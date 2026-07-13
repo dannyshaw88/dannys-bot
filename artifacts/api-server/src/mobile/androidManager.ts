@@ -698,6 +698,10 @@ export async function dismissInstagramInterstitials(serial: string): Promise<str
     "Don't Allow",
     "Deny",
     "Cancel",
+    // Generic confirmation dialogs (e.g. "Turn on notifications?" / one-off
+    // info popups) that only offer a single "OK" acknowledgement. Listed
+    // last since it's the least specific match.
+    "OK",
   ];
 
   for (const label of DISMISS_LABELS) {
@@ -2118,6 +2122,21 @@ export async function scanMediaFile(serial: string, devicePath: string): Promise
     "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
     "-d", `file://${devicePath}`,
   ], 6000);
+}
+
+/**
+ * Removes a file previously pushed to the device (e.g. via pushFileToDevice)
+ * and re-triggers the media scanner so it also disappears from Instagram's
+ * gallery/media-picker and the phone's own Gallery app. Used to clean up
+ * after a "Make a Post" attempt that pushed an image but then aborted
+ * before actually posting it — without this, every retry leaves behind a
+ * duplicate copy of the same source image in DCIM/Camera.
+ */
+export async function removeDeviceFile(serial: string, devicePath: string): Promise<void> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  await runAdb(adb, ["-s", serial, "shell", "rm", "-f", devicePath], 6000).catch(() => {});
+  await scanMediaFile(serial, devicePath).catch(() => {});
 }
 
 export async function findHomeTab(serial: string): Promise<{ x: number; y: number } | null> {

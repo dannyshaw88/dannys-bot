@@ -991,7 +991,9 @@ interface AutomationSettingsData {
   makePostPerSessionMin: number; makePostPerSessionMax: number;
   makePostSourceUsername: string;
   makePostDisableUsernameSource: boolean;
+  makePostAlterationEnabled: boolean;
   makePostAlterationLevel: "small" | "medium" | "high";
+  makePostImageSettingsEnabled: boolean;
   makePostUseHikerApi: boolean;
   makePostDisableAtPostCount: number;
   makePostDisableWhenExhausted: boolean;
@@ -1045,7 +1047,9 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   makePostPerSessionMin: 1, makePostPerSessionMax: 1,
   makePostSourceUsername: "",
   makePostDisableUsernameSource: false,
+  makePostAlterationEnabled: true,
   makePostAlterationLevel: "small",
+  makePostImageSettingsEnabled: true,
   makePostUseHikerApi: false,
   makePostDisableAtPostCount: 0,
   makePostDisableWhenExhausted: true,
@@ -1253,7 +1257,9 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             makePostPerSessionMax: s.makePostPerSessionMax,
             makePostSourceUsername: s.makePostSourceUsername,
             makePostDisableUsernameSource: s.makePostDisableUsernameSource,
+            makePostAlterationEnabled: s.makePostAlterationEnabled,
             makePostAlterationLevel: s.makePostAlterationLevel,
+            makePostImageSettingsEnabled: s.makePostImageSettingsEnabled,
             makePostUseHikerApi: s.makePostUseHikerApi,
             makePostDisableAtPostCount: s.makePostDisableAtPostCount,
             makePostDisableWhenExhausted: s.makePostDisableWhenExhausted,
@@ -2182,33 +2188,54 @@ function AutomationSettingsPanel({
                   onChange={e => setSettings(s => ({ ...s, makePostCaptionText: e.target.value }))}
                   disabled={loading}
                 />
-                {/* Image alteration — applies to whichever source produced the image */}
+                {/* Image alteration — applies to whichever source produced the image.
+                    Each control has its own enable checkbox; when off, the control
+                    stays visible (not hidden) but shows as inactive/disabled rather
+                    than disappearing. */}
                 <div className="flex flex-wrap items-end gap-4">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Alteration level</Label>
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <input type="checkbox" id="make-a-post-alteration-enabled"
+                        checked={settings.makePostAlterationEnabled}
+                        onChange={e => setSettings(s => ({ ...s, makePostAlterationEnabled: e.target.checked }))}
+                        disabled={loading}
+                        className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                      <label htmlFor="make-a-post-alteration-enabled" className="text-xs text-muted-foreground cursor-pointer select-none">Alteration level</label>
+                    </div>
                     <div className="flex gap-1">
                       {(["small", "medium", "high"] as const).map(lvl => (
-                        <button key={lvl} type="button" disabled={loading}
+                        <button key={lvl} type="button" disabled={loading || !settings.makePostAlterationEnabled}
                           onClick={() => setSettings(s => ({ ...s, makePostAlterationLevel: lvl }))}
                           className={`h-8 px-3 text-xs rounded border transition-colors capitalize ${
-                            settings.makePostAlterationLevel === lvl
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "bg-background border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                            !settings.makePostAlterationEnabled
+                              ? "bg-background border-border text-muted-foreground/40 cursor-not-allowed"
+                              : settings.makePostAlterationLevel === lvl
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-background border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
                           }`}
                         >{lvl}</button>
                       ))}
                     </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Image settings</Label>
-                    <button type="button" disabled={loading}
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <input type="checkbox" id="make-a-post-image-settings-enabled"
+                        checked={settings.makePostImageSettingsEnabled}
+                        onChange={e => setSettings(s => ({ ...s, makePostImageSettingsEnabled: e.target.checked }))}
+                        disabled={loading}
+                        className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                      <label htmlFor="make-a-post-image-settings-enabled" className="text-xs text-muted-foreground cursor-pointer select-none">Image settings</label>
+                    </div>
+                    <button type="button" disabled={loading || !settings.makePostImageSettingsEnabled}
                       onClick={() => setMakePostImageSettingsOpen(true)}
-                      className="h-8 px-3 text-xs rounded border transition-colors bg-background border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                      className={`h-8 px-3 text-xs rounded border transition-colors ${
+                        settings.makePostImageSettingsEnabled
+                          ? "bg-background border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                          : "bg-background border-border text-muted-foreground/40 cursor-not-allowed"
+                      }`}
                     >Configure</button>
                   </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 pb-2.5">
                     <input type="checkbox" id="make-a-post-make-unique"
                       checked={settings.makePostMakeUnique}
                       onChange={e => setSettings(s => ({ ...s, makePostMakeUnique: e.target.checked }))}
@@ -2216,7 +2243,7 @@ function AutomationSettingsPanel({
                       className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                     <label htmlFor="make-a-post-make-unique" className="text-xs text-muted-foreground cursor-pointer select-none">Make it unique</label>
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 pb-2.5">
                     <input type="checkbox" id="make-a-post-disable-comments"
                       checked={settings.makePostDisableComments}
                       onChange={e => setSettings(s => ({ ...s, makePostDisableComments: e.target.checked }))}

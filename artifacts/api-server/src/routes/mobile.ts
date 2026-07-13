@@ -152,7 +152,9 @@ type AutomationSettings = {
   makePostPerSessionMax?: number;
   makePostSourceUsername?: string;
   makePostDisableUsernameSource?: boolean;
+  makePostAlterationEnabled?: boolean;
   makePostAlterationLevel?: "small" | "medium" | "high";
+  makePostImageSettingsEnabled?: boolean;
   makePostUseHikerApi?: boolean;
   makePostDisableAtPostCount?: number;
   makePostDisableWhenExhausted?: boolean;
@@ -933,7 +935,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostPerSessionMax: z.number().min(1).max(20).default(1),
     makePostSourceUsername: z.string().default(""),
     makePostDisableUsernameSource: z.boolean().default(false),
+    makePostAlterationEnabled: z.boolean().default(true),
     makePostAlterationLevel: z.enum(["small", "medium", "high"]).default("small"),
+    makePostImageSettingsEnabled: z.boolean().default(true),
     makePostUseHikerApi: z.boolean().default(false),
     makePostDisableAtPostCount: z.number().min(0).default(0),
     makePostDisableWhenExhausted: z.boolean().default(true),
@@ -997,7 +1001,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       makePostActivatePctMin: 100, makePostActivatePctMax: 100,
       makePostPerSessionMin: 1, makePostPerSessionMax: 1,
       makePostSourceUsername: "", makePostDisableUsernameSource: false,
-      makePostAlterationLevel: "small", makePostUseHikerApi: false,
+      makePostAlterationEnabled: true, makePostAlterationLevel: "small",
+      makePostImageSettingsEnabled: true, makePostUseHikerApi: false,
       makePostDisableAtPostCount: 0, makePostDisableWhenExhausted: true,
       makePostLocalFolderEnabled: false, makePostLocalFolderPath: "",
       makePostLocalFolderNoRepeat: false, makePostLocalFolderRandom: false,
@@ -2253,21 +2258,43 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     await android.tap(serial, composeBtn.x, composeBtn.y);
     await sleepOrAbort(serial, 1800);
 
+    // Auto-clear any interstitial ("Turn on notifications?", a stray "OK"
+    // confirmation, etc.) that can appear right after opening the composer —
+    // left alone it silently sits on top of the picker and every later
+    // findButtonByLabel() call comes back empty.
+    await android.dismissInstagramInterstitials(serial).catch(() => null);
+
+    // Instagram's "+" compose button opens a sheet that defaults to
+    // whichever mode (Story/Reel/Post) was last used — NOT necessarily the
+    // feed-post gallery. If it lands on Story/Reel mode there is a "POST"
+    // mode tab to switch into the feed-post picker; tap it when present.
+    // (When we're already on the Post picker this tab isn't there, so this
+    // is a no-op in that case.)
+    const postTab = await android.findButtonByLabel(serial, "POST").catch(() => null)
+      ?? await android.findButtonByLabel(serial, "Post").catch(() => null);
+    if (postTab) {
+      await android.tap(serial, postTab.x, postTab.y);
+      await sleepOrAbort(serial, 1200);
+    }
+
     // The just-pushed file should be the most recent (top-left) thumbnail in
     // the media grid, but there's no existing selector for it — this is a
-    // best-effort tap on the first grid item, gated on first confirming a
-    // "Next" control exists (i.e. we're actually on a picker/selection
-    // screen, not still on the feed from a missed compose tap).
-    const nextBtn1 = await android.findButtonByLabel(serial, "Next").catch(() => null);
-    if (!nextBtn1) {
-      onLog?.("Make a Post: compose sheet did not open (no \"Next\" control found) — aborting this attempt");
-      await android.pressBack(serial);
-      return { posted: false };
-    }
+    // best-effort tap on the first grid item. "Next" only appears *after* a
+    // photo has been selected, so the thumbnail tap must happen before we
+    // look for it — checking for "Next" first (the previous behaviour) would
+    // always fail here and abort the attempt without ever selecting an image.
     const { w, h } = getScreenSize(serial);
     // First grid cell in Instagram's media picker sits just under the header/toolbar.
     await android.tap(serial, Math.round(w * 0.17), Math.round(h * 0.22));
     await sleepOrAbort(serial, 700);
+
+    const nextBtn1 = await android.findButtonByLabel(serial, "Next").catch(() => null);
+    if (!nextBtn1) {
+      onLog?.("Make a Post: compose sheet did not open (no \"Next\" control found) — aborting this attempt");
+      await android.pressBack(serial);
+      await android.removeDeviceFile(serial, devicePath).catch(() => {});
+      return { posted: false };
+    }
     await android.tap(serial, nextBtn1.x, nextBtn1.y);
     await sleepOrAbort(serial, 1500);
 
@@ -2289,6 +2316,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const shareBtn = await android.findButtonByLabel(serial, "Share").catch(() => null);
     if (!shareBtn) {
       onLog?.("Make a Post: caption/share screen not confirmed (no \"Share\" control found) — aborting this attempt");
+      await android.removeDeviceFile(serial, devicePath).catch(() => {});
       return { posted: false };
     }
     const caption = captionText.trim();
@@ -2328,6 +2356,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     onLog?.("Make a Post: tapping Share…");
     await android.tap(serial, finalShareBtn.x, finalShareBtn.y);
     await sleepOrAbort(serial, 3000); // sharing/upload can take a few seconds
+
+    // A one-off "OK" confirmation (e.g. a notifications prompt) can appear
+    // right after sharing and sit on top of the feed indefinitely if left
+    // unhandled — auto-clear it before moving on.
+    await android.dismissInstagramInterstitials(serial).catch(() => null);
 
     recordPostedLocalFile(serial, fileName);
     if (deleteAfterUpload) {
