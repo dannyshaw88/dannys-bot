@@ -4,6 +4,36 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.525] — 2026-07-13
+
+### Fix: "Make a Post" media never highlighted under automation; Windows installer stuck at v1.1.522
+
+**Media never selected (real-device confirmed):**
+- Root cause — the assumption from v1.1.523 ("Instagram auto-selects the newest photo the instant
+  the picker opens, no tap needed") only holds for a genuine manual finger tap on "+". The user
+  confirmed on a real device that under this automation's UI-Automator tap, the Recents grid comes
+  up with **nothing highlighted** every time.
+- Fix — added `findFirstGalleryThumbnail()`, which scans the Recents grid band, explicitly skips
+  the "open camera" shutter tile (the original v1.1.522 bug — that tile is the grid's first cell,
+  not a photo), and taps the topmost-leftmost real thumbnail. Since the grid sorts newest-first and
+  we just pushed the target file, that thumbnail is our file. This tap now happens explicitly
+  instead of relying on a default that doesn't occur under automation.
+- The thumbnail-found signal was also added to the existing "did the picker actually open" sanity
+  check that gates the positional "Next" fallback.
+
+**Windows installer stuck at v1.1.522:**
+- Root cause — `build-windows-installer.yml`'s "Publish to GitHub Release" step only runs on a
+  pushed `v*` tag (`if: startsWith(github.ref, 'refs/tags/v')`). No git tag has ever been pushed to
+  this repo, so that step has never run since whatever build produced the v1.1.522 release asset —
+  every commit since then (523, 524) built successfully on push-to-main but never published a new
+  Release, so the installer page kept serving the old v1.1.522 `.exe`.
+- Fix — pushing a `v1.1.525` tag alongside this release to trigger the publish step. Going forward,
+  a version bump needs a matching pushed tag (`git tag vX.Y.Z && git push origin vX.Y.Z`) for the
+  installer Release to actually update — the version bump commit alone is not enough.
+
+Status: media-selection fix unconfirmed on a live device — awaiting another real-device test with
+the Log panel.
+
 ## [1.1.524] — 2026-07-13
 
 ### Fix: reverted a regression that broke media auto-selection, plus a real fix for the "Next" tap + a new expand-to-fit tap

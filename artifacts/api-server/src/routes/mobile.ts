@@ -2289,18 +2289,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await sleepOrAbort(serial, 1200);
     }
 
-    // Instagram's media grid already auto-selects the most recent photo as
-    // the default (shown large in the preview pane above the grid) the
-    // instant the picker opens — confirmed against manual taps on a real
-    // device (screenshot 2026-07-13): tapping "+" alone highlights the
-    // newest photo without the user ever touching the grid. The grid's
-    // FIRST cell is Instagram's "open camera" shutter tile, not a photo —
-    // an earlier blind coordinate tap here (~17%/22%) was landing on that
-    // camera tile instead of a thumbnail, which is exactly why no image was
-    // ever actually selected and the attempt silently aborted. Since we
-    // just pushed the file we want to post and it is therefore the newest
-    // item in the gallery, no tap is needed at all: the default selection
-    // already matches our target. Go straight to "Next".
+    // NOTE (corrected 2026-07-13, second real-device test): the earlier
+    // assumption that Instagram auto-selects the newest photo the instant
+    // the picker opens only held for a genuine manual finger tap on "+".
+    // Under this automation (UI Automator tap), the user confirmed the
+    // grid comes up with NOTHING highlighted every time. So we now
+    // explicitly find and tap the newest real thumbnail ourselves rather
+    // than relying on a default that doesn't occur under automation. The
+    // grid's FIRST cell is Instagram's "open camera" shutter tile, not a
+    // photo — an earlier blind coordinate tap here (~17%/22%) was landing
+    // on that camera tile instead of a thumbnail (the original v1.1.522
+    // bug). findFirstGalleryThumbnail() scans the grid band and explicitly
+    // skips anything labelled "camera", returning the topmost-leftmost
+    // survivor — since the grid sorts newest-first and we just pushed the
+    // target file, that survivor is our file.
+    onLog?.("Make a Post: looking for the newest photo thumbnail in the Recents grid…");
+    const thumbnail = await android.findFirstGalleryThumbnail(serial).catch(() => null);
+    if (thumbnail) {
+      onLog?.(`Make a Post: tapping newest thumbnail at (${thumbnail.x}, ${thumbnail.y})…`);
+      await android.tap(serial, thumbnail.x, thumbnail.y);
+      await sleepOrAbort(serial, 800);
+    } else {
+      onLog?.("Make a Post: no gallery thumbnail found in the Recents grid — the picker may not have opened, continuing to check anyway");
+    }
+
     // Confirm the compose sheet actually opened before trying to find/tap
     // "Next" at all — we check for ANY recognizable picker element (the
     // expand toggle, or a labelled Next) rather than requiring Next's own
@@ -2326,7 +2338,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // via the positional fallback with no other confirming signal at all
     // (e.g. compose never opened, we're still on the home feed), a blind
     // tap could hit something unrelated — bail out instead.
-    if (nextBtn1IsPositionalGuess && !postTab && !(await android.findExpandPhotoButton(serial).catch(() => null))) {
+    if (nextBtn1IsPositionalGuess && !postTab && !thumbnail && !(await android.findExpandPhotoButton(serial).catch(() => null))) {
       onLog?.("Make a Post: compose sheet did not open (no picker signal found at all) — aborting this attempt");
       await android.pressBack(serial);
       await android.removeDeviceFile(serial, devicePath).catch(() => {});

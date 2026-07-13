@@ -2144,6 +2144,72 @@ export async function findExpandPhotoButton(serial: string): Promise<{ x: number
 }
 
 /**
+ * Finds the first real photo thumbnail in the Recents grid on Instagram's
+ * New Post photo-select screen — i.e. the most recently added item,
+ * EXCLUDING the "open camera" shutter tile.
+ *
+ * Root cause (confirmed via real-device testing, 2026-07-13): the earlier
+ * assumption that Instagram auto-selects the newest photo the instant the
+ * picker opens only holds for a genuine finger tap on "+". When the "+" is
+ * tapped via UI Automator (this automation), the grid comes up with
+ * NOTHING highlighted — no default selection happens. So the flow must
+ * explicitly tap a thumbnail itself rather than relying on a default that
+ * doesn't occur under automation.
+ *
+ * The grid's first cell is Instagram's camera-shutter tile, not a photo —
+ * tapping it blind was the original v1.1.522 bug (opens the camera instead
+ * of selecting anything). This scans the grid band for clickable, roughly
+ * square, tile-sized nodes, skips any whose content-desc/resource-id
+ * mentions "camera", and returns the topmost-leftmost survivor — since the
+ * grid sorts newest-first and we just pushed the target file, that survivor
+ * is our file.
+ */
+export async function findFirstGalleryThumbnail(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+
+  const { w, h } = getScreenSize(serial);
+  // The preview + expand-toggle band occupies roughly the top 58% of the
+  // screen (see findExpandPhotoButton); the Recents grid sits below that,
+  // down to just above the bottom nav/caption bar.
+  const minY = Math.round(h * 0.58);
+  const maxY = Math.round(h * 0.97);
+  const nodeRe = /<node\s([^/\n>]+)\/>/g;
+  const candidates: { x: number; y: number; y1: number; isCamera: boolean }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    if (!/clickable="true"/.test(attrs)) continue;
+    const bm = attrs.match(/bounds="(\[(\d+),(\d+)\]\[(\d+),(\d+)\])"/);
+    if (!bm) continue;
+    const x1 = Number(bm[2]), y1 = Number(bm[3]), x2 = Number(bm[4]), y2 = Number(bm[5]);
+    const bw = x2 - x1, bh = y2 - y1;
+    if (bw <= 0 || bh <= 0) continue;
+    const c = _parseCenter(bm[1]);
+    if (!c) continue;
+    if (c.y < minY || c.y > maxY) continue;
+    // Grid tiles are roughly square (within a 3-4 column layout) — reject
+    // full-width rows (e.g. a "Recents ▾" dropdown header) and slivers.
+    if (bw < w * 0.15 || bw > w * 0.40) continue;
+    if (Math.abs(bw - bh) > bh * 0.5) continue;
+    const textM = attrs.match(/\btext="([^"]*)"/);
+    const cdM = attrs.match(/content-desc="([^"]*)"/);
+    const rid = attrs.match(/resource-id="([^"]*)"/);
+    const label = `${textM?.[1] || ""} ${cdM?.[1] || ""} ${rid?.[1] || ""}`.toLowerCase();
+    const isCamera = label.includes("camera");
+    candidates.push({ x: c.x, y: c.y, y1, isCamera });
+  }
+  if (!candidates.length) return null;
+  // Sort top-left first (row by y1, then x within a row) so the newest
+  // grid item — not necessarily the first XML node encountered — wins.
+  candidates.sort((a, b) => (Math.abs(a.y1 - b.y1) > 20 ? a.y1 - b.y1 : a.x - b.x));
+  const real = candidates.find(c => !c.isCamera);
+  return real ? { x: real.x, y: real.y } : null;
+}
+
+/**
  * Positional fallback for the blue "Next" control on Instagram's very first
  * New Post screen (the photo-select/Recents grid).
  *
