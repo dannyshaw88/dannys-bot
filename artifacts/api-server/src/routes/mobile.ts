@@ -1425,7 +1425,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // shares per post) is resolved fresh per post instead of assuming
           // a fixed layout. See findFeedActionIcons()'s doc comment.
           onLog?.(`Scroll ${i + 1}/${count}: scanning action bar…`);
-          const icons = await android.findFeedActionIcons(serial).catch(() => null);
+          const icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
           if (!icons) {
             // No Like button found — this isn't a normal in-feed post right
             // now (Reel suggestion, ad, still animating in from the scroll,

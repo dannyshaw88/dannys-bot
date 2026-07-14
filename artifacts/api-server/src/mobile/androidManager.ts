@@ -1353,7 +1353,7 @@ export interface FeedActionIcons {
  * Callers must treat a `null` field as "skip this action for this post",
  * never fall back to a fixed coordinate.
  */
-export async function findFeedActionIcons(serial: string): Promise<FeedActionIcons | null> {
+export async function findFeedActionIcons(serial: string, onLog?: (msg: string) => void): Promise<FeedActionIcons | null> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial);
@@ -1441,10 +1441,8 @@ export async function findFeedActionIcons(serial: string): Promise<FeedActionIco
 
   // Diagnostic: log every node in the action-bar row so we know the exact
   // content-desc labels Instagram puts on this device/build.
-  logger.info(
-    { row: rowNodes.map(n => ({ x: n.x, cd: n.cd || "(empty)" })) },
-    "[feed-icons] action-bar rowNodes content-desc dump"
-  );
+  const rowDump = rowNodes.map(n => `x=${n.x} cd="${n.cd || ""}"`).join(" | ");
+  onLog?.(`[feed-icons] row cd dump: ${rowDump}`);
 
   const pos = (n: RowNode) => ({ x: n.x, y: n.y });
   let comment: { x: number; y: number } | null = null;

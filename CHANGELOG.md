@@ -4,6 +4,14 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.570] — 2026-07-14
+
+### Fix: route rowNode cd dump through onLog (visible in UI)
+
+The v1.1.569 diagnostic used `logger.info` which writes to the server log file, not the in-app Log panel. Changed `findFeedActionIcons` to accept an optional `onLog` callback and pipe the dump through it. The caller in `mobile.ts` now passes its `onLog` so the line `[feed-icons] row cd dump: x=… cd="…" | …` appears directly in the Log panel on the next run.
+
+---
+
 ## [1.1.569] — 2026-07-14
 
 ### Diagnostic: dump action-bar rowNode content-desc labels
