@@ -1386,7 +1386,7 @@ export async function findFeedActionIcons(serial: string, onLog?: (msg: string) 
   // full-width text field never does.
   const maxIconWidth = Math.max(120, Math.round(w * 0.12));
 
-  type RowNode = { x: number; y: number; cd: string; rid: string; cls: string };
+  type RowNode = { x: number; y: number; cd: string; rid: string; cls: string; txt: string; width: number };
   const rowNodes: RowNode[] = [];
   // Nodes that match the audio-disc profile (ImageView, no content-desc, no digit
   // text) are NOT immediately discarded. They are saved here and used as a
@@ -1433,22 +1433,28 @@ export async function findFeedActionIcons(serial: string, onLog?: (msg: string) 
       // Potential audio disc OR unlabeled Repost/Send — save separately, don't
       // add to rowNodes (keeps the disc-tapping regression fix intact for devices
       // where the disc is present and Repost/Send ARE labeled).
-      unlabeledImgViews.push({ x: c.x, y: c.y, cd, rid, cls });
+      unlabeledImgViews.push({ x: c.x, y: c.y, cd, rid, cls, txt, width: nodeWidth });
       continue;
     }
-    rowNodes.push({ x: c.x, y: c.y, cd, rid, cls });
+    rowNodes.push({ x: c.x, y: c.y, cd, rid, cls, txt, width: nodeWidth });
   }
   rowNodes.sort((a, b) => a.x - b.x);
   unlabeledImgViews.sort((a, b) => a.x - b.x);
 
   // Diagnostic: log every node in the action-bar row so we know the exact
   // content-desc / resource-id / class Instagram puts on this device/build.
-  // This device's cd dump (v1.1.570) came back with EVERY node's
-  // content-desc empty — no label to match against at all. resource-id is
-  // usually still present even when content-desc is stripped (device/build
-  // specific accessibility trimming), so it's the next thing to check before
-  // any icon can be identified here.
-  const fmt = (n: RowNode) => `x=${n.x} cd="${n.cd || ""}" rid="${n.rid || ""}" cls="${n.cls || ""}"`;
+  // v1.1.570's cd dump came back with EVERY node's content-desc empty, and
+  // v1.1.571's resource-id dump came back empty too — this build/device
+  // strips both. The v1.1.571 run showed a clean alternating
+  // Button/ViewGroup/Button/ViewGroup pattern (4 Buttons, 3 ViewGroups
+  // interleaved), which suggests each real icon renders as a
+  // `android.widget.Button` node while its count label (e.g. "64" reposts)
+  // renders as a separate clickable `android.view.ViewGroup` wrapper — but
+  // that needs `text` and `width` to confirm before it's used for anything.
+  // text should reveal which nodes carry a visible count number, and width
+  // should show whether Buttons are narrow (icon-sized) vs ViewGroups wider
+  // (label-sized) or vice versa.
+  const fmt = (n: RowNode) => `x=${n.x} w=${n.width} cd="${n.cd || ""}" rid="${n.rid || ""}" cls="${n.cls || ""}" txt="${n.txt || ""}"`;
   const rowDump = rowNodes.map(fmt).join(" | ");
   onLog?.(`[feed-icons] row cd dump: ${rowDump}`);
   if (unlabeledImgViews.length) {

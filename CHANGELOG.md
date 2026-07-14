@@ -4,6 +4,14 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.572] — 2026-07-14
+
+### Diagnostic: dump text and width alongside class for action-bar icons
+
+The v1.1.571 resource-id dump came back empty too, but showed a clean pattern: 4 `android.widget.Button` nodes alternating with 3 `android.view.ViewGroup` nodes (Button/ViewGroup ×3 + trailing Button). That suggests each real icon is a `Button` and each count label (e.g. a repost count) is a separate clickable `ViewGroup` wrapper — but that's still a guess without seeing what text/width those nodes carry. Extended the `[feed-icons]` dump to also print `w=` (node width) and `txt=` (the node's `text` attribute, which should reveal count numbers) for every row node and unlabeled ImageView. Still diagnostic-only — no detection or tap behaviour changed, no coordinate fallback added.
+
+---
+
 ## [1.1.571] — 2026-07-14
 
 ### Diagnostic: dump resource-id and class alongside content-desc for action-bar icons
