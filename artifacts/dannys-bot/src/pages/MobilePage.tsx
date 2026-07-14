@@ -122,7 +122,7 @@ type InspectResult = {
   _cssX?: number; _cssY?: number;
 };
 
-const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; inspectMode?: boolean; onInspectResult?: (r: InspectResult) => void }>(function LiveCanvas({ serial, onLog, onDimensions, inspectMode, onInspectResult }, ref) {
+const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; inspectMode?: boolean; onInspectResult?: (r: InspectResult) => void; clickTestMode?: boolean }>(function LiveCanvas({ serial, onLog, onDimensions, inspectMode, onInspectResult, clickTestMode }, ref) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   // Cache the 2D context so we don't re-call getContext() every frame.
   const ctxRef       = useRef<CanvasRenderingContext2D | null>(null);
@@ -133,9 +133,13 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   // reads from the exact same numbers used to paint — no CSS inference at all.
   const drawRectRef  = useRef<{ dx: number; dy: number; dw: number; dh: number } | null>(null);
   // Tap indicator: shows where the mouse clicked (red) vs where the system
-  // sent the tap (blue). Both in canvas-CSS-pixel space. Clears after 700ms.
-  const [tapDots, setTapDots] = useState<{ rawX: number; rawY: number; mapX: number; mapY: number } | null>(null);
+  // sent the tap (blue). In Click Test mode a second click adds a yellow dot
+  // (user marking where the tap *should* have landed). All in canvas-CSS-pixel space.
+  const [tapDots, setTapDots] = useState<{ rawX: number; rawY: number; mapX: number; mapY: number; yellowX?: number; yellowY?: number } | null>(null);
   const tapDotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // "idle" = waiting for first click, "target" = waiting for user's yellow correction dot
+  const clickTestPhaseRef = useRef<"idle" | "target">("idle");
+  const clickTestModeRef  = useRef(false);
   const fpsCountRef  = useRef(0);
   const frameSeenRef = useRef(false);
   // Video mode: true H.264 stream decoded with WebCodecs (near-instant).
@@ -149,6 +153,10 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   // latest value without needing to be recreated on every toggle.
   const inspectModeRef = useRef(false);
   useEffect(() => { inspectModeRef.current = !!inspectMode; }, [inspectMode]);
+  useEffect(() => {
+    clickTestModeRef.current = !!clickTestMode;
+    if (!clickTestMode) { clickTestPhaseRef.current = "idle"; setTapDots(null); }
+  }, [clickTestMode]);
   const onInspectResultRef = useRef(onInspectResult);
   useEffect(() => { onInspectResultRef.current = onInspectResult; }, [onInspectResult]);
 
@@ -585,9 +593,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       return;
     }
 
-    // Visual tap indicator: red = where mouse clicked, blue = where system
-    // sent the tap (reverse-mapped from phone coords back to canvas space).
-    // If they diverge, the coordinate mapping itself is the bug.
+    // Visual tap indicator / Click Test logic
     if (canvasRef.current && drawRectRef.current && phoneSizeRef.current) {
       const rect = canvasRef.current.getBoundingClientRect();
       const rawX = e.clientX - rect.left;
@@ -596,9 +602,25 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       const { w: phoneW, h: phoneH } = phoneSizeRef.current;
       const mapX = dx + (p.x / phoneW) * dw;
       const mapY = dy + (p.y / phoneH) * dh;
-      if (tapDotTimerRef.current) clearTimeout(tapDotTimerRef.current);
-      setTapDots({ rawX, rawY, mapX, mapY });
-      tapDotTimerRef.current = setTimeout(() => setTapDots(null), 700);
+
+      if (clickTestModeRef.current) {
+        if (clickTestPhaseRef.current === "target") {
+          // Second click: user marks where the tap SHOULD have landed — yellow dot.
+          // Don't send a tap to the phone, just update the dots and go back to idle.
+          clickTestPhaseRef.current = "idle";
+          setTapDots(prev => prev ? { ...prev, yellowX: rawX, yellowY: rawY } : null);
+          return; // skip the drag/tap entirely
+        } else {
+          // First click: show bullseye (send tap normally), wait for yellow correction.
+          clickTestPhaseRef.current = "target";
+          if (tapDotTimerRef.current) clearTimeout(tapDotTimerRef.current);
+          setTapDots({ rawX, rawY, mapX, mapY }); // persists — no timer in click test mode
+        }
+      } else {
+        if (tapDotTimerRef.current) clearTimeout(tapDotTimerRef.current);
+        setTapDots({ rawX, rawY, mapX, mapY });
+        tapDotTimerRef.current = setTimeout(() => setTapDots(null), 700);
+      }
     }
 
     (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
@@ -816,7 +838,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
           inset:         0,
           width:         "100%",
           height:        "100%",
-          cursor:        inspectMode ? "crosshair" : clickable ? "pointer" : "default",
+          cursor:        inspectMode ? "crosshair" : clickTestMode ? "cell" : clickable ? "pointer" : "default",
           pointerEvents: clickable ? "auto" : "none",
           zIndex:        5,
         }}
@@ -856,6 +878,23 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
             zIndex: 21,
             pointerEvents: "none",
           }} />
+          {/* Yellow dot: user's correction — where the tap SHOULD have landed */}
+          {tapDots.yellowX != null && tapDots.yellowY != null && (
+            <div style={{
+              position: "absolute",
+              left: tapDots.yellowX,
+              top: tapDots.yellowY,
+              width: 16,
+              height: 16,
+              marginLeft: -8,
+              marginTop: -8,
+              borderRadius: "50%",
+              background: "rgba(255,210,0,0.95)",
+              border: "2px solid white",
+              zIndex: 22,
+              pointerEvents: "none",
+            }} />
+          )}
         </>
       )}
 
@@ -893,6 +932,7 @@ function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower }: { phone: 
   const [inspectMode,   setInspectMode]   = useState(false);
   const [inspectResult, setInspectResult] = useState<InspectResult | null>(null);
   const [inspecting,    setInspecting]    = useState(false);
+  const [clickTestMode, setClickTestMode] = useState(false);
 
   const label = phone?.model
     ? `${phone.manufacturer ? phone.manufacturer + " " : ""}${phone.model}`
@@ -936,17 +976,30 @@ function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower }: { phone: 
         </div>
         <div className="flex items-center gap-2">
           {isReady && phone && live && (
-            <button
-              onClick={() => { setInspectMode(m => !m); setInspectResult(null); }}
-              title={inspectMode ? "Exit inspect mode — clicks will tap the phone again" : "Inspect mode — click any element on screen to identify it (like Chrome F12)"}
-              className={`text-[9px] font-semibold px-2 py-0.5 rounded transition-colors ${
-                inspectMode
-                  ? "bg-yellow-400/20 text-yellow-300 border border-yellow-400/40"
-                  : "bg-white/5 text-white/40 border border-white/10 hover:bg-white/10 hover:text-white/70"
-              }`}
-            >
-              {inspectMode ? "🔍 Inspecting" : "🔍 Inspect"}
-            </button>
+            <>
+              <button
+                onClick={() => { setClickTestMode(m => !m); setInspectMode(false); setInspectResult(null); }}
+                title={clickTestMode ? "Exit Click Test — 1st click sends tap + shows bullseye, 2nd click marks where it should have landed (yellow dot)" : "Click Test — diagnose tap offset: 1st click shows where tap was sent, 2nd click marks the correct target"}
+                className={`text-[9px] font-semibold px-2 py-0.5 rounded transition-colors ${
+                  clickTestMode
+                    ? "bg-orange-400/20 text-orange-300 border border-orange-400/40"
+                    : "bg-white/5 text-white/40 border border-white/10 hover:bg-white/10 hover:text-white/70"
+                }`}
+              >
+                {clickTestMode ? "🎯 Testing" : "🎯 Click Test"}
+              </button>
+              <button
+                onClick={() => { setInspectMode(m => !m); setInspectResult(null); setClickTestMode(false); }}
+                title={inspectMode ? "Exit inspect mode — clicks will tap the phone again" : "Inspect mode — click any element on screen to identify it (like Chrome F12)"}
+                className={`text-[9px] font-semibold px-2 py-0.5 rounded transition-colors ${
+                  inspectMode
+                    ? "bg-yellow-400/20 text-yellow-300 border border-yellow-400/40"
+                    : "bg-white/5 text-white/40 border border-white/10 hover:bg-white/10 hover:text-white/70"
+                }`}
+              >
+                {inspectMode ? "🔍 Inspecting" : "🔍 Inspect"}
+              </button>
+            </>
           )}
           {isReady        && <span className="flex items-center gap-1 text-[9px] font-bold text-green-400 shrink-0"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />Live</span>}
           {isUnauthorized && <span className="text-[9px] font-semibold text-yellow-500 shrink-0">Auth needed</span>}
@@ -981,6 +1034,7 @@ function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower }: { phone: 
             onDimensions={onDimensions}
             inspectMode={inspectMode}
             onInspectResult={handleInspectResult}
+            clickTestMode={clickTestMode}
           />
         )}
         {isReady && phone && !live && (
