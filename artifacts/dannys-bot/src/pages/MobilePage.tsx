@@ -924,18 +924,67 @@ function EmptyShell({ idx }: { idx: number }) {
 
 // ─── Phone slot ───────────────────────────────────────────────────────────────
 
-function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower }: { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; live: boolean; onPower: () => void }) {
+function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower, phoneDims, paneSize }: { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; live: boolean; onPower: () => void; phoneDims: { w: number; h: number } | null; paneSize: { w: number; h: number } | null }) {
   const liveCanvasRef = useRef<LiveCanvasHandle>(null);
   const [inspectMode,   setInspectMode]   = useState(false);
   const [inspectResult, setInspectResult] = useState<InspectResult | null>(null);
   const [inspecting,    setInspecting]    = useState(false);
   const [clickTestMode, setClickTestMode] = useState(false);
 
+  // ── Exact shell sizing ──────────────────────────────────────────────────
+  // The shell must hug the phone's real aspect ratio *without* including
+  // the header/nav-bar chrome in that ratio math (they have fixed pixel
+  // heights, not proportional to the phone's screen). Applying the ratio
+  // to the whole shell (chrome + screen combined) makes the resolved
+  // screen box shorter than it should be for its width, so LiveCanvas's
+  // own contain-fit drawing then pillarboxes to compensate — that's the
+  // "dead space" bug, and when it pushes the shell taller than the pane,
+  // it's also why the nav bar can get clipped/unreachable by an ancestor's
+  // overflow-hidden. See .agents/memory/mobile-mirror-shell-pillarbox.md.
+  //
+  // Fix: measure the header/nav chrome height for real (it's fixed, but
+  // measuring beats guessing pixel values), subtract it from the pane's
+  // available height, then size the shell so the *screen* area alone gets
+  // the phone's exact ratio — the shell shrink-wraps to that resolved
+  // width instead of stretching the video area.
+  const headerRef = useRef<HTMLDivElement>(null);
+  const navRef    = useRef<HTMLDivElement>(null);
+  const [chromeH, setChromeH] = useState(0);
+
+  const isReady        = phone?.state === "device";
+  const showNav         = isReady && !!phone;
+
+  useEffect(() => {
+    const headerEl = headerRef.current;
+    if (!headerEl) return;
+    const measure = () => {
+      const h = headerEl.getBoundingClientRect().height;
+      const n = showNav ? (navRef.current?.getBoundingClientRect().height ?? 0) : 0;
+      setChromeH(h + n);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(headerEl);
+    if (showNav && navRef.current) ro.observe(navRef.current);
+    return () => ro.disconnect();
+  }, [showNav]);
+
+  const ratio = phoneDims ? phoneDims.w / phoneDims.h : 9 / 16;
+  let shellStyle: React.CSSProperties | undefined;
+  let shellClassExtra = "w-full h-full";
+  if (isReady && live && paneSize && paneSize.w > 0 && paneSize.h > 0 && chromeH > 0) {
+    const screenHFromHeight = Math.max(0, paneSize.h - chromeH);
+    const widthFromHeight   = screenHFromHeight * ratio;
+    const finalWidth        = Math.min(widthFromHeight, paneSize.w);
+    const finalScreenH      = finalWidth / ratio;
+    shellStyle = { width: `${finalWidth}px`, height: `${finalScreenH + chromeH}px` };
+    shellClassExtra = "";
+  }
+
   const label = phone?.model
     ? `${phone.manufacturer ? phone.manufacturer + " " : ""}${phone.model}`
     : phone?.product ?? phone?.serial ?? null;
 
-  const isReady        = phone?.state === "device";
   const isUnauthorized = phone?.state === "unauthorized";
   const isOffline      = phone?.state === "offline";
   const isEmpty        = !phone;
@@ -960,10 +1009,13 @@ function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower }: { phone: 
   };
 
   return (
-    <div className="flex flex-col bg-zinc-950 rounded-2xl border border-white/8 overflow-hidden shadow-xl w-full h-full">
+    <div
+      className={`flex flex-col bg-zinc-950 rounded-2xl border border-white/8 overflow-hidden shadow-xl ${shellClassExtra}`}
+      style={shellStyle}
+    >
 
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 bg-zinc-900 border-b border-white/6 shrink-0">
+      <div ref={headerRef} className="flex items-center justify-between px-3 py-2 bg-zinc-900 border-b border-white/6 shrink-0">
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="text-[9px] font-mono text-white/20 shrink-0">S{idx + 1}</span>
           {label && <span className="text-[10px] font-semibold text-white/70 truncate">{label}</span>}
@@ -1136,7 +1188,7 @@ function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower }: { phone: 
 
       {/* Nav bar */}
       {isReady && phone && (
-        <div className="flex items-center justify-center gap-2 py-2 bg-zinc-900 border-t border-white/6 shrink-0">
+        <div ref={navRef} className="flex items-center justify-center gap-2 py-2 bg-zinc-900 border-t border-white/6 shrink-0">
           <NavBtn icon={<ChevronLeft className="w-3.5 h-3.5" />} label="Back"   onClick={() => sendKey(phone.serial, 4,   "Back",   onLog)} />
           <NavBtn icon={<Home        className="w-3.5 h-3.5" />} label="Home"   onClick={() => sendKey(phone.serial, 3,   "Home",   onLog)} />
           <NavBtn icon={<LayoutGrid  className="w-3.5 h-3.5" />} label="Recent" onClick={() => sendKey(phone.serial, 187, "Recent", onLog)} />
@@ -3214,6 +3266,24 @@ export function MobilePage() {
   const [error,   setError]   = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [phoneDims, setPhoneDims] = useState<{ w: number; h: number } | null>(null);
+  // Measured size of the pane the phone shell lives in — feeds PhoneSlot's
+  // exact-fit sizing (see PhoneSlot's "Exact shell sizing" block). Must be
+  // the real available box, not derived from CSS aspect-ratio math, or the
+  // header/nav chrome eats into the phone-ratio budget again.
+  const paneRef = useRef<HTMLDivElement>(null);
+  const [paneSize, setPaneSize] = useState<{ w: number; h: number } | null>(null);
+  useEffect(() => {
+    const el = paneRef.current;
+    if (!el) return;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      setPaneSize({ w: r.width, h: r.height });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const [activeTab, setActiveTab] = useState<MobileTab>("tool");
   // Per-serial "user explicitly turned the live view on" flag. Visiting the
   // Mobile tab, or a phone simply being connected, must never by itself
@@ -3337,42 +3407,38 @@ export function MobilePage() {
         {/* Phone (left half, full height) + automation settings (right half) */}
         {showSplitView && (
           <div className="flex-1 min-h-0 flex">
-            <div className="w-1/2 h-full flex items-center justify-center p-4 min-h-0">
-              {/* Aspect ratio is set from the phone's real reported resolution
-                  once known (falls back to 9/16 before the first frame
-                  arrives), so the canvas's object-fit: contain never has to
-                  letterbox — the shell fits the actual screen exactly instead
-                  of leaving black bars on either side. */}
-              <div
-                className="h-full"
-                style={{
-                  maxWidth: "100%",
-                  aspectRatio: phoneDims ? `${phoneDims.w} / ${phoneDims.h}` : "9 / 16",
-                }}
-              >
-                {slots.map((phone, i) => (
-                  <PhoneSlot
-                    key={phone?.serial ?? `empty-${i}`}
-                    phone={phone}
-                    idx={i}
-                    onLog={addLog}
-                    onDimensions={(w, h) => setPhoneDims({ w, h })}
-                    // Only auto-connect the live feed while a cycle is
-                    // actually executing (automation.running) — NOT merely
-                    // because the master toggle is enabled. Previously this
-                    // used `automation.settings.enabled`, so after a
-                    // restart/update with the toggle left on, opening this
-                    // tab reconnected the phone's video feed immediately
-                    // just to "check if it's alive" even though the
-                    // automation loop was idle, waiting for its next
-                    // scheduled run — an unnecessary connection. Clicking
-                    // Power (liveOn) is still a deliberate manual-view
-                    // action and always connects regardless of execution.
-                    live={!!(phone && (liveOn[phone.serial] || automation.running))}
-                    onPower={() => { if (phone) setLiveOn(s => ({ ...s, [phone.serial]: true })); }}
-                  />
-                ))}
-              </div>
+            <div ref={paneRef} className="w-1/2 h-full flex items-center justify-center p-4 min-h-0">
+              {/* PhoneSlot sizes its own shell exactly to the phone's real
+                  reported resolution using the measured pane size below —
+                  see PhoneSlot's "Exact shell sizing" block for why this
+                  can't be a CSS aspect-ratio on a wrapper div (that was the
+                  bug: it included the header/nav chrome in the ratio math,
+                  which shrank the resolved screen height and forced the
+                  canvas to pillarbox/letterbox — the "dead space" bug). */}
+              {slots.map((phone, i) => (
+                <PhoneSlot
+                  key={phone?.serial ?? `empty-${i}`}
+                  phone={phone}
+                  idx={i}
+                  onLog={addLog}
+                  onDimensions={(w, h) => setPhoneDims({ w, h })}
+                  phoneDims={phoneDims}
+                  paneSize={paneSize}
+                  // Only auto-connect the live feed while a cycle is
+                  // actually executing (automation.running) — NOT merely
+                  // because the master toggle is enabled. Previously this
+                  // used `automation.settings.enabled`, so after a
+                  // restart/update with the toggle left on, opening this
+                  // tab reconnected the phone's video feed immediately
+                  // just to "check if it's alive" even though the
+                  // automation loop was idle, waiting for its next
+                  // scheduled run — an unnecessary connection. Clicking
+                  // Power (liveOn) is still a deliberate manual-view
+                  // action and always connects regardless of execution.
+                  live={!!(phone && (liveOn[phone.serial] || automation.running))}
+                  onPower={() => { if (phone) setLiveOn(s => ({ ...s, [phone.serial]: true })); }}
+                />
+              ))}
             </div>
             <div className="w-1/2 h-full min-h-0 flex flex-col border-l border-border">
               <div className="shrink-0 flex items-center border-b border-border px-4">

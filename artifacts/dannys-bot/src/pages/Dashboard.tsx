@@ -78,6 +78,23 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.555",
+    date: "14 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Found and fixed the real cause of the phone mirror's dead space and the Back/Home/Recent buttons being unreachable. The mirror's shape was being calculated using the height of the whole card (header bar + screen + button row) instead of just the screen, so the video area was squeezed shorter than it should be and could push the button row outside the visible card. The mirror now measures the header and button row for real and sizes the screen around them, so the shell hugs the phone image with no black bars, and the buttons always stay on-screen and clickable.",
+        technical: [
+          "PhoneSlot no longer inherits a CSS aspect-ratio from a wrapper div that spanned header+screen+nav together — that math assumed the whole card was the phone's shape, which is wrong once fixed-height chrome (header, nav bar) is added to the box.",
+          "Added a ResizeObserver-measured header/nav chrome height inside PhoneSlot; the shell's pixel width/height is now computed as (available pane height − measured chrome height) × phone aspect ratio, clamped to the available pane width.",
+          "This guarantees the screen area LiveCanvas draws into is already the phone's exact aspect ratio, so its own contain-fit letterboxing never has to kick in — zero pillarbox instead of a CSS-driven approximation.",
+          "Also guarantees the shell's total height never exceeds the pane, so the nav bar can no longer be pushed past the parent's overflow-hidden and become unclickable.",
+          "Not yet verified against the real device — no phone attached in this dev environment. Please test the mirror fit and the Back/Home/Recent buttons on your real device and report back.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.554",
     date: "14 Jul 2026",
     items: [
