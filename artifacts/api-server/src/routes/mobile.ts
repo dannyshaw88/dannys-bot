@@ -1241,41 +1241,48 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
    *   true  — Send was tapped and the sheet closed (DM sent)
    *   false — Send was tapped (or fallback coordinate used) but sheet stayed open (no recipient selected / send failed)
    *   null  — sheet was already gone when we checked (DM likely sent by the recipient-tap itself); caller must NOT press Back
+   *
+   * Sheet-open detection uses the DM-specific search-box resource-id
+   * ("direct_private_share") rather than label strings like "Direct" / "Share":
+   *  - findButtonByLabel("Direct") matched resource-id="...direct_private_share_sticky_search_box..."
+   *    via substring — always truthy while the sheet was open, making "send confirmed"
+   *    unreachable and always returning false even after a successful send.
+   *  - findButtonByLabel("Share") matched the "Share via other apps" pill in the
+   *    external-app row, also always present — the null (already-dismissed) path
+   *    was similarly unreachable.
    */
   async function sendShareSheet(serial: string, w: number, h: number): Promise<boolean | null> {
+    // Is the DM share sheet currently visible?  The sticky search box is
+    // present for the entire lifetime of the sheet and only ever appears
+    // inside it, making it a reliable, DM-specific indicator with no false
+    // positives from feed or nav elements.
+    const isDmSheetOpen = async (): Promise<boolean> => {
+      const found = await android.findButtonByLabel(serial, "direct_private_share").catch(() => null)
+        ?? await android.findButtonByLabel(serial, "layout_container_bottom_sheet").catch(() => null);
+      return found !== null;
+    };
+
     const sendBtn = await android.findButtonByLabel(serial, "Send").catch(() => null);
     if (sendBtn) {
       await android.tap(serial, sendBtn.x, sendBtn.y);
-      // Verify the tap actually sent: a successful send closes the share sheet,
-      // so the "Send" button disappears. If no recipient was selected the button
-      // does nothing and the sheet stays open — we detect that here and return
-      // false so the caller can close the sheet rather than logging a false success.
+      // Verify the tap actually sent: a successful send closes the share sheet.
+      // If no recipient was selected the button does nothing and the sheet stays
+      // open — we detect that and return false so the caller can close the sheet.
       await sleepOrAbort(serial, 900);
-      const sheetStillOpen = await android.findButtonByLabel(serial, "Send").catch(() => null);
-      return !sheetStillOpen;
+      return !(await isDmSheetOpen());
     }
-    // UIAutomator didn't find "Send" — this previously fell back to a
-    // fixed-coordinate tap and unconditionally returned true regardless of
-    // whether the sheet was even open, which produced false "shared via
-    // DM" success logs while nothing was actually sent (confirmed on a
-    // live run: the DM step never fired, but the fallback tap + `true`
-    // return reported success anyway). The fixed coordinate is only a
-    // sensible tap target if the share sheet is actually open — confirm
-    // that first by checking for a recipient-list/sheet marker before
-    // trusting the blind tap.
-    const sheetOpen = await android.findButtonByLabel(serial, "Direct").catch(() => null)
-      ?? await android.findButtonByLabel(serial, "Share").catch(() => null)
-      ?? await android.findButtonByLabel(serial, "To").catch(() => null);
-    // Sheet already gone — the recipient tap likely auto-sent the DM.
-    // Return null so the caller knows NOT to press Back (Back on the feed
-    // scrolls to top and triggers Instagram's pull-to-refresh).
-    if (!sheetOpen) return null;
+    // "Send" button not visible — either the sheet is already gone (recipient
+    // tap auto-sent the DM on this device), or no recipient is selected yet.
+    if (!(await isDmSheetOpen())) {
+      // Sheet already dismissed — return null so the caller knows NOT to press
+      // Back (Back on the home feed scrolls to top + triggers pull-to-refresh).
+      return null;
+    }
+    // Sheet is open but Send button not found — tap the coordinate fallback.
     await android.tap(serial, Math.round(w * 0.422), Math.round(h * 0.948));
-    // Same verification for the coordinate-fallback path.
     await sleepOrAbort(serial, 900);
-    const sheetStillOpen2 = await android.findButtonByLabel(serial, "Send").catch(() => null)
-      ?? await android.findButtonByLabel(serial, "Direct").catch(() => null);
-    return !sheetStillOpen2;
+    // Sheet closed = DM sent; sheet still open = send failed / no recipient.
+    return !(await isDmSheetOpen());
   }
 
   // Shared by the standalone `/check-feed` route and the full

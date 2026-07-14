@@ -4,6 +4,22 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.579] — 2026-07-14
+
+### Fix: pull-to-refresh no longer triggered after Share-to-DM (root cause fixed)
+
+The v1.1.578 fix covered the case where the share sheet was already gone before `sendShareSheet` ran. This release fixes the remaining case — the far more common one on this device — where the sheet appeared "still open" according to the code even after the DM was sent.
+
+**Root cause:** Two false-positive matches inside `sendShareSheet`:
+
+1. `findButtonByLabel("Direct")` was used in the post-send verification to check whether the sheet was still open. But `findButtonByLabel` also searches `resource-id`, so it matched `resource-id="com.instagram.android:id/direct_private_share_sticky_search_box"` (the DM sheet's own search box) via substring. That node is present for the entire lifetime of the sheet — so the verification always said "sheet still open", always returned `false` (send failed), even when the DM had actually been sent.
+
+2. `findButtonByLabel("Share")` (used as the sheet-open guard before the coordinate-fallback tap) matched the "Share via other apps" pill in the external-apps row — also always present while the sheet is open. The `null` return path (sheet already gone) was therefore unreachable on this device.
+
+**Fix:** Replaced all three sheet-open indicator lookups (`"Direct"`, `"Share"`, `"To"`) with a single `"direct_private_share"` resource-id substring check, which matches `direct_private_share_sticky_search_box` — a node that is present during the DM sheet's entire lifetime and never appears in any other Instagram screen. Confirmation that the sheet has closed (= DM sent) now correctly returns `true` or `null` instead of always `false`, preventing the spurious Back press that was landing on the home feed and triggering the pull-to-refresh.
+
+---
+
 ## [1.1.578] — 2026-07-14
 
 ### Fix: pull-to-refresh no longer triggered after a successful Share-to-DM
