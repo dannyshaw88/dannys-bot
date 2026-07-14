@@ -1363,6 +1363,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (fg && fg !== INSTAGRAM_PKG) {
         strayNavRecoveries++;
         logger.warn({ serial, fg }, "[check-feed] tap navigated away from Instagram (likely hit an ad's CTA) — recovering with BACK");
+        onLog?.(`⚠ Tapped outside Instagram — foreground app is "${fg}" (likely hit an ad CTA). Pressing Back to recover…`);
         try { await android.pressBack(serial); } catch { /* best effort */ }
         await sleepOrAbort(serial, 700);
         // If BACK didn't get us home (e.g. it opened a separate app like the
@@ -1428,6 +1429,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // This card replaced the post entirely — there is nothing safe to
           // tap for like/share/share-DM. Skip all three and just scroll on.
           logger.info({ serial }, "[check-feed] feedback/survey card detected in place of a post — skipping like/share/share-DM, scrolling past");
+          onLog?.(`Scroll ${i + 1}/${count}: feedback/survey card on screen — skipping like/share`);
           if (wantLike) likeFailures++;
         } else {
           await sleepOrAbort(serial, 250 + Math.round(Math.random() * 250));
@@ -1437,6 +1439,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // absence — a page/profile owner can disable comments and/or
           // shares per post) is resolved fresh per post instead of assuming
           // a fixed layout. See findFeedActionIcons()'s doc comment.
+          onLog?.(`Scroll ${i + 1}/${count}: scanning action bar…`);
           const icons = await android.findFeedActionIcons(serial).catch(() => null);
           if (!icons) {
             // No Like button found — this isn't a normal in-feed post right
@@ -1445,10 +1448,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // like AND share AND share-DM rather than firing share taps at
             // coordinates that assume an action bar exists.
             logger.info({ serial, target: "action-bar", matched: false }, "[check-feed] skipped like/share/share-DM — no Like button visible on screen");
+            onLog?.(`Scroll ${i + 1}/${count}: no Like button visible — skipping actions (Reel/ad/animating)`);
             if (wantLike) likeFailures++;
           } else {
             const likeBtn = icons.like;
+            const iconSummary = `like=(${likeBtn.x},${likeBtn.y}) comment=${icons.comment ? `(${icons.comment.x},${icons.comment.y})` : "n/a"} shareFeed=${icons.shareFeed ? `(${icons.shareFeed.x},${icons.shareFeed.y})` : "n/a"} shareDM=${icons.shareDm ? `(${icons.shareDm.x},${icons.shareDm.y})` : "n/a"}`;
             logger.info({ serial, hasComment: !!icons.comment, hasShareFeed: !!icons.shareFeed, hasShareDm: !!icons.shareDm }, "[check-feed] action-bar icons detected for this post");
+            onLog?.(`Scroll ${i + 1}/${count}: action bar found — ${iconSummary}`);
 
             if (wantLike) {
               // Tiny jitter (a few px) so repeated taps aren't pixel-identical,
@@ -1456,14 +1462,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               const jx = likeBtn.x + Math.round((Math.random() - 0.5) * 6);
               const jy = likeBtn.y + Math.round((Math.random() - 0.5) * 6);
               logger.info({ serial, target: "like-button", x: jx, y: jy, matched: true }, "[check-feed] tap like");
+              onLog?.(`Scroll ${i + 1}/${count}: tapping Like at (${jx},${jy})…`);
               try {
                 await android.tap(serial, jx, jy);
                 likes++;
+                onLog?.(`Scroll ${i + 1}/${count}: ✓ liked (total likes this run: ${likes})`);
               } catch {
                 likeFailures++;
+                onLog?.(`Scroll ${i + 1}/${count}: ✗ like tap threw an error`);
               }
               await sleepOrAbort(serial, 300);
               await verifyStillInInstagram();
+            } else {
+              onLog?.(`Scroll ${i + 1}/${count}: like roll missed (chance ${Math.round(likeChance * 100)}%) — scrolling without like`);
             }
 
             // Share to Feed (repost): tap the circular-arrows icon, find
@@ -1478,6 +1489,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // risking a tap on the wrong control (e.g. Comment).
             if (wantShareFeed && !icons.shareFeed) {
               logger.info({ serial }, "[check-feed] skipped share-to-feed — icon not identifiable on this post (disabled or ambiguous layout)");
+              onLog?.(`Scroll ${i + 1}/${count}: skipped repost — share-to-feed icon not found on this post`);
             }
             if (wantShareFeed && icons.shareFeed) {
               const shareFeedIconX = icons.shareFeed.x, rowY = icons.shareFeed.y;
@@ -1494,6 +1506,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 // matches that same relabelled icon via substring and this
                 // code taps it AGAIN — undoing the repost it just made.
                 const beforeCd = await android.getContentDescNear(serial, shareFeedIconX, rowY).catch(() => null);
+                onLog?.(`Scroll ${i + 1}/${count}: tapping share-to-feed icon at (${shareFeedIconX},${rowY})…`);
                 await android.tap(serial, shareFeedIconX, rowY);
                 logger.info({ serial, x: shareFeedIconX, y: rowY, beforeCd }, "[check-feed] tapped share-to-feed icon");
                 await sleepOrAbort(serial, 1200); // wait for a possible share sheet
@@ -1502,6 +1515,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 const sameCoords = !!repostBtn &&
                   Math.abs(repostBtn.x - shareFeedIconX) < 15 && Math.abs(repostBtn.y - rowY) < 15;
                 if (repostBtn && !sameCoords) {
+                  onLog?.(`Scroll ${i + 1}/${count}: Repost sheet opened — tapping Repost at (${repostBtn.x},${repostBtn.y})…`);
                   await android.tap(serial, repostBtn.x, repostBtn.y);
                   logger.info({ serial }, "[check-feed] tapped Repost in sheet");
                   await sleepOrAbort(serial, 1000);
@@ -1512,21 +1526,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   if (closeBtn) {
                     await android.tap(serial, closeBtn.x, closeBtn.y);
                     logger.info({ serial }, "[check-feed] dismissed repost confirmation popup (Close)");
+                    onLog?.(`Scroll ${i + 1}/${count}: dismissed "You reposted" popup`);
                     await sleepOrAbort(serial, 500);
                   }
                   sharesFeed++;
+                  onLog?.(`Scroll ${i + 1}/${count}: ✓ reposted to feed (total reposts: ${sharesFeed})`);
                 } else if (sameCoords) {
                   const afterCd = await android.getContentDescNear(serial, shareFeedIconX, rowY).catch(() => null);
                   if (afterCd && afterCd !== beforeCd) {
                     logger.info({ serial, beforeCd, afterCd }, "[check-feed] repost icon label changed in place — single-tap repost succeeded, no sheet on this account");
+                    onLog?.(`Scroll ${i + 1}/${count}: ✓ reposted (single-tap, no sheet) — icon changed: "${beforeCd}" → "${afterCd}"`);
                     sharesFeed++;
                   } else {
                     logger.info({ serial, beforeCd, afterCd }, "[check-feed] repost icon unchanged after tap — genuinely did not complete — pressing Back");
+                    onLog?.(`Scroll ${i + 1}/${count}: repost icon unchanged after tap — pressing Back`);
                     await android.pressBack(serial);
                     await sleepOrAbort(serial, 500);
                   }
                 } else {
                   logger.info({ serial }, "[check-feed] no Repost-labelled node found after tap — pressing Back");
+                  onLog?.(`Scroll ${i + 1}/${count}: no Repost option appeared after tap — pressing Back`);
                   await android.pressBack(serial);
                   await sleepOrAbort(serial, 500);
                 }
@@ -1545,12 +1564,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // findFeedActionIcons), so the action is skipped.
             if (wantShareDm && !icons.shareDm) {
               logger.info({ serial }, "[check-feed] skipped share-via-DM — icon not identifiable on this post (disabled or ambiguous layout)");
+              onLog?.(`Scroll ${i + 1}/${count}: skipped share-via-DM — paper-plane icon not found on this post`);
             }
             if (wantShareDm && icons.shareDm) {
               const shareDmIconX = icons.shareDm.x, rowY = icons.shareDm.y;
               if (isCycleAborted(serial)) throw new Error("cycle-aborted");
               try {
                 await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
+                onLog?.(`Scroll ${i + 1}/${count}: tapping share-via-DM icon at (${shareDmIconX},${rowY})…`);
                 await android.tap(serial, shareDmIconX, rowY);
                 logger.info({ serial, x: shareDmIconX, y: rowY }, "[check-feed] tapped share-to-DM icon");
                 await sleepOrAbort(serial, 1200); // wait for DM picker sheet
@@ -1558,6 +1579,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 // then look for the Send button that appears once a
                 // recipient is selected — previously this just opened the
                 // sheet and pressed Back, never actually sending to anyone.
+                onLog?.(`Scroll ${i + 1}/${count}: picking DM recipient…`);
                 await tapRandomShareSheetRecipient(serial, w, h);
                 // 1500ms instead of 700ms — UIAutomator (now async) takes
                 // ~4s on this device. 700ms was never enough time for the
@@ -1566,10 +1588,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 const sent = await sendShareSheet(serial, w, h);
                 if (sent) {
                   logger.info({ serial }, "[check-feed] shared post via DM — Send tapped");
+                  onLog?.(`Scroll ${i + 1}/${count}: ✓ shared via DM — Send tapped (total DM shares: ${sharesDm + 1})`);
                   await sleepOrAbort(serial, 800);
                   sharesDm++;
                 } else {
                   logger.info({ serial }, "[check-feed] Send button not found after picking recipient — pressing Back");
+                  onLog?.(`Scroll ${i + 1}/${count}: Send button not found after picking DM recipient — pressing Back`);
                   await android.pressBack(serial);
                   await sleepOrAbort(serial, 500);
                 }
@@ -1578,6 +1602,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             }
           }
         }
+      } else {
+        onLog?.(`Scroll ${i + 1}/${count}: no actions rolled this scroll`);
       }
 
       if (i < count - 1) {
@@ -1587,6 +1613,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     if (strayNavRecoveries > 0) {
       logger.warn({ serial, strayNavRecoveries }, "[check-feed] recovered from stray navigation (ad CTA) during this run");
+      onLog?.(`⚠ Recovered from ${strayNavRecoveries} stray navigation(s) — likely tapped an ad CTA during scroll`);
     }
     return { count, likes, likeFailures, sharesFeed, sharesDm, strayNavRecoveries };
   }

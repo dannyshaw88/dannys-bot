@@ -4,6 +4,46 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.560] — 2026-07-14
+
+### Fix: View Posts tool — all actions now fully logged in the UI log panel; Make a Post no longer deselects the auto-selected photo; Rate Instagram popup auto-dismissed; stray-navigation warning shown in log
+
+**View Posts / feed scroll — comprehensive UI log added**
+
+Every significant action the feed scroll loop takes was previously only going to the server's pino log (invisible in the app). The UI log panel (the "Log" tab on the Mobile page) now shows the full detail for every scroll iteration:
+
+- `Scroll N/M: scanning action bar…` — confirms the tool is looking for the Like/Share icons on that post
+- `Scroll N/M: action bar found — like=(x,y) comment=(x,y) shareFeed=(x,y) shareDM=(x,y)` — exact pixel coordinates of every icon found on that specific post (invaluable for debugging a misclick: if the coordinates look wrong for where the icon should be, the issue is in `findFeedActionIcons`)
+- `Scroll N/M: tapping Like at (x,y)…` followed by `✓ liked (total likes this run: N)` or `✗ like tap threw an error`
+- `Scroll N/M: like roll missed (chance N%) — scrolling without like` — when the randomised chance didn't fire
+- `Scroll N/M: no Like button visible — skipping actions (Reel/ad/animating)` — when the post on screen isn't a normal feed post
+- `Scroll N/M: feedback/survey card on screen — skipping like/share` — when Instagram's own survey/feedback card is on screen
+- `Scroll N/M: no actions rolled this scroll` — when no actions were configured to fire this iteration
+- Full share-to-feed (repost) path logged: icon tap coordinates, Repost sheet confirmation, "You reposted" popup dismissal, running total
+- Full share-via-DM path logged: icon tap, recipient selection, Send confirmation, running total
+- Skip reasons logged explicitly for both share paths when their icons can't be identified
+- `⚠ Tapped outside Instagram — foreground app is "X" (likely hit an ad CTA). Pressing Back to recover…` — the stray-navigation recovery was previously only in the server log; now visible in the UI so the misclick moment is immediately identifiable
+- `⚠ Recovered from N stray navigation(s) — likely tapped an ad CTA during scroll` — end-of-run summary if any recoveries happened
+
+**Make a Post — thumbnail re-tap deselects the auto-selected photo (fixed)**
+
+Instagram auto-selects the most recent gallery photo the moment the New Post picker opens (the image appears in the preview at the top and the expand/fit toggle appears). The automation was tapping the already-selected thumbnail a second time, which *deselects* it (the thumbnail turns grey/white) and leaves the preview empty — causing every subsequent Next/Share tap to fail.
+
+Fix: the expand/fit toggle is now used as the "is an image already selected?" signal. If the toggle is visible → skip the thumbnail tap entirely. If it is *not* visible (e.g. the media scanner hadn't indexed the pushed file in time when IG opened) → tap the first non-camera thumbnail as before, then re-probe. This makes the detection concrete and non-destructive.
+
+The flow the automation now follows:
+1. Open picker → IG auto-selects newest photo (expand toggle becomes visible)
+2. Tap the expand/fit toggle (two-arrow NE↔SW icon, bottom-left of preview) to switch to full-image fit
+3. Tap **Next** (top-right header)
+4. Tap blue **Next** on the filter/edit screen
+5. Tap blue **Share**
+
+**Rate Instagram / "Remind me later" popup — auto-dismissed**
+
+`"No thanks"` and `"No Thanks"` were already in the auto-dismiss label list and are called mid-scroll, at launch, and at other cycle checkpoints — so "Rate us" popups were already being handled wherever those checkpoints run. Added `"Remind me later"` and `"Remind Me Later"` to the same list to cover the other soft-dismiss button on that popup.
+
+---
+
 ## [1.1.559] — 2026-07-14
 
 ### Fix: mirror taps accurate in the middle, off near the edges — the real letterbox/pillarbox bug behind the mismatched resolutions
