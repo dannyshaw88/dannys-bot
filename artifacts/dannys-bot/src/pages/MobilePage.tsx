@@ -1641,8 +1641,11 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             likePercentMax: s.likePercentMax,
             shareFeedPercentMin: s.shareFeedPercentMin,
             shareFeedPercentMax: s.shareFeedPercentMax,
-            shareDmPercentMin: s.shareDmPercentMin,
-            shareDmPercentMax: s.shareDmPercentMax,
+            // Share-via-DM is intentionally disabled in the UI (fields are
+            // locked/greyed out). Always send 0 regardless of any previously
+            // persisted value so the backend never rolls a DM-share action.
+            shareDmPercentMin: 0,
+            shareDmPercentMax: 0,
             viewStoriesSlidesMin: s.viewStoriesSlidesMin,
             viewStoriesSlidesMax: s.viewStoriesSlidesMax,
             viewStoriesSlideWatchPctMin: s.viewStoriesSlideWatchPctMin,
