@@ -1535,62 +1535,58 @@ export async function findFeedActionIcons(serial: string, onLog?: (msg: string) 
   // regardless of whether the post disabled repost or the label is just
   // missing — both cases are handled identically and safely by callers.
 
-  // --- Device-specific fallback: icon/count structural pairing ---
+  // --- Device-specific fallback: icon-class structural identification ---
   //
   // Confirmed 14 Jul 2026 against a live screenshot + matching row dump on a
   // device/build where content-desc AND resource-id are BOTH empty on every
   // action-bar node (v1.1.570/571 dumps), so no label exists to match at
-  // all. The row dump instead showed a consistent structural pattern: each
-  // real action icon renders as a content-desc-less `android.view.ViewGroup`
-  // (the tappable icon graphic itself, empty `text`) immediately followed in
-  // x-order by a content-desc-less `android.widget.Button` carrying the
-  // visible count as its `text` attribute (e.g. txt="2,340"). A single
-  // unpaired LEADING Button (no ViewGroup immediately before it) is the
-  // *Like* count label, not a separate action — Instagram renders it right
-  // after the Like heart, before Comment's icon/count pair, and it must be
-  // discarded rather than mistaken for Comment.
+  // all. The row dump showed a consistent pattern: each real action icon
+  // renders as a content-desc-less `android.view.ViewGroup` with empty
+  // `text` (the tappable icon graphic itself). When a visible count exists,
+  // Instagram renders it as a SEPARATE content-desc-less `android.widget.
+  // Button` immediately after the icon (e.g. txt="2,340") — but that count
+  // node is NOT relied on for identification, only the ViewGroup icon is.
+  //
+  // Why not require the adjacent count node (v1.1.573's original approach):
+  // a post can have a genuine zero count on any of Comment/Repost/Send —
+  // possibly on all three, or all four including Like — and it is unknown
+  // whether Instagram then renders the count Button with blank text or
+  // omits the node from the tree entirely. Requiring a paired Button either
+  // way would risk silently losing icons on exactly the zero-count posts
+  // this is meant to handle. The icon's own class/content-desc/text is
+  // constant regardless of whether a count node exists next to it, so
+  // identification uses ONLY that: a candidate action icon is any rowNode
+  // that is a content-desc-less, text-less ViewGroup.
   //
   // Live confirmation: screenshot showed comment=34, repost=2,340, send=30.9K
-  // on a post; the row dump for that exact post had exactly 3 (ViewGroup,
-  // Button) pairs after the leading unpaired Like-count Button, with
-  // txt="34", txt="2,340", txt="30.9K" in that left-to-right order — matching
-  // Comment/Repost/Send exactly. This is a structural/type read of the live
-  // tree (class + adjacency), not a fixed pixel-percentage guess, but it is
-  // still elimination-based like the label matching above: it only fires
-  // when NONE of comment/shareFeed/shareDm were found by label (this device
-  // has none), and only trusts the result when exactly 3 pairs are found —
-  // anything else (an icon disabled, extra/missing pairs) is genuinely
-  // ambiguous with no label to confirm which slot is missing, so it's left
-  // null rather than guessed, per this function's existing contract.
+  // on a post; the row dump for that exact post had exactly 3 such
+  // ViewGroups (each followed by its own Button count, coincidentally, but
+  // that adjacency isn't what's being trusted here) in that left-to-right
+  // order — matching Comment/Repost/Send exactly.
+  //
+  // This is a structural/type read of the live tree (class + content-desc +
+  // text), not a fixed pixel-percentage guess, but it is still
+  // elimination-based like the label matching above: it only fires when
+  // NONE of comment/shareFeed/shareDm were found by label (this device has
+  // none), and only trusts the result when EXACTLY 3 candidate icons are
+  // found. Anything else (an icon disabled, extra unrelated ViewGroups,
+  // fewer than 3) is genuinely ambiguous with no label to confirm which
+  // slot is missing or spurious, so it's left null rather than guessed —
+  // same safety contract as the rest of this function.
   if (!comment && !shareFeed && !shareDm) {
-    type Pair = { icon: RowNode; count: RowNode };
-    const pairs: Pair[] = [];
-    for (let i = 0; i < rowNodes.length - 1; i++) {
-      const a = rowNodes[i];
-      const b = rowNodes[i + 1];
-      // The count node's `text` is NOT required to contain a digit: Instagram
-      // renders no text at all for a zero count (a post with 0 comments/
-      // reposts/DM-shares shows a blank count, not the digit "0"). Requiring
-      // /\d/ here would silently drop that icon's pair and leave it null on
-      // exactly the posts most likely to have a real zero count. The role
-      // split is by CLASS instead, which is present either way: the icon
-      // graphic is always a content-desc-less ViewGroup with empty text, the
-      // count label next to it is always a content-desc-less Button — full,
-      // blank, or otherwise.
-      if (
-        a.cls === "android.view.ViewGroup" && !a.cd && !a.txt &&
-        b.cls === "android.widget.Button" && !b.cd &&
-        (b.x - a.x) < maxIconWidth * 2
-      ) {
-        pairs.push({ icon: a, count: b });
-        i++; // consume both nodes, don't let b start a new pair
-      }
-    }
-    if (pairs.length === 3) {
-      onLog?.(`[feed-icons] structural icon/count pairing matched 3 pairs — assigning Comment/Repost/Send by elimination: ${pairs.map(p => `icon@${p.icon.x} count="${p.count.txt}"`).join(" | ")}`);
-      comment   = pos(pairs[0].icon);
-      shareFeed = pos(pairs[1].icon);
-      shareDm   = pos(pairs[2].icon);
+    const iconCandidates = rowNodes.filter(n => n.cls === "android.view.ViewGroup" && !n.cd && !n.txt);
+    if (iconCandidates.length === 3) {
+      const countFor = (icon: RowNode) => {
+        const idx = rowNodes.indexOf(icon);
+        const next = rowNodes[idx + 1];
+        return next && next.cls === "android.widget.Button" && !next.cd && (next.x - icon.x) < maxIconWidth * 2
+          ? next.txt || "(blank/zero)"
+          : "(no count node)";
+      };
+      onLog?.(`[feed-icons] structural icon-class match found exactly 3 candidates — assigning Comment/Repost/Send by elimination: ${iconCandidates.map(n => `icon@${n.x} count=${countFor(n)}`).join(" | ")}`);
+      comment   = pos(iconCandidates[0]);
+      shareFeed = pos(iconCandidates[1]);
+      shareDm   = pos(iconCandidates[2]);
     }
   }
 

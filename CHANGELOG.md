@@ -4,6 +4,14 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.575] — 2026-07-14
+
+### Fix: icon detection no longer depends on a count node existing at all
+
+v1.1.573/574 identified Comment/Repost/Send by pairing each icon `ViewGroup` with an adjacent count `Button`. That still assumed a count node (blank or not) always exists next to the icon — but it's unknown whether Instagram renders a blank-text Button for a zero count or omits the node from the tree entirely. If it omits it, a post with all three counts at zero (or Like's count also hidden) would have no Button to pair with, and every icon would wrongly stay undetected. Removed the pairing requirement: Comment/Repost/Send are now identified purely by the icon's own signature (a content-desc-less, text-less `ViewGroup`), independent of whether any count node exists beside it. Still elimination-based (only trusted when exactly 3 candidates are found) and only used when no content-desc label matched anything.
+
+---
+
 ## [1.1.574] — 2026-07-14
 
 ### Fix: structural icon/count pairing no longer requires a non-zero count
