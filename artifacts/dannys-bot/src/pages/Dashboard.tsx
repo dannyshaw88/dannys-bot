@@ -78,6 +78,22 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.550",
+    date: "14 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Phone mirror click offset — root cause found and eliminated. The actual bug was server-side: the /input/tap route was calling `adb shell wm size` on every tap and using the result to rescale coordinates from the video frame's pixel space to the device's logical pixel space. On this device, `wm size` returns a slightly different number from `frame.displayWidth` (OEM quirk, alignment rounding, or an active display-size override), causing a small but consistent ratio error — roughly 1–2% — that grows with distance from the left edge and shows up as 5–15px rightward displacement. The client-side changes in v1.1.548 and v1.1.549 were correct but irrelevant: the container is already forced to the phone's exact aspect ratio via the `aspectRatio` wrapper, so all three coordinate mappings produced identical x,y values, and the displacement was injected afterwards by the rescaling step. The fix: `screenrecord --output-format=h264` without `--size` always captures at the device's native logical resolution, so `frame.displayWidth/Height` IS the ADB coordinate space — no rescaling is ever needed. Removing videoW/videoH from the tap/swipe requests causes `rescaleForDevice` to fast-return immediately (it already checks `!videoW || !videoH`), bypassing both the `wm size` sync call and the ratio math entirely.",
+        technical: [
+          "Removed videoW and videoH from the fetch body of all three gesture requests: /input/double-tap, /input/tap, and /input/swipe.",
+          "rescaleForDevice already guards: `if (!videoW || !videoH) return { x, y }` — no server-side change needed.",
+          "Side-effect: each manual tap no longer blocks on a synchronous `adb shell wm size` round-trip (100–300ms per tap), so the mirror now responds instantly.",
+          "The v1.1.548 and v1.1.549 canvas changes (drawRectRef, ResizeObserver, letterbox draw) are kept — they are the correct implementation and will be important if the mirror is ever shown without the aspect-ratio wrapper.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.549",
     date: "14 Jul 2026",
     items: [

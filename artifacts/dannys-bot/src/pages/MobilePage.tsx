@@ -676,7 +676,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
           const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/double-tap`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ x: drag.startX, y: drag.startY, videoW: phoneSize.w, videoH: phoneSize.h }),
+            body: JSON.stringify({ x: drag.startX, y: drag.startY }),
           });
           if (!r.ok) {
             const body = await r.json().catch(() => null);
@@ -699,7 +699,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
           const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/tap`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ x: tapX, y: tapY, videoW: phoneSize.w, videoH: phoneSize.h }),
+            body: JSON.stringify({ x: tapX, y: tapY }),
           });
           if (!r.ok) {
             const body = await r.json().catch(() => null);
@@ -720,7 +720,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           x1: drag.startX, y1: drag.startY, x2: endX, y2: endY,
-          durationMs, videoW: phoneSize.w, videoH: phoneSize.h,
+          durationMs,
         }),
       });
       if (!r.ok) {
