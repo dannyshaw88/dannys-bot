@@ -4,6 +4,29 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.580] — 2026-07-14
+
+### Fix: Story tool — slide count, short-story likes, and Share-to-DM wrong tap
+
+Three bugs fixed in the View Stories from Feed tool:
+
+**1. Slide-advance tap fires on last iteration (caused 4-5 slides when "1" was set)**
+
+The advance-to-next-slide tap (`tap right 75 %`) previously fired at the end of every loop iteration, including the last one. For 3-second story slides, the like/share sequence (1800ms open wait + 250ms action wait + multi-step share) already auto-advances through 2-3 slides naturally. The unnecessary final advance tap pushed the count 1 higher, then the exit swipe-down pushed it 1 more. Result: user set "1 story to watch" and saw 4-5 slides fly by. Fix: advance tap is now guarded by `s < totalStories - 1` — only fires between slides, not after the last one.
+
+**2. Slow uiautomator-dump fallback burning short-story slide timer before like fires**
+
+The pre-action `stillInStoryViewer()` check (runs before like/share) previously always fell through to a full uiautomator dump (~3-4s) when the fast pixel scan returned `null` (inconclusive). For 3-second slides this consumed the entire remaining slide timer before the like even fired. Fix: the pre-action check now passes `fastOnly = true`, which skips the slow dump and assumes "still open" when the fast scan is inconclusive. The worst case (wrong assumption) is a double-tap on the home feed — rare and non-catastrophic. All post-action checks retain the full fallback.
+
+**3. Share-to-DM tap hitting wrong screen element (paper-plane icon scan false-match)**
+
+The paper-plane icon was located by a pixel luminance scan. Captions, stickers, or bright text on a dark story background could produce clusters that passed all the scan's heuristics and returned as the "rightmost icon", landing the tap on random story content instead of the paper-plane. Two fixes applied:
+
+- **UIAutomator probe first**: before the pixel scan, attempt to find the share button via the accessibility tree (`findStoryShareButtonViaA11y` in `androidManager.ts`). Tries known content-desc labels and, if those miss, searches all clickable nodes in the reply-bar y-zone (72–95 % height) on the right half of the screen, returning the rightmost one. Instagram's canvas-rendered reply-bar has no accessible elements on most builds, but some do — this handles those correctly and costs nothing when it misses (falls through to pixel scan unchanged).
+- **Positional sanity check on pixel scan**: if the pixel scan returns a "paper-plane" position that is left of 40 % of screen width, it is rejected as a false content match (the real paper-plane is always in the right half of the screen). A log message explains the rejection so it's diagnosable from the Log tab.
+
+---
+
 ## [1.1.579] — 2026-07-14
 
 ### Fix: pull-to-refresh no longer triggered after Share-to-DM (root cause fixed)

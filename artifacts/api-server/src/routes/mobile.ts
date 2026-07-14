@@ -1817,10 +1817,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // confident `true`; it returns `null` whenever it can't tell for sure
     // (e.g. a single-story tray with no multi-segment progress bar), and
     // only THEN do we pay for the slow-but-proven accessibility-tree check.
-    const stillInStoryViewer = async () => {
+    // `fastOnly = true` skips the slow uiautomator-dump fallback.  Use it
+    // for the pre-action gate that fires right before a like or share tap:
+    // the slow dump takes 3-4s on this farm's devices — longer than a
+    // short (3s) story slide's entire remaining timer.  When the fast pixel
+    // scan returns null (can't confirm), treating it as "still open" and
+    // proceeding is safer than spending the whole slide budget on a dump.
+    // The worst-case wrong-viewer tap is a double-tap on the home feed
+    // (likes a feed post), which is rare and non-catastrophic.  All other
+    // checks (post-like, post-share, pre-Send, pre-advance) keep the full
+    // fallback since they run well into the multi-second share sequence
+    // where a 3-4s dump doesn't consume the remaining slide time alone.
+    const stillInStoryViewer = async (fastOnly = false) => {
       const fastStart = Date.now();
       const fast = await android.isStoryViewerOpenFast(serial).catch(() => null);
       if (fast === true) return true;
+      if (fastOnly) {
+        // Can't tell from pixels alone — assume still open to keep the
+        // like/share firing on time rather than burning the slide budget
+        // on a full accessibility-tree dump.
+        onLog?.(`  (story-viewer check: fast scan ${Date.now() - fastStart}ms inconclusive — fastOnly, assuming open)`);
+        return true;
+      }
       // Instrumented (12 Jul 2026): the previous version of this fix
       // assumed the fast pixel-scan check would hit most of the time and
       // never verified it in the field. Log every fallback with real
@@ -1888,7 +1906,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // instant the story viewer is gone. Continuing to loop assumes the
       // next iteration will also be inside a story, which is exactly the
       // false assumption that let blind taps land on the home feed.
-      if (!(await stillInStoryViewer())) {
+      //
+      // fastOnly = true: for 3-second stories the slow fallback (uiautomator
+      // dump, ~3-4s) would consume the ENTIRE remaining slide timer before
+      // the like/share even fires. Skip the dump here; if the fast scan is
+      // inconclusive we assume still-open and proceed. See the stillInStoryViewer
+      // declaration for the full rationale.
+      if (!(await stillInStoryViewer(/* fastOnly */ true))) {
         onLog?.(`Story ${s + 1}: story viewer no longer open (auto-advanced/exited) — stopping story actions`);
         logger.info({ serial, story: s + 1 }, "[view-stories] story viewer gone before action — stopping loop");
         break;
@@ -1943,9 +1967,38 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // paper-plane.  We only tap if ≥2 icons were found, and we tap the
         // actual detected coordinates rather than a guessed percentage.
         // The keyboard check is kept as a final safety net.
-        const iconScan = await android.findStoryActionIcons(serial).catch(() => null);
-        const shareIconPos = (iconScan && iconScan.length >= 2) ? iconScan[iconScan.length - 1] : null;
-        onLog?.(`Story ${s + 1}: share icon scan — ${iconScan == null ? "screenshot unavailable" : `${iconScan.length} icon(s) found`}${shareIconPos ? ` — paper-plane at (${shareIconPos.x},${shareIconPos.y})` : " — sharing disabled or not detectable"}`);
+        // Strategy 1: UIAutomator accessibility probe.
+        // Instagram draws the story reply-bar on a canvas with no accessible
+        // child elements on most device/version combinations, but some builds
+        // DO label the paper-plane. Try the a11y tree first (fast, zero tap
+        // risk on wrong coordinates) and fall back to the pixel scan only if
+        // the probe returns nothing.  The probe also does a positional sanity
+        // check internally — any match must be right-of-centre and in the
+        // lower 40 % of the screen so it can't be confused with a "Share"
+        // button elsewhere in the UI.
+        let shareIconPos: { x: number; y: number } | null = null;
+        const a11yPos = await android.findStoryShareButtonViaA11y(serial).catch(() => null);
+        if (a11yPos) {
+          shareIconPos = a11yPos;
+          onLog?.(`Story ${s + 1}: share button found via UIAutomator a11y at (${a11yPos.x},${a11yPos.y})`);
+        } else {
+          // Strategy 2: pixel scan.
+          const iconScan = await android.findStoryActionIcons(serial).catch(() => null);
+          const rawPos = (iconScan && iconScan.length >= 2) ? iconScan[iconScan.length - 1] : null;
+          onLog?.(`Story ${s + 1}: share icon scan — ${iconScan == null ? "screenshot unavailable" : `${iconScan.length} icon(s) found`}${rawPos ? ` — rightmost at (${rawPos.x},${rawPos.y})` : " — sharing disabled or scan returned <2 clusters"}`);
+          // Positional sanity check: the paper-plane is ALWAYS in the right
+          // half of the screen.  If the scan's rightmost cluster is left of
+          // centre it's a false match on story content (captions, stickers,
+          // bright text over a dark background) — tapping there would hit
+          // whatever random element the scan mistook for an icon.
+          // Threshold: x must be > 40 % of screen width.
+          if (rawPos && rawPos.x > w * 0.40) {
+            shareIconPos = rawPos;
+          } else if (rawPos) {
+            onLog?.(`Story ${s + 1}: share icon scan result rejected — x=${rawPos.x} < 40 % of w=${w}; likely a false content match — skipping share`);
+            logger.warn({ serial, story: s + 1, rawX: rawPos.x, w }, "[view-stories] share scan rejected — x too far left");
+          }
+        }
 
         let opened = false;
         if (!shareIconPos) {
@@ -2068,9 +2121,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
       storiesWatched++;
 
-      // Advance to the next story by tapping the right ~75% of the screen.
-      await android.tap(serial, Math.round(w * 0.75), Math.round(h * 0.50));
-      await sleepOrAbort(serial, 500 + Math.round(Math.random() * 400));
+      // Advance to the next story by tapping the right ~75% of the screen —
+      // but ONLY when there are more slides left to watch.  Previously this
+      // tap fired unconditionally at the end of every iteration, including
+      // the last one.  On 3-second stories that means: open tray → watch
+      // slide 1 (1800ms open + 250ms action wait + share sequence) → the
+      // tray has auto-advanced through slides 2 and 3 while we ran the
+      // sequence → unnecessary advance tap pushes us to slide 4 → exit via
+      // swipe-down — the user sees 4-5 slides fly by when they set
+      // "1 story to watch".  Skipping the advance on the last iteration
+      // lets the loop finish on whatever slide the tray is currently on,
+      // then exits cleanly via the swipe-down below.
+      if (s < totalStories - 1) {
+        await android.tap(serial, Math.round(w * 0.75), Math.round(h * 0.50));
+        await sleepOrAbort(serial, 500 + Math.round(Math.random() * 400));
+      }
     }
 
     // Exit the story viewer by swiping down — only if we're actually still

@@ -1855,6 +1855,80 @@ export async function findStoryActionIcons(serial: string): Promise<{ x: number;
 }
 
 /**
+ * Attempts to locate Instagram's story share (paper-plane) button via the
+ * UIAutomator accessibility tree BEFORE the caller falls back to the
+ * pixel-scan approach in `findStoryActionIcons`.
+ *
+ * Instagram renders the story reply-bar as a canvas with no accessible child
+ * elements on most device/version combinations — UIAutomator exposes only an
+ * opaque container for the entire bar. However, some device builds and newer
+ * Instagram versions DO label the paper-plane with a content-desc, AND the
+ * DM-share button on reposted-Reel stories sometimes has a unique resource-id.
+ * This function probes both paths; if it finds nothing it returns null and the
+ * caller continues to the pixel scan unchanged.
+ *
+ * Two strategies (tried in order):
+ *  1. Label probe — common content-desc strings Instagram has used for the
+ *     share button. Positions are sanity-checked (must be right of centre,
+ *     must be in the lower part of the screen) to reject accidental matches
+ *     on other "Share" controls in the tree.
+ *  2. Positional probe — scan every clickable node in the reply-bar y-zone
+ *     (72–95 % of screen height) that is in the right half of the screen and
+ *     not full-width (which would be a bottom-sheet, not an icon). Return the
+ *     rightmost such node — the paper-plane is always rightmost in the bar.
+ */
+export async function findStoryShareButtonViaA11y(
+  serial: string,
+): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const { w, h } = getScreenSize(serial);
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+
+  // 1. Label probe — Instagram has used several content-desc strings
+  const labelCandidates = [
+    "Share to Direct", "Send to Direct", "Direct", "Share",
+    "story_share", "direct_share",
+  ];
+  for (const label of labelCandidates) {
+    const found = _findElem(xml, label);
+    // Must be right of 40 % of screen width (the paper-plane is always
+    // in the right portion of the bar) and in the lower 40 % of height.
+    if (found && found.x > w * 0.40 && found.y > h * 0.60) {
+      return found;
+    }
+  }
+
+  // 2. Positional probe — find all clickable nodes in the reply-bar zone
+  //    and return the rightmost one.
+  const yMin = Math.round(h * 0.72); // reply bar is always in the lower 28 %
+  const yMax = Math.round(h * 0.95); // above the Android nav bar inset
+  const xMin = Math.round(w * 0.40); // paper-plane is right-of-centre
+
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+  let m: RegExpExecArray | null;
+  let best: { x: number; y: number } | null = null;
+
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    if (!/clickable="true"/.test(attrs)) continue;
+    const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+    if (!bm) continue;
+    const x1 = Number(bm[1]), y1 = Number(bm[2]), x2 = Number(bm[3]), y2 = Number(bm[4]);
+    const cx = Math.round((x1 + x2) / 2);
+    const cy = Math.round((y1 + y2) / 2);
+    if (cy < yMin || cy > yMax) continue;
+    if (cx < xMin) continue;
+    // Exclude full-width elements (bottom sheets, nav bars)
+    if ((x2 - x1) > w * 0.60) continue;
+    if (!best || cx > best.x) best = { x: cx, y: cy };
+  }
+
+  return best;
+}
+
+/**
  * Fast, screenshot-based "is the story viewer still on screen?" check.
  *
  * Why this exists: the story per-slide loop in `runViewStoriesFromFeedLoop`
