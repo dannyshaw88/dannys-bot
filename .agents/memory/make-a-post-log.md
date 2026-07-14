@@ -14,7 +14,9 @@ description: Chronological record of every attempt to get Make a Post working vi
 3. Do NOT attempt any approach already listed below without a fundamentally different root cause.
 4. After your attempt (win or fail), add a new dated entry to BOTH this file AND the README-REPLIT block in the UI.
 
----
+## User constraint: NO terminal/command-prompt steps, ever
+
+The user (Danny) has explicitly and repeatedly refused any workflow that requires them to type a command — not for diagnostics, not for a faster dev-mode test cycle. Every debugging step, diagnostic, or workaround MUST be a button click inside the running app itself. If a fix requires the user to run `adb shell ...` or any CLI command, it is not an acceptable deliverable on its own — build an in-app button/endpoint that runs it for them and prints the result to the in-app log instead.
 
 ## Known failure pattern (as of 2026-06-25)
 
@@ -27,8 +29,6 @@ The agent repeatedly cycles through these steps without resolution:
 
 None of these have produced a working post.
 
----
-
 ## Root cause (suspected, never confirmed)
 
 `instagram-private-api` publish() calls fail silently or return 200 without actually posting.
@@ -38,8 +38,6 @@ the permission scope required for media publishing.
 Additionally: the mobile API client session may be expired by the time the post is triggered
 (the session is bootstrapped at verify time, hours/days earlier).
 
----
-
 ## What has NOT been tried
 
 1. Driving the post entirely through the EB (Puppeteer clicking the Instagram web upload flow) — bypassing the mobile API entirely. This is the most promising untried path.
@@ -47,22 +45,28 @@ Additionally: the mobile API client session may be expired by the time the post 
 3. Explicitly checking `isMobileLoggedIn()` at post execution time — not just at verify time. The session may be stale.
 4. Checking whether `mobileBootstrapFromWebCookies()` succeeds immediately before attempting to publish (not just at session init).
 
----
-
 ## Chronological entries (newest first)
+
+### 2026-07-14 — Manual debugging loop itself was the blocker, not any single tap bug — added in-app self-diagnostic tooling (v1.1.547)
+- Context: after the v1.1.546 expand-toggle fix, the user reported it failed the exact same way on the very next real-device test ("YOU PRESSED THE CAMERA SO I DONT FUCKING CARE"). The user was, correctly, furious that every fix in this file has depended on THEM manually pulling a fresh device log + screenshot after burning ~30 min on a rebuild, every single time, with no way for the agent to verify a fix before shipping it.
+- The user then explicitly refused two proposed paths: (1) sending another log/screenshot ("just like the rest of the debugging" — implying they've done this "hundreds of times" with no lasting fix), and (2) running ANY terminal/command-prompt step, including a proposed faster Electron dev-mode script and a proposed one-line `adb shell wm size` diagnostic command. **Lesson: this user will not use a terminal under any circumstances, for any purpose — every diagnostic must ship as an in-app button.**
+- Also asked whether Replit could read their laptop's USB ports directly, to test the phone from inside Replit instead of building for Windows. Answer given and worth remembering: **no bridge exists between a remote cloud dev environment and a local machine's physical USB device** — ADB/USB access is only possible on whatever machine the cable is physically plugged into. This is a hard architectural fact, not a workaround-able limitation, and should not be re-litigated if asked again.
+- What shipped instead: (1) a "📐 Check Screen Info" button in the Mobile page's Log panel (next to "📱 Capture Screen") that calls a new `GET /api/mobile/devices/:serial/screen-info` endpoint and prints the device's raw `wm size` (Physical + Override, if present) / `wm density` output straight to the in-app log, flagging a mismatch inline — this is the exact data needed for the still-unconfirmed "manual mirror-click offset" bug, obtainable with zero terminal use; (2) a `captureDebugEvidence()` helper in `androidManager.ts` (screenshot + accessibility dump saved to `debug-captures/` on disk automatically) intended to end the need for the user to manually capture evidence at all — not yet wired into every tap in the Make a Post flow, do that next if the expand-toggle bug recurs; (3) an `electron dev` script that skips full installer packaging for faster local iteration — added but the user has NOT endorsed using it (see terminal-refusal constraint above); treat it as available for the agent's own reference only, not as an instruction to give the user.
+- Status: the underlying camera-tap bug (v1.1.546) is UNCONFIRMED and may still be broken — this entry is about the debugging *process*, not a fix to that bug itself. Read this entry before proposing ANY diagnostic step to this user.
 
 ### 2026-07-13 — Mobile (ADB) path: expand/fit toggle's positional fallback tapped the camera shutter, not the fit icon — replaced fixed-percentage band with container-anchored search (v1.1.546)
 - Same failure *shape* as the compose-icon and header-icon bugs above, on a DIFFERENT element: `findExpandPhotoButton`'s positional fallback used a fixed `y:30-58%, x<22%` screen band with no exclusion for camera/grid elements. The real preview container's bounds run to ~59.8% of screen height (past the 58% cutoff), so the real icon was excluded and the scan matched the unlabelled "open camera" grid tile instead — tapping it opened the phone's live camera. Confirmed via a user-provided real-device log + screenshot showing the automation stuck on the camera viewfinder right after "looking for the photo expand/fit toggle…".
+- **User's next real-device test (14 Jul 2026) showed this fix did NOT hold — same camera-tap symptom recurred.** Root cause of the recurrence not yet diagnosed (user refused to send a fresh log/screenshot this round — see 2026-07-14 entry above for what was built instead).
 - **Do not keep re-tuning fixed screen-percentage bands for icons on this app.** Every element that has no accessibility label needs THREE things to be reliably found: (1) an anchor to a *dump-confirmed sibling/container* element's own bounds (not a screen-wide percentage — percentages drift per build/device and this has now bitten three different icons), (2) a search scoped strictly inside that anchor's rectangle so nothing outside it can ever match, and (3) a label-based exclusion (camera/gallery/tab/story/reel/live) as a second independent safety net for when the anchor itself can't be found.
 - Applied here: search now anchors to the preview container's own bounds (rid contains `preview_container`/`crop_image_view`/`draft_image_view`, all reliably present in real dumps of this screen) and only accepts candidates in that container's bottom-left quadrant — geometrically impossible to match the camera tab, tab strip, or grid below it.
-- Status: UNCONFIRMED — pushed as v1.1.546, awaiting real-device confirmation.
+- Status: UNCONFIRMED, and the user's next test suggests it's still broken. Do not repeat "anchor to container bounds" as if it were a solved pattern for this specific screen without new evidence of why it still failed.
 
 ### 2026-07-13 — Mobile (ADB) path: top-left header icon (v1.1.544) existed in the dump but was excluded by a too-tight y cutoff — widened + hardened (v1.1.545)
 - The user's real-device test of v1.1.544 still reported "not found," which was surprising since the top-left position had just been confirmed correct visually. A `screen-layout-scan` (a debug tool in this codebase that dumps every accessibility node bucketed into TOP/MIDDLE/BOTTOM thirds with pixel + percentage coords — ask the user to run it whenever a selector "should" work but doesn't) showed the real icon's bounds are `[0,104][132,258]` on a 1080×2226 device — centre y ≈ 8.1%, just past the `y < 7%` cutoff the fallback used. It existed in the dump the whole time; the filter itself was silently too strict.
 - Also found while investigating: the fallback computed screen w/h via an independent `adb shell wm size` call rather than the dump's own root bounds. This codebase has a known, already-fixed bug class (`rescaleForDevice` in routes/mobile.ts, for mirror-tap coordinate rescaling) where `wm size` reports a "Physical size" line and an "Override size" line that disagree when a display-size override is active. Any function that derives thresholds from a *second, independent* `wm size` call risks that same mismatch against the *live accessibility dump's* coordinate space. **Lesson: always derive screen dimensions from the same xml dump being scanned (its `bounds="[0,0][W,H]"` root node), never from a separate adb call, when the two need to agree.**
 - Fix: widened the header band to `y < 12%`, and since that reopens the original v1.1.526 stories-tray "Add" circle risk, added a label exclusion (content-desc/text containing "add"/"story") and a "no similarly-sized siblings at a similar y" check (a tray is a row of same-sized icons; a lone header button never has that shape) as defenses that don't depend on the y band alone.
 - Status: UNCONFIRMED — pushed as v1.1.545, awaiting real-device confirmation.
-- Separately, the user reported a manual-mirror-click offset (~5px correction needed, "not everywhere") that matches the exact symptom this codebase's `rescaleForDevice` Physical-vs-Override fix already targets — not yet root-caused further since it needs the user to report what `adb shell wm size` actually prints on this device (Physical-only, or Physical+Override) rather than guessing again.
+- Separately, the user reported a manual-mirror-click offset (~5px correction needed, "not everywhere") that matches the exact symptom this codebase's `rescaleForDevice` Physical-vs-Override fix already targets — not yet root-caused further since it needs the user to report what `adb shell wm size` actually prints on this device (Physical-only, or Physical+Override) rather than guessing again. **As of 14 Jul 2026 there is now an in-app button ("📐 Check Screen Info") that gets this data without the user touching a terminal — use it instead of asking for a manual adb command.**
 
 ### 2026-07-13 — Mobile (ADB) path: bottom-nav fallback (v1.1.543) was ALSO wrong — moved to user-confirmed top-left header icon (v1.1.544)
 - Context: v1.1.543 shipped the bottom-nav-centre fallback as "the last approach confirmed correct via screenshot." That confirmation was from a DIFFERENT earlier moment/account and did not hold on the next real-device run: the user's follow-up screenshot showed the "+" tap landing on **Direct/Messages**, not Notifications this time.
@@ -163,25 +167,4 @@ Additionally: the mobile API client session may be expired by the time the post 
 - Context: this is the EB (Puppeteer/embedded-browser) click-through path mentioned as "untried" above — NOT the mobile API path this file otherwise tracks. Posting is driven by clicking Instagram's own web UI (Create → Post → file picker → Next → Share) rather than calling the mobile API.
 - Prior attempts (v1.1.351–353) fixed timing/wait issues (fixed sleeps → poll loops) but the Create button click kept silently failing — hover/highlight worked, nothing else happened.
 - Root cause confirmed from production logs: the hover step used a real CDP-dispatched mousemove (isTrusted=true), but the actual click was a synthetic in-page `element.click()` / `PointerEvent`, which is always `isTrusted=false` per spec. Instagram's Create control silently ignores untrusted clicks on this specific control.
-- Fix: dispatch the click via real CDP `Input.dispatchMouseEvent` (mousePressed + mouseReleased), the same trusted-click pattern already used elsewhere in `ebManager.ts` (ghost-signup nav, cookie banner dismissal). Also re-fetch the button's position after the hover/expand animation before clicking (sidebar shifts on hover), and verify success by checking the dropdown actually opened rather than trusting a JS boolean.
-- **Lesson for any future "found the element but click does nothing" bug in the EB**: check whether the click is dispatched via synthetic JS (`.click()`/`PointerEvent`, always untrusted) vs real CDP `Input.dispatchMouseEvent` (trusted). Sites with bot-detection (Instagram in particular) can accept untrusted hover but silently ignore untrusted clicks on sensitive controls.
-
-### 2026-06-25 — ATTEMPT 2: Switched PATH B to CycleTLS (v1.1.160)
-- Changed `_mobileRupload` from `forceNodeTls=true` → `forceNodeTls=false` (CycleTLS)
-- Changed `_configureViaIgClient` from `forceNodeTls: true` → `forceNodeTls: false` (CycleTLS)
-- Theory: rupload and configure must share the same TLS stack. CycleTLS mimics Android TLS fingerprint; Node.js HTTPS never worked.
-- Result: UNCONFIRMED — user must run Make a Post and report back.
-- If this fails: The TLS stack is NOT the root cause. Next step must be reading the actual error string from the activity log detail column.
-
-### 2026-06-25 — README-REPLIT log block added to UI
-- Added amber scrollable log box in HumanSessionPanel.tsx below "Delete from PC after upload" so future agent sessions see the history inline.
-- No fix attempt made. This entry establishes the baseline.
-
-### Pre-2026-06-25 — ~20 failed attempts (all prior sessions)
-- PATH A: `ig.publish.photo()` via rebuilt IgApiClient — NEVER worked
-- PATH B: hand-rolled rupload + configure, `forceNodeTls=true` — NEVER worked  
-- Cycle: fix endpoint URL → fix configure body → add retry → change headers → repeat
-- Confirmed: follows/unfollows work on same session (igApiCookies valid). Upload-specific failure.
-- Error in activity log: "Upload failed for @X will retry next session" = `uploadAttempted > 0` branch at automationEngine.ts line 3131
-
-**How to apply:** Before every Make a Post fix, read this file. After every attempt, prepend a new entry here AND in the UI block.
+</content>
