@@ -808,24 +808,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(500).json({ error: e?.message }); }
   });
 
-  // ── Reset resolution override (one-click fix for the mismatch above) ───────
-  // `wm size reset` clears any active display-size override, returning the
-  // device to its native physical panel resolution/ratio. Safe to call even
-  // when no override is set (no-op). Does NOT touch density — left alone
-  // deliberately since a density override doesn't change the screen's
-  // aspect ratio and resetting it could visually rescale UI the user may
-  // have intentionally set up.
-  app.post("/api/mobile/devices/:serial/screen-info/reset", async (req: Request, res: Response) => {
-    try {
-      const tools = android.detectToolset();
-      const adbPath = tools.adb.path;
-      if (!adbPath) { res.status(503).json({ error: "ADB not found" }); return; }
-      const serial = p(req, "serial");
-      await execFileP(adbPath, ["-s", serial, "shell", "wm", "size", "reset"], { timeout: 5000 } as any);
-      const { stdout } = await execFileP(adbPath, ["-s", serial, "shell", "wm", "size"], { timeout: 5000 } as any);
-      res.json({ ok: true, sizeRaw: String(stdout || "").trim() });
-    } catch (e: any) { res.status(500).json({ error: e?.message }); }
-  });
+  // BANNED: `adb shell wm size reset` (and any command that changes phone display settings)
+  // is permanently removed. The code handles coordinate differences in software via
+  // rescaleForDevice() — the phone's display settings must never be touched by this app.
 
   // ── Network interfaces (for source-adapter picker in UI) ───────────────────
   app.get("/api/network/interfaces", (_req: Request, res: Response) => {

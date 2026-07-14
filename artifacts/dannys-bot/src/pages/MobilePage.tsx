@@ -3100,8 +3100,6 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize }: 
   const [copiedCapture,  setCopiedCapture]  = React.useState(false);
   const [lastCapture,    setLastCapture]    = React.useState<string[] | null>(null);
   const [checkingInfo,   setCheckingInfo]   = React.useState(false);
-  const [resettingRes,   setResettingRes]   = React.useState(false);
-  const [hasMismatch,    setHasMismatch]    = React.useState(false);
   useEffect(() => { bottomRef.current?.scrollIntoView({ block: "end" }); }, [lines.length]);
 
   const handleCheckScreenInfo = async () => {
@@ -3136,32 +3134,14 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize }: 
         addLog?.(`ℹ️ Video size differs from wm size — normal. Android's screen capture never stretches to fit; it letterboxes/pillarboxes the real screen inside the recording buffer, and taps are already rescaled through the real content area, not the raw buffer.`);
       }
       if (body.override) {
-        addLog?.(`⚠️ Override size is active — the phone is currently running at ${body.override.w}x${body.override.h}, NOT its physical panel resolution (${body.physical?.w ?? "?"}x${body.physical?.h ?? "?"}).`);
-        if (body.mismatch) {
-          addLog?.(`   Aspect ratio differs by ${body.mismatch.percentDiff.toFixed(1)}% — this is almost certainly why the mirror looks the wrong shape and/or taps land off-target. Click "🔄 Reset Resolution Override" to fix it.`);
-        }
-        setHasMismatch(true);
+        addLog?.(`ℹ️ Override size detected — phone is currently running at ${body.override.w}x${body.override.h} (physical: ${body.physical?.w ?? "?"}x${body.physical?.h ?? "?"}). The code handles this automatically — no action needed.`);
       } else {
         addLog?.(`No resolution override active — the device is running at its native physical resolution.`);
-        setHasMismatch(false);
       }
     } catch (e: any) { addLog?.(`Screen info error: ${e?.message ?? "network error"}`); }
     finally { setCheckingInfo(false); }
   };
 
-  const handleResetResolution = async () => {
-    if (!serial) return;
-    setResettingRes(true);
-    try {
-      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/screen-info/reset`, { method: "POST" });
-      const body = await r.json();
-      if (!r.ok) { addLog?.(`Reset resolution failed: ${body?.error ?? r.status}`); return; }
-      addLog?.(`✅ Resolution override cleared. Device now reports: ${body.sizeRaw}`);
-      addLog?.(`Reconnect the mirror (toggle Live off/on) to pick up the corrected resolution.`);
-      setHasMismatch(false);
-    } catch (e: any) { addLog?.(`Reset resolution error: ${e?.message ?? "network error"}`); }
-    finally { setResettingRes(false); }
-  };
 
   const writeToClipboard = async (text: string) => {
     try {
@@ -3238,17 +3218,6 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize }: 
                 title="Prints the device's raw wm size / wm density into the log, and flags a resolution override if one is active. Use this before Reset."
               >
                 {checkingInfo ? "Checking…" : "📐 Check Screen Info"}
-              </Button>
-            )}
-            {serial && hasMismatch && (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handleResetResolution}
-                disabled={resettingRes}
-                title="Clears an active resolution override so the phone (and the mirror) run at the real physical screen resolution."
-              >
-                {resettingRes ? "Resetting…" : "🔄 Reset Resolution Override"}
               </Button>
             )}
             <Button type="button" variant="secondary" onClick={handleCopyLog} disabled={lines.length === 0}>

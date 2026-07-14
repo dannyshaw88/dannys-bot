@@ -4,6 +4,16 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.564] — 2026-07-14
+
+### Remove: "Reset Resolution Override" — phone display settings must never be changed
+
+Removed the `POST /api/mobile/devices/:serial/screen-info/reset` endpoint and the "🔄 Reset Resolution Override" button. Both called `adb shell wm size reset`, which physically changes the phone's display settings.
+
+The code already handles coordinate differences correctly in software via `rescaleForDevice()` (reads `wm size`, prefers Override size when present, maps capture-frame coordinates to device coordinates). There is no scenario where changing the phone's display is the right fix — the software layer is always the answer. This action is now permanently banned from the codebase.
+
+---
+
 ## [1.1.563] — 2026-07-14
 
 ### Fix: Feed Like — wrong button selected + fake "liked" confirmation

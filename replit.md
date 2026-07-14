@@ -45,6 +45,14 @@ Workflows are managed as Replit artifacts (`artifacts/api-server: API Server`, `
 
 ---
 
+## Phone display settings — PERMANENTLY BANNED
+
+**Never call `adb shell wm size reset`, `adb shell wm size WxH`, `adb shell wm density reset`, or any other command that changes the phone's display settings.**
+
+The code handles all coordinate differences in software — `rescaleForDevice()` reads `wm size` (preferring Override size when present) and maps capture-frame coordinates to device coordinates. No display-setting change is ever needed. This ban is non-negotiable and must never be reversed.
+
+---
+
 ## Mobile automation rules (non-negotiable)
 
 ### Detection must use accessibility tree labels — never hardcoded coordinates
