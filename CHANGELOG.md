@@ -4,6 +4,18 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.553] — 2026-07-14
+
+### Reverted: [1.1.552] phone mirror shell fix
+
+The user's real-device screenshot after [1.1.552] showed the change did not fix the problem it was meant to fix — the mirror still looked tiny inside a large dark area. The layout math for that fix was internally consistent (it removed a genuine internal pillarbox bug), but it did not address what the user is actually seeing: the app's background is the same near-black as the phone shell, so a correctly-sized but still-narrow phone mirror reads as "swimming in dead black space" regardless of whether the shell border hugs it tightly. That's a visibility/contrast problem, not (only) a sizing bug, and the previous fix didn't touch it.
+
+**Reverted in full:** `artifacts/dannys-bot/src/pages/MobilePage.tsx` is back to its pre-[1.1.552] state (shell aspect-ratio applied to the whole header+screen box, as it was before). `package.json` / `artifacts/electron/package.json` bumped to 1.1.553 to mark the revert.
+
+**Status:** reverted, pushed. Next attempt needs to address actual visible size/contrast (e.g. giving the mirror column more width than the current 50/50 split with the settings panel, and/or a visible boundary — a lighter border or background tint — around the shell so it doesn't blend into the app background) rather than only the internal aspect-ratio math, and should be checked against a real screenshot before calling it done, not just reasoned about from code.
+
+---
+
 ## [1.1.547] — 2026-07-14
 
 ### New: in-app diagnostics — no terminal/command prompt needed
