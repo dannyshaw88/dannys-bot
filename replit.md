@@ -70,6 +70,10 @@ Once an element is found via its label, its center coordinates are read from its
 
 Android's screen-capture buffer (e.g. 720×1280) often has a different aspect ratio than the real display (e.g. 1080×2460) and pads the real content with black bars inside the buffer. Taps from the mirror panel were previously scaled against the full buffer including the black padding, which caused accurate centre taps but drifted noticeably toward edges. The fix scales through the actual content sub-rect inside the buffer so every tap lands correctly regardless of where on screen it is. This is implemented in `rescaleForDevice()` in `artifacts/api-server/src/routes/mobile.ts`. **Do not alter this logic.**
 
+### Feed action-bar icons with no content-desc/resource-id — structural fallback
+
+Some device/IG builds strip both `content-desc` and `resource-id` from every action-bar node, so label matching (the rule above) has nothing to match against and Comment/Repost/Send would stay unfound. The fix, confirmed working live: identify each icon by its structural signature instead of a label — a content-desc-less, text-less `ViewGroup` — and only trust the match when exactly 3 such candidates are found in the row (same elimination-based safety as label matching; anything else is left `null`, never guessed). Implemented in `findFeedActionIcons()` in `artifacts/api-server/src/mobile/androidManager.ts`. This only activates when label matching finds nothing — it never overrides a real content-desc match.
+
 ---
 
 ## CI / GitHub Actions
