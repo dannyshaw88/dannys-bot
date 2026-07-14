@@ -4,6 +4,14 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.573] — 2026-07-14
+
+### Fix: Comment/Repost/Send detected on devices with zero content-desc or resource-id labels
+
+Root cause found via a live screenshot (comment=34, repost=2,340, send=30.9K) matched against its row dump: on this device/build, content-desc AND resource-id are both stripped from every action-bar node, so the existing label matching had nothing to match against — every field came back `n/a` even though the icons were plainly visible. The row dump revealed a consistent structural pattern instead: each real icon is a content-desc-less `ViewGroup` (the icon graphic, empty text) immediately followed by a content-desc-less `Button` carrying the visible count as its `text` (e.g. `txt="2,340"`), with a single unpaired leading `Button` being the Like count label (not a separate action). Added a fallback in `findFeedActionIcons`: when content-desc matching finds nothing for Comment/Repost/Send, pair up (ViewGroup, Button) nodes structurally and — only when exactly 3 pairs are found — assign them Comment/Repost/Send by left-to-right elimination, the same forced-elimination logic already used for label matches. This is a read of live tree structure (class + adjacency), not a fixed pixel-percentage guess; when the pair count isn't exactly 3 (an icon disabled, or unexpected layout) it's left ambiguous and all three stay `null`, same as before.
+
+---
+
 ## [1.1.572] — 2026-07-14
 
 ### Diagnostic: dump text and width alongside class for action-bar icons

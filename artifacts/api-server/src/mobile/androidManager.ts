@@ -1535,10 +1535,63 @@ export async function findFeedActionIcons(serial: string, onLog?: (msg: string) 
   // regardless of whether the post disabled repost or the label is just
   // missing — both cases are handled identically and safely by callers.
 
-  // No positional fallback. Every icon must be confirmed by its accessibility
-  // label. Guessing by left-to-right order violates the project rule that all
-  // detection uses live element labels — never coordinates. If "Repost" or
-  // "Send" aren't in the tree, those slots stay null and callers skip the action.
+  // --- Device-specific fallback: icon/count structural pairing ---
+  //
+  // Confirmed 14 Jul 2026 against a live screenshot + matching row dump on a
+  // device/build where content-desc AND resource-id are BOTH empty on every
+  // action-bar node (v1.1.570/571 dumps), so no label exists to match at
+  // all. The row dump instead showed a consistent structural pattern: each
+  // real action icon renders as a content-desc-less `android.view.ViewGroup`
+  // (the tappable icon graphic itself, empty `text`) immediately followed in
+  // x-order by a content-desc-less `android.widget.Button` carrying the
+  // visible count as its `text` attribute (e.g. txt="2,340"). A single
+  // unpaired LEADING Button (no ViewGroup immediately before it) is the
+  // *Like* count label, not a separate action — Instagram renders it right
+  // after the Like heart, before Comment's icon/count pair, and it must be
+  // discarded rather than mistaken for Comment.
+  //
+  // Live confirmation: screenshot showed comment=34, repost=2,340, send=30.9K
+  // on a post; the row dump for that exact post had exactly 3 (ViewGroup,
+  // Button) pairs after the leading unpaired Like-count Button, with
+  // txt="34", txt="2,340", txt="30.9K" in that left-to-right order — matching
+  // Comment/Repost/Send exactly. This is a structural/type read of the live
+  // tree (class + adjacency), not a fixed pixel-percentage guess, but it is
+  // still elimination-based like the label matching above: it only fires
+  // when NONE of comment/shareFeed/shareDm were found by label (this device
+  // has none), and only trusts the result when exactly 3 pairs are found —
+  // anything else (an icon disabled, extra/missing pairs) is genuinely
+  // ambiguous with no label to confirm which slot is missing, so it's left
+  // null rather than guessed, per this function's existing contract.
+  if (!comment && !shareFeed && !shareDm) {
+    type Pair = { icon: RowNode; count: RowNode };
+    const pairs: Pair[] = [];
+    for (let i = 0; i < rowNodes.length - 1; i++) {
+      const a = rowNodes[i];
+      const b = rowNodes[i + 1];
+      if (
+        a.cls === "android.view.ViewGroup" && !a.cd && !a.txt &&
+        b.cls === "android.widget.Button" && !b.cd && /\d/.test(b.txt) &&
+        (b.x - a.x) < maxIconWidth * 2
+      ) {
+        pairs.push({ icon: a, count: b });
+        i++; // consume both nodes, don't let b start a new pair
+      }
+    }
+    if (pairs.length === 3) {
+      onLog?.(`[feed-icons] structural icon/count pairing matched 3 pairs — assigning Comment/Repost/Send by elimination: ${pairs.map(p => `icon@${p.icon.x} count="${p.count.txt}"`).join(" | ")}`);
+      comment   = pos(pairs[0].icon);
+      shareFeed = pos(pairs[1].icon);
+      shareDm   = pos(pairs[2].icon);
+    }
+  }
+
+  // No fixed-percentage positional fallback. Every icon must be confirmed by
+  // its accessibility label, or — only when no label exists anywhere on this
+  // device/build — by the structural icon/count pairing above. Guessing by
+  // raw left-to-right order among unrelated clickable nodes violates the
+  // project rule that all detection uses live element structure, never
+  // coordinates. If neither strategy confirms a role, that slot stays null
+  // and callers skip the action.
   return { like, comment, shareFeed, shareDm };
 }
 
