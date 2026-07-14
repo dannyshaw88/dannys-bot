@@ -3842,18 +3842,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const realH = parseInt(m[2]);
       const device: [number,number] = [realW, realH];
       if (realW === videoW && realH === videoH) return { ...noOp, device };
-      // If the aspect ratios differ by more than 2%, the wm-size coordinate space
-      // is incompatible with the video frame space (e.g. wm size returns physical
-      // panel resolution 1080×2460 while the phone's logical input space matches
-      // the video stream at 720×1280). Rescaling in that case introduces a large
-      // systematic error — skip it and use the raw video coords directly.
-      const videoAR = videoW / videoH;
-      const deviceAR = realW / realH;
-      if (Math.abs(videoAR - deviceAR) / deviceAR > 0.02) {
-        logger.warn({ serial, videoAR: videoAR.toFixed(3), deviceAR: deviceAR.toFixed(3) },
-          "[mobile-tap] video/device aspect ratios differ >2% — skipping rescale (wm size reports physical panel, not logical input space)");
-        return { ...noOp, device };
-      }
+      // NOTE: a previous version of this function skipped rescaling whenever
+      // the video and device aspect ratios differed by more than 2%, on the
+      // theory that a mismatched AR meant `wm size` was reporting an
+      // incompatible coordinate space (e.g. the physical panel resolution
+      // instead of the logical input space) and that raw video coordinates
+      // must already be correct. That was wrong and made every manual mirror
+      // tap land far from the click (confirmed via Click Test: bullseye vs.
+      // yellow dot at completely different spots, "double the size" symptom,
+      // taps landing near the middle of the screen for edge taps).
+      //
+      // The real explanation (see the comment above the screenrecord spawn
+      // in this file's video-WS route): `screenrecord` is *never* pinned to
+      // the device's exact `wm size` because most panel resolutions aren't
+      // 16-pixel-aligned, so screenrecord silently picks its own encoder-
+      // supported size — which can legitimately have a different aspect
+      // ratio than the panel (e.g. video 720×1280 vs. device 1080×2460 on
+      // this hardware). That's expected, not a sign of an incompatible
+      // coordinate space. `wm size` (Override if present, else Physical) is
+      // still the space `adb shell input tap`/uiautomator use — the same
+      // space every other tap in this codebase (built from uiautomator
+      // bounds) already targets successfully. Independent per-axis scaling
+      // from the video's pixel space into that space is correct regardless
+      // of whether the two aspect ratios match, as long as the video frame
+      // itself isn't letterboxed (screenrecord doesn't add letterbox bars).
       const rx = Math.round((x / videoW) * realW);
       const ry = Math.round((y / videoH) * realH);
       logger.info({ serial, from: [x, y], to: [rx, ry], video: [videoW, videoH], real: [realW, realH] }, "[mobile-tap] rescaled tap for downscaled video");

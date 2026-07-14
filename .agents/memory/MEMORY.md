@@ -31,3 +31,4 @@
 - [License auth is a single global session, not per-cookie](license-global-session.md) — /api/license/login writes one global "license_session" row; any curl login logs in every browser tab/window against that server.
 - [Make a Post UI: image alteration is source-agnostic](make-a-post-image-alteration-scope.md) — Alteration level + Image settings button live in the shared caption section, not inside the Instagram-account source block, so they apply to local-computer-sourced images too.
 - [Instagram media-picker default selection (real device)](instagram-media-picker-default-selection.md) — IG auto-selects the newest photo on picker open; a blind grid tap was hitting the camera tile (cell 0), not a thumbnail — no tap needed at all.
+- [Mirror tap rescale must not skip on aspect-ratio mismatch](mobile-mirror-tap-rescale-ar-guard.md) — screenrecord's video AR never has to match wm-size's AR by design; skipping rescale on AR mismatch broke every manual mirror tap.

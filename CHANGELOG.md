@@ -4,6 +4,18 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.557] — 2026-07-14
+
+### Fix: manual mirror taps landing far from the click — removed the aspect-ratio "skip rescale" guard added in [1.1.551]
+
+The user's latest device check confirmed: `wm size` reports physical resolution **1080×2460**, no resolution override active — yet the mirror's video stream negotiates at **720×1280** (a *different* aspect ratio, 9:16 vs. ~18:41). [1.1.551] treated a video/device aspect-ratio mismatch as proof that `wm size` was reporting an incompatible coordinate space, and skipped rescaling entirely whenever the two ARs differed by more than 2% — sending raw video-pixel coordinates straight to `adb shell input tap`. That was the wrong call: this file's own long-standing comment on the `screenrecord` spawn explains that `screenrecord` is *never* pinned to the device's exact `wm size`, because most panel resolutions aren't 16-pixel-aligned, so it silently self-selects an encoder-supported size — which can legitimately have a different aspect ratio than the panel. A mismatched AR is the expected, normal case for this feature, not a sign of two incompatible spaces. Skipping the rescale in exactly that case sent every manual tap to essentially arbitrary coordinates, matching the reports of the Stop button hitting a "TV and Streaming" link, and the Fit-to-Screen icon being unclickable.
+
+**Fix:** `rescaleForDevice()` in `artifacts/api-server/src/routes/mobile.ts` now always does independent per-axis scaling (`x/videoW*realW`, `y/videoH*realH`) from the video's pixel space into whatever `wm size` reports (Override size if present, else Physical size) — the same coordinate space every other tap in this codebase (built from uiautomator bounds) already targets successfully. The 2%-aspect-ratio skip branch is removed.
+
+**Status:** shipped, not yet verified against the real device — no phone is attached in this environment. Please retest with 🎯 Click Test: the bullseye and yellow dot should now land at the same spot (or much closer than before). If there's still an offset, report the exact video/device numbers again — they'll now always come with a rescale log line since rescaling can no longer be silently skipped.
+
+---
+
 ## [1.1.554] — 2026-07-14
 
 ### Fix: mirror rendering at the wrong aspect ratio entirely — reinstated the resolution-override diagnostic
