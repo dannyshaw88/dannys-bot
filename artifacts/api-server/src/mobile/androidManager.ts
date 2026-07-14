@@ -1463,7 +1463,14 @@ export async function findFeedActionIcons(serial: string): Promise<FeedActionIco
   // which (a) claims the comment slot for a non-icon element and (b) collapses
   // iconGap to 5 px, making the unlabeled-ImageView minX filter exclude the
   // real Repost/Send icons at their true positions.
-  const commentNode  = rowNodes.find(n => /^comment$/i.test(n.cd)) ?? null;
+  //
+  // Additional guard: a node labeled "Comment" that is within 20 px of the
+  // Like button's centre CANNOT be the real comment-bubble icon — Instagram's
+  // action-bar icons are at minimum ~60 px apart. This phantom element is an
+  // accessibility container (parent ViewGroup) that wraps the Like heart and
+  // its sibling text, not the comment icon itself. Requiring n.x > like.x + 20
+  // excludes it while still accepting the real Comment icon further right.
+  const commentNode  = rowNodes.find(n => /^comment$/i.test(n.cd) && n.x > like.x + 20) ?? null;
   // Some IG builds label Repost as "Share", "Share to Feed", or "Repost to
   // your story" rather than the bare "Repost" string; all of these refer to
   // the same in-feed reshare icon and must be matched.  Exclude any candidate

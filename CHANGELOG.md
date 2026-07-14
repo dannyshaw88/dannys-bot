@@ -4,6 +4,28 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.565] — 2026-07-14
+
+### Fix: Feed Like — phantom "Comment" node + false-negative like verification
+
+**Phantom "Comment" container stealing the comment slot**
+Instagram's accessibility tree contains a parent `ViewGroup` labeled `content-desc="Comment"` whose centre lands at x=71 — only 5 px from the Like icon at x=66. It passes the `^comment# Changelog
+
+All notable changes to Equinox are documented here.
+
+---
+
+ exact-match filter and gets assigned as the Comment icon, collapsing the icon gap to 5 px. Every subsequent icon (shareFeed, shareDM) is then positionally assigned from that wrong anchor — shareFeed ended up at x=135 (the like-count badge area), which opened the Likes panel instead of the Repost sheet.
+
+Fix: `commentNode` now requires `n.x > like.x + 20`. A real comment-bubble icon is always at least 60 px to the right of Like — any node within 20 px is a container/parent, not the icon itself.
+
+**False-negative like verification**
+The like DID register (heart turned red, user confirmed) but the single UI dump taken 700 ms after the tap still showed `content-desc="Like"` because Instagram's accessibility tree can lag the visual update by up to ~1.5 s. This caused `✗ like tap did not register` in the log followed by the share-to-feed action proceeding — which then opened the Likes panel (wrong icon position, see above).
+
+Fix: polls up to 3 times at 500 ms intervals (max 1.5 s total). Confirms liked on the first dump that shows `content-desc="Unlike"`, logs failure only if all three polls miss.
+
+---
+
 ## [1.1.564] — 2026-07-14
 
 ### Remove: "Reset Resolution Override" — phone display settings must never be changed

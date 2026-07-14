@@ -1450,21 +1450,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               onLog?.(`Scroll ${i + 1}/${count}: tapping Like at (${jx},${jy})…`);
               try {
                 await android.tap(serial, jx, jy);
-                // Verify Instagram actually registered the like by waiting for the
-                // heart icon to switch from content-desc="Like" → content-desc="Unlike".
-                // Previously the code incremented likes++ immediately after tap() returned
-                // without error, which logged "✓ liked" even when the tap landed on the
-                // wrong element and nothing was liked.
-                await sleepOrAbort(serial, 700);
-                const verifyXml = await android.dumpUi(serial).catch(() => "");
-                const likeRegistered = /content-desc="Unlike"/.test(verifyXml);
+                // Verify Instagram registered the like by waiting for the heart to
+                // switch content-desc="Like" → "Unlike".  Instagram's accessibility
+                // tree can lag behind the visual update by up to ~1.5 s, so we poll
+                // up to 3 times (500 ms apart) rather than doing a single dump and
+                // declaring failure if the tree hasn't caught up yet.
+                let likeRegistered = false;
+                for (let attempt = 0; attempt < 3; attempt++) {
+                  await sleepOrAbort(serial, 500);
+                  const verifyXml = await android.dumpUi(serial).catch(() => "");
+                  if (/content-desc="Unlike"/.test(verifyXml)) { likeRegistered = true; break; }
+                }
                 if (likeRegistered) {
                   likes++;
                   onLog?.(`Scroll ${i + 1}/${count}: ✓ liked (total likes this run: ${likes})`);
                 } else {
                   likeFailures++;
-                  onLog?.(`Scroll ${i + 1}/${count}: ✗ like tap did not register — heart stayed "Like" (no Unlike found in tree)`);
-                  logger.warn({ serial, x: jx, y: jy }, "[check-feed] like tap did not register — content-desc='Unlike' not found after tap");
+                  onLog?.(`Scroll ${i + 1}/${count}: ✗ like tap did not register — "Unlike" not found in tree after 1.5 s`);
+                  logger.warn({ serial, x: jx, y: jy }, "[check-feed] like tap did not register — content-desc='Unlike' not found after 3 polls");
                 }
               } catch {
                 likeFailures++;
