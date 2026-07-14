@@ -2010,9 +2010,18 @@ export async function findButtonByLabel(serial: string, label: string): Promise<
  * - Node must carry a non-empty text or content-desc label
  * - Label must not match obvious UI chrome: Send / Search / Write a message /
  *   Direct / Share / To / Message / Cancel / OK / Close
+ * - Label must not match a known share-DESTINATION shortcut rather than a
+ *   person: "Your Story" / "Close Friends" / "Add to story". Instagram's
+ *   Send-to sheet renders these as pill buttons in the SAME y-zone and under
+ *   the SAME width cap as real recipient rows (confirmed 14 Jul 2026 from a
+ *   live run where the previous filter let "Your Story" or "Close Friends"
+ *   through, got randomly picked as the "recipient", and navigated into the
+ *   add-to-story compose screen instead of DMing anyone) — they must be
+ *   excluded explicitly, position/width alone doesn't tell them apart from a
+ *   contact row.
  * - Label must be ≤ 50 characters (display names, not article titles)
  */
-export async function findShareSheetRecipients(serial: string): Promise<{ x: number; y: number }[]> {
+export async function findShareSheetRecipients(serial: string, onLog?: (line: string) => void): Promise<{ x: number; y: number }[]> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial).catch(() => "");
@@ -2023,8 +2032,11 @@ export async function findShareSheetRecipients(serial: string): Promise<{ x: num
   const maxY = Math.round(h * 0.90);
   const maxWidth = Math.round(w * 0.80);
   const UI_CHROME = /^(send|search|write a message|direct|share|to|message|cancel|ok|close|suggested)$/i;
+  // Known share-destination shortcuts, not people — see doc comment above.
+  const SHARE_DESTINATIONS = /^(your story|close friends|add to story|add to your story|story|notes)$/i;
 
   const results: { x: number; y: number }[] = [];
+  const dump: string[] = [];
   const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
   let m: RegExpExecArray | null;
 
@@ -2037,14 +2049,25 @@ export async function findShareSheetRecipients(serial: string): Promise<{ x: num
     const cx = Math.round((x1 + x2) / 2);
     const cy = Math.round((y1 + y2) / 2);
     if (cy < minY || cy > maxY) continue;
-    if ((x2 - x1) > maxWidth) continue;
+    const width = x2 - x1;
     const textM = attrs.match(/\btext="([^"]*)"/);
     const cdM = attrs.match(/content-desc="([^"]*)"/);
+    const ridM = attrs.match(/resource-id="([^"]*)"/);
+    const clsM = attrs.match(/\bclass="([^"]*)"/);
     const label = (textM?.[1] || cdM?.[1] || "").trim();
+    // Diagnostic-only dump of every clickable node in the sheet's y-zone,
+    // regardless of whether it passes the filters below, so a real device
+    // run's log shows exactly what candidates existed (name/class/resource-id
+    // /width) — needed to confirm real recipient rows carry a usable label at
+    // all, the same way the feed action-bar icons initially didn't.
+    dump.push(`x=${cx} y=${cy} w=${width} cd="${cdM?.[1] ?? ""}" rid="${ridM?.[1] ?? ""}" cls="${clsM?.[1] ?? ""}" txt="${textM?.[1] ?? ""}"`);
+    if (width > maxWidth) continue;
     if (!label || label.length > 50) continue;
     if (UI_CHROME.test(label)) continue;
+    if (SHARE_DESTINATIONS.test(label.trim())) continue;
     results.push({ x: cx, y: cy });
   }
+  if (dump.length) onLog?.(`[share-sheet] recipient-zone node dump: ${dump.join(" | ")}`);
   return results;
 }
 

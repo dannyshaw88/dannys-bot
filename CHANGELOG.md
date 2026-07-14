@@ -4,6 +4,18 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.577] — 2026-07-14
+
+### Fix: DM recipient picker no longer taps "Your Story"/"Close Friends" instead of a person
+
+Confirmed from a live run + screenshot: the recipient list was open, but the picker tapped "Add to Story" at the bottom of that same list instead of an actual contact. `findShareSheetRecipients` filtered by position/width/label only, and Instagram's "Your Story" / "Close Friends" / "Add to Story" quick-share pills sit in the exact same y-zone and under the same width cap as real recipient rows — nothing previously excluded them by name. Added an explicit exclusion list for these known share-destination labels (not people), and added a diagnostic node dump (mirroring the feed-icon dump) so any further picker misses can be diagnosed the same way.
+
+### Enabled: remaining "Share to DM" controls
+
+With shareDm detection now confirmed working, re-enabled the two other locked/strikethrough "Share to DM" controls: "Share DM %" under View Stories from Feed, and "Share to DM %" under Inject Browsing. Both now behave like their sibling percentage inputs (no forced-0 override, no disabled/strikethrough styling). Only the base View Feed "Share via DM %" control (v1.1.576) had previously been re-enabled.
+
+---
+
 ## [1.1.576] — 2026-07-14
 
 ### Enabled: "Share via DM % of posts" (View Feed base action)

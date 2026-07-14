@@ -2140,18 +2140,18 @@ function AutomationSettingsPanel({
             </div>
           </div>
 
-          <div className="space-y-3 opacity-50 pointer-events-none select-none">
-            <Label className="text-sm text-red-400 line-through decoration-red-500">Share DM %</Label>
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Share DM %</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewStoriesShareDmPercentMin}
-                onChange={() => {}}
-                disabled />
+                onChange={e => setSettings(s => ({ ...s, viewStoriesShareDmPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewStoriesShareDmPercentMax}
-                onChange={() => {}}
-                disabled />
+                onChange={e => setSettings(s => ({ ...s, viewStoriesShareDmPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
               <span className="text-muted-foreground text-sm">%</span>
             </div>
           </div>
@@ -2306,12 +2306,12 @@ function AutomationSettingsPanel({
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingShareFeedPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareFeedPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
               </div>
             </div>
-            <div className="space-y-1.5 opacity-50 pointer-events-none select-none">
-              <Label className="text-xs text-red-400 line-through decoration-red-500">Share to DM %</Label>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Share to DM %</Label>
               <div className="flex items-center gap-2">
-                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingShareDmPctMin} onChange={() => {}} disabled />
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingShareDmPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareDmPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
                 <span className="text-muted-foreground text-sm">to</span>
-                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingShareDmPctMax} onChange={() => {}} disabled />
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingShareDmPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareDmPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
               </div>
             </div>
           </div>

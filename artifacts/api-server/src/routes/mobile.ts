@@ -1204,13 +1204,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   ];
 
   /** Taps one randomly-chosen recipient avatar in an open Share sheet. */
-  async function tapRandomShareSheetRecipient(serial: string, w: number, h: number): Promise<void> {
+  async function tapRandomShareSheetRecipient(serial: string, w: number, h: number, onLog?: (line: string) => void): Promise<void> {
     // Primary: scan the accessibility tree for tappable recipient rows/bubbles.
     // The DM share sheet presents suggested contacts as clickable nodes with
     // display-name or username labels; their pixel positions vary by device/
     // screen size, so fixed coordinates are unreliable. The a11y scan finds
     // whatever contacts are actually rendered.
-    const recipients = await android.findShareSheetRecipients(serial).catch(() => [] as { x: number; y: number }[]);
+    const recipients = await android.findShareSheetRecipients(serial, onLog).catch(() => [] as { x: number; y: number }[]);
     if (recipients.length > 0) {
       const pick = recipients[Math.floor(Math.random() * recipients.length)];
       await android.tap(serial, pick.x, pick.y);
@@ -1565,7 +1565,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 // recipient is selected — previously this just opened the
                 // sheet and pressed Back, never actually sending to anyone.
                 onLog?.(`Scroll ${i + 1}/${count}: picking DM recipient…`);
-                await tapRandomShareSheetRecipient(serial, w, h);
+                await tapRandomShareSheetRecipient(serial, w, h, onLog);
                 // 1500ms instead of 700ms — UIAutomator (now async) takes
                 // ~4s on this device. 700ms was never enough time for the
                 // blue Send button to finish rendering before we looked for it.
@@ -1999,7 +1999,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // Pick a random recipient, then look for the real Send button —
           // previously this just opened the sheet and pressed Back, never
           // actually sending to anyone (same bug as the feed's share-to-DM).
-          await tapRandomShareSheetRecipient(serial, w, h);
+          await tapRandomShareSheetRecipient(serial, w, h, onLog);
           await sleepOrAbort(serial, 900); // 1500→900ms: still enough for the Send button to render
           // Final checkpoint before the last tap: if the sheet/story is
           // already gone by now, tapping "Send"'s coordinates blind would
@@ -2961,7 +2961,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           await android.tap(serial, sendIcon.x, sendIcon.y);
           logger.info({ serial, x: sendIcon.x, y: sendIcon.y }, "[inject-browsing] tapped Send icon");
           await sleepOrAbort(serial, 1200);
-          await tapRandomShareSheetRecipient(serial, w, h);
+          await tapRandomShareSheetRecipient(serial, w, h, onLog);
           await sleepOrAbort(serial, 1500);
           const sent = await sendShareSheet(serial, w, h);
           if (sent) { onLog?.("Inject Browsing: shared the post via DM"); await sleepOrAbort(serial, 600); }
