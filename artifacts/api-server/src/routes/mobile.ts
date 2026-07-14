@@ -1459,7 +1459,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 for (let attempt = 0; attempt < 3; attempt++) {
                   await sleepOrAbort(serial, 500);
                   const verifyXml = await android.dumpUi(serial).catch(() => "");
-                  if (/content-desc="Unlike"/.test(verifyXml)) { likeRegistered = true; break; }
+                  // Instagram's tree may read content-desc="Unlike" OR content-desc="Unlike, 3,821 likes"
+                  // — match the prefix only (no closing quote) so both forms are accepted.
+                  if (/content-desc="Unlike/.test(verifyXml)) { likeRegistered = true; break; }
                 }
                 if (likeRegistered) {
                   likes++;

@@ -4,6 +4,18 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.566] — 2026-07-14
+
+### Fix: Feed Like — phantom comment node in positional fallback + "Unlike" regex missing count suffix
+
+**Phantom comment node surviving into positional fallback**
+The rowNodes entry filter was `c.x < like.x + 4`, so the phantom `content-desc="Comment"` parent container at x=73 (7 px from Like at x=66) passed through and entered rowNodes. The `commentNode` regex correctly rejected it (`n.x > like.x + 20` = 86, and 73 < 86), but the positional fallback at `pool()[0]` picked it right back up as the Comment icon — same wrong result as before the v1.1.565 fix. The phantom is now excluded at the rowNodes collection step (`c.x < like.x + 20`) so it never reaches the pool.
+
+**"Unlike" verification never matching Instagram's count-suffixed content-desc**
+The poll regex was `/content-desc="Unlike"/` (closing quote included). Instagram's accessibility tree renders the node as `content-desc="Unlike, 3,821 likes"` — the closing quote after the bare word "Unlike" is never present, so the regex matched nothing across all 3 polls (1.5 s) even when the like had already visually registered. Changed to `/content-desc="Unlike/` (prefix match, no closing quote) — matches both the bare form and the count-suffixed form.
+
+---
+
 ## [1.1.565] — 2026-07-14
 
 ### Fix: Feed Like — phantom "Comment" node + false-negative like verification

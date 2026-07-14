@@ -1413,7 +1413,7 @@ export async function findFeedActionIcons(serial: string): Promise<FeedActionIco
     const nodeWidth = +bm[4] - +bm[2];
     if (nodeWidth > maxIconWidth) continue; // too wide to be a single action icon (e.g. a reply/compose bar)
     if (Math.abs(c.y - like.y) > rowTolerance) continue;
-    if (c.x <= like.x + 4) continue; // Like itself, or anything left of it
+    if (c.x < like.x + 20) continue; // Like itself, or the phantom accessibility container that wraps it (always within 20 px of like.x)
     const cdM = attrs.match(/content-desc="([^"]*)"/);
     const cd = cdM ? cdM[1] : "";
     if (/favorit|save/i.test(cd)) continue; // bookmark, labeled
