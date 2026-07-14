@@ -692,6 +692,10 @@ export async function dismissInstagramInterstitials(serial: string): Promise<str
     "Maybe later",
     "No thanks",
     "No Thanks",
+    // "Remind me later" / "Remind Me Later" appear on the Instagram "Rate us"
+    // popup as an alternative soft-dismiss alongside "No Thanks".
+    "Remind me later",
+    "Remind Me Later",
     "Later",
     "Dismiss",
     // "Don't Allow Access" is the exact button text on the Instagram

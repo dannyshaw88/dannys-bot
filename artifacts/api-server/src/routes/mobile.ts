@@ -2436,25 +2436,40 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return { posted: false };
     }
 
-    // The photo is visible in the grid but NOT yet selected (highlighted
-    // with a white border) — it must be tapped to select it. Always tap.
-    // Grid layout: cell 0 = camera shutter tile, cell 1+ = photo thumbnails
-    // sorted newest-first. findFirstGalleryThumbnail() skips the camera tile
-    // and accepts both clickable and non-clickable nodes (Xiaomi/Android 14
-    // RecyclerView marks child cells non-clickable; v1.1.526 fix).
-    onLog?.("Make a Post: looking for the newest photo thumbnail in the Recents grid…");
-    const thumbnail = await android.findFirstGalleryThumbnail(serial).catch(() => null);
-    if (thumbnail) {
-      onLog?.(`Make a Post: tapping thumbnail at (${thumbnail.x}, ${thumbnail.y}) to select it…`);
-      await android.tap(serial, thumbnail.x, thumbnail.y);
-      await sleepOrAbort(serial, 1500);
+    // Instagram auto-selects the newest gallery photo the moment the New Post
+    // picker opens — the image appears in the preview area at the top and the
+    // expand/fit toggle (two-arrow icon) becomes visible in the preview's
+    // bottom-left corner.  Tapping the already-selected tile a second time
+    // DESELECTS it (turns it grey/white), leaving the preview empty and
+    // causing every subsequent Next tap to fail.
+    //
+    // Strategy: use the expand toggle as a proxy for "image is already selected
+    // and showing in the preview".  If it is visible, skip the thumbnail tap
+    // entirely.  If it is NOT visible (e.g. the pushed file hadn't been
+    // indexed by the media scanner yet when IG opened), fall back to tapping
+    // the first non-camera thumbnail to force-select it, then re-check.
+    onLog?.("Make a Post: checking whether newest photo was auto-selected by IG…");
+    let expandToggle = await android.findExpandPhotoButton(serial).catch(() => null);
+    if (!expandToggle) {
+      // No image in the preview yet — select one manually.
+      onLog?.("Make a Post: no auto-selection detected — tapping first thumbnail to select it…");
+      const thumbnail = await android.findFirstGalleryThumbnail(serial).catch(() => null);
+      if (thumbnail) {
+        onLog?.(`Make a Post: tapping thumbnail at (${thumbnail.x}, ${thumbnail.y})…`);
+        await android.tap(serial, thumbnail.x, thumbnail.y);
+        await sleepOrAbort(serial, 1500);
+      } else {
+        // Accessibility scan returned nothing — positional fallback for the
+        // second grid cell (first non-camera tile, x≈38%, y≈69%).
+        const fallbackThumb = android.postGalleryThumbnailPositionalFallback(serial);
+        onLog?.(`Make a Post: no thumbnail via scan — positional fallback at (${fallbackThumb.x}, ${fallbackThumb.y})…`);
+        await android.tap(serial, fallbackThumb.x, fallbackThumb.y);
+        await sleepOrAbort(serial, 1500);
+      }
+      // Re-probe after the manual tap.
+      expandToggle = await android.findExpandPhotoButton(serial).catch(() => null);
     } else {
-      // Accessibility scan returned nothing — use the positional fallback for
-      // the second grid cell (first non-camera photo tile, x≈38%, y≈69%).
-      const fallbackThumb = android.postGalleryThumbnailPositionalFallback(serial);
-      onLog?.(`Make a Post: no thumbnail found via scan — positional fallback at (${fallbackThumb.x}, ${fallbackThumb.y})…`);
-      await android.tap(serial, fallbackThumb.x, fallbackThumb.y);
-      await sleepOrAbort(serial, 1500);
+      onLog?.("Make a Post: newest photo already auto-selected — skipping thumbnail tap.");
     }
 
     // Confirm the picker is actually open before tapping Next. Check for any
@@ -2474,19 +2489,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Sanity-check: if we're relying entirely on positional guesses with no
     // confirming signal (no POST tab, no expand toggle, no labelled Next),
     // the compose sheet likely never opened — bail rather than tap blind.
-    if (nextBtn1IsPositionalGuess && !postTab && !(await android.findExpandPhotoButton(serial).catch(() => null))) {
+    if (nextBtn1IsPositionalGuess && !postTab && !expandToggle) {
       onLog?.("Make a Post: compose sheet did not open (no picker signal found at all) — aborting");
       await android.pressBack(serial);
       await android.removeDeviceFile(serial, devicePath).catch(() => {});
       return { posted: false };
     }
 
-    // The picker preview has a small "expand" (two-arrow / resize) toggle in
-    // its bottom-left corner that switches the crop from a square/cropped
-    // frame to the full original photo. Tap it before Next so the post uses
-    // the full uncropped image rather than IG's default centre-crop.
-    onLog?.("Make a Post: looking for the photo expand/fit toggle…");
-    const expandToggle = await android.findExpandPhotoButton(serial).catch(() => null);
+    // Tap the expand/fit toggle (two-arrow icon, bottom-left of preview) to
+    // switch from IG's default centre-crop to the full original photo before
+    // advancing to the filter/edit screen.
     if (expandToggle) {
       onLog?.(`Make a Post: tapping expand/fit toggle at (${expandToggle.x}, ${expandToggle.y})…`);
       await android.tap(serial, expandToggle.x, expandToggle.y);
