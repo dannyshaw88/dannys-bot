@@ -107,7 +107,7 @@ function NavBtn({ icon, label, onClick }: { icon: ReactNode; label: string; onCl
 
 const WEBCODECS_SUPPORTED = typeof window !== "undefined" && "VideoDecoder" in window;
 
-type LiveCanvasHandle = { clearToBlack: () => void };
+type LiveCanvasHandle = { clearToBlack: () => void; getVideoSize: () => { w: number; h: number } | null };
 
 type InspectNode = {
   cls: string; resourceId: string; contentDesc: string; text: string;
@@ -198,6 +198,13 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       if (!ctx) return;
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
+    },
+    // Lets the page-level Log tab (Check Screen Info) show the mirror's
+    // actual decoded video frame size next to `wm size`'s device resolution
+    // — otherwise the only place that size is ever visible is a "Frame WxH"
+    // line that scrolls past in the log the moment the stream (re)connects.
+    getVideoSize() {
+      return phoneSizeRef.current;
     },
   }), []);
 
@@ -763,12 +770,20 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
 
     addLog(`Swipe → (${drag.startX}, ${drag.startY}) → (${endX}, ${endY}) over ${durationMs}ms`);
     try {
+      // Same rescale-input requirement as tap/double-tap: without videoW/videoH
+      // the server has nothing to rescale from and silently sends the raw
+      // video-pixel coordinates straight through. This was previously omitted
+      // here, so every drag gesture (including press-and-drag to close a
+      // floating window) went out unscaled while plain taps were correct —
+      // exactly the "some clicks are pinpoint, some functions don't work"
+      // symptom reported for drag-based interactions.
+      const phoneSize = phoneSizeRef.current;
       const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/swipe`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           x1: drag.startX, y1: drag.startY, x2: endX, y2: endY,
-          durationMs,
+          durationMs, videoW: phoneSize?.w, videoH: phoneSize?.h,
         }),
       });
       if (!r.ok) {
@@ -924,8 +939,19 @@ function EmptyShell({ idx }: { idx: number }) {
 
 // ─── Phone slot ───────────────────────────────────────────────────────────────
 
-function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower, phoneDims, paneSize }: { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; live: boolean; onPower: () => void; phoneDims: { w: number; h: number } | null; paneSize: { w: number; h: number } | null }) {
+type PhoneSlotHandle = { getVideoSize: () => { w: number; h: number } | null };
+
+const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; live: boolean; onPower: () => void; phoneDims: { w: number; h: number } | null; paneSize: { w: number; h: number } | null }>(function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower, phoneDims, paneSize }, ref) {
   const liveCanvasRef = useRef<LiveCanvasHandle>(null);
+  // Re-exposes LiveCanvas's own handle so the page-level Log tab (rendered
+  // as a sibling, not a child, of this slot) can read the mirror's live
+  // decoded video frame size for Check Screen Info — see the matching
+  // comment on LiveCanvas's `getVideoSize`.
+  useImperativeHandle(ref, () => ({
+    getVideoSize() {
+      return liveCanvasRef.current?.getVideoSize() ?? null;
+    },
+  }), []);
   const [inspectMode,   setInspectMode]   = useState(false);
   const [inspectResult, setInspectResult] = useState<InspectResult | null>(null);
   const [inspecting,    setInspecting]    = useState(false);
@@ -1200,7 +1226,7 @@ function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower, phoneDims, 
       )}
     </div>
   );
-}
+});
 
 // ─── Setup panels ─────────────────────────────────────────────────────────────
 
@@ -3051,13 +3077,19 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
   );
 }
 
-function LogPanel({ lines, onClear, serial, onScanTray, addLog }: {
+function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize }: {
   lines: string[];
   onClear: () => void;
   serial?: string | null;
   /** Returns the captured lines so LogPanel can offer Copy Capture / Save. */
   onScanTray?: () => Promise<string[]>;
   addLog?: (msg: string) => void;
+  /** Returns the mirror's current decoded video frame size, or null before
+   *  the stream has produced a frame / while off. Used by Check Screen Info
+   *  to show the video's actual dimensions next to `wm size`, since that's
+   *  otherwise only visible transiently in the scrolling log ("Frame WxH")
+   *  and disappears once the stream reconnects or the log scrolls past it. */
+  getVideoSize?: () => { w: number; h: number } | null;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [scanning,       setScanning]       = React.useState(false);
@@ -3080,6 +3112,15 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog }: {
       for (const line of String(body.sizeRaw ?? "").split("\n")) if (line.trim()) addLog?.(line.trim());
       addLog?.(`── wm density ──`);
       for (const line of String(body.densityRaw ?? "").split("\n")) if (line.trim()) addLog?.(line.trim());
+      // `wm size` alone can't tell you whether the MIRROR is actually using
+      // that resolution — the video stream (screenrecord) frequently picks a
+      // different, encoder-friendly size on its own. Print the live decoded
+      // frame size right next to it so a mismatch (or a "no video yet — is
+      // Live on?" gap) is visible in one place instead of scrolling past in
+      // the log or requiring you to hunt Android's own settings for it.
+      const vs = getVideoSize?.() ?? null;
+      addLog?.(`── mirror video stream ──`);
+      addLog?.(vs ? `Decoded frame: ${vs.w}x${vs.h}` : `No frame decoded yet — turn Live on and wait for the mirror to connect, then re-run Check Screen Info.`);
       if (body.override) {
         addLog?.(`⚠️ Override size is active — the phone is currently running at ${body.override.w}x${body.override.h}, NOT its physical panel resolution (${body.physical?.w ?? "?"}x${body.physical?.h ?? "?"}).`);
         if (body.mismatch) {
@@ -3323,6 +3364,10 @@ export function MobilePage() {
   const phones = data?.phones ?? [];
   const slots: (UsbPhone | null)[] = Array.from({ length: TOTAL_SLOTS }, (_, i) => phones[i] ?? null);
   const activeSerial = slots[0]?.serial ?? null;
+  // Points at whichever rendered PhoneSlot corresponds to activeSerial, so
+  // the Log tab (a sibling, not a child, of the mirror) can pull the live
+  // decoded video frame size for Check Screen Info.
+  const activeSlotRef = useRef<PhoneSlotHandle>(null);
 
   // Owned here (not inside the tab-conditional panel) so the run-loop keeps
   // going in the background no matter which right-panel tab is active.
@@ -3444,6 +3489,7 @@ export function MobilePage() {
                   // action and always connects regardless of execution.
                   live={!!(phone && (liveOn[phone.serial] || automation.running))}
                   onPower={() => { if (phone) setLiveOn(s => ({ ...s, [phone.serial]: true })); }}
+                  ref={phone?.serial === activeSerial ? activeSlotRef : undefined}
                 />
               ))}
             </div>
@@ -3484,6 +3530,7 @@ export function MobilePage() {
                     onClear={() => setLogLines([])}
                     serial={activeSerial}
                     addLog={addLog}
+                    getVideoSize={() => activeSlotRef.current?.getVideoSize() ?? null}
                     onScanTray={activeSerial ? async () => {
                       addLog("── Capturing screen layout… ──");
                       try {

@@ -4,6 +4,22 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.558] — 2026-07-14
+
+### Fix: press-and-drag gestures (e.g. dragging a floating window closed) went out unrescaled — plus Check Screen Info now shows the mirror's actual video size
+
+Two separate but related gaps found after retesting [1.1.557] on the real device: some taps landed pinpoint, others (specifically press-and-hold-drag gestures, like dragging a floating window down to close it) still missed.
+
+**Root cause:** manual taps/double-taps send `videoW`/`videoH` with every request, so the server can rescale them from video-pixel space into the device's real resolution. Drag gestures go through the separate `/input/swipe` route, and its client call was never updated to send `videoW`/`videoH` — so the server's `if (input.videoW && input.videoH)` rescale branch never ran, and every drag was sent in raw, unscaled video coordinates. This is a different bug from [1.1.557]'s tap-rescale-skip guard, but produces the same symptom for drag-based interactions specifically.
+
+**Fix:** the mirror's pointer-up handler now sends the current decoded video frame size with every `/input/swipe` request too, so drags get the same rescale treatment as taps.
+
+**Also added:** "🔍 Check Screen Info" now prints the mirror's live decoded video frame size (e.g. `Decoded frame: 720x1280`) alongside `wm size`'s device resolution, since that's otherwise only ever visible in a "Frame WxH" line that scrolls past the log the moment the stream (re)connects, and isn't shown anywhere in Android's own settings — there was no way to see both numbers side-by-side to judge whether they're within the expected AR-mismatch range or something is actually broken.
+
+**Status:** shipped, not yet re-verified against the real device — please retest 🎯 Click Test *and* try dragging a floating window closed; both should track the click/drag point now. Run 📐 Check Screen Info too and confirm you now see a "Decoded frame" line under the wm size output.
+
+---
+
 ## [1.1.557] — 2026-07-14
 
 ### Fix: manual mirror taps landing far from the click — removed the aspect-ratio "skip rescale" guard added in [1.1.551]
