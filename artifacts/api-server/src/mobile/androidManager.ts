@@ -1269,24 +1269,22 @@ function _findCentermostLikeNode(xml: string, screenH: number): { x: number; y: 
   const re = /content-desc="Like"[^>]*bounds="(\[\d+,\d+\]\[\d+,\d+\])"/g;
   // Use the caller-supplied real screen height (from adb wm size) rather than
   // _getScreenSize(xml), which falls back to h=900 when the XML root bounds
-  // don't match [0,0][W,H].  With h=900, centerY=450 — a Like node anywhere
-  // near the top of the screen (y≈276, e.g. a header element or suggested
-  // post) wins over the real feed action-bar Like at y≈1900 because 276 is
-  // only 174px from 450 while 1900 is 1450px away.  The correct center for a
-  // 2460px tall device is 1230, which makes the real feed bar unambiguously
-  // the winner.
+  // don't match [0,0][W,H].  With h=900, centerY=450 — a Like node near the
+  // top of the screen (y≈276) wins over the real action bar (y≈1900) because
+  // 276 is only 174px from 450 while 1900 is 1450px away.  The correct center
+  // for a 2460px tall device is 1230; from there the real bar at y≈975+ is
+  // always 255px or less away while any header element at y≈276 is 954px away,
+  // so the correct node wins without needing an additional hard floor.
+  // NOTE: no hard y floor is applied here.  The first post's action bar can
+  // legitimately sit at y < 40% of screen height when the post image is small
+  // (landscape/news post) — a fixed floor at 40% falsely rejects it.
   const centerY = screenH / 2;
-  // Also enforce a minimum y floor: the feed action bar is always in the
-  // lower half of the screen.  Reject any Like node above 40% of screen
-  // height — nothing in the post action bar is ever that high.
-  const minY = Math.round(screenH * 0.40);
   let best: { x: number; y: number } | null = null;
   let bestDist = Infinity;
   let m: RegExpExecArray | null;
   while ((m = re.exec(xml)) !== null) {
     const c = _parseCenter(m[1]);
     if (!c) continue;
-    if (c.y < minY) continue; // header / nav element, not a post action bar
     const dist = Math.abs(c.y - centerY);
     if (dist < bestDist) { bestDist = dist; best = c; }
   }
