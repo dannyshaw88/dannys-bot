@@ -66,6 +66,18 @@ Once an element is found via its label, its center coordinates are read from its
 
 **Forbidden:** any fixed pixel percentage (e.g. "tap at 48% of screen width") used to locate a UI element whose position can change between posts, accounts, or app versions.
 
+### How to diagnose "detection can't find this element" — the required approach
+
+When automation fails to find or correctly pick an element (a button, icon, or list item), do NOT guess at a fix from memory or general UI conventions. Every real fix so far has come from this exact loop — follow it in order:
+
+1. **Add a diagnostic dump, ship it alone, gather real data first.** Extend the relevant scan function to log every candidate node it sees in that screen region — at minimum `class`, `resource-id`, `content-desc`, `text`, `bounds`/position, and width. Ship this as its own version bump with nothing else changed. Do not touch the actual tap/detection logic yet — you don't know what's true on this device/build until you've seen it.
+2. **Get a screenshot AND the matching log from the same run, at the moment of failure.** The dump alone isn't enough — you need to see what's actually on screen (which icon/button is which, what's visible/highlighted) lined up against the raw attribute dump from that identical moment, not a different run. Ask for both together if the user only supplies one.
+3. **Cross-reference visible UI against the raw attributes to find the real distinguishing signal.** Match on-screen elements (by their visible position, count, or label) to specific dumped nodes to figure out what actually tells them apart in the tree — this might be `class` alternating in a pattern, a label that exists but wasn't in an exclusion list, adjacency between two nodes, or something else entirely. There have been two distinct failure shapes so far, and both required this same evidence-gathering step even though the fixes looked different:
+   - *No label exists at all* (content-desc/resource-id both empty on every candidate) → identify by structural signature instead (element type/class, position relative to siblings) — see the feed action-bar icon fix below.
+   - *A label exists but an unwanted element also matches* (e.g. a same-zone, similarly-sized button that isn't a real candidate) → the label-reading approach was already correct, it just didn't know that specific label needed excluding — add it explicitly once confirmed from the screenshot, don't broaden the filter blindly.
+4. **Only trust the new rule when it resolves unambiguously.** Whatever structural or label rule you land on, only act on it when it uniquely identifies the right element (e.g. "exactly N candidates found") — if the count or match is off, leave the result null/skip the action rather than guessing, exactly like the existing label-matching rule already does.
+5. **Ship the real fix as a separate version bump from the diagnostic-only one**, with a changelog entry describing the evidence that led to it (what the screenshot showed, what the dump showed, why this rule follows from that) — not just what the code now does.
+
 ### Mirror tap rescaling — pinpoint-clicking fix
 
 Android's screen-capture buffer (e.g. 720×1280) often has a different aspect ratio than the real display (e.g. 1080×2460) and pads the real content with black bars inside the buffer. Taps from the mirror panel were previously scaled against the full buffer including the black padding, which caused accurate centre taps but drifted noticeably toward edges. The fix scales through the actual content sub-rect inside the buffer so every tap lands correctly regardless of where on screen it is. This is implemented in `rescaleForDevice()` in `artifacts/api-server/src/routes/mobile.ts`. **Do not alter this logic.**
