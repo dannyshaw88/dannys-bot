@@ -2519,6 +2519,54 @@ export async function logScreenLayout(
 }
 
 /**
+ * Automatic self-diagnostic evidence capture. Saves a full screenshot PNG
+ * and the raw accessibility-tree XML dump to disk, on THIS machine, without
+ * any user action.
+ *
+ * Why this exists (13 Jul 2026): every "Make a Post" tap-mismatch bug fixed
+ * in this codebase so far has depended on the user manually pulling a
+ * device log and a screenshot at the exact moment of failure and pasting
+ * them into chat — after already burning ~30 min on a rebuild. That is a
+ * broken debugging loop, not a broken button: fixes are always guesses
+ * made from a stale, user-supplied snapshot, with no way to verify them
+ * before shipping. This function removes the user from that loop — call it
+ * around every risky tap in a flow, and the evidence is already sitting on
+ * disk the next time something goes wrong, with zero effort from the user.
+ *
+ * Files are written to `debug-captures/<serial>/<timestamp>_<label>/`:
+ *   - `screen.png`  — raw screencap at the moment of capture
+ *   - `dump.xml`    — full uiautomator accessibility-tree dump
+ * Never throws — a failed capture (missing tool, device disconnected) logs
+ * and returns null so it can never break the automation flow it's
+ * instrumenting.
+ */
+export async function captureDebugEvidence(serial: string, label: string): Promise<string | null> {
+  try {
+    const tools = detectToolset();
+    const adb = requireTool(tools.adb, "adb");
+    const safeLabel = label.replace(/[^a-zA-Z0-9_.\-]+/g, "_").slice(0, 80);
+    const dir = path.join(process.cwd(), "debug-captures", serial.replace(/[^a-zA-Z0-9_.\-]+/g, "_"), `${Date.now()}_${safeLabel}`);
+    fs.mkdirSync(dir, { recursive: true });
+
+    const [{ stdout: pngBuf } , xml] = await Promise.all([
+      execFileP(adb, ["-s", serial, "exec-out", "screencap", "-p"], {
+        encoding: "buffer", timeout: 8000, maxBuffer: 20 * 1024 * 1024,
+      } as any) as unknown as Promise<{ stdout: Buffer }>,
+      _uiDump(adb, serial).catch(() => ""),
+    ]);
+    if (pngBuf && (pngBuf as unknown as Buffer).length > 100) {
+      fs.writeFileSync(path.join(dir, "screen.png"), pngBuf as unknown as Buffer);
+    }
+    fs.writeFileSync(path.join(dir, "dump.xml"), xml || "[dump failed]");
+    fs.writeFileSync(path.join(dir, "label.txt"), label);
+    return dir;
+  } catch (e: any) {
+    logger.warn?.(`[captureDebugEvidence] failed for "${label}": ${e?.message ?? e}`);
+    return null;
+  }
+}
+
+/**
  * Positional fallback for the blue "Next" control on Instagram's very first
  * New Post screen (the photo-select/Recents grid).
  *
