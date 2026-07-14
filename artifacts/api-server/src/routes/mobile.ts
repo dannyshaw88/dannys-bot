@@ -1972,38 +1972,43 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // child elements on most device/version combinations, but some builds
         // DO label the paper-plane. Try the a11y tree first (fast, zero tap
         // risk on wrong coordinates) and fall back to the pixel scan only if
-        // the probe returns nothing.  The probe also does a positional sanity
-        // check internally — any match must be right-of-centre and in the
-        // lower 40 % of the screen so it can't be confused with a "Share"
-        // button elsewhere in the UI.
+        // Strategy 1 (v1.1.580): UIAutomator a11y probe — tries known labels and
+        // the text-field-anchor approach.  Now also passes onLog so the full
+        // diagnostic dump of every node in the lower 35 % of the screen appears
+        // in the Log tab on every share attempt.  If it returns null, fall
+        // through to the pixel scan unchanged.
+        //
+        // NOTE: the positional probe (find rightmost clickable in the bar zone)
+        // was REMOVED in v1.1.581 — it reliably returned the text-input field
+        // centre (~60 % of screen width) rather than the paper-plane (~88–93 %),
+        // burning the slide timer with three keyboard-opening retries.
         let shareIconPos: { x: number; y: number } | null = null;
-        const a11yPos = await android.findStoryShareButtonViaA11y(serial).catch(() => null);
+        const a11yPos = await android.findStoryShareButtonViaA11y(serial, (msg) => onLog?.(msg)).catch(() => null);
         if (a11yPos) {
           shareIconPos = a11yPos;
-          onLog?.(`Story ${s + 1}: share button found via UIAutomator a11y at (${a11yPos.x},${a11yPos.y})`);
+          onLog?.(`Story ${s + 1}: share button located via a11y at (${a11yPos.x},${a11yPos.y})`);
         } else {
           // Strategy 2: pixel scan.
           const iconScan = await android.findStoryActionIcons(serial).catch(() => null);
           const rawPos = (iconScan && iconScan.length >= 2) ? iconScan[iconScan.length - 1] : null;
-          onLog?.(`Story ${s + 1}: share icon scan — ${iconScan == null ? "screenshot unavailable" : `${iconScan.length} icon(s) found`}${rawPos ? ` — rightmost at (${rawPos.x},${rawPos.y})` : " — sharing disabled or scan returned <2 clusters"}`);
-          // Positional sanity check: the paper-plane is ALWAYS in the right
-          // half of the screen.  If the scan's rightmost cluster is left of
-          // centre it's a false match on story content (captions, stickers,
-          // bright text over a dark background) — tapping there would hit
-          // whatever random element the scan mistook for an icon.
-          // Threshold: x must be > 40 % of screen width.
-          if (rawPos && rawPos.x > w * 0.40) {
+          onLog?.(`Story ${s + 1}: pixel scan — ${iconScan == null ? "screenshot unavailable" : `${iconScan.length} cluster(s) found`}${rawPos ? ` — rightmost at (${rawPos.x},${rawPos.y})` : " — <2 clusters (sharing disabled or scan miss)"}`);
+          // Sanity check: the paper-plane is always in the rightmost ~15–20 %
+          // of the screen.  The v1.1.580 threshold of 40 % was too permissive
+          // and would accept false content-cluster matches in the centre of the
+          // frame.  Raised to 65 % — anything left of that is not the paper-
+          // plane regardless of device resolution.
+          if (rawPos && rawPos.x > w * 0.65) {
             shareIconPos = rawPos;
           } else if (rawPos) {
-            onLog?.(`Story ${s + 1}: share icon scan result rejected — x=${rawPos.x} < 40 % of w=${w}; likely a false content match — skipping share`);
-            logger.warn({ serial, story: s + 1, rawX: rawPos.x, w }, "[view-stories] share scan rejected — x too far left");
+            onLog?.(`Story ${s + 1}: pixel scan result rejected — x=${rawPos.x} < 65% of w=${w}; false content match — skipping share`);
+            logger.warn({ serial, story: s + 1, rawX: rawPos.x, w }, "[view-stories] share pixel-scan rejected — x too far left");
           }
         }
 
         let opened = false;
         if (!shareIconPos) {
-          // 0 or 1 icon — sharing disabled or ambiguous, skip without touching the screen
-          logger.info({ serial, story: s + 1, iconsFound: iconScan?.length ?? 0 }, "[view-stories] share skipped — paper-plane not found in icon scan");
+          // no usable position — skip without touching the screen
+          logger.info({ serial, story: s + 1 }, "[view-stories] share skipped — paper-plane not found");
           onLog?.(`Story ${s + 1}: share skipped — owner has sharing disabled (no paper-plane detected)`);
         } else {
           // Root-cause fix (12 Jul 2026, user-reported): a missed tap used

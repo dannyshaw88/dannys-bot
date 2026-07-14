@@ -4,6 +4,26 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.581] — 2026-07-15
+
+### Fix: story Share-to-DM — remove positional probe, add diagnostic dump + text-field anchor
+
+**Root cause of v1.1.580 regression:** The UIAutomator positional probe (find all clickable nodes in the bar zone, return the rightmost one) consistently found the **text-input field** at ~60 % of screen width rather than the paper-plane icon at ~88–93 %. The text field is the only accessible element in the story reply bar; the paper-plane is canvas-drawn with no content-desc, resource-id, or text. The probe then used the text-field centre as the tap target, causing three keyboard-opening retries per story — ~8 seconds of wasted time while short stories auto-advanced through 3-4 slides per retry cycle.
+
+**Changes:**
+
+- **Removed** the positional probe from `findStoryShareButtonViaA11y`. It cannot distinguish the text field from the paper-plane because the paper-plane has no accessible attributes on this device/Instagram build. A comment in the code documents this explicitly so it is not re-added without evidence.
+
+- **Added diagnostic dump** — `findStoryShareButtonViaA11y` now logs every UIAutomator node whose vertical centre sits in the lower 35 % of the screen (`class`, `resource-id`, `content-desc`, `text`, `bounds`, `clickable`) on every share attempt. This appears in the Log tab without a separate debug run, so the real a11y signal can be identified from a single run if Instagram exposes the button on a future build.
+
+- **Added text-field anchor (Strategy 2)** — the text-input field IS accessible (confirmed from the log: UIAutomator returns it). The function now reads its live `bounds` right-edge from the dump and estimates the paper-plane at 75 % of the remaining screen width to the right. 75 % reliably lands on the last icon (paper-plane) whether the remaining space has 1 or 2 icons. This derives the coordinate from the real rendered bounds, not a hardcoded pixel.
+
+- **Tightened pixel-scan sanity check** (fallback path): raised minimum x from 40 % → 65 % of screen width. The paper-plane is always in the rightmost 15–20 % of the screen; any pixel-scan result left of 65 % is a false content-cluster match and is now rejected and logged rather than used as a tap target.
+
+- **`onLog` passed through** from `runViewStoriesFromFeedLoop` to `findStoryShareButtonViaA11y` so all diagnostic lines appear in the user-visible Log tab.
+
+---
+
 ## [1.1.580] — 2026-07-14
 
 ### Fix: Story tool — slide count, short-story likes, and Share-to-DM wrong tap

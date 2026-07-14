@@ -1856,29 +1856,39 @@ export async function findStoryActionIcons(serial: string): Promise<{ x: number;
 
 /**
  * Attempts to locate Instagram's story share (paper-plane) button via the
- * UIAutomator accessibility tree BEFORE the caller falls back to the
- * pixel-scan approach in `findStoryActionIcons`.
+ * UIAutomator accessibility tree BEFORE falling back to the pixel-scan in
+ * `findStoryActionIcons`.
  *
  * Instagram renders the story reply-bar as a canvas with no accessible child
- * elements on most device/version combinations — UIAutomator exposes only an
- * opaque container for the entire bar. However, some device builds and newer
- * Instagram versions DO label the paper-plane with a content-desc, AND the
- * DM-share button on reposted-Reel stories sometimes has a unique resource-id.
- * This function probes both paths; if it finds nothing it returns null and the
- * caller continues to the pixel scan unchanged.
+ * elements on most device/version combos.  The ONLY accessible element in
+ * the bar is the text-input field ("Send message" placeholder) — the heart
+ * and paper-plane icons are canvas-drawn with no content-desc, resource-id,
+ * or text attributes.
  *
- * Two strategies (tried in order):
- *  1. Label probe — common content-desc strings Instagram has used for the
- *     share button. Positions are sanity-checked (must be right of centre,
- *     must be in the lower part of the screen) to reject accidental matches
- *     on other "Share" controls in the tree.
- *  2. Positional probe — scan every clickable node in the reply-bar y-zone
- *     (72–95 % of screen height) that is in the right half of the screen and
- *     not full-width (which would be a bottom-sheet, not an icon). Return the
- *     rightmost such node — the paper-plane is always rightmost in the bar.
+ * Two strategies (in order):
+ *  1. Label probe — known content-desc strings the paper-plane has been
+ *     labelled with on some Instagram builds (rare but free to try).
+ *  2. Text-field anchor — find the reply-bar text input by its placeholder
+ *     text, read its LIVE right-edge x from the dump, then place the
+ *     paper-plane at 75 % of the remaining width to the right.  The paper-
+ *     plane is always the rightmost element in the bar; 75 % reliably lands
+ *     on it whether there are 1 or 2 icons sharing that space.  The
+ *     coordinate is derived from real rendered bounds — not a hardcoded pixel.
+ *
+ * REMOVED (v1.1.581): the positional probe (find all clickable nodes in the
+ * bar zone, return rightmost). It consistently found the text-input field
+ * centre (~60 % of screen width) instead of the paper-plane (~88–93 %),
+ * causing three keyboard-opening retries per story and burning the slide
+ * timer.  Do not re-add without a UIAutomator dump confirming the paper-
+ * plane is actually accessible on the target build.
+ *
+ * Comprehensive diagnostic logging of every node in the lower 35 % of the
+ * screen is written via `onLog` so a single Log-tab run captures the full
+ * a11y tree at the moment of share-attempt.
  */
 export async function findStoryShareButtonViaA11y(
   serial: string,
+  onLog?: (msg: string) => void,
 ): Promise<{ x: number; y: number } | null> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
@@ -1886,46 +1896,100 @@ export async function findStoryShareButtonViaA11y(
   const xml = await _uiDump(adb, serial).catch(() => "");
   if (!xml) return null;
 
-  // 1. Label probe — Instagram has used several content-desc strings
+  // ── Diagnostic: emit every node whose vertical centre sits in the lower
+  //    35 % of the screen (the story reply-bar zone).  class, resource-id,
+  //    content-desc, text, bounds, and clickability are all included so a
+  //    single Log-tab output is enough to identify the real a11y signal on
+  //    any device / Instagram build — no separate debug run needed.
+  const diagYMin = Math.round(h * 0.65);
+  {
+    const nodeRe2 = /<node\s([^>]+?)\s*\/?>/g;
+    let nm: RegExpExecArray | null;
+    const diagLines: string[] = [];
+    while ((nm = nodeRe2.exec(xml)) !== null) {
+      const a = nm[1];
+      const bm = a.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (!bm) continue;
+      const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
+      if (cy < diagYMin) continue;
+      const cls = (a.match(/\bclass="([^"]*)"/)  ?? [])[1] ?? "";
+      const rid = (a.match(/resource-id="([^"]*)"/) ?? [])[1] ?? "";
+      const cd  = (a.match(/content-desc="([^"]*)"/) ?? [])[1] ?? "";
+      const txt = (a.match(/\btext="([^"]*)"/)  ?? [])[1] ?? "";
+      const clk = /clickable="true"/.test(a) ? "clickable" : "non-clickable";
+      diagLines.push(
+        `  [a11y-diag] ${clk} | class=${cls} | rid=${rid}` +
+        ` | cd=${cd} | text=${txt} | bounds=[${bm[1]},${bm[2]}][${bm[3]},${bm[4]}]`,
+      );
+    }
+    if (diagLines.length === 0) {
+      onLog?.(`  [a11y-diag] no nodes in lower 35% of screen (y>${diagYMin}, screen ${w}x${h})`);
+    } else {
+      onLog?.(`  [a11y-diag] ${diagLines.length} node(s) in lower 35% (y>${diagYMin}, screen ${w}x${h}):`);
+      diagLines.forEach(l => onLog?.(l));
+    }
+  }
+
+  // ── Strategy 1: label probe — check if this build exposes the paper-plane
+  //    via a content-desc (rare but possible on some Instagram versions).
   const labelCandidates = [
-    "Share to Direct", "Send to Direct", "Direct", "Share",
+    "Share to Direct", "Send to Direct", "Direct", "Share to",
     "story_share", "direct_share",
   ];
   for (const label of labelCandidates) {
     const found = _findElem(xml, label);
-    // Must be right of 40 % of screen width (the paper-plane is always
-    // in the right portion of the bar) and in the lower 40 % of height.
-    if (found && found.x > w * 0.40 && found.y > h * 0.60) {
+    // Sanity: paper-plane must be right of 60 % of screen width AND in the
+    // lower 40 % of height.  Anything left of centre is a false match.
+    if (found && found.x > w * 0.60 && found.y > h * 0.60) {
+      onLog?.(
+        `  [a11y-diag] label probe: matched "${label}" at (${found.x},${found.y}) — using as paper-plane`,
+      );
       return found;
+    } else if (found) {
+      onLog?.(
+        `  [a11y-diag] label probe: matched "${label}" at (${found.x},${found.y})` +
+        ` but failed sanity check (need x>${Math.round(w * 0.60)}, y>${Math.round(h * 0.60)}) — rejected`,
+      );
     }
   }
 
-  // 2. Positional probe — find all clickable nodes in the reply-bar zone
-  //    and return the rightmost one.
-  const yMin = Math.round(h * 0.72); // reply bar is always in the lower 28 %
-  const yMax = Math.round(h * 0.95); // above the Android nav bar inset
-  const xMin = Math.round(w * 0.40); // paper-plane is right-of-centre
-
-  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
-  let m: RegExpExecArray | null;
-  let best: { x: number; y: number } | null = null;
-
-  while ((m = nodeRe.exec(xml)) !== null) {
-    const attrs = m[1];
-    if (!/clickable="true"/.test(attrs)) continue;
-    const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+  // ── Strategy 2: text-field anchor.
+  //    The story reply-bar text input IS accessible (confirmed on the user's
+  //    device — it is the element the v1.1.580 positional probe was finding
+  //    at ~60 % of screen width).  We read its LIVE right-edge x from the
+  //    UIAutomator dump, then estimate the paper-plane position as 75 % of
+  //    the icon-zone width to the right of that edge.  This is derived from
+  //    the real rendered bounds, not a hardcoded pixel value.
+  const textFieldCandidates = [
+    "Send message", "Message\u2026", "Message", "Reply\u2026", "Reply",
+    "Write a reply", "Send",
+  ];
+  for (const label of textFieldCandidates) {
+    const esc = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const attrRe = new RegExp(
+      `(?:text|content-desc|hint)="[^"]*${esc}[^"]*"[^>]*bounds="\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]"`,
+      "i",
+    );
+    const bm = xml.match(attrRe);
     if (!bm) continue;
-    const x1 = Number(bm[1]), y1 = Number(bm[2]), x2 = Number(bm[3]), y2 = Number(bm[4]);
-    const cx = Math.round((x1 + x2) / 2);
-    const cy = Math.round((y1 + y2) / 2);
-    if (cy < yMin || cy > yMax) continue;
-    if (cx < xMin) continue;
-    // Exclude full-width elements (bottom sheets, nav bars)
-    if ((x2 - x1) > w * 0.60) continue;
-    if (!best || cx > best.x) best = { x: cx, y: cy };
+    const fieldX1 = Number(bm[1]), fieldY1 = Number(bm[2]);
+    const fieldX2 = Number(bm[3]), fieldY2 = Number(bm[4]);
+    const fieldCy = Math.round((fieldY1 + fieldY2) / 2);
+    if (fieldCy < h * 0.60) continue; // must be in the lower bar zone
+    const iconZoneWidth = w - fieldX2;
+    if (iconZoneWidth < w * 0.04) continue; // sanity: icon zone too narrow
+    // 75 % into the icon zone lands on the rightmost icon (paper-plane)
+    // whether the space contains 1 or 2 icons.
+    const paperPlaneX = Math.round(fieldX2 + iconZoneWidth * 0.75);
+    onLog?.(
+      `  [a11y-diag] text-field anchor: "${label}" bounds=[${fieldX1},${fieldY1}][${fieldX2},${fieldY2}]` +
+      ` → iconZone=${iconZoneWidth}px → paper-plane estimated at (${paperPlaneX},${fieldCy})`,
+    );
+    return { x: paperPlaneX, y: fieldCy };
   }
 
-  return best;
+  onLog?.("  [a11y-diag] no usable a11y signal — falling back to pixel scan");
+  return null;
 }
 
 /**
