@@ -4,6 +4,16 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.576] — 2026-07-14
+
+### Enabled: "Share via DM % of posts" (View Feed base action)
+
+v1.1.575's row-node fix confirmed Comment/Repost/Send detection works live (log showed correct coordinates for all three, and a "Share to Feed" tap succeeded on a real device run). The base View Feed "Share via DM % of posts" control was previously locked/greyed out with a strikethrough label, and the save payload silently forced `shareDmPercentMin`/`shareDmPercentMax` to 0 regardless of the UI, as a safety measure from before shareDm coordinates could be trusted. Since shareDm detection is now confirmed working the same way shareFeed is, re-enabled the control (matches the "Share to Feed %" input styling/behavior) and removed the payload override so the real slider values are sent and used by the automation engine.
+
+Note: this only affects the base View Feed action. "Share DM %" under View Stories and "Share to DM %" under Inject Browsing remain locked/greyed out — those are separate, untested code paths not covered by this fix.
+
+---
+
 ## [1.1.575] — 2026-07-14
 
 ### Fix: icon detection no longer depends on a count node existing at all

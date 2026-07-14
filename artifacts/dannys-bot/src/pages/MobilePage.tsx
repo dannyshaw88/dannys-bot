@@ -1641,11 +1641,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             likePercentMax: s.likePercentMax,
             shareFeedPercentMin: s.shareFeedPercentMin,
             shareFeedPercentMax: s.shareFeedPercentMax,
-            // Share-via-DM is intentionally disabled in the UI (fields are
-            // locked/greyed out). Always send 0 regardless of any previously
-            // persisted value so the backend never rolls a DM-share action.
-            shareDmPercentMin: 0,
-            shareDmPercentMax: 0,
+            shareDmPercentMin: s.shareDmPercentMin,
+            shareDmPercentMax: s.shareDmPercentMax,
             viewStoriesSlidesMin: s.viewStoriesSlidesMin,
             viewStoriesSlidesMax: s.viewStoriesSlidesMax,
             viewStoriesSlideWatchPctMin: s.viewStoriesSlideWatchPctMin,
@@ -2030,8 +2027,8 @@ function AutomationSettingsPanel({
             </div>
           </div>
 
-          <div className="space-y-3 opacity-50 pointer-events-none select-none">
-            <Label className="text-sm text-red-400 line-through decoration-red-500">Share via DM % of posts</Label>
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Share via DM % of posts</Label>
             <div className="flex items-center gap-3">
               <Input
                 type="number"
@@ -2040,8 +2037,8 @@ function AutomationSettingsPanel({
                 maxLength={4}
                 className={NUM_INPUT_CLASS}
                 value={settings.shareDmPercentMin}
-                onChange={() => {}}
-                disabled
+                onChange={e => setSettings(s => ({ ...s, shareDmPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading}
               />
               <span className="text-muted-foreground text-sm">to</span>
               <Input
@@ -2051,8 +2048,8 @@ function AutomationSettingsPanel({
                 maxLength={4}
                 className={NUM_INPUT_CLASS}
                 value={settings.shareDmPercentMax}
-                onChange={() => {}}
-                disabled
+                onChange={e => setSettings(s => ({ ...s, shareDmPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading}
               />
               <span className="text-muted-foreground text-sm">%</span>
             </div>
