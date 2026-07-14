@@ -1439,6 +1439,13 @@ export async function findFeedActionIcons(serial: string): Promise<FeedActionIco
   rowNodes.sort((a, b) => a.x - b.x);
   unlabeledImgViews.sort((a, b) => a.x - b.x);
 
+  // Diagnostic: log every node in the action-bar row so we know the exact
+  // content-desc labels Instagram puts on this device/build.
+  logger.info(
+    { row: rowNodes.map(n => ({ x: n.x, cd: n.cd || "(empty)" })) },
+    "[feed-icons] action-bar rowNodes content-desc dump"
+  );
+
   const pos = (n: RowNode) => ({ x: n.x, y: n.y });
   let comment: { x: number; y: number } | null = null;
   let shareFeed: { x: number; y: number } | null = null;

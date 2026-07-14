@@ -4,6 +4,14 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.569] — 2026-07-14
+
+### Diagnostic: dump action-bar rowNode content-desc labels
+
+Added a single log line in `findFeedActionIcons` that prints every node in the action-bar row with its exact `content-desc` value after the row is built. This will show the real labels Instagram puts on Comment / Repost / Send on this device/build so the regex can be corrected.
+
+---
+
 ## [1.1.568] — 2026-07-14
 
 ### Fix: label-only icon detection + remove Like verification
