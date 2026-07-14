@@ -773,26 +773,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // desyncs any coordinate math that assumes a single screen size. The parsed
   // /screen-size endpoint above collapses that distinction; this one preserves
   // it so it can be diagnosed from a single in-app button click.
-  app.get("/api/mobile/devices/:serial/screen-info", async (req: Request, res: Response) => {
-    try {
-      const tools = android.detectToolset();
-      const adbPath = tools.adb.path;
-      if (!adbPath) { res.status(503).json({ error: "ADB not found" }); return; }
-      const serial = p(req, "serial");
-      const [sizeR, densityR] = await Promise.all([
-        execFileP(adbPath, ["-s", serial, "shell", "wm", "size"], { timeout: 5000 } as any).catch((e: any) => ({ stdout: `error: ${e?.message ?? e}` })),
-        execFileP(adbPath, ["-s", serial, "shell", "wm", "density"], { timeout: 5000 } as any).catch((e: any) => ({ stdout: `error: ${e?.message ?? e}` })),
-      ]);
-      const sizeLines = String(sizeR.stdout).split("\n").map(l => l.trim()).filter(Boolean);
-      const hasOverride = sizeLines.some(l => /^override size:/i.test(l));
-      res.json({
-        lines: [...sizeLines, ...String(densityR.stdout).split("\n").map(l => l.trim()).filter(Boolean)],
-        mismatchWarning: hasOverride
-          ? "This device reports an Override size in addition to Physical size — if any tap/coordinate bug keeps recurring, this mismatch is the prime suspect."
-          : null,
-      });
-    } catch (e: any) { res.status(500).json({ error: e?.message }); }
-  });
   // ── Network interfaces (for source-adapter picker in UI) ───────────────────
   app.get("/api/network/interfaces", (_req: Request, res: Response) => {
     const raw = os.networkInterfaces();

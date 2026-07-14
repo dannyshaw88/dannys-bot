@@ -434,35 +434,24 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
     }
   }, [serial, addLog]);
 
-  // Maps a client (viewport) point to phone-panel coordinates, accounting
-  // for the canvas's object-fit: contain letterboxing. Returns null if the
-  // point falls outside the actual displayed image (in the letterbox
-  // padding) or geometry isn't ready yet.
+  // Maps a client (viewport) point to phone-panel coordinates.
+  // The canvas is sized with max-width/max-height + width/height:auto so the
+  // browser scales it down to fit the container while preserving the phone's
+  // aspect ratio — getBoundingClientRect() returns the exact rendered image
+  // bounds (no letterbox padding), so the mapping is a simple linear scale
+  // with no offset correction needed.
   const mapToPhone = useCallback((clientX: number, clientY: number): { x: number; y: number } | null => {
     if (!canvasRef.current || !phoneSizeRef.current) return null;
     const rect = canvasRef.current.getBoundingClientRect();
     const { w: phoneW, h: phoneH } = phoneSizeRef.current;
     if (rect.width <= 0 || rect.height <= 0 || phoneW <= 0 || phoneH <= 0) return null;
 
-    const boxRatio   = rect.width / rect.height;
-    const phoneRatio = phoneW / phoneH;
-    let dispW = rect.width, dispH = rect.height, offsetX = 0, offsetY = 0;
-    if (boxRatio > phoneRatio) {
-      dispH = rect.height;
-      dispW = dispH * phoneRatio;
-      offsetX = (rect.width - dispW) / 2;
-    } else {
-      dispW = rect.width;
-      dispH = dispW / phoneRatio;
-      offsetY = (rect.height - dispH) / 2;
-    }
+    const localX = clientX - rect.left;
+    const localY = clientY - rect.top;
+    if (localX < 0 || localY < 0 || localX > rect.width || localY > rect.height) return null;
 
-    const localX = clientX - rect.left - offsetX;
-    const localY = clientY - rect.top  - offsetY;
-    if (localX < 0 || localY < 0 || localX > dispW || localY > dispH) return null;
-
-    const x = Math.min(phoneW - 1, Math.max(0, Math.round((localX / dispW) * phoneW)));
-    const y = Math.min(phoneH - 1, Math.max(0, Math.round((localY / dispH) * phoneH)));
+    const x = Math.min(phoneW - 1, Math.max(0, Math.round((localX / rect.width)  * phoneW)));
+    const y = Math.min(phoneH - 1, Math.max(0, Math.round((localY / rect.height) * phoneH)));
     return { x, y };
   }, []);
 
@@ -566,21 +555,17 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       // get back every accessibility node whose bounds contain that point.
       if (inspectModeRef.current) {
         // Compute where the click sits in CSS pixels relative to the canvas
-        // container so PhoneSlot can draw a crosshair at the exact spot,
-        // letting the user confirm the coordinate mapping is right.
+        // container so PhoneSlot can draw a crosshair at the exact spot.
+        // Since the canvas is sized to exactly the displayed image (no
+        // letterbox padding), the mapping is a plain linear scale of rect.
         let _cssX: number | undefined, _cssY: number | undefined;
         const canvas = canvasRef.current;
         const ps = phoneSizeRef.current;
         if (canvas && ps) {
           const rect = canvas.getBoundingClientRect();
           const { w: phoneW, h: phoneH } = ps;
-          const boxRatio = rect.width / rect.height;
-          const phoneRatio = phoneW / phoneH;
-          let dispW = rect.width, dispH = rect.height, offsetX = 0, offsetY = 0;
-          if (boxRatio > phoneRatio) { dispH = rect.height; dispW = dispH * phoneRatio; offsetX = (rect.width - dispW) / 2; }
-          else                       { dispW = rect.width;  dispH = dispW / phoneRatio; offsetY = (rect.height - dispH) / 2; }
-          _cssX = ((drag.startX / phoneW) * dispW) + offsetX;
-          _cssY = ((drag.startY / phoneH) * dispH) + offsetY;
+          _cssX = (drag.startX / phoneW) * rect.width;
+          _cssY = (drag.startY / phoneH) * rect.height;
         }
         addLog(`🔍 Inspecting phone (${drag.startX}, ${drag.startY})…`);
         try {
@@ -689,7 +674,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   const clickable = status === "live" || status === "asleep" || status === "error";
 
   return (
-    <div className="absolute inset-0 bg-black flex flex-col">
+    <div className="absolute inset-0 bg-black flex items-center justify-center">
       {status === "connecting" && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-10 pointer-events-none">
           <Loader2 className="w-5 h-5 animate-spin text-white/30" />
@@ -726,15 +711,20 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
         style={{
-          display:      status === "connecting" ? "none" : "block",
-          position:     "absolute",
-          inset:        0,
-          width:        "100%",
-          height:       "100%",
-          objectFit:    "contain",
-          cursor:       inspectMode ? "crosshair" : clickable ? "pointer" : "default",
+          display:       status === "connecting" ? "none" : "block",
+          // object-fit does NOT apply to <canvas> — only to <img>/<video>.
+          // Using max-width/max-height with auto dimensions lets the browser
+          // scale the canvas down to fit the container while preserving the
+          // phone's aspect ratio. getBoundingClientRect() then returns the
+          // exact image bounds, so mapToPhone() needs no letterbox-offset math.
+          maxWidth:      "100%",
+          maxHeight:     "100%",
+          width:         "auto",
+          height:        "auto",
+          cursor:        inspectMode ? "crosshair" : clickable ? "pointer" : "default",
           pointerEvents: clickable ? "auto" : "none",
-          zIndex:       5,
+          zIndex:        5,
+          position:      "relative",
         }}
       />
 
@@ -2827,18 +2817,15 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
   );
 }
 
-function LogPanel({ lines, onClear, serial, onScanTray, onCheckScreenInfo }: {
+function LogPanel({ lines, onClear, serial, onScanTray }: {
   lines: string[];
   onClear: () => void;
   serial?: string | null;
   /** Returns the captured lines so LogPanel can offer Copy Capture / Save. */
   onScanTray?: () => Promise<string[]>;
-  /** In-app-only diagnostic — no terminal needed. Prints raw wm size/density. */
-  onCheckScreenInfo?: () => Promise<void>;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [scanning,       setScanning]       = React.useState(false);
-  const [checkingInfo,   setCheckingInfo]   = React.useState(false);
   const [copied,         setCopied]         = React.useState(false);
   const [copiedCapture,  setCopiedCapture]  = React.useState(false);
   const [lastCapture,    setLastCapture]    = React.useState<string[] | null>(null);
@@ -2865,12 +2852,6 @@ function LogPanel({ lines, onClear, serial, onScanTray, onCheckScreenInfo }: {
       const captured = await onScanTray();
       if (captured.length > 0) setLastCapture(captured);
     } finally { setScanning(false); }
-  };
-
-  const handleCheckScreenInfo = async () => {
-    if (!onCheckScreenInfo) return;
-    setCheckingInfo(true);
-    try { await onCheckScreenInfo(); } finally { setCheckingInfo(false); }
   };
 
   const handleCopyLog = async () => {
@@ -2914,17 +2895,6 @@ function LogPanel({ lines, onClear, serial, onScanTray, onCheckScreenInfo }: {
                 title="Captures every element on screen with pixel coords and screen %. Use Copy Capture or Save to send just the layout — no log noise."
               >
                 {scanning ? "Scanning…" : "📱 Capture Screen"}
-              </Button>
-            )}
-            {serial && onCheckScreenInfo && (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handleCheckScreenInfo}
-                disabled={checkingInfo}
-                title="Prints the device's raw screen size/density info to the log below. No terminal needed — this is the one thing to click if a tap keeps landing off-target."
-              >
-                {checkingInfo ? "Checking…" : "📐 Check Screen Info"}
               </Button>
             )}
             <Button type="button" variant="secondary" onClick={handleCopyLog} disabled={lines.length === 0}>
@@ -3202,16 +3172,6 @@ export function MobilePage() {
                         for (const line of (body.lines as string[])) addLog(line);
                         return body.lines as string[];
                       } catch (e: any) { addLog(`Capture error: ${e?.message ?? "network error"}`); return []; }
-                    } : undefined}
-                    onCheckScreenInfo={activeSerial ? async () => {
-                      addLog("── Checking device screen info… ──");
-                      try {
-                        const r = await fetch(`/api/mobile/devices/${encodeURIComponent(activeSerial)}/screen-info`);
-                        const body = await r.json();
-                        if (!r.ok) { addLog(`Screen info failed: ${body?.error ?? r.status}`); return; }
-                        for (const line of (body.lines as string[])) addLog(`  ${line}`);
-                        if (body.mismatchWarning) addLog(`⚠️ ${body.mismatchWarning}`);
-                      } catch (e: any) { addLog(`Screen info error: ${e?.message ?? "network error"}`); }
                     } : undefined}
                   />
                 )}
