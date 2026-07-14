@@ -4,6 +4,21 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.547] — 2026-07-14
+
+### New: in-app diagnostics — no terminal/command prompt needed
+
+The user does not want to run any command-prompt/terminal commands to help debug this device — every diagnostic must be a button click inside the app itself.
+
+- Added a **"📐 Check Screen Info"** button next to "📱 Capture Screen" in the Mobile page's Log panel. Clicking it prints the device's raw `wm size` (Physical size + Override size, if present) and `wm density` output straight into the log, with an inline warning if an Override size is present — this is the exact data needed to diagnose the long-suspected coordinate-mismatch ("offset") bug, without the user ever opening a terminal.
+- New backend endpoint `GET /api/mobile/devices/:serial/screen-info` (raw, unparsed — the existing `/screen-size` endpoint only returns a single parsed WxH and discards whether the device reported two different sizes).
+- Added `captureDebugEvidence()` in `androidManager.ts`: an automatic, zero-effort screenshot + accessibility-dump capture to `debug-captures/` on disk, intended to end the manual "user pastes a fresh log + screenshot every time something goes wrong" cycle. Not yet wired into every tap in the Make a Post flow — next step if the expand-toggle bug recurs.
+- Added `pnpm --filter @workspace/electron run dev` script: rebuilds and launches the Electron app directly against your local ADB/USB connection, skipping the full `electron-builder --win` installer packaging step, for faster iteration. (Still requires a terminal — superseded by the in-app diagnostics above for anything that doesn't need a full app relaunch.)
+
+**Status:** shipped. The screen-info button is the one thing to click, in-app, if a tap keeps landing off-target.
+
+---
+
 ## [1.1.546] — 2026-07-13
 
 ### Fix: Make a Post (mobile) — expand/fit toggle tapped the camera shutter instead

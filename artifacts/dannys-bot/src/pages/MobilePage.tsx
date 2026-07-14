@@ -2827,15 +2827,18 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
   );
 }
 
-function LogPanel({ lines, onClear, serial, onScanTray }: {
+function LogPanel({ lines, onClear, serial, onScanTray, onCheckScreenInfo }: {
   lines: string[];
   onClear: () => void;
   serial?: string | null;
   /** Returns the captured lines so LogPanel can offer Copy Capture / Save. */
   onScanTray?: () => Promise<string[]>;
+  /** In-app-only diagnostic — no terminal needed. Prints raw wm size/density. */
+  onCheckScreenInfo?: () => Promise<void>;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [scanning,       setScanning]       = React.useState(false);
+  const [checkingInfo,   setCheckingInfo]   = React.useState(false);
   const [copied,         setCopied]         = React.useState(false);
   const [copiedCapture,  setCopiedCapture]  = React.useState(false);
   const [lastCapture,    setLastCapture]    = React.useState<string[] | null>(null);
@@ -2862,6 +2865,12 @@ function LogPanel({ lines, onClear, serial, onScanTray }: {
       const captured = await onScanTray();
       if (captured.length > 0) setLastCapture(captured);
     } finally { setScanning(false); }
+  };
+
+  const handleCheckScreenInfo = async () => {
+    if (!onCheckScreenInfo) return;
+    setCheckingInfo(true);
+    try { await onCheckScreenInfo(); } finally { setCheckingInfo(false); }
   };
 
   const handleCopyLog = async () => {
@@ -2905,6 +2914,17 @@ function LogPanel({ lines, onClear, serial, onScanTray }: {
                 title="Captures every element on screen with pixel coords and screen %. Use Copy Capture or Save to send just the layout — no log noise."
               >
                 {scanning ? "Scanning…" : "📱 Capture Screen"}
+              </Button>
+            )}
+            {serial && onCheckScreenInfo && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleCheckScreenInfo}
+                disabled={checkingInfo}
+                title="Prints the device's raw screen size/density info to the log below. No terminal needed — this is the one thing to click if a tap keeps landing off-target."
+              >
+                {checkingInfo ? "Checking…" : "📐 Check Screen Info"}
               </Button>
             )}
             <Button type="button" variant="secondary" onClick={handleCopyLog} disabled={lines.length === 0}>
@@ -3182,6 +3202,16 @@ export function MobilePage() {
                         for (const line of (body.lines as string[])) addLog(line);
                         return body.lines as string[];
                       } catch (e: any) { addLog(`Capture error: ${e?.message ?? "network error"}`); return []; }
+                    } : undefined}
+                    onCheckScreenInfo={activeSerial ? async () => {
+                      addLog("── Checking device screen info… ──");
+                      try {
+                        const r = await fetch(`/api/mobile/devices/${encodeURIComponent(activeSerial)}/screen-info`);
+                        const body = await r.json();
+                        if (!r.ok) { addLog(`Screen info failed: ${body?.error ?? r.status}`); return; }
+                        for (const line of (body.lines as string[])) addLog(`  ${line}`);
+                        if (body.mismatchWarning) addLog(`⚠️ ${body.mismatchWarning}`);
+                      } catch (e: any) { addLog(`Screen info error: ${e?.message ?? "network error"}`); }
                     } : undefined}
                   />
                 )}

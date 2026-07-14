@@ -78,6 +78,24 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.547",
+    date: "14 Jul 2026",
+    items: [
+      {
+        category: "New",
+        text: "Mobile page → Log panel: added a \"📐 Check Screen Info\" button next to \"📱 Capture Screen\". Click it to print the device's raw screen size/density info straight into the log — no terminal or command prompt needed for any of this.",
+        technical: [
+          "New GET /api/mobile/devices/:serial/screen-info endpoint returns the raw wm size (Physical size + Override size, if present) and wm density output, and flags an inline warning if an Override size is present.",
+          "The existing /screen-size endpoint only returns one parsed width/height and silently discards whether the device reported two different sizes — this is the data needed to diagnose the long-suspected coordinate-mismatch (\"offset\") bug.",
+        ],
+      },
+      {
+        category: "Improved",
+        text: "Added an internal captureDebugEvidence() helper that can auto-save a screenshot + full screen layout to disk on this machine with zero user action, to reduce reliance on manually pasted logs/screenshots for future bug reports. Not yet wired into every step of Make a Post.",
+      },
+    ],
+  },
+  {
     version: "1.1.546",
     date: "13 Jul 2026",
     items: [
