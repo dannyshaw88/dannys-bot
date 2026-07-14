@@ -4,6 +4,16 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.567] — 2026-07-14
+
+### Fix: never attempt like when no Like icon is actually on screen
+
+`_findCentermostLikeNode` was returning the Like node *closest to screen centre* with no upper-bound check on that distance. When Instagram serves a Reel, ad, or Suggested-Reels grid at the current scroll position, the only `content-desc="Like"` nodes in the accessibility tree belong to posts recycled above or below the visible viewport. The function returned the least-far one regardless, and the software tapped it blind — attempting a like on a post the user couldn't even see.
+
+Fix: after finding the best candidate, reject it if its distance from screen centre exceeds 38 % of screen height. On a 1280 px screen that threshold is 486 px; on a 2460 px screen it is 935 px. Any Like node farther than that cannot be in the visible portion of the feed. `findFeedActionIcons` returns null, callers log "no Like button visible — skipping" and move on without tapping anything.
+
+---
+
 ## [1.1.566] — 2026-07-14
 
 ### Fix: Feed Like — phantom comment node in positional fallback + "Unlike" regex missing count suffix

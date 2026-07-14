@@ -1291,6 +1291,11 @@ function _findCentermostLikeNode(xml: string, screenH: number): { x: number; y: 
   // legitimately sit at y < 40% of screen height when the post image is small
   // (landscape/news post) — a fixed floor at 40% falsely rejects it.
   const centerY = screenH / 2;
+  // If the closest Like node is more than 38 % of screen height from centre,
+  // no real feed-post action bar is in the visible viewport — the node belongs
+  // to a post recycled above/below the screen.  Return null so callers skip
+  // all actions rather than tapping an off-screen node blind.
+  const MAX_DIST = screenH * 0.38;
   let best: { x: number; y: number } | null = null;
   let bestDist = Infinity;
   let m: RegExpExecArray | null;
@@ -1300,7 +1305,7 @@ function _findCentermostLikeNode(xml: string, screenH: number): { x: number; y: 
     const dist = Math.abs(c.y - centerY);
     if (dist < bestDist) { bestDist = dist; best = c; }
   }
-  return best;
+  return bestDist <= MAX_DIST ? best : null;
 }
 
 export interface FeedActionIcons {
