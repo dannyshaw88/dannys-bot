@@ -78,6 +78,31 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.548",
+    date: "14 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Phone mirror: clicks now land exactly where you tap — the long-standing offset bug where tapping an icon required clicking 5–15 pixels to one side is gone. Root cause was that the canvas had `object-fit: contain` in CSS, which browsers silently ignore for <canvas> elements (it only works on <img> and <video>). The canvas was being stretched to fill the full container while the click-mapping code was computing phantom letterbox offsets that didn't exist in the actual display. The error grew with distance from the top-left — worst at the right and bottom edges where icons live.",
+        technical: [
+          "Canvas CSS changed from `position: absolute; inset: 0; width: 100%; height: 100%; objectFit: contain` (stretch-to-fill, object-fit ignored) to `maxWidth: 100%; maxHeight: 100%; width: auto; height: auto; position: relative` — the browser now scales the canvas down to fit the container while genuinely preserving the phone's aspect ratio.",
+          "Parent div changed from `flex flex-col` to `flex items-center justify-center` so the canvas is centered in the mirror area regardless of container size.",
+          "mapToPhone() letterbox offset math removed entirely. With the canvas sized to the exact image bounds, getBoundingClientRect() returns the true rendered rect with no padding — coordinate mapping is now a plain linear scale: localX = clientX - rect.left, x = round((localX / rect.width) * phoneW). No boxRatio / phoneRatio / dispW / dispH / offsetX / offsetY intermediate variables.",
+          "Inspect-mode crosshair CSS pixel calculation updated with the same simplification: _cssX = (drag.startX / phoneW) * rect.width, _cssY = (drag.startY / phoneH) * rect.height.",
+        ],
+      },
+      {
+        category: "Removed",
+        text: "Log panel: removed the \"📐 Check Screen Info\" button added in v1.1.547. It was a diagnostic tool for the offset bug, which is now fixed at the source — the button is no longer needed and was adding clutter.",
+        technical: [
+          "Removed GET /api/mobile/devices/:serial/screen-info endpoint from mobile.ts.",
+          "Removed onCheckScreenInfo prop, checkingInfo state, and handleCheckScreenInfo handler from LogPanel.",
+          "Removed the onCheckScreenInfo wiring from the LogPanel call site in MobilePage.tsx.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.547",
     date: "14 Jul 2026",
     items: [
