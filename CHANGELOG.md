@@ -4,6 +4,42 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.562] — 2026-07-14
+
+### Fix: View Posts — Share to Feed icon not detected; Make a Post — camera tapped instead of image
+
+**View Posts — "N comments" count badge stealing the Comment icon slot, collapsing icon gap and breaking Repost detection**
+
+The log showed `comment=(71,2176)` — only 5 px from `like=(66,2176)`. The Comment action icon on a 1080 px wide phone should be ~100–130 px to the right of Like. The cause: the regex `/\bcomment\b/i` matched Instagram's comment-count badge element (content-desc="1,844 comments") which sits on the same row as the action icons. That node was claimed as the Comment icon at x=71, collapsing `iconGap` to 5 px and making the unlabeled-ImageView `minX` filter (`comment.x + max(iconGap×0.6, 30) = 101`) exclude real Repost/Send icons at their true positions.
+
+Fix: changed the Comment regex to `^comment# Changelog
+
+All notable changes to Equinox are documented here.
+
+---
+
+ (exact match, case-insensitive). "1,844 comments" no longer matches; only the bare "Comment" accessibility label does.
+
+**View Posts — Share to Feed never found even when visible**
+
+With the comment-count bug fixed, `iconGap` is now correct, but the Repost icon was still null because:
+1. Some IG builds label it "Share" rather than "Repost". Added `^share# Changelog
+
+All notable changes to Equinox are documented here.
+
+---
+
+ to the repost regex (excluding nodes already claimed by Send) so both label variants are caught.
+2. The positional pool fallback (left-to-right consumption of unclaimed row nodes) was explicitly disabled for `shareFeed` based on a past incident where a "More options" icon was grabbed — but that icon is at x > 80% of screen width and is already excluded by `saveCutoffX` before `rowNodes` is built. Re-enabled the pool fallback for `shareFeed` so an unlabeled-but-present Repost icon in the pool is correctly assigned.
+
+**Make a Post — camera opened because thumbnail tap hit grid cell 0**
+
+Instagram unconditionally auto-selects the most recent photo when the New Post picker opens — the image is always in the preview before any tap occurs. The old code checked for the expand toggle and, when not found, tapped the "first thumbnail" at (336,1617). That coordinate was landing on the camera icon (grid cell 0) or adjacent to it, opening the camera app.
+
+Fix: removed the thumbnail-tap fallback entirely. The flow now checks for the expand toggle (taps it if found, to switch from centre-crop to full-image view) and then proceeds directly to Next — no thumbnail tap, no camera risk. The sanity-check abort (no POST tab signal + no expand toggle + positional Next) is preserved.
+
+---
+
 ## [1.1.561] — 2026-07-14
 
 ### Fix: View Posts action bar picking wrong post's Like node (all icon coords wrong); Make a Post expand toggle finding camera icon instead

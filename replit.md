@@ -58,9 +58,9 @@ Once an element is found via its label, its center coordinates are read from its
 
 **Forbidden:** any fixed pixel percentage (e.g. "tap at 48% of screen width") used to locate a UI element whose position can change between posts, accounts, or app versions.
 
-### Mirror tap rescaling
+### Mirror tap rescaling — pinpoint-clicking fix
 
-The phone screen-capture buffer letterboxes/pillarboxes the real display content with black bars. Taps from the mirror panel are rescaled through the real content sub-rect (not the full buffer) so they land accurately at the edges — see `rescaleForDevice()` in `artifacts/api-server/src/routes/mobile.ts`. Do not alter this logic.
+Android's screen-capture buffer (e.g. 720×1280) often has a different aspect ratio than the real display (e.g. 1080×2460) and pads the real content with black bars inside the buffer. Taps from the mirror panel were previously scaled against the full buffer including the black padding, which caused accurate centre taps but drifted noticeably toward edges. The fix scales through the actual content sub-rect inside the buffer so every tap lands correctly regardless of where on screen it is. This is implemented in `rescaleForDevice()` in `artifacts/api-server/src/routes/mobile.ts`. **Do not alter this logic.**
 
 ---
 

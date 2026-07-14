@@ -2463,41 +2463,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return { posted: false };
     }
 
-    // Instagram auto-selects the newest gallery photo the moment the New Post
-    // picker opens — the image appears in the preview area at the top and the
-    // expand/fit toggle (two-arrow icon) becomes visible in the preview's
-    // bottom-left corner.  Tapping the already-selected tile a second time
-    // DESELECTS it (turns it grey/white), leaving the preview empty and
-    // causing every subsequent Next tap to fail.
+    // Instagram always auto-selects the newest gallery photo the moment the
+    // New Post picker opens — the image appears in the preview area at the top.
+    // Never tap a thumbnail manually: tapping the already-selected tile
+    // DESELECTS it (turns it grey/white), and tapping any other tile risks
+    // hitting the camera icon at grid cell 0, which opens the camera app.
     //
-    // Strategy: use the expand toggle as a proxy for "image is already selected
-    // and showing in the preview".  If it is visible, skip the thumbnail tap
-    // entirely.  If it is NOT visible (e.g. the pushed file hadn't been
-    // indexed by the media scanner yet when IG opened), fall back to tapping
-    // the first non-camera thumbnail to force-select it, then re-check.
-    onLog?.("Make a Post: checking whether newest photo was auto-selected by IG…");
-    let expandToggle = await android.findExpandPhotoButton(serial).catch(() => null);
-    if (!expandToggle) {
-      // No image in the preview yet — select one manually.
-      onLog?.("Make a Post: no auto-selection detected — tapping first thumbnail to select it…");
-      const thumbnail = await android.findFirstGalleryThumbnail(serial).catch(() => null);
-      if (thumbnail) {
-        onLog?.(`Make a Post: tapping thumbnail at (${thumbnail.x}, ${thumbnail.y})…`);
-        await android.tap(serial, thumbnail.x, thumbnail.y);
-        await sleepOrAbort(serial, 1500);
-      } else {
-        // Accessibility scan returned nothing — positional fallback for the
-        // second grid cell (first non-camera tile, x≈38%, y≈69%).
-        const fallbackThumb = android.postGalleryThumbnailPositionalFallback(serial);
-        onLog?.(`Make a Post: no thumbnail via scan — positional fallback at (${fallbackThumb.x}, ${fallbackThumb.y})…`);
-        await android.tap(serial, fallbackThumb.x, fallbackThumb.y);
-        await sleepOrAbort(serial, 1500);
-      }
-      // Re-probe after the manual tap.
-      expandToggle = await android.findExpandPhotoButton(serial).catch(() => null);
-    } else {
-      onLog?.("Make a Post: newest photo already auto-selected — skipping thumbnail tap.");
-    }
+    // Simply check for the expand/fit toggle as a confirmation signal.  If it
+    // is visible, image is confirmed selected — tap the toggle to switch from
+    // IG's default centre-crop to the full original photo.  If the toggle is
+    // not found in the accessibility tree (some IG builds don't expose it),
+    // the image is still selected — IG's auto-selection is unconditional.
+    onLog?.("Make a Post: IG auto-selects newest photo — checking for expand/fit toggle…");
+    const expandToggle = await android.findExpandPhotoButton(serial).catch(() => null);
 
     // Confirm the picker is actually open before tapping Next. Check for any
     // recognizable picker signal: the expand toggle (only visible when a photo

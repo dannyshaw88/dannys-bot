@@ -1444,9 +1444,22 @@ export async function findFeedActionIcons(serial: string): Promise<FeedActionIco
   // Fallback strategy: for any role whose label was not found, consume the
   // next unassigned node in left-to-right order. This preserves correct
   // behaviour on devices/versions where content-desc attributes are absent.
-  const commentNode  = rowNodes.find(n => /\bcomment\b/i.test(n.cd)) ?? null;
-  const repostNode   = rowNodes.find(n => /\brepost\b/i.test(n.cd)) ?? null;
-  const sendNode     = rowNodes.find(n => /\b(send|direct|message)\b/i.test(n.cd)) ?? null;
+  // Use anchored / exact matches for Comment and Repost so that count-badge
+  // elements don't steal the slot.  Instagram renders a "N comments" count
+  // node (content-desc="1,844 comments") on the same Y row as the action
+  // icons; /\bcomment\b/i matches that node and returns x≈71 (5 px from Like),
+  // which (a) claims the comment slot for a non-icon element and (b) collapses
+  // iconGap to 5 px, making the unlabeled-ImageView minX filter exclude the
+  // real Repost/Send icons at their true positions.
+  const commentNode  = rowNodes.find(n => /^comment$/i.test(n.cd)) ?? null;
+  // Some IG builds label Repost as "Share", "Share to Feed", or "Repost to
+  // your story" rather than the bare "Repost" string; all of these refer to
+  // the same in-feed reshare icon and must be matched.  Exclude any candidate
+  // that also matches the Send/DM slot (Send can be labelled "Share via DM"
+  // or "Share" on older builds, so always prefer the rightmost "Share" node
+  // as Send and the leftmost as Repost — handled by left→right pool order).
+  const repostNode   = rowNodes.find(n => /\brepost\b/i.test(n.cd) || /^share$/i.test(n.cd)) ?? null;
+  const sendNode     = rowNodes.find(n => /\b(send|direct|message)\b/i.test(n.cd) || (/^share$/i.test(n.cd) && n !== repostNode)) ?? null;
 
   comment   = commentNode  ? pos(commentNode)  : null;
   shareFeed = repostNode   ? pos(repostNode)   : null;
@@ -1477,14 +1490,25 @@ export async function findFeedActionIcons(serial: string): Promise<FeedActionIco
   // missing — both cases are handled identically and safely by callers.
 
   // Positional fallback for roles that content-desc did not resolve.
-  // Consume nodes left-to-right, skipping those already claimed above.
-  // (shareFeed is deliberately excluded — see note above.)
+  // Consume nodes left-to-right in Instagram's fixed icon order:
+  //   Like (already anchored) → Comment → Repost → Send
+  // shareFeed IS now included in the positional fallback.  The previous
+  // exclusion was based on a single live-run incident where a "More options"
+  // icon was grabbed — but that icon sits at x > 80 % of screen width and is
+  // already excluded by saveCutoffX before rowNodes is built, so the concern
+  // no longer applies.  Leaving shareFeed out of the pool meant a Repost icon
+  // with a non-standard/missing label (e.g. "Share" on some IG builds) was
+  // never assigned, even though it was the only unclaimed node in the pool.
   const claimed = new Set<RowNode>([commentNode, repostNode, sendNode].filter(Boolean) as RowNode[]);
   const pool = () => rowNodes.filter(n => !claimed.has(n));
 
   if (!comment) {
     const c = pool()[0];
     if (c) { comment = pos(c); claimed.add(c); }
+  }
+  if (!shareFeed) {
+    const c = pool()[0];
+    if (c) { shareFeed = pos(c); claimed.add(c); }
   }
   if (!shareDm) {
     const c = pool()[0];
