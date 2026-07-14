@@ -132,6 +132,10 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   // (= CSS-pixel) coords. Set by drawFrame() on every frame so mapToPhone()
   // reads from the exact same numbers used to paint — no CSS inference at all.
   const drawRectRef  = useRef<{ dx: number; dy: number; dw: number; dh: number } | null>(null);
+  // Tap indicator: shows where the mouse clicked (red) vs where the system
+  // sent the tap (blue). Both in canvas-CSS-pixel space. Clears after 700ms.
+  const [tapDots, setTapDots] = useState<{ rawX: number; rawY: number; mapX: number; mapY: number } | null>(null);
+  const tapDotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fpsCountRef  = useRef(0);
   const frameSeenRef = useRef(false);
   // Video mode: true H.264 stream decoded with WebCodecs (near-instant).
@@ -580,6 +584,23 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       addLog(`Pointer down ignored — outside displayed phone image`);
       return;
     }
+
+    // Visual tap indicator: red = where mouse clicked, blue = where system
+    // sent the tap (reverse-mapped from phone coords back to canvas space).
+    // If they diverge, the coordinate mapping itself is the bug.
+    if (canvasRef.current && drawRectRef.current && phoneSizeRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const rawX = e.clientX - rect.left;
+      const rawY = e.clientY - rect.top;
+      const { dx, dy, dw, dh } = drawRectRef.current;
+      const { w: phoneW, h: phoneH } = phoneSizeRef.current;
+      const mapX = dx + (p.x / phoneW) * dw;
+      const mapY = dy + (p.y / phoneH) * dh;
+      if (tapDotTimerRef.current) clearTimeout(tapDotTimerRef.current);
+      setTapDots({ rawX, rawY, mapX, mapY });
+      tapDotTimerRef.current = setTimeout(() => setTapDots(null), 700);
+    }
+
     (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
     dragRef.current = {
       pointerId: e.pointerId,
@@ -800,6 +821,43 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
           zIndex:        5,
         }}
       />
+
+      {/* Tap indicator dots — red = where mouse clicked, blue = where tap was sent.
+           If they don't overlap, mapToPhone() has an offset bug. */}
+      {tapDots && (
+        <>
+          {/* Red: raw mouse click position on canvas */}
+          <div style={{
+            position: "absolute",
+            left: tapDots.rawX,
+            top: tapDots.rawY,
+            width: 16,
+            height: 16,
+            marginLeft: -8,
+            marginTop: -8,
+            borderRadius: "50%",
+            background: "rgba(255,40,40,0.85)",
+            border: "2px solid white",
+            zIndex: 20,
+            pointerEvents: "none",
+          }} />
+          {/* Blue: reverse-mapped from phone coords — where the tap was actually sent */}
+          <div style={{
+            position: "absolute",
+            left: tapDots.mapX,
+            top: tapDots.mapY,
+            width: 16,
+            height: 16,
+            marginLeft: -8,
+            marginTop: -8,
+            borderRadius: "50%",
+            background: "rgba(40,120,255,0.85)",
+            border: "2px solid white",
+            zIndex: 20,
+            pointerEvents: "none",
+          }} />
+        </>
+      )}
 
       {/* FPS */}
       {status === "live" && (
