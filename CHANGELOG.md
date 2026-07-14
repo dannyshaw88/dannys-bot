@@ -33,6 +33,22 @@ The user's real-device screenshot after [1.1.552] showed the change did not fix 
 
 ---
 
+## [1.1.556] — 2026-07-14
+
+### Fixed: [1.1.555]'s mirror exact-fit sizing never actually activated
+
+Real-device screenshot after [1.1.555] showed the pillarbox and unclickable-nav bug *worse* than before, not fixed: large black bars either side of the phone image, taps not registering anywhere.
+
+**Root cause:** the mirror pane's size is measured with a `ResizeObserver` attached in a `useEffect(..., [])`. That pane `<div>` sits behind a loading/data gate and doesn't exist yet on the component's first mount, so the effect's ref was `null`, the observer never attached, and — with an empty dependency array — nothing ever re-ran it once the div actually appeared later. The measured pane size stayed `null` forever, so [1.1.555]'s exact-fit sizing code (which was otherwise correct) never had a non-null size to compute from, and silently fell back to a "stretch to fill the box" shape — which is what produced the bars.
+
+**Fix:** replaced the plain `useRef` with a ref *callback* (backed by `useState`), so the measuring effect's dependency is the element itself and fires the moment the div mounts, not just once at the top-level component's own mount time.
+
+Also killed a leftover manually-started API-server process left bound to its port from an earlier debugging session, and removed the redundant manually-configured "API Server"/"Frontend" workflows now that this project has its own artifact-managed ones.
+
+**Status:** shipped. Still not verified against the real device from this environment (no phone attached here) — please confirm the mirror now hugs the phone shape with no bars and the nav buttons are clickable.
+
+---
+
 ## [1.1.548]–[1.1.551] — 2026-07-14 (corrected)
 
 An earlier pass at this file backfilled these four versions from a session transcript and got the details wrong — the app's own in-app changelog (`Dashboard.tsx`) had the accurate, detailed record the whole time. Corrected here:

@@ -78,6 +78,22 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.556",
+    date: "14 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "The [1.1.555] mirror fit fix never actually turned on. The page measures the box the mirror lives in before it knows the phone is even connected (while the page is still loading), finds nothing there yet, and never checked again afterward — so the mirror kept falling back to the old \"stretch to fill\" shape forever, which is why the black bars and dead-click areas were actually worse after that fix, not better. Fixed the measurement to update itself as soon as that box actually exists, so the exact-fit sizing now works as intended and the mirror should finally hug the real phone shape with clickable buttons.",
+        technical: [
+          "The pane-size ResizeObserver in MobilePage used a plain useRef + useEffect(..., []) — since the pane <div> is behind a loading/data gate, it doesn't exist on first mount, so the effect's null-check bailed out and, with an empty dependency array, never ran again once the div actually appeared.",
+          "Replaced the plain ref with a ref callback (useState<HTMLDivElement|null>) so the measuring effect depends on the element itself and re-attaches the moment the div mounts.",
+          "This was the actual root cause of the pillarboxing and rejected taps reported against 1.1.555 — PhoneSlot's exact-fit sizing code from that version was correct but never received a non-null paneSize to act on.",
+          "Killed a leftover manually-created API Server process left bound to the port from an earlier debugging session, and removed the now-redundant manually-configured workflows now that this project has its own artifact-managed ones.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.555",
     date: "14 Jul 2026",
     items: [

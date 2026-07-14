@@ -3270,20 +3270,27 @@ export function MobilePage() {
   // exact-fit sizing (see PhoneSlot's "Exact shell sizing" block). Must be
   // the real available box, not derived from CSS aspect-ratio math, or the
   // header/nav chrome eats into the phone-ratio budget again.
-  const paneRef = useRef<HTMLDivElement>(null);
+  // A plain useRef + `useEffect(..., [])` here would silently never attach:
+  // this pane <div> is behind a loading/data gate, so on first mount (while
+  // still loading) the ref is null, the effect bails out, and nothing ever
+  // re-runs it once the div actually appears — paneSize stays null forever
+  // and PhoneSlot's exact-fit sizing permanently falls back to "fill the
+  // box", which is the pillarbox regression. A ref *callback* (via state)
+  // re-fires whenever the element itself changes, including "was null, now
+  // mounted", so it reliably attaches once the div exists.
+  const [paneEl, setPaneEl] = useState<HTMLDivElement | null>(null);
   const [paneSize, setPaneSize] = useState<{ w: number; h: number } | null>(null);
   useEffect(() => {
-    const el = paneRef.current;
-    if (!el) return;
+    if (!paneEl) return;
     const measure = () => {
-      const r = el.getBoundingClientRect();
+      const r = paneEl.getBoundingClientRect();
       setPaneSize({ w: r.width, h: r.height });
     };
     measure();
     const ro = new ResizeObserver(measure);
-    ro.observe(el);
+    ro.observe(paneEl);
     return () => ro.disconnect();
-  }, []);
+  }, [paneEl]);
   const [activeTab, setActiveTab] = useState<MobileTab>("tool");
   // Per-serial "user explicitly turned the live view on" flag. Visiting the
   // Mobile tab, or a phone simply being connected, must never by itself
@@ -3407,7 +3414,7 @@ export function MobilePage() {
         {/* Phone (left half, full height) + automation settings (right half) */}
         {showSplitView && (
           <div className="flex-1 min-h-0 flex">
-            <div ref={paneRef} className="w-1/2 h-full flex items-center justify-center p-4 min-h-0">
+            <div ref={setPaneEl} className="w-1/2 h-full flex items-center justify-center p-4 min-h-0">
               {/* PhoneSlot sizes its own shell exactly to the phone's real
                   reported resolution using the measured pane size below —
                   see PhoneSlot's "Exact shell sizing" block for why this
