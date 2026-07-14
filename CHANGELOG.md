@@ -4,6 +4,14 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.571] — 2026-07-14
+
+### Diagnostic: dump resource-id and class alongside content-desc for action-bar icons
+
+The v1.1.570 log came back with `content-desc` **empty on every node** in the action bar row (`cd=""` for all 7 nodes) — this device/build strips content-desc from Comment/Repost/Send entirely, so there's nothing for the label regexes to match against. Extended the `[feed-icons] row cd dump` line to also print each node's `resource-id` and `class`, and added a second `[feed-icons] unlabeled ImageView dump` line for nodes already filtered out as audio-disc/unlabeled candidates. resource-id is often preserved even when content-desc is stripped, and is the next thing to check before Comment/Repost/Send can be identified on this device. Run View Feed again and paste the new log lines — no detection behaviour changed yet, this is diagnostic-only, and no coordinate fallback was added per the accessibility-label-only rule in replit.md.
+
+---
+
 ## [1.1.570] — 2026-07-14
 
 ### Fix: route rowNode cd dump through onLog (visible in UI)
