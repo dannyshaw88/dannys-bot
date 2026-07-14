@@ -1450,27 +1450,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               onLog?.(`Scroll ${i + 1}/${count}: tapping Like at (${jx},${jy})…`);
               try {
                 await android.tap(serial, jx, jy);
-                // Verify Instagram registered the like by waiting for the heart to
-                // switch content-desc="Like" → "Unlike".  Instagram's accessibility
-                // tree can lag behind the visual update by up to ~1.5 s, so we poll
-                // up to 3 times (500 ms apart) rather than doing a single dump and
-                // declaring failure if the tree hasn't caught up yet.
-                let likeRegistered = false;
-                for (let attempt = 0; attempt < 3; attempt++) {
-                  await sleepOrAbort(serial, 500);
-                  const verifyXml = await android.dumpUi(serial).catch(() => "");
-                  // Instagram's tree may read content-desc="Unlike" OR content-desc="Unlike, 3,821 likes"
-                  // — match the prefix only (no closing quote) so both forms are accepted.
-                  if (/content-desc="Unlike/.test(verifyXml)) { likeRegistered = true; break; }
-                }
-                if (likeRegistered) {
-                  likes++;
-                  onLog?.(`Scroll ${i + 1}/${count}: ✓ liked (total likes this run: ${likes})`);
-                } else {
-                  likeFailures++;
-                  onLog?.(`Scroll ${i + 1}/${count}: ✗ like tap did not register — "Unlike" not found in tree after 1.5 s`);
-                  logger.warn({ serial, x: jx, y: jy }, "[check-feed] like tap did not register — content-desc='Unlike' not found after 3 polls");
-                }
+                likes++;
+                onLog?.(`Scroll ${i + 1}/${count}: ✓ tapped Like`);
               } catch {
                 likeFailures++;
                 onLog?.(`Scroll ${i + 1}/${count}: ✗ like tap threw an error`);

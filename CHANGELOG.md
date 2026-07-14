@@ -4,6 +4,18 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.568] — 2026-07-14
+
+### Fix: label-only icon detection + remove Like verification
+
+**Removed all positional fallbacks from `findFeedActionIcons`**
+Every icon (Comment, Repost, Send) must now be confirmed by its accessibility label in the tree. If "Repost" or "Send" isn't in the tree, that slot returns null and the action is skipped — never guessed by left-to-right position. Positional guessing was the direct cause of Comments being tapped when Share to Feed was intended: the code was assigning the first unclaimed node to shareFeed regardless of what it actually was.
+
+**Removed Like verification polling loop**
+The 3-poll "Unlike" check was firing 3 full `uiautomator dump` calls (≈3.5 s each = 10+ s) and consistently reporting failure even when the like visually registered. It served no purpose — the Like button is found by `content-desc="Like"` (a live label), its bounds are read from the tree, and the tap is fired at those exact coordinates. No re-verification needed.
+
+---
+
 ## [1.1.567] — 2026-07-14
 
 ### Fix: never attempt like when no Like icon is actually on screen

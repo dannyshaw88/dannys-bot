@@ -1513,69 +1513,10 @@ export async function findFeedActionIcons(serial: string): Promise<FeedActionIco
   // regardless of whether the post disabled repost or the label is just
   // missing — both cases are handled identically and safely by callers.
 
-  // Positional fallback for roles that content-desc did not resolve.
-  // Consume nodes left-to-right in Instagram's fixed icon order:
-  //   Like (already anchored) → Comment → Repost → Send
-  // shareFeed IS now included in the positional fallback.  The previous
-  // exclusion was based on a single live-run incident where a "More options"
-  // icon was grabbed — but that icon sits at x > 80 % of screen width and is
-  // already excluded by saveCutoffX before rowNodes is built, so the concern
-  // no longer applies.  Leaving shareFeed out of the pool meant a Repost icon
-  // with a non-standard/missing label (e.g. "Share" on some IG builds) was
-  // never assigned, even though it was the only unclaimed node in the pool.
-  const claimed = new Set<RowNode>([commentNode, repostNode, sendNode].filter(Boolean) as RowNode[]);
-  const pool = () => rowNodes.filter(n => !claimed.has(n));
-
-  if (!comment) {
-    const c = pool()[0];
-    if (c) { comment = pos(c); claimed.add(c); }
-  }
-  if (!shareFeed) {
-    const c = pool()[0];
-    if (c) { shareFeed = pos(c); claimed.add(c); }
-  }
-  if (!shareDm) {
-    const c = pool()[0];
-    if (c) { shareDm = pos(c); claimed.add(c); }
-  }
-
-  // --- Unlabeled-ImageView positional fallback (last resort) ---
-  //
-  // Only fires when shareFeed or shareDm is STILL null after all content-desc
-  // and pool fallbacks above, AND unlabeledImgViews has candidates.
-  //
-  // Safety filter: the audio disc sits immediately to the right of Comment in x
-  // (disc.x ≈ comment.x + ~40 px), while Repost and Send sit at comment.x + gap
-  // and comment.x + 2×gap (where gap = comment.x − like.x, typically 90–130 px).
-  // Requiring a node to be at least 60 % of one icon-gap to the right of Comment
-  // reliably excludes the disc while accepting Repost and Send.
-  //
-  // If both shareFeed and shareDm are still null, assign left→right:
-  //   first  unlabeled candidate → shareFeed (Repost position)
-  //   second unlabeled candidate → shareDm   (Send position)
-  // If only shareDm is null (shareFeed was resolved), use the rightmost
-  // remaining candidate (Send is always to the right of Repost).
-  if ((!shareFeed || !shareDm) && unlabeledImgViews.length > 0) {
-    const iconGap = like && comment ? comment.x - like.x : 0;
-    const minX = comment ? comment.x + Math.max(iconGap * 0.6, 30) : like.x + 4;
-    const candidates = unlabeledImgViews.filter(n => n.x > minX); // excludes disc
-    if (candidates.length > 0) {
-      if (!shareFeed && !shareDm) {
-        // Assign left-to-right: first = Repost, second = Send
-        shareFeed = pos(candidates[0]);
-        if (candidates[1]) shareDm = pos(candidates[1]);
-      } else if (!shareDm) {
-        // shareFeed already resolved — Send is the rightmost remaining candidate
-        const rightmost = candidates[candidates.length - 1];
-        if (rightmost.x !== shareFeed?.x) shareDm = pos(rightmost);
-      } else if (!shareFeed) {
-        // shareDm already resolved — Repost is the leftmost candidate not = shareDm
-        const c = candidates.find(n => n.x !== shareDm?.x);
-        if (c) shareFeed = pos(c);
-      }
-    }
-  }
-
+  // No positional fallback. Every icon must be confirmed by its accessibility
+  // label. Guessing by left-to-right order violates the project rule that all
+  // detection uses live element labels — never coordinates. If "Repost" or
+  // "Send" aren't in the tree, those slots stay null and callers skip the action.
   return { like, comment, shareFeed, shareDm };
 }
 
