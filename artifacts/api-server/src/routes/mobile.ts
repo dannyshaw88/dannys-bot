@@ -651,13 +651,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             logger.warn({ serial, bytesTotal, sawRealFrame }, `[mobile-video] stream stalled — no data for ${ms / 1000}s, forcing restart`);
             if (!stallNotified) {
               stallNotified = true;
+              // Only notify the client for DRM blocks — the generic "screen may
+              // be off" message is suppressed as it clutters the log uselessly.
               const cycleActive = automationCycleInProgress.has(serial);
-              const msg = !sawRealFrame
-                ? "Stream paused — DRM surface blocked (Instagram). Restarting…"
-                : cycleActive
-                  ? "Stream paused — automation busy (UIAutomator / adb). Restarting stream…"
-                  : "Stream stalled — screen may be off. Tap the mirror to wake.";
-              if (ws.readyState === 1) ws.send(JSON.stringify({ info: msg }));
+              if (!sawRealFrame && ws.readyState === 1) {
+                ws.send(JSON.stringify({ info: "Stream paused — DRM surface blocked (Instagram). Restarting…" }));
+              } else if (sawRealFrame && cycleActive && ws.readyState === 1) {
+                ws.send(JSON.stringify({ info: "Stream paused — automation busy (UIAutomator / adb). Restarting stream…" }));
+              }
+              // "screen may be off" case: no client log — server restarts silently.
             }
             // WAKEUP intentionally omitted: wake must only come from user input.
             try { child.kill(); } catch { /* ignore — close handler restarts */ }

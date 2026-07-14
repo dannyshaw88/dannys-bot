@@ -826,34 +826,34 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
            If they don't overlap, mapToPhone() has an offset bug. */}
       {tapDots && (
         <>
-          {/* Red: raw mouse click position on canvas */}
-          <div style={{
-            position: "absolute",
-            left: tapDots.rawX,
-            top: tapDots.rawY,
-            width: 16,
-            height: 16,
-            marginLeft: -8,
-            marginTop: -8,
-            borderRadius: "50%",
-            background: "rgba(255,40,40,0.85)",
-            border: "2px solid white",
-            zIndex: 20,
-            pointerEvents: "none",
-          }} />
-          {/* Blue: reverse-mapped from phone coords — where the tap was actually sent */}
+          {/* Blue outer ring: reverse-mapped from phone coords — where tap was sent */}
           <div style={{
             position: "absolute",
             left: tapDots.mapX,
             top: tapDots.mapY,
-            width: 16,
-            height: 16,
-            marginLeft: -8,
-            marginTop: -8,
+            width: 20,
+            height: 20,
+            marginLeft: -10,
+            marginTop: -10,
             borderRadius: "50%",
-            background: "rgba(40,120,255,0.85)",
+            background: "rgba(40,120,255,0.7)",
             border: "2px solid white",
             zIndex: 20,
+            pointerEvents: "none",
+          }} />
+          {/* Red inner dot: raw mouse click position — rendered last so it's on top */}
+          <div style={{
+            position: "absolute",
+            left: tapDots.rawX,
+            top: tapDots.rawY,
+            width: 10,
+            height: 10,
+            marginLeft: -5,
+            marginTop: -5,
+            borderRadius: "50%",
+            background: "rgba(255,40,40,0.95)",
+            border: "1.5px solid white",
+            zIndex: 21,
             pointerEvents: "none",
           }} />
         </>
