@@ -4,6 +4,29 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.563] — 2026-07-14
+
+### Fix: Feed Like — wrong button selected + fake "liked" confirmation
+
+Two separate bugs caused feed liking to silently do nothing while logging "✓ liked":
+
+**Wrong Like button selected (root cause of the wrong tap position)**
+Xiaomi devices (and other OEMs with display overrides) report two sizes in `adb shell wm size`:
+```
+Physical size: 1080x2400
+Override size: 720x1280
+```
+The code was grabbing the first number match — the physical size — so `centerY` was calculated as 1200 instead of the correct 640. `_findCentermostLikeNode` then picked whichever Like node was closest to y=1200 in UIAutomator space (a wrong element near the middle of the physical pixel space), not the real action bar heart icon. This is why the log showed `comment=(71,352)` only 5px from `like=(66,352)` — the anchored Like node was wrong, pulling in a completely different row's elements.
+
+Fix: `getScreenSize` now prefers the `Override size:` line from `wm size` output when present, falling back to the first match only if no override line exists. UIAutomator and `adb shell input tap` both use override/logical space — the screen dimensions used for center-finding must match.
+
+**Fake "liked" confirmation**
+After tapping the like button, the code immediately incremented `likes++` and logged `✓ liked` the moment `tap()` returned without error — no verification that Instagram actually registered the like. The heart icon switching from `content-desc="Like"` to `content-desc="Unlike"` is the only reliable signal.
+
+Fix: after tapping, wait 700ms, dump the UI, and check for `content-desc="Unlike"`. If found → confirmed liked. If not → logs `✗ like tap did not register` and counts as a failure so the real miss is visible in the log.
+
+---
+
 ## [1.1.562] — 2026-07-14
 
 ### Fix: View Posts — Share to Feed icon not detected; Make a Post — camera tapped instead of image

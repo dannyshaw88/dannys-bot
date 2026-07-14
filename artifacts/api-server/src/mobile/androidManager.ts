@@ -908,7 +908,19 @@ function getScreenSize(serial: string): { w: number; h: number } {
     const tools = detectToolset();
     const adb = requireTool(tools.adb, "adb");
     const wm = spawnSync(adb, ["-s", serial, "shell", "wm", "size"], { encoding: "utf8", timeout: 3000 });
-    const m = (wm.stdout ?? "").match(/(\d+)x(\d+)/);
+    const out = wm.stdout ?? "";
+    // UIAutomator accessibility-tree coordinates and `adb shell input tap` both use
+    // the display's OVERRIDE (logical) coordinate space, not the physical pixel space.
+    // `wm size` on Xiaomi / OEM devices often prints:
+    //   Physical size: 1080x2400
+    //   Override size: 720x1280
+    // A naïve /(\d+)x(\d+)/ grabs the FIRST match — the physical size — so
+    // centerY ends up as 1200 instead of 640, causing _findCentermostLikeNode to
+    // pick the wrong Like node (one near physical-center y≈1200 in logical space
+    // rather than the real action bar).  Always prefer Override size when present.
+    const mOverride = out.match(/Override\s+size:\s*(\d+)x(\d+)/i);
+    const mAny = out.match(/(\d+)x(\d+)/);
+    const m = mOverride ?? mAny;
     if (m) { w = parseInt(m[1]); h = parseInt(m[2]); }
   } catch { /* fall back to defaults above */ }
   return { w, h };
