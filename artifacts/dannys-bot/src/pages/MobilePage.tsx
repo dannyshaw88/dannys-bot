@@ -616,11 +616,8 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
           if (tapDotTimerRef.current) clearTimeout(tapDotTimerRef.current);
           setTapDots({ rawX, rawY, mapX, mapY }); // persists — no timer in click test mode
         }
-      } else {
-        if (tapDotTimerRef.current) clearTimeout(tapDotTimerRef.current);
-        setTapDots({ rawX, rawY, mapX, mapY });
-        tapDotTimerRef.current = setTimeout(() => setTapDots(null), 700);
       }
+      // Normal mode: no dots — dots only appear in Click Test mode
     }
 
     (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
