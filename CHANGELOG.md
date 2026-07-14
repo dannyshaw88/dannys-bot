@@ -4,6 +4,20 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.546] — 2026-07-13
+
+### Fix: Make a Post (mobile) — expand/fit toggle tapped the camera shutter instead
+
+The user sent a real-device log + screenshot proving the expand/fit toggle's positional fallback tapped the phone's own camera shutter (opening the live camera) instead of the intended two-arrow fit icon.
+
+**Root cause:** the fallback scanned a fixed `y: 30–58%, x: <22%` band with no exclusion for camera/tab/grid elements. The live preview container's actual bounds run to ~59.8% of screen height — past the old 58% cutoff, the exact same "cutoff excludes the real element" mistake already fixed once for the compose icon. With the real icon outside the band, the scan matched the next-best candidate: the unlabelled "open camera" grid tile, which is just as small, square, and unlabelled as the real icon.
+
+**Fix:** stopped guessing a fixed screen fraction entirely. The preview container's own bounds are now read from the live accessibility dump (resource-id contains `preview_container`, `crop_image_view`, or `draft_image_view` — all confirmed present on this screen from real-device dumps), and the search is scoped to that container's bottom-left quadrant only. Anything in the camera tab, tab strip, or Recents grid sits geometrically outside that rectangle, so it is no longer possible for the scan to match it. A camera/gallery/tab/story/reel/live label exclusion was also added as an independent second safety net for older builds where the container can't be found and the old fixed-percentage fallback still has to run.
+
+**Status:** shipped, awaiting real-device confirmation.
+
+---
+
 ## [1.1.545] — 2026-07-13
 
 ### Fix: Make a Post (mobile) — top-left header icon was excluded by too-tight y cutoff

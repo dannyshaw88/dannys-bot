@@ -2231,8 +2231,29 @@ export async function isOnStoryCreator(serial: string): Promise<boolean> {
  * photo-select screen. Tapping it switches the crop from IG's default
  * centre-cropped square frame to the full original photo. It carries no
  * visible text, so this relies on a content-desc/resource-id label match
- * first, falling back to a positional heuristic (small square clickable
- * icon in the lower-left area of the preview, above the Recents grid).
+ * first, falling back to a positional heuristic.
+ *
+ * BUG (found 2026-07-13 via real-device log + screenshot): the previous
+ * positional fallback searched a FIXED screen-percentage band (y 30-58%,
+ * x<22%) with no exclusion for camera/tab/grid elements. On the real
+ * device that band did not contain the actual icon (the live preview
+ * container's own bounds run to ~59.8% of screen height, past the old 58%
+ * cutoff — the exact same "cutoff excludes the real element" mistake as
+ * the compose-button fix) and instead matched the "open camera" grid tile,
+ * which IS small, square, and unlabelled just like the real icon. Tapping
+ * it opened the phone's live camera, exactly as reported.
+ *
+ * FIX: stop guessing a fixed screen fraction. Anchor the search to the
+ * preview container's OWN bounds from the live dump (rid contains
+ * "preview_container", "crop_image_view", or "draft_image_view" — all
+ * confirmed present on this screen from real-device dumps), and only
+ * accept candidates whose bounds fall inside that container's bottom-left
+ * quadrant. This makes it geometrically impossible to match anything in
+ * the camera tab, the tab strip, or the Recents grid below, since those
+ * sit entirely outside the container's rectangle. A camera/gallery/tab
+ * label exclusion is kept as a second, independent safety net in case the
+ * container can't be found on some build and the old fixed-percentage
+ * fallback has to be used.
  */
 export async function findExpandPhotoButton(serial: string): Promise<{ x: number; y: number } | null> {
   const tools = detectToolset();
@@ -2245,25 +2266,65 @@ export async function findExpandPhotoButton(serial: string): Promise<{ x: number
   const byResId = _findByResId(xml, ":id/expand_photo_button", ":id/original_media_full_size_toggle_button", ":id/media_size_toggle");
   if (byResId) return byResId;
 
-  // Positional fallback: the icon is a small square (roughly 60-140px on a
-  // 1080-wide device), sitting in the bottom-left of the preview image —
-  // which itself occupies roughly the top 35-55% of the screen, above the
-  // Recents label/grid. Scan for a small square clickable node with no
-  // text/content-desc label inside that band.
   const { w, h } = getScreenSize(serial);
-  const minY = Math.round(h * 0.30);
-  const maxY = Math.round(h * 0.58);
-  const maxX = Math.round(w * 0.22);
+  const isExcluded = (label: string) =>
+    /camera|shutter|gallery|tab|story|reel|live|post_tab|recents/i.test(label);
+
+  const container = _findBoundsByResId(xml, "preview_container", "crop_image_view", "draft_image_view");
   const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
   let best: { x: number; y: number } | null = null;
   let bestArea = Infinity;
   let m: RegExpExecArray | null;
+
+  if (container) {
+    // Search strictly inside the preview container's own rectangle, bottom-left
+    // quadrant only (the icon overlays the image near its bottom-left corner).
+    const cw = container.x2 - container.x1, ch = container.y2 - container.y1;
+    const bandMinX = container.x1;
+    const bandMaxX = container.x1 + Math.round(cw * 0.30);
+    const bandMinY = container.y1 + Math.round(ch * 0.55);
+    const bandMaxY = container.y2 + Math.round(ch * 0.05); // small tolerance past the bottom edge
+    while ((m = nodeRe.exec(xml)) !== null) {
+      const attrs = m[1];
+      if (!/clickable="true"/.test(attrs)) continue;
+      const textM = attrs.match(/\btext="([^"]*)"/);
+      const cdM = attrs.match(/content-desc="([^"]*)"/);
+      const ridM = attrs.match(/resource-id="([^"]*)"/);
+      if ((textM?.[1] || "").trim() || (cdM?.[1] || "").trim()) continue; // icon-only, no visible label
+      const label = `${textM?.[1] || ""} ${cdM?.[1] || ""} ${ridM?.[1] || ""}`;
+      if (isExcluded(label)) continue; // resource-id alone can still flag camera/tab/grid nodes
+      const bm = attrs.match(/bounds="(\[(\d+),(\d+)\]\[(\d+),(\d+)\])"/);
+      if (!bm) continue;
+      const x1 = Number(bm[2]), y1 = Number(bm[3]), x2 = Number(bm[4]), y2 = Number(bm[5]);
+      const bw = x2 - x1, bh = y2 - y1;
+      const c = _parseCenter(bm[1]);
+      if (!c) continue;
+      if (c.x < bandMinX || c.x > bandMaxX || c.y < bandMinY || c.y > bandMaxY) continue;
+      if (bw <= 0 || bh <= 0 || bw > w * 0.15 || bh > h * 0.10) continue; // must be icon-sized
+      const area = bw * bh;
+      if (area < bestArea) { best = c; bestArea = area; }
+    }
+    if (best) return best;
+    // Container found but no icon-sized candidate inside it — do NOT fall
+    // through to the fixed-percentage scan below, since that's what caused
+    // this bug. Report "not found" instead of risking a wrong-screen tap.
+    return null;
+  }
+
+  // Container not found in this dump (older/different build) — last-resort
+  // fixed-percentage band, now with the same camera/tab/grid exclusion.
+  const minY = Math.round(h * 0.30);
+  const maxY = Math.round(h * 0.62);
+  const maxX = Math.round(w * 0.22);
   while ((m = nodeRe.exec(xml)) !== null) {
     const attrs = m[1];
     if (!/clickable="true"/.test(attrs)) continue;
     const textM = attrs.match(/\btext="([^"]*)"/);
     const cdM = attrs.match(/content-desc="([^"]*)"/);
-    if ((textM?.[1] || "").trim() || (cdM?.[1] || "").trim()) continue; // icon-only, no label
+    const ridM = attrs.match(/resource-id="([^"]*)"/);
+    const label = `${textM?.[1] || ""} ${cdM?.[1] || ""} ${ridM?.[1] || ""}`;
+    if ((textM?.[1] || "").trim() || (cdM?.[1] || "").trim()) continue; // icon-only, no visible label
+    if (isExcluded(label)) continue;
     const bm = attrs.match(/bounds="(\[(\d+),(\d+)\]\[(\d+),(\d+)\])"/);
     if (!bm) continue;
     const x1 = Number(bm[2]), y1 = Number(bm[3]), x2 = Number(bm[4]), y2 = Number(bm[5]);
@@ -2823,10 +2884,25 @@ function _findElem(xml: string, ...candidates: string[]): { x: number; y: number
 /** Find an element by partial resource-id match (e.g. "fab", "hostname"). */
 function _findByResId(xml: string, ...ids: string[]): { x: number; y: number } | null {
   for (const id of ids) {
-    const esc = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const esc = id.replace(/[.*+?^${}()|[]\]/g, "\$&");
     const re = new RegExp(`resource-id="[^"]*${esc}[^"]*"[^>]*bounds="([^"]+)"`, "i");
     const m = xml.match(re);
     if (m) { const c = _parseCenter(m[1]); if (c) return c; }
+  }
+  return null;
+}
+
+/**
+ * Same lookup as _findByResId but returns the raw bounding box instead of
+ * just the centre point — used when a caller needs to search WITHIN a
+ * containers rectangle rather than tap the container itself.
+ */
+function _findBoundsByResId(xml: string, ...ids: string[]): { x1: number; y1: number; x2: number; y2: number } | null {
+  for (const id of ids) {
+    const esc = id.replace(/[.*+?^${}()|[]\]/g, "\$&");
+    const re = new RegExp(`resource-id="[^"]*${esc}[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"`, "i");
+    const m = xml.match(re);
+    if (m) return { x1: Number(m[1]), y1: Number(m[2]), x2: Number(m[3]), y2: Number(m[4]) };
   }
   return null;
 }

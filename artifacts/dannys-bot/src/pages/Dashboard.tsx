@@ -78,6 +78,21 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.546",
+    date: "13 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Make a Post (mobile/ADB): the expand/fit toggle's positional fallback tapped the phone's live camera shutter instead of the fit icon — confirmed via a real-device log + screenshot the user sent. Stopped guessing a fixed screen percentage for this icon; it's now located from the photo preview's own on-screen position, so it can't land on the camera or tab strip anymore.",
+        technical: [
+          "Root cause: the old fallback scanned a fixed y:30-58% / x<22% band with no exclusion for camera/tab/grid elements. The live preview container's actual bounds run to ~59.8% of screen height — past the old 58% cutoff, the same class of mistake as the earlier compose-icon cutoff bug — so the scan matched the unlabelled \"open camera\" grid tile instead, which is exactly as small, square, and unlabelled as the real icon.",
+          "Fix: read the preview container's own bounds from the live accessibility dump (rid contains preview_container / crop_image_view / draft_image_view — all confirmed present on this screen) and search only inside that container's bottom-left quadrant. Anything in the camera tab, tab strip, or Recents grid sits geometrically outside that rectangle, so it can no longer be matched by mistake.",
+          "Added a camera/gallery/tab/story/reel/live label exclusion as a second, independent safety net for older builds where the container can't be found and the fixed-percentage fallback still has to run.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.545",
     date: "13 Jul 2026",
     items: [
