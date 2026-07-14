@@ -673,14 +673,18 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         lastTapRef.current = null;
         addLog(`Double-tap → (${drag.startX}, ${drag.startY})`);
         try {
+          const phoneSize = phoneSizeRef.current;
           const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/double-tap`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ x: drag.startX, y: drag.startY }),
+            body: JSON.stringify({ x: drag.startX, y: drag.startY, videoW: phoneSize?.w, videoH: phoneSize?.h }),
           });
           if (!r.ok) {
             const body = await r.json().catch(() => null);
             addLog(`Double-tap FAILED (${r.status}) — ${body?.error ?? "no error detail"}`);
+          } else {
+            const body = await r.json().catch(() => null);
+            if (body?.rescaled) addLog(`Rescale: video ${body.video[0]}×${body.video[1]} → device ${body.device[0]}×${body.device[1]}, tap (${body.from[0]},${body.from[1]}) → (${body.to[0]},${body.to[1]})`);
           }
         } catch (err: any) {
           addLog(`Double-tap FAILED — ${err?.message ?? "network error"}`);
@@ -696,14 +700,18 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         pendingSingleTapRef.current = null;
         addLog(`Tap → (${tapX}, ${tapY})`);
         try {
+          const phoneSize = phoneSizeRef.current;
           const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/tap`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ x: tapX, y: tapY }),
+            body: JSON.stringify({ x: tapX, y: tapY, videoW: phoneSize?.w, videoH: phoneSize?.h }),
           });
           if (!r.ok) {
             const body = await r.json().catch(() => null);
             addLog(`Tap FAILED (${r.status}) — ${body?.error ?? "no error detail"}`);
+          } else {
+            const body = await r.json().catch(() => null);
+            if (body?.rescaled) addLog(`Rescale: video ${body.video[0]}×${body.video[1]} → device ${body.device[0]}×${body.device[1]}, tap (${body.from[0]},${body.from[1]}) → (${body.to[0]},${body.to[1]})`);
           }
         } catch (err: any) {
           addLog(`Tap FAILED — ${err?.message ?? "network error"}`);

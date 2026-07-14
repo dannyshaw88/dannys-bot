@@ -3761,12 +3761,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // often downscaled from the device's real resolution, so tap coordinates
   // captured against the video's pixel size need rescaling to the phone's
   // actual `wm size` before they're sent to adb.
-  function rescaleForDevice(serial: string, x: number, y: number, videoW?: number, videoH?: number): { x: number; y: number } {
-    if (!videoW || !videoH) return { x, y };
+  function rescaleForDevice(serial: string, x: number, y: number, videoW?: number, videoH?: number): { x: number; y: number; rescaled: boolean; video: [number,number]; device: [number,number]; from: [number,number]; to: [number,number] } {
+    const noOp = { x, y, rescaled: false, video: [videoW ?? 0, videoH ?? 0] as [number,number], device: [0,0] as [number,number], from: [x,y] as [number,number], to: [x,y] as [number,number] };
+    if (!videoW || !videoH) return noOp;
     try {
       const tools = android.detectToolset();
       const adbPath = tools.adb.path;
-      if (!adbPath) return { x, y };
+      if (!adbPath) return noOp;
       const wm = spawnSync(adbPath, ["-s", serial, "shell", "wm", "size"], { encoding: "utf8", timeout: 3000 });
       const out = wm.stdout ?? "";
       // `wm size` can print BOTH a "Physical size" and an "Override size"
@@ -3782,24 +3783,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const overrideM = out.match(/Override size:\s*(\d+)x(\d+)/);
       const physicalM = out.match(/Physical size:\s*(\d+)x(\d+)/);
       const m = overrideM ?? physicalM ?? out.match(/(\d+)x(\d+)/);
-      if (!m) return { x, y };
+      if (!m) return noOp;
       const realW = parseInt(m[1]);
       const realH = parseInt(m[2]);
-      if (realW === videoW && realH === videoH) return { x, y };
+      const device: [number,number] = [realW, realH];
+      if (realW === videoW && realH === videoH) return { ...noOp, device };
       const rx = Math.round((x / videoW) * realW);
       const ry = Math.round((y / videoH) * realH);
       logger.info({ serial, from: [x, y], to: [rx, ry], video: [videoW, videoH], real: [realW, realH] }, "[mobile-tap] rescaled tap for downscaled video");
-      return { x: rx, y: ry };
-    } catch { return { x, y }; }
+      return { x: rx, y: ry, rescaled: true, video: [videoW, videoH], device, from: [x, y], to: [rx, ry] };
+    } catch { return noOp; }
   }
 
   app.post("/api/mobile/devices/:serial/input/tap", async (req: Request, res: Response) => {
     try {
       const input = tapSchema.parse(req.body);
       const serial = p(req, "serial");
-      const { x, y } = rescaleForDevice(serial, input.x, input.y, input.videoW, input.videoH);
-      await android.tap(serial, x, y);
-      res.json({ ok: true });
+      const result = rescaleForDevice(serial, input.x, input.y, input.videoW, input.videoH);
+      await android.tap(serial, result.x, result.y);
+      res.json({ ok: true, rescaled: result.rescaled, video: result.video, device: result.device, from: result.from, to: result.to });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
@@ -3814,9 +3816,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       const input = tapSchema.parse(req.body);
       const serial = p(req, "serial");
-      const { x, y } = rescaleForDevice(serial, input.x, input.y, input.videoW, input.videoH);
-      await android.doubleTap(serial, x, y);
-      res.json({ ok: true });
+      const result = rescaleForDevice(serial, input.x, input.y, input.videoW, input.videoH);
+      await android.doubleTap(serial, result.x, result.y);
+      res.json({ ok: true, rescaled: result.rescaled, video: result.video, device: result.device, from: result.from, to: result.to });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 

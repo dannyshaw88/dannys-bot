@@ -78,6 +78,22 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.551",
+    date: "14 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Reverted v1.1.550's removal of videoW/videoH from tap requests — that change made click offset worse, not better. Rescaling IS needed because screenrecord may encode at a different width than the device's logical wm size. Restored videoW/videoH on all tap/double-tap requests so rescaleForDevice correctly maps video-frame coordinates to device coordinates. Added a visible diagnostic log line in the mirror log panel whenever rescaling actually fires, showing video dimensions, device dimensions, original tap coords, and rescaled coords — this gives us the exact numbers needed to diagnose any remaining offset.",
+        technical: [
+          "Restored videoW/videoH in both /input/tap and /input/double-tap fetch bodies (phoneSizeRef.current.w/h).",
+          "rescaleForDevice return type extended to include rescaled/video/device/from/to fields.",
+          "Both tap routes now return these fields in the JSON response.",
+          "Client logs 'Rescale: video WxH → device AxB, tap (x,y) → (rx,ry)' whenever rescaling fires, visible in the mirror log panel.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.550",
     date: "14 Jul 2026",
     items: [
