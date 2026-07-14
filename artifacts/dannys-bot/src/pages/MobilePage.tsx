@@ -2999,19 +2999,62 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
   );
 }
 
-function LogPanel({ lines, onClear, serial, onScanTray }: {
+function LogPanel({ lines, onClear, serial, onScanTray, addLog }: {
   lines: string[];
   onClear: () => void;
   serial?: string | null;
   /** Returns the captured lines so LogPanel can offer Copy Capture / Save. */
   onScanTray?: () => Promise<string[]>;
+  addLog?: (msg: string) => void;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [scanning,       setScanning]       = React.useState(false);
   const [copied,         setCopied]         = React.useState(false);
   const [copiedCapture,  setCopiedCapture]  = React.useState(false);
   const [lastCapture,    setLastCapture]    = React.useState<string[] | null>(null);
+  const [checkingInfo,   setCheckingInfo]   = React.useState(false);
+  const [resettingRes,   setResettingRes]   = React.useState(false);
+  const [hasMismatch,    setHasMismatch]    = React.useState(false);
   useEffect(() => { bottomRef.current?.scrollIntoView({ block: "end" }); }, [lines.length]);
+
+  const handleCheckScreenInfo = async () => {
+    if (!serial) return;
+    setCheckingInfo(true);
+    try {
+      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/screen-info`);
+      const body = await r.json();
+      if (!r.ok) { addLog?.(`Screen info failed: ${body?.error ?? r.status}`); return; }
+      addLog?.(`── wm size ──`);
+      for (const line of String(body.sizeRaw ?? "").split("\n")) if (line.trim()) addLog?.(line.trim());
+      addLog?.(`── wm density ──`);
+      for (const line of String(body.densityRaw ?? "").split("\n")) if (line.trim()) addLog?.(line.trim());
+      if (body.override) {
+        addLog?.(`⚠️ Override size is active — the phone is currently running at ${body.override.w}x${body.override.h}, NOT its physical panel resolution (${body.physical?.w ?? "?"}x${body.physical?.h ?? "?"}).`);
+        if (body.mismatch) {
+          addLog?.(`   Aspect ratio differs by ${body.mismatch.percentDiff.toFixed(1)}% — this is almost certainly why the mirror looks the wrong shape and/or taps land off-target. Click "🔄 Reset Resolution Override" to fix it.`);
+        }
+        setHasMismatch(true);
+      } else {
+        addLog?.(`No resolution override active — the device is running at its native physical resolution.`);
+        setHasMismatch(false);
+      }
+    } catch (e: any) { addLog?.(`Screen info error: ${e?.message ?? "network error"}`); }
+    finally { setCheckingInfo(false); }
+  };
+
+  const handleResetResolution = async () => {
+    if (!serial) return;
+    setResettingRes(true);
+    try {
+      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/screen-info/reset`, { method: "POST" });
+      const body = await r.json();
+      if (!r.ok) { addLog?.(`Reset resolution failed: ${body?.error ?? r.status}`); return; }
+      addLog?.(`✅ Resolution override cleared. Device now reports: ${body.sizeRaw}`);
+      addLog?.(`Reconnect the mirror (toggle Live off/on) to pick up the corrected resolution.`);
+      setHasMismatch(false);
+    } catch (e: any) { addLog?.(`Reset resolution error: ${e?.message ?? "network error"}`); }
+    finally { setResettingRes(false); }
+  };
 
   const writeToClipboard = async (text: string) => {
     try {
@@ -3077,6 +3120,28 @@ function LogPanel({ lines, onClear, serial, onScanTray }: {
                 title="Captures every element on screen with pixel coords and screen %. Use Copy Capture or Save to send just the layout — no log noise."
               >
                 {scanning ? "Scanning…" : "📱 Capture Screen"}
+              </Button>
+            )}
+            {serial && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleCheckScreenInfo}
+                disabled={checkingInfo}
+                title="Prints the device's raw wm size / wm density into the log, and flags a resolution override if one is active. Use this before Reset."
+              >
+                {checkingInfo ? "Checking…" : "📐 Check Screen Info"}
+              </Button>
+            )}
+            {serial && hasMismatch && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleResetResolution}
+                disabled={resettingRes}
+                title="Clears an active resolution override so the phone (and the mirror) run at the real physical screen resolution."
+              >
+                {resettingRes ? "Resetting…" : "🔄 Reset Resolution Override"}
               </Button>
             )}
             <Button type="button" variant="secondary" onClick={handleCopyLog} disabled={lines.length === 0}>
@@ -3345,6 +3410,7 @@ export function MobilePage() {
                     lines={logLines}
                     onClear={() => setLogLines([])}
                     serial={activeSerial}
+                    addLog={addLog}
                     onScanTray={activeSerial ? async () => {
                       addLog("── Capturing screen layout… ──");
                       try {

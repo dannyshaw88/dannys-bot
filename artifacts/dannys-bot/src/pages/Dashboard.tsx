@@ -78,6 +78,42 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.554",
+    date: "14 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Mirror rendering at the wrong aspect ratio entirely (not just a shell/CSS issue — the video content itself is the wrong shape). The user's real device measures 9:16; the mirror shows a much narrower ratio. Reinstated the \"📐 Check Screen Info\" diagnostic that v1.1.548 removed on the (incorrect) theory that the offset bug was fixed at the source — v1.1.550/551 already proved the wm-size/video mismatch is still live, so removing the one tool that could confirm a resolution-override mismatch was premature. Added a one-click reset alongside it.",
+        technical: [
+          "Reinstated GET /api/mobile/devices/:serial/screen-info (raw wm size + wm density, flags Override vs Physical size mismatch with percent difference).",
+          "New POST /api/mobile/devices/:serial/screen-info/reset — runs `adb shell wm size reset`; does not touch density.",
+          "Log panel: \"📐 Check Screen Info\" button restored; \"🔄 Reset Resolution Override\" button appears only once a mismatch is detected.",
+          "Not yet verified against the real device — no phone attached in this dev environment. Needs the user's actual Check Screen Info output to confirm the override theory.",
+        ],
+      },
+    ],
+  },
+  {
+    version: "1.1.553",
+    date: "14 Jul 2026",
+    items: [
+      {
+        category: "Reverted",
+        text: "Reverted v1.1.552's phone mirror shell CSS fix. It correctly removed an internal canvas pillarbox, but the user's real-device screenshot showed the mirror still looked tiny inside a large dark area — the app background is the same near-black as the shell, so a correctly-sized-but-still-narrow mirror still reads as swimming in dead space. That's a visibility/contrast problem the CSS fix didn't address, so it was reverted rather than layered on top of.",
+      },
+    ],
+  },
+  {
+    version: "1.1.552",
+    date: "14 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "(Reverted in v1.1.553 — kept here for history.) Phone mirror shell left dead black space instead of wrapping the mirror tightly. Root cause: the phone's aspect ratio was applied to the whole header+screen shell, not just the screen area, so the header's fixed height made the canvas proportionally narrower than the real device and it pillarboxed internally to compensate.",
+      },
+    ],
+  },
+  {
     version: "1.1.551",
     date: "14 Jul 2026",
     items: [

@@ -4,6 +4,23 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.554] — 2026-07-14
+
+### Fix: mirror rendering at the wrong aspect ratio entirely — reinstated the resolution-override diagnostic
+
+The user provided their phone's actual screen ratio from an external site (9:16) and it doesn't match what the mirror renders — a much narrower ratio. This isn't the same bug as [1.1.553]'s shell-CSS issue; the mirror's *content* itself (not just the shell wrapping it) is the wrong shape, which can only mean the video stream itself is coming from the device at the wrong resolution.
+
+**What we found going back through the real history (`Dashboard.tsx`'s in-app changelog, which is more detailed and accurate than this file had been kept — see the [1.1.548]–[1.1.551] entries below, corrected):** a "📐 Check Screen Info" diagnostic — built specifically to detect a resolution-override mismatch on this device (`adb shell wm size` reporting a different "Override size" than "Physical size") — was removed in [1.1.548] on the theory that the offset bug was "fixed at the source." [1.1.550] and [1.1.551] then showed that theory was wrong: the wm-size/video mismatch is still live. That removal deprived us of the one tool that could confirm or rule out a resolution override — exactly the kind of evidence needed now instead of another guess.
+
+**Fix:**
+- Reinstated `GET /api/mobile/devices/:serial/screen-info` (raw `wm size` + `wm density`, flags an Override vs Physical size mismatch with the percentage difference).
+- Added `POST /api/mobile/devices/:serial/screen-info/reset` — runs `adb shell wm size reset`, a one-click fix if a mismatch is confirmed. Deliberately does not touch density.
+- Log panel: **"📐 Check Screen Info"** button restored; a **"🔄 Reset Resolution Override"** button now appears only after Check Screen Info detects a mismatch.
+
+**Status:** shipped, not yet verified against the real device — no phone is attached in this environment. Please click **Check Screen Info** on the Mobile page's Log tab and paste what it prints; if it reports an Override size, click **Reset Resolution Override** and reconnect the mirror (Live off/on) to see if the mirror's shape and the fit-icon tap accuracy both correct themselves. This is a real hypothesis backed by this device's documented history, not another blind CSS guess — but it needs your device's actual output to confirm.
+
+---
+
 ## [1.1.553] — 2026-07-14
 
 ### Reverted: [1.1.552] phone mirror shell fix
@@ -13,6 +30,19 @@ The user's real-device screenshot after [1.1.552] showed the change did not fix 
 **Reverted in full:** `artifacts/dannys-bot/src/pages/MobilePage.tsx` is back to its pre-[1.1.552] state (shell aspect-ratio applied to the whole header+screen box, as it was before). `package.json` / `artifacts/electron/package.json` bumped to 1.1.553 to mark the revert.
 
 **Status:** reverted, pushed. Next attempt needs to address actual visible size/contrast (e.g. giving the mirror column more width than the current 50/50 split with the settings panel, and/or a visible boundary — a lighter border or background tint — around the shell so it doesn't blend into the app background) rather than only the internal aspect-ratio math, and should be checked against a real screenshot before calling it done, not just reasoned about from code.
+
+---
+
+## [1.1.548]–[1.1.551] — 2026-07-14 (corrected)
+
+An earlier pass at this file backfilled these four versions from a session transcript and got the details wrong — the app's own in-app changelog (`Dashboard.tsx`) had the accurate, detailed record the whole time. Corrected here:
+
+- **[1.1.548]** Fixed the mirror tap-offset bug (thought, at the time, to be the root cause): the mirror canvas had `object-fit: contain` in its CSS, which browsers silently ignore on `<canvas>` elements — it was being stretched to fill its container while the click-mapping math assumed letterbox bars that didn't actually exist. Changed the canvas to `width: auto; height: auto` so it genuinely preserves aspect ratio, and simplified `mapToPhone()` to a plain linear scale. Also **removed** the "📐 Check Screen Info" button and its `GET /screen-info` endpoint (added in [1.1.547]), reasoning the offset bug was "fixed at the source" and the diagnostic was no longer needed — this turned out to be premature (see [1.1.554]).
+- **[1.1.549]** The [1.1.548] CSS fix proved unreliable in Electron/Windows (`width/height: auto` on canvas doesn't behave consistently across rendering engines there). Rewrote the coordinate system to be renderer-driven instead: every frame is drawn letterboxed at an explicitly computed `{dx,dy,dw,dh}` stored in a ref (`drawRectRef`), and the click mapper reads from that exact same ref — the paint numbers and the click-mapping numbers are the same numbers by construction, eliminating any possibility of drift between them.
+- **[1.1.550]** Traced the *remaining* offset to the server: `/input/tap` was calling `adb shell wm size` on every tap and rescaling coordinates from video-frame space to that reported size, but `wm size` returned a slightly different number than the video frame's actual dimensions on this device (OEM quirk / alignment / a resolution override), injecting a small but real 1–2% error. Since `screenrecord` without `--size` already captures at the device's native logical resolution, `frame.displayWidth/Height` **is** the correct tap coordinate space — no rescaling should be needed at all. Removed `videoW`/`videoH` from the tap/swipe requests so `rescaleForDevice` fast-returns without ever calling `wm size`.
+- **[1.1.551]** [1.1.550] made the offset *worse*, not better — rescaling turned out to still be necessary in practice. Reverted [1.1.550]: restored `videoW`/`videoH` on all tap/double-tap requests, and added a visible log line whenever a rescale actually fires (video dims, device dims, original vs. rescaled coordinates) so the next mismatch has real numbers attached to it instead of another guess.
+
+**Lesson:** [1.1.548] through [1.1.551] are four consecutive, partially-contradicting attempts at the same bug in a single day, each shipped with high confidence ("root cause found and eliminated") and each subsequently reverted or superseded. [1.1.554] reinstates the one diagnostic tool ([1.1.548] removed) that could have shortened this cycle by actually confirming or ruling out a resolution override instead of guessing at the coordinate math from both ends.
 
 ---
 

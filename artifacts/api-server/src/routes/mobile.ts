@@ -775,6 +775,58 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // desyncs any coordinate math that assumes a single screen size. The parsed
   // /screen-size endpoint above collapses that distinction; this one preserves
   // it so it can be diagnosed from a single in-app button click.
+  //
+  // This was originally added in v1.1.547, then removed in v1.1.548 on the
+  // (incorrect, as it turned out) theory that the offset bug was "fixed at
+  // the source" — v1.1.550/551 show the wm-size/video-frame mismatch is
+  // still very much alive, and it's now also the leading suspect for the
+  // mirror rendering at the wrong aspect ratio entirely (not just tap
+  // offset), so the diagnostic is reinstated rather than re-guessed.
+  app.get("/api/mobile/devices/:serial/screen-info", async (req: Request, res: Response) => {
+    try {
+      const tools = android.detectToolset();
+      const adbPath = tools.adb.path;
+      if (!adbPath) { res.status(503).json({ error: "ADB not found" }); return; }
+      const serial = p(req, "serial");
+      const [sizeR, densityR] = await Promise.all([
+        execFileP(adbPath, ["-s", serial, "shell", "wm", "size"], { timeout: 5000 } as any),
+        execFileP(adbPath, ["-s", serial, "shell", "wm", "density"], { timeout: 5000 } as any),
+      ]);
+      const sizeOut = String(sizeR.stdout || "").trim();
+      const densityOut = String(densityR.stdout || "").trim();
+      const physicalM = sizeOut.match(/Physical size:\s*(\d+)x(\d+)/);
+      const overrideM = sizeOut.match(/Override size:\s*(\d+)x(\d+)/);
+      const physical = physicalM ? { w: parseInt(physicalM[1]), h: parseInt(physicalM[2]) } : null;
+      const override = overrideM ? { w: parseInt(overrideM[1]), h: parseInt(overrideM[2]) } : null;
+      let mismatch: { physicalRatio: number; overrideRatio: number; percentDiff: number } | null = null;
+      if (physical && override) {
+        const physicalRatio = physical.w / physical.h;
+        const overrideRatio = override.w / override.h;
+        mismatch = { physicalRatio, overrideRatio, percentDiff: Math.abs(physicalRatio - overrideRatio) / physicalRatio * 100 };
+      }
+      res.json({ sizeRaw: sizeOut, densityRaw: densityOut, physical, override, mismatch });
+    } catch (e: any) { res.status(500).json({ error: e?.message }); }
+  });
+
+  // ── Reset resolution override (one-click fix for the mismatch above) ───────
+  // `wm size reset` clears any active display-size override, returning the
+  // device to its native physical panel resolution/ratio. Safe to call even
+  // when no override is set (no-op). Does NOT touch density — left alone
+  // deliberately since a density override doesn't change the screen's
+  // aspect ratio and resetting it could visually rescale UI the user may
+  // have intentionally set up.
+  app.post("/api/mobile/devices/:serial/screen-info/reset", async (req: Request, res: Response) => {
+    try {
+      const tools = android.detectToolset();
+      const adbPath = tools.adb.path;
+      if (!adbPath) { res.status(503).json({ error: "ADB not found" }); return; }
+      const serial = p(req, "serial");
+      await execFileP(adbPath, ["-s", serial, "shell", "wm", "size", "reset"], { timeout: 5000 } as any);
+      const { stdout } = await execFileP(adbPath, ["-s", serial, "shell", "wm", "size"], { timeout: 5000 } as any);
+      res.json({ ok: true, sizeRaw: String(stdout || "").trim() });
+    } catch (e: any) { res.status(500).json({ error: e?.message }); }
+  });
+
   // ── Network interfaces (for source-adapter picker in UI) ───────────────────
   app.get("/api/network/interfaces", (_req: Request, res: Response) => {
     const raw = os.networkInterfaces();
