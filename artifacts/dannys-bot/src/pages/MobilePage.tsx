@@ -128,6 +128,10 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   const ctxRef       = useRef<CanvasRenderingContext2D | null>(null);
   const wsRef        = useRef<WebSocket | null>(null);
   const phoneSizeRef = useRef<{ w: number; h: number } | null>(null);
+  // Where the phone image is actually drawn inside the canvas, in canvas-pixel
+  // (= CSS-pixel) coords. Set by drawFrame() on every frame so mapToPhone()
+  // reads from the exact same numbers used to paint — no CSS inference at all.
+  const drawRectRef  = useRef<{ dx: number; dy: number; dw: number; dh: number } | null>(null);
   const fpsCountRef  = useRef(0);
   const frameSeenRef = useRef(false);
   // Video mode: true H.264 stream decoded with WebCodecs (near-instant).
@@ -146,6 +150,30 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
 
   const [status, setStatus] = useState<"connecting" | "waiting" | "live" | "asleep" | "error">("connecting");
   const [fps,    setFps]    = useState(0);
+
+  // Keep canvas.width/height = CSS client size so canvas-pixel coords are
+  // identical to CSS-pixel coords. This is the key invariant the letterbox
+  // drawing and mapToPhone() both rely on. A ResizeObserver fires whenever
+  // the container is resized (panel open/close, window resize, etc.) so the
+  // mapping stays correct without any manual refresh.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const sync = () => {
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      if (w > 0 && h > 0 && (canvas.width !== w || canvas.height !== h)) {
+        canvas.width  = w;
+        canvas.height = h;
+        ctxRef.current = null; // resize invalidates cached context
+        drawRectRef.current = null; // next frame will recompute
+      }
+    };
+    sync();
+    const ro = new ResizeObserver(sync);
+    ro.observe(canvas);
+    return () => ro.disconnect();
+  }, []);
 
   // Expose clearToBlack() so PhoneSlot can immediately black out the canvas
   // when the user presses Power — before the server has a chance to report
@@ -226,17 +254,35 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
     const drawFrame = (frame: VideoFrame) => {
       const canvas = canvasRef.current;
       if (!canvas) { frame.close(); return; }
+      // Track phone dimensions (used by mapToPhone for the final scale step).
       if (!phoneSizeRef.current || phoneSizeRef.current.w !== frame.displayWidth || phoneSizeRef.current.h !== frame.displayHeight) {
         const sz = { w: frame.displayWidth, h: frame.displayHeight };
         phoneSizeRef.current = sz;
-        canvas.width  = sz.w;
-        canvas.height = sz.h;
-        ctxRef.current = null; // canvas resize invalidates cached context
-        addLog(`Canvas set ${sz.w}×${sz.h}`);
+        addLog(`Frame ${sz.w}×${sz.h}`);
         onDimensions?.(sz.w, sz.h);
       }
-      const ctx = getCtx();
-      ctx?.drawImage(frame, 0, 0);
+      // Draw the frame letterboxed to fill the canvas while preserving the
+      // phone's aspect ratio. Store the exact draw rect so mapToPhone() uses
+      // the same coordinates — no CSS inference, no object-fit, no DPR math.
+      const cw = canvas.width;
+      const ch = canvas.height;
+      if (cw > 0 && ch > 0) {
+        const phoneRatio = frame.displayWidth / frame.displayHeight;
+        const canvasRatio = cw / ch;
+        let dw: number, dh: number, dx: number, dy: number;
+        if (canvasRatio > phoneRatio) {
+          dh = ch; dw = Math.round(dh * phoneRatio); dx = Math.round((cw - dw) / 2); dy = 0;
+        } else {
+          dw = cw; dh = Math.round(dw / phoneRatio); dx = 0; dy = Math.round((ch - dh) / 2);
+        }
+        drawRectRef.current = { dx, dy, dw, dh };
+        const ctx = getCtx();
+        if (ctx) {
+          ctx.fillStyle = "#000";
+          ctx.fillRect(0, 0, cw, ch);
+          ctx.drawImage(frame, dx, dy, dw, dh);
+        }
+      }
       frame.close();
       fpsCountRef.current++;
       setStatus("live");
@@ -349,13 +395,31 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
             if (!phoneSizeRef.current) {
               const sz = { w: img.naturalWidth, h: img.naturalHeight };
               phoneSizeRef.current = sz;
-              canvas.width  = sz.w;
-              canvas.height = sz.h;
-              ctxRef.current = null;
-              addLog(`Canvas set ${sz.w}×${sz.h}`);
+              addLog(`Frame ${sz.w}×${sz.h}`);
               onDimensions?.(sz.w, sz.h);
             }
-            getCtx()?.drawImage(img, 0, 0);
+            // Same letterbox-draw as the H.264 path so mapToPhone() works
+            // identically regardless of which stream mode is active.
+            const cw = canvas.width;
+            const ch = canvas.height;
+            if (cw > 0 && ch > 0 && phoneSizeRef.current) {
+              const { w: phoneW, h: phoneH } = phoneSizeRef.current;
+              const phoneRatio  = phoneW / phoneH;
+              const canvasRatio = cw / ch;
+              let dw: number, dh: number, dx: number, dy: number;
+              if (canvasRatio > phoneRatio) {
+                dh = ch; dw = Math.round(dh * phoneRatio); dx = Math.round((cw - dw) / 2); dy = 0;
+              } else {
+                dw = cw; dh = Math.round(dw / phoneRatio); dx = 0; dy = Math.round((ch - dh) / 2);
+              }
+              drawRectRef.current = { dx, dy, dw, dh };
+              const ctx = getCtx();
+              if (ctx) {
+                ctx.fillStyle = "#000";
+                ctx.fillRect(0, 0, cw, ch);
+                ctx.drawImage(img, dx, dy, dw, dh);
+              }
+            }
             revoke();
           };
           img.onerror = revoke;
@@ -435,23 +499,29 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   }, [serial, addLog]);
 
   // Maps a client (viewport) point to phone-panel coordinates.
-  // The canvas is sized with max-width/max-height + width/height:auto so the
-  // browser scales it down to fit the container while preserving the phone's
-  // aspect ratio — getBoundingClientRect() returns the exact rendered image
-  // bounds (no letterbox padding), so the mapping is a simple linear scale
-  // with no offset correction needed.
+  //
+  // The canvas fills the container (absolute inset-0 100%×100%). Its
+  // canvas.width/height are kept equal to its CSS clientWidth/clientHeight by
+  // a ResizeObserver, so canvas pixels = CSS pixels (no DPR math needed).
+  // Every frame is drawn letterboxed at an explicit drawRectRef position
+  // using the same coordinate system. We read that exact draw rect here so
+  // the click mapping and the renderer are mathematically identical.
   const mapToPhone = useCallback((clientX: number, clientY: number): { x: number; y: number } | null => {
-    if (!canvasRef.current || !phoneSizeRef.current) return null;
+    if (!canvasRef.current || !phoneSizeRef.current || !drawRectRef.current) return null;
     const rect = canvasRef.current.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
     const { w: phoneW, h: phoneH } = phoneSizeRef.current;
-    if (rect.width <= 0 || rect.height <= 0 || phoneW <= 0 || phoneH <= 0) return null;
+    const { dx, dy, dw, dh } = drawRectRef.current;
 
-    const localX = clientX - rect.left;
-    const localY = clientY - rect.top;
-    if (localX < 0 || localY < 0 || localX > rect.width || localY > rect.height) return null;
+    // Convert viewport click → canvas-pixel position (1:1 since canvas.width = clientWidth)
+    const cx = clientX - rect.left;
+    const cy = clientY - rect.top;
 
-    const x = Math.min(phoneW - 1, Math.max(0, Math.round((localX / rect.width)  * phoneW)));
-    const y = Math.min(phoneH - 1, Math.max(0, Math.round((localY / rect.height) * phoneH)));
+    // Reject clicks in the letterbox bars outside the image
+    if (cx < dx || cy < dy || cx > dx + dw || cy > dy + dh) return null;
+
+    const x = Math.min(phoneW - 1, Math.max(0, Math.round(((cx - dx) / dw) * phoneW)));
+    const y = Math.min(phoneH - 1, Math.max(0, Math.round(((cy - dy) / dh) * phoneH)));
     return { x, y };
   }, []);
 
@@ -555,17 +625,18 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       // get back every accessibility node whose bounds contain that point.
       if (inspectModeRef.current) {
         // Compute where the click sits in CSS pixels relative to the canvas
-        // container so PhoneSlot can draw a crosshair at the exact spot.
-        // Since the canvas is sized to exactly the displayed image (no
-        // letterbox padding), the mapping is a plain linear scale of rect.
+        // top-left so PhoneSlot can draw a crosshair at the exact spot.
+        // Uses the same drawRectRef as mapToPhone — guaranteed to match the
+        // visual position of the element on screen.
         let _cssX: number | undefined, _cssY: number | undefined;
         const canvas = canvasRef.current;
         const ps = phoneSizeRef.current;
-        if (canvas && ps) {
-          const rect = canvas.getBoundingClientRect();
+        const dr = drawRectRef.current;
+        if (canvas && ps && dr) {
           const { w: phoneW, h: phoneH } = ps;
-          _cssX = (drag.startX / phoneW) * rect.width;
-          _cssY = (drag.startY / phoneH) * rect.height;
+          const { dx, dy, dw, dh } = dr;
+          _cssX = dx + (drag.startX / phoneW) * dw;
+          _cssY = dy + (drag.startY / phoneH) * dh;
         }
         addLog(`🔍 Inspecting phone (${drag.startX}, ${drag.startY})…`);
         try {
@@ -674,7 +745,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   const clickable = status === "live" || status === "asleep" || status === "error";
 
   return (
-    <div className="absolute inset-0 bg-black flex items-center justify-center">
+    <div className="absolute inset-0 bg-black">
       {status === "connecting" && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-10 pointer-events-none">
           <Loader2 className="w-5 h-5 animate-spin text-white/30" />
@@ -712,19 +783,13 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         onPointerCancel={handlePointerCancel}
         style={{
           display:       status === "connecting" ? "none" : "block",
-          // object-fit does NOT apply to <canvas> — only to <img>/<video>.
-          // Using max-width/max-height with auto dimensions lets the browser
-          // scale the canvas down to fit the container while preserving the
-          // phone's aspect ratio. getBoundingClientRect() then returns the
-          // exact image bounds, so mapToPhone() needs no letterbox-offset math.
-          maxWidth:      "100%",
-          maxHeight:     "100%",
-          width:         "auto",
-          height:        "auto",
+          position:      "absolute",
+          inset:         0,
+          width:         "100%",
+          height:        "100%",
           cursor:        inspectMode ? "crosshair" : clickable ? "pointer" : "default",
           pointerEvents: clickable ? "auto" : "none",
           zIndex:        5,
-          position:      "relative",
         }}
       />
 

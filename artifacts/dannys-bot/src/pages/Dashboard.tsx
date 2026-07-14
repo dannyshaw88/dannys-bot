@@ -78,6 +78,25 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.1.549",
+    date: "14 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Phone mirror click offset — complete rewrite of the coordinate system. The v1.1.548 CSS fix was unreliable across Electron/Windows because `width: auto; height: auto` on a canvas element doesn't behave consistently in all rendering engines. The new approach is renderer-driven: the canvas fills its container (100%×100%) and every frame is drawn letterboxed at an explicitly computed position stored in a ref. The click mapper reads from that same ref — the numbers used to paint the image and the numbers used to map a click are mathematically identical by construction, with no CSS inference, no object-fit, no devicePixelRatio math, and no possibility of drift.",
+        technical: [
+          "Added drawRectRef: { dx, dy, dw, dh } — updated by drawFrame() on every rendered frame to record where the phone image was actually painted inside the canvas.",
+          "Added ResizeObserver on the canvas element: keeps canvas.width = canvas.clientWidth and canvas.height = canvas.clientHeight at all times, so canvas-pixel coords equal CSS-pixel coords (1:1). Fires on window/panel resize so the mapping stays in sync without manual refresh.",
+          "drawFrame() (H.264/WebCodecs path): no longer sets canvas.width/height to the frame's phone resolution. Instead computes letterbox rect from phoneW/H vs canvas clientW/H, fills with black, draws frame at the computed rect, stores rect in drawRectRef.",
+          "PNG fallback path: same letterbox draw + drawRectRef update, so both stream modes behave identically.",
+          "mapToPhone(): rewritten to use drawRectRef. localX = clientX - rect.left (canvas-to-viewport offset only), then checks cx/cy against dx/dy/dw/dh, converts image-relative position to phone coords: x = ((cx - dx) / dw) * phoneW.",
+          "Inspect-mode crosshair _cssX/_cssY: updated to use drawRectRef — _cssX = dx + (startX / phoneW) * dw.",
+          "Canvas CSS: reverted to position absolute inset-0 width/height 100% (same as before v1.1.548). Parent div: reverted to plain absolute inset-0 bg-black.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.1.548",
     date: "14 Jul 2026",
     items: [
