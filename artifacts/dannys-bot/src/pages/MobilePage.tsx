@@ -924,7 +924,7 @@ function EmptyShell({ idx }: { idx: number }) {
 
 // ─── Phone slot ───────────────────────────────────────────────────────────────
 
-function PhoneSlot({ phone, idx, onLog, onDimensions, phoneDims, live, onPower }: { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; phoneDims: { w: number; h: number } | null; live: boolean; onPower: () => void }) {
+function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower }: { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; live: boolean; onPower: () => void }) {
   const liveCanvasRef = useRef<LiveCanvasHandle>(null);
   const [inspectMode,   setInspectMode]   = useState(false);
   const [inspectResult, setInspectResult] = useState<InspectResult | null>(null);
@@ -960,20 +960,7 @@ function PhoneSlot({ phone, idx, onLog, onDimensions, phoneDims, live, onPower }
   };
 
   return (
-    // No `w-full` here on purpose: the shell's width is now *derived* from
-    // the screen area below (which sizes itself from the phone's real
-    // aspect ratio), not stretched to fill whatever box the parent handed
-    // it. Previously the parent applied the phone's aspect ratio to this
-    // ENTIRE shell (header + screen), so the header's own height silently
-    // ate into the ratio meant only for the video — the canvas ended up
-    // proportionally taller/narrower than the real device and had to
-    // pillarbox (black bars) inside itself to avoid stretching the image.
-    // That pillarboxing, sitting on the same black background as the shell,
-    // is the "dead black space" that was reported. Sizing the screen area
-    // by its own aspect-ratio + the flex-computed height it actually has
-    // (after the header is subtracted) means the canvas fills it exactly —
-    // zero pillarbox — and the shell (this div) shrink-wraps to match.
-    <div className="flex flex-col bg-zinc-950 rounded-2xl border border-white/8 overflow-hidden shadow-xl h-full">
+    <div className="flex flex-col bg-zinc-950 rounded-2xl border border-white/8 overflow-hidden shadow-xl w-full h-full">
 
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 bg-zinc-900 border-b border-white/6 shrink-0">
@@ -1018,18 +1005,8 @@ function PhoneSlot({ phone, idx, onLog, onDimensions, phoneDims, live, onPower }
         </div>
       </div>
 
-      {/* Screen area — `flex-1` gives this a definite HEIGHT (the shell's
-          h-full minus the header's shrink-0 height). `aspectRatio` then
-          derives this element's own WIDTH from that height using the
-          phone's real ratio, and `alignSelf: "center"` stops the flex
-          column's default stretch from overriding that derived width back
-          to 100%. The shell above has no width of its own, so it shrink-
-          wraps to whatever width this box resolves to — no leftover black
-          margin on either side. */}
-      <div
-        className="relative bg-zinc-900 flex-1 min-h-0 max-w-full"
-        style={{ aspectRatio: `${phoneDims?.w ?? 9} / ${phoneDims?.h ?? 16}`, alignSelf: "center" }}
-      >
+      {/* Screen area */}
+      <div className="relative bg-zinc-900 flex-1 min-h-0">
         {isEmpty && <EmptyShell idx={idx} />}
         {isUnauthorized && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center">
@@ -3296,31 +3273,24 @@ export function MobilePage() {
         {showSplitView && (
           <div className="flex-1 min-h-0 flex">
             <div className="w-1/2 h-full flex items-center justify-center p-4 min-h-0">
-              {/* Aspect ratio is applied inside PhoneSlot itself, on the
-                  screen area only (not this wrapper, and not the header)
-                  — see the comment on PhoneSlot's screen-area div for why:
-                  applying it here to the whole header+screen box let the
-                  header's height eat into the ratio meant only for the
-                  video, forcing the canvas to pillarbox internally. This
-                  wrapper now just centers whatever width the shell resolves
-                  to within the available half of the page. */}
-              {/* flex + items-center (not the default stretch) is required
-                  here: PhoneSlot is a block-level div, and a plain block box
-                  always stretches to its parent's full width regardless of
-                  its children's intrinsic size. Making this a flex column
-                  with centered cross-axis alignment is what actually lets
-                  PhoneSlot shrink-wrap to the width its aspect-ratio'd
-                  screen area resolves to, instead of being stretched wide
-                  and re-introducing the same dead space this was meant to
-                  remove. */}
-              <div className="h-full max-w-full flex flex-col items-center justify-center">
+              {/* Aspect ratio is set from the phone's real reported resolution
+                  once known (falls back to 9/16 before the first frame
+                  arrives), so the canvas's object-fit: contain never has to
+                  letterbox — the shell fits the actual screen exactly instead
+                  of leaving black bars on either side. */}
+              <div
+                className="h-full"
+                style={{
+                  maxWidth: "100%",
+                  aspectRatio: phoneDims ? `${phoneDims.w} / ${phoneDims.h}` : "9 / 16",
+                }}
+              >
                 {slots.map((phone, i) => (
                   <PhoneSlot
                     key={phone?.serial ?? `empty-${i}`}
                     phone={phone}
                     idx={i}
                     onLog={addLog}
-                    phoneDims={phoneDims}
                     onDimensions={(w, h) => setPhoneDims({ w, h })}
                     // Only auto-connect the live feed while a cycle is
                     // actually executing (automation.running) — NOT merely
