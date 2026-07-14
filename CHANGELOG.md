@@ -4,6 +4,32 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.561] — 2026-07-14
+
+### Fix: View Posts action bar picking wrong post's Like node (all icon coords wrong); Make a Post expand toggle finding camera icon instead
+
+**View Posts — `_findCentermostLikeNode` using wrong screen height, poisoning all action-bar coordinates**
+
+The log showed `like=(66,276) comment=(71,278) shareDM=(133,278)` — all three icons at y≈277, which is only 11% from the top of a 2460px screen (the status bar / header area), nowhere near the real feed action bar at y≈1900.
+
+**Root cause:** `_findCentermostLikeNode` picks the Like button closest to the screen's vertical centre. It was calling `_getScreenSize(xml)` to get the screen height, which parses the XML root `bounds="[0,0][W,H]"` attribute. When the root bounds attribute is missing or formatted differently, the function returns its hard-coded fallback of `{w:1600, h:900}`. With `h=900`, `centerY=450` — and a Like node at y≈276 (a header-area element, perhaps a suggested-post like button or notification badge) is only 174px from center, while the real feed action-bar Like at y≈1900 is 1450px away. The wrong node wins, and the entire action-bar row scan anchors on that wrong position, producing bogus coordinates for Like, Comment, Repost, and Send — all near y=277.
+
+**Fix:** `findFeedActionIcons` now calls `getScreenSize(serial)` (which queries `adb shell wm size` and defaults to 1080×2400 on error) for *both* width and height, then passes the real `screenH` into `_findCentermostLikeNode`. With `h=2460`, `centerY=1230` — the real feed action bar at y≈1900 is only 670px away while any header element at y≈276 is 954px away, so the correct node wins decisively. Added a hard floor of `y > screenH * 0.40` so any Like node in the top 40% of the screen is unconditionally rejected regardless of distance from center.
+
+**Consequence of this bug:** the share-via-DM attempt at (133,278) was tapping the likes-count text near the top of the post, which opened the Likes panel instead of the DM share sheet. The action bar icon detection will now correctly find (or not find) the real Like/Repost/Send icons on the actual post action bar.
+
+**Make a Post — `findExpandPhotoButton` finding the camera grid tile instead of the expand toggle**
+
+The NE↔SW expand/fit toggle was never tapped; the camera icon in the Recents grid cell 0 was tapped instead. The camera tile is at the left edge of the grid (x≈12%, y≈63-70% of screen). Two separate heuristic paths in `findExpandPhotoButton` allowed it through:
+
+1. **Container-based path:** when the preview container node's reported bounds extend into or past the Recents grid (on some Instagram builds the container includes grid children), `bandMaxY = container.y2 + 5%` reached into the grid area. The camera tile at x≈12% and y in the "lower-left" of the (now-too-tall) container passed the in-bounds check.
+
+2. **Heuristic fallback path:** `maxY = h * 0.62` was close enough to the grid's first-row y position that border cases could pass, especially since the camera tile often has no "camera" keyword in its resource-id on some Instagram builds.
+
+**Fix:** both paths now share a hard cap of `EXPAND_MAX_Y = h * 0.57`. The expand toggle is always inside the photo preview area, which ends well before the Recents grid starts (~58% screen height). The camera tile at y≈63-70% can never pass. The `isExcluded` label regex also expanded to cover `grid|thumbnail|picker` keywords as an additional safety net for resource-ids that describe grid cells without using "camera".
+
+---
+
 ## [1.1.560] — 2026-07-14
 
 ### Fix: View Posts tool — all actions now fully logged in the UI log panel; Make a Post no longer deselects the auto-selected photo; Rate Instagram popup auto-dismissed; stray-navigation warning shown in log

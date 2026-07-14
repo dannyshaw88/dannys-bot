@@ -1263,18 +1263,30 @@ export async function findLikeButton(serial: string): Promise<{ x: number; y: nu
  * the post the user (and any human-like jitter tap) is actually looking
  * at, since that's what's centred in the viewport after a scroll settles.
  */
-function _findCentermostLikeNode(xml: string): { x: number; y: number } | null {
+function _findCentermostLikeNode(xml: string, screenH: number): { x: number; y: number } | null {
   // Exact, whole-word "Like" only — content-desc="Unlike" (already-liked
   // posts) must never match, or a jitter tap could accidentally unlike.
   const re = /content-desc="Like"[^>]*bounds="(\[\d+,\d+\]\[\d+,\d+\])"/g;
-  const { h } = _getScreenSize(xml);
-  const centerY = h / 2;
+  // Use the caller-supplied real screen height (from adb wm size) rather than
+  // _getScreenSize(xml), which falls back to h=900 when the XML root bounds
+  // don't match [0,0][W,H].  With h=900, centerY=450 — a Like node anywhere
+  // near the top of the screen (y≈276, e.g. a header element or suggested
+  // post) wins over the real feed action-bar Like at y≈1900 because 276 is
+  // only 174px from 450 while 1900 is 1450px away.  The correct center for a
+  // 2460px tall device is 1230, which makes the real feed bar unambiguously
+  // the winner.
+  const centerY = screenH / 2;
+  // Also enforce a minimum y floor: the feed action bar is always in the
+  // lower half of the screen.  Reject any Like node above 40% of screen
+  // height — nothing in the post action bar is ever that high.
+  const minY = Math.round(screenH * 0.40);
   let best: { x: number; y: number } | null = null;
   let bestDist = Infinity;
   let m: RegExpExecArray | null;
   while ((m = re.exec(xml)) !== null) {
     const c = _parseCenter(m[1]);
     if (!c) continue;
+    if (c.y < minY) continue; // header / nav element, not a post action bar
     const dist = Math.abs(c.y - centerY);
     if (dist < bestDist) { bestDist = dist; best = c; }
   }
@@ -1332,26 +1344,22 @@ export async function findFeedActionIcons(serial: string): Promise<FeedActionIco
   const xml = await _uiDump(adb, serial);
   if (!xml) return null;
 
-  // Use the Like node closest to the screen's vertical centre, not just the
-  // first one in document order — RecyclerView recycling can keep an
-  // adjacent post's (or a Reel/reply-bar card's) Like node alive in the
-  // hierarchy at the same time. Anchoring the row-scan on the wrong post's
-  // Like button pulls THAT post's unrelated wide elements (e.g. a Reel's
-  // message/reply text field) into rowNodes — see _findCentermostLikeNode.
-  const like = _findCentermostLikeNode(xml);
+  // Use the adb-queried screen dimensions, NOT _getScreenSize(xml). The XML-parsed
+  // fallback returns w=1600 (landscape desktop) / h=900 when the root bounds attribute
+  // is absent. Using the wrong width sets saveCutoffX = 1280 — well above the
+  // bookmark icon's real X (~950 px on 1080 px phone) so it leaks into rowNodes
+  // and breaks icon counting. Using the wrong height (h=900 → centerY=450) makes
+  // _findCentermostLikeNode pick a Like node near the screen top (y≈276 header
+  // area) instead of the real feed action bar (y≈1900), poisoning every icon coord.
+  // getScreenSize(serial) uses `adb shell wm size` and defaults to 1080×2400.
+  const { w, h: screenH } = getScreenSize(serial);
+  // Find the Like node closest to the screen's real vertical centre.
+  // RecyclerView recycling can keep an adjacent post's (or a Reel/reply-bar
+  // card's) Like node alive in the hierarchy at the same time; anchoring the
+  // row-scan on the wrong post's Like button pulls THAT post's unrelated wide
+  // elements into rowNodes — see _findCentermostLikeNode.
+  const like = _findCentermostLikeNode(xml, screenH);
   if (!like) return null;
-
-  // Use the adb-queried screen width, NOT _getScreenSize(xml). The XML-parsed
-  // fallback returns w=1600 (landscape desktop) when the root bounds attribute
-  // is absent. That sets saveCutoffX = 1280 — well above the bookmark icon's
-  // real X position (~950 px on a 1080 px phone), so the bookmark is NOT
-  // excluded from rowNodes. It then appears as a 4th entry, rowNodes.length
-  // equals 4 instead of 3, the if-branch is skipped, and the ambiguous else
-  // branch leaves shareFeed/shareDm null even when both icons are plainly
-  // visible. getScreenSize(serial) uses `adb shell wm size` and defaults to
-  // 1080 px on error; 0.80 × 1080 = 864, which correctly sits LEFT of the
-  // bookmark at ~950 px → bookmark excluded → rowNodes.length = 3 → icons found.
-  const { w } = getScreenSize(serial);
   const rowTolerance = 20;
   const saveCutoffX = Math.round(w * 0.80);
   // Instagram's Comment/Repost/Send icons are small square glyphs (roughly
@@ -2271,8 +2279,13 @@ export async function findExpandPhotoButton(serial: string): Promise<{ x: number
   if (byResId) return byResId;
 
   const { w, h } = getScreenSize(serial);
+  // The expand toggle is always inside the PHOTO PREVIEW area, which ends
+  // before the Recents grid starts (~57% of screen height on this device).
+  // Camera icon in the grid sits at ~y=63-70% — cap both search paths at
+  // h*0.57 so it can never be mistaken for the expand toggle.
+  const EXPAND_MAX_Y = Math.round(h * 0.57);
   const isExcluded = (label: string) =>
-    /camera|shutter|gallery|tab|story|reel|live|post_tab|recents/i.test(label);
+    /camera|shutter|gallery|tab|story|reel|live|post_tab|recents|grid|thumbnail|picker/i.test(label);
 
   const container = _findBoundsByResId(xml, "preview_container", "crop_image_view", "draft_image_view");
   const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
@@ -2287,7 +2300,11 @@ export async function findExpandPhotoButton(serial: string): Promise<{ x: number
     const bandMinX = container.x1;
     const bandMaxX = container.x1 + Math.round(cw * 0.30);
     const bandMinY = container.y1 + Math.round(ch * 0.55);
-    const bandMaxY = container.y2 + Math.round(ch * 0.05); // small tolerance past the bottom edge
+    // Cap bandMaxY at EXPAND_MAX_Y — if the container's reported bounds extend
+    // into or past the Recents grid (a known issue on some IG builds where the
+    // container node includes grid children), the camera tile at y≈65%+ would
+    // otherwise pass the in-container check and get tapped as the expand toggle.
+    const bandMaxY = Math.min(container.y2 + Math.round(ch * 0.05), EXPAND_MAX_Y);
     while ((m = nodeRe.exec(xml)) !== null) {
       const attrs = m[1];
       if (!/clickable="true"/.test(attrs)) continue;
@@ -2316,9 +2333,10 @@ export async function findExpandPhotoButton(serial: string): Promise<{ x: number
   }
 
   // Container not found in this dump (older/different build) — last-resort
-  // fixed-percentage band, now with the same camera/tab/grid exclusion.
+  // fixed-percentage band. maxY capped at EXPAND_MAX_Y (h*0.57) — same cap
+  // as the container path — so the camera tile at y≈63-70% is always excluded.
   const minY = Math.round(h * 0.30);
-  const maxY = Math.round(h * 0.62);
+  const maxY = EXPAND_MAX_Y; // h*0.57 — preview area ends well before the grid
   const maxX = Math.round(w * 0.22);
   while ((m = nodeRe.exec(xml)) !== null) {
     const attrs = m[1];
