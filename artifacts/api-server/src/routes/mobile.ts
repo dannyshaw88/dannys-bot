@@ -1236,7 +1236,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
    * NOTE: _uiDump is now async (non-blocking) so calling this no longer
    * stalls the video WebSocket.
    */
-  async function sendShareSheet(serial: string, w: number, h: number): Promise<boolean> {
+  /**
+   * Returns:
+   *   true  — Send was tapped and the sheet closed (DM sent)
+   *   false — Send was tapped (or fallback coordinate used) but sheet stayed open (no recipient selected / send failed)
+   *   null  — sheet was already gone when we checked (DM likely sent by the recipient-tap itself); caller must NOT press Back
+   */
+  async function sendShareSheet(serial: string, w: number, h: number): Promise<boolean | null> {
     const sendBtn = await android.findButtonByLabel(serial, "Send").catch(() => null);
     if (sendBtn) {
       await android.tap(serial, sendBtn.x, sendBtn.y);
@@ -1260,7 +1266,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const sheetOpen = await android.findButtonByLabel(serial, "Direct").catch(() => null)
       ?? await android.findButtonByLabel(serial, "Share").catch(() => null)
       ?? await android.findButtonByLabel(serial, "To").catch(() => null);
-    if (!sheetOpen) return false;
+    // Sheet already gone — the recipient tap likely auto-sent the DM.
+    // Return null so the caller knows NOT to press Back (Back on the feed
+    // scrolls to top and triggers Instagram's pull-to-refresh).
+    if (!sheetOpen) return null;
     await android.tap(serial, Math.round(w * 0.422), Math.round(h * 0.948));
     // Same verification for the coordinate-fallback path.
     await sleepOrAbort(serial, 900);
@@ -1571,12 +1580,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 // blue Send button to finish rendering before we looked for it.
                 await sleepOrAbort(serial, 1500);
                 const sent = await sendShareSheet(serial, w, h);
-                if (sent) {
+                if (sent === true) {
                   logger.info({ serial }, "[check-feed] shared post via DM — Send tapped");
                   onLog?.(`Scroll ${i + 1}/${count}: ✓ shared via DM — Send tapped (total DM shares: ${sharesDm + 1})`);
                   await sleepOrAbort(serial, 800);
                   sharesDm++;
+                } else if (sent === null) {
+                  // Sheet was already gone when sendShareSheet looked — the
+                  // recipient tap likely auto-sent the DM. Do NOT press Back:
+                  // Back on the feed scrolls to top and triggers pull-to-refresh.
+                  logger.info({ serial }, "[check-feed] share sheet already closed — DM likely sent by recipient tap");
+                  onLog?.(`Scroll ${i + 1}/${count}: ✓ shared via DM — sheet auto-dismissed (sent by recipient tap)`);
+                  await sleepOrAbort(serial, 500);
+                  sharesDm++;
                 } else {
+                  // sent === false: sheet was open but send didn't go through
+                  // (no recipient selected, or button stayed visible) — close it.
                   logger.info({ serial }, "[check-feed] Send button not found after picking recipient — pressing Back");
                   onLog?.(`Scroll ${i + 1}/${count}: Send button not found after picking DM recipient — pressing Back`);
                   await android.pressBack(serial);
@@ -2010,10 +2029,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             onLog?.(`Story ${s + 1}: share aborted — story ended before Send could be tapped (no tap sent)`);
           } else {
           const sent = await sendShareSheet(serial, w, h);
-          if (sent) {
+          if (sent === true) {
             logger.info({ serial, story: s + 1 }, "[view-stories] shared story via DM — Send tapped");
             onLog?.(`Story ${s + 1}: shared via DM — Send tapped`);
             await sleepOrAbort(serial, 800);
+          } else if (sent === null) {
+            // Sheet already gone — recipient tap auto-sent it; no Back needed.
+            logger.info({ serial, story: s + 1 }, "[view-stories] share sheet already closed — DM likely sent by recipient tap");
+            onLog?.(`Story ${s + 1}: shared via DM — sheet auto-dismissed (sent by recipient tap)`);
+            await sleepOrAbort(serial, 500);
           } else {
             await android.pressBack(serial);
             logger.info({ serial, story: s + 1 }, "[view-stories] Send button not found — closed DM picker");
@@ -2964,8 +2988,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           await tapRandomShareSheetRecipient(serial, w, h, onLog);
           await sleepOrAbort(serial, 1500);
           const sent = await sendShareSheet(serial, w, h);
-          if (sent) { onLog?.("Inject Browsing: shared the post via DM"); await sleepOrAbort(serial, 600); }
-          else {
+          if (sent === true) { onLog?.("Inject Browsing: shared the post via DM"); await sleepOrAbort(serial, 600); }
+          else if (sent === null) {
+            // Sheet already gone — recipient tap auto-sent it; no Back needed.
+            onLog?.("Inject Browsing: shared the post via DM (sheet auto-dismissed by recipient tap)");
+            await sleepOrAbort(serial, 400);
+          } else {
             onLog?.("Inject Browsing: share sheet did not confirm send — skipping share-via-DM");
             await android.pressBack(serial); await sleepOrAbort(serial, 400);
           }

@@ -4,6 +4,14 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.578] — 2026-07-14
+
+### Fix: pull-to-refresh no longer triggered after a successful Share-to-DM
+
+When you tapped a recipient in the DM share sheet, Instagram sometimes auto-sent the DM immediately on that tap (closing the sheet before the bot could even look for the Send button). The bot then saw the sheet was already gone, assumed the send had failed, and pressed Back — but Back on the Instagram home feed scrolls to the top and triggers a pull-to-refresh. Fixed by detecting this "sheet already gone" state (which means the DM was sent by the recipient tap) and skipping the Back press entirely. Applies to View Feed, View Stories, and Inject Browsing share-to-DM flows. The log message in this case now reads: "sheet auto-dismissed (sent by recipient tap)" instead of "Send button not found — pressing Back".
+
+---
+
 ## [1.1.577] — 2026-07-14
 
 ### Fix: DM recipient picker no longer taps "Your Story"/"Close Friends" instead of a person
