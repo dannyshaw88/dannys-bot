@@ -1568,9 +1568,18 @@ export async function findFeedActionIcons(serial: string, onLog?: (msg: string) 
     for (let i = 0; i < rowNodes.length - 1; i++) {
       const a = rowNodes[i];
       const b = rowNodes[i + 1];
+      // The count node's `text` is NOT required to contain a digit: Instagram
+      // renders no text at all for a zero count (a post with 0 comments/
+      // reposts/DM-shares shows a blank count, not the digit "0"). Requiring
+      // /\d/ here would silently drop that icon's pair and leave it null on
+      // exactly the posts most likely to have a real zero count. The role
+      // split is by CLASS instead, which is present either way: the icon
+      // graphic is always a content-desc-less ViewGroup with empty text, the
+      // count label next to it is always a content-desc-less Button — full,
+      // blank, or otherwise.
       if (
         a.cls === "android.view.ViewGroup" && !a.cd && !a.txt &&
-        b.cls === "android.widget.Button" && !b.cd && /\d/.test(b.txt) &&
+        b.cls === "android.widget.Button" && !b.cd &&
         (b.x - a.x) < maxIconWidth * 2
       ) {
         pairs.push({ icon: a, count: b });

@@ -4,6 +4,14 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.574] — 2026-07-14
+
+### Fix: structural icon/count pairing no longer requires a non-zero count
+
+v1.1.573's ViewGroup→Button pairing required the count node's `text` to contain a digit, which breaks on a post with a genuine zero count — Instagram renders no text at all for 0 comments/reposts/DM-shares (never the digit "0"), so that pair would fail to match and the icon would incorrectly stay `null`. The digit requirement is removed; the icon/count role split now comes purely from class (`ViewGroup` = icon graphic, always empty text; `Button` = count label, full or blank) plus both having no content-desc, which holds regardless of the actual count value.
+
+---
+
 ## [1.1.573] — 2026-07-14
 
 ### Fix: Comment/Repost/Send detected on devices with zero content-desc or resource-id labels
