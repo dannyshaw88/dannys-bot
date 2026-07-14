@@ -4,6 +4,24 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.559] — 2026-07-14
+
+### Fix: mirror taps accurate in the middle, off near the edges — the real letterbox/pillarbox bug behind the mismatched resolutions
+
+After retesting [1.1.558], drag-and-tap parity was better but some taps (mostly near the edges of the mirror) still landed off. The user's own diagnostics nailed the real cause: Check Screen Info reports `wm size` as e.g. 1080x2460, but the mirror's decoded video frame is a completely different aspect ratio (e.g. 720x1280 — 16:9 vs. the device's actual ~20:9 panel).
+
+**Root cause:** Android's screen capture (what `screenrecord` records against) never stretches the real screen to fill a differently-shaped recording buffer — it letterboxes/pillarboxes: the real content is centered in the buffer at its own correct aspect ratio, and the rest of the buffer is dead black padding. Every tap/swipe/double-tap was rescaling with `x / videoW * realW` — a straight linear scale across the *entire* buffer, padding included. That's only accurate at the exact center of the padded axis (where padding is symmetric and cancels out) and drifts further off the more a tap sits toward the padded edges — which is exactly "clicks work in the middle, not at the edges."
+
+**Fix:** all three input routes (`/input/tap`, `/input/double-tap`, `/input/swipe`) now compute the real content sub-rectangle within the video buffer first (comparing the buffer's aspect ratio to the device's actual `wm size` ratio, same centered-fit math Android itself uses to capture the frame), then rescale coordinates relative to that sub-rect instead of the raw buffer. When the two aspect ratios already match, this is a no-op — zero behavior change for devices without the mismatch.
+
+**Also added:** Check Screen Info now explains, in plain language, that a video-size/`wm size` mismatch here is expected (Android capture behavior, not a bug) and that taps already account for it — so the numbers not matching stops looking alarming on its own.
+
+**Scope note:** this fixes tap/swipe *accuracy*. It does not change how the mirror image itself is drawn — the video still visually includes Android's internal black padding on the letterboxed axis (usually not very noticeable, but it's there). Cropping that out cosmetically is a separate, riskier change to the render pipeline (the single most fragile part of this codebase per its own changelog history) and wasn't attempted here; flag it separately if it's still worth doing once tap accuracy is confirmed fixed.
+
+**Status:** shipped, not yet re-verified against the real device — please retest 🎯 Click Test specifically near the top/bottom and left/right edges of the mirror (not just the center), and try dragging a floating window closed from near an edge too.
+
+---
+
 ## [1.1.558] — 2026-07-14
 
 ### Fix: press-and-drag gestures (e.g. dragging a floating window closed) went out unrescaled — plus Check Screen Info now shows the mirror's actual video size

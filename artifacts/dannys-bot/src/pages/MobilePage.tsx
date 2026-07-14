@@ -3121,6 +3121,17 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize }: 
       const vs = getVideoSize?.() ?? null;
       addLog?.(`── mirror video stream ──`);
       addLog?.(vs ? `Decoded frame: ${vs.w}x${vs.h}` : `No frame decoded yet — turn Live on and wait for the mirror to connect, then re-run Check Screen Info.`);
+      // A video/device size (or aspect-ratio) mismatch here is expected and
+      // NOT a bug on its own — Android's screen capture never stretches the
+      // real screen to fill a differently-shaped recording buffer, it
+      // letterboxes/pillarboxes (centers the real content, pads the rest
+      // with black). Every tap/swipe is already corrected for this
+      // server-side (rescales through the real content sub-rect, not the
+      // raw buffer) — this line is just so the numbers not matching doesn't
+      // look alarming on its own.
+      if (vs && body.physical && (vs.w !== body.physical.w || vs.h !== body.physical.h)) {
+        addLog?.(`ℹ️ Video size differs from wm size — normal. Android's screen capture never stretches to fit; it letterboxes/pillarboxes the real screen inside the recording buffer, and taps are already rescaled through the real content area, not the raw buffer.`);
+      }
       if (body.override) {
         addLog?.(`⚠️ Override size is active — the phone is currently running at ${body.override.w}x${body.override.h}, NOT its physical panel resolution (${body.physical?.w ?? "?"}x${body.physical?.h ?? "?"}).`);
         if (body.mismatch) {

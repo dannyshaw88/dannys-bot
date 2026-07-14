@@ -3811,10 +3811,49 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     videoW: z.number().optional(),
     videoH: z.number().optional(),
   });
+  // Android's virtual-display capture (what `screenrecord` records against)
+  // NEVER stretches the source display to fill a differently-shaped output
+  // buffer — SurfaceFlinger's display projection preserves the source
+  // aspect ratio and pads the rest of the buffer with black (letterboxed if
+  // the buffer is relatively taller, pillarboxed if it's relatively wider).
+  // That means when the video buffer's own aspect ratio doesn't match the
+  // device's real `wm size` ratio, the real screen content only occupies a
+  // centered sub-rectangle of the buffer — the remaining border is dead
+  // encoder padding, not scaled-down real content.
+  //
+  // A naive `x/videoW*realW` scale (the previous implementation) treats the
+  // WHOLE buffer, padding included, as if it linearly covered the whole real
+  // screen. That is correct at the padded axis's center (padding is
+  // symmetric, so the middle lines up) but increasingly wrong the further a
+  // tap is from that center — exactly the "accurate in the middle, off near
+  // the edges" pattern reported after [1.1.558] (videoW×videoH 720×1280 vs.
+  // device 1080×2460 on the affected hardware: those ratios differ by ~22%,
+  // so the padded axis alone accounts for a very real, very visible offset
+  // that grows toward the padded edges). Compute the actual content
+  // sub-rect within the buffer first, then scale relative to THAT.
+  function videoContentRect(videoW: number, videoH: number, realW: number, realH: number): { x: number; y: number; w: number; h: number } {
+    const videoRatio = videoW / videoH;
+    const deviceRatio = realW / realH;
+    if (Math.abs(videoRatio - deviceRatio) / deviceRatio < 0.005) {
+      return { x: 0, y: 0, w: videoW, h: videoH };
+    }
+    if (videoRatio > deviceRatio) {
+      // Buffer is relatively wider than the device screen — pillarboxed
+      // (dead columns) left/right; real content spans the full buffer height.
+      const w = videoH * deviceRatio;
+      return { x: (videoW - w) / 2, y: 0, w, h: videoH };
+    }
+    // Buffer is relatively taller than the device screen — letterboxed
+    // (dead rows) top/bottom; real content spans the full buffer width.
+    const h = videoW / deviceRatio;
+    return { x: 0, y: (videoH - h) / 2, w: videoW, h };
+  }
+
   // Shared by /input/tap and /input/double-tap — the mirrored video frame is
-  // often downscaled from the device's real resolution, so tap coordinates
-  // captured against the video's pixel size need rescaling to the phone's
-  // actual `wm size` before they're sent to adb.
+  // often downscaled (and, per videoContentRect above, letterboxed/
+  // pillarboxed) relative to the device's real resolution, so tap
+  // coordinates captured against the video's pixel size need rescaling
+  // through the real content sub-rect before they're sent to adb.
   function rescaleForDevice(serial: string, x: number, y: number, videoW?: number, videoH?: number): { x: number; y: number; rescaled: boolean; video: [number,number]; device: [number,number]; from: [number,number]; to: [number,number] } {
     const noOp = { x, y, rescaled: false, video: [videoW ?? 0, videoH ?? 0] as [number,number], device: [0,0] as [number,number], from: [x,y] as [number,number], to: [x,y] as [number,number] };
     if (!videoW || !videoH) return noOp;
@@ -3866,9 +3905,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // from the video's pixel space into that space is correct regardless
       // of whether the two aspect ratios match, as long as the video frame
       // itself isn't letterboxed (screenrecord doesn't add letterbox bars).
-      const rx = Math.round((x / videoW) * realW);
-      const ry = Math.round((y / videoH) * realH);
-      logger.info({ serial, from: [x, y], to: [rx, ry], video: [videoW, videoH], real: [realW, realH] }, "[mobile-tap] rescaled tap for downscaled video");
+      const rect = videoContentRect(videoW, videoH, realW, realH);
+      const rx = Math.round(Math.min(realW - 1, Math.max(0, ((x - rect.x) / rect.w) * realW)));
+      const ry = Math.round(Math.min(realH - 1, Math.max(0, ((y - rect.y) / rect.h) * realH)));
+      logger.info({ serial, from: [x, y], to: [rx, ry], video: [videoW, videoH], real: [realW, realH], contentRect: rect }, "[mobile-tap] rescaled tap for downscaled/letterboxed video");
       return { x: rx, y: ry, rescaled: true, video: [videoW, videoH], device, from: [x, y], to: [rx, ry] };
     } catch { return noOp; }
   }
@@ -4090,11 +4130,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               const realW = parseInt(m[1]);
               const realH = parseInt(m[2]);
               if (realW !== input.videoW || realH !== input.videoH) {
-                x1 = Math.round((x1 / input.videoW) * realW);
-                y1 = Math.round((y1 / input.videoH) * realH);
-                x2 = Math.round((x2 / input.videoW) * realW);
-                y2 = Math.round((y2 / input.videoH) * realH);
-                logger.info({ serial, video: [input.videoW, input.videoH], real: [realW, realH] }, "[mobile-swipe] rescaled swipe for downscaled video");
+                // Same content-sub-rect correction as /input/tap (see
+                // videoContentRect above) — a naive full-buffer scale is
+                // only accurate at the padded axis's center and drifts
+                // toward the edges when the video buffer is letterboxed/
+                // pillarboxed relative to the device's real aspect ratio.
+                const rect = videoContentRect(input.videoW, input.videoH, realW, realH);
+                const scale = (v: number, off: number, span: number, real: number) =>
+                  Math.round(Math.min(real - 1, Math.max(0, ((v - off) / span) * real)));
+                x1 = scale(x1, rect.x, rect.w, realW);
+                y1 = scale(y1, rect.y, rect.h, realH);
+                x2 = scale(x2, rect.x, rect.w, realW);
+                y2 = scale(y2, rect.y, rect.h, realH);
+                logger.info({ serial, video: [input.videoW, input.videoH], real: [realW, realH], contentRect: rect }, "[mobile-swipe] rescaled swipe for downscaled/letterboxed video");
               }
             }
           }
