@@ -3790,6 +3790,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const realH = parseInt(m[2]);
       const device: [number,number] = [realW, realH];
       if (realW === videoW && realH === videoH) return { ...noOp, device };
+      // If the aspect ratios differ by more than 2%, the wm-size coordinate space
+      // is incompatible with the video frame space (e.g. wm size returns physical
+      // panel resolution 1080×2460 while the phone's logical input space matches
+      // the video stream at 720×1280). Rescaling in that case introduces a large
+      // systematic error — skip it and use the raw video coords directly.
+      const videoAR = videoW / videoH;
+      const deviceAR = realW / realH;
+      if (Math.abs(videoAR - deviceAR) / deviceAR > 0.02) {
+        logger.warn({ serial, videoAR: videoAR.toFixed(3), deviceAR: deviceAR.toFixed(3) },
+          "[mobile-tap] video/device aspect ratios differ >2% — skipping rescale (wm size reports physical panel, not logical input space)");
+        return { ...noOp, device };
+      }
       const rx = Math.round((x / videoW) * realW);
       const ry = Math.round((y / videoH) * realH);
       logger.info({ serial, from: [x, y], to: [rx, ry], video: [videoW, videoH], real: [realW, realH] }, "[mobile-tap] rescaled tap for downscaled video");
