@@ -1276,6 +1276,16 @@ export async function findLikeButton(serial: string): Promise<{ x: number; y: nu
  * at, since that's what's centred in the viewport after a scroll settles.
  */
 function _findCentermostLikeNode(xml: string, screenH: number): { x: number; y: number } | null {
+  // Primary: resource-id lookup — handles builds where content-desc="Like"
+  // is absent (stripped by the device/IG build). No MAX_DIST filter is
+  // applied here because resource-id "row_feed_button_like" is unique: there
+  // is exactly one Like button per feed post and the rid never appears on
+  // any other element, so the first match is always the correct node
+  // regardless of its y-position in the a11y layout space.
+  const ridLike = _findByResId(xml, ":id/row_feed_button_like");
+  if (ridLike) return ridLike;
+
+  // Fallback: content-desc="Like" closest to screen centre + MAX_DIST guard.
   // Exact, whole-word "Like" only — content-desc="Unlike" (already-liked
   // posts) must never match, or a jitter tap could accidentally unlike.
   const re = /content-desc="Like"[^>]*bounds="(\[\d+,\d+\]\[\d+,\d+\])"/g;
@@ -1429,7 +1439,15 @@ export async function findFeedActionIcons(serial: string, onLog?: (msg: string) 
     return null;
   }
   const rowTolerance = 20;
-  const saveCutoffX = Math.round(w * 0.80);
+  // Save/bookmark is almost always explicitly labelled (cd="Add to Saved" /
+  // cd="Remove from saved" / rid=row_feed_button_save) so the label filter
+  // catches it first. This positional cutoff is only a last-resort guard for
+  // the rare unlabelled save node, and must be generous enough NOT to exclude
+  // the Send/DM icon on narrow screens (720 px wide): Send lands at x≈90% on
+  // those devices, so 80% was incorrectly cutting it out.  95% leaves room for
+  // Send while still excluding an unlabelled Save that is always at the far
+  // right edge (confirmed: x=1013 on a 720 px screen, i.e. >100%).
+  const saveCutoffX = Math.round(w * 0.95);
   // Instagram's Comment/Repost/Send icons are small square glyphs (roughly
   // the same width as the Like heart). A message/reply compose field (the
   // quick-reaction bar Instagram shows under a Reel/repost card in-feed)
@@ -1627,6 +1645,9 @@ export async function findFeedActionIcons(serial: string, onLog?: (msg: string) 
   // slot is missing or spurious, so it's left null rather than guessed —
   // same safety contract as the rest of this function.
   if (!comment && !shareFeed && !shareDm) {
+    // ── Structural fallback A: ViewGroup icon pattern ──
+    // Confirmed 14 Jul 2026: content-desc-less, text-less ViewGroup nodes are
+    // the tappable icon glyphs on some device/build combos.  Exactly 3 required.
     const iconCandidates = rowNodes.filter(n => n.cls === "android.view.ViewGroup" && !n.cd && !n.txt);
     if (iconCandidates.length === 3) {
       const countFor = (icon: RowNode) => {
@@ -1640,6 +1661,23 @@ export async function findFeedActionIcons(serial: string, onLog?: (msg: string) 
       comment   = pos(iconCandidates[0]);
       shareFeed = pos(iconCandidates[1]);
       shareDm   = pos(iconCandidates[2]);
+    } else {
+      // ── Structural fallback B: Button icon pattern ──
+      // Some builds (confirmed 15 Jul 2026 from live dump: alternating
+      // ViewGroup/Button at y=2202 with all cd/rid empty) render each action
+      // icon as an unlabelled android.widget.Button rather than a ViewGroup.
+      // The ViewGroups in that pattern are parent CONTAINERS (wrapping icon +
+      // count), not the tappable glyph — they may be wider than maxIconWidth
+      // and excluded from rowNodes by the width filter.  The Button children
+      // ARE narrow/icon-sized and pass the filter.  Same elimination rule: only
+      // trust the result when EXACTLY 3 such Buttons are found.
+      const btnCandidates = rowNodes.filter(n => n.cls === "android.widget.Button" && !n.cd && !n.txt);
+      if (btnCandidates.length === 3) {
+        onLog?.(`[feed-icons] structural Button-class match found exactly 3 candidates — assigning Comment/Repost/Send by elimination: ${btnCandidates.map(n => `btn@${n.x}`).join(" | ")}`);
+        comment   = pos(btnCandidates[0]);
+        shareFeed = pos(btnCandidates[1]);
+        shareDm   = pos(btnCandidates[2]);
+      }
     }
   }
 

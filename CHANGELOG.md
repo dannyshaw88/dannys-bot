@@ -4,6 +4,22 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.593] — 2026-07-15
+
+### Fix: findFeedActionIcons — resource-id Like lookup, wider saveCutoffX, Button structural fallback
+
+Three root causes combined to make `findFeedActionIcons` return null for video/Reel posts on this device, even when the action icons were plainly visible on screen:
+
+**1. `_findCentermostLikeNode` only searched `content-desc="Like"`** — this device's Like button has `cd=""` (label stripped by the build). The `MAX_DIST` filter (38 % of screen height from centre) also rejected the node because the a11y tree reports action-bar coordinates in layout space (y=2202) rather than viewport space, placing them beyond the distance threshold. Fix: try `_findByResId(":id/row_feed_button_like")` first, before the content-desc search, with no distance filter. Resource-id is unique — there is exactly one Like button per post — so the first match is always correct regardless of y-position.
+
+**2. `saveCutoffX = w * 0.80` excluded the Send/DM icon on 720 px screens** — Send lands at x=648 (90 % of 720 px), beyond the 576 px cutoff. The Save/bookmark button is always explicitly labelled (`cd="Add to Saved"`) and caught by the label filter before the positional check; the positional cutoff only exists as a last resort for unlabelled saves which sit at x>100 % of screen width on this device anyway. Raised to `w * 0.95`, which keeps Send in the row scan while still covering any plausible unlabelled Save position.
+
+**3. Missing Button structural fallback** — the existing structural fallback assigns Comment/Repost/Send only when it finds exactly 3 unlabelled `android.view.ViewGroup` icon nodes. On this device/build the alternating pattern is ViewGroup (container) + Button (tappable glyph), meaning the Buttons are the real icons. If the ViewGroup containers are too wide and excluded by `maxIconWidth`, zero ViewGroups remain in `rowNodes` and the fallback does nothing. Added a second structural fallback (B): if no ViewGroups match, look for exactly 3 unlabelled `android.widget.Button` nodes and assign them Comment/Repost/Send by elimination — same safety contract.
+
+**Also reverted v1.1.592 scroll-down recovery** — scrolling does not change a11y coordinates (the tree always reports layout-space positions), so a scroll followed by a re-scan returns the same y=2202 values. Removed that dead code; `isInPostViewer=true` now simply presses Back as a final fallback, which is correct behaviour when the rid lookup also found nothing.
+
+---
+
 ## [1.1.592] — 2026-07-15
 
 ### Fix: Inject Browsing — action bar below screen bottom now recovered with a scroll-down before giving up
