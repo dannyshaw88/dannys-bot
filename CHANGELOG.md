@@ -4,6 +4,23 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.602] — 2026-07-15
+
+### Fix: Inject Browsing share-to-DM replaced with exact View Feed code path
+
+The old share-to-DM block in `runProfileBrowsingSequence` (Inject Browsing, Follow tool) was a separate, older implementation that diverged from View Feed's proven code. It had no pre-tap settle wait, no explicit `isCycleAborted` guard before the try block, inconsistent Back-press timing on failure paths, and different log message formatting than the rest of the codebase.
+
+Scrapped in full. Replaced with an exact port of View Feed's share-via-DM block (`checkFeedPosts`, lines 1577–1629), adapted for the inject-browsing context:
+
+- `isCycleAborted` check before entering the try block (same as View Feed)
+- 300–600 ms randomised pre-tap settle wait (same as View Feed)
+- Explicit `shareDmIconX / rowY` capture from `icons.shareDm` before tapping (same as View Feed)
+- 400 ms post-tap wait then `findButtonByLabel("Send")` to confirm sheet opened (same as View Feed)
+- `tapRandomShareSheetRecipient` → 200 ms wait → `sendShareSheet` with all three result branches (`true` / `null` / `false`) handled identically to View Feed, including correct Back-press and sleep durations per branch
+- Logger tags updated to `[inject-browsing]`, log messages prefixed `Inject Browsing:`
+
+---
+
 ## [1.1.601] — 2026-07-15
 
 ### Fix: Follow tool fails on 4th run — "Search tab not found" caused by MIUI floating window

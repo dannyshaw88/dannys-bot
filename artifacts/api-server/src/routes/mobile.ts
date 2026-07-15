@@ -3238,58 +3238,50 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     );
     if (!(shareDmChance > 0 && Math.random() < shareDmChance)) {
       onLog?.("Inject Browsing: share-via-DM roll missed — skipping");
+    } else if (!icons.shareDm) {
+      logger.info({ serial }, "[inject-browsing] skipped share-via-DM — icon not identifiable on this post (disabled or ambiguous layout)");
+      onLog?.("Inject Browsing: skipped share-via-DM — paper-plane icon not found on this post");
     } else {
+      // Exact same code path as View Feed's share-via-DM block.
+      const shareDmIconX = icons.shareDm.x, rowY = icons.shareDm.y;
+      if (isCycleAborted(serial)) throw new Error("cycle-aborted");
       try {
-        // Use the SAME code path as View Feed's share-to-DM (findFeedActionIcons
-        // + measured icons.shareDm as the tap target, findButtonByLabel("Send")
-        // used ONLY afterward to confirm the sheet opened). Previously this
-        // block tapped whatever findButtonByLabel("Send"/"Direct"/"Message")
-        // found FIRST, which on this device is the feed's own DM icon —
-        // identical to the node the "confirm sheet opened" check searches for.
-        // A missed/failed tap then re-found that same unclicked icon and
-        // reported a false-positive "sheet open" (TAUTOLOGY BUG, found from a
-        // live log 15 Jul 2026 — it fell through to tapping the feed's own
-        // "Add to Saved" button by elimination, then logged "shared via DM").
-        // View Feed never has this problem because its tap target
-        // (icons.shareDm) and its confirmation signal (findButtonByLabel)
-        // come from two independent sources by construction. Mirroring that
-        // exactly — instead of patching the old label-first approach with a
-        // position-delta guard — removes the tautology at the root.
-        if (!icons.shareDm) {
-          onLog?.("Inject Browsing: Send icon not found on this post — skipping share-via-DM");
-          logger.warn({ serial }, "[inject-browsing] findFeedActionIcons found no shareDm icon on this post — likely absent or unlabeled on this build");
+        await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
+        onLog?.(`Inject Browsing: tapping share-via-DM icon at (${shareDmIconX},${rowY})…`);
+        await android.tap(serial, shareDmIconX, rowY);
+        logger.info({ serial, x: shareDmIconX, y: rowY }, "[inject-browsing] tapped share-to-DM icon");
+        await sleepOrAbort(serial, 400);
+        onLog?.("Inject Browsing: confirming share sheet opened…");
+        const sheetSendBtn = await android.findButtonByLabel(serial, "Send").catch(() => null);
+        if (!sheetSendBtn) {
+          logger.warn({ serial }, "[inject-browsing] share sheet not confirmed open — closing and skipping DM");
+          onLog?.("Inject Browsing: share aborted — share sheet did not open (no Send button found)");
+          await android.pressBack(serial);
+          await sleepOrAbort(serial, 200);
         } else {
-          const sendIcon = icons.shareDm;
-          await android.tap(serial, sendIcon.x, sendIcon.y);
-          logger.info({ serial, x: sendIcon.x, y: sendIcon.y }, "[inject-browsing] tapped Send icon");
-          await sleepOrAbort(serial, 400); // same settle wait as View Feed's share-to-DM
-          // Confirm the sheet actually opened before tapping a recipient — this
-          // findButtonByLabel("Send") call is a genuinely independent signal
-          // from the tap target above (icons.shareDm), not a re-check of the
-          // same node, so no position-delta guard is needed (see View Feed).
-          const sheetSendBtn = await android.findButtonByLabel(serial, "Send").catch(() => null);
-          if (!sheetSendBtn) {
-            logger.warn({ serial, sendIcon }, "[inject-browsing] share sheet not confirmed open — skipping recipient tap");
-            onLog?.("Inject Browsing: share aborted — could not confirm the share sheet opened (no Send button found)");
-          } else {
+          onLog?.("Inject Browsing: picking DM recipient…");
           const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog);
           if (!recipientPicked) {
             await android.pressBack(serial);
             logger.warn({ serial }, "[inject-browsing] no recipient found — closed share sheet without sending");
             onLog?.("Inject Browsing: share skipped — no recipient avatars found (closed without sending)");
           } else {
-          await sleepOrAbort(serial, 200);
-          const sent = await sendShareSheet(serial, w, h, sheetSendBtn);
-          if (sent === true) { onLog?.("Inject Browsing: shared the post via DM — Send tapped"); await sleepOrAbort(serial, 200); }
-          else if (sent === null) {
-            // Sheet already gone — recipient tap auto-sent it; no Back needed.
-            onLog?.("Inject Browsing: shared the post via DM (sheet auto-dismissed by recipient tap)");
-            await sleepOrAbort(serial, 150);
-          } else {
-            onLog?.("Inject Browsing: share sheet did not confirm send — skipping share-via-DM");
-            await android.pressBack(serial); await sleepOrAbort(serial, 150);
-          }
-          }
+            await sleepOrAbort(serial, 200);
+            const sent = await sendShareSheet(serial, w, h, sheetSendBtn);
+            if (sent === true) {
+              logger.info({ serial }, "[inject-browsing] shared post via DM — Send tapped");
+              onLog?.("Inject Browsing: ✓ shared the post via DM — Send tapped");
+              await sleepOrAbort(serial, 300);
+            } else if (sent === null) {
+              logger.info({ serial }, "[inject-browsing] share sheet already closed — DM likely sent by recipient tap");
+              onLog?.("Inject Browsing: ✓ shared the post via DM — sheet auto-dismissed (sent by recipient tap)");
+              await sleepOrAbort(serial, 200);
+            } else {
+              logger.info({ serial }, "[inject-browsing] Send button not found after picking recipient — pressing Back");
+              onLog?.("Inject Browsing: Send button not found after picking DM recipient — pressing Back");
+              await android.pressBack(serial);
+              await sleepOrAbort(serial, 200);
+            }
           }
         }
       } catch (e: any) {
