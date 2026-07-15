@@ -4,6 +4,22 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.605] — 2026-07-15
+
+### Fix: Inject Browsing share-to-DM — sheet closed before a recipient could be picked
+
+**Root cause confirmed from live logs (15 Jul 2026, three consecutive runs).** Confirming the share sheet opened (`findButtonByLabel(serial, "Send")`) and then scanning for recipient avatars (`findShareSheetRecipients`) were two *separate* full `uiautomator dump` calls. On this class of device each dump takes ~9s, so the two calls back-to-back left the phone sitting untouched for ~18s+ between tapping the share icon and picking a recipient — with zero interaction with the sheet in between.
+
+The recipient-scan dump from a failing run showed the exact same feed action-bar nodes (`row_feed_button_save` / "Add to Saved", the Like/Comment/Repost icon row, `media_group`) that were present *before* the share icon was even tapped — proof the DM share sheet had already closed and Instagram had returned to the underlying post by the time the second dump ran. The existing label-exclusion filters (numeric counts, hashtags, "Add to Saved") were working exactly as designed; there were simply no real recipient nodes left in the tree to find, because the sheet wasn't there anymore.
+
+**Fix:**
+- Added `confirmAndScanShareSheet()` in `androidManager.ts` — does the Send-button confirmation AND the recipient scan from a **single** `uiautomator dump`, roughly halving the idle window between the tap and the recipient tap.
+- It also surfaces a `sheetOpen` signal (presence of the DM sheet's `direct_private_share` search-box resource-id in that same dump) so the caller can tell "sheet closed, 0 recipients because we're not even looking at the sheet anymore" apart from "sheet genuinely has 0 recipients".
+- `shareCurrentPostViaDm` (shared by View Feed and Inject Browsing) now uses this combined scan and retries once — re-tapping the share icon and re-scanning — if the first check shows the sheet isn't open, or shows 0 recipients with the feed-only signal, instead of immediately giving up.
+- View Stories and View Reels' own share-to-DM sequences were switched to the same combined single-dump scan (no retry added there — the story viewer's fixed auto-advance timer means burning time on a retry risks the "still in story viewer" race documented separately; cutting the dump count in half is a pure win there with no added risk).
+
+---
+
 ## [1.1.604] — 2026-07-15
 
 ### Fix: Inject Browsing "no posts found" on profiles with hundreds of posts

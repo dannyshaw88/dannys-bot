@@ -2431,7 +2431,14 @@ export async function findShareSheetRecipients(serial: string, onLog?: (line: st
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial).catch(() => "");
   if (!xml) return [];
+  return _extractShareSheetRecipients(xml, serial, onLog);
+}
 
+/** Shared xml-parsing core of findShareSheetRecipients — see that function's
+ * docs for the filter rules. Split out so confirmAndScanShareSheet can reuse
+ * a single dump for both the Send-button confirmation and the recipient
+ * scan instead of paying for two separate ~9s uiautomator dumps. */
+function _extractShareSheetRecipients(xml: string, serial: string, onLog?: (line: string) => void): { x: number; y: number }[] {
   const { w, h } = getScreenSize(serial);
   const minY = Math.round(h * 0.20);
   const maxY = Math.round(h * 0.95);
@@ -2539,6 +2546,43 @@ export async function findShareSheetRecipients(serial: string, onLog?: (line: st
   }
   if (dump.length) onLog?.(`[share-sheet] Strategy 2 label-scan node dump: ${dump.join(" | ")}`);
   return results;
+}
+
+/**
+ * Confirms the DM share sheet is open AND scans for recipient avatars in a
+ * SINGLE uiautomator dump, instead of the two sequential dumps the caller
+ * used to take (one via findButtonByLabel("Send") to confirm, one via
+ * findShareSheetRecipients to pick).
+ *
+ * Root cause (device logs, 15 Jul 2026): each uiautomator dump on this class
+ * of device takes ~9s. Confirm-then-scan as two separate dumps left the
+ * sheet sitting untouched for ~18s+ between the tap and the recipient tap.
+ * A live run showed the recipient-scan dump returning the SAME feed action-
+ * bar nodes (row_feed_button_save, media_group) seen in the pre-tap scan —
+ * i.e. the sheet had already closed and we were back on the underlying post
+ * by the time the second dump ran. Cutting this to one dump removes half of
+ * that idle window outright.
+ *
+ * `direct_private_share` is the DM sheet's sticky search-box resource-id
+ * (see sendShareSheet's isDmSheetOpen) — its presence in the SAME dump used
+ * for the recipient scan lets the caller tell "sheet closed, 0 recipients
+ * because we're not even looking at it" apart from "sheet open, 0
+ * recipients because none were found" — the current dump's Strategy-2 node
+ * list already leaks this exact signal (feed-only ids/labels) whenever the
+ * sheet has gone away underneath us.
+ */
+export async function confirmAndScanShareSheet(
+  serial: string,
+  onLog?: (line: string) => void,
+): Promise<{ sheetOpen: boolean; sendBtn: { x: number; y: number } | null; recipients: { x: number; y: number }[] }> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return { sheetOpen: false, sendBtn: null, recipients: [] };
+  const sendBtn = _findElem(xml, "Send");
+  const sheetOpen = xml.includes("direct_private_share");
+  const recipients = _extractShareSheetRecipients(xml, serial, onLog);
+  return { sheetOpen, sendBtn, recipients };
 }
 
 /**

@@ -1205,13 +1205,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     return { w, h };
   }
 
-  /** Taps one randomly-chosen recipient avatar in an open Share sheet. */
-  async function tapRandomShareSheetRecipient(serial: string, onLog?: (line: string) => void): Promise<boolean> {
+  /**
+   * Taps one randomly-chosen recipient avatar in an open Share sheet.
+   *
+   * `preScanned` lets a caller that already ran confirmAndScanShareSheet (one
+   * dump, covers both Send-button confirmation and the recipient list) pass
+   * those results straight through instead of paying for a second ~9s dump
+   * here. Only used when no preScanned list is supplied does this fall back
+   * to taking its own fresh dump.
+   */
+  async function tapRandomShareSheetRecipient(serial: string, onLog?: (line: string) => void, preScanned?: { x: number; y: number }[]): Promise<boolean> {
     // Find recipient avatar buttons by resource-id (confirmed on device:
     // rid=com.instagram.android:id/grid_view_pog_avatar_view).  Their pixel
     // positions vary by device/screen size — resource-id targeting is the
     // only reliable approach; coordinate slots have been removed.
-    const recipients = await android.findShareSheetRecipients(serial, onLog).catch(() => [] as { x: number; y: number }[]);
+    const recipients = preScanned ?? await android.findShareSheetRecipients(serial, onLog).catch(() => [] as { x: number; y: number }[]);
     if (recipients.length === 0) {
       onLog?.("[share-sheet] no recipient avatars found via a11y — cannot select recipient");
       return false;
@@ -1323,17 +1331,43 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await android.tap(serial, shareDmIcon.x, shareDmIcon.y);
       logger.info({ serial, x: shareDmIcon.x, y: shareDmIcon.y }, `${logTag} tapped share-to-DM icon`);
       await sleepOrAbort(serial, 400); // wait for share sheet to open
-      onLog?.(`${logPrefix}: confirming share sheet opened…`);
-      const sheetSendBtn = await android.findButtonByLabel(serial, "Send").catch(() => null);
-      if (!sheetSendBtn) {
+      onLog?.(`${logPrefix}: confirming share sheet opened and picking DM recipient…`);
+      // Confirm-open and recipient-scan used to be two sequential ~9s
+      // uiautomator dumps with nothing happening on screen in between. A
+      // live run (15 Jul 2026) showed the sheet gone by the second dump —
+      // the recipient scan returned the SAME feed action-bar nodes seen
+      // before the tap. confirmAndScanShareSheet does both in ONE dump to
+      // roughly halve that idle window. If the sheet is still gone even in
+      // this single dump, retry once (re-tap the icon) before giving up —
+      // see the root-cause comment on confirmAndScanShareSheet.
+      let scan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
+      if ((!scan || !scan.sendBtn) && !isCycleAborted(serial)) {
+        onLog?.(`${logPrefix}: share sheet not confirmed open on first check — retrying tap once…`);
+        await android.tap(serial, shareDmIcon.x, shareDmIcon.y);
+        await sleepOrAbort(serial, 400);
+        scan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
+      }
+      if (!scan || !scan.sendBtn) {
         logger.warn({ serial }, `${logTag} share sheet not confirmed open — closing and skipping DM`);
         onLog?.(`${logPrefix}: share aborted — share sheet did not open (no Send button found)`);
         await android.pressBack(serial);
         await sleepOrAbort(serial, 200);
         return false;
       }
-      onLog?.(`${logPrefix}: picking DM recipient…`);
-      const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog);
+      const firstSendBtn = scan.sendBtn; // known non-null from the check above
+      if (scan.recipients.length === 0 && !scan.sheetOpen) {
+        // The Send label matched but the recipient scan's own node dump is
+        // feed-only content (see confirmAndScanShareSheet) — the sheet
+        // closed between the tap and this dump. Retry once: re-tap and
+        // re-scan in a single fresh dump rather than giving up immediately.
+        onLog?.(`${logPrefix}: share sheet appears to have closed before a recipient could be picked — retrying once…`);
+        await android.tap(serial, shareDmIcon.x, shareDmIcon.y);
+        await sleepOrAbort(serial, 400);
+        const retryScan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
+        if (retryScan?.sendBtn) scan = retryScan;
+      }
+      const sheetSendBtn = scan.sendBtn ?? firstSendBtn;
+      const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog, scan.recipients);
       if (!recipientPicked) {
         await android.pressBack(serial);
         logger.warn({ serial }, `${logTag} no recipient found — closed share sheet without sending`);
@@ -2079,13 +2113,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // open" apart from "nothing happened at all".
           // Capture the Send button position — proves the sheet is open AND
           // passes it to sendShareSheet so it can skip its own 2–3s a11y dump.
-          const sheetSendBtn = await android.findButtonByLabel(serial, "Send").catch(() => null);
+          // Uses confirmAndScanShareSheet (one dump for both confirm + recipient
+          // scan) instead of two sequential dumps — every second here eats into
+          // the story's fixed auto-advance timer (see story-action-timing-
+          // starvation), so the single-dump path matters even more here than on
+          // the feed/reels flows.
+          const storyShareScan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
+          const sheetSendBtn = storyShareScan?.sendBtn ?? null;
           if (!sheetSendBtn) {
             logger.warn({ serial, story: s + 1 }, "[view-stories] share sheet not confirmed open (no Send button found) — skipping recipient tap to avoid a blind tap on the story underneath");
             onLog?.(`Story ${s + 1}: share aborted — could not confirm the share sheet actually opened (no Send button found) — skipped recipient tap rather than risk tapping the story underneath`);
           } else {
-          // Pick a random recipient, then look for the real Send button.
-          const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog);
+          // Pick a random recipient from the same dump — look for the real Send button.
+          const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog, storyShareScan?.recipients);
           if (!recipientPicked) {
             await android.pressBack(serial);
             logger.warn({ serial, story: s + 1 }, "[view-stories] no recipient found — closed share sheet without sending");
@@ -2260,12 +2300,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               await android.tap(serial, icons.shareDm.x, icons.shareDm.y);
               onLog?.(`Reel ${i + 1}/${totalReels}: tapped Send at (${icons.shareDm.x},${icons.shareDm.y}) — waiting for share sheet`);
               await sleepOrAbort(serial, 400);
-              const sheetSendBtn = await android.findButtonByLabel(serial, "Send").catch(() => null);
+              // One dump for both confirm + recipient scan — see
+              // confirmAndScanShareSheet's root-cause comment (two sequential
+              // dumps left enough idle time for the sheet to close underneath us).
+              const reelShareScan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
+              const sheetSendBtn = reelShareScan?.sendBtn ?? null;
               if (!sheetSendBtn) {
                 onLog?.(`Reel ${i + 1}/${totalReels}: share sheet not confirmed open — skipping recipient tap to avoid a blind tap on the reel underneath`);
                 logger.warn({ serial, reel: i + 1 }, "[view-reels] share sheet not confirmed open (no Send button found)");
               } else {
-                const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog);
+                const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog, reelShareScan?.recipients);
                 if (!recipientPicked) {
                   await android.pressBack(serial);
                   onLog?.(`Reel ${i + 1}/${totalReels}: no recipient found — closed share sheet without sending`);
