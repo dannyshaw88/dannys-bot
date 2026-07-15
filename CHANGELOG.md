@@ -4,6 +4,26 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.584] — 2026-07-15
+
+### Fix: story like/share fires instantly — remove pre-action viewer check (was taking 2.7s before action fired)
+
+Root cause: `isStoryViewerOpenFast()` (the "fast" screenshot pixel scan) was taking ~2.7 seconds on this farm's devices. With the prior 250ms watch delay plus the 2.7s scan, the like/share fired ~3 seconds into a 3-second story — the slide had already auto-advanced before the `doubleTap` ran, so no like was ever registered. Removed both the 250ms pre-action delay and the pre-action viewer check entirely. When a like or share is scheduled, it now fires immediately with zero delay. Post-action guards (pre-advance check, pre-exit swipe) still prevent blind taps after the slide timer expires.
+
+### Fix: story slide count — viewing "1 story" now means 1 slide maximum
+
+The `stillInStoryViewer` pre-action check consumed 2.7s per call on this device, eating into each slide's timer and allowing the tray to auto-advance during the check. With the check removed, the loop's `totalStories` guard now actually controls how many slides are processed before the swipe-down exit.
+
+### Fix: Inject Browsing share-to-DM — add sheetConfirmed + recipientPicked gates (same fix as story DM)
+
+Applied the same pattern as the story share-to-DM fix: after tapping the Send icon and waiting 1200ms, confirm the DM share sheet actually rendered (via `findButtonByLabel("Send")`) before firing the recipient tap. If the sheet didn't open, skip without blind-tapping. If no recipient avatar found, close the sheet rather than tapping Send with nobody selected.
+
+### UI: nav — remove Proxy Manager and Accounts, rename Mobile → Accounts with person icon
+
+Mobile section is now the Accounts page. Left nav order: Dashboard → Accounts (path `/mobile`, person icon) → Statistics → Tools. Proxy Manager removed.
+
+---
+
 ## [1.1.583] — 2026-07-15
 
 ### Fix: story share-to-DM — remove keyboard-check retry loop (was closing the sheet it just opened)

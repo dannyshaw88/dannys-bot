@@ -126,11 +126,9 @@ export function Sidebar() {
   const BRAND = "#1AD2F2";
   const navItems = [
     { name: "Dashboard",       shortLabel: "DASHBOARD",      path: "/dashboard",    icon: FilledDashboardIcon   },
-    { name: "Accounts",        shortLabel: "ACCOUNTS",       path: "/profiles",     icon: FilledPersonIcon      },
+    { name: "Accounts",        shortLabel: "ACCOUNTS",       path: "/mobile",       icon: FilledPersonIcon      },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon    },
-    { name: "Proxy Manager",   shortLabel: "PROXY MANAGER",  path: "/proxies",  icon: FilledShieldAlertIcon  },
-    { name: "Mobile",          shortLabel: "MOBILE",         path: "/mobile",   icon: FilledSmartphoneIcon   },
-    { name: "Tools",           shortLabel: "TOOLS",          path: "/tools",    icon: FilledHammerIcon       },
+    { name: "Tools",           shortLabel: "TOOLS",          path: "/tools",        icon: FilledHammerIcon      },
   ];
 
   return (

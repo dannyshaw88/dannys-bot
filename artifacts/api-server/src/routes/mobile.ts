@@ -1849,44 +1849,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const willShare = shareChance > 0 && Math.random() < shareChance;
 
       // Watch this story for a random percentage of its ~6s duration — but
-      // ONLY when no action is scheduled on this slide. Root-cause fix
-      // (Jul 2026, user-reported): stories run on their own fixed real-world
-      // timer no matter what the script does, and the multi-step DM-share
-      // sequence alone (icon scan, tap, wait for sheet, pick recipient,
-      // wait, tap Send) costs several real seconds. Any deliberate "watch"
-      // delay before even STARTING a scheduled like/share eats directly
-      // into that fixed timer and was the main reason share attempts ran
-      // out of runway before finishing — not the icon detection or the
-      // close-Instagram logic. When a like and/or a share is scheduled,
-      // fire immediately (minimal delay, just enough for the opened-story
-      // frame to actually be on screen) so the full remaining slide timer
-      // is available for the action(s). Pure viewing (neither action
-      // scheduled) keeps the old randomized watch time since there's
-      // nothing time-critical to rush toward.
-      let watchMs: number;
-      if (willLike || willShare) {
-        watchMs = 250;
-      } else {
+      // ONLY when no action is scheduled on this slide. When a like and/or
+      // share is scheduled, fire immediately — no delay, no pre-action
+      // viewer check. Root-cause fix (Jul 2026): the "fast" pixel-scan
+      // viewer check was taking ~2.7s on this farm's devices (screenshot
+      // round-trip), so 250ms delay + 2.7s check = ~3s before the like
+      // fired — longer than a 3-second story slide. The story auto-advanced
+      // before the doubleTap ever ran. Pre-action check removed entirely;
+      // we are guaranteed to be in the viewer at this point (opened 1800ms
+      // ago, nothing has navigated away). Post-action checks (pre-advance
+      // at line ~2076, pre-exit at ~2106) still guard against blind taps
+      // after the slide timer expires.
+      if (!(willLike || willShare)) {
         const watchPct = Math.min(slideWatchPctMin, slideWatchPctMax) +
           Math.random() * Math.abs(slideWatchPctMax - slideWatchPctMin);
-        watchMs = Math.max(1500, Math.round((watchPct / 100) * 6000));
-      }
-      await sleepOrAbort(serial, watchMs);
-
-      // Bail out of the ENTIRE remaining loop — not just this slide — the
-      // instant the story viewer is gone. Continuing to loop assumes the
-      // next iteration will also be inside a story, which is exactly the
-      // false assumption that let blind taps land on the home feed.
-      //
-      // fastOnly = true: for 3-second stories the slow fallback (uiautomator
-      // dump, ~3-4s) would consume the ENTIRE remaining slide timer before
-      // the like/share even fires. Skip the dump here; if the fast scan is
-      // inconclusive we assume still-open and proceed. See the stillInStoryViewer
-      // declaration for the full rationale.
-      if (!(await stillInStoryViewer(/* fastOnly */ true))) {
-        onLog?.(`Story ${s + 1}: story viewer no longer open (auto-advanced/exited) — stopping story actions`);
-        logger.info({ serial, story: s + 1 }, "[view-stories] story viewer gone before action — stopping loop");
-        break;
+        const watchMs = Math.max(1500, Math.round((watchPct / 100) * 6000));
+        await sleepOrAbort(serial, watchMs);
       }
 
       if (willLike) {
@@ -3018,8 +2996,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           await android.tap(serial, sendIcon.x, sendIcon.y);
           logger.info({ serial, x: sendIcon.x, y: sendIcon.y }, "[inject-browsing] tapped Send icon");
           await sleepOrAbort(serial, 1200);
-          await tapRandomShareSheetRecipient(serial, onLog);
-          await sleepOrAbort(serial, 1500);
+          // Confirm the sheet actually rendered before firing the recipient tap.
+          // Same fix as story share-to-DM (Jul 2026): the DM share sheet's
+          // search box auto-focuses on open, raising the soft keyboard — so
+          // isKeyboardShown() returns true even on a SUCCESSFUL open. Never
+          // use keyboard presence as a proxy for "sheet opened". Use
+          // direct_private_share_sticky_search_box (via findButtonByLabel
+          // "Send" which only exists inside the sheet) as the positive signal.
+          const sheetConfirmed = await android.findButtonByLabel(serial, "Send").catch(() => null) !== null;
+          if (!sheetConfirmed) {
+            logger.warn({ serial }, "[inject-browsing] share sheet not confirmed open — skipping recipient tap");
+            onLog?.("Inject Browsing: share aborted — could not confirm the share sheet opened (no Send button found)");
+          } else {
+          const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog);
+          if (!recipientPicked) {
+            await android.pressBack(serial);
+            logger.warn({ serial }, "[inject-browsing] no recipient found — closed share sheet without sending");
+            onLog?.("Inject Browsing: share skipped — no recipient avatars found (closed without sending)");
+          } else {
+          await sleepOrAbort(serial, 900);
           const sent = await sendShareSheet(serial, w, h);
           if (sent === true) { onLog?.("Inject Browsing: shared the post via DM"); await sleepOrAbort(serial, 600); }
           else if (sent === null) {
@@ -3029,6 +3024,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           } else {
             onLog?.("Inject Browsing: share sheet did not confirm send — skipping share-via-DM");
             await android.pressBack(serial); await sleepOrAbort(serial, 400);
+          }
+          }
           }
         }
       } catch (e: any) {
