@@ -4,6 +4,23 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.604] — 2026-07-15
+
+### Fix: Inject Browsing "no posts found" on profiles with hundreds of posts
+
+**Root cause confirmed from a live log (15 Jul 2026)** — a profile whose grid is entirely Reels. The sequence:
+
+1. Scroll profile grid, tap a slot → still on the grid (no viewer opened; confirmed via `isInPostViewer()==false`).
+2. Old recovery code called `pressBack()` here on the assumption it was a harmless no-op "just in case a viewer opened".
+3. It is NOT a no-op. Follow always reaches this profile via a username search, so the profile page's own Back target is the Search results screen it came from — not itself. Pressing Back while sitting on the base profile grid (nothing was pushed onto the nav stack) popped straight out of the profile back to Search.
+4. The retry then blind-tapped coordinates on the Search page, found no post, and reported "no posts found" — even though the profile had hundreds of real posts, because the retry was never looking at the profile at all.
+
+Confirmed directly from the log: the retry tap's accessibility dump showed `row_search_user_container` / `action_bar_search_edit_text` (Search page elements), not the profile grid.
+
+**Fix:** removed the erroneous `pressBack()` call from the "still on profile grid" recovery branch — there is nothing to close, so nothing to press Back from. Applied the same fix to the second-retry fallback, gated behind an explicit `isInPostViewer()` check so Back is only pressed when there's an actual viewer open to close.
+
+---
+
 ## [1.1.603] — 2026-07-15
 
 ### Refactor: share-via-DM is now one shared function, not two hand-copied versions

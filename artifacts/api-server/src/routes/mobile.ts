@@ -3128,12 +3128,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         return;
       }
       // Case A: still on profile grid — scroll up and retry once.
+      //
+      // ROOT CAUSE (confirmed 15 Jul 2026 from live log — a Reels-only
+      // profile where the first grid tap didn't open anything): this branch
+      // fires when isInPostViewer()==false, meaning NOTHING was pushed onto
+      // the nav stack — we never left the profile grid in the first place.
+      // The old code still called pressBack() here on the theory that it was
+      // a harmless no-op "just in case a viewer opened". It is NOT a no-op:
+      // Follow always reaches this profile via a username search, so the
+      // profile page's own Back target is the Search results screen, not
+      // itself. Pressing Back while sitting on the base profile page (no
+      // viewer open) popped the nav stack straight out of the profile and
+      // back to Search — confirmed by the retry tap's a11y dump showing
+      // `row_search_user_container` / `action_bar_search_edit_text` (the
+      // Search page), not the profile grid. Every retry after that was a
+      // blind tap on the wrong screen, which is why "no posts found" fired
+      // even on profiles with hundreds of posts.
+      //
+      // Fix: do NOT press Back here — we are already on the grid we want.
       onLog?.("Inject Browsing: no post opened here (empty grid cell) — scrolling up and retrying");
-      logger.info({ serial }, "[inject-browsing] findFeedActionIcons=null, isInPostViewer=false — likely scrolled past end of grid into whitespace; pressing Back, scrolling up once, retrying");
-      // Return to the profile grid, scroll back up one row to get posts into
-      // view, then try tapping a post from the middle of the now-visible grid.
-      await android.pressBack(serial);
-      await sleepOrAbort(serial, 600);
+      logger.info({ serial }, "[inject-browsing] findFeedActionIcons=null, isInPostViewer=false — still on profile grid (no viewer was ever opened); scrolling up once and retrying WITHOUT pressing Back (Back here exits the profile to Search)");
       // Scroll UP one row (swipe finger downward = content moves up into view).
       await android.swipe(serial, x, y2, x, y1, 500);
       await sleepOrAbort(serial, 600);
@@ -3150,10 +3164,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await sleepOrAbort(serial, 1200);
       icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
       if (!icons) {
-        onLog?.("Inject Browsing: retry also found no post — returning to profile");
-        logger.info({ serial }, "[inject-browsing] retry tap also found no Like button — profile may have very few posts or all posts are Reels; pressing Back");
-        await android.pressBack(serial);
-        await sleepOrAbort(serial, 500);
+        // Same nav-stack trap as above: only press Back if a viewer is
+        // actually open (something to close). If we're still on the grid,
+        // pressing Back here would again exit the profile to Search instead
+        // of "returning to profile" — there's nothing to return FROM.
+        const stillInViewer = await android.isInPostViewer(serial).catch(() => false);
+        onLog?.("Inject Browsing: retry also found no post — giving up on this profile's posts");
+        logger.info({ serial, stillInViewer }, "[inject-browsing] retry tap also found no Like button — profile may have very few posts or all posts are Reels");
+        if (stillInViewer) {
+          await android.pressBack(serial);
+          await sleepOrAbort(serial, 500);
+        }
         return;
       }
       onLog?.("Inject Browsing: retry succeeded — post opened after scrolling up");
