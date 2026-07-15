@@ -2868,15 +2868,37 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Confirm a post actually opened (has a Like button) rather than
     // assuming the tap landed on a real thumbnail — profile grids can have
     // gaps (Reels tab strip, "Tagged" empty state, end-of-grid whitespace).
-    const icons = await android.findFeedActionIcons(serial).catch(() => null);
+    let icons = await android.findFeedActionIcons(serial).catch(() => null);
     if (!icons) {
-      onLog?.("Inject Browsing: no post opened here (empty grid cell or unrecognised layout) — returning to profile");
-      logger.info({ serial }, "[inject-browsing] findFeedActionIcons returned null — no Like button found in accessibility tree; post may already be liked (content-desc='Unlike'), or this is a Reel/ad with a non-standard action bar");
-      // Press Back to leave whatever was opened (Reel viewer, ad, etc.) so the
-      // caller (Follow step) is back on the profile page, not stranded mid-view.
+      onLog?.("Inject Browsing: no post opened here (empty grid cell or unrecognised layout) — scrolling up and retrying");
+      logger.info({ serial }, "[inject-browsing] findFeedActionIcons returned null — likely scrolled past end of grid into whitespace; pressing Back, scrolling up once, retrying");
+      // Return to the profile grid, scroll back up one row to get posts into
+      // view, then try tapping a post from the middle of the now-visible grid.
       await android.pressBack(serial);
-      await sleepOrAbort(serial, 500);
-      return;
+      await sleepOrAbort(serial, 600);
+      // Scroll UP one row (swipe finger downward = content moves up into view).
+      await android.swipe(serial, x, y2, x, y1, 500);
+      await sleepOrAbort(serial, 600);
+      // Pick a slot from the centre of the screen — after scrolling up, real
+      // posts should occupy this area even on a very short profile grid.
+      const recoverySlots = [
+        { x: Math.round(w * 0.17), y: Math.round(h * 0.45) },
+        { x: Math.round(w * 0.50), y: Math.round(h * 0.45) },
+        { x: Math.round(w * 0.83), y: Math.round(h * 0.45) },
+      ];
+      const retrySlot = recoverySlots[Math.floor(Math.random() * recoverySlots.length)];
+      onLog?.("Inject Browsing: retry — tapping post after scrolling up");
+      await android.tap(serial, retrySlot.x, retrySlot.y);
+      await sleepOrAbort(serial, 1200);
+      icons = await android.findFeedActionIcons(serial).catch(() => null);
+      if (!icons) {
+        onLog?.("Inject Browsing: retry also found no post — returning to profile");
+        logger.info({ serial }, "[inject-browsing] retry tap also found no Like button — profile may have very few posts or all posts are Reels; pressing Back");
+        await android.pressBack(serial);
+        await sleepOrAbort(serial, 500);
+        return;
+      }
+      onLog?.("Inject Browsing: retry succeeded — post opened after scrolling up");
     }
 
     // Diagnostic: show exactly which icons were resolved so we can see

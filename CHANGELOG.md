@@ -4,6 +4,22 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.587] — 2026-07-15
+
+### Fix: Inject Browsing — scroll recovery when post tap lands on blank whitespace
+
+When a target profile has a small number of posts (e.g. ~10 posts = ~3–4 rows) and Inject Browsing's row-scroll roll is set to 3–6 rows, the grid scroll can overshoot past the last row and land in the blank white space Instagram renders below the grid. The subsequent post tap finds no Like button (empty cell), logs "no post opened here", and returns without doing anything.
+
+**Fix:** when `findFeedActionIcons` returns null after the post tap, instead of immediately returning:
+1. Press Back to return to the profile grid.
+2. Scroll UP one row (reverse swipe) to bring real posts back into view.
+3. Tap a randomly-chosen column from the middle of the now-visible grid (at `h×0.45`).
+4. Check for icons again — if found, continue with the normal like/share flow. If still not found (profile may be all-Reels, or genuinely empty), press Back and return as before.
+
+This turns a silent failure into a graceful recovery visible in the log as "retry — tapping post after scrolling up" / "retry succeeded — post opened after scrolling up".
+
+---
+
 ## [1.1.586] — 2026-07-15
 
 ### Fix: Purge All Data — "queryClient is not defined"
