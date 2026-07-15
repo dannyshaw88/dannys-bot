@@ -3362,7 +3362,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // one with nothing else different). One-time settle wait, not a retry
     // loop — check once, not repeatedly.
     await sleepOrAbort(serial, 1500);
-    const searchTab = await android.findInstagramSearchTab(serial).catch(() => null);
+    const searchTab = await android.findInstagramSearchTab(serial, onLog).catch(() => null);
     if (!searchTab) { onLog?.("Follow: Search tab not found — skipping"); return 0; }
     await android.tap(serial, searchTab.x, searchTab.y);
     // Give the Explore page more time to fully render — 1500 ms was sometimes

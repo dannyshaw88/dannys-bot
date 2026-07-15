@@ -4125,15 +4125,56 @@ export async function findRandomNotificationItem(serial: string): Promise<{ x: n
 /**
  * Find the Instagram Search tab (magnifying-glass icon) in the bottom nav.
  * Returns the tap coordinates or null if not found.
+ *
+ * DIAGNOSTIC-ONLY CHANGE (no detection logic touched): when both the
+ * resource-id and label lookups miss, this now dumps every clickable node in
+ * the bottom-nav row (bottom 12% of screen) via onLog — class, resource-id,
+ * content-desc, text, bounds — before returning null. Per the project's
+ * evidence-first debugging rule (see replit.md), we do not guess a fix
+ * without a real device dump from the exact failing moment. Reported live
+ * (15 Jul 2026): "Search tab not found" on a Follow-only cycle despite no
+ * change to this function — next failing run's log will show what's
+ * actually in that row now so the real cause (renamed resource-id, a11y
+ * label change, or an IG app update that moved/removed the tab) can be
+ * confirmed instead of assumed.
  */
-export async function findInstagramSearchTab(serial: string): Promise<{ x: number; y: number } | null> {
+export async function findInstagramSearchTab(
+  serial: string,
+  onLog?: (msg: string) => void,
+): Promise<{ x: number; y: number } | null> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial);
   if (!xml) return null;
   const byId = _findByResId(xml, ":id/search", ":id/tab_search", ":id/nav_search", ":id/bottom_tab_search");
   if (byId) return byId;
-  return _findElem(xml, "Search", "Explore");
+  const byLabel = _findElem(xml, "Search", "Explore");
+  if (byLabel) return byLabel;
+
+  // Nothing matched — dump the bottom-nav row so the next failure carries
+  // real evidence instead of another guess.
+  if (onLog) {
+    const { h } = _getScreenSize(xml);
+    const botMin = Math.round(h * 0.88);
+    const rows: string[] = [];
+    const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+    let m: RegExpExecArray | null;
+    while ((m = nodeRe.exec(xml)) !== null) {
+      const attrs = m[1];
+      const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (!bm) continue;
+      const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
+      if (cy < botMin) continue;
+      const cls = attrs.match(/class="([^"]*)"/)?.[1] ?? "";
+      const rid = attrs.match(/resource-id="([^"]*)"/)?.[1] ?? "";
+      const cd = attrs.match(/content-desc="([^"]*)"/)?.[1] ?? "";
+      const txt = attrs.match(/(?<!content-desc)(?<!content-des)text="([^"]*)"/)?.[1] ?? "";
+      const clickable = attrs.match(/clickable="([^"]*)"/)?.[1] ?? "";
+      rows.push(`class=${cls} rid=${rid} cd="${cd}" text="${txt}" clickable=${clickable} bounds=${bm[0].slice(bm[0].indexOf('"') + 1, -1)}`);
+    }
+    onLog(`Follow: search tab lookup missed — bottom-nav dump (${rows.length} node(s) below y=${botMin}): ${rows.length ? rows.join(" | ") : "(none — bottom nav absent from a11y tree)"}`);
+  }
+  return null;
 }
 
 /**

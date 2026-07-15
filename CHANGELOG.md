@@ -4,6 +4,19 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.599] — 2026-07-15
+
+### Diagnostic-only: Follow "Search tab not found" evidence gathering
+
+**No detection logic was changed.** `findInstagramSearchTab()` (in `androidManager.ts`) is unchanged from v1.1.598 — confirmed by inspection, this was not caused by a prior fix. Per the project's evidence-first rule (see replit.md), a fix cannot be guessed without a real device dump from the exact failing moment, so this version adds logging only:
+
+- When the resource-id lookup (`:id/search`, `:id/tab_search`, `:id/nav_search`, `:id/bottom_tab_search`) AND the label lookup (`content-desc`/`text` "Search"/"Explore") both miss, the function now logs every clickable node in the bottom 12% of the screen (class, resource-id, content-desc, text, clickable, bounds) to the cycle log before returning null.
+- Wired the log callback through the Follow tool's call site in `mobile.ts` so the dump actually reaches the on-screen Log panel.
+
+**Next step:** run the Follow tool again until it hits "Search tab not found" and send the Log panel output from that run, plus a screenshot of the phone at that exact moment showing the bottom nav. That will show whether Instagram's bottom nav lost its resource-id, renamed it, dropped the "Search" label, or moved search into a different tab on this app build — the real fix ships as a separate, targeted version once that's confirmed.
+
+---
+
 ## [1.1.598] — 2026-07-15
 
 ### Fix: Follow tool's share-to-DM — replaced with View Feed's proven code path (removes the tautology at the root, not just a patch)
