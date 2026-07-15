@@ -2636,18 +2636,34 @@ export async function confirmAndScanShareSheet(
   //   "Add to story"            — same sheet, always alongside "Copy link";
   //                               second signal to reduce false-positive risk
   //
+  // Diagnostic: emit every unique resource-id and content-desc found in the
+  // dump so we can see exactly which signals are available on this device/build
+  // without needing a manual XML paste.
+  const rids = [...new Set((xml.match(/resource-id="([^"]+)"/g) ?? []).map(m => m.replace('resource-id="','').replace('"','')))].filter(Boolean);
+  const cds  = [...new Set((xml.match(/content-desc="([^"]{1,60})"/g) ?? []).map(m => m.replace('content-desc="','').replace('"','')))].filter(Boolean);
+  onLog?.(`[share-sheet] dump signals — rids: ${rids.slice(0,20).join(', ')} | cds: ${cds.slice(0,20).join(', ')}`);
+
   // ANY single marker is sufficient — the sheet is open if at least one fires.
+  //   direct_private_share      — search-box rid in the narrow DM sheet
+  //   grid_view_pog_avatar_view — recipient avatar rid, narrow + wide picker
+  //   "Copy link"               — pill button in the wider share sheet
+  //   "Add to story"            — same wider sheet
+  //   android.widget.EditText   — the sheet's search box class; always
+  //                               present in every share-sheet variant,
+  //                               never present on a plain post/Reel view
   const sheetOpen =
     xml.includes("direct_private_share") ||
     xml.includes("grid_view_pog_avatar_view") ||
     xml.includes("Copy link") ||
-    xml.includes("Add to story");
+    xml.includes("Add to story") ||
+    xml.includes("android.widget.EditText");
   if (!sheetOpen) {
-    onLog?.("[share-sheet] no share-sheet marker found (direct_private_share / grid_view_pog_avatar_view / Copy link / Add to story all absent) — sheet not open");
+    onLog?.("[share-sheet] no share-sheet marker found — sheet not open");
     return { sheetOpen: false, sendBtn: null, recipients: [] };
   }
   const sendBtn = _findElem(xml, "Send");
   const recipients = _extractShareSheetRecipients(xml, serial, onLog);
+  onLog?.(`[share-sheet] sheet confirmed open — sendBtn: ${sendBtn ? `(${sendBtn.x},${sendBtn.y})` : "null (will re-scan after recipient tap)"} | recipients found: ${recipients.length}`);
   return { sheetOpen, sendBtn, recipients };
 }
 

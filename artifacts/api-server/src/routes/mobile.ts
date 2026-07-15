@@ -1291,9 +1291,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // only appears inside the sheet, never on feed or nav.
     // Using a single dump here (no second fallback label) saves another 2–3s
     // on every post-send confirmation pass where the sheet is already gone.
+    // Sheet-open check: works for BOTH the narrow DM sheet (direct_private_share)
+    // and the wider share sheet (android.widget.EditText = search box).
     const isDmSheetOpen = async (): Promise<boolean> => {
-      const found = await android.findButtonByLabel(serial, "direct_private_share").catch(() => null);
-      return found !== null;
+      const xml = await android.dumpUi(serial).catch(() => "");
+      return xml.includes("direct_private_share") ||
+             xml.includes("grid_view_pog_avatar_view") ||
+             xml.includes("android.widget.EditText") ||
+             xml.includes("Copy link") ||
+             xml.includes("Add to story");
     };
 
     // Use the pre-found button if provided, otherwise dump the a11y tree.
@@ -1312,8 +1318,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Back (Back on the home feed scrolls to top + triggers pull-to-refresh).
       return null;
     }
-    // Sheet is open but Send button not found — tap the coordinate fallback.
-    await android.tap(serial, Math.round(w * 0.422), Math.round(h * 0.948));
+    // Sheet is open but Send button not found via a11y — tap the coordinate
+    // fallback. The Send button is always the large blue row at the bottom of
+    // the sheet immediately above the Android nav bar.
+    const fbX = Math.round(w * 0.422), fbY = Math.round(h * 0.948);
+    onLog?.(`[share-sheet] Send button not found via a11y — tapping coordinate fallback (${fbX},${fbY})`);
+    await android.tap(serial, fbX, fbY);
     await sleepOrAbort(serial, 200);
     // Sheet closed = DM sent; sheet still open = send failed / no recipient.
     return !(await isDmSheetOpen());
