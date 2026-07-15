@@ -1592,6 +1592,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   await android.pressBack(serial);
                   await sleepOrAbort(serial, 200);
                 }
+                } // closes recipientPicked else
                 } // closes sheetSendBtn else
                 await verifyStillInInstagram();
               } catch (e: any) { if (e?.message === "cycle-aborted") throw e; /* else non-fatal */ }
@@ -2051,9 +2052,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             onLog?.(`Story ${s + 1}: Send button not found — closed DM picker`);
             await sleepOrAbort(serial, 200);
           }
-          }
-          }
-          }
+          } // closes recipientPicked else
+          } // closes sheetSendBtn else
         }
       }
 
