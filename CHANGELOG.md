@@ -4,6 +4,49 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.614] — 2026-07-15
+
+### Feature: Skip Followed Users — Follow Tool
+
+A new **Skip Followed Users** tickbox sits to the right of "Users to follow per operation" in the Mobile Farm Human Session panel. It defaults **on**.
+
+**What it does:** Before any browsing or follow attempt begins for a scraped candidate, the full per-device Followed Users list is loaded and converted to a lookup set. Any candidate username already present in that set is dropped silently. Only users who have never been followed on this device make it through to the follow + inject-browsing steps — so no phone time is wasted browsing a profile that will ultimately be skipped.
+
+**Implementation detail:** The filter runs after HikerAPI candidate collection and deduplication but before the Instagram navigation loop starts. The log shows "Follow: skipped N already-followed users" whenever candidates are dropped, so you can verify the filter is working. The `getMobileFollowedList` lookup is the same data that populates the Followed tab.
+
+---
+
+### Feature: Follow Tool Sources — CSV/TSV Import & Export + 10-row capped scroll
+
+**Import:** The Sources panel in the Mobile Farm now has an **Import** button. It accepts any of:
+- 2-column TSV: `Hashtag \t Rank` (the format exported by this tool and used by the uploaded CSV)
+- 3-column Jarvee TSV: `Keyword \t NrPosts \t Rank` (UTF-16LE with BOM)
+- Plain list: one hashtag per line, no rank column
+
+Encoding is auto-detected: UTF-16LE/BE (BOM), UTF-8, and windows-1252 (latin-1 fallback for files with extended characters). Imported hashtags are appended to the current list — existing sources are not cleared.
+
+**Export:** An **Export** button downloads all current sources as a UTF-8 TSV file (`follow-sources.csv`) with `Hashtag \t Type` columns.
+
+**Sources list capped to 10 rows:** The sources list in the Mobile Farm panel now shows a maximum of 10 rows at a time. When there are more than 10, the list becomes scrollable — no more layout overflow pushing the Make a Post section out of view.
+
+**Panel header rework:** The panel header now shows the total source count alongside Import / Export / Clear All buttons all on one row, so the actions are always visible regardless of how many sources are loaded.
+
+---
+
+### Fix: View Reels — Share Feed % and Share DM % now functional
+
+Two bugs in `findReelActionIcons` (androidManager.ts) were silently making both percentages do nothing:
+
+**Bug 1 — Wrong label priority.** The icon scanner treated any node with `content-desc="Share"` as the feed-repost icon (shareFeed). In the Reels viewer, "Share" opens the DM share sheet — not a feed repost. This meant "Share" was stolen by shareFeed (wrong action), and shareDm found nothing left to match against, so both came back null every time. Fixed: `repostNode` now only matches `"Repost"`; `sendNode` matches `"Send"`, `"Direct"`, `"Message"`, or `"Share"` (the real Reels DM-share label).
+
+**Bug 2 — No structural fallback for the Reels column.** The feed icon scanner has a proven structural fallback for device/IG builds that strip `content-desc` from every action node. The Reels scanner had no equivalent — the column dump was logged but silently produced nulls. Fixed: after label matching, if shareFeed or shareDm are still null, the scanner now applies the same structural fallback adapted for the vertical Reels column:
+- Finds unlabelled `ViewGroup` nodes sorted by Y (top → bottom); assigns Comment / shareFeed / shareDm by position when exactly 2 or 3 are found
+- Falls back to unlabelled `android.widget.Button` nodes with the same logic if the ViewGroup pass finds nothing
+- Ambiguous counts (not 2 or 3) stay null — same safety contract as the feed fallback; never guessed
+- Result line logged every run: `[reel-icons] result — like:… comment:… shareFeed:… shareDm:…`
+
+---
+
 ## [1.1.612] — 2026-07-15
 
 ### Fix: Inject Browsing share-to-DM now works for all post types
