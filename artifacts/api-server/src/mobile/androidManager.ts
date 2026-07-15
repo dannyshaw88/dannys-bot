@@ -1402,7 +1402,32 @@ export async function findFeedActionIcons(serial: string, onLog?: (msg: string) 
       alreadyLiked = true;
     }
   }
-  if (!like) return null;
+  if (!like) {
+    // Diagnostic: dump every clickable node near screen centre so we can see
+    // exactly what label/resource-id the Reel viewer (or any other layout)
+    // exposes for its Like control. Without this the "null" return is silent
+    // and we cannot distinguish "Like button has different label" from
+    // "UI still loading" or "genuinely no post opened".
+    const centerY = screenH / 2;
+    const scanWindow = screenH * 0.50; // look within ±50 % of centre
+    const nearCentreRe = /<node\s([^>]+?)\s*\/?>/g;
+    const nearNodes: string[] = [];
+    let dm: RegExpExecArray | null;
+    while ((dm = nearCentreRe.exec(xml)) !== null) {
+      const a = dm[1];
+      if (!/clickable="true"/.test(a)) continue;
+      const bm = a.match(/bounds="(\[\d+,\d+\]\[\d+,\d+\])"/);
+      if (!bm) continue;
+      const c = _parseCenter(bm[1]);
+      if (!c || Math.abs(c.y - centerY) > scanWindow) continue;
+      const cd  = (a.match(/content-desc="([^"]*)"/)  || [])[1] ?? "";
+      const rid = (a.match(/resource-id="([^"]*)"/)   || [])[1] ?? "";
+      const cls = (a.match(/class="([^"]*)"/)         || [])[1] ?? "";
+      nearNodes.push(`(${c.x},${c.y}) cd="${cd}" rid="${rid}" cls="${cls}"`);
+    }
+    onLog?.(`[feed-icons] no Like/Unlike node found near centre — nearcentre clickable nodes: ${nearNodes.length ? nearNodes.join(" | ") : "(none)"}`);
+    return null;
+  }
   const rowTolerance = 20;
   const saveCutoffX = Math.round(w * 0.80);
   // Instagram's Comment/Repost/Send icons are small square glyphs (roughly

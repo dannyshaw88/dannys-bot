@@ -2868,7 +2868,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Confirm a post actually opened (has a Like button) rather than
     // assuming the tap landed on a real thumbnail — profile grids can have
     // gaps (Reels tab strip, "Tagged" empty state, end-of-grid whitespace).
-    let icons = await android.findFeedActionIcons(serial).catch(() => null);
+    let icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
     if (!icons) {
       onLog?.("Inject Browsing: no post opened here (empty grid cell or unrecognised layout) — scrolling up and retrying");
       logger.info({ serial }, "[inject-browsing] findFeedActionIcons returned null — likely scrolled past end of grid into whitespace; pressing Back, scrolling up once, retrying");
@@ -2890,7 +2890,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       onLog?.("Inject Browsing: retry — tapping post after scrolling up");
       await android.tap(serial, retrySlot.x, retrySlot.y);
       await sleepOrAbort(serial, 1200);
-      icons = await android.findFeedActionIcons(serial).catch(() => null);
+      icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
       if (!icons) {
         onLog?.("Inject Browsing: retry also found no post — returning to profile");
         logger.info({ serial }, "[inject-browsing] retry tap also found no Like button — profile may have very few posts or all posts are Reels; pressing Back");

@@ -4,6 +4,22 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.589] — 2026-07-15
+
+### Diagnostic: Inject Browsing — expose why "no post opened" fires on Reels
+
+When Inject Browsing taps a post from the profile grid and gets back "no post opened here (empty grid cell or unrecognised layout)", the cause was completely invisible: both `findFeedActionIcons` calls (initial tap and scroll-up retry) were not passing `onLog`, so every diagnostic log inside that function — including the per-node row dump — fired silently into nothing. Separately, when `_findCentermostLikeNode` found no Like/Unlike node at all and `findFeedActionIcons` returned null, the code did so with zero trace of what WAS in the accessibility tree.
+
+**Two targeted diagnostic changes (no behaviour change):**
+
+1. `onLog` is now passed to both inject-browsing `findFeedActionIcons` calls (initial and retry). The existing `[feed-icons] row cd dump` line — showing every node's `content-desc`, `resource-id`, `class`, and text — now appears in the cycle log when inject browsing runs.
+
+2. New log emitted when `_findCentermostLikeNode` finds no Like/Unlike node: `[feed-icons] no Like/Unlike node found near centre — nearcentre clickable nodes: (x,y) cd="..." rid="..." cls="..." | ...`. This scans every clickable node within ±50% of screen centre and prints its labels/class, showing exactly what the Reel viewer (or any other layout) exposes for its action controls.
+
+The next run where a Reel triggers "no post opened" will now show the real tree — from which the actual fix (correct label/resource-id, or a longer load wait) can be determined with evidence.
+
+---
+
 ## [1.1.588] — 2026-07-15
 
 ### Fix: Inject Browsing Share-to-DM — Send button never tapped after recipient selected
