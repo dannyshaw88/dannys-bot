@@ -1358,21 +1358,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // but giving the sheet more time to open reduces unnecessary retries.
       await sleepOrAbort(serial, 1500);
       onLog?.(`${logPrefix}: confirming share sheet opened and picking DM recipient…`);
-      let scan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
-      if ((!scan || !scan.sendBtn) && !isCycleAborted(serial)) {
-        onLog?.(`${logPrefix}: share sheet not confirmed open on first check — retrying tap once…`);
-        await android.tap(serial, shareDmIcon.x, shareDmIcon.y);
-        await sleepOrAbort(serial, 1500);
-        scan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
-      }
-      if (!scan || !scan.sendBtn) {
+      const scan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
+      if (!scan || !scan.sheetOpen) {
         logger.warn({ serial }, `${logTag} share sheet not confirmed open — closing and skipping DM`);
-        onLog?.(`${logPrefix}: share aborted — share sheet did not open (no Send button found)`);
+        onLog?.(`${logPrefix}: share aborted — share sheet did not open`);
         await android.pressBack(serial);
         await sleepOrAbort(serial, 200);
         return false;
       }
-      const sheetSendBtn = scan.sendBtn;
+      // sendBtn may be null here — the Send button only appears after a
+      // recipient is selected. sendShareSheet does its own fresh lookup
+      // when knownSendBtn is null, so passing null is correct.
+      const sheetSendBtn = scan.sendBtn ?? null;
       const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog, scan.recipients);
       if (!recipientPicked) {
         await android.pressBack(serial);

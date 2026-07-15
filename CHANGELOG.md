@@ -4,6 +4,16 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.612] — 2026-07-15
+
+### Fix: Inject Browsing share-to-DM now works for all post types
+
+**Root cause 1 — wrong sheet-detection gate:** `confirmAndScanShareSheet` only accepted `direct_private_share` or `grid_view_pog_avatar_view` as proof the DM share sheet was open. Posts opened from a profile grid (including Reels, but not limited to them) show a wider share sheet that uses neither of those resource-ids — so the gate fired false, logged "sheet not open", and aborted every time even though the sheet was visibly open on screen. Fixed by also accepting `"Copy link"` and `"Add to story"` as valid sheet-open signals. Any one of the four markers is now sufficient.
+
+**Root cause 2 — wrong abort condition:** The abort fired when `sendBtn` was null after the scan. The Send button only appears in the share sheet *after* a recipient is selected — so it is always null at scan time. The abort should fire on `!sheetOpen`, not `!sendBtn`. Fixed. `sendShareSheet` already does its own fresh lookup for Send when `knownSendBtn` is null.
+
+**Retry logic removed:** The retry tap in `shareCurrentPostViaDm` has been removed. Retries are now forbidden across all automation — see the new rule in the Mobile automation rules section.
+
 ## [1.1.611] — 2026-07-15
 
 ### Fix: Log Record markers now actually appear (stale-closure bug)

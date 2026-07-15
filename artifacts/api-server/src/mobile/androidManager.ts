@@ -2620,24 +2620,30 @@ export async function confirmAndScanShareSheet(
   // Both together produce a false-positive "DM sent" log with nothing actually
   // sent.  When neither sheet marker is present we must return null/empty.
   //
-  // TWO markers are tried because Instagram's DM sheet uses different layouts
-  // across builds (confirmed on device, 15 Jul 2026):
+  // Multiple markers are tried because Instagram uses different share-sheet
+  // layouts depending on post type and where the post was opened from:
   //
-  //   direct_private_share  — the sticky search-box resource-id present in
-  //                           the narrow "send to one person" sheet variant
-  //   grid_view_pog_avatar_view — the recipient avatar button resource-id,
-  //                           present in BOTH sheet variants (the narrow one
-  //                           and the wider grid picker).  It only ever
-  //                           appears inside an open DM share sheet; it is
-  //                           absent from the raw feed view.
+  //   direct_private_share      — sticky search-box rid in the narrow DM sheet
+  //                               (home-feed posts, standard DM picker)
+  //   grid_view_pog_avatar_view — recipient avatar button rid, present in
+  //                               both the narrow sheet and the wider grid
+  //                               picker; absent from raw feed view
+  //   "Copy link"               — pill button always present in the full share
+  //                               sheet (Reels, profile-grid posts, any post
+  //                               where the wider share sheet opens instead of
+  //                               the narrow DM-only picker); never appears on
+  //                               the plain feed or inside a post viewer
+  //   "Add to story"            — same sheet, always alongside "Copy link";
+  //                               second signal to reduce false-positive risk
   //
-  // If either is found the sheet is confirmed open.  If neither is found we
-  // are still on the feed and must abort / retry.
+  // ANY single marker is sufficient — the sheet is open if at least one fires.
   const sheetOpen =
     xml.includes("direct_private_share") ||
-    xml.includes("grid_view_pog_avatar_view");
+    xml.includes("grid_view_pog_avatar_view") ||
+    xml.includes("Copy link") ||
+    xml.includes("Add to story");
   if (!sheetOpen) {
-    onLog?.("[share-sheet] direct_private_share and grid_view_pog_avatar_view both absent — sheet not open");
+    onLog?.("[share-sheet] no share-sheet marker found (direct_private_share / grid_view_pog_avatar_view / Copy link / Add to story all absent) — sheet not open");
     return { sheetOpen: false, sendBtn: null, recipients: [] };
   }
   const sendBtn = _findElem(xml, "Send");

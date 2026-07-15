@@ -55,6 +55,12 @@ The code handles all coordinate differences in software — `rescaleForDevice()`
 
 ## Mobile automation rules (non-negotiable)
 
+### Retries are forbidden
+
+**Never add a retry loop or a second-attempt tap to any automation action.** If something fails — a sheet doesn't open, a button isn't found, a tap doesn't register — the action is skipped and the cycle moves on. A retry masks the real failure, burns time in the middle of a timed sequence (story slides, share-sheet auto-dismiss), and has caused multiple bugs. If a detection function returns null or an action produces no result: log it, move on, do not tap again.
+
+This applies everywhere: share-to-DM, recipient selection, Send button, icon taps, sheet confirmation, follow taps — all of it. No exceptions.
+
 ### Detection must use accessibility tree labels — never hardcoded coordinates
 
 All UI element detection reads the live UIAutomator accessibility tree (`uiautomator dump`) and finds elements by their attributes:
