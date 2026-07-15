@@ -1691,6 +1691,135 @@ export async function findFeedActionIcons(serial: string, onLog?: (msg: string) 
   return { like, comment, shareFeed, shareDm, alreadyLiked };
 }
 
+export interface ReelActionIcons {
+  like: { x: number; y: number };
+  comment: { x: number; y: number } | null;
+  shareFeed: { x: number; y: number } | null; // repost / share-to-feed
+  shareDm: { x: number; y: number } | null;   // send / share-via-DM
+  /** True when the Like button resolved to "Unlike" — reel is already liked. */
+  alreadyLiked?: boolean;
+}
+
+/**
+ * Locates Instagram's Reels viewer action-icon COLUMN (Like, Comment,
+ * Repost/Share, Send) — for Reels these render VERTICALLY down the right
+ * edge of the screen, unlike a normal feed post's horizontal bottom action
+ * bar (see findFeedActionIcons). This reuses the exact same
+ * accessibility-tree content-desc labels already proven reliable for the
+ * feed's action bar ("Like"/"Unlike", "Comment", "Repost"/"Share",
+ * "Send"/"Direct"/"Message") — Instagram reuses these labels for the Reels
+ * icon column, just laid out on a different axis. No fixed pixel
+ * coordinates are used anywhere in this function, per project rule.
+ *
+ * NOT YET VALIDATED against a real device screenshot of an open Reel (added
+ * 15 Jul 2026, no diagnostic run yet). Ships with the same "diagnostic dump
+ * on failure" pattern as findFeedActionIcons: if the Like/Unlike anchor or
+ * the Comment/Repost/Send labels don't match what a real device actually
+ * exposes, this logs every right-edge clickable node instead of guessing, so
+ * the next fix has real evidence rather than another blind attempt.
+ */
+export async function findReelActionIcons(serial: string, onLog?: (msg: string) => void): Promise<ReelActionIcons | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial);
+  if (!xml) return null;
+  const { w, h: screenH } = getScreenSize(serial);
+  void screenH;
+
+  // The action column sits in the right ~28% of the screen. Anchor on the
+  // Like/Unlike node closest to that column rather than trusting the first
+  // match anywhere on screen — a caption, hashtag, or the audio-disc label
+  // elsewhere on the frame could otherwise be mistaken for it.
+  const rightBand = w * 0.72;
+  const findAnchor = (label: "Like" | "Unlike"): { x: number; y: number } | null => {
+    const re = new RegExp(`content-desc="${label}"[^>]*bounds="(\\[\\d+,\\d+\\]\\[\\d+,\\d+\\])"`, "g");
+    let best: { x: number; y: number } | null = null;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(xml)) !== null) {
+      const c = _parseCenter(m[1]);
+      if (!c || c.x < rightBand) continue;
+      if (!best) best = c; // first right-column match wins
+    }
+    return best;
+  };
+
+  let like = findAnchor("Like");
+  let alreadyLiked = false;
+  if (!like) {
+    like = findAnchor("Unlike");
+    if (like) alreadyLiked = true;
+  }
+
+  if (!like) {
+    // Diagnostic dump: every clickable node in the right-edge column, so a
+    // real run's log shows exactly what label/resource-id this device/build
+    // actually exposes for the Reels action column instead of a silent null.
+    const colTolerance = w * 0.28;
+    const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+    const nodes: string[] = [];
+    let dm: RegExpExecArray | null;
+    while ((dm = nodeRe.exec(xml)) !== null) {
+      const a = dm[1];
+      if (!/clickable="true"/.test(a)) continue;
+      const bm = a.match(/bounds="(\[\d+,\d+\]\[\d+,\d+\])"/);
+      if (!bm) continue;
+      const c = _parseCenter(bm[1]);
+      if (!c || c.x < w - colTolerance) continue;
+      const cd  = (a.match(/content-desc="([^"]*)"/) || [])[1] ?? "";
+      const rid = (a.match(/resource-id="([^"]*)"/)  || [])[1] ?? "";
+      const cls = (a.match(/class="([^"]*)"/)        || [])[1] ?? "";
+      nodes.push(`(${c.x},${c.y}) cd="${cd}" rid="${rid}" cls="${cls}"`);
+    }
+    onLog?.(`[reel-icons] no Like/Unlike node found in right column — right-edge clickable nodes: ${nodes.length ? nodes.join(" | ") : "(none)"}`);
+    return null;
+  }
+
+  // Collect every other clickable node in the same column (X tolerance),
+  // BELOW the Like icon — Comment/Repost/Send stack downward from Like in
+  // the Reels viewer, mirroring the left-to-right elimination-by-label
+  // approach findFeedActionIcons uses for the horizontal bar.
+  const colTolerance = 40;
+  type ColNode = { x: number; y: number; cd: string; rid: string; cls: string; txt: string };
+  const colNodes: ColNode[] = [];
+  const nodeRe2 = /<node\s([^>]+?)\s*\/?>/g;
+  let nm: RegExpExecArray | null;
+  while ((nm = nodeRe2.exec(xml)) !== null) {
+    const attrs = nm[1];
+    if (!/clickable="true"/.test(attrs)) continue;
+    if (/class="android\.widget\.EditText"/.test(attrs)) continue;
+    const bm = attrs.match(/bounds="(\[(\d+),(\d+)\]\[(\d+),(\d+)\])"/);
+    if (!bm) continue;
+    const c = _parseCenter(bm[1]);
+    if (!c) continue;
+    if (Math.abs(c.x - like!.x) > colTolerance) continue;
+    if (c.y <= like!.y + 10) continue; // Like itself, or anything above it (e.g. profile avatar)
+    const cdM = attrs.match(/content-desc="([^"]*)"/);
+    const cd = cdM ? cdM[1] : "";
+    const clsM = attrs.match(/class="([^"]*)"/);
+    const cls = clsM ? clsM[1] : "";
+    const txtM = attrs.match(/\btext="([^"]*)"/);
+    const txt = txtM ? txtM[1] : "";
+    const ridM = attrs.match(/resource-id="([^"]*)"/);
+    const rid = ridM ? ridM[1] : "";
+    colNodes.push({ x: c.x, y: c.y, cd, rid, cls, txt });
+  }
+  colNodes.sort((a, b) => a.y - b.y);
+
+  const fmt = (n: ColNode) => `y=${n.y} cd="${n.cd || ""}" rid="${n.rid || ""}" cls="${n.cls || ""}" txt="${n.txt || ""}"`;
+  onLog?.(`[reel-icons] column dump below Like: ${colNodes.map(fmt).join(" | ") || "(none)"}`);
+
+  const pos = (n: ColNode) => ({ x: n.x, y: n.y });
+  const commentNode = colNodes.find(n => /^comment$/i.test(n.cd)) ?? null;
+  const repostNode  = colNodes.find(n => /\brepost\b/i.test(n.cd) || /^share$/i.test(n.cd)) ?? null;
+  const sendNode    = colNodes.find(n => /\b(send|direct|message)\b/i.test(n.cd) || (/^share$/i.test(n.cd) && n !== repostNode)) ?? null;
+
+  const comment   = commentNode ? pos(commentNode) : null;
+  const shareFeed = repostNode  ? pos(repostNode)  : null;
+  const shareDm   = sendNode    ? pos(sendNode)    : null;
+
+  return { like, comment, shareFeed, shareDm, alreadyLiked };
+}
+
 /**
  * Minimal, dependency-free PNG decoder for `adb exec-out screencap -p`
  * output. Android's screencap always emits 8-bit RGBA (colorType 6); plain
@@ -3096,6 +3225,27 @@ export async function findHomeTab(serial: string): Promise<{ x: number; y: numbe
   const m = xml.match(re);
   if (m) return _parseCenter(m[1]);
   return _findByResId(xml, ":id/feed_tab", ":id/home_tab");
+}
+
+/**
+ * Find the Reels tab (square icon with a play triangle) in Instagram's
+ * bottom navigation bar. Modeled on findInstagramSearchTab/findHomeTab: try
+ * known resource-ids first, then the "Reels" accessibility label. No
+ * positional fallback — guessing a bottom-nav slot risks tapping DM/Search/
+ * Profile instead, per project rule against hardcoded coordinates.
+ */
+export async function findReelsTab(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+  const byId = _findByResId(
+    xml,
+    ":id/clips_tab", ":id/reels_tab", ":id/tab_clips", ":id/nav_clips",
+    ":id/clips_tab_icon_view", ":id/reels_icon", ":id/clips_icon",
+  );
+  if (byId) return byId;
+  return _findElem(xml, "Reels");
 }
 
 /**

@@ -4,6 +4,25 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.596] — 2026-07-15
+
+### Feature: View Reels — new tool between View Stories and Follow Users
+
+Adds a fourth mobile automation tool, inserted in the UI and orchestrator between View Stories from Feed and Follow Users, with its own bordered card sections above and below (same convention as the existing tools). One settings row: Activation %, Scroll amount, Like %, Share to Feed %, Share to DM % (all min/max pairs).
+
+**Behaviour:** taps the bottom Reels nav tab (`android.findReelsTab` — resource-id candidates first, "Reels" content-desc label fallback, no positional guess), then snap-swipes through a randomly-rolled number of reels (full-height swipe — Reels always snaps fully to the next clip, unlike the feed's partial scroll). On each reel, rolls independent Like / Share-to-Feed / Share-to-DM chances and, if any hit, scans the accessibility tree for the reel's right-side vertical icon column via a new `android.findReelActionIcons` helper.
+
+**Detection approach:** Reels renders its Like/Comment/Repost/Send icons in a vertical column down the right edge of the screen, not the feed's horizontal bottom action bar — there was no existing detector for this layout. `findReelActionIcons` reuses the exact content-desc labels already proven reliable for the feed's action bar ("Like"/"Unlike", "Comment", "Repost"/"Share", "Send"/"Direct"/"Message"), anchored on the Like/Unlike node found in the right ~28% of the screen, then resolves Comment/Repost/Send as the other clickable nodes in that same X column, sorted by Y. Share-to-DM reuses the existing `findButtonByLabel`/`tapRandomShareSheetRecipient`/`sendShareSheet` share-sheet helpers, including the "confirm the sheet actually opened before tapping a recipient" safeguard from the Follow/Stories flows.
+
+**Not yet validated on a real device** — this is the first Reels-specific detector in the codebase, and no diagnostic dump of an open Reel has been captured yet. Both `findReelsTab` (returns null, tool skips this execution) and `findReelActionIcons` (returns null, or partial columns with individual icons null) fail closed rather than guessing, and the latter logs every right-edge clickable node it saw when the Like/Unlike anchor can't be found — that log is the evidence needed to correct the label set on the first real run if it doesn't match.
+
+**New/changed files:**
+- `artifacts/api-server/src/mobile/androidManager.ts` — `findReelsTab`, `findReelActionIcons`, `ReelActionIcons` type.
+- `artifacts/api-server/src/routes/mobile.ts` — `runViewReelsLoop`; `viewReels*` fields added to `AutomationSettings`, `automationSchema` (+ its defaults), `automationCycleSchema`; orchestrator call wired in between the View Stories and Follow Users steps.
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — new "View Reels" card section (checkbox + one settings row) between the View Stories and Follow Users sections; `viewReels*` fields added to `AutomationSettingsData`, `AUTOMATION_DEFAULTS`, and the automation-cycle POST payload.
+
+---
+
 ## [1.1.595] — 2026-07-15
 
 ### Fix: Share-to-DM Strategy 2 — abbreviated like/share counts ("12.1K") slipped through the numeric filter

@@ -88,6 +88,20 @@ type AutomationSettings = {
   viewStoriesLikePercentMax: number;
   viewStoriesShareDmPercentMin: number;
   viewStoriesShareDmPercentMax: number;
+  // View Reels — taps the Reels tab, snap-swipes through N reels, and acts
+  // on each via the right-side vertical icon column (see findReelActionIcons
+  // in androidManager.ts, distinct from the feed's horizontal action bar).
+  viewReelsEnabled?: boolean;
+  viewReelsScrollMin?: number;
+  viewReelsScrollMax?: number;
+  viewReelsLikePercentMin?: number;
+  viewReelsLikePercentMax?: number;
+  viewReelsShareFeedPercentMin?: number;
+  viewReelsShareFeedPercentMax?: number;
+  viewReelsShareDmPercentMin?: number;
+  viewReelsShareDmPercentMax?: number;
+  viewReelsActivatePctMin?: number;
+  viewReelsActivatePctMax?: number;
   // Follow Users — HikerAPI-driven follow flow (persisted here too; this
   // schema previously only covered the feed/stories fields, so these were
   // silently stripped by automationSchema.parse() on every autosave and
@@ -926,6 +940,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     viewStoriesLikePercentMax: z.number().min(0).max(100).default(0),
     viewStoriesShareDmPercentMin: z.number().min(0).max(100).default(0),
     viewStoriesShareDmPercentMax: z.number().min(0).max(100).default(0),
+    viewReelsEnabled: z.boolean().default(false),
+    viewReelsScrollMin: z.number().min(0).max(100).default(0),
+    viewReelsScrollMax: z.number().min(0).max(100).default(0),
+    viewReelsLikePercentMin: z.number().min(0).max(100).default(0),
+    viewReelsLikePercentMax: z.number().min(0).max(100).default(0),
+    viewReelsShareFeedPercentMin: z.number().min(0).max(100).default(0),
+    viewReelsShareFeedPercentMax: z.number().min(0).max(100).default(0),
+    viewReelsShareDmPercentMin: z.number().min(0).max(100).default(0),
+    viewReelsShareDmPercentMax: z.number().min(0).max(100).default(0),
+    viewReelsActivatePctMin: z.number().min(0).max(100).default(100),
+    viewReelsActivatePctMax: z.number().min(0).max(100).default(100),
     followEnabled: z.boolean().default(false),
     followUsersMin: z.number().min(0).max(9999).default(1),
     followUsersMax: z.number().min(0).max(9999).default(3),
@@ -1025,6 +1050,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
       viewStoriesLikePercentMin: 0, viewStoriesLikePercentMax: 0,
       viewStoriesShareDmPercentMin: 0, viewStoriesShareDmPercentMax: 0,
+      viewReelsEnabled: false, viewReelsScrollMin: 0, viewReelsScrollMax: 0,
+      viewReelsLikePercentMin: 0, viewReelsLikePercentMax: 0,
+      viewReelsShareFeedPercentMin: 0, viewReelsShareFeedPercentMax: 0,
+      viewReelsShareDmPercentMin: 0, viewReelsShareDmPercentMax: 0,
+      viewReelsActivatePctMin: 100, viewReelsActivatePctMax: 100,
       followEnabled: false, followUsersMin: 1, followUsersMax: 3, followSources: [],
       injectBrowsingEnabled: false,
       injectBrowsingActivatePctMin: 0, injectBrowsingActivatePctMax: 0,
@@ -2103,6 +2133,141 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     return { storiesWatched };
   }
 
+  // ── View Reels — taps the Reels tab, then snap-swipes through N reels,
+  // acting on each via the right-side vertical icon column (Like/Comment/
+  // Repost/Send) instead of the feed's horizontal bottom action bar. See
+  // findReelActionIcons in androidManager.ts for the detection approach and
+  // its "not yet validated on a real device" caveat.
+  async function runViewReelsLoop(serial: string, params: {
+    scrollMin: number; scrollMax: number;
+    likePercentMin: number; likePercentMax: number;
+    shareFeedPercentMin: number; shareFeedPercentMax: number;
+    shareDmPercentMin: number; shareDmPercentMax: number;
+    onLog?: (msg: string) => void;
+  }): Promise<{ reelsViewed: number; likes: number; sharesFeed: number; sharesDm: number }> {
+    const {
+      scrollMin, scrollMax,
+      likePercentMin, likePercentMax,
+      shareFeedPercentMin, shareFeedPercentMax,
+      shareDmPercentMin, shareDmPercentMax,
+      onLog,
+    } = params;
+
+    const totalReels = Math.floor(rollRange(scrollMin, scrollMax));
+    if (totalReels <= 0) return { reelsViewed: 0, likes: 0, sharesFeed: 0, sharesDm: 0 };
+
+    const { w, h } = getScreenSize(serial);
+    onLog?.(`Reels loop: device resolution ${w}×${h}`);
+
+    const reelsTab = await android.findReelsTab(serial).catch(() => null);
+    if (!reelsTab) {
+      onLog?.("Reels tab not found via accessibility tree — skipping View Reels for this execution");
+      logger.warn({ serial }, "[view-reels] Reels tab not found");
+      return { reelsViewed: 0, likes: 0, sharesFeed: 0, sharesDm: 0 };
+    }
+    await android.tap(serial, reelsTab.x, reelsTab.y);
+    onLog?.(`Tapped Reels tab at (${reelsTab.x},${reelsTab.y}) — waiting for Reels to load`);
+    await sleepOrAbort(serial, 1500);
+
+    const likeChance = rollRange(likePercentMin, likePercentMax) / 100;
+    const shareFeedChance = rollRange(shareFeedPercentMin, shareFeedPercentMax) / 100;
+    const shareDmChance = rollRange(shareDmPercentMin, shareDmPercentMax) / 100;
+
+    let likes = 0, sharesFeed = 0, sharesDm = 0, reelsViewed = 0;
+
+    // Reels snap fully to the next clip on a swipe — unlike the feed's
+    // partial scroll (runCheckFeedLoop), a single full-height swipe here
+    // always lands on exactly the next reel.
+    const swipeToNextReel = async () => {
+      const x = Math.round(w / 2);
+      const y1 = Math.round(h * 0.80);
+      const y2 = Math.round(h * 0.20);
+      await android.swipe(serial, x, y1, x, y2, 300 + Math.round(Math.random() * 150));
+    };
+
+    for (let i = 0; i < totalReels; i++) {
+      if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+      onLog?.(`Reel ${i + 1}/${totalReels}`);
+
+      // Watch briefly before acting so the reel has time to render before we
+      // scan the accessibility tree for its action column.
+      await sleepOrAbort(serial, 800 + Math.round(Math.random() * 700));
+
+      const wantLike = likeChance > 0 && Math.random() < likeChance;
+      const wantShareFeed = shareFeedChance > 0 && Math.random() < shareFeedChance;
+      const wantShareDm = shareDmChance > 0 && Math.random() < shareDmChance;
+
+      if (wantLike || wantShareFeed || wantShareDm) {
+        onLog?.(`Reel ${i + 1}/${totalReels}: scanning right-side action column…`);
+        const icons = await android.findReelActionIcons(serial, (msg) => onLog?.(`  ${msg}`)).catch(() => null);
+        if (!icons) {
+          onLog?.(`Reel ${i + 1}/${totalReels}: action icons not found — skipping like/share for this reel`);
+        } else {
+          if (wantLike) {
+            if (icons.alreadyLiked) {
+              onLog?.(`Reel ${i + 1}/${totalReels}: already liked — skipping like`);
+            } else {
+              await android.tap(serial, icons.like.x, icons.like.y);
+              likes++;
+              onLog?.(`Reel ${i + 1}/${totalReels}: liked at (${icons.like.x},${icons.like.y})`);
+              await sleepOrAbort(serial, 250);
+            }
+          }
+          if (wantShareFeed) {
+            if (!icons.shareFeed) {
+              onLog?.(`Reel ${i + 1}/${totalReels}: Share to Feed icon not found — skipping`);
+            } else {
+              await android.tap(serial, icons.shareFeed.x, icons.shareFeed.y);
+              sharesFeed++;
+              onLog?.(`Reel ${i + 1}/${totalReels}: shared to feed at (${icons.shareFeed.x},${icons.shareFeed.y})`);
+              await sleepOrAbort(serial, 400);
+            }
+          }
+          if (wantShareDm) {
+            if (!icons.shareDm) {
+              onLog?.(`Reel ${i + 1}/${totalReels}: Share via DM icon not found — skipping`);
+            } else {
+              await android.tap(serial, icons.shareDm.x, icons.shareDm.y);
+              onLog?.(`Reel ${i + 1}/${totalReels}: tapped Send at (${icons.shareDm.x},${icons.shareDm.y}) — waiting for share sheet`);
+              await sleepOrAbort(serial, 400);
+              const sheetSendBtn = await android.findButtonByLabel(serial, "Send").catch(() => null);
+              if (!sheetSendBtn) {
+                onLog?.(`Reel ${i + 1}/${totalReels}: share sheet not confirmed open — skipping recipient tap to avoid a blind tap on the reel underneath`);
+                logger.warn({ serial, reel: i + 1 }, "[view-reels] share sheet not confirmed open (no Send button found)");
+              } else {
+                const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog);
+                if (!recipientPicked) {
+                  await android.pressBack(serial);
+                  onLog?.(`Reel ${i + 1}/${totalReels}: no recipient found — closed share sheet without sending`);
+                } else {
+                  await sleepOrAbort(serial, 200);
+                  const sent = await sendShareSheet(serial, w, h, sheetSendBtn);
+                  if (sent === true || sent === null) {
+                    sharesDm++;
+                    onLog?.(`Reel ${i + 1}/${totalReels}: shared via DM`);
+                  } else {
+                    await android.pressBack(serial);
+                    onLog?.(`Reel ${i + 1}/${totalReels}: Send button not found — closed DM picker`);
+                  }
+                  await sleepOrAbort(serial, 250);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      reelsViewed++;
+
+      if (i < totalReels - 1) {
+        await swipeToNextReel();
+        await sleepOrAbort(serial, 400 + Math.round(Math.random() * 300));
+      }
+    }
+
+    return { reelsViewed, likes, sharesFeed, sharesDm };
+  }
+
   app.post("/api/mobile/devices/:serial/check-feed", async (req: Request, res: Response) => {
     const serial = p(req, "serial");
     if (checkFeedInProgress.has(serial)) {
@@ -2145,6 +2310,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     viewStoriesLikePercentMax: z.number().min(0).max(100).default(0),
     viewStoriesShareDmPercentMin: z.number().min(0).max(100).default(0),
     viewStoriesShareDmPercentMax: z.number().min(0).max(100).default(0),
+    // View Reels — see AutomationSettings type above for full comment.
+    viewReelsEnabled: z.boolean().default(false),
+    viewReelsScrollMin: z.number().min(0).max(100).default(0),
+    viewReelsScrollMax: z.number().min(0).max(100).default(0),
+    viewReelsLikePercentMin: z.number().min(0).max(100).default(0),
+    viewReelsLikePercentMax: z.number().min(0).max(100).default(0),
+    viewReelsShareFeedPercentMin: z.number().min(0).max(100).default(0),
+    viewReelsShareFeedPercentMax: z.number().min(0).max(100).default(0),
+    viewReelsShareDmPercentMin: z.number().min(0).max(100).default(0),
+    viewReelsShareDmPercentMax: z.number().min(0).max(100).default(0),
+    viewReelsActivatePctMin: z.number().min(0).max(100).default(100),
+    viewReelsActivatePctMax: z.number().min(0).max(100).default(100),
     // Follow Users — HikerAPI-driven follow flow. HikerAPI fetches candidates
     // from the configured target sources (hashtags / followers-of-account);
     // the software then navigates to Instagram Search and follows each user by
@@ -3341,6 +3518,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewStoriesSlideWatchPctMin, viewStoriesSlideWatchPctMax,
         viewStoriesLikePercentMin, viewStoriesLikePercentMax,
         viewStoriesShareDmPercentMin, viewStoriesShareDmPercentMax,
+        viewReelsEnabled, viewReelsScrollMin, viewReelsScrollMax,
+        viewReelsLikePercentMin, viewReelsLikePercentMax,
+        viewReelsShareFeedPercentMin, viewReelsShareFeedPercentMax,
+        viewReelsShareDmPercentMin, viewReelsShareDmPercentMax,
+        viewReelsActivatePctMin, viewReelsActivatePctMax,
         followEnabled, followUsersMin, followUsersMax, followSources,
         injectBrowsingEnabled,
         injectBrowsingActivatePctMin, injectBrowsingActivatePctMax,
@@ -3501,6 +3683,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       } else if (storiesEnabled && viewStoriesSlidesMax > 0) {
         steps.push("stories(skipped — Activate Percentage roll missed this execution)");
         tLog("▶ View Stories from Feed Activate Percentage roll missed — skipping stories this execution");
+      }
+
+      // 4a. View Reels — runs after stories, before Follow Users. Taps the
+      // Reels tab and snap-swipes through N reels, liking/sharing via the
+      // right-side vertical icon column.
+      if (viewReelsEnabled && viewReelsScrollMax > 0 && rollActivate(viewReelsActivatePctMin, viewReelsActivatePctMax)) {
+        tLog(`▶ Starting View Reels (up to ${viewReelsScrollMax})`);
+        const reelsResult = await runViewReelsLoop(serial, {
+          scrollMin: viewReelsScrollMin, scrollMax: viewReelsScrollMax,
+          likePercentMin: viewReelsLikePercentMin, likePercentMax: viewReelsLikePercentMax,
+          shareFeedPercentMin: viewReelsShareFeedPercentMin, shareFeedPercentMax: viewReelsShareFeedPercentMax,
+          shareDmPercentMin: viewReelsShareDmPercentMin, shareDmPercentMax: viewReelsShareDmPercentMax,
+          onLog: (msg) => tLog(`  ${msg}`),
+        });
+        steps.push(`reels(${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes, ${reelsResult.sharesFeed} feed-shares, ${reelsResult.sharesDm} dm-shares)`);
+        tLog(`▶ View Reels done — ${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes`);
+      } else if (!viewReelsEnabled) {
+        steps.push("reels(skipped — View Reels disabled)");
+        tLog("▶ View Reels disabled — skipping reels");
+      } else if (viewReelsEnabled && viewReelsScrollMax > 0) {
+        steps.push("reels(skipped — Activate Percentage roll missed this execution)");
+        tLog("▶ View Reels Activate Percentage roll missed — skipping reels this execution");
       }
 
       // 4b. Follow Users — HikerAPI-driven follow step. Runs after stories/feed

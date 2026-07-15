@@ -1373,6 +1373,20 @@ interface AutomationSettingsData {
   viewStoriesLikePercentMax: number;
   viewStoriesShareDmPercentMin: number;
   viewStoriesShareDmPercentMax: number;
+  // View Reels — taps the Reels tab, then snap-swipes through N reels,
+  // acting on each via the right-side vertical icon column instead of the
+  // feed's horizontal bottom action bar.
+  viewReelsEnabled: boolean;
+  viewReelsScrollMin: number;
+  viewReelsScrollMax: number;
+  viewReelsLikePercentMin: number;
+  viewReelsLikePercentMax: number;
+  viewReelsShareFeedPercentMin: number;
+  viewReelsShareFeedPercentMax: number;
+  viewReelsShareDmPercentMin: number;
+  viewReelsShareDmPercentMax: number;
+  viewReelsActivatePctMin: number;
+  viewReelsActivatePctMax: number;
   // Follow Users — HikerAPI-driven follow flow.
   // followSources is stored inline (no separate DB table) to keep mobile
   // settings self-contained. Each entry is a source the HikerAPI client
@@ -1452,6 +1466,12 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
   viewStoriesLikePercentMin: 0, viewStoriesLikePercentMax: 0,
   viewStoriesShareDmPercentMin: 0, viewStoriesShareDmPercentMax: 0,
+  viewReelsEnabled: false,
+  viewReelsScrollMin: 0, viewReelsScrollMax: 0,
+  viewReelsLikePercentMin: 0, viewReelsLikePercentMax: 0,
+  viewReelsShareFeedPercentMin: 0, viewReelsShareFeedPercentMax: 0,
+  viewReelsShareDmPercentMin: 0, viewReelsShareDmPercentMax: 0,
+  viewReelsActivatePctMin: 100, viewReelsActivatePctMax: 100,
   followEnabled: false,
   followUsersMin: 1, followUsersMax: 3,
   followSources: [],
@@ -1651,6 +1671,17 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             viewStoriesLikePercentMax: s.viewStoriesLikePercentMax,
             viewStoriesShareDmPercentMin: s.viewStoriesShareDmPercentMin,
             viewStoriesShareDmPercentMax: s.viewStoriesShareDmPercentMax,
+            viewReelsEnabled: s.viewReelsEnabled,
+            viewReelsScrollMin: s.viewReelsScrollMin,
+            viewReelsScrollMax: s.viewReelsScrollMax,
+            viewReelsLikePercentMin: s.viewReelsLikePercentMin,
+            viewReelsLikePercentMax: s.viewReelsLikePercentMax,
+            viewReelsShareFeedPercentMin: s.viewReelsShareFeedPercentMin,
+            viewReelsShareFeedPercentMax: s.viewReelsShareFeedPercentMax,
+            viewReelsShareDmPercentMin: s.viewReelsShareDmPercentMin,
+            viewReelsShareDmPercentMax: s.viewReelsShareDmPercentMax,
+            viewReelsActivatePctMin: s.viewReelsActivatePctMin,
+            viewReelsActivatePctMax: s.viewReelsActivatePctMax,
             followEnabled: s.followEnabled,
             followUsersMin: s.followUsersMin,
             followUsersMax: s.followUsersMax,
@@ -2157,9 +2188,108 @@ function AutomationSettingsPanel({
           </div>
         </div>}
 
-        {/* Border separator between View Stories from Feed above and the new
-            Follow Users feature below — same card/step (STEP2), mirrors the
-            divider above between View Feed and View Stories from Feed. */}
+        {/* Border separator between View Stories from Feed above and View
+            Reels below — same card/step (STEP2), mirrors the divider above
+            between View Feed and View Stories from Feed. */}
+        <div className="border-t border-border" />
+
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="reels-enabled"
+              checked={settings.viewReelsEnabled}
+              onChange={e => setSettings(s => ({ ...s, viewReelsEnabled: e.target.checked }))}
+              disabled={loading}
+              className="w-4 h-4 accent-primary cursor-pointer"
+            />
+            <label htmlFor="reels-enabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">View Reels</label>
+          </div>
+        </div>
+
+        {settings.viewReelsEnabled && <div className="flex items-start gap-6 flex-wrap">
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Activate Percentage</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewReelsActivatePctMin}
+                onChange={e => setSettings(s => ({ ...s, viewReelsActivatePctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewReelsActivatePctMax}
+                onChange={e => setSettings(s => ({ ...s, viewReelsActivatePctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">%</span>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Scroll amount</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewReelsScrollMin}
+                onChange={e => setSettings(s => ({ ...s, viewReelsScrollMin: clamp4(Number(e.target.value)) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewReelsScrollMax}
+                onChange={e => setSettings(s => ({ ...s, viewReelsScrollMax: clamp4(Number(e.target.value)) }))}
+                disabled={loading} />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Like %</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewReelsLikePercentMin}
+                onChange={e => setSettings(s => ({ ...s, viewReelsLikePercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewReelsLikePercentMax}
+                onChange={e => setSettings(s => ({ ...s, viewReelsLikePercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">%</span>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Share Feed %</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewReelsShareFeedPercentMin}
+                onChange={e => setSettings(s => ({ ...s, viewReelsShareFeedPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewReelsShareFeedPercentMax}
+                onChange={e => setSettings(s => ({ ...s, viewReelsShareFeedPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">%</span>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Share DM %</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewReelsShareDmPercentMin}
+                onChange={e => setSettings(s => ({ ...s, viewReelsShareDmPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewReelsShareDmPercentMax}
+                onChange={e => setSettings(s => ({ ...s, viewReelsShareDmPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">%</span>
+            </div>
+          </div>
+        </div>}
+
+        {/* Border separator between View Reels above and the Follow Users
+            feature below — same card/step (STEP2). */}
         <div className="border-t border-border" />
 
         {/* ── Follow Users header — tickbox, label, Sources, Followed all
