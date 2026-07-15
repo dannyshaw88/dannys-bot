@@ -4,6 +4,16 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.591] — 2026-07-15
+
+### Fix: Inject Browsing Share-to-DM — pure-numeric count nodes no longer picked as recipients
+
+**Root cause:** `findShareSheetRecipients` Strategy 2 scans every clickable node in the accessibility tree, but Instagram's a11y dump includes ALL nodes simultaneously — both the share sheet overlay AND the feed-post action bar sitting underneath it. The feed action bar exposes its like/comment/repost/send counts as clickable `android.widget.Button` nodes with `txt="38"` (comments), `txt="203"` (reposts), `txt="9,077"` (likes), `txt="1,074"` (sends). Every one of these passed all existing Strategy 2 filters: correct y-range, width under 80 %, non-empty label, not a UI-chrome keyword, not a share-destination keyword, ≤ 50 chars. The comment count "38" was randomly picked as the "recipient" tap target, which expanded the underlying comment count display rather than selecting any DM contact. `sendShareSheet` then tapped the pre-found Send button — but with no recipient selected, nothing was actually sent.
+
+**Fix:** One additional exclusion in Strategy 2 — if the candidate label matches `/^[\d,.\s]+$/` (i.e. it contains only digits, commas, dots, and spaces — a count string), skip it. A real DM recipient name always contains at least one letter, so this rule is safe: "38", "203", "9,077" all fail; "mo_fitness_03", "john_doe", "Instagram Verified Chat" all pass.
+
+---
+
 ## [1.1.590] — 2026-07-15
 
 ### Fix: Inject Browsing — scroll-up recovery no longer fires when a Reel is open

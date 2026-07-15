@@ -2341,6 +2341,11 @@ export async function findShareSheetRecipients(serial: string, onLog?: (line: st
     if (!label || label.length > 50) continue;
     if (UI_CHROME.test(label)) continue;
     if (SHARE_DESTINATIONS.test(label.trim())) continue;
+    // Exclude pure-numeric strings (like counts from the feed action bar that
+    // sit BENEATH the share sheet and still appear in the a11y tree):
+    //   "38" (comments), "203" (reposts), "9,077" (likes), "1,074" (sends).
+    // A real DM recipient name always contains at least one letter.
+    if (/^[\d,.\s]+$/.test(label)) continue;
     results.push({ x: cx, y: cy });
   }
   if (dump.length) onLog?.(`[share-sheet] Strategy 2 label-scan node dump: ${dump.join(" | ")}`);
