@@ -2428,7 +2428,7 @@ export async function findButtonByLabel(serial: string, label: string): Promise<
  *   contact row.
  * - Label must be ≤ 50 characters (display names, not article titles)
  */
-export async function findShareSheetRecipients(serial: string, onLog?: (line: string) => void): Promise<{ x: number; y: number }[]> {
+export async function findShareSheetRecipients(serial: string, onLog?: (line: string) => void): Promise<{ x: number; y: number; name?: string }[]> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial).catch(() => "");
@@ -2440,7 +2440,7 @@ export async function findShareSheetRecipients(serial: string, onLog?: (line: st
  * docs for the filter rules. Split out so confirmAndScanShareSheet can reuse
  * a single dump for both the Send-button confirmation and the recipient
  * scan instead of paying for two separate ~9s uiautomator dumps. */
-function _extractShareSheetRecipients(xml: string, serial: string, onLog?: (line: string) => void): { x: number; y: number }[] {
+function _extractShareSheetRecipients(xml: string, serial: string, onLog?: (line: string) => void): { x: number; y: number; name?: string }[] {
   const { w, h } = getScreenSize(serial);
   const minY = Math.round(h * 0.20);
   const maxY = Math.round(h * 0.95);
@@ -2484,9 +2484,19 @@ function _extractShareSheetRecipients(xml: string, serial: string, onLog?: (line
       if (!a.includes(RID_AVATAR)) continue;
       const bm = a.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
       if (!bm) continue;
-      const cx = Math.round((Number(bm[1]) + Number(bm[3])) / 2);
-      const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
+      const x1 = Number(bm[1]), y1 = Number(bm[2]), x2 = Number(bm[3]), y2 = Number(bm[4]);
+      const cx = Math.round((x1 + x2) / 2);
+      const cy = Math.round((y1 + y2) / 2);
       if (cy < minY || cy > maxY) continue;
+      // Skip nodes that are too short — real avatar buttons are square (~230px);
+      // partially-clipped contacts at the sheet's bottom edge can appear as tiny
+      // slivers (e.g. 28px tall). Tapping their centre is unreliable and they
+      // are never fully visible to the user, so exclude them.
+      const nodeH = y2 - y1;
+      if (nodeH < 80) {
+        onLog?.(`[share-sheet] Strategy 1: skipped avatar at (${cx},${cy}) — height ${nodeH}px too small (clipped at sheet edge)`);
+        continue;
+      }
       // Check the XML immediately before this node for the parent's
       // content-desc ("Your Story", "Close Friends", etc.) — take the LAST
       // content-desc attr in the lookback window, which is the closest parent.
@@ -2497,7 +2507,7 @@ function _extractShareSheetRecipients(xml: string, serial: string, onLog?: (line
         onLog?.(`[share-sheet] Strategy 1: excluded avatar at (${cx},${cy}) — parent content-desc "${parentCd}" is a story destination, not a DM contact`);
         continue;
       }
-      avatarResults.push({ x: cx, y: cy });
+      avatarResults.push({ x: cx, y: cy, name: parentCd || undefined } as { x: number; y: number; name?: string });
     }
   }
 
@@ -2594,7 +2604,7 @@ function _extractShareSheetRecipients(xml: string, serial: string, onLog?: (line
 export async function confirmAndScanShareSheet(
   serial: string,
   onLog?: (line: string) => void,
-): Promise<{ sheetOpen: boolean; sendBtn: { x: number; y: number } | null; recipients: { x: number; y: number }[] }> {
+): Promise<{ sheetOpen: boolean; sendBtn: { x: number; y: number } | null; recipients: { x: number; y: number; name?: string }[] }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial).catch(() => "");

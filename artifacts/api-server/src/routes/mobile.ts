@@ -1215,18 +1215,36 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
    * here. Only used when no preScanned list is supplied does this fall back
    * to taking its own fresh dump.
    */
-  async function tapRandomShareSheetRecipient(serial: string, onLog?: (line: string) => void, preScanned?: { x: number; y: number }[]): Promise<boolean> {
+  // Tracks the last recipient tapped per device so consecutive runs never
+  // land on the same person. Keyed by serial, value is the (x,y) centre of
+  // the previously-picked avatar button.
+  const lastPickedRecipient = new Map<string, { x: number; y: number }>();
+
+  async function tapRandomShareSheetRecipient(serial: string, onLog?: (line: string) => void, preScanned?: { x: number; y: number; name?: string }[]): Promise<boolean> {
     // Find recipient avatar buttons by resource-id (confirmed on device:
     // rid=com.instagram.android:id/grid_view_pog_avatar_view).  Their pixel
     // positions vary by device/screen size — resource-id targeting is the
     // only reliable approach; coordinate slots have been removed.
-    const recipients = preScanned ?? await android.findShareSheetRecipients(serial, onLog).catch(() => [] as { x: number; y: number }[]);
+    const recipients = preScanned ?? await android.findShareSheetRecipients(serial, onLog).catch(() => [] as { x: number; y: number; name?: string }[]);
     if (recipients.length === 0) {
       onLog?.("[share-sheet] no recipient avatars found via a11y — cannot select recipient");
       return false;
     }
-    const pick = recipients[Math.floor(Math.random() * recipients.length)];
-    onLog?.(`[share-sheet] tapping recipient at (${pick.x},${pick.y})`);
+    // Exclude the last-picked recipient so consecutive runs always land on a
+    // different person. If excluding it leaves the pool empty (only 1 contact
+    // visible on screen), fall back to the full list.
+    const last = lastPickedRecipient.get(serial);
+    const pool = last
+      ? recipients.filter(r => !(r.x === last.x && r.y === last.y))
+      : recipients;
+    const candidates = pool.length > 0 ? pool : recipients;
+    if (last && pool.length === 0) {
+      onLog?.("[share-sheet] only one recipient visible — re-using same contact (no alternative)");
+    }
+    const pick = candidates[Math.floor(Math.random() * candidates.length)];
+    lastPickedRecipient.set(serial, { x: pick.x, y: pick.y });
+    const nameTag = (pick as { name?: string }).name ? ` (${(pick as { name?: string }).name})` : "";
+    onLog?.(`[share-sheet] tapping recipient at (${pick.x},${pick.y})${nameTag}`);
     await android.tap(serial, pick.x, pick.y);
     return true;
   }
