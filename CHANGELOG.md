@@ -4,6 +4,26 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.607] — 2026-07-15
+
+### Fix: share-to-DM false-positive — sheet-not-open incorrectly reported as success
+
+**Root cause confirmed from live log (15 Jul 2026).** The DM icon tap failed to open the share sheet. The `confirmAndScanShareSheet` dump that followed captured the **underlying feed post** instead of the share sheet, because:
+
+1. `_findElem(xml, "Send")` matched the **feed's own paper-plane icon** (which has `content-desc="Send"` on a child node) at the exact same coordinate — so `sendBtn` was non-null even though the sheet never appeared
+2. `sheetOpen = xml.includes("direct_private_share")` was `false`, but this was only checked in a secondary guard (`recipients.length === 0 && !sheetOpen`) — which was bypassed because Strategy 2 returned **bogus feed post nodes** (username buttons, `"more"` caption button, caption text) as recipients
+3. The `"more"` button at (566,2155) was randomly picked and tapped as a "recipient", then the code re-tapped the feed's own send icon; since no sheet was ever open `isDmSheetOpen()` returned false, and the cycle reported `✓ shared via DM — Send tapped` — a complete false positive with nothing actually sent
+
+**Fix 1 — `confirmAndScanShareSheet` (androidManager.ts):** `direct_private_share` is now checked FIRST, before calling `_findElem` or `_extractShareSheetRecipients`. If the sheet is not confirmed open, the function returns `{ sheetOpen: false, sendBtn: null, recipients: [] }` immediately. The feed's own send-icon coordinate can no longer masquerade as the share sheet's Send button, and bogus feed post nodes can no longer appear as DM recipients.
+
+**Fix 2 — Wait time after DM icon tap (mobile.ts):** increased from 400 ms to 1500 ms for both the initial tap and the retry. The dump captures UI state at the moment it starts — 400 ms was too short for the share sheet to fully animate in on this MIUI device. With the longer wait the sheet is open before the dump begins, so `direct_private_share` is present and the scan succeeds.
+
+**Fix 3 — Removed redundant secondary guard (mobile.ts):** the `recipients.length === 0 && !sheetOpen` retry block is removed. With the primary `sheetOpen` gate now in `confirmAndScanShareSheet`, `sendBtn` is always null when the sheet is not open, so the existing `!scan.sendBtn` check handles all retry paths without a second layer of redundant logic.
+
+**Fix 4 — Added `"more"` to UI_CHROME exclusion (androidManager.ts Strategy 2):** the `"more"` caption-expand button was not previously excluded by the label filter and could be picked as a DM recipient when feed post nodes leaked through Strategy 2. Added as belt-and-suspenders on top of the primary fix.
+
+---
+
 ## [1.1.606] — 2026-07-15
 
 ### Fix: share-to-DM tapped "Your Story" instead of a DM contact

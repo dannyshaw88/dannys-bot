@@ -1349,21 +1349,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       onLog?.(`${logPrefix}: tapping share-via-DM icon at (${shareDmIcon.x},${shareDmIcon.y})…`);
       await android.tap(serial, shareDmIcon.x, shareDmIcon.y);
       logger.info({ serial, x: shareDmIcon.x, y: shareDmIcon.y }, `${logTag} tapped share-to-DM icon`);
-      await sleepOrAbort(serial, 400); // wait for share sheet to open
+      // Wait 1500ms before dumping: the share sheet needs time to animate in.
+      // 400ms was too short on this MIUI device — the dump started before the
+      // sheet appeared, so `direct_private_share` was absent and the scan
+      // fell through to feed-post nodes. confirmAndScanShareSheet now gates
+      // on direct_private_share first (if not found → sendBtn:null,
+      // recipients:[]) so a short-wait false-negative always triggers a retry,
+      // but giving the sheet more time to open reduces unnecessary retries.
+      await sleepOrAbort(serial, 1500);
       onLog?.(`${logPrefix}: confirming share sheet opened and picking DM recipient…`);
-      // Confirm-open and recipient-scan used to be two sequential ~9s
-      // uiautomator dumps with nothing happening on screen in between. A
-      // live run (15 Jul 2026) showed the sheet gone by the second dump —
-      // the recipient scan returned the SAME feed action-bar nodes seen
-      // before the tap. confirmAndScanShareSheet does both in ONE dump to
-      // roughly halve that idle window. If the sheet is still gone even in
-      // this single dump, retry once (re-tap the icon) before giving up —
-      // see the root-cause comment on confirmAndScanShareSheet.
       let scan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
       if ((!scan || !scan.sendBtn) && !isCycleAborted(serial)) {
         onLog?.(`${logPrefix}: share sheet not confirmed open on first check — retrying tap once…`);
         await android.tap(serial, shareDmIcon.x, shareDmIcon.y);
-        await sleepOrAbort(serial, 400);
+        await sleepOrAbort(serial, 1500);
         scan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
       }
       if (!scan || !scan.sendBtn) {
@@ -1373,19 +1372,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         await sleepOrAbort(serial, 200);
         return false;
       }
-      const firstSendBtn = scan.sendBtn; // known non-null from the check above
-      if (scan.recipients.length === 0 && !scan.sheetOpen) {
-        // The Send label matched but the recipient scan's own node dump is
-        // feed-only content (see confirmAndScanShareSheet) — the sheet
-        // closed between the tap and this dump. Retry once: re-tap and
-        // re-scan in a single fresh dump rather than giving up immediately.
-        onLog?.(`${logPrefix}: share sheet appears to have closed before a recipient could be picked — retrying once…`);
-        await android.tap(serial, shareDmIcon.x, shareDmIcon.y);
-        await sleepOrAbort(serial, 400);
-        const retryScan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
-        if (retryScan?.sendBtn) scan = retryScan;
-      }
-      const sheetSendBtn = scan.sendBtn ?? firstSendBtn;
+      const sheetSendBtn = scan.sendBtn;
       const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog, scan.recipients);
       if (!recipientPicked) {
         await android.pressBack(serial);

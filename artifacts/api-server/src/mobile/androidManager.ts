@@ -2521,7 +2521,7 @@ function _extractShareSheetRecipients(xml: string, serial: string, onLog?: (line
   //    expose recipient rows as labelled clickable nodes rather than un-labelled
   //    Button children.
   const maxWidth = Math.round(w * 0.80);
-  const UI_CHROME = /^(send|search|write a message|direct|share|to|message|cancel|ok|close|suggested)$/i;
+  const UI_CHROME = /^(send|search|write a message|direct|share|to|message|cancel|ok|close|suggested|more)$/i;
   const SHARE_DESTINATIONS = /^(your story|close friends|add to story|add to your story|story|notes)$/i;
   const results: { x: number; y: number }[] = [];
 
@@ -2609,8 +2609,21 @@ export async function confirmAndScanShareSheet(
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial).catch(() => "");
   if (!xml) return { sheetOpen: false, sendBtn: null, recipients: [] };
-  const sendBtn = _findElem(xml, "Send");
+  // Check sheet presence FIRST. `direct_private_share` is the DM sheet's
+  // sticky search-box resource-id — it only appears inside the sheet, never
+  // on the underlying feed post. If it is absent, the sheet is not open and
+  // everything else in the XML is from the feed: the feed's own paper-plane
+  // icon has content-desc/resource-id that also matches `_findElem(xml,"Send")`,
+  // and feed post nodes (username buttons, "more", captions) pass Strategy-2's
+  // label filters — so we must NOT call either helper when sheetOpen is false
+  // or we will return the feed's send-icon coordinate as `sendBtn` and bogus
+  // feed nodes as `recipients`, producing a false-positive "DM sent" log.
   const sheetOpen = xml.includes("direct_private_share");
+  if (!sheetOpen) {
+    onLog?.("[share-sheet] direct_private_share not found — sheet not open, treating scan as empty");
+    return { sheetOpen: false, sendBtn: null, recipients: [] };
+  }
+  const sendBtn = _findElem(xml, "Send");
   const recipients = _extractShareSheetRecipients(xml, serial, onLog);
   return { sheetOpen, sendBtn, recipients };
 }
