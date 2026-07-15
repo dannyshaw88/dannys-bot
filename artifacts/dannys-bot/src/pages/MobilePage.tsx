@@ -115,8 +115,12 @@ type LogMarker = {
   x: number; y: number;
   /** Unix-ms timestamp. */
   t: number;
-  /** "expected" = user clicked on mirror (cyan).  "bot" = automation tapped (orange). */
-  type: "expected" | "bot";
+  /**
+   * "expected" = user left-clicked on mirror (cyan) — exact expected tap.
+   * "vicinity" = user right-clicked on mirror (yellow) — approximate / multi-choice area.
+   * "bot"      = automation tapped (orange) — what the bot actually sent.
+   */
+  type: "expected" | "vicinity" | "bot";
   /** Short label drawn next to the dot (e.g. the trimmed log line for bot taps). */
   label?: string;
 };
@@ -134,7 +138,7 @@ type InspectResult = {
   _cssX?: number; _cssY?: number;
 };
 
-const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; inspectMode?: boolean; onInspectResult?: (r: InspectResult) => void; clickTestMode?: boolean; logRecMode?: boolean; logMarkers?: LogMarker[]; onExpectedTap?: (x: number, y: number) => void }>(function LiveCanvas({ serial, onLog, onDimensions, inspectMode, onInspectResult, clickTestMode, logRecMode, logMarkers, onExpectedTap }, ref) {
+const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; inspectMode?: boolean; onInspectResult?: (r: InspectResult) => void; clickTestMode?: boolean; logRecMode?: boolean; logMarkers?: LogMarker[]; onExpectedTap?: (x: number, y: number, kind?: "expected" | "vicinity") => void }>(function LiveCanvas({ serial, onLog, onDimensions, inspectMode, onInspectResult, clickTestMode, logRecMode, logMarkers, onExpectedTap }, ref) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   // Cache the 2D context so we don't re-call getContext() every frame.
   const ctxRef       = useRef<CanvasRenderingContext2D | null>(null);
@@ -152,6 +156,13 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   // "idle" = waiting for first click, "target" = waiting for user's yellow correction dot
   const clickTestPhaseRef = useRef<"idle" | "target">("idle");
   const clickTestModeRef  = useRef(false);
+  // Log Record mode — mirrored into refs so handlePointerUp's stable
+  // useCallback closure can read the current values without going stale
+  // (logRecMode and onExpectedTap are NOT in handlePointerUp's dep array).
+  const logRecModeRef2    = useRef(logRecMode);
+  const onExpectedTapRef  = useRef(onExpectedTap);
+  useEffect(() => { logRecModeRef2.current   = logRecMode;    }, [logRecMode]);
+  useEffect(() => { onExpectedTapRef.current = onExpectedTap; }, [onExpectedTap]);
   const fpsCountRef  = useRef(0);
   const frameSeenRef = useRef(false);
   // Video mode: true H.264 stream decoded with WebCodecs (near-instant).
@@ -719,8 +730,8 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       // the phone.  The user marks the taps they expect the bot to make;
       // the bot's actual automated taps are added as orange dots via addLog
       // parsing.  Normal interaction resumes once recording stops.
-      if (logRecMode) {
-        onExpectedTap?.(drag.startX, drag.startY);
+      if (logRecModeRef2.current) {
+        onExpectedTapRef.current?.(drag.startX, drag.startY, "expected");
         return;
       }
 
@@ -867,6 +878,13 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
+        onContextMenu={(e) => {
+          if (!logRecModeRef2.current) return;
+          e.preventDefault();
+          const p = mapToPhone(e.clientX, e.clientY);
+          if (!p) return;
+          onExpectedTapRef.current?.(p.x, p.y, "vicinity");
+        }}
         style={{
           display:       status === "connecting" ? "none" : "block",
           position:      "absolute",
@@ -950,27 +968,40 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
             {logMarkers.map((m, i) => {
               const cssX = dx + (m.x / phoneW) * dw;
               const cssY = dy + (m.y / phoneH) * dh;
-              const isBot = m.type === "bot";
+              const isBot      = m.type === "bot";
+              const isVicinity = m.type === "vicinity";
+              // cyan = exact expected (left-click), yellow = vicinity/multi-choice (right-click), orange = bot actual
+              const size   = isBot ? 16 : 22;
+              const half   = size / 2;
+              const bg     = isBot      ? "rgba(255,120,20,0.85)"
+                           : isVicinity ? "rgba(220,190,0,0.75)"
+                           :              "rgba(0,210,210,0.85)";
+              const shadow = isBot      ? "0 0 6px rgba(255,120,20,0.7)"
+                           : isVicinity ? "0 0 8px rgba(220,190,0,0.8)"
+                           :              "0 0 6px rgba(0,210,210,0.7)";
+              const labelBg = isBot      ? "rgba(180,70,0,0.9)"
+                            : isVicinity ? "rgba(160,130,0,0.9)"
+                            :              "rgba(0,140,140,0.9)";
               return (
                 <React.Fragment key={i}>
                   <div style={{
                     position: "absolute",
                     left: cssX, top: cssY,
-                    width: isBot ? 16 : 20, height: isBot ? 16 : 20,
-                    marginLeft: isBot ? -8 : -10, marginTop: isBot ? -8 : -10,
+                    width: size, height: size,
+                    marginLeft: -half, marginTop: -half,
                     borderRadius: "50%",
-                    background: isBot ? "rgba(255,120,20,0.85)" : "rgba(0,210,210,0.85)",
-                    border: "2px solid white",
+                    background: bg,
+                    border: isVicinity ? "2px dashed white" : "2px solid white",
                     zIndex: 25,
                     pointerEvents: "none",
-                    boxShadow: isBot ? "0 0 6px rgba(255,120,20,0.7)" : "0 0 6px rgba(0,210,210,0.7)",
+                    boxShadow: shadow,
                   }} />
                   {/* Sequence number label */}
                   <div style={{
                     position: "absolute",
-                    left: cssX + (isBot ? 8 : 10), top: cssY - (isBot ? 8 : 10),
+                    left: cssX + half, top: cssY - half,
                     fontSize: 8, lineHeight: 1, fontWeight: 700, color: "white",
-                    background: isBot ? "rgba(180,70,0,0.9)" : "rgba(0,140,140,0.9)",
+                    background: labelBg,
                     borderRadius: 3, padding: "1px 2px",
                     zIndex: 26, pointerEvents: "none",
                     whiteSpace: "nowrap",
@@ -988,7 +1019,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       {logRecMode && (
         <div style={{ position: "absolute", top: 6, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 30, pointerEvents: "none" }}>
           <span style={{ background: "rgba(0,180,180,0.92)", color: "white", fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 10, letterSpacing: 1 }}>
-            📍 LOG RECORD — tap to place expected marker
+            📍 LOG RECORD — left-click: exact cyan marker · right-click: approximate yellow marker
           </span>
         </div>
       )}
@@ -1024,7 +1055,7 @@ function EmptyShell({ idx }: { idx: number }) {
 
 type PhoneSlotHandle = { getVideoSize: () => { w: number; h: number } | null };
 
-const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; live: boolean; onPower: () => void; phoneDims: { w: number; h: number } | null; paneSize: { w: number; h: number } | null; logRecMode?: boolean; logMarkers?: LogMarker[]; onExpectedTap?: (x: number, y: number) => void }>(function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower, phoneDims, paneSize, logRecMode, logMarkers, onExpectedTap }, ref) {
+const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; live: boolean; onPower: () => void; phoneDims: { w: number; h: number } | null; paneSize: { w: number; h: number } | null; logRecMode?: boolean; logMarkers?: LogMarker[]; onExpectedTap?: (x: number, y: number, kind?: "expected" | "vicinity") => void }>(function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower, phoneDims, paneSize, logRecMode, logMarkers, onExpectedTap }, ref) {
   const liveCanvasRef = useRef<LiveCanvasHandle>(null);
   // Re-exposes LiveCanvas's own handle so the page-level Log tab (rendered
   // as a sibling, not a child, of this slot) can read the mirror's live
@@ -3452,8 +3483,9 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
         exportedAt:  new Date().toISOString(),
         serial:      serial ?? "unknown",
         phoneSize:   phoneDims ?? null,
-        markerCount: logMarkers.length,
+        markerCount:   logMarkers.length,
         expectedCount: logMarkers.filter(m => m.type === "expected").length,
+        vicinityCount: logMarkers.filter(m => m.type === "vicinity").length,
         botCount:      logMarkers.filter(m => m.type === "bot").length,
         markers:     logMarkers,
       };
@@ -3547,10 +3579,10 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                 className="gap-1.5"
                 title={logRecMode
                   ? `Stop Log Record — exports ${(logMarkers ?? []).length} marker(s) as JSON`
-                  : "Log Record — mirror clicks place cyan 'expected' markers; bot taps are marked orange. Export on stop."}
+                  : "Log Record — left-click: cyan exact · right-click: yellow vicinity · bot taps auto-orange. Export on stop."}
               >
                 {logRecMode
-                  ? `⏹ Stop (${(logMarkers ?? []).length}🔵${(logMarkers ?? []).filter(m => m.type === "expected").length} 🟠${(logMarkers ?? []).filter(m => m.type === "bot").length})`
+                  ? `⏹ Stop (🔵${(logMarkers ?? []).filter(m => m.type === "expected").length} 🟡${(logMarkers ?? []).filter(m => m.type === "vicinity").length} 🟠${(logMarkers ?? []).filter(m => m.type === "bot").length})`
                   : "📍 Log Record"}
               </Button>
             )}
@@ -3845,7 +3877,7 @@ export function MobilePage() {
                   ref={phone?.serial === activeSerial ? activeSlotRef : undefined}
                   logRecMode={logRecMode}
                   logMarkers={logMarkers}
-                  onExpectedTap={(x, y) => addLogMarker({ x, y, t: Date.now(), type: "expected" })}
+                  onExpectedTap={(x, y, kind) => addLogMarker({ x, y, t: Date.now(), type: kind ?? "expected" })}
                 />
               ))}
             </div>

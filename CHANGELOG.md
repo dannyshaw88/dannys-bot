@@ -4,6 +4,16 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.611] — 2026-07-15
+
+### Fix: Log Record markers now actually appear (stale-closure bug)
+
+**Left-click cyan markers weren't registering at all** — clicking the mirror in Log Record mode did nothing. Root cause: `handlePointerUp` is a stable `useCallback` with fixed deps; `logRecMode` wasn't in the dep list, so the closure always saw `false` and fell through to the normal tap path. Fixed by mirroring `logRecMode` and `onExpectedTap` into refs inside `LiveCanvas` and reading those refs in `handlePointerUp`.
+
+**Right-click now places a yellow "vicinity" marker** — for taps whose exact location varies (e.g. picking a random user from the share-sheet list, tapping a post anywhere on screen). Right-click on the mirror in Log Record mode → yellow dashed circle. Left-click remains the cyan exact-match marker.
+
+Stop button now shows **🔵 exact / 🟡 vicinity / 🟠 bot** counts individually. Exported JSON includes `vicinityCount` in the summary.
+
 ## [1.1.610] — 2026-07-15
 
 ### Feature: Log Record mode — visual expected-vs-actual tap comparison overlay
