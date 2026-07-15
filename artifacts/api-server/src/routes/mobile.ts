@@ -3039,8 +3039,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // use keyboard presence as a proxy for "sheet opened". Use
           // direct_private_share_sticky_search_box (via findButtonByLabel
           // "Send" which only exists inside the sheet) as the positive signal.
-          const sheetConfirmed = await android.findButtonByLabel(serial, "Send").catch(() => null) !== null;
-          if (!sheetConfirmed) {
+          //
+          // Capture the Send button position — proves the sheet is open AND
+          // passes it to sendShareSheet so it can skip its own 2–3s a11y dump
+          // and always taps the pre-found position (same pattern as ViewFeed /
+          // ViewStories). Without this the re-scan after the recipient tap can
+          // miss the button if the sheet has partially transitioned, falling
+          // through to the null "auto-dismissed" path with Send never tapped.
+          const sheetSendBtn = await android.findButtonByLabel(serial, "Send").catch(() => null);
+          if (!sheetSendBtn) {
             logger.warn({ serial }, "[inject-browsing] share sheet not confirmed open — skipping recipient tap");
             onLog?.("Inject Browsing: share aborted — could not confirm the share sheet opened (no Send button found)");
           } else {
@@ -3051,8 +3058,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             onLog?.("Inject Browsing: share skipped — no recipient avatars found (closed without sending)");
           } else {
           await sleepOrAbort(serial, 200);
-          const sent = await sendShareSheet(serial, w, h);
-          if (sent === true) { onLog?.("Inject Browsing: shared the post via DM"); await sleepOrAbort(serial, 200); }
+          const sent = await sendShareSheet(serial, w, h, sheetSendBtn);
+          if (sent === true) { onLog?.("Inject Browsing: shared the post via DM — Send tapped"); await sleepOrAbort(serial, 200); }
           else if (sent === null) {
             // Sheet already gone — recipient tap auto-sent it; no Back needed.
             onLog?.("Inject Browsing: shared the post via DM (sheet auto-dismissed by recipient tap)");

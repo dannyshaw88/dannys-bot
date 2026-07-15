@@ -4,6 +4,16 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.588] — 2026-07-15
+
+### Fix: Inject Browsing Share-to-DM — Send button never tapped after recipient selected
+
+**Root cause:** After tapping the DM paper-plane icon and confirming the share sheet was open, the code called `findButtonByLabel("Send")` purely to check `!== null` (discarding the result), then called `sendShareSheet(serial, w, h)` with no pre-found button. `sendShareSheet` then ran a fresh a11y scan to find "Send". By that point — after the recipient tap — the sheet had partially transitioned, the scan returned nothing, `isDmSheetOpen()` also found nothing (sheet closed), and the function returned `null`. The code interpreted `null` as "DM sent by recipient tap" and logged "sheet auto-dismissed by recipient tap" — but Send was never actually tapped and no DM was sent.
+
+**Fix:** Aligned Inject Browsing with the identical pattern already used by ViewFeed (`check-feed`) and ViewStories: store the result of `findButtonByLabel("Send")` into `sheetSendBtn` (this both confirms the sheet is open AND captures the button position), then pass `sheetSendBtn` to `sendShareSheet`. With a pre-found position, `sendShareSheet` skips the re-scan entirely and taps the known coordinates immediately — guaranteed to fire even if the sheet has started to animate after the recipient tap. Log message on success changed from "shared the post via DM" to "shared the post via DM — Send tapped" to match ViewFeed/ViewStories phrasing.
+
+---
+
 ## [1.1.587] — 2026-07-15
 
 ### Fix: Inject Browsing — scroll recovery when post tap lands on blank whitespace
