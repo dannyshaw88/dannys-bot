@@ -4,6 +4,16 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.603] — 2026-07-15
+
+### Refactor: share-via-DM is now one shared function, not two hand-copied versions
+
+Reported live: after "porting" Inject Browsing's share-to-DM block to match View Feed's in v1.1.602, the two were structurally identical but Inject Browsing still failed to select a recipient on a real run. Comparing them side by side confirmed the logic was already the same — the actual problem is that this flow lived as two separately-maintained copies (View Feed's in `runCheckFeedLoop`, Inject Browsing's in `runProfileBrowsingSequence`, plus similar copies in View Stories/Reels), so every real-device fix applied to one (the `grid_view_pog_avatar_view` resource-id lookup, the numeric/hashtag/abbreviated-count label exclusions, the sheet-already-closed-vs-never-opened distinction) had to be manually re-applied to the others, and it was easy for that to silently not happen or drift.
+
+Extracted the whole tap-icon → confirm-sheet → pick-recipient → tap-Send sequence into one function, `shareCurrentPostViaDm(serial, w, h, shareDmIcon, logPrefix, logTag, onLog)`. Both View Feed's `runCheckFeedLoop` and Follow's Inject Browsing `runProfileBrowsingSequence` now call this one implementation instead of maintaining their own copy. They can no longer diverge — a fix to the shared function fixes both call sites at once, by construction rather than by remembering to copy it twice.
+
+---
+
 ## [1.1.602] — 2026-07-15
 
 ### Fix: Inject Browsing share-to-DM replaced with exact View Feed code path
