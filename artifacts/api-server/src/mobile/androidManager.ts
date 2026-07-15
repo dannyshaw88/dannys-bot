@@ -2379,11 +2379,17 @@ export async function findShareSheetRecipients(serial: string, onLog?: (line: st
     if (!label || label.length > 50) continue;
     if (UI_CHROME.test(label)) continue;
     if (SHARE_DESTINATIONS.test(label.trim())) continue;
-    // Exclude pure-numeric strings (like counts from the feed action bar that
-    // sit BENEATH the share sheet and still appear in the a11y tree):
-    //   "38" (comments), "203" (reposts), "9,077" (likes), "1,074" (sends).
-    // A real DM recipient name always contains at least one letter.
+    // Exclude count labels from the feed action bar that sit BENEATH the
+    // share sheet and still appear in the a11y tree: plain digits/commas
+    // ("38" comments, "203" reposts, "9,077" likes) AND abbreviated counts
+    // with a K/M/B suffix ("12.1K" likes, "1.2M" likes). The abbreviated
+    // form was NOT excluded by the old pure-digit regex — confirmed live
+    // (15 Jul 2026) where a "12.1K" like-count node at the same y-row as
+    // the real recipient buttons slipped through, got randomly picked as
+    // the "recipient", and no DM was actually sent to anyone.
+    // A real DM recipient username/display name never matches this shape.
     if (/^[\d,.\s]+$/.test(label)) continue;
+    if (/^[\d,.]+\s*[KMB]$/i.test(label)) continue;
     // Exclude hashtag caption chips (e.g. #foryou, #gymrat) — these are the
     // post's own caption tags surfaced as clickable Button nodes at the same
     // y-row as the real DM recipient name buttons.  Tapping one focuses the

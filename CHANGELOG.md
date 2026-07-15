@@ -4,6 +4,16 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.595] — 2026-07-15
+
+### Fix: Share-to-DM Strategy 2 — abbreviated like/share counts ("12.1K") slipped through the numeric filter
+
+**Root cause (from live log, 15 Jul 2026):** Strategy 1 (resource-id lookup for the real recipient avatar grid) failed to find any avatars, so the code fell to Strategy 2 (label scan). On this run the DM share sheet was overlaying a screen where the underlying post's own action-bar counts were still present in the accessibility tree beneath it — including the Like count rendered as `"12.1K"`. The existing numeric-exclusion filter (`/^[\d,.\s]+$/`) only caught plain digit/comma counts like `"203"` or `"9,077"` — it did not match abbreviated counts with a `K`/`M`/`B` suffix, because the letter fails the pure-digit test. `"12.1K"` passed every filter, got treated as a candidate "recipient," and was randomly tapped instead of a real user — the DM was sent to nobody (or mis-tapped into an unrelated action) even though the log reported "Send tapped."
+
+**Fix:** Added a second exclusion in the same Strategy 2 scan: `if (/^[\d,.]+\s*[KMB]$/i.test(label)) continue;` — catches abbreviated counts (`12.1K`, `1.2M`, `374B`) the same way the existing rule catches plain ones. No new logic was introduced elsewhere: the Follow tool's Inject Browsing share-to-DM flow and the View Feed share-to-DM flow already share the exact same `findShareSheetRecipients` / `tapRandomShareSheetRecipient` / `sendShareSheet` helpers — this was a single shared-code bug, not a duplicated one.
+
+---
+
 ## [1.1.594] — 2026-07-15
 
 ### Fix: Share-to-DM Strategy 2 — exclude `#hashtag` caption chips as recipient candidates
