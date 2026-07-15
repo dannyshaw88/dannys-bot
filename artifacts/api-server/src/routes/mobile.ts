@@ -3219,68 +3219,37 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       onLog?.("Inject Browsing: share-via-DM roll missed — skipping");
     } else {
       try {
-        // Same reasoning as share-to-feed above: the label scan is the
-        // trusted source because it only matches a node whose content-desc
-        // literally says "Send"/"Direct"/"Message". `icons.shareDm` can be
-        // a positional guess inside findFeedActionIcons and has previously
-        // mis-mapped onto the Comment icon when a role's label was
-        // missing/unmatched on-device — never prefer it over the label
-        // scan. It's used only as a last resort when the label scan finds
-        // nothing at all.
-        const sendIcon =
-          (await android.findButtonByLabel(serial, "Send").catch(() => null)) ??
-          (await android.findButtonByLabel(serial, "Direct").catch(() => null)) ??
-          (await android.findButtonByLabel(serial, "Message").catch(() => null)) ??
-          icons.shareDm;
-        if (!sendIcon) {
+        // Use the SAME code path as View Feed's share-to-DM (findFeedActionIcons
+        // + measured icons.shareDm as the tap target, findButtonByLabel("Send")
+        // used ONLY afterward to confirm the sheet opened). Previously this
+        // block tapped whatever findButtonByLabel("Send"/"Direct"/"Message")
+        // found FIRST, which on this device is the feed's own DM icon —
+        // identical to the node the "confirm sheet opened" check searches for.
+        // A missed/failed tap then re-found that same unclicked icon and
+        // reported a false-positive "sheet open" (TAUTOLOGY BUG, found from a
+        // live log 15 Jul 2026 — it fell through to tapping the feed's own
+        // "Add to Saved" button by elimination, then logged "shared via DM").
+        // View Feed never has this problem because its tap target
+        // (icons.shareDm) and its confirmation signal (findButtonByLabel)
+        // come from two independent sources by construction. Mirroring that
+        // exactly — instead of patching the old label-first approach with a
+        // position-delta guard — removes the tautology at the root.
+        if (!icons.shareDm) {
           onLog?.("Inject Browsing: Send icon not found on this post — skipping share-via-DM");
-          logger.warn({ serial }, "[inject-browsing] neither findFeedActionIcons row-scan nor findButtonByLabel('Send'/'Direct'/'Message') found the icon — likely absent or unlabeled on this build");
+          logger.warn({ serial }, "[inject-browsing] findFeedActionIcons found no shareDm icon on this post — likely absent or unlabeled on this build");
         } else {
+          const sendIcon = icons.shareDm;
           await android.tap(serial, sendIcon.x, sendIcon.y);
           logger.info({ serial, x: sendIcon.x, y: sendIcon.y }, "[inject-browsing] tapped Send icon");
-          await sleepOrAbort(serial, 200);
-          // Confirm the sheet actually rendered before firing the recipient tap.
-          // Same fix as story share-to-DM (Jul 2026): the DM share sheet's
-          // search box auto-focuses on open, raising the soft keyboard — so
-          // isKeyboardShown() returns true even on a SUCCESSFUL open. Never
-          // use keyboard presence as a proxy for "sheet opened". Use
-          // direct_private_share_sticky_search_box (via findButtonByLabel
-          // "Send" which only exists inside the sheet) as the positive signal.
-          //
-          // Capture the Send button position — proves the sheet is open AND
-          // passes it to sendShareSheet so it can skip its own 2–3s a11y dump
-          // and always taps the pre-found position (same pattern as ViewFeed /
-          // ViewStories). Without this the re-scan after the recipient tap can
-          // miss the button if the sheet has partially transitioned, falling
-          // through to the null "auto-dismissed" path with Send never tapped.
-          //
-          // TAUTOLOGY BUG (found from a live log, 15 Jul 2026): unlike Stories
-          // — where the tapped paper-plane icon is found by pixel-scan, so a
-          // later "Send" label match is a genuinely new signal — here the
-          // tapped icon (`sendIcon`) is ITSELF found via
-          // findButtonByLabel("Send"/"Direct"/"Message"), because this
-          // device's feed action bar legitimately exposes its own DM icon
-          // under that same label. If the tap missed or the sheet never
-          // opened, re-running findButtonByLabel("Send") finds that SAME
-          // still-unclicked feed icon and reports a false positive "sheet
-          // confirmed open" — the code then fell through the label scan,
-          // found no real recipients, and (in the observed run) tapped the
-          // feed's own "Add to Saved" button by elimination, then logged
-          // "shared via DM — Send tapped" for something that never happened.
-          // Fix: a real sheet confirmation must be a DIFFERENT node than the
-          // one just tapped — require its position to have moved.
+          await sleepOrAbort(serial, 400); // same settle wait as View Feed's share-to-DM
+          // Confirm the sheet actually opened before tapping a recipient — this
+          // findButtonByLabel("Send") call is a genuinely independent signal
+          // from the tap target above (icons.shareDm), not a re-check of the
+          // same node, so no position-delta guard is needed (see View Feed).
           const sheetSendBtn = await android.findButtonByLabel(serial, "Send").catch(() => null);
-          const sheetSendBtnIsSameNode =
-            !!sheetSendBtn &&
-            Math.abs(sheetSendBtn.x - sendIcon.x) < 60 &&
-            Math.abs(sheetSendBtn.y - sendIcon.y) < 60;
-          if (!sheetSendBtn || sheetSendBtnIsSameNode) {
-            logger.warn({ serial, sheetSendBtn, sendIcon, sheetSendBtnIsSameNode }, "[inject-browsing] share sheet not confirmed open — skipping recipient tap");
-            onLog?.(
-              sheetSendBtnIsSameNode
-                ? "Inject Browsing: share aborted — Send tap didn't open a sheet (still the same feed icon) — skipping to avoid a blind tap on the feed underneath"
-                : "Inject Browsing: share aborted — could not confirm the share sheet opened (no Send button found)"
-            );
+          if (!sheetSendBtn) {
+            logger.warn({ serial, sendIcon }, "[inject-browsing] share sheet not confirmed open — skipping recipient tap");
+            onLog?.("Inject Browsing: share aborted — could not confirm the share sheet opened (no Send button found)");
           } else {
           const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog);
           if (!recipientPicked) {
@@ -3386,7 +3355,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     let followed = 0;
 
-    // Navigate to Search tab
+    // Navigate to Search tab. When Follow is the only enabled tool, no prior
+    // scroll/view action has run to let the just-opened feed settle, so the
+    // bottom nav can still be mid-render on the very first lookup (seen live
+    // 15 Jul 2026 — failed on the first cycle, succeeded on the very next
+    // one with nothing else different). One-time settle wait, not a retry
+    // loop — check once, not repeatedly.
+    await sleepOrAbort(serial, 1500);
     const searchTab = await android.findInstagramSearchTab(serial).catch(() => null);
     if (!searchTab) { onLog?.("Follow: Search tab not found — skipping"); return 0; }
     await android.tap(serial, searchTab.x, searchTab.y);

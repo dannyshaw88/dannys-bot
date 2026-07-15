@@ -4317,14 +4317,12 @@ export async function typeViaOnscreenKeyboard(
   await refreshKeyMap("letters");
 
   // Verify the keyboard actually opened — a real soft-keyboard has ≥ 20
-  // mappable keys.  Fewer means the field wasn't focused yet (the bar tap
+  // mappable keys. Fewer means the field wasn't focused yet (the bar tap
   // landed below the field, the Explore page settled late, etc.).
-  // Retry up to 2 times with a 1.2 s pause to let the keyboard animate up.
-  for (let kbRetry = 0; kbRetry < 2 && keyMap.size < 15; kbRetry++) {
-    onLog?.(`[keyboard] only ${keyMap.size} keys — waiting for keyboard… (retry ${kbRetry + 1})`);
-    await _sleep(1200);
-    await refreshKeyMap("letters");
-  }
+  // One check, no retries (per project rule, 15 Jul 2026): if it fails
+  // once, fall straight through to the IME fallback below instead of
+  // polling again — callers that need the keyboard to have settled first
+  // must add their own upfront wait before calling this function.
   if (keyMap.size < 5) {
     // The accessibility dump never surfaced the on-screen keyboard's keys —
     // on some devices/IME builds uiautomator's window walk misses the IME

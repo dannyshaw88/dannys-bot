@@ -4,6 +4,24 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.598] — 2026-07-15
+
+### Fix: Follow tool's share-to-DM — replaced with View Feed's proven code path (removes the tautology at the root, not just a patch)
+
+**Why the 1.1.597 patch wasn't good enough:** the position-delta guard stopped the false positive, but it left the root design intact — Inject Browsing's DM tap target was still found via `findButtonByLabel(serial, "Send"/"Direct"/"Message")`, the same call used for confirmation. A live re-test (log `equinox-log-2026-07-15T15-46-11-267Z`) still showed the share aborting every time ("Send tap didn't open a sheet (still the same feed icon)") because the label scan kept finding the unclicked feed icon as its own "tap target," not just as a false confirmation.
+
+**Fix:** Inject Browsing's share-to-DM now taps `icons.shareDm` — the same measured/positional icon from `findFeedActionIcons` that View Feed's share-to-DM has always used as its tap target — instead of a label scan. `findButtonByLabel(serial, "Send")` is now used ONLY afterward, to confirm the sheet opened, exactly as in View Feed. Because the tap target and the confirmation signal now come from two different sources by construction, the tautology can't recur and the position-delta guard is no longer needed (removed).
+
+### Fix: Follow tool — "Search tab not found" on the very first cycle when Follow is the only enabled tool
+
+Root cause: with View Feed/Stories/Reels all disabled, nothing runs before Follow to let the freshly-opened app settle, so the bottom nav can still be mid-render on the very first `findInstagramSearchTab` lookup (observed live: failed on one cycle, succeeded on the next with nothing else different). Added a one-time 1.5s settle wait before that lookup — a single check, not a retry loop.
+
+### Changed: on-screen keyboard detection no longer retries
+
+`typeViaOnscreenKeyboard` polled up to 2 extra times (1.2s apart) if fewer than 15 keys were mapped on the first read. Per project rule, tool checks fail once and move on — removed the retry loop; a low key count now falls straight through to the existing IME-injection fallback on the first read.
+
+---
+
 ## [1.1.597] — 2026-07-15
 
 ### Fix: Follow tool's share-to-DM — false "sheet confirmed open" tautology
