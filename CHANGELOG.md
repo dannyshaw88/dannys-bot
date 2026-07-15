@@ -4,6 +4,18 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.597] — 2026-07-15
+
+### Fix: Follow tool's share-to-DM — false "sheet confirmed open" tautology
+
+**Root cause (from live log, 15 Jul 2026):** the Inject Browsing DM step finds its tap target (`sendIcon`) via `findButtonByLabel(serial, "Send"/"Direct"/"Message")`, because this device's feed action bar legitimately exposes its own DM icon under that label. After tapping it, the code re-ran the exact same `findButtonByLabel(serial, "Send")` to "confirm the sheet opened." If the tap missed or the sheet never rendered, that second call just found the SAME still-unclicked feed icon and reported a false positive. The label scan then fell through to `findShareSheetRecipients`, found no real recipients (Strategy 1's avatar grid absent, Strategy 2 dump was actually the underlying feed's own action bar), and — after the numeric/hashtag exclusions removed every other candidate — tapped the feed's own "Add to Saved" button by elimination. The log reported "shared the post via DM — Send tapped" for a share that never happened.
+
+This is a different failure mode from Stories/Feed's share-to-DM, which finds its tap target by pixel-scan/measured position — a genuinely independent signal from the later "Send" label confirmation, so no tautology there.
+
+**Fix:** the sheet-open confirmation now requires the found "Send" node's position to differ (>60px) from the tapped `sendIcon`'s position. If it's the same node, the share is aborted instead of falsely confirmed. Also added "Add to Saved" / `row_feed_button_save` to the share-sheet recipient exclusion list as a backstop against this same leak class recurring with a different label.
+
+---
+
 ## [1.1.596] — 2026-07-15
 
 ### Feature: View Reels — new tool between View Stories and Follow Users
