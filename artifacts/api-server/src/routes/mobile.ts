@@ -1982,48 +1982,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           logger.info({ serial, story: s + 1 }, "[view-stories] share skipped — paper-plane not found");
           onLog?.(`Story ${s + 1}: share skipped — owner has sharing disabled (no paper-plane detected)`);
         } else {
-          // Root-cause fix (12 Jul 2026, user-reported): a missed tap used
-          // to be a dead end — one shot at the scanned coordinates, and if
-          // the keyboard opened (meaning we hit the message field instead
-          // of the paper-plane) we just gave up on the whole share. The
-          // scan can't be made perfectly reliable across every device in
-          // this farm, but the keyboard-open signal already tells us
-          // definitively that we missed — so use it as live feedback and
-          // retry further right (the paper-plane is always the rightmost
-          // element of the bar) instead of stopping after one attempt.
-          let attemptX = shareIconPos.x;
-          let opened_ = false;
-          for (let attempt = 0; attempt < 3; attempt++) {
-            await android.tap(serial, attemptX, shareIconPos.y);
-            await sleepOrAbort(serial, 500);
-            const keyboardShown = await android.isKeyboardShown(serial).catch(() => false);
-            if (!keyboardShown) { opened_ = true; break; }
-            await android.pressBack(serial);
-            logger.warn({ serial, story: s + 1, attempt, attemptX }, "[view-stories] share tap opened keyboard — retrying further right");
-            onLog?.(`Story ${s + 1}: share tap at (${attemptX},${shareIconPos.y}) opened keyboard — retrying further right`);
-            attemptX = Math.min(Math.round(w * 0.97), attemptX + Math.round(w * 0.05));
-            await sleepOrAbort(serial, 300);
-          }
-          // The sheet is a modal over the story, so its own presence isn't
-          // directly checkable via findHomeTab — but if the story has
-          // ALREADY exited to the feed underneath (auto-advanced past the
-          // last slide while we were mid-tap), the bottom nav reappears
-          // even though no keyboard is showing. That combination used to
-          // read as "sheet opened successfully" and every tap after this
-          // point (recipient, Send) landed on the feed instead.
-          const backOnFeed = opened_ && await stillInStoryViewer().then(v => !v);
-          if (!opened_) {
-            // Every retry hit the message field — give up rather than risk
-            // a 4th blind tap.
-            logger.warn({ serial, story: s + 1 }, "[view-stories] share tap opened keyboard on every retry — giving up");
-            onLog?.(`Story ${s + 1}: share skipped — every retry landed on the message field, could not locate the paper-plane`);
-          } else if (backOnFeed) {
-            logger.warn({ serial, story: s + 1 }, "[view-stories] story exited to feed instead of opening share sheet — no further taps");
-            onLog?.(`Story ${s + 1}: share skipped — story ended before the share sheet opened (back on home feed)`);
-          } else {
-            opened = true;
-            onLog?.(`Story ${s + 1}: share sheet opened — tapped paper-plane at (${attemptX},${shareIconPos.y})`);
-          }
+          // Tap the paper-plane once and wait for the share sheet — identical
+          // to the feed share-to-DM flow which does not use a keyboard check.
+          //
+          // DO NOT use isKeyboardShown() here.  When the paper-plane tap
+          // correctly opens the DM share sheet, the sheet's search box
+          // ("Search" EditText) auto-focuses and raises the soft keyboard —
+          // so isKeyboardShown() returns true even on a SUCCESSFUL tap.
+          // The old keyboard-check-and-retry loop therefore pressed Back every
+          // time the sheet opened correctly, closing it immediately, then
+          // repeated 3 times — which is exactly the "clicking and closing the
+          // share sheet" behaviour reported (15 Jul 2026).
+          //
+          // Sheet confirmation is handled below via direct_private_share
+          // resource-id (the same signal sendShareSheet uses), which
+          // unambiguously distinguishes "sheet open" from "nothing happened".
+          await android.tap(serial, shareIconPos.x, shareIconPos.y);
+          onLog?.(`Story ${s + 1}: tapped paper-plane at (${shareIconPos.x},${shareIconPos.y}) — waiting for share sheet`);
+          await sleepOrAbort(serial, 1200); // match feed flow timing
+          opened = true;
         }
         if (opened) {
           await sleepOrAbort(serial, 900); // wait for picker sheet (trimmed from 1200ms to leave more runway)

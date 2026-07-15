@@ -4,6 +4,18 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.583] — 2026-07-15
+
+### Fix: story share-to-DM — remove keyboard-check retry loop (was closing the sheet it just opened)
+
+Root cause confirmed from device log (15 Jul 2026):
+
+When `toolbar_reshare_button` is tapped correctly and the DM share sheet opens, the sheet's "Search" EditText auto-focuses and raises the soft keyboard. `isKeyboardShown()` therefore returned `true` on a **successful** paper-plane tap. The old retry loop treated this as "missed the button", called `pressBack` (closing the sheet), then retried — repeating 3 times. This is exactly the "constantly clicking and closing the share sheet" behaviour reported.
+
+Fix: removed the keyboard-check retry loop entirely. Replaced with a single tap + 1200ms wait, identical to the feed share-to-DM flow which has never used a keyboard check. Sheet confirmation continues to use the `direct_private_share_sticky_search_box` resource-id (the existing `sheetConfirmed` gate below the tap), which unambiguously distinguishes "sheet open" from "nothing happened".
+
+---
+
 ## [1.1.582] — 2026-07-15
 
 ### Fix: story Share-to-DM — paper-plane by resource-id, recipients by resource-id, no coordinate fallbacks
