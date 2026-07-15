@@ -2580,19 +2580,116 @@ function AutomationSettingsPanel({
           </div>
         </div>}
 
+        {/* ── Target Sources panel (toggled via the Sources button above) ─ */}
+        <div className="space-y-2">
+          {showSources && (
+            <div className="border border-border rounded-lg p-3 space-y-2">
+              {/* Hidden file input for CSV/TSV import */}
+              <input
+                ref={importSourceFileRef}
+                type="file"
+                accept=".csv,.tsv,.txt"
+                className="hidden"
+                onChange={handleImportFollowSources}
+              />
+
+              {/* Header row: count + Import / Export / Clear all */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-muted-foreground flex-1">
+                  {settings.followSources.length} source{settings.followSources.length !== 1 ? 's' : ''}
+                </span>
+                <Button
+                  variant="outline" size="sm" className="h-7 text-xs px-2.5 gap-1 shrink-0"
+                  onClick={() => importSourceFileRef.current?.click()}
+                  disabled={loading}
+                >
+                  <Upload className="w-3 h-3" /> Import
+                </Button>
+                <Button
+                  variant="outline" size="sm" className="h-7 text-xs px-2.5 gap-1 shrink-0"
+                  onClick={handleExportFollowSources}
+                  disabled={loading || !settings.followSources.length}
+                >
+                  <Download className="w-3 h-3" /> Export
+                </Button>
+                {settings.followSources.length > 0 && (
+                  <Button
+                    variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:text-destructive shrink-0"
+                    disabled={loading}
+                    onClick={() => setSettings(s => ({ ...s, followSources: [] }))}
+                  >Clear all</Button>
+                )}
+              </div>
+
+              {/* Sources list — max 10 rows visible, scrollable */}
+              {settings.followSources.length > 0 ? (
+                <div className="space-y-1 max-h-[260px] overflow-y-auto pr-0.5">
+                  {settings.followSources.map((src, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono shrink-0">
+                        {src.type === 'hashtag' ? '#' : '@'}
+                      </span>
+                      <span className="flex-1 text-foreground truncate">{src.value}</span>
+                      <button
+                        onClick={() => setSettings(s => ({ ...s, followSources: s.followSources.filter((_, j) => j !== i) }))}
+                        disabled={loading}
+                        className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                      >✕</button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No sources yet. Import a CSV or add manually below.</p>
+              )}
+
+              {/* Add new source */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <select
+                  value={newFollowSourceType}
+                  onChange={e => setNewFollowSourceType(e.target.value as 'hashtag' | 'target_followers')}
+                  disabled={loading}
+                  className="text-xs bg-muted border border-border rounded px-2 py-1 text-foreground cursor-pointer"
+                >
+                  <option value="hashtag">Hashtag</option>
+                  <option value="target_followers">Followers of Account</option>
+                </select>
+                <Input
+                  className="flex-1 min-w-0 text-xs h-8"
+                  placeholder={newFollowSourceType === 'hashtag' ? 'e.g. fitness' : 'e.g. @username'}
+                  value={newFollowSourceValue}
+                  onChange={e => setNewFollowSourceValue(e.target.value)}
+                  disabled={loading}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && newFollowSourceValue.trim()) {
+                      const val = newFollowSourceValue.trim().replace(/^[@#]/, '');
+                      if (val) {
+                        setSettings(s => ({ ...s, followSources: [...s.followSources, { type: newFollowSourceType, value: val }] }));
+                        setNewFollowSourceValue('');
+                      }
+                    }
+                  }}
+                />
+                <Button
+                  variant="outline" size="sm" className="h-8 text-xs shrink-0"
+                  disabled={loading || !newFollowSourceValue.trim()}
+                  onClick={() => {
+                    const val = newFollowSourceValue.trim().replace(/^[@#]/, '');
+                    if (val) {
+                      setSettings(s => ({ ...s, followSources: [...s.followSources, { type: newFollowSourceType, value: val }] }));
+                      setNewFollowSourceValue('');
+                    }
+                  }}
+                >Add</Button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* ── Inject Browsing ─────────────────────────────────
-             Always visible, never collapsible — this drives real
-             per-user behaviour in the follow flow, not an optional extra.
-             No per-item toggles: search-browsing is mandatory (removed),
-             "Get Suggested Users" was removed, and the old separate
-             "Inject Profile Browsing" toggle was a duplicate of this
-             whole section — injectBrowsingEnabled alone gates everything
-             below. Row 1 = title + checkbox. Row 2 = Browse before
-             follow / Feed chance / Feed posts (3-up). Row 3 = Click
-             posts / Like / Share feed / Share to DM (4-up). Labels sit
-             above their min–max fields, matching the panel's other
-             settings (e.g. "Users to follow per operation" above). */}
-        <div className="space-y-3">
+             Sub-feature of Follow Users — disabled entirely when
+             Follow Users is not checked. injectBrowsingEnabled alone
+             gates the settings below. */}
+        <div className={`space-y-3 transition-opacity ${!settings.followEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
           {/* Row 1: title + checkbox only */}
           <div className="flex items-center gap-3">
             <input
@@ -2600,10 +2697,10 @@ function AutomationSettingsPanel({
               id="inject-browsing-enabled"
               checked={settings.injectBrowsingEnabled}
               onChange={e => setSettings(s => ({ ...s, injectBrowsingEnabled: e.target.checked }))}
-              disabled={loading}
+              disabled={loading || !settings.followEnabled}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
-            <label htmlFor="inject-browsing-enabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">Inject Browsing</label>
+            <label htmlFor="inject-browsing-enabled" className={`text-sm font-semibold cursor-pointer select-none ${settings.followEnabled ? 'text-foreground' : 'text-muted-foreground'}`}>Inject Browsing</label>
           </div>
 
           {settings.injectBrowsingEnabled && (<>
@@ -3054,111 +3151,6 @@ function AutomationSettingsPanel({
           alterationLevel={settings.makePostAlterationLevel}
           onSave={saved => setSettings(s => ({ ...s, makePostImageSettings: saved }))}
         />
-
-        {/* ── Target Sources panel (toggled via the Sources button above) ─ */}
-        <div className="space-y-2">
-          {showSources && (
-            <div className="border border-border rounded-lg p-3 space-y-2">
-              {/* Hidden file input for CSV/TSV import */}
-              <input
-                ref={importSourceFileRef}
-                type="file"
-                accept=".csv,.tsv,.txt"
-                className="hidden"
-                onChange={handleImportFollowSources}
-              />
-
-              {/* Header row: count + Import / Export / Clear all */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-muted-foreground flex-1">
-                  {settings.followSources.length} source{settings.followSources.length !== 1 ? 's' : ''}
-                </span>
-                <Button
-                  variant="outline" size="sm" className="h-7 text-xs px-2.5 gap-1 shrink-0"
-                  onClick={() => importSourceFileRef.current?.click()}
-                  disabled={loading}
-                >
-                  <Upload className="w-3 h-3" /> Import
-                </Button>
-                <Button
-                  variant="outline" size="sm" className="h-7 text-xs px-2.5 gap-1 shrink-0"
-                  onClick={handleExportFollowSources}
-                  disabled={loading || !settings.followSources.length}
-                >
-                  <Download className="w-3 h-3" /> Export
-                </Button>
-                {settings.followSources.length > 0 && (
-                  <Button
-                    variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:text-destructive shrink-0"
-                    disabled={loading}
-                    onClick={() => setSettings(s => ({ ...s, followSources: [] }))}
-                  >Clear all</Button>
-                )}
-              </div>
-
-              {/* Sources list — max 10 rows visible, scrollable */}
-              {settings.followSources.length > 0 ? (
-                <div className="space-y-1 max-h-[260px] overflow-y-auto pr-0.5">
-                  {settings.followSources.map((src, i) => (
-                    <div key={i} className="flex items-center gap-2 text-xs">
-                      <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono shrink-0">
-                        {src.type === 'hashtag' ? '#' : '@'}
-                      </span>
-                      <span className="flex-1 text-foreground truncate">{src.value}</span>
-                      <button
-                        onClick={() => setSettings(s => ({ ...s, followSources: s.followSources.filter((_, j) => j !== i) }))}
-                        disabled={loading}
-                        className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
-                      >✕</button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">No sources yet. Import a CSV or add manually below.</p>
-              )}
-
-              {/* Add new source */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <select
-                  value={newFollowSourceType}
-                  onChange={e => setNewFollowSourceType(e.target.value as 'hashtag' | 'target_followers')}
-                  disabled={loading}
-                  className="text-xs bg-muted border border-border rounded px-2 py-1 text-foreground cursor-pointer"
-                >
-                  <option value="hashtag">Hashtag</option>
-                  <option value="target_followers">Followers of Account</option>
-                </select>
-                <Input
-                  className="flex-1 min-w-0 text-xs h-8"
-                  placeholder={newFollowSourceType === 'hashtag' ? 'e.g. fitness' : 'e.g. @username'}
-                  value={newFollowSourceValue}
-                  onChange={e => setNewFollowSourceValue(e.target.value)}
-                  disabled={loading}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && newFollowSourceValue.trim()) {
-                      const val = newFollowSourceValue.trim().replace(/^[@#]/, '');
-                      if (val) {
-                        setSettings(s => ({ ...s, followSources: [...s.followSources, { type: newFollowSourceType, value: val }] }));
-                        setNewFollowSourceValue('');
-                      }
-                    }
-                  }}
-                />
-                <Button
-                  variant="outline" size="sm" className="h-8 text-xs shrink-0"
-                  disabled={loading || !newFollowSourceValue.trim()}
-                  onClick={() => {
-                    const val = newFollowSourceValue.trim().replace(/^[@#]/, '');
-                    if (val) {
-                      setSettings(s => ({ ...s, followSources: [...s.followSources, { type: newFollowSourceType, value: val }] }));
-                      setNewFollowSourceValue('');
-                    }
-                  }}
-                >Add</Button>
-              </div>
-            </div>
-          )}
-        </div>
 
         {/* ── Followed Users panel (toggled via the Followed button above) */}
         <div className="space-y-2">

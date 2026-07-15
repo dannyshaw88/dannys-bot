@@ -148,6 +148,7 @@ export function Sidebar() {
           const isActive = (() => {
             if (item.path === "/dashboard") return location === "/dashboard";
             if (item.path === "/profiles") return location === "/profiles" || location.startsWith("/profiles/");
+            if (item.path === "/mobile") return location === "/mobile" || location.startsWith("/mobile/");
             return location.startsWith(item.path);
           })();
           const Icon = item.icon;
