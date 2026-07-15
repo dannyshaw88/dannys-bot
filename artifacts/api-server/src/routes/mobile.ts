@@ -3114,20 +3114,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return;
     }
     onLog?.(`Inject Browsing: scrolling profile grid — ${rows} row(s)`);
-    const seenPostSlots: { x: number; y: number }[] = [];
     const x = Math.round(w / 2);
     const y1 = Math.round(h * 0.78);
     const y2 = Math.round(h * 0.30);
     for (let i = 0; i < rows; i++) {
       if (isCycleAborted(serial)) throw new Error("cycle-aborted");
-      // Instagram's profile grid is 3 columns; remember roughly where each
-      // column sat on THIS scroll position so a later "click post" roll can
-      // pick one of the rows actually scrolled past, not a guess.
-      seenPostSlots.push(
-        { x: Math.round(w * 0.17), y: Math.round(h * 0.55) },
-        { x: Math.round(w * 0.50), y: Math.round(h * 0.55) },
-        { x: Math.round(w * 0.83), y: Math.round(h * 0.55) },
-      );
       await android.swipe(serial, x, y1, x, y2, 500 + Math.round(Math.random() * 200));
       await sleepOrAbort(serial, 350 + Math.round(Math.random() * 300));
     }
@@ -3138,89 +3129,71 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return;
     }
 
-    const slot = seenPostSlots[Math.floor(Math.random() * seenPostSlots.length)];
-    onLog?.("Inject Browsing: opening a scrolled post");
+    // Find real post thumbnail positions from the live accessibility tree.
+    // Instagram's profile grid renders each thumbnail as a Button with
+    // resource-id com.instagram.android:id/image_button — those are the
+    // only safe tap targets.  Hardcoded percentage slots (w*0.17 etc.) are
+    // forbidden: they can land on tab strips, gaps, or off-screen areas and
+    // produce "no post opened" failures even on profiles with hundreds of posts.
+    const gridPosts = await android.findProfileGridPosts(serial, onLog).catch(() => [] as { x: number; y: number; cd: string }[]);
+    if (gridPosts.length === 0) {
+      onLog?.("Inject Browsing: no image_button nodes found in grid — skipping post open");
+      return;
+    }
+    const slot = gridPosts[Math.floor(Math.random() * gridPosts.length)];
+    const slotCd = slot.cd ? ` (${slot.cd})` : "";
+    onLog?.(`Inject Browsing: opening a scrolled post at (${slot.x},${slot.y})${slotCd}`);
     await android.tap(serial, slot.x, slot.y);
     await sleepOrAbort(serial, 1200);
 
-    // Confirm a post actually opened (has a Like button) rather than
-    // assuming the tap landed on a real thumbnail — profile grids can have
-    // gaps (Reels tab strip, "Tagged" empty state, end-of-grid whitespace).
+    // Confirm a post actually opened (has a Like button).
     let icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
     if (!icons) {
       // Distinguish two cases that both produce icons=null:
       //
-      //   A) Tap landed on blank whitespace / Reels-tab strip → still on the
-      //      profile grid (no post opened at all). Safe to scroll up and retry.
+      //   A) Tap didn't open a post (e.g. thumbnail was partially off-screen,
+      //      or this is a pinned Reel/video that opens a different viewer) —
+      //      still on the profile grid. Safe to retry with a fresh a11y dump.
       //
-      //   B) A Reel (or feed post) opened but findFeedActionIcons returned null
-      //      because the viewer uses a different icon label / layout. We are
-      //      INSIDE the viewer. Pressing Back + scrolling up + retrying is
-      //      wrong here — it closes a valid post and can cause a mis-tap on
-      //      the grid. Just press Back once to return cleanly to the profile.
+      //   B) A Reel/post opened but findFeedActionIcons returned null because
+      //      the viewer uses a different label. We are INSIDE the viewer.
+      //      Pressing Back + retrying is wrong — it closes a valid post.
       //
       // Detection: isInPostViewer checks for resource-ids that only appear
-      // inside a post or Reel viewer (reel_viewer_follow_button,
-      // row_feed_photo_profile_name, row_feed_button_like).
+      // inside a post/Reel viewer, never on the profile grid.
       const insideViewer = await android.isInPostViewer(serial).catch(() => false);
       if (insideViewer) {
-        // A post/Reel IS open but findFeedActionIcons returned null.
-        // This should be rare after the rid-based Like detection fix: if
-        // row_feed_button_like is in the tree, findFeedActionIcons finds it
-        // directly regardless of y-position in the layout space. Reaching here
-        // means the node genuinely isn't labelled at all on this build — press
-        // Back cleanly rather than doing the profile-grid scroll-up-and-retry,
-        // which would be wrong (we are inside a viewer, not on the grid).
         onLog?.("Inject Browsing: post/Reel opened but icons not found — pressing Back to profile");
-        logger.info({ serial }, "[inject-browsing] findFeedActionIcons=null, isInPostViewer=true — no identifiable Like button; pressing Back without scroll-up retry");
+        logger.info({ serial }, "[inject-browsing] findFeedActionIcons=null, isInPostViewer=true — no identifiable Like button; pressing Back without retry");
         await android.pressBack(serial);
         await sleepOrAbort(serial, 500);
         return;
       }
-      // Case A: still on profile grid — scroll up and retry once.
+      // Case A: still on profile grid — scroll up once and retry using a
+      // fresh a11y dump (same rule: no hardcoded coordinates).
       //
-      // ROOT CAUSE (confirmed 15 Jul 2026 from live log — a Reels-only
-      // profile where the first grid tap didn't open anything): this branch
-      // fires when isInPostViewer()==false, meaning NOTHING was pushed onto
-      // the nav stack — we never left the profile grid in the first place.
-      // The old code still called pressBack() here on the theory that it was
-      // a harmless no-op "just in case a viewer opened". It is NOT a no-op:
-      // Follow always reaches this profile via a username search, so the
-      // profile page's own Back target is the Search results screen, not
-      // itself. Pressing Back while sitting on the base profile page (no
-      // viewer open) popped the nav stack straight out of the profile and
-      // back to Search — confirmed by the retry tap's a11y dump showing
-      // `row_search_user_container` / `action_bar_search_edit_text` (the
-      // Search page), not the profile grid. Every retry after that was a
-      // blind tap on the wrong screen, which is why "no posts found" fired
-      // even on profiles with hundreds of posts.
-      //
-      // Fix: do NOT press Back here — we are already on the grid we want.
-      onLog?.("Inject Browsing: no post opened here (empty grid cell) — scrolling up and retrying");
-      logger.info({ serial }, "[inject-browsing] findFeedActionIcons=null, isInPostViewer=false — still on profile grid (no viewer was ever opened); scrolling up once and retrying WITHOUT pressing Back (Back here exits the profile to Search)");
-      // Scroll UP one row (swipe finger downward = content moves up into view).
+      // Do NOT press Back here. Follow reaches this profile via a search, so
+      // the profile's own Back target is the Search page. Pressing Back while
+      // on the base profile grid (no viewer open) exits the profile entirely.
+      onLog?.("Inject Browsing: no post opened here — scrolling up and retrying via a11y");
+      logger.info({ serial }, "[inject-browsing] findFeedActionIcons=null, isInPostViewer=false — still on profile grid; scrolling up and re-scanning a11y tree for image_button nodes");
       await android.swipe(serial, x, y2, x, y1, 500);
-      await sleepOrAbort(serial, 600);
-      // Pick a slot from the centre of the screen — after scrolling up, real
-      // posts should occupy this area even on a very short profile grid.
-      const recoverySlots = [
-        { x: Math.round(w * 0.17), y: Math.round(h * 0.45) },
-        { x: Math.round(w * 0.50), y: Math.round(h * 0.45) },
-        { x: Math.round(w * 0.83), y: Math.round(h * 0.45) },
-      ];
-      const retrySlot = recoverySlots[Math.floor(Math.random() * recoverySlots.length)];
-      onLog?.("Inject Browsing: retry — tapping post after scrolling up");
+      await sleepOrAbort(serial, 800);
+      const retryPosts = await android.findProfileGridPosts(serial, onLog).catch(() => [] as { x: number; y: number; cd: string }[]);
+      if (retryPosts.length === 0) {
+        onLog?.("Inject Browsing: retry — no image_button nodes found after scroll-up, giving up");
+        return;
+      }
+      const retrySlot = retryPosts[Math.floor(Math.random() * retryPosts.length)];
+      const retryCd = retrySlot.cd ? ` (${retrySlot.cd})` : "";
+      onLog?.(`Inject Browsing: retry — tapping post at (${retrySlot.x},${retrySlot.y})${retryCd}`);
       await android.tap(serial, retrySlot.x, retrySlot.y);
       await sleepOrAbort(serial, 1200);
       icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
       if (!icons) {
-        // Same nav-stack trap as above: only press Back if a viewer is
-        // actually open (something to close). If we're still on the grid,
-        // pressing Back here would again exit the profile to Search instead
-        // of "returning to profile" — there's nothing to return FROM.
         const stillInViewer = await android.isInPostViewer(serial).catch(() => false);
         onLog?.("Inject Browsing: retry also found no post — giving up on this profile's posts");
-        logger.info({ serial, stillInViewer }, "[inject-browsing] retry tap also found no Like button — profile may have very few posts or all posts are Reels");
+        logger.info({ serial, stillInViewer }, "[inject-browsing] retry tap also found no Like button — profile may be Reels-only or viewer label not recognised");
         if (stillInViewer) {
           await android.pressBack(serial);
           await sleepOrAbort(serial, 500);

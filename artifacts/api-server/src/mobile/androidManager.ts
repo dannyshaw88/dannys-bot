@@ -3388,6 +3388,70 @@ export async function findStoryFollowButton(serial: string): Promise<{ x: number
 }
 
 /**
+ * Returns the center-coordinates of every visible profile-grid post thumbnail
+ * currently in the accessibility tree.
+ *
+ * Instagram's profile grid renders each thumbnail as a Button with
+ * resource-id `com.instagram.android:id/image_button`.  The content-desc is
+ * typically "Photo by X at row N, column M", "Reel by X at row N, column M",
+ * "Video by X …", or sometimes blank — so we key off the resource-id, not
+ * the label.
+ *
+ * Why this exists: the old inject-browsing code remembered fixed percentage
+ * slots (w*0.17, w*0.50, w*0.83 at h*0.55) that it accumulated across scroll
+ * rows, then tapped one at random.  Those coordinates are forbidden by the
+ * project rules (Instagram's layout shifts by post type, account, and MIUI
+ * version) and they frequently missed the actual thumbnail cells, landing on
+ * the Reels-tab strip, a gap at the grid bottom, or empty whitespace —
+ * triggering the "no post opened here" fallback even on profiles with
+ * hundreds of visible posts.
+ *
+ * This function reads the live accessibility tree instead.  Only nodes whose
+ * centre falls within the visible scrollable band (y ∈ [minY, maxY]) are
+ * returned so we never try to tap a partially-offscreen thumbnail.
+ */
+export async function findProfileGridPosts(
+  serial: string,
+  onLog?: (line: string) => void,
+): Promise<{ x: number; y: number; cd: string }[]> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return [];
+  const { h } = getScreenSize(serial);
+  // Ignore thumbnails whose centre is in the top 18% of the screen (nav/header
+  // area) or the bottom 10% (nav bar / tab strip).
+  const minY = Math.round(h * 0.18);
+  const maxY = Math.round(h * 0.90);
+  const RID = "com.instagram.android:id/image_button";
+  const results: { x: number; y: number; cd: string }[] = [];
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+  let m: RegExpExecArray | null;
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const a = m[1];
+    if (!a.includes("image_button")) continue;      // fast pre-filter
+    const ridM = a.match(/resource-id="([^"]*)"/);
+    if (!ridM?.[1].includes("image_button")) continue;
+    const bm = a.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+    if (!bm) continue;
+    const x1 = Number(bm[1]), y1 = Number(bm[2]), x2 = Number(bm[3]), y2 = Number(bm[4]);
+    const cx = Math.round((x1 + x2) / 2);
+    const cy = Math.round((y1 + y2) / 2);
+    if (cy < minY || cy > maxY) continue;
+    // Require a minimum size so we don't pick header/avatar image buttons.
+    // Profile grid thumbnails are roughly 1/3 screen wide and square.
+    const nodeW = x2 - x1;
+    const nodeH = y2 - y1;
+    if (nodeW < 60 || nodeH < 60) continue;
+    const cdM = a.match(/content-desc="([^"]*)"/);
+    const cd = cdM?.[1] ?? "";
+    results.push({ x: cx, y: cy, cd });
+  }
+  onLog?.(`[profile-grid] found ${results.length} image_button node(s) in visible band`);
+  return results;
+}
+
+/**
  * Returns true when the device is currently showing an opened post or Reel
  * viewer (i.e. a tap from the profile grid navigated INTO a post), rather
  * than still sitting on the profile grid.

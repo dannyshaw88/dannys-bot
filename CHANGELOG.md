@@ -4,6 +4,18 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.609] — 2026-07-15
+
+### Fix: profile grid post tap used forbidden hardcoded coordinates — replaced with live a11y tree lookup
+
+**Root cause.** `runProfileBrowsingSequence` accumulated fixed percentage slots (`w×0.17`, `w×0.50`, `w×0.83` at `h×0.55`) across scroll rows and tapped one at random. These are hardcoded pixel percentages — forbidden by project rules. On profiles like `ibrahimdayann` (mostly Reels, grid thumbnails at varying positions) the slot coordinates frequently missed the actual thumbnails, landing on the Reels-tab strip, gap cells, or off-screen whitespace. Both the initial tap and the scroll-up-and-retry recovery slots shared the same flaw, so the retry always missed too, ending with "retry also found no post — giving up" on profiles with hundreds of visible posts.
+
+**Fix — `findProfileGridPosts` (androidManager.ts, new):** dumps the live accessibility tree and finds every node with `resource-id="com.instagram.android:id/image_button"` whose centre falls within the visible grid band (y ∈ [18%, 90%] of screen height) and has minimum size (≥60×60px) to exclude header/avatar image buttons. Returns each node's actual bounds-derived centre coordinate and content-desc. Posts tap exactly where the thumbnail is, regardless of scroll position, screen density, or Instagram version.
+
+**Fix — `runProfileBrowsingSequence` (mobile.ts):** removed `seenPostSlots` and both `recoverySlots` arrays entirely. After scrolling, calls `findProfileGridPosts` to get real positions; picks one at random and logs which post (by content-desc) was tapped. Retry after scroll-up also calls `findProfileGridPosts` for a fresh dump — no hardcoded coordinates anywhere in the path.
+
+---
+
 ## [1.1.608] — 2026-07-15
 
 ### Fix: share-to-DM sheet detection broken on Instagram builds without `direct_private_share`
