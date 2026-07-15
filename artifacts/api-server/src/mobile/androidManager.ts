@@ -1811,14 +1811,71 @@ export async function findReelActionIcons(serial: string, onLog?: (msg: string) 
   onLog?.(`[reel-icons] column dump below Like: ${colNodes.map(fmt).join(" | ") || "(none)"}`);
 
   const pos = (n: ColNode) => ({ x: n.x, y: n.y });
+
+  // Label matching — priority order matters:
+  //   repostNode: only "Repost" (feed repost). Do NOT claim "Share" here —
+  //     in the Reels viewer "Share" opens the DM share sheet, not the feed
+  //     repost flow. Claiming it as shareFeed was the root cause of both
+  //     shareFeed and shareDm being silently null (shareFeed got the wrong
+  //     action, shareDm found nothing left).
+  //   sendNode: "Send", "Direct", "Message", OR "Share" (the standard Reels
+  //     DM-share label) — all open the share sheet leading to DM.
   const commentNode = colNodes.find(n => /^comment$/i.test(n.cd)) ?? null;
-  const repostNode  = colNodes.find(n => /\brepost\b/i.test(n.cd) || /^share$/i.test(n.cd)) ?? null;
-  const sendNode    = colNodes.find(n => /\b(send|direct|message)\b/i.test(n.cd) || (/^share$/i.test(n.cd) && n !== repostNode)) ?? null;
+  const repostNode  = colNodes.find(n => /\brepost\b/i.test(n.cd)) ?? null;
+  const sendNode    = colNodes.find(n => /\b(send|direct|message|share)\b/i.test(n.cd) && n !== repostNode) ?? null;
 
-  const comment   = commentNode ? pos(commentNode) : null;
-  const shareFeed = repostNode  ? pos(repostNode)  : null;
-  const shareDm   = sendNode    ? pos(sendNode)    : null;
+  let comment:   { x: number; y: number } | null = commentNode ? pos(commentNode) : null;
+  let shareFeed: { x: number; y: number } | null = repostNode  ? pos(repostNode)  : null;
+  let shareDm:   { x: number; y: number } | null = sendNode    ? pos(sendNode)    : null;
 
+  // Structural fallback — mirrors findFeedActionIcons (replit.md rule:
+  // "Feed action-bar icons with no content-desc/resource-id — structural
+  // fallback"). Fires when label matching leaves shareFeed OR shareDm null,
+  // i.e. this device/IG build strips content-desc from the Reels column.
+  // Icons stack VERTICALLY in the column (Y ascending = top to bottom):
+  // Comment → shareFeed (Repost) → shareDm (Send/Share). Only trust the
+  // result when an EXACT count is found — ambiguous counts stay null.
+  if (!shareFeed || !shareDm) {
+    // ── Structural fallback A: ViewGroup icon pattern ──
+    const vgCandidates = colNodes.filter(n => n.cls === "android.view.ViewGroup" && !n.cd && !n.txt);
+    if (!comment && !shareFeed && !shareDm && vgCandidates.length === 3) {
+      onLog?.(`[reel-icons] structural ViewGroup fallback: 3 unlabelled column nodes — assigning Comment/shareFeed/shareDm by Y order`);
+      comment   = pos(vgCandidates[0]);
+      shareFeed = pos(vgCandidates[1]);
+      shareDm   = pos(vgCandidates[2]);
+    } else if (comment && !shareFeed && !shareDm && vgCandidates.length === 2) {
+      onLog?.(`[reel-icons] structural ViewGroup fallback: 2 unlabelled column nodes (Comment already found) — assigning shareFeed/shareDm by Y order`);
+      shareFeed = pos(vgCandidates[0]);
+      shareDm   = pos(vgCandidates[1]);
+    } else if (!comment && !shareFeed && !shareDm && vgCandidates.length === 2) {
+      // Comment absent or labelled differently — treat remaining 2 as shareFeed + shareDm
+      onLog?.(`[reel-icons] structural ViewGroup fallback: 2 unlabelled column nodes (no Comment) — assigning shareFeed/shareDm by Y order`);
+      shareFeed = pos(vgCandidates[0]);
+      shareDm   = pos(vgCandidates[1]);
+    } else if (vgCandidates.length > 0) {
+      onLog?.(`[reel-icons] structural ViewGroup fallback: ${vgCandidates.length} candidate(s) — ambiguous count, leaving null`);
+    }
+
+    // ── Structural fallback B: Button icon pattern ──
+    // Only runs if fallback A also produced nothing.
+    if (!shareFeed && !shareDm) {
+      const btnCandidates = colNodes.filter(n => n.cls === "android.widget.Button" && !n.cd && !n.txt);
+      if (!comment && btnCandidates.length === 3) {
+        onLog?.(`[reel-icons] structural Button fallback: 3 unlabelled Buttons — assigning Comment/shareFeed/shareDm by Y order`);
+        comment   = pos(btnCandidates[0]);
+        shareFeed = pos(btnCandidates[1]);
+        shareDm   = pos(btnCandidates[2]);
+      } else if (btnCandidates.length === 2) {
+        onLog?.(`[reel-icons] structural Button fallback: 2 unlabelled Buttons — assigning shareFeed/shareDm by Y order`);
+        shareFeed = pos(btnCandidates[0]);
+        shareDm   = pos(btnCandidates[1]);
+      } else if (btnCandidates.length > 0) {
+        onLog?.(`[reel-icons] structural Button fallback: ${btnCandidates.length} candidate(s) — ambiguous count, leaving null`);
+      }
+    }
+  }
+
+  onLog?.(`[reel-icons] result — like:(${like.x},${like.y}) comment:${comment ? `(${comment.x},${comment.y})` : "null"} shareFeed:${shareFeed ? `(${shareFeed.x},${shareFeed.y})` : "null"} shareDm:${shareDm ? `(${shareDm.x},${shareDm.y})` : "null"}`);
   return { like, comment, shareFeed, shareDm, alreadyLiked };
 }
 
