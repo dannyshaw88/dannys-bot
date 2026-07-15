@@ -4,6 +4,21 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.608] — 2026-07-15
+
+### Fix: share-to-DM sheet detection broken on Instagram builds without `direct_private_share`
+
+**Root cause confirmed from live log + screenshot (15 Jul 2026).** v1.1.607 made `direct_private_share` the sole gate for "share sheet is open". On this device's Instagram build the DM share sheet renders without that resource-id in the accessibility tree — confirmed by the screenshot showing the sheet fully open (with Francis Bourgeois selected, blue Send button visible) at the same moment the log reported "direct_private_share not found — sheet not open". The code therefore aborted on every attempt, and the accidental retry tap at (535,1904) happened to land on a recipient avatar (selecting Francis Bourgeois), which is why the Send button appeared.
+
+**Fix:** `confirmAndScanShareSheet` now checks TWO markers before deciding the sheet is closed:
+
+- `direct_private_share` — the sticky search-box resource-id present in the narrow single-recipient sheet variant
+- `grid_view_pog_avatar_view` — the recipient avatar button resource-id, present in **both** DM share sheet variants (narrow and wide grid picker), and confirmed absent from the raw feed view
+
+If **either** is found the sheet is confirmed open and the scan proceeds normally. Only when **both** are absent does the function return `{ sheetOpen: false, sendBtn: null, recipients: [] }` and trigger the retry/abort path. This preserves the false-positive protection from v1.1.607 while supporting both Instagram sheet layouts seen on this device.
+
+---
+
 ## [1.1.607] — 2026-07-15
 
 ### Fix: share-to-DM false-positive — sheet-not-open incorrectly reported as success

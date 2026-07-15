@@ -2609,18 +2609,35 @@ export async function confirmAndScanShareSheet(
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial).catch(() => "");
   if (!xml) return { sheetOpen: false, sendBtn: null, recipients: [] };
-  // Check sheet presence FIRST. `direct_private_share` is the DM sheet's
-  // sticky search-box resource-id — it only appears inside the sheet, never
-  // on the underlying feed post. If it is absent, the sheet is not open and
-  // everything else in the XML is from the feed: the feed's own paper-plane
-  // icon has content-desc/resource-id that also matches `_findElem(xml,"Send")`,
-  // and feed post nodes (username buttons, "more", captions) pass Strategy-2's
-  // label filters — so we must NOT call either helper when sheetOpen is false
-  // or we will return the feed's send-icon coordinate as `sendBtn` and bogus
-  // feed nodes as `recipients`, producing a false-positive "DM sent" log.
-  const sheetOpen = xml.includes("direct_private_share");
+  // Check sheet presence FIRST — before calling _findElem or
+  // _extractShareSheetRecipients — because when the sheet is NOT open the
+  // underlying feed post is visible instead, and:
+  //   • the feed's own paper-plane icon carries content-desc/resource-id that
+  //     matches _findElem(xml,"Send"), returning the icon's coordinate as
+  //     `sendBtn` even though the sheet never appeared
+  //   • feed post nodes (username buttons, "more", captions) pass Strategy-2's
+  //     label filters and appear as fake recipients
+  // Both together produce a false-positive "DM sent" log with nothing actually
+  // sent.  When neither sheet marker is present we must return null/empty.
+  //
+  // TWO markers are tried because Instagram's DM sheet uses different layouts
+  // across builds (confirmed on device, 15 Jul 2026):
+  //
+  //   direct_private_share  — the sticky search-box resource-id present in
+  //                           the narrow "send to one person" sheet variant
+  //   grid_view_pog_avatar_view — the recipient avatar button resource-id,
+  //                           present in BOTH sheet variants (the narrow one
+  //                           and the wider grid picker).  It only ever
+  //                           appears inside an open DM share sheet; it is
+  //                           absent from the raw feed view.
+  //
+  // If either is found the sheet is confirmed open.  If neither is found we
+  // are still on the feed and must abort / retry.
+  const sheetOpen =
+    xml.includes("direct_private_share") ||
+    xml.includes("grid_view_pog_avatar_view");
   if (!sheetOpen) {
-    onLog?.("[share-sheet] direct_private_share not found — sheet not open, treating scan as empty");
+    onLog?.("[share-sheet] direct_private_share and grid_view_pog_avatar_view both absent — sheet not open");
     return { sheetOpen: false, sendBtn: null, recipients: [] };
   }
   const sendBtn = _findElem(xml, "Send");
