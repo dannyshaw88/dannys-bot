@@ -1199,32 +1199,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
           )}
         </div>
         <div className="flex items-center gap-2">
-          {isReady && phone && live && (
-            <>
-              <button
-                onClick={() => { setClickTestMode(m => !m); setInspectMode(false); setInspectResult(null); }}
-                title={clickTestMode ? "Exit Click Test — 1st click sends tap + shows bullseye, 2nd click marks where it should have landed (yellow dot)" : "Click Test — diagnose tap offset: 1st click shows where tap was sent, 2nd click marks the correct target"}
-                className={`text-[9px] font-semibold px-2 py-0.5 rounded transition-colors ${
-                  clickTestMode
-                    ? "bg-orange-400/20 text-orange-300 border border-orange-400/40"
-                    : "bg-white/5 text-white/40 border border-white/10 hover:bg-white/10 hover:text-white/70"
-                }`}
-              >
-                {clickTestMode ? "🎯 Testing" : "🎯 Click Test"}
-              </button>
-              <button
-                onClick={() => { setInspectMode(m => !m); setInspectResult(null); setClickTestMode(false); }}
-                title={inspectMode ? "Exit inspect mode — clicks will tap the phone again" : "Inspect mode — click any element on screen to identify it (like Chrome F12)"}
-                className={`text-[9px] font-semibold px-2 py-0.5 rounded transition-colors ${
-                  inspectMode
-                    ? "bg-yellow-400/20 text-yellow-300 border border-yellow-400/40"
-                    : "bg-white/5 text-white/40 border border-white/10 hover:bg-white/10 hover:text-white/70"
-                }`}
-              >
-                {inspectMode ? "🔍 Inspecting" : "🔍 Inspect"}
-              </button>
-            </>
-          )}
+
           {isReady        && <span className="flex items-center gap-1 text-[9px] font-bold text-green-400 shrink-0"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />Live</span>}
           {isUnauthorized && <span className="text-[9px] font-semibold text-yellow-500 shrink-0">Auth needed</span>}
           {isOffline      && <span className="text-[9px] font-semibold text-red-500 shrink-0">Offline</span>}
@@ -3549,43 +3524,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-foreground">Log</h2>
           <div className="flex items-center gap-2">
-            {serial && (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handleScan}
-                disabled={scanning}
-                title="Captures every element on screen with pixel coords and screen %. Use Copy Capture or Save to send just the layout — no log noise."
-              >
-                {scanning ? "Scanning…" : "📱 Capture Screen"}
-              </Button>
-            )}
-            {serial && (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handleCheckScreenInfo}
-                disabled={checkingInfo}
-                title="Prints the device's raw wm size / wm density into the log, and flags a resolution override if one is active. Use this before Reset."
-              >
-                {checkingInfo ? "Checking…" : "📐 ScreenInfo"}
-              </Button>
-            )}
-            {serial && (
-              <Button
-                type="button"
-                variant={logRecMode ? "destructive" : "secondary"}
-                onClick={logRecMode ? handleLogRecordStop : onToggleLogRec}
-                className="gap-1.5"
-                title={logRecMode
-                  ? `Stop Log Record — exports ${(logMarkers ?? []).length} marker(s) as JSON`
-                  : "Log Record — left-click: cyan exact · right-click: yellow vicinity · bot taps auto-orange. Export on stop."}
-              >
-                {logRecMode
-                  ? `⏹ Stop (🔵${(logMarkers ?? []).filter(m => m.type === "expected").length} 🟡${(logMarkers ?? []).filter(m => m.type === "vicinity").length} 🟠${(logMarkers ?? []).filter(m => m.type === "bot").length})`
-                  : "📍 Log Record"}
-              </Button>
-            )}
+
             <Button type="button" variant="secondary" onClick={handleCopyLog} disabled={lines.length === 0}>
               {copied ? "Copied!" : "📄 Copy Log"}
             </Button>
@@ -3598,37 +3537,6 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
           </div>
         </div>
 
-        {/* Capture action row — only visible after a capture has been taken */}
-        {lastCapture && (
-          <div className="flex items-center gap-2 px-1">
-            <span className="text-xs text-muted-foreground">Last capture ready →</span>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleCopyCapture}
-              className="text-xs h-7 px-2"
-            >
-              {copiedCapture ? "Copied!" : "📋 Copy Capture"}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleSaveCapture}
-              className="text-xs h-7 px-2"
-              title="Downloads the capture as a .txt file"
-            >
-              ⬇️ Save
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setLastCapture(null)}
-              className="text-xs h-7 px-2 text-muted-foreground"
-            >
-              ✕
-            </Button>
-          </div>
-        )}
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto bg-black/90 border border-border rounded-xl p-3 font-mono text-[11px] leading-relaxed text-green-400/90">
