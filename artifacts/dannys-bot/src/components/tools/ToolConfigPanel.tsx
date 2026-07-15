@@ -1101,8 +1101,8 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                     </div>
                     <div className="w-px h-5 bg-border/50 shrink-0" />
                     {/* Inject Browsing — click Open to open dialog */}
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <input type="checkbox" id="injectProfileBrowsingEnabled" checked={!!(settings as any).injectProfileBrowsingEnabled} onChange={(e) => setSettings({ ...settings, injectProfileBrowsingEnabled: e.target.checked } as any)} className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0" />
+                    <div className={`flex items-center gap-1.5 shrink-0 transition-opacity ${!tool.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                      <input type="checkbox" id="injectProfileBrowsingEnabled" checked={!!(settings as any).injectProfileBrowsingEnabled} onChange={(e) => setSettings({ ...settings, injectProfileBrowsingEnabled: e.target.checked } as any)} className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0" disabled={!tool.enabled} />
                       <label htmlFor="injectProfileBrowsingEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0">Inject Browsing</label>
                       <div className={`flex items-center gap-1 transition-opacity ${!(settings as any).injectProfileBrowsingEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                         <NumField min={1} max={100} className="w-[51px] h-7 text-xs shrink-0" value={(settings as any).injectProfileBrowsingMin ?? 1} onChange={(v) => setSettings({ ...settings, injectProfileBrowsingMin: v, injectProfileBrowsingMax: Math.max(v, (settings as any).injectProfileBrowsingMax ?? 100) } as any)} />
