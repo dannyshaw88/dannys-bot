@@ -3279,6 +3279,17 @@ export async function registerInstagramRoutes(
     res.json(enriched);
   });
 
+  // Purge all evasion stats — clears instagram_api_calls + all four analytics tables
+  // so the Evasion Stats page starts fresh. Irreversible.
+  app.delete("/api/analytics/purge-evasion-stats", async (_req, res) => {
+    try {
+      const result = await storage.purgeEvasionStats();
+      res.json({ ok: true, ...result });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e?.message ?? "Purge failed" });
+    }
+  });
+
   app.get("/api/instagram-api-calls", async (req, res) => {
     const sinceParam = req.query.since;
     const limitParam = req.query.limit;

@@ -7,7 +7,7 @@ import {
   Clock, Award, RefreshCw, X, Activity, Hash, Sigma, Target,
   Flame, Cpu, Network, Layers, Zap, UserPlus, UserMinus,
   MessageSquare, ChevronDown, ChevronUp, TrendingUp, Eye,
-  Star, Scale, FlaskConical, BadgeAlert, Download, Shuffle, Fingerprint, Gauge,
+  Star, Scale, FlaskConical, BadgeAlert, Download, Shuffle, Fingerprint, Gauge, Trash2,
 } from "lucide-react";
 import { getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
 
@@ -2327,6 +2327,28 @@ export function BanAnalyticsPage() {
   const TAB_LABELS: Record<Tab, string> = { ban: "Banned", automated: "Automated", captcha: "Captcha", locked: "Locked", survivors: "Survivors" };
   const ERROR_TABS: ErrorTab[] = ["ban", "automated", "captcha", "locked"];
 
+  async function handlePurge() {
+    if (!window.confirm(
+      "Purge ALL evasion stats?\n\nThis permanently deletes every API call log, and all banned/automated/captcha/locked account analytics entries.\nThis cannot be undone.",
+    )) return;
+    try {
+      const resp = await fetch("/api/analytics/purge-evasion-stats", {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const data = await resp.json();
+      if (!data.ok) throw new Error(data.error ?? "Purge failed");
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/ban-patterns"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/automated-patterns"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/captcha-patterns"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/locked-patterns"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/instagram-api-calls"] });
+      alert(`Purged — API calls: ${data.deletedApiCalls ?? 0}, Ban: ${data.deletedBan ?? 0}, Automated: ${data.deletedAutomated ?? 0}, Captcha: ${data.deletedCaptcha ?? 0}, Locked: ${data.deletedLocked ?? 0}`);
+    } catch (e: any) {
+      alert(`Purge failed: ${e?.message ?? "Unknown error"}`);
+    }
+  }
+
   async function handleExport() {
     const levels = getTrustLevels();
 
@@ -2614,6 +2636,14 @@ export function BanAnalyticsPage() {
               <h1 className="text-xl font-bold">Evasion Stats</h1>
               <p className="text-sm text-muted-foreground">Error-type causation · TrustScore correlation · Reliability weighting · Timing CoV · Session noise · Subnet concurrency</p>
             </div>
+            <button
+              onClick={handlePurge}
+              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-border bg-background hover:bg-destructive/10 hover:text-destructive hover:border-destructive/40 transition-colors"
+              title="Permanently delete all evasion stats and analytics entries"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Purge All Data
+            </button>
             <button
               onClick={handleExport}
               className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-border bg-background hover:bg-muted transition-colors"

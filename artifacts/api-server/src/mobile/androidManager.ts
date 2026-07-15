@@ -1313,6 +1313,10 @@ export interface FeedActionIcons {
   comment: { x: number; y: number } | null;
   shareFeed: { x: number; y: number } | null; // repost / share-to-feed (double-arrow icon)
   shareDm: { x: number; y: number } | null;   // send / share-via-DM (paper-plane icon)
+  /** True when the Like button resolved to "Unlike" — post is already liked.
+   *  Callers must skip the like tap to avoid accidental unlike, but MUST still
+   *  continue with ShareFeed/ShareDM actions — the icon row is fully present. */
+  alreadyLiked?: boolean;
 }
 
 /**
@@ -1373,7 +1377,31 @@ export async function findFeedActionIcons(serial: string, onLog?: (msg: string) 
   // card's) Like node alive in the hierarchy at the same time; anchoring the
   // row-scan on the wrong post's Like button pulls THAT post's unrelated wide
   // elements into rowNodes — see _findCentermostLikeNode.
-  const like = _findCentermostLikeNode(xml, screenH);
+  let like = _findCentermostLikeNode(xml, screenH);
+  let alreadyLiked = false;
+  if (!like) {
+    // Post may be already liked (content-desc="Unlike"). We still need the
+    // button's position to anchor the row scan for Comment/Repost/Send.
+    // Use the same centering heuristic as _findCentermostLikeNode, but match
+    // "Unlike". The result is NEVER tapped for a like — callers must check
+    // alreadyLiked and skip the like action to avoid accidental unlike.
+    const unlikeRe = /content-desc="Unlike"[^>]*bounds="(\[\d+,\d+\]\[\d+,\d+\])"/g;
+    let bestUnlike: { x: number; y: number } | null = null;
+    let bestDist = Infinity;
+    const centerY = screenH / 2;
+    const MAX_DIST = screenH * 0.38;
+    let um: RegExpExecArray | null;
+    while ((um = unlikeRe.exec(xml)) !== null) {
+      const c = _parseCenter(um[1]);
+      if (!c) continue;
+      const dist = Math.abs(c.y - centerY);
+      if (dist < bestDist) { bestDist = dist; bestUnlike = c; }
+    }
+    if (bestUnlike && bestDist <= MAX_DIST) {
+      like = bestUnlike;
+      alreadyLiked = true;
+    }
+  }
   if (!like) return null;
   const rowTolerance = 20;
   const saveCutoffX = Math.round(w * 0.80);
@@ -1597,7 +1625,7 @@ export async function findFeedActionIcons(serial: string, onLog?: (msg: string) 
   // project rule that all detection uses live element structure, never
   // coordinates. If neither strategy confirms a role, that slot stays null
   // and callers skip the action.
-  return { like, comment, shareFeed, shareDm };
+  return { like, comment, shareFeed, shareDm, alreadyLiked };
 }
 
 /**
@@ -1981,6 +2009,61 @@ export async function findStoryShareButtonViaA11y(
   }
 
   onLog?.("  [a11y-diag] no usable a11y signal — falling back to pixel scan");
+  return null;
+}
+
+/**
+ * Locates Instagram's story Like button via the UIAutomator accessibility
+ * tree, using the confirmed resource-id on this device/build:
+ *
+ *   class=android.widget.ImageView
+ *   rid=com.instagram.android:id/toolbar_like_button
+ *   cd=Like Story
+ *   bounds=[838,2122][948,2226]   (1080×2460 device, confirmed 15 Jul 2026)
+ *
+ * Using the a11y element replaces the previous double-tap at a fixed
+ * percentage of screen centre (w*0.50, h*0.44), which violated the
+ * project rule against hardcoded coordinates and was not reliably
+ * registering as a like on this farm's devices.
+ *
+ * Strategy 1 (primary): resource-id `toolbar_like_button`.
+ * Strategy 2 (fallback): content-desc "Like Story" or "Like".
+ * Returns null if neither is found — callers fall back to the legacy
+ * double-tap approach so no regression occurs on builds that don't expose
+ * the button in the accessibility tree.
+ */
+export async function findStoryLikeButtonViaA11y(
+  serial: string,
+): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const { h } = getScreenSize(serial);
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+
+  // Strategy 1: resource-id lookup (primary).
+  const RID = "com.instagram.android:id/toolbar_like_button";
+  {
+    const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+    let m: RegExpExecArray | null;
+    while ((m = nodeRe.exec(xml)) !== null) {
+      const a = m[1];
+      if (!a.includes(RID)) continue;
+      const bm = a.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (!bm) continue;
+      const cx = Math.round((Number(bm[1]) + Number(bm[3])) / 2);
+      const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
+      if (cy < h * 0.50) continue; // sanity: must be in lower half
+      return { x: cx, y: cy };
+    }
+  }
+
+  // Strategy 2: content-desc label fallback.
+  for (const label of ["Like Story", "Like"]) {
+    const found = _findElem(xml, label);
+    if (found && found.y > h * 0.50) return found;
+  }
+
   return null;
 }
 

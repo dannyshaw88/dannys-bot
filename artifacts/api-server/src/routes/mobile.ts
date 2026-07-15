@@ -1868,32 +1868,33 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
 
       if (willLike) {
-        // Double-tap the centre of the story content to Like.
+        // Tap the story Like button via the accessibility tree.
         //
-        // Previous approach: pixel-scan for the heart icon, tap it.
-        // Problem: Instagram renders the story reply-bar on a canvas with
-        // ZERO accessible elements, so the pixel scan had to find the
-        // bright icon glyphs by luminance. The "Send message" placeholder
-        // text is also bright white on the same dark scrim and consistently
-        // fooled the scan — clusters from the text were returned as "icons",
-        // the tap landed in the message field, and the keyboard opened.
-        // Patching the gap filter only partially helped; the text produced
-        // clusters that survived every heuristic.
+        // Previous approach: double-tap at fixed screen-centre percentages
+        // (w*0.50, h*0.44). Violated the project rule against hardcoded
+        // coordinates and was not reliably registering on this farm's devices
+        // (confirmed from log: "liked (double-tap at (540,1082))" fired but
+        // the Like Story button still showed cd="Like Story" afterwards).
         //
-        // Fix: double-tap anywhere on the story content (not the action
-        // bar). Instagram registers that as a like — same gesture as the
-        // feed heart animation. Zero icon detection required; works
-        // regardless of which icons the story owner has enabled or disabled.
-        const cx = Math.round(w * 0.50);
-        const cy = Math.round(h * 0.44);
-        await android.doubleTap(serial, cx, cy);
-        logger.info({ serial, story: s + 1 }, "[view-stories] liked story (double-tap on content)");
-        onLog?.(`Story ${s + 1}: liked (double-tap at (${cx},${cy}))`);
+        // Fix: find toolbar_like_button by resource-id via findStoryLikeButtonViaA11y
+        // and tap it once — same as every other button in this codebase.
+        // Falls back to the legacy double-tap if the a11y lookup fails.
+        const likeBtn = await android.findStoryLikeButtonViaA11y(serial).catch(() => null);
+        if (likeBtn) {
+          await android.tap(serial, likeBtn.x, likeBtn.y);
+          logger.info({ serial, story: s + 1, x: likeBtn.x, y: likeBtn.y }, "[view-stories] liked story via a11y toolbar_like_button");
+          onLog?.(`Story ${s + 1}: liked via a11y at (${likeBtn.x},${likeBtn.y})`);
+        } else {
+          // Fallback: double-tap centre of story content
+          const cx = Math.round(w * 0.50);
+          const cy = Math.round(h * 0.44);
+          await android.doubleTap(serial, cx, cy);
+          logger.info({ serial, story: s + 1 }, "[view-stories] liked story (fallback double-tap — a11y like button not found)");
+          onLog?.(`Story ${s + 1}: liked (fallback double-tap at (${cx},${cy}) — a11y like button not found)`);
+        }
         // When a share is also scheduled on this slide, don't linger here —
-        // every extra ms is runway the DM-share sequence won't have. Only
-        // pause for the full heart-animation beat when nothing else needs
-        // to happen next.
-        await sleepOrAbort(serial, willShare ? 150 : 600);
+        // every extra ms is runway the DM-share sequence won't have.
+        await sleepOrAbort(serial, willShare ? 100 : 200);
       }
 
       if (willShare && !(await stillInStoryViewer())) {
@@ -1977,11 +1978,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // unambiguously distinguishes "sheet open" from "nothing happened".
           await android.tap(serial, shareIconPos.x, shareIconPos.y);
           onLog?.(`Story ${s + 1}: tapped paper-plane at (${shareIconPos.x},${shareIconPos.y}) — waiting for share sheet`);
-          await sleepOrAbort(serial, 1200); // match feed flow timing
+          await sleepOrAbort(serial, 200); // just enough for the sheet to render
           opened = true;
         }
         if (opened) {
-          await sleepOrAbort(serial, 900); // wait for picker sheet (trimmed from 1200ms to leave more runway)
+          await sleepOrAbort(serial, 150); // wait for recipient picker
           // Confirm the sheet actually rendered BEFORE firing the recipient
           // tap. Root-cause fix (12 Jul 2026, user-reported): the only gate
           // that used to exist here was "no keyboard AND still in story
@@ -2019,7 +2020,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             logger.warn({ serial, story: s + 1 }, "[view-stories] no recipient found — closed share sheet without sending");
             onLog?.(`Story ${s + 1}: share skipped — no recipient avatars found in sheet (closed without sending)`);
           } else {
-          await sleepOrAbort(serial, 900); // wait for Send button to activate after selection
+          await sleepOrAbort(serial, 200); // wait for Send button to activate after selection
           // Final checkpoint before the last tap: if the sheet/story is
           // already gone by now, tapping "Send" blind would land on the feed.
           if (!(await stillInStoryViewer())) {
@@ -2030,17 +2031,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           if (sent === true) {
             logger.info({ serial, story: s + 1 }, "[view-stories] shared story via DM — Send tapped");
             onLog?.(`Story ${s + 1}: shared via DM — Send tapped`);
-            await sleepOrAbort(serial, 800);
+            await sleepOrAbort(serial, 200);
           } else if (sent === null) {
             // Sheet already gone — recipient tap auto-sent it; no Back needed.
             logger.info({ serial, story: s + 1 }, "[view-stories] share sheet already closed — DM likely sent by recipient tap");
             onLog?.(`Story ${s + 1}: shared via DM — sheet auto-dismissed (sent by recipient tap)`);
-            await sleepOrAbort(serial, 500);
+            await sleepOrAbort(serial, 150);
           } else {
             await android.pressBack(serial);
             logger.info({ serial, story: s + 1 }, "[view-stories] Send button not found — closed DM picker");
             onLog?.(`Story ${s + 1}: Send button not found — closed DM picker`);
-            await sleepOrAbort(serial, 600);
+            await sleepOrAbort(serial, 200);
           }
           }
           }
@@ -2883,16 +2884,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // was misleading users into thinking the repost/share hadn't worked even
     // when it had (the label-scan found the button even when the icon scan
     // failed to detect it by position).
-    onLog?.(`Inject Browsing: icons — Like✓ Comment:${icons.comment?'✓':'✗'}`);
+    onLog?.(`Inject Browsing: icons — Like:${icons.alreadyLiked ? '(already liked)' : '✓'} Comment:${icons.comment?'✓':'✗'}`);
 
     const likeChance = rollRange(browsing.likePctMin, browsing.likePctMax) / 100;
-    logger.info({ serial, likeChance: Math.round(likeChance * 100) }, "[inject-browsing] like chance rolled");
+    logger.info({ serial, likeChance: Math.round(likeChance * 100), alreadyLiked: !!icons.alreadyLiked }, "[inject-browsing] like chance rolled");
     if (likeChance > 0 && Math.random() < likeChance) {
-      try {
-        await android.tap(serial, icons.like.x, icons.like.y);
-        onLog?.("Inject Browsing: liked the post");
-        await sleepOrAbort(serial, 400);
-      } catch { /* best effort */ }
+      if (icons.alreadyLiked) {
+        onLog?.("Inject Browsing: post already liked — skipping like tap, continuing with share actions");
+        logger.info({ serial }, "[inject-browsing] post already liked (Unlike button found) — skipped like tap, share/DM actions will still run");
+      } else {
+        try {
+          await android.tap(serial, icons.like.x, icons.like.y);
+          onLog?.("Inject Browsing: liked the post");
+          await sleepOrAbort(serial, 300);
+        } catch { /* best effort */ }
+      }
     }
 
     const shareFeedChance = rollRange(browsing.shareFeedPctMin, browsing.shareFeedPctMax) / 100;
@@ -2995,7 +3001,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         } else {
           await android.tap(serial, sendIcon.x, sendIcon.y);
           logger.info({ serial, x: sendIcon.x, y: sendIcon.y }, "[inject-browsing] tapped Send icon");
-          await sleepOrAbort(serial, 1200);
+          await sleepOrAbort(serial, 200);
           // Confirm the sheet actually rendered before firing the recipient tap.
           // Same fix as story share-to-DM (Jul 2026): the DM share sheet's
           // search box auto-focuses on open, raising the soft keyboard — so
@@ -3014,16 +3020,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             logger.warn({ serial }, "[inject-browsing] no recipient found — closed share sheet without sending");
             onLog?.("Inject Browsing: share skipped — no recipient avatars found (closed without sending)");
           } else {
-          await sleepOrAbort(serial, 900);
+          await sleepOrAbort(serial, 200);
           const sent = await sendShareSheet(serial, w, h);
-          if (sent === true) { onLog?.("Inject Browsing: shared the post via DM"); await sleepOrAbort(serial, 600); }
+          if (sent === true) { onLog?.("Inject Browsing: shared the post via DM"); await sleepOrAbort(serial, 200); }
           else if (sent === null) {
             // Sheet already gone — recipient tap auto-sent it; no Back needed.
             onLog?.("Inject Browsing: shared the post via DM (sheet auto-dismissed by recipient tap)");
-            await sleepOrAbort(serial, 400);
+            await sleepOrAbort(serial, 150);
           } else {
             onLog?.("Inject Browsing: share sheet did not confirm send — skipping share-via-DM");
-            await android.pressBack(serial); await sleepOrAbort(serial, 400);
+            await android.pressBack(serial); await sleepOrAbort(serial, 150);
           }
           }
           }

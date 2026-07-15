@@ -4,6 +4,26 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.585] — 2026-07-15
+
+### Fix: story likes — switch from percentage-based double-tap to accessibility-tree button tap
+
+Root cause: story likes were firing via `doubleTap(w*0.50, h*0.44)` — a fixed percentage of the screen — which violated the project rule against hardcoded coordinates and was not reliably registering on this farm's devices (log showed "liked (double-tap at (540,1082))" but the Like Story button still had `cd="Like Story"` in the next a11y dump, meaning the gesture was not captured by Instagram). The a11y diagnostic already confirmed the Like button IS accessible via `com.instagram.android:id/toolbar_like_button`. Fix: `findStoryLikeButtonViaA11y()` locates the button by resource-id and the existing `tap()` function handles the press — same approach used for every other button in this codebase. Falls back to the legacy double-tap if the resource-id is absent on an older build.
+
+### Fix: Inject Browsing post actions (Like/ShareToFeed/ShareToDM) — no longer abandoned when the post was already liked
+
+Root cause: `findFeedActionIcons()` returned null when the post's Like button had `content-desc="Unlike"` (already liked), because the search regex was hard-scoped to `"Like"` to prevent accidental unlikes. Returning null caused the caller to press Back and skip all remaining actions (ShareToFeed, ShareToDM) — the "it clicked the post then went backwards without doing anything" behaviour. Fix: `findFeedActionIcons()` now runs a second pass for `"Unlike"` when `"Like"` is not found. If found, it sets `alreadyLiked: true` on the returned icons object and continues normally. The like tap is skipped (to avoid unlinking), but ShareToFeed and ShareToDM run as normal.
+
+### Fix: 90% reduction in Like and ShareToDM action delays (story and Inject Browsing)
+
+All waits between tap → share sheet confirmation → recipient selection → Send reduced from the 800–1 200 ms range down to 150–200 ms each. Previously: paper-plane tap → 1 200 ms → sheet check → 900 ms → recipient tap → 900 ms → Send tap = ~3 s of dead waiting on top of a 3–6 s story. Now: 200 ms → sheet check → 150 ms → recipient tap → 200 ms → Send tap. Same fix applied to Inject Browsing DM share sequence.
+
+### Feature: Purge All Data button on Evasion Stats page
+
+New "Purge All Data" button sits next to "Export Evasion Stats". Clicking it prompts for confirmation, then permanently deletes every row from `instagram_api_calls` plus all four analytics tables (banned/automated/captcha/locked). Useful for resetting statistics before a fresh test run. Backend: `DELETE /api/analytics/purge-evasion-stats`. Frontend invalidates all analytics query caches on success.
+
+---
+
 ## [1.1.584] — 2026-07-15
 
 ### Fix: story like/share fires instantly — remove pre-action viewer check (was taking 2.7s before action fired)

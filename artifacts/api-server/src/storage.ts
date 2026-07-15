@@ -75,6 +75,7 @@ export interface IStorage {
   getVerifyOpsByProfile(): Promise<Record<number, string[]>>;
   createInstagramApiCall(call: { profileId: number; username?: string; operationName: string; date: string; message?: string; source?: string; navChain?: string; ipAddress?: string; durationMs?: number; isError?: boolean; transport?: string }): Promise<any>;
   resetStuckVerifyingAccounts(): Promise<number>;
+  purgeEvasionStats(): Promise<{ deletedApiCalls: number; deletedBan: number; deletedAutomated: number; deletedCaptcha: number; deletedLocked: number }>;
 
   // Pre-Status-Change Hit Tracking
   getPreStatusChangeHits(profileId: number): Promise<{ operationName: string; perAccountCount: number }[]>;
@@ -635,6 +636,25 @@ export class DatabaseStorage implements IStorage {
       console.warn("[storage] createInstagramApiCall insert failed (non-fatal):", insertErr);
       return undefined;
     }
+  }
+
+  async purgeEvasionStats(): Promise<{ deletedApiCalls: number; deletedBan: number; deletedAutomated: number; deletedCaptcha: number; deletedLocked: number }> {
+    const [apiCallsResult, banResult, autoResult, captchaResult, lockedResult] = await Promise.all([
+      db.run(sql`DELETE FROM instagram_api_calls`),
+      db.delete(bannedAccountsAnalytics),
+      db.delete(automatedBehaviourAnalytics),
+      db.delete(captchaAnalytics),
+      db.delete(lockedAccountsAnalytics),
+    ]);
+    // Reset the insert counter so the next prune cycle doesn't try to prune an empty table
+    this._apiCallInsertCount = 0;
+    return {
+      deletedApiCalls: (apiCallsResult as any).changes ?? 0,
+      deletedBan: (banResult as any).rowsAffected ?? 0,
+      deletedAutomated: (autoResult as any).rowsAffected ?? 0,
+      deletedCaptcha: (captchaResult as any).rowsAffected ?? 0,
+      deletedLocked: (lockedResult as any).rowsAffected ?? 0,
+    };
   }
 
   async incrementStat(profileId: number, toolType: string): Promise<void> {
