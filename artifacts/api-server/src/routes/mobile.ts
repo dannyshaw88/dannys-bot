@@ -1505,7 +1505,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               try {
                 await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
                 // Capture the icon's own label before tapping — see the
-                // same-name guard in runProfileBrowsingForUser for why:
+                // same-name guard in runProfileBrowsingSequence for why:
                 // some accounts' Instagram build reposts instantly on a
                 // single tap with NO confirmation sheet, relabelling the
                 // SAME icon in place (e.g. "Repost" -> "Remove
@@ -2970,35 +2970,56 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   }
 
   /**
-   * Runs the "Inject Browsing" sequence for ONE user's profile page, called
-   * (when it rolls true) BEFORE the Follow button is tapped for that user.
-   * Every roll below (whether the sequence runs at all, whether the feed
-   * gets scrolled, whether a post gets opened, liked, reposted, or shared
-   * via DM) is drawn fresh per user — a min/max pair is a range the actual
-   * chance for THIS user is drawn from, not a fixed percentage, so e.g.
-   * min=5/max=10 gives each user its own roll somewhere in that band
-   * (~7.5% on average) rather than exactly 7.5% every time.
+   * Decides, for ONE user, whether Inject Browsing runs at all this user
+   * and — independently — whether it should run before or after the Follow
+   * tap. These are two separate rolls, not one combined gate:
    *
-   * Must be called while already sitting on the target user's profile page
-   * (after findAndTapUserInSearch, before tapFollowButtonOnProfilePage).
-   * Every step degrades to a no-op (never throws, never leaves the profile
-   * page) if the expected icon/button can't be located — per spec, a
-   * missing icon just means that step is skipped for this user.
+   *   - `activatePct` — whether browsing happens for this user at all.
+   *   - `beforeFollowPct` — GIVEN that it happens, the odds it happens
+   *     before the follow (vs. after). This does NOT gate whether browsing
+   *     happens — it only orders it.
+   *
+   * Fix (15 Jul 2026): previously `beforeFollowPct` was (incorrectly) used
+   * as a second on/off gate stacked on top of `activatePct` — if that roll
+   * missed, browsing was skipped entirely for the user, with no "after
+   * follow" branch ever implemented. That made "before follow" look like it
+   * meant "follow first, never browse" whenever the roll missed. Now a miss
+   * only changes the order to after-follow; browsing still runs whenever
+   * `activatePct` says it should.
    */
-  async function runProfileBrowsingForUser(
+  function rollInjectBrowsingDecision(browsing: InjectBrowsingParams): { willBrowse: boolean; browseBeforeFollow: boolean } {
+    const activateChance = rollRange(browsing.activatePctMin, browsing.activatePctMax) / 100;
+    const willBrowse = activateChance > 0 && Math.random() < activateChance;
+    if (!willBrowse) return { willBrowse: false, browseBeforeFollow: false };
+    const beforeFollowChance = rollRange(browsing.beforeFollowPctMin, browsing.beforeFollowPctMax) / 100;
+    const browseBeforeFollow = beforeFollowChance > 0 && Math.random() < beforeFollowChance;
+    return { willBrowse, browseBeforeFollow };
+  }
+
+  /**
+   * Runs the "Inject Browsing" sequence for ONE user's profile page. Caller
+   * decides (via rollInjectBrowsingDecision) whether and when this runs —
+   * this function no longer rolls the activate/before-follow gates itself.
+   * Every roll below (whether the feed gets scrolled, whether a post gets
+   * opened, liked, reposted, or shared via DM) is drawn fresh per user — a
+   * min/max pair is a range the actual chance for THIS user is drawn from,
+   * not a fixed percentage, so e.g. min=5/max=10 gives each user its own
+   * roll somewhere in that band (~7.5% on average) rather than exactly 7.5%
+   * every time.
+   *
+   * Must be called while already sitting on the target user's profile page.
+   * When called before the follow tap: after findAndTapUserInSearch, before
+   * tapFollowButtonOnProfilePage. When called after: right after the follow
+   * tap succeeds/fails, still on the same profile page. Every step degrades
+   * to a no-op (never throws, never leaves the profile page) if the
+   * expected icon/button can't be located — per spec, a missing icon just
+   * means that step is skipped for this user.
+   */
+  async function runProfileBrowsingSequence(
     serial: string,
     browsing: InjectBrowsingParams,
     onLog?: (msg: string) => void,
   ): Promise<void> {
-    // Outer gate: "Activate Percentage" — rolls once per user before anything else.
-    // If it misses, inject browsing is skipped entirely for this user.
-    const activateChance = rollRange(browsing.activatePctMin, browsing.activatePctMax) / 100;
-    if (!(activateChance > 0 && Math.random() < activateChance)) return;
-
-    const beforeFollowChance = rollRange(browsing.beforeFollowPctMin, browsing.beforeFollowPctMax) / 100;
-    if (!(beforeFollowChance > 0 && Math.random() < beforeFollowChance)) return;
-
-    onLog?.("Inject Browsing: rolled to browse this profile before following");
     const { w, h } = getScreenSize(serial);
 
     const feedChance = rollRange(browsing.feedChanceMin, browsing.feedChanceMax) / 100;
@@ -3410,24 +3431,35 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
         await sleepOrAbort(serial, 1500);
 
-        // Inject Browsing — rolled fresh for this user; browses the
-        // profile's grid (scroll/open/like/repost/share-DM) BEFORE the
-        // Follow tap when it rolls true, so the follow doesn't always look
-        // like an instant drive-by.
-        if (browsing) {
-          await runProfileBrowsingForUser(serial, browsing, onLog).catch((e: any) => {
+        // Inject Browsing — rolled fresh for this user. `willBrowse` decides
+        // whether browsing happens at all; `browseBeforeFollow` (an
+        // independent roll, only consulted when willBrowse is true) decides
+        // whether it happens before or after the Follow tap. A before-follow
+        // miss no longer skips browsing — it just moves it to run after the
+        // follow instead.
+        const { willBrowse, browseBeforeFollow } = browsing
+          ? rollInjectBrowsingDecision(browsing)
+          : { willBrowse: false, browseBeforeFollow: false };
+
+        if (browsing && willBrowse && browseBeforeFollow) {
+          onLog?.("Inject Browsing: rolled to browse this profile before following");
+          await runProfileBrowsingSequence(serial, browsing, onLog).catch((e: any) => {
             if (e?.message === "cycle-aborted") throw e;
             onLog?.(`Inject Browsing: error — ${e?.message}`);
           });
           // Browsing may have scrolled the profile grid, pushing the Follow
           // button (in the profile header) off-screen. Scroll back to the top
-          // of the profile before attempting the Follow tap.
+          // of the profile before attempting the Follow tap. Only needed on
+          // this branch — the after-follow branch below taps Follow first,
+          // while still at the top of the profile, so no scroll-up is needed.
           const { w: bw, h: bh } = getScreenSize(serial);
           for (let _si = 0; _si < 4; _si++) {
             await android.swipe(serial, Math.round(bw / 2), Math.round(bh * 0.30), Math.round(bw / 2), Math.round(bh * 0.75), 280);
             await sleepOrAbort(serial, 180);
           }
           await sleepOrAbort(serial, 400);
+        } else if (browsing && willBrowse && !browseBeforeFollow) {
+          onLog?.("Inject Browsing: rolled to browse this profile after following");
         }
 
         // Tap Follow on the profile page. Only logs success when the button
@@ -3440,6 +3472,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           await sleepOrAbort(serial, 1000 + Math.round(Math.random() * 1500));
         } else {
           onLog?.(`Follow: Follow button not found or state did not change on @${username} — already following?`);
+        }
+
+        // Browsing rolled to run AFTER the follow — do it now, still on the
+        // same profile page, regardless of whether the follow tap itself
+        // succeeded (a missed/duplicate Follow tap shouldn't also skip the
+        // browsing that was already decided for this user).
+        if (browsing && willBrowse && !browseBeforeFollow) {
+          await runProfileBrowsingSequence(serial, browsing, onLog).catch((e: any) => {
+            if (e?.message === "cycle-aborted") throw e;
+            onLog?.(`Inject Browsing: error — ${e?.message}`);
+          });
         }
 
         // Go back to search only when there are more users to follow.

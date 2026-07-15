@@ -4,6 +4,19 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.600] — 2026-07-15
+
+### Fix: Follow tool's "Browse Before Follow %" was silently gating whether browsing happened at all, not just its order
+
+**Root cause:** `runProfileBrowsingForUser` rolled two separate settings back-to-back and returned early on either miss — `activatePct` (whether browsing happens for this user) and `beforeFollowPct` (which was supposed to only decide the *order* relative to the Follow tap). Because a `beforeFollowPct` miss also `return`ed, it acted as a second on/off gate: whenever it missed, the user got followed with **no browsing at all**, before or after — there was no "browse after follow" code path in existence. That's exactly the reported symptom: "when it kicks in, it follows first and does no browsing afterwards."
+
+**Fix:**
+- Split the two rolls apart. `rollInjectBrowsingDecision()` now rolls `activatePct` once to decide `willBrowse`, then — only if that hits — rolls `beforeFollowPct` to decide `browseBeforeFollow` (order only, never a gate on whether it happens).
+- Renamed `runProfileBrowsingForUser` → `runProfileBrowsingSequence`; it no longer rolls either gate itself, just runs the browsing actions when told to.
+- The Follow flow in `mobile.ts` now branches on the decision: if `browseBeforeFollow`, run the sequence, scroll back to the top of the profile (Follow button may have scrolled off-screen), then tap Follow — unchanged from before. If browsing rolled for **after** follow, skip the scroll-up entirely (never needed — the profile is still at the top when Follow is tapped) and tap Follow immediately, then run the browsing sequence afterward on the same profile page.
+
+---
+
 ## [1.1.599] — 2026-07-15
 
 ### Diagnostic-only: Follow "Search tab not found" evidence gathering
