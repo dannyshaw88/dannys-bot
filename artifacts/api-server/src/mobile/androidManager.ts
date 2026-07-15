@@ -4138,6 +4138,40 @@ export async function findRandomNotificationItem(serial: string): Promise<{ x: n
  * label change, or an IG app update that moved/removed the tab) can be
  * confirmed instead of assumed.
  */
+/**
+ * Detects whether Instagram (or any foreground app) is running inside a MIUI
+ * floating window rather than fullscreen. A floating window is smaller than
+ * the real device screen — UIAutomator's dump reports the window's own bounds
+ * as the root, which will be noticeably shorter than the real display height.
+ *
+ * Root cause (confirmed 15 Jul 2026): when Instagram is in a floating window
+ * the ui-dump root bounds height is ~1709 instead of the real 2460 px, so
+ * _getScreenSize(xml) returns the wrong height. This shifts the bottom-nav
+ * cutoff (botMin = h * 0.88) to a position that no longer corresponds to
+ * where the bottom navigation bar actually sits, making findInstagramSearchTab
+ * find 0 nodes and return null every time — even though Instagram's own layout
+ * and code are completely unchanged. The fix is to detect the mismatch before
+ * entering the search-tab / per-user follow loop, and recover by relaunching
+ * Instagram fullscreen before proceeding.
+ *
+ * Returns the detected window height (from ui dump), the real device height
+ * (from adb wm size), and whether a floating-window mismatch was found.
+ */
+export async function detectFloatingWindow(
+  serial: string,
+): Promise<{ floating: boolean; windowH: number; deviceH: number; windowW: number; deviceW: number }> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const { w: deviceW, h: deviceH } = getScreenSize(serial);
+  const xml = await _uiDump(adb, serial).catch(() => null);
+  if (!xml) return { floating: false, windowH: deviceH, deviceH, windowW: deviceW, deviceW };
+  const { w: windowW, h: windowH } = _getScreenSize(xml);
+  // Use 0.88 threshold — a floating window is typically 60–80 % of screen height;
+  // 12 % headroom avoids false-positives from status-bar / notch differences.
+  const floating = windowH < deviceH * 0.88 || windowW < deviceW * 0.88;
+  return { floating, windowH, deviceH, windowW, deviceW };
+}
+
 export async function findInstagramSearchTab(
   serial: string,
   onLog?: (msg: string) => void,
@@ -4152,10 +4186,14 @@ export async function findInstagramSearchTab(
   if (byLabel) return byLabel;
 
   // Nothing matched — dump the bottom-nav row so the next failure carries
-  // real evidence instead of another guess.
+  // real evidence instead of another guess.  Also check for floating-window
+  // mode (MIUI "floating windows" feature) which makes the ui-dump report a
+  // smaller root-bounds height than the real device screen, shifting all
+  // position-based detection thresholds and causing spurious misses.
   if (onLog) {
-    const { h } = _getScreenSize(xml);
-    const botMin = Math.round(h * 0.88);
+    const { w: xmlW, h: xmlH } = _getScreenSize(xml);
+    const { w: realW, h: realH } = getScreenSize(serial);
+    const botMin = Math.round(xmlH * 0.88);
     const rows: string[] = [];
     const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
     let m: RegExpExecArray | null;
@@ -4172,7 +4210,15 @@ export async function findInstagramSearchTab(
       const clickable = attrs.match(/clickable="([^"]*)"/)?.[1] ?? "";
       rows.push(`class=${cls} rid=${rid} cd="${cd}" text="${txt}" clickable=${clickable} bounds=${bm[0].slice(bm[0].indexOf('"') + 1, -1)}`);
     }
-    onLog(`Follow: search tab lookup missed — bottom-nav dump (${rows.length} node(s) below y=${botMin}): ${rows.length ? rows.join(" | ") : "(none — bottom nav absent from a11y tree)"}`);
+    const floatingNote =
+      (xmlH < realH * 0.88 || xmlW < realW * 0.88)
+        ? ` ⚠️ FLOATING WINDOW: ui-dump bounds ${xmlW}×${xmlH} vs real screen ${realW}×${realH} — Instagram is NOT fullscreen`
+        : ` (screen ${realW}×${realH}, dump root ${xmlW}×${xmlH})`;
+    onLog(
+      `Follow: search tab lookup missed — bottom-nav dump (${rows.length} node(s) below y=${botMin})` +
+      floatingNote +
+      (rows.length ? `: ${rows.join(" | ")}` : ""),
+    );
   }
   return null;
 }

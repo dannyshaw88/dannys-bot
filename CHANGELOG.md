@@ -4,6 +4,26 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.601] — 2026-07-15
+
+### Fix: Follow tool fails on 4th run — "Search tab not found" caused by MIUI floating window
+
+**Root cause confirmed from live log + screenshot evidence (15 Jul 2026):**
+
+The log showed `Follow: search tab lookup missed — bottom-nav dump (0 node(s) below y=1503) (none — bottom nav absent from a11y tree)`. The number `y=1503` is 88% of 1709 — meaning the UIAutomator dump reported a root-bounds height of 1709 px, not the real device screen height of 2460 px. The attached screenshot confirmed why: Instagram was running as a **MIUI floating window** (small resizable panel overlaid on the home screen), not fullscreen. When Instagram is in a floating window, the UIAutomator accessibility dump reports the floating window's own bounds as the root node — so `_getScreenSize(xml)` returns the wrong height. This pushes the bottom-nav detection cutoff (`botMin = h × 0.88`) to a position where the nav bar no longer sits, producing 0 matches every single time. Instagram's actual layout never changed — the window Instagram was rendering in did, which broke every position-based detection threshold built around fullscreen coordinates.
+
+Instagram's layout is unchanged. This was never a detection regression.
+
+**Fix:**
+
+1. **New `detectFloatingWindow(serial)` export** in `androidManager.ts`: takes a fresh UIAutomator dump, compares its root-bounds `width × height` against the real device screen dimensions from `adb shell wm size`. If either axis is more than 12% smaller than the real screen, Instagram is running in a floating/resized window, not fullscreen. Returns `{ floating, windowW, windowH, deviceW, deviceH }`.
+
+2. **Floating-window annotation in `findInstagramSearchTab` diagnostic log**: when the search-tab lookup fails, the existing bottom-nav dump log line now also shows whether a floating-window mismatch was detected — e.g. `⚠️ FLOATING WINDOW: ui-dump bounds 720×1709 vs real screen 1080×2460 — Instagram is NOT fullscreen`. Makes future failures immediately self-diagnosing.
+
+3. **Auto-recovery in the Follow tool call site** (`mobile.ts`): after the 1500 ms settle wait, before calling `findInstagramSearchTab`, calls `detectFloatingWindow`. If a mismatch is detected, logs the exact window vs. screen sizes, calls `launchInstagram(serial)` (the existing `am start --activity-clear-top` helper) to promote Instagram from the floating-window task stack back to a normal fullscreen foreground task, waits 3 seconds for MIUI to animate the transition, and then proceeds normally with `findInstagramSearchTab`. No second retry loop — one recovery attempt, clean fallthrough.
+
+---
+
 ## [1.1.600] — 2026-07-15
 
 ### Fix: Follow tool's "Browse Before Follow %" was silently gating whether browsing happened at all, not just its order

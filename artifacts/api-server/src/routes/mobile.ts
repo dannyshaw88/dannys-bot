@@ -3376,13 +3376,38 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     let followed = 0;
 
-    // Navigate to Search tab. When Follow is the only enabled tool, no prior
-    // scroll/view action has run to let the just-opened feed settle, so the
-    // bottom nav can still be mid-render on the very first lookup (seen live
-    // 15 Jul 2026 — failed on the first cycle, succeeded on the very next
-    // one with nothing else different). One-time settle wait, not a retry
-    // loop — check once, not repeatedly.
+    // Navigate to Search tab. Give the just-opened feed a moment to settle
+    // before attempting to locate the bottom nav.
     await sleepOrAbort(serial, 1500);
+
+    // Floating-window guard (MIUI "Floating windows" feature, confirmed 15 Jul
+    // 2026 from live log + screenshot evidence). When Instagram is running in a
+    // MIUI floating / resized window instead of fullscreen, the UIAutomator
+    // accessibility dump reports the window's own bounds as the root — e.g.
+    // 720×1709 instead of the real 1080×2460 screen. This shifts the
+    // bottom-nav detection cutoff to a position where the nav bar no longer
+    // sits, causing findInstagramSearchTab to return null every time even
+    // though Instagram's layout is unchanged. Detection: compare the
+    // ui-dump-derived root-bounds height against the real device height from
+    // `adb shell wm size`. If mismatched by more than 12%, Instagram is in a
+    // floating window. Recovery: relaunch Instagram fullscreen via `am start`
+    // with CLEAR_TOP / NEW_TASK, which pulls the existing task out of floating
+    // mode and into the foreground at full screen size on all tested MIUI
+    // versions.
+    const floatCheck = await android.detectFloatingWindow(serial).catch(() => null);
+    if (floatCheck?.floating) {
+      onLog?.(
+        `Follow: ⚠️ Instagram is in a floating window (window ${floatCheck.windowW}×${floatCheck.windowH}, ` +
+        `real screen ${floatCheck.deviceW}×${floatCheck.deviceH}) — relaunching fullscreen before proceeding`,
+      );
+      // Force-launch the main activity via the existing launchInstagram helper
+      // (am start --activity-clear-top). Android/MIUI promotes the task from
+      // the floating-window stack to a normal fullscreen foreground task.
+      await android.launchInstagram(serial);
+      // Give MIUI time to animate the window transition back to fullscreen.
+      await sleepOrAbort(serial, 3000);
+    }
+
     const searchTab = await android.findInstagramSearchTab(serial, onLog).catch(() => null);
     if (!searchTab) { onLog?.("Follow: Search tab not found — skipping"); return 0; }
     await android.tap(serial, searchTab.x, searchTab.y);
