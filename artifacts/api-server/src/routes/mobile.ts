@@ -3253,10 +3253,34 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // ViewStories). Without this the re-scan after the recipient tap can
           // miss the button if the sheet has partially transitioned, falling
           // through to the null "auto-dismissed" path with Send never tapped.
+          //
+          // TAUTOLOGY BUG (found from a live log, 15 Jul 2026): unlike Stories
+          // — where the tapped paper-plane icon is found by pixel-scan, so a
+          // later "Send" label match is a genuinely new signal — here the
+          // tapped icon (`sendIcon`) is ITSELF found via
+          // findButtonByLabel("Send"/"Direct"/"Message"), because this
+          // device's feed action bar legitimately exposes its own DM icon
+          // under that same label. If the tap missed or the sheet never
+          // opened, re-running findButtonByLabel("Send") finds that SAME
+          // still-unclicked feed icon and reports a false positive "sheet
+          // confirmed open" — the code then fell through the label scan,
+          // found no real recipients, and (in the observed run) tapped the
+          // feed's own "Add to Saved" button by elimination, then logged
+          // "shared via DM — Send tapped" for something that never happened.
+          // Fix: a real sheet confirmation must be a DIFFERENT node than the
+          // one just tapped — require its position to have moved.
           const sheetSendBtn = await android.findButtonByLabel(serial, "Send").catch(() => null);
-          if (!sheetSendBtn) {
-            logger.warn({ serial }, "[inject-browsing] share sheet not confirmed open — skipping recipient tap");
-            onLog?.("Inject Browsing: share aborted — could not confirm the share sheet opened (no Send button found)");
+          const sheetSendBtnIsSameNode =
+            !!sheetSendBtn &&
+            Math.abs(sheetSendBtn.x - sendIcon.x) < 60 &&
+            Math.abs(sheetSendBtn.y - sendIcon.y) < 60;
+          if (!sheetSendBtn || sheetSendBtnIsSameNode) {
+            logger.warn({ serial, sheetSendBtn, sendIcon, sheetSendBtnIsSameNode }, "[inject-browsing] share sheet not confirmed open — skipping recipient tap");
+            onLog?.(
+              sheetSendBtnIsSameNode
+                ? "Inject Browsing: share aborted — Send tap didn't open a sheet (still the same feed icon) — skipping to avoid a blind tap on the feed underneath"
+                : "Inject Browsing: share aborted — could not confirm the share sheet opened (no Send button found)"
+            );
           } else {
           const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog);
           if (!recipientPicked) {

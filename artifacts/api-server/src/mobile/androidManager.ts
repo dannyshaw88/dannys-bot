@@ -2525,6 +2525,16 @@ export async function findShareSheetRecipients(serial: string, onLog?: (line: st
     // message compose area (keyboard appears) instead of selecting a recipient.
     // A valid DM recipient username NEVER starts with '#'.
     if (label.startsWith('#')) continue;
+    // Exclude the feed's own Save/bookmark button ("Add to Saved" / "Remove
+    // from saved") — another action-bar node from the underlying post that
+    // can appear in this same y-row scan when the sheet fails to actually
+    // open (confirmed live, 15 Jul 2026: after the numeric/hashtag
+    // exclusions above removed every other candidate, this was the one
+    // label left over and got tapped instead of a real recipient). Same
+    // leak class as the numeric/hashtag exclusions — an underlying
+    // feed-post node bleeding through, not a real DM recipient.
+    if (/^(add to saved|remove from saved)$/i.test(label)) continue;
+    if (ridM?.[1] === "com.instagram.android:id/row_feed_button_save") continue;
     results.push({ x: cx, y: cy });
   }
   if (dump.length) onLog?.(`[share-sheet] Strategy 2 label-scan node dump: ${dump.join(" | ")}`);
