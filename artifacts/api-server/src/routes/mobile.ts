@@ -4368,7 +4368,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const input = tapSchema.parse(req.body);
       const serial = p(req, "serial");
       const result = rescaleForDevice(serial, input.x, input.y, input.videoW, input.videoH);
-      await android.tap(serial, result.x, result.y);
+      // Tag as manual and, when recording, capture the screen state immediately
+      // after the tap so the macro export shows what was on screen at each step.
+      await android.tap(serial, result.x, result.y, "manual");
+      if (sessionRecorder.isRecording(serial)) {
+        // Fire async — don't block the tap response (dump takes ~1-2s)
+        android.dumpUi(serial)
+          .then(xml => { if (xml) sessionRecorder.addDump(serial, xml, "screen after manual tap"); })
+          .catch(() => { /* ignore dump errors during macro recording */ });
+      }
       res.json({ ok: true, rescaled: result.rescaled, video: result.video, device: result.device, from: result.from, to: result.to });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });

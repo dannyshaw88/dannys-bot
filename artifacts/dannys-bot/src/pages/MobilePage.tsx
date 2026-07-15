@@ -957,6 +957,41 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
   const [inspecting,    setInspecting]    = useState(false);
   const [clickTestMode, setClickTestMode] = useState(false);
 
+  // ── Macro recorder ─────────────────────────────────────────────────────────
+  // Records every manual tap + the screen state after each one so you can
+  // export it and send it to show the correct sequence (vs what the bot did).
+  const [macroRec,   setMacroRec]   = useState(false);
+  const [macroCount, setMacroCount] = useState(0);
+
+  useEffect(() => {
+    if (!phone || !macroRec) return;
+    const iv = setInterval(async () => {
+      try {
+        const r = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/session-recorder/status`);
+        if (!r.ok) return;
+        const d = await r.json();
+        setMacroCount(d.eventCount ?? 0);
+      } catch { /* ignore */ }
+    }, 1500);
+    return () => clearInterval(iv);
+  }, [phone, macroRec]);
+
+  const handleMacroToggle = async () => {
+    if (!phone) return;
+    const starting = !macroRec;
+    try {
+      await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/session-recorder/${starting ? "start" : "stop"}`, { method: "POST" });
+      setMacroRec(starting);
+      if (starting) setMacroCount(0);
+    } catch { /* ignore */ }
+  };
+
+  const handleMacroExport = () => {
+    if (!phone) return;
+    const url = `/api/mobile/devices/${encodeURIComponent(phone.serial)}/session-recorder/export.html`;
+    window.open(url, "_blank");
+  };
+
   // ── Exact shell sizing ──────────────────────────────────────────────────
   // The shell must hug the phone's real aspect ratio *without* including
   // the header/nav-bar chrome in that ratio math (they have fixed pixel
@@ -1222,6 +1257,28 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
           <NavBtn icon={<Power       className="w-3 h-3" />}     label="Power"  onClick={() => { liveCanvasRef.current?.clearToBlack(); onPower(); sendKey(phone.serial, 26, "Power", onLog); }} />
           <NavBtn icon={<Volume2     className="w-3 h-3" />}     label="Vol +"  onClick={() => sendKey(phone.serial, 24,  "Vol +",  onLog)} />
           <NavBtn icon={<VolumeX     className="w-3 h-3" />}     label="Vol −"  onClick={() => sendKey(phone.serial, 25,  "Vol −",  onLog)} />
+          <div className="w-px h-4 bg-white/10" />
+          {/* Macro recorder — record your own taps as the correct sequence */}
+          <button
+            onClick={handleMacroToggle}
+            title={macroRec ? `Stop macro recording (${macroCount} events)` : "Record macro — captures every tap you make + screen state"}
+            className={`flex items-center gap-1 px-2 py-1 rounded text-[9px] font-bold transition-colors ${
+              macroRec
+                ? "bg-orange-500/20 text-orange-400 border border-orange-500/40 animate-pulse"
+                : "bg-white/5 text-white/40 border border-white/10 hover:bg-white/10 hover:text-white/70"
+            }`}
+          >
+            {macroRec ? `⏹ ${macroCount}` : "● Macro"}
+          </button>
+          {macroCount > 0 && !macroRec && (
+            <button
+              onClick={handleMacroExport}
+              title="Export macro as HTML — send this file to the developer"
+              className="px-2 py-1 rounded text-[9px] font-bold bg-white/5 text-white/40 border border-white/10 hover:bg-white/10 hover:text-white/70 transition-colors"
+            >
+              ↗ Export
+            </button>
+          )}
         </div>
       )}
     </div>

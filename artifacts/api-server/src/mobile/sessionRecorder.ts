@@ -24,7 +24,7 @@ export interface RecEvent {
   data:    TapData | KeyData | SwipeData | LogData | DumpData;
 }
 
-export interface TapData    { x: number; y: number; label?: string }
+export interface TapData    { x: number; y: number; label?: string; source?: "manual" | "bot" }
 export interface KeyData    { code: number; label?: string }
 export interface SwipeData  { x1: number; y1: number; x2: number; y2: number; durationMs?: number }
 export interface LogData    { text: string }
@@ -80,8 +80,8 @@ function push(serial: string, ev: RecEvent): void {
   s.events.push(ev);
 }
 
-export function addTap(serial: string, x: number, y: number, label?: string): void {
-  push(serial, { ts: Date.now(), type: "tap", data: { x, y, label } });
+export function addTap(serial: string, x: number, y: number, label?: string, source?: "manual" | "bot"): void {
+  push(serial, { ts: Date.now(), type: "tap", data: { x, y, label, source } });
 }
 
 export function addKey(serial: string, code: number, label?: string): void {
@@ -169,10 +169,18 @@ export function exportHtml(serial: string): string | null {
     const ev = s.events[i];
     const dt = `+${((ev.ts - t0) / 1000).toFixed(2)}s`;
     let desc = "";
+    // Row background: highlight manual taps so they stand out immediately
+    const rowBg = (ev.type === "tap" && (ev.data as TapData).source === "manual")
+      ? "background:rgba(251,146,60,0.08);"
+      : "";
 
     if (ev.type === "tap") {
       const d = ev.data as TapData;
-      desc = `tap at (${d.x}, ${d.y})${d.label ? ` — ${esc(d.label)}` : ""}`;
+      const isManual = d.source === "manual";
+      const tapIcon  = isManual ? "🫵" : "🤖";
+      const tapLabel = isManual ? "YOU tapped" : "BOT tapped";
+      const tapColor = isManual ? "#fb923c" : "#4ade80";
+      desc = `<span style="color:${tapColor};font-weight:bold">${tapIcon} ${tapLabel}</span> (${d.x}, ${d.y})${d.label ? ` — ${esc(d.label)}` : ""}`;
     } else if (ev.type === "key") {
       const d = ev.data as KeyData;
       desc = `key ${d.code}${d.label ? ` (${esc(d.label)})` : ""}`;
@@ -192,10 +200,10 @@ export function exportHtml(serial: string): string | null {
         </details>`;
     }
 
-    rows += `<tr>
+    rows += `<tr style="${rowBg}">
       <td style="color:#6b7280;font-size:10px;white-space:nowrap;padding:4px 8px;vertical-align:top">${i + 1}</td>
       <td style="color:#6b7280;font-size:10px;white-space:nowrap;padding:4px 8px;vertical-align:top">${dt}</td>
-      <td style="font-size:12px;padding:4px 8px;vertical-align:top">${icon[ev.type]}</td>
+      <td style="font-size:12px;padding:4px 8px;vertical-align:top">${ev.type === "tap" ? "" : icon[ev.type]}</td>
       <td style="color:${color[ev.type]};padding:4px 8px;vertical-align:top;word-break:break-all">${desc}</td>
     </tr>\n`;
   }

@@ -846,8 +846,8 @@ export async function inputText(serial: string, text: string): Promise<void> {
   runInputShell(serial, ["text", escaped], "text");
 }
 
-export async function tap(serial: string, x: number, y: number): Promise<void> {
-  recorder.addTap(serial, x, y);
+export async function tap(serial: string, x: number, y: number, source?: "manual" | "bot"): Promise<void> {
+  recorder.addTap(serial, x, y, undefined, source ?? "bot");
   runInputShell(serial, ["tap", String(x), String(y)], "tap");
 }
 
