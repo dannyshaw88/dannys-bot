@@ -4,6 +4,21 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.590] — 2026-07-15
+
+### Fix: Inject Browsing — scroll-up recovery no longer fires when a Reel is open
+
+**Root cause (introduced in v1.1.587):** The scroll-up recovery was written for one specific case — tap lands on blank whitespace past the end of the profile grid, so no post opens at all. When `findFeedActionIcons` returned null in that case, pressing Back was safe because we were still on the profile grid. However, the same `findFeedActionIcons=null` result also happens when a Reel opens in the fullscreen viewer but its Like button uses a different accessibility label. In that second case the device is INSIDE the Reel viewer, not on the profile grid. The v1.1.587 recovery code had no way to tell the two cases apart, so it pressed Back (closing the valid Reel), scrolled up, and retried — which found another Reel, pressed Back again, and gave up. Reels that were previously fine now lost all like/share actions.
+
+**Fix:** Before triggering the scroll-up recovery, a new `isInPostViewer()` check inspects the accessibility tree for resource-ids that only appear inside an opened post or Reel viewer (`reel_viewer_follow_button`, `row_feed_photo_profile_name`, `row_feed_button_like`). Two paths:
+
+- `isInPostViewer = true` → a Reel or post opened but its icons weren't readable. Press Back once to cleanly return to the profile grid. Log: *"post/Reel opened but icons not found — pressing Back to profile (skipping scroll-up recovery)"*. No scroll, no retry, no wasted taps.
+- `isInPostViewer = false` → we are still on the profile grid (blank whitespace case). Run the existing scroll-up recovery exactly as before.
+
+The v1.1.589 diagnostic logging (`onLog` now passed to both `findFeedActionIcons` calls, plus the near-centre node dump) is also retained, so the next Reel failure will show exactly what label its Like button uses — the follow-up fix to teach `findFeedActionIcons` to recognize it can then be made with real evidence.
+
+---
+
 ## [1.1.589] — 2026-07-15
 
 ### Diagnostic: Inject Browsing — expose why "no post opened" fires on Reels

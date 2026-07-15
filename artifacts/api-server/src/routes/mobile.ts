@@ -2870,8 +2870,31 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // gaps (Reels tab strip, "Tagged" empty state, end-of-grid whitespace).
     let icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
     if (!icons) {
-      onLog?.("Inject Browsing: no post opened here (empty grid cell or unrecognised layout) — scrolling up and retrying");
-      logger.info({ serial }, "[inject-browsing] findFeedActionIcons returned null — likely scrolled past end of grid into whitespace; pressing Back, scrolling up once, retrying");
+      // Distinguish two cases that both produce icons=null:
+      //
+      //   A) Tap landed on blank whitespace / Reels-tab strip → still on the
+      //      profile grid (no post opened at all). Safe to scroll up and retry.
+      //
+      //   B) A Reel (or feed post) opened but findFeedActionIcons returned null
+      //      because the viewer uses a different icon label / layout. We are
+      //      INSIDE the viewer. Pressing Back + scrolling up + retrying is
+      //      wrong here — it closes a valid post and can cause a mis-tap on
+      //      the grid. Just press Back once to return cleanly to the profile.
+      //
+      // Detection: isInPostViewer checks for resource-ids that only appear
+      // inside a post or Reel viewer (reel_viewer_follow_button,
+      // row_feed_photo_profile_name, row_feed_button_like).
+      const insideViewer = await android.isInPostViewer(serial).catch(() => false);
+      if (insideViewer) {
+        onLog?.("Inject Browsing: post/Reel opened but icons not found — pressing Back to profile (skipping scroll-up recovery)");
+        logger.info({ serial }, "[inject-browsing] findFeedActionIcons=null but isInPostViewer=true — Reel/post opened with unreadable icons; pressing Back without scroll-up retry");
+        await android.pressBack(serial);
+        await sleepOrAbort(serial, 500);
+        return;
+      }
+      // Case A: still on profile grid — scroll up and retry once.
+      onLog?.("Inject Browsing: no post opened here (empty grid cell) — scrolling up and retrying");
+      logger.info({ serial }, "[inject-browsing] findFeedActionIcons=null, isInPostViewer=false — likely scrolled past end of grid into whitespace; pressing Back, scrolling up once, retrying");
       // Return to the profile grid, scroll back up one row to get posts into
       // view, then try tapping a post from the middle of the now-visible grid.
       await android.pressBack(serial);

@@ -3069,6 +3069,39 @@ export async function findStoryFollowButton(serial: string): Promise<{ x: number
 }
 
 /**
+ * Returns true when the device is currently showing an opened post or Reel
+ * viewer (i.e. a tap from the profile grid navigated INTO a post), rather
+ * than still sitting on the profile grid.
+ *
+ * Used by the inject-browsing scroll-recovery logic to distinguish two cases
+ * that both produce findFeedActionIcons=null:
+ *   A) Tap landed on blank whitespace → still on profile grid → safe to
+ *      do scroll-up + retry.
+ *   B) Reel (or other post) opened but icons not found by findFeedActionIcons
+ *      (e.g. Reel viewer uses different label) → we're INSIDE the viewer →
+ *      must press Back once to return to grid, NOT press Back + scroll + retry
+ *      (which would close the viewer and potentially mis-tap something else).
+ *
+ * Detection: looks for resource-ids that only appear inside a post/reel
+ * viewer and never on the profile-grid screen:
+ *   - reel_viewer_follow_button  — Reel fullscreen viewer
+ *   - row_feed_photo_profile_name — feed-post viewer (profile username row)
+ *   - row_feed_button_like        — feed-post viewer (like button)
+ * Any one of these present = we're inside a viewer, not on the grid.
+ */
+export async function isInPostViewer(serial: string): Promise<boolean> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return false;
+  return (
+    xml.includes("reel_viewer_follow_button") ||
+    xml.includes("row_feed_photo_profile_name") ||
+    xml.includes("row_feed_button_like")
+  );
+}
+
+/**
  * Best-effort extraction of the current story owner's @username from the
  * accessibility tree, for the "skip Indian users" filter only. Instagram's
  * story header renders the username as a plain TextView near the top of the
