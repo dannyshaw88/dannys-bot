@@ -4,6 +4,21 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.594] — 2026-07-15
+
+### Fix: Share-to-DM Strategy 2 — exclude `#hashtag` caption chips as recipient candidates
+
+**Root cause (from live log + screenshot, 15 Jul 2026):** Instagram renders the shared post's caption hashtags (`#foryou`, `#gymrat`, `#estetica`, etc.) as `android.widget.Button` nodes at y≈1159 — the same y-row as the real DM recipient name buttons. These nodes pass every existing Strategy 2 filter:
+- Not pure-numeric (they contain letters)
+- Width ≤ 80% screen
+- Not in the UI_CHROME or SHARE_DESTINATIONS blocklists
+
+Because `Math.random()` picks from the full results array, the code tapped `#foryou` (index 1) instead of the real recipient `bachidiego_` (index 0). Tapping a hashtag chip focuses the message compose text-input (keyboard appears) rather than selecting a recipient, so the subsequent Send tap fired against an unaddressed message.
+
+**Fix:** One exclusion added to Strategy 2: `if (label.startsWith('#')) continue;`. A valid Instagram DM recipient username can never begin with `#`.
+
+---
+
 ## [1.1.593] — 2026-07-15
 
 ### Fix: findFeedActionIcons — resource-id Like lookup, wider saveCutoffX, Button structural fallback

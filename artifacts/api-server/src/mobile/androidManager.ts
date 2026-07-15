@@ -2384,6 +2384,12 @@ export async function findShareSheetRecipients(serial: string, onLog?: (line: st
     //   "38" (comments), "203" (reposts), "9,077" (likes), "1,074" (sends).
     // A real DM recipient name always contains at least one letter.
     if (/^[\d,.\s]+$/.test(label)) continue;
+    // Exclude hashtag caption chips (e.g. #foryou, #gymrat) — these are the
+    // post's own caption tags surfaced as clickable Button nodes at the same
+    // y-row as the real DM recipient name buttons.  Tapping one focuses the
+    // message compose area (keyboard appears) instead of selecting a recipient.
+    // A valid DM recipient username NEVER starts with '#'.
+    if (label.startsWith('#')) continue;
     results.push({ x: cx, y: cy });
   }
   if (dump.length) onLog?.(`[share-sheet] Strategy 2 label-scan node dump: ${dump.join(" | ")}`);
