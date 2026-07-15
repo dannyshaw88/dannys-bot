@@ -4,6 +4,35 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.606] — 2026-07-15
+
+### Fix: share-to-DM tapped "Your Story" instead of a DM contact
+
+**Root cause confirmed from device log.** Instagram's DM share sheet renders "Your Story" (and "Close Friends") as a tappable circle at the top of the recipient picker grid using the **exact same resource-id** (`com.instagram.android:id/grid_view_pog_avatar_view`) as real DM contact avatars. The clickable `android.widget.Button` child node has no `content-desc` or `text` of its own — only the wrapping ViewGroup carries the human-readable label "Your Story". Strategy 1 in `_extractShareSheetRecipients` found all `grid_view_pog_avatar_view` nodes by resource-id but applied no content filtering at all, so "Your Story" was returned as a valid recipient and got randomly picked first.
+
+**Fix:** for each `grid_view_pog_avatar_view` button found in the accessibility tree, look back up to 600 characters in the raw XML from that node's position to find the last `content-desc` attribute (the nearest parent ViewGroup's label). If it matches `your story|close friends|add to story|add to your story` (case-insensitive), the node is excluded and logged. Real DM contact parents have labels like "John Doe not selected" or "Instagram Verified Chat not selected" — these never match the story-destination regex.
+
+### Feature: Session Recorder
+
+Addresses the recurring disconnect between what automation logs report and what the phone actually did. When active, the session recorder captures:
+- **Every tap** (x, y coordinates) — via the single `android.tap()` chokepoint so nothing is missed
+- **Every uiautomator dump** (full XML, truncated to 60 KB per dump to avoid OOM) — via the single `_uiDump()` chokepoint, so every Share Sheet scan, feed icon scan, and story viewer check is captured
+- **Every log line** emitted by the automation (all the `onLog` callbacks)
+
+The recorder is per-device, ring-buffered at 1000 events, and fully in-memory. It does not slow down or alter the automation flow in any way.
+
+**UI** — in the phone's Log tab, a new Session Recorder bar sits below the existing buttons:
+- **● Record Session** / **⏹ Stop Recording** toggle — starts/stops capture; a live event counter pulses red while recording
+- **🎬 Export Session (HTML)** — downloads a self-contained HTML report (no dependencies, open in any browser) showing every event in chronological order with timestamps relative to recording start, colour-coded by type, and uiautomator XML in expandable sections
+- **JSON** — downloads the raw JSON including full XML for every dump, suitable for automated analysis
+
+To debug a future issue: hit Record, run the broken automation cycle, hit Stop, export HTML, send the file. It will show exactly what was on screen at each decision point alongside what the automation did.
+
+**New files:** `artifacts/api-server/src/mobile/sessionRecorder.ts`
+**New API endpoints:** `POST /api/mobile/devices/:serial/session-recorder/start|stop`, `GET …/status`, `GET …/export.html`, `GET …/export.json`
+
+---
+
 ## [1.1.605] — 2026-07-15
 
 ### Fix: Inject Browsing share-to-DM — sheet closed before a recipient could be picked

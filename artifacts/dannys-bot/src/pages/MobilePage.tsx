@@ -3227,7 +3227,23 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize }: 
   const [copiedCapture,  setCopiedCapture]  = React.useState(false);
   const [lastCapture,    setLastCapture]    = React.useState<string[] | null>(null);
   const [checkingInfo,   setCheckingInfo]   = React.useState(false);
+  const [recStatus,      setRecStatus]      = React.useState<{ recording: boolean; eventCount: number } | null>(null);
+  const recPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => { bottomRef.current?.scrollIntoView({ block: "end" }); }, [lines.length]);
+
+  // Poll recorder status every 2 s while panel is open (cheap, stateless).
+  useEffect(() => {
+    if (!serial) return;
+    const poll = async () => {
+      try {
+        const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/session-recorder/status`);
+        if (r.ok) setRecStatus(await r.json());
+      } catch { /* network error — keep last known state */ }
+    };
+    poll();
+    recPollRef.current = setInterval(poll, 2000);
+    return () => { if (recPollRef.current) clearInterval(recPollRef.current); };
+  }, [serial]);
 
   const handleCheckScreenInfo = async () => {
     if (!serial) return;
@@ -3291,6 +3307,31 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize }: 
       const captured = await onScanTray();
       if (captured.length > 0) setLastCapture(captured);
     } finally { setScanning(false); }
+  };
+
+  const handleRecordToggle = async () => {
+    if (!serial) return;
+    const starting = !recStatus?.recording;
+    try {
+      const url = `/api/mobile/devices/${encodeURIComponent(serial)}/session-recorder/${starting ? "start" : "stop"}`;
+      const r = await fetch(url, { method: "POST" });
+      if (r.ok) {
+        const body = await r.json();
+        setRecStatus({ recording: body.recording, eventCount: body.eventCount ?? 0 });
+        addLog?.(starting ? "● Session recording started — every tap, log line, and UI dump will be captured." : `⏹ Session recording stopped — ${body.eventCount} events captured. Use Export Session to download.`);
+      }
+    } catch (e: any) { addLog?.(`Session recorder error: ${e?.message ?? "network error"}`); }
+  };
+
+  const handleExportSession = (format: "html" | "json") => {
+    if (!serial) return;
+    const url = `/api/mobile/devices/${encodeURIComponent(serial)}/session-recorder/export.${format}`;
+    const a   = document.createElement("a");
+    a.href    = url;
+    a.download = "";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const handleCopyLog = async () => {
@@ -3370,6 +3411,56 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize }: 
             </Button>
           </div>
         </div>
+
+        {/* Session Recorder row — visible whenever a phone is connected */}
+        {serial && (
+          <div className="flex items-center gap-2 px-1 py-1 bg-black/30 rounded-lg border border-border/50">
+            <Button
+              type="button"
+              variant={recStatus?.recording ? "destructive" : "secondary"}
+              onClick={handleRecordToggle}
+              className="text-xs h-7 px-3 gap-1.5"
+              title={recStatus?.recording
+                ? "Stop recording — then export the file and send it to diagnose automation issues"
+                : "Start recording — captures every tap, log line, and accessibility tree dump so you can share the exact sequence with the developer"}
+            >
+              {recStatus?.recording ? "⏹ Stop Recording" : "● Record Session"}
+            </Button>
+            {recStatus?.recording && (
+              <span className="text-[10px] text-red-400 animate-pulse font-mono">
+                ● REC &nbsp;{recStatus.eventCount} events
+              </span>
+            )}
+            {!recStatus?.recording && (recStatus?.eventCount ?? 0) > 0 && (
+              <>
+                <span className="text-[10px] text-muted-foreground font-mono">{recStatus!.eventCount} events captured</span>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => handleExportSession("html")}
+                  className="text-xs h-7 px-2"
+                  title="Download a self-contained HTML report — open in any browser to see every tap + UI dump side by side"
+                >
+                  🎬 Export Session (HTML)
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => handleExportSession("json")}
+                  className="text-xs h-7 px-2"
+                  title="Download raw JSON — includes full uiautomator XML for every dump"
+                >
+                  { } JSON
+                </Button>
+              </>
+            )}
+            {!recStatus?.recording && (recStatus?.eventCount ?? 0) === 0 && (
+              <span className="text-[10px] text-muted-foreground">
+                Records every tap, log line &amp; accessibility tree dump → export → send to developer
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Capture action row — only visible after a capture has been taken */}
         {lastCapture && (

@@ -5,6 +5,7 @@ import fs from "fs";
 import os from "os";
 import zlib from "zlib";
 import { logger } from "../lib/logger";
+import * as recorder from "./sessionRecorder";
 
 const execFileP = promisify(execFile);
 
@@ -846,6 +847,7 @@ export async function inputText(serial: string, text: string): Promise<void> {
 }
 
 export async function tap(serial: string, x: number, y: number): Promise<void> {
+  recorder.addTap(serial, x, y);
   runInputShell(serial, ["tap", String(x), String(y)], "tap");
 }
 
@@ -2464,6 +2466,14 @@ function _extractShareSheetRecipients(xml: string, serial: string, onLog?: (line
   // picks one at random from this list.  No label or width filter is needed
   // because the resource-id uniquely identifies these elements.
   const RID_AVATAR = "com.instagram.android:id/grid_view_pog_avatar_view";
+  // Instagram uses the SAME resource-id (grid_view_pog_avatar_view) for BOTH
+  // real DM contact avatars AND the "Your Story" / "Close Friends" share
+  // destination circles. The clickable Button child has NO content-desc or
+  // text itself — only the wrapping ViewGroup carries the human-readable label.
+  // Filter: look back up to 600 chars in the XML from each avatar button node
+  // for the last content-desc seen there; if it contains a story-destination
+  // phrase it belongs to "Your Story" / "Close Friends" / etc., not a contact.
+  const STORY_DEST_RE = /your story|close friends|add to story|add to your story/i;
   const avatarResults: { x: number; y: number }[] = [];
 
   {
@@ -2477,15 +2487,25 @@ function _extractShareSheetRecipients(xml: string, serial: string, onLog?: (line
       const cx = Math.round((Number(bm[1]) + Number(bm[3])) / 2);
       const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
       if (cy < minY || cy > maxY) continue;
+      // Check the XML immediately before this node for the parent's
+      // content-desc ("Your Story", "Close Friends", etc.) — take the LAST
+      // content-desc attr in the lookback window, which is the closest parent.
+      const lookback = xml.slice(Math.max(0, m2.index - 600), m2.index);
+      const parentCdMatches = [...lookback.matchAll(/content-desc="([^"]*)"/g)];
+      const parentCd = parentCdMatches.length > 0 ? parentCdMatches[parentCdMatches.length - 1][1] : "";
+      if (STORY_DEST_RE.test(parentCd)) {
+        onLog?.(`[share-sheet] Strategy 1: excluded avatar at (${cx},${cy}) — parent content-desc "${parentCd}" is a story destination, not a DM contact`);
+        continue;
+      }
       avatarResults.push({ x: cx, y: cy });
     }
   }
 
   if (avatarResults.length > 0) {
-    onLog?.(`[share-sheet] Strategy 1 (resource-id): ${avatarResults.length} avatar button(s) found via grid_view_pog_avatar_view — ${avatarResults.map(r => `(${r.x},${r.y})`).join(", ")}`);
+    onLog?.(`[share-sheet] Strategy 1 (resource-id): ${avatarResults.length} DM contact avatar(s) found — ${avatarResults.map(r => `(${r.x},${r.y})`).join(", ")}`);
     return avatarResults;
   }
-  onLog?.("[share-sheet] Strategy 1: grid_view_pog_avatar_view not found — falling back to label scan");
+  onLog?.("[share-sheet] Strategy 1: no non-story grid_view_pog_avatar_view nodes found — falling back to label scan");
 
   // ── Strategy 2 (fallback): label scan — used on Instagram builds that
   //    expose recipient rows as labelled clickable nodes rather than un-labelled
@@ -3577,7 +3597,10 @@ async function _uiDump(adb: string, serial: string): Promise<string> {
     // (killed mid-dump, or a partial pull) is missing this — retry instead
     // of silently handing back a document that's only populated near the
     // top of the tree.
-    if (xml && xml.includes("</hierarchy>")) return xml;
+    if (xml && xml.includes("</hierarchy>")) {
+      recorder.addDump(serial, xml);
+      return xml;
+    }
     if (attempt < 2) await _sleep(400);
   }
   return "";

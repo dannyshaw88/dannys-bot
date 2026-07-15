@@ -10,6 +10,7 @@ import * as os from "os";
 import { WebSocketServer } from "ws";
 import * as android from "../mobile/androidManager";
 import * as proxyRelay from "../mobile/proxyRelay";
+import * as sessionRecorder from "../mobile/sessionRecorder";
 // NOTE: src/mobile/scrcpyServer.ts implements a real scrcpy-server protocol
 // client that was meant to replace the screenrecord-based mirror below (to
 // fix screenrecord's MIUI keyguard-freeze issue), but it has never
@@ -4399,6 +4400,60 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const serial = p(req, "serial");
       const xml = await android.dumpUi(serial);
       res.type("text/plain").send(xml || "(empty dump)");
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
+
+  // ── Session Recorder ─────────────────────────────────────────────────────
+  // Records every tap, log line, and uiautomator dump XML so the full
+  // automation → Instagram → outcome chain is captured in one export file.
+
+  app.post("/api/mobile/devices/:serial/session-recorder/start", (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      sessionRecorder.start(serial);
+      logger.info({ serial }, "[session-recorder] recording started");
+      res.json({ ok: true, recording: true });
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
+
+  app.post("/api/mobile/devices/:serial/session-recorder/stop", (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      sessionRecorder.stop(serial);
+      const st = sessionRecorder.status(serial);
+      logger.info({ serial, eventCount: st.eventCount }, "[session-recorder] recording stopped");
+      res.json({ ok: true, recording: false, eventCount: st.eventCount });
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
+
+  app.get("/api/mobile/devices/:serial/session-recorder/status", (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      res.json(sessionRecorder.status(serial));
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
+
+  /** Download as JSON — includes full uiautomator XML for every dump. */
+  app.get("/api/mobile/devices/:serial/session-recorder/export.json", (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const json = sessionRecorder.exportJson(serial);
+      if (!json) { res.status(404).json({ error: "No recording for this device" }); return; }
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Content-Disposition", `attachment; filename="equinox-session-${serial}-${Date.now()}.json"`);
+      res.send(json);
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
+
+  /** Download as a self-contained HTML report — human readable, no dependencies. */
+  app.get("/api/mobile/devices/:serial/session-recorder/export.html", (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const html = sessionRecorder.exportHtml(serial);
+      if (!html) { res.status(404).json({ error: "No recording for this device" }); return; }
+      res.setHeader("Content-Type", "text/html");
+      res.setHeader("Content-Disposition", `attachment; filename="equinox-session-${serial}-${Date.now()}.html"`);
+      res.send(html);
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
