@@ -3169,6 +3169,18 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize }: 
     setTimeout(() => setCopied(false), 1500);
   };
 
+  const handleExportLog = () => {
+    const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `equinox-log-${new Date().toISOString().replace(/[:.]/g, "-")}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const handleCopyCapture = async () => {
     if (!lastCapture) return;
     await writeToClipboard(lastCapture.join("\n"));
@@ -3219,6 +3231,9 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize }: 
             )}
             <Button type="button" variant="secondary" onClick={handleCopyLog} disabled={lines.length === 0}>
               {copied ? "Copied!" : "📄 Copy Log"}
+            </Button>
+            <Button type="button" variant="secondary" onClick={handleExportLog} disabled={lines.length === 0} title="Save the full log as a .txt file — browser Save As dialog will appear">
+              💾 Export Log
             </Button>
             <Button type="button" variant="secondary" onClick={onClear} disabled={lines.length === 0}>
               Clear

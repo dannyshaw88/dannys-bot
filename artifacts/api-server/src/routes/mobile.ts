@@ -1222,24 +1222,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
    *    external-app row, also always present — the null (already-dismissed) path
    *    was similarly unreachable.
    */
-  async function sendShareSheet(serial: string, w: number, h: number): Promise<boolean | null> {
-    // Is the DM share sheet currently visible?  The sticky search box is
-    // present for the entire lifetime of the sheet and only ever appears
-    // inside it, making it a reliable, DM-specific indicator with no false
-    // positives from feed or nav elements.
+  async function sendShareSheet(
+    serial: string, w: number, h: number,
+    // Caller may pass a pre-found Send button position (captured during sheet
+    // confirmation) so this function can skip its own a11y dump — saves 2–3s
+    // on every DM send (the dump is the bottleneck, not the tap itself).
+    knownSendBtn?: { x: number; y: number },
+  ): Promise<boolean | null> {
+    // Is the DM share sheet currently visible?
+    // `direct_private_share` is the DM sheet's sticky search container —
+    // only appears inside the sheet, never on feed or nav.
+    // Using a single dump here (no second fallback label) saves another 2–3s
+    // on every post-send confirmation pass where the sheet is already gone.
     const isDmSheetOpen = async (): Promise<boolean> => {
-      const found = await android.findButtonByLabel(serial, "direct_private_share").catch(() => null)
-        ?? await android.findButtonByLabel(serial, "layout_container_bottom_sheet").catch(() => null);
+      const found = await android.findButtonByLabel(serial, "direct_private_share").catch(() => null);
       return found !== null;
     };
 
-    const sendBtn = await android.findButtonByLabel(serial, "Send").catch(() => null);
+    // Use the pre-found button if provided, otherwise dump the a11y tree.
+    const sendBtn = knownSendBtn ?? await android.findButtonByLabel(serial, "Send").catch(() => null);
     if (sendBtn) {
       await android.tap(serial, sendBtn.x, sendBtn.y);
-      // Verify the tap actually sent: a successful send closes the share sheet.
-      // If no recipient was selected the button does nothing and the sheet stays
-      // open — we detect that and return false so the caller can close the sheet.
-      await sleepOrAbort(serial, 900);
+      // A successful send closes the sheet within one frame.
+      // 200ms is enough to let the close animation start before we check.
+      await sleepOrAbort(serial, 200);
       return !(await isDmSheetOpen());
     }
     // "Send" button not visible — either the sheet is already gone (recipient
@@ -1251,7 +1257,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     // Sheet is open but Send button not found — tap the coordinate fallback.
     await android.tap(serial, Math.round(w * 0.422), Math.round(h * 0.948));
-    await sleepOrAbort(serial, 900);
+    await sleepOrAbort(serial, 200);
     // Sheet closed = DM sent; sheet still open = send failed / no recipient.
     return !(await isDmSheetOpen());
   }
@@ -1481,7 +1487,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 onLog?.(`Scroll ${i + 1}/${count}: tapping share-to-feed icon at (${shareFeedIconX},${rowY})…`);
                 await android.tap(serial, shareFeedIconX, rowY);
                 logger.info({ serial, x: shareFeedIconX, y: rowY, beforeCd }, "[check-feed] tapped share-to-feed icon");
-                await sleepOrAbort(serial, 1200); // wait for a possible share sheet
+                await sleepOrAbort(serial, 400); // wait for repost sheet
 
                 const repostBtn = await android.findButtonByLabel(serial, "Repost").catch(() => null);
                 const sameCoords = !!repostBtn &&
@@ -1490,7 +1496,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   onLog?.(`Scroll ${i + 1}/${count}: Repost sheet opened — tapping Repost at (${repostBtn.x},${repostBtn.y})…`);
                   await android.tap(serial, repostBtn.x, repostBtn.y);
                   logger.info({ serial }, "[check-feed] tapped Repost in sheet");
-                  await sleepOrAbort(serial, 1000);
+                  await sleepOrAbort(serial, 300);
                   // "You reposted X's post" popup appears after the first
                   // repost — find its blue "Close" button via accessibility
                   // tree and tap it.
@@ -1499,7 +1505,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     await android.tap(serial, closeBtn.x, closeBtn.y);
                     logger.info({ serial }, "[check-feed] dismissed repost confirmation popup (Close)");
                     onLog?.(`Scroll ${i + 1}/${count}: dismissed "You reposted" popup`);
-                    await sleepOrAbort(serial, 500);
+                    await sleepOrAbort(serial, 150);
                   }
                   sharesFeed++;
                   onLog?.(`Scroll ${i + 1}/${count}: ✓ reposted to feed (total reposts: ${sharesFeed})`);
@@ -1546,39 +1552,47 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 onLog?.(`Scroll ${i + 1}/${count}: tapping share-via-DM icon at (${shareDmIconX},${rowY})…`);
                 await android.tap(serial, shareDmIconX, rowY);
                 logger.info({ serial, x: shareDmIconX, y: rowY }, "[check-feed] tapped share-to-DM icon");
-                await sleepOrAbort(serial, 1200); // wait for DM picker sheet
-                // Pick a random recipient from the quick-share avatar grid,
-                // then look for the Send button that appears once a
-                // recipient is selected — previously this just opened the
-                // sheet and pressed Back, never actually sending to anyone.
+                await sleepOrAbort(serial, 400); // wait for share sheet to open
+                // Confirm the sheet actually opened before tapping a recipient —
+                // same pattern as story/inject-browsing code. findButtonByLabel
+                // returns the Send button position which we reuse in sendShareSheet
+                // to skip a redundant a11y dump (saves 2–3s).
+                onLog?.(`Scroll ${i + 1}/${count}: confirming share sheet opened…`);
+                const sheetSendBtn = await android.findButtonByLabel(serial, "Send").catch(() => null);
+                if (!sheetSendBtn) {
+                  logger.warn({ serial }, "[check-feed] share sheet not confirmed open — closing and skipping DM");
+                  onLog?.(`Scroll ${i + 1}/${count}: share aborted — share sheet did not open (no Send button found)`);
+                  await android.pressBack(serial);
+                  await sleepOrAbort(serial, 200);
+                } else {
                 onLog?.(`Scroll ${i + 1}/${count}: picking DM recipient…`);
-                await tapRandomShareSheetRecipient(serial, onLog);
-                // 1500ms instead of 700ms — UIAutomator (now async) takes
-                // ~4s on this device. 700ms was never enough time for the
-                // blue Send button to finish rendering before we looked for it.
-                await sleepOrAbort(serial, 1500);
-                const sent = await sendShareSheet(serial, w, h);
+                const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog);
+                if (!recipientPicked) {
+                  await android.pressBack(serial);
+                  logger.warn({ serial }, "[check-feed] no recipient found — closed share sheet without sending");
+                  onLog?.(`Scroll ${i + 1}/${count}: share skipped — no recipient avatars found (closed without sending)`);
+                } else {
+                await sleepOrAbort(serial, 200); // brief pause for selection to register
+                const sent = await sendShareSheet(serial, w, h, sheetSendBtn);
                 if (sent === true) {
                   logger.info({ serial }, "[check-feed] shared post via DM — Send tapped");
                   onLog?.(`Scroll ${i + 1}/${count}: ✓ shared via DM — Send tapped (total DM shares: ${sharesDm + 1})`);
-                  await sleepOrAbort(serial, 800);
+                  await sleepOrAbort(serial, 300);
                   sharesDm++;
                 } else if (sent === null) {
-                  // Sheet was already gone when sendShareSheet looked — the
-                  // recipient tap likely auto-sent the DM. Do NOT press Back:
-                  // Back on the feed scrolls to top and triggers pull-to-refresh.
+                  // Sheet was already gone — the recipient tap likely auto-sent the DM.
+                  // Do NOT press Back: Back on the feed scrolls to top + pull-to-refresh.
                   logger.info({ serial }, "[check-feed] share sheet already closed — DM likely sent by recipient tap");
                   onLog?.(`Scroll ${i + 1}/${count}: ✓ shared via DM — sheet auto-dismissed (sent by recipient tap)`);
-                  await sleepOrAbort(serial, 500);
+                  await sleepOrAbort(serial, 200);
                   sharesDm++;
                 } else {
-                  // sent === false: sheet was open but send didn't go through
-                  // (no recipient selected, or button stayed visible) — close it.
                   logger.info({ serial }, "[check-feed] Send button not found after picking recipient — pressing Back");
                   onLog?.(`Scroll ${i + 1}/${count}: Send button not found after picking DM recipient — pressing Back`);
                   await android.pressBack(serial);
-                  await sleepOrAbort(serial, 500);
+                  await sleepOrAbort(serial, 200);
                 }
+                } // closes sheetSendBtn else
                 await verifyStillInInstagram();
               } catch (e: any) { if (e?.message === "cycle-aborted") throw e; /* else non-fatal */ }
             }
@@ -1897,7 +1911,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         await sleepOrAbort(serial, willShare ? 100 : 200);
       }
 
-      if (willShare && !(await stillInStoryViewer())) {
+      if (willShare && !(await stillInStoryViewer(/* fastOnly= */ true))) {
         onLog?.(`Story ${s + 1}: story viewer closed before share could start — skipping share`);
         logger.info({ serial, story: s + 1 }, "[view-stories] story viewer gone before share attempt");
       } else if (willShare) {
@@ -2002,32 +2016,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // finding it is a reliable positive signal the sheet is open —
           // unlike the absence checks used above, which can't tell "sheet
           // open" apart from "nothing happened at all".
-          const sheetConfirmed = await android.findButtonByLabel(serial, "Send").catch(() => null) !== null;
-          if (!sheetConfirmed) {
+          // Capture the Send button position — proves the sheet is open AND
+          // passes it to sendShareSheet so it can skip its own 2–3s a11y dump.
+          const sheetSendBtn = await android.findButtonByLabel(serial, "Send").catch(() => null);
+          if (!sheetSendBtn) {
             logger.warn({ serial, story: s + 1 }, "[view-stories] share sheet not confirmed open (no Send button found) — skipping recipient tap to avoid a blind tap on the story underneath");
             onLog?.(`Story ${s + 1}: share aborted — could not confirm the share sheet actually opened (no Send button found) — skipped recipient tap rather than risk tapping the story underneath`);
           } else {
-          // Pick a random recipient, then look for the real Send button —
-          // previously this just opened the sheet and pressed Back, never
-          // actually sending to anyone (same bug as the feed's share-to-DM).
+          // Pick a random recipient, then look for the real Send button.
           const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog);
           if (!recipientPicked) {
-            // No recipient avatar found — close the sheet and skip.  Firing
-            // Send with no recipient selected silently closes the sheet without
-            // sending anything, making it look like a success (confirmed from
-            // device log, 15 Jul 2026).
             await android.pressBack(serial);
             logger.warn({ serial, story: s + 1 }, "[view-stories] no recipient found — closed share sheet without sending");
             onLog?.(`Story ${s + 1}: share skipped — no recipient avatars found in sheet (closed without sending)`);
           } else {
-          await sleepOrAbort(serial, 200); // wait for Send button to activate after selection
-          // Final checkpoint before the last tap: if the sheet/story is
-          // already gone by now, tapping "Send" blind would land on the feed.
-          if (!(await stillInStoryViewer())) {
-            logger.warn({ serial, story: s + 1 }, "[view-stories] story/sheet gone before Send — skipped final tap");
-            onLog?.(`Story ${s + 1}: share aborted — story ended before Send could be tapped (no tap sent)`);
-          } else {
-          const sent = await sendShareSheet(serial, w, h);
+          await sleepOrAbort(serial, 200); // brief pause for selection to register
+          // No "still in story viewer?" check here — sheetSendBtn already confirms
+          // the story was showing when the sheet opened. Adding an a11y dump
+          // (fast 1–1.5s + slow 2.7s = 4.2s) burns the remaining slide budget
+          // without providing meaningful protection.
+          const sent = await sendShareSheet(serial, w, h, sheetSendBtn);
           if (sent === true) {
             logger.info({ serial, story: s + 1 }, "[view-stories] shared story via DM — Send tapped");
             onLog?.(`Story ${s + 1}: shared via DM — Send tapped`);
@@ -3363,7 +3371,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // 3. Scroll the feed (Step 2 in the UI) — skipped entirely when the
       // "View Feed" checkbox is unticked, per-slide enable/disable (12 Jul 2026).
       let likes = 0, likeFailures = 0, sharesFeed = 0, sharesDm = 0, strayNavRecoveries = 0;
+      let feedActuallyRan = false;
       if (feedEnabled && rollActivate(feedActivatePctMin, feedActivatePctMax)) {
+        feedActuallyRan = true;
         tLog(`▶ Starting feed scroll — ${count} posts`);
         ({ likes, likeFailures, sharesFeed, sharesDm, strayNavRecoveries } = await runCheckFeedLoop(serial, {
           count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
@@ -3385,38 +3395,36 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // skipped entirely when the "View Stories from Feed" checkbox is
       // unticked.
       if (storiesEnabled && viewStoriesSlidesMax > 0 && rollActivate(viewStoriesActivatePctMin, viewStoriesActivatePctMax)) {
-        tLog("▶ Tapping Home tab for stories…");
-        // Find the real Home tab via the accessibility tree instead of a
-        // guessed screen percentage — the fixed 10%/97.5% coordinates were
-        // landing on a feed post instead of the bottom-nav house icon on
-        // some devices/screen ratios. Fall back to the old percentage guess
-        // only if the element genuinely can't be found.
-        const homeTab = await android.findHomeTab(serial).catch(() => null);
-        if (homeTab) {
-          await android.tap(serial, homeTab.x, homeTab.y);
+        if (!feedActuallyRan) {
+          // Story is the first or only active tool — Instagram just opened and
+          // is already showing the home feed with the stories tray loaded at
+          // the top. Tapping Home tab again would trigger a feed refresh and
+          // force a 5 s wait for the tray to repopulate. Skip it entirely.
+          tLog("▶ Stories: feed step skipped — already on home feed, story tray already loaded");
+          await sleepOrAbort(serial, 800); // brief settle before tapping a bubble
         } else {
-          const { w: sw, h: sh } = getScreenSize(serial);
-          await android.tap(serial, Math.round(sw * 0.10), Math.round(sh * 0.975));
+          // Feed scroll ran before stories — we may have scrolled well down
+          // the feed. Tap Home to return to the top and reload the story tray.
+          tLog("▶ Tapping Home tab for stories…");
+          const homeTab = await android.findHomeTab(serial).catch(() => null);
+          if (homeTab) {
+            await android.tap(serial, homeTab.x, homeTab.y);
+          } else {
+            const { w: sw, h: sh } = getScreenSize(serial);
+            await android.tap(serial, Math.round(sw * 0.10), Math.round(sh * 0.975));
+          }
+          // Dismiss any popup that appeared after tapping Home (notifications
+          // prompt often fires here since the feed just refreshed).
+          const preStoriesPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
+          if (preStoriesPopup) {
+            steps.push(`pre-stories-popup-dismissed(${preStoriesPopup})`);
+            await sleepOrAbort(serial, 600);
+          }
+          // The Home tap forces Instagram to refresh back to the top — the
+          // story tray needs up to ~5 s to repopulate after the refresh.
+          tLog("▶ Waiting for story tray to load…");
+          await sleepOrAbort(serial, 5000);
         }
-        // The Home tap forces Instagram to refresh the feed back to the top,
-        // but the stories tray doesn't repopulate instantly — it needs up to
-        // ~10s to reload after the refresh. Tapping the story bar before then
-        // lands on empty space (no story opens) and the whole stories step
-        // silently no-ops. 1.5s was nowhere near enough; wait the full 10s.
-        // Dismiss any popup that appeared after tapping Home (notifications
-        // prompt often fires here since the feed just refreshed).
-        const preStoriesPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
-        if (preStoriesPopup) {
-          steps.push(`pre-stories-popup-dismissed(${preStoriesPopup})`);
-          await sleepOrAbort(serial, 600);
-        }
-        // Reduced from 10 000 → 5 000 ms. 10 s was added because 1.5 s was
-        // "nowhere near enough" on a first test — but 10 s is the extreme
-        // upper bound; on the user's device the story tray reliably reloads
-        // in 3–5 s. Cutting it to 5 s eliminates the long dead pause the
-        // user sees after scrolling ends and before any story opens.
-        tLog("▶ Waiting for story tray to load…");
-        await sleepOrAbort(serial, 5000);
         tLog(`▶ Starting stories (up to ${viewStoriesSlidesMax})`);
         const result = await runViewStoriesFromFeedLoop(serial, {
           slidesMin: viewStoriesSlidesMin, slidesMax: viewStoriesSlidesMax,

@@ -2287,6 +2287,7 @@ function TheoriesTab({ forTab, primaryEntries, banEntries, automatedEntries, cap
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export function BanAnalyticsPage() {
+  const queryClient = useQueryClient();
   const setSidebarSlot = useSidebarSetSlot();
   useEffect(() => { setSidebarSlot(null); return () => setSidebarSlot(null); }, []);
 

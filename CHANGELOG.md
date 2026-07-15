@@ -4,6 +4,43 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.586] — 2026-07-15
+
+### Fix: Purge All Data — "queryClient is not defined"
+
+`useQueryClient()` was called at the top of two sub-components before line 2289 but not inside `BanAnalyticsPage` itself. The `handlePurge` function sat inside `BanAnalyticsPage` and referenced `queryClient` from an outer scope that doesn't exist at runtime. Fixed by adding `const queryClient = useQueryClient()` at the top of `BanAnalyticsPage`.
+
+### Fix: story DM share — 13 s like → 17 s total cut to ~5–7 s
+
+Root-cause analysis of the 15 Jul 2026 log (story tap at 29.5s, DM sent at 66.5s = 37s total):
+
+**Removed: pre-Send story viewer check (saved 3.6s)**  
+The code called `stillInStoryViewer()` between recipient tap and Send. The `sheetSendBtn` check two lines earlier already proved the story was still open (the sheet literally can't appear without the story underneath it). The viewer check was a redundant 3.6s cost (fast scan 985ms inconclusive → slow dump 2590ms).
+
+**Pre-share viewer check changed to fastOnly (saved 2.7s)**  
+The `stillInStoryViewer()` call before finding the share button was running the full slow-dump fallback every time (fast scan always inconclusive on this device = 1.5s dead cost on top of the 2.7s dump). Changed to `fastOnly=true` — when the fast scan is inconclusive, it assumes "still open" and skips the slow dump. Worst case is a miss-tap on the feed if the story vanished in the 4.9s the like took; this is rare and non-catastrophic.
+
+**sendShareSheet rewrite (saved 5–8s)**  
+Old behaviour: (1) fresh a11y dump to find "Send" (2.5s), (2) tap, (3) 900ms sleep, (4) `isDmSheetOpen()` = two separate dumps (first `direct_private_share` ~2.5s, then `layout_container_bottom_sheet` ~2.5s) = ~8.4s total. New behaviour: callers pass the already-found Send button position (`knownSendBtn`), skipping the initial dump. Post-tap sleep reduced 900ms→200ms. `isDmSheetOpen` now checks only `direct_private_share` (single dump, ~2.5s). Total per-send: ~2.7s.
+
+### Fix: Follow tool ShareToDM — Send button never tapped
+
+`runCheckFeedLoop`'s share-via-DM block was missing the sheet-confirmation step that story and inject-browsing code both use. It tapped the paper-plane, slept 1200ms, picked a recipient, slept 1500ms, then called `sendShareSheet` — but never confirmed the DM sheet actually opened (which proves Send exists). When `sendShareSheet` looked for the "Send" button after the recipient was selected and found null, it fell back to a coordinate tap at `(w*0.422, h*0.948)` which was off-screen on this device. Fixed: add `sheetConfirmed` check immediately after the sheet-open sleep, guard the `recipientPicked` result, and pass `sheetSendBtn` to `sendShareSheet` (same pattern as story/inject-browsing). Delays reduced: 1200ms→400ms (sheet open), 1500ms→removed (not needed when sheetSendBtn is passed directly), post-send sleeps 800ms→300ms and 500ms→200ms.
+
+### Fix: Follow tool — 15s hang between ShareToFeed and paper-plane
+
+All delays in the ShareToFeed flow reduced: post-tap sheet wait 1200ms→400ms, post-Repost-confirm sleep 1000ms→300ms, post-Close-dismiss sleep 500ms→150ms. Each of these was chained with a 2.5s a11y dump (`findButtonByLabel("Repost")`, `findButtonByLabel("Close")`), so the total was 1200+2500+1000+2500+500 = 7.7s of dead time between ShareToFeed tap and the DM paper-plane. Now ~3.2s.
+
+### Fix: story tool — skip Home-tab refresh when story is first/only active tool
+
+When View Feed is disabled (or its Activate Percentage roll misses), Instagram opens fresh and the home feed is already showing with the story tray loaded at the top. The code was still tapping the Home tab (triggering a feed refresh) and waiting 5000ms for the tray to repopulate — unnecessary. `feedActuallyRan` flag now tracks whether the feed loop ran. When it didn't, the Home tap and 5s wait are skipped; instead an 800ms settle is used. When the feed DID run, the existing tap + 5s wait is kept as before.
+
+### Feature: Export Log button on Log tab
+
+"💾 Export Log" button added next to "📄 Copy Log". Clicking it triggers a browser Save-As dialog to download the full log as a timestamped `.txt` file (e.g. `equinox-log-2026-07-15T13-18-46-000Z.txt`). Uses the same `Blob` + `<a download>` pattern already used by the Screen Capture "Save" button.
+
+---
+
 ## [1.1.585] — 2026-07-15
 
 ### Fix: story likes — switch from percentage-based double-tap to accessibility-tree button tap
