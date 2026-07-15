@@ -12,7 +12,7 @@ import {
   Smartphone, RefreshCw, CheckCircle2, AlertTriangle,
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
   ChevronLeft, Home, LayoutGrid, Power, Volume2, VolumeX, Trash2,
-  FolderOpen,
+  FolderOpen, Upload, Download,
 } from "lucide-react";
 
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
@@ -1981,6 +1981,44 @@ function AutomationSettingsPanel({
   const [showSources, setShowSources] = useState(false);
   const [newFollowSourceType, setNewFollowSourceType] = useState<'hashtag' | 'target_followers'>('hashtag');
   const [newFollowSourceValue, setNewFollowSourceValue] = useState('');
+  const importSourceFileRef = useRef<HTMLInputElement>(null);
+
+  const handleImportFollowSources = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const buf = await file.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let encoding = 'utf-8';
+      let offset = 0;
+      if (bytes[0] === 0xff && bytes[1] === 0xfe) { encoding = 'utf-16le'; offset = 2; }
+      else if (bytes[0] === 0xfe && bytes[1] === 0xff) { encoding = 'utf-16be'; offset = 2; }
+      let text: string;
+      try { text = new TextDecoder(encoding, { fatal: true }).decode(buf.slice(offset)); }
+      catch { text = new TextDecoder('windows-1252').decode(buf.slice(offset)); }
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      // Skip header row; first column is the hashtag value
+      const newSources: { type: 'hashtag' | 'target_followers'; value: string }[] = lines.slice(1)
+        .map(line => line.split('\t')[0].trim().replace(/^#/, '').toLowerCase())
+        .filter(v => v && !/^\d+$/.test(v))
+        .map(value => ({ type: 'hashtag' as const, value }));
+      if (!newSources.length) return;
+      setSettings(s => ({ ...s, followSources: [...s.followSources, ...newSources] }));
+    } finally {
+      if (importSourceFileRef.current) importSourceFileRef.current.value = '';
+    }
+  };
+
+  const handleExportFollowSources = () => {
+    const items = settings.followSources;
+    if (!items.length) return;
+    const lines = ['Hashtag\tType', ...items.map(s => `${s.value}\t${s.type}`)];
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'follow-sources.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
   const [mobileFollowedList, setMobileFollowedList] = useState<{username:string;followedAt:number}[]>([]);
   const [loadingFollowed, setLoadingFollowed] = useState(false);
   // Make a Post UI local state
@@ -3000,9 +3038,46 @@ function AutomationSettingsPanel({
         <div className="space-y-2">
           {showSources && (
             <div className="border border-border rounded-lg p-3 space-y-2">
-              {/* Existing sources list */}
+              {/* Hidden file input for CSV/TSV import */}
+              <input
+                ref={importSourceFileRef}
+                type="file"
+                accept=".csv,.tsv,.txt"
+                className="hidden"
+                onChange={handleImportFollowSources}
+              />
+
+              {/* Header row: count + Import / Export / Clear all */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-muted-foreground flex-1">
+                  {settings.followSources.length} source{settings.followSources.length !== 1 ? 's' : ''}
+                </span>
+                <Button
+                  variant="outline" size="sm" className="h-7 text-xs px-2.5 gap-1 shrink-0"
+                  onClick={() => importSourceFileRef.current?.click()}
+                  disabled={loading}
+                >
+                  <Upload className="w-3 h-3" /> Import
+                </Button>
+                <Button
+                  variant="outline" size="sm" className="h-7 text-xs px-2.5 gap-1 shrink-0"
+                  onClick={handleExportFollowSources}
+                  disabled={loading || !settings.followSources.length}
+                >
+                  <Download className="w-3 h-3" /> Export
+                </Button>
+                {settings.followSources.length > 0 && (
+                  <Button
+                    variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:text-destructive shrink-0"
+                    disabled={loading}
+                    onClick={() => setSettings(s => ({ ...s, followSources: [] }))}
+                  >Clear all</Button>
+                )}
+              </div>
+
+              {/* Sources list — max 10 rows visible, scrollable */}
               {settings.followSources.length > 0 ? (
-                <div className="space-y-1">
+                <div className="space-y-1 max-h-[260px] overflow-y-auto pr-0.5">
                   {settings.followSources.map((src, i) => (
                     <div key={i} className="flex items-center gap-2 text-xs">
                       <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono shrink-0">
@@ -3018,8 +3093,9 @@ function AutomationSettingsPanel({
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">No sources yet.</p>
+                <p className="text-xs text-muted-foreground">No sources yet. Import a CSV or add manually below.</p>
               )}
+
               {/* Add new source */}
               <div className="flex items-center gap-2 flex-wrap">
                 <select
@@ -3058,13 +3134,6 @@ function AutomationSettingsPanel({
                     }
                   }}
                 >Add</Button>
-                {settings.followSources.length > 0 && (
-                  <Button
-                    variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-destructive shrink-0"
-                    disabled={loading}
-                    onClick={() => setSettings(s => ({ ...s, followSources: [] }))}
-                  >Clear all</Button>
-                )}
               </div>
             </div>
           )}

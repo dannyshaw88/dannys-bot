@@ -122,7 +122,14 @@ export function useClearSourcesByType() {
   });
 }
 
-/** Parse a Jarvee hashtag export file (UTF-16LE TSV with BOM). */
+/**
+ * Parse a hashtag source file for import. Handles:
+ *   - Jarvee 3-col TSV (UTF-16LE with BOM): Keyword \t NrPosts \t Rank
+ *   - Simple 2-col TSV: Hashtag \t Rank  (latin-1 / windows-1252 or UTF-8)
+ *   - Plain list: one hashtag per line, no rank column
+ * Encoding: tries the detected encoding first; if decoding fails (e.g. a
+ * latin-1 file passed as UTF-8) falls back to windows-1252 automatically.
+ */
 export async function parseJarveeHashtagFile(file: File): Promise<{ value: string; nrPosts: number | null; rank: number | null }[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -130,21 +137,40 @@ export async function parseJarveeHashtagFile(file: File): Promise<{ value: strin
       try {
         const buf = reader.result as ArrayBuffer;
         const bytes = new Uint8Array(buf);
-        // Detect and skip BOM (FF FE = UTF-16LE, FE FF = UTF-16BE)
+        // Detect BOM
         let encoding = 'utf-8';
         let offset = 0;
         if (bytes[0] === 0xff && bytes[1] === 0xfe) { encoding = 'utf-16le'; offset = 2; }
         else if (bytes[0] === 0xfe && bytes[1] === 0xff) { encoding = 'utf-16be'; offset = 2; }
-        const text = new TextDecoder(encoding).decode(buf.slice(offset));
+
+        // Decode — fall back to windows-1252 if the primary encoding fails
+        let text: string;
+        try {
+          text = new TextDecoder(encoding, { fatal: true }).decode(buf.slice(offset));
+        } catch {
+          text = new TextDecoder('windows-1252').decode(buf.slice(offset));
+        }
+
         const lines = text.split(/\r?\n/).filter(l => l.trim());
         // Skip header row
         const rows = lines.slice(1).map(line => {
           const parts = line.split('\t');
           const value = (parts[0] ?? '').trim().replace(/^#/, '');
-          const nrPosts = parts[1] ? parseInt(parts[1].trim(), 10) : null;
-          const rank = parts[2] ? parseInt(parts[2].trim(), 10) : null;
-          return { value, nrPosts: isNaN(nrPosts as any) ? null : nrPosts, rank: isNaN(rank as any) ? null : rank };
-        }).filter(r => r.value);
+          if (!value) return null;
+          if (parts.length >= 3) {
+            // Jarvee 3-col: value, nrPosts, rank
+            const nrPosts = parts[1] ? parseInt(parts[1].trim(), 10) : null;
+            const rank    = parts[2] ? parseInt(parts[2].trim(), 10) : null;
+            return { value, nrPosts: isNaN(nrPosts as any) ? null : nrPosts, rank: isNaN(rank as any) ? null : rank };
+          } else if (parts.length === 2) {
+            // Simple 2-col: value, rank
+            const rank = parts[1] ? parseInt(parts[1].trim(), 10) : null;
+            return { value, nrPosts: null, rank: isNaN(rank as any) ? null : rank };
+          } else {
+            // Plain list — no rank
+            return { value, nrPosts: null, rank: null };
+          }
+        }).filter((r): r is NonNullable<typeof r> => r !== null && r.value !== '');
         resolve(rows);
       } catch (e) {
         reject(e);
