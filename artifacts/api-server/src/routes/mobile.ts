@@ -103,6 +103,8 @@ type AutomationSettings = {
   viewReelsShareDmPercentMax?: number;
   viewReelsActivatePctMin?: number;
   viewReelsActivatePctMax?: number;
+  viewReelsWatchPctMin?: number;
+  viewReelsWatchPctMax?: number;
   // Follow Users — HikerAPI-driven follow flow (persisted here too; this
   // schema previously only covered the feed/stories fields, so these were
   // silently stripped by automationSchema.parse() on every autosave and
@@ -1056,6 +1058,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       viewReelsShareFeedPercentMin: 0, viewReelsShareFeedPercentMax: 0,
       viewReelsShareDmPercentMin: 0, viewReelsShareDmPercentMax: 0,
       viewReelsActivatePctMin: 100, viewReelsActivatePctMax: 100,
+      viewReelsWatchPctMin: 30, viewReelsWatchPctMax: 70,
       followEnabled: false, followUsersMin: 1, followUsersMax: 3, followSources: [],
       injectBrowsingEnabled: false,
       injectBrowsingActivatePctMin: 0, injectBrowsingActivatePctMax: 0,
@@ -2223,6 +2226,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // its "not yet validated on a real device" caveat.
   async function runViewReelsLoop(serial: string, params: {
     scrollMin: number; scrollMax: number;
+    watchPctMin: number; watchPctMax: number;
     likePercentMin: number; likePercentMax: number;
     shareFeedPercentMin: number; shareFeedPercentMax: number;
     shareDmPercentMin: number; shareDmPercentMax: number;
@@ -2230,6 +2234,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   }): Promise<{ reelsViewed: number; likes: number; sharesFeed: number; sharesDm: number }> {
     const {
       scrollMin, scrollMax,
+      watchPctMin, watchPctMax,
       likePercentMin, likePercentMax,
       shareFeedPercentMin, shareFeedPercentMax,
       shareDmPercentMin, shareDmPercentMax,
@@ -2252,10 +2257,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     onLog?.(`Tapped Reels tab at (${reelsTab.x},${reelsTab.y}) — waiting for Reels to load`);
     await sleepOrAbort(serial, 1500);
 
-    const likeChance = rollRange(likePercentMin, likePercentMax) / 100;
-    const shareFeedChance = rollRange(shareFeedPercentMin, shareFeedPercentMax) / 100;
-    const shareDmChance = rollRange(shareDmPercentMin, shareDmPercentMax) / 100;
-
     let likes = 0, sharesFeed = 0, sharesDm = 0, reelsViewed = 0;
 
     // Reels snap fully to the next clip on a swipe — unlike the feed's
@@ -2272,13 +2273,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (isCycleAborted(serial)) throw new Error("cycle-aborted");
       onLog?.(`Reel ${i + 1}/${totalReels}`);
 
-      // Watch briefly before acting so the reel has time to render before we
-      // scan the accessibility tree for its action column.
-      await sleepOrAbort(serial, 800 + Math.round(Math.random() * 700));
+      // Watch a configurable % of the reel before acting. Keeps the reel
+      // visible long enough for Instagram to render the action-icon column,
+      // and gives the reel a natural watch time. Assumed max reel duration
+      // is 30 s; watchPct is rolled fresh each reel.
+      const watchPct = rollRange(watchPctMin, watchPctMax);
+      const watchMs  = Math.max(1500, Math.round((watchPct / 100) * 30000));
+      onLog?.(`Reel ${i + 1}/${totalReels}: watching ${watchPct.toFixed(0)}% (~${(watchMs / 1000).toFixed(1)}s)`);
+      await sleepOrAbort(serial, watchMs);
 
-      const wantLike = likeChance > 0 && Math.random() < likeChance;
-      const wantShareFeed = shareFeedChance > 0 && Math.random() < shareFeedChance;
-      const wantShareDm = shareDmChance > 0 && Math.random() < shareDmChance;
+      // Roll like/share decisions fresh per reel so each reel is independent.
+      const wantLike      = likePercentMax > 0 && Math.random() * 100 < rollRange(likePercentMin, likePercentMax);
+      const wantShareFeed = shareFeedPercentMax > 0 && Math.random() * 100 < rollRange(shareFeedPercentMin, shareFeedPercentMax);
+      const wantShareDm   = shareDmPercentMax > 0 && Math.random() * 100 < rollRange(shareDmPercentMin, shareDmPercentMax);
 
       if (wantLike || wantShareFeed || wantShareDm) {
         onLog?.(`Reel ${i + 1}/${totalReels}: scanning right-side action column…`);
@@ -2409,6 +2416,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     viewReelsShareDmPercentMax: z.number().min(0).max(100).default(0),
     viewReelsActivatePctMin: z.number().min(0).max(100).default(100),
     viewReelsActivatePctMax: z.number().min(0).max(100).default(100),
+    viewReelsWatchPctMin: z.number().min(1).max(100).default(30),
+    viewReelsWatchPctMax: z.number().min(1).max(100).default(70),
     // Follow Users — HikerAPI-driven follow flow. HikerAPI fetches candidates
     // from the configured target sources (hashtags / followers-of-account);
     // the software then navigates to Instagram Search and follows each user by
@@ -3617,6 +3626,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewStoriesLikePercentMin, viewStoriesLikePercentMax,
         viewStoriesShareDmPercentMin, viewStoriesShareDmPercentMax,
         viewReelsEnabled, viewReelsScrollMin, viewReelsScrollMax,
+        viewReelsWatchPctMin, viewReelsWatchPctMax,
         viewReelsLikePercentMin, viewReelsLikePercentMax,
         viewReelsShareFeedPercentMin, viewReelsShareFeedPercentMax,
         viewReelsShareDmPercentMin, viewReelsShareDmPercentMax,
@@ -3790,6 +3800,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         tLog(`▶ Starting View Reels (up to ${viewReelsScrollMax})`);
         const reelsResult = await runViewReelsLoop(serial, {
           scrollMin: viewReelsScrollMin, scrollMax: viewReelsScrollMax,
+          watchPctMin: viewReelsWatchPctMin, watchPctMax: viewReelsWatchPctMax,
           likePercentMin: viewReelsLikePercentMin, likePercentMax: viewReelsLikePercentMax,
           shareFeedPercentMin: viewReelsShareFeedPercentMin, shareFeedPercentMax: viewReelsShareFeedPercentMax,
           shareDmPercentMin: viewReelsShareDmPercentMin, shareDmPercentMax: viewReelsShareDmPercentMax,

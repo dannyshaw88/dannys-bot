@@ -1536,6 +1536,8 @@ interface AutomationSettingsData {
   viewReelsShareDmPercentMax: number;
   viewReelsActivatePctMin: number;
   viewReelsActivatePctMax: number;
+  viewReelsWatchPctMin: number;
+  viewReelsWatchPctMax: number;
   // Follow Users — HikerAPI-driven follow flow.
   // followSources is stored inline (no separate DB table) to keep mobile
   // settings self-contained. Each entry is a source the HikerAPI client
@@ -1621,6 +1623,7 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   viewReelsShareFeedPercentMin: 0, viewReelsShareFeedPercentMax: 0,
   viewReelsShareDmPercentMin: 0, viewReelsShareDmPercentMax: 0,
   viewReelsActivatePctMin: 100, viewReelsActivatePctMax: 100,
+  viewReelsWatchPctMin: 30, viewReelsWatchPctMax: 70,
   followEnabled: false,
   followUsersMin: 1, followUsersMax: 3,
   followSources: [],
@@ -1831,6 +1834,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             viewReelsShareDmPercentMax: s.viewReelsShareDmPercentMax,
             viewReelsActivatePctMin: s.viewReelsActivatePctMin,
             viewReelsActivatePctMax: s.viewReelsActivatePctMax,
+            viewReelsWatchPctMin: s.viewReelsWatchPctMin,
+            viewReelsWatchPctMax: s.viewReelsWatchPctMax,
             followEnabled: s.followEnabled,
             followUsersMin: s.followUsersMin,
             followUsersMax: s.followUsersMax,
@@ -2385,6 +2390,22 @@ function AutomationSettingsPanel({
                 value={settings.viewReelsScrollMax}
                 onChange={e => setSettings(s => ({ ...s, viewReelsScrollMax: clamp4(Number(e.target.value)) }))}
                 disabled={loading} />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Watch %</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={1} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewReelsWatchPctMin}
+                onChange={e => setSettings(s => ({ ...s, viewReelsWatchPctMin: Math.min(100, Math.max(1, clamp4(Number(e.target.value)))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={1} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewReelsWatchPctMax}
+                onChange={e => setSettings(s => ({ ...s, viewReelsWatchPctMax: Math.min(100, Math.max(1, clamp4(Number(e.target.value)))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">%</span>
             </div>
           </div>
 
