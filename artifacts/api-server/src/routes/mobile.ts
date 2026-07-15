@@ -2886,11 +2886,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // row_feed_photo_profile_name, row_feed_button_like).
       const insideViewer = await android.isInPostViewer(serial).catch(() => false);
       if (insideViewer) {
-        onLog?.("Inject Browsing: post/Reel opened but icons not found — pressing Back to profile (skipping scroll-up recovery)");
-        logger.info({ serial }, "[inject-browsing] findFeedActionIcons=null but isInPostViewer=true — Reel/post opened with unreadable icons; pressing Back without scroll-up retry");
-        await android.pressBack(serial);
-        await sleepOrAbort(serial, 500);
-        return;
+        // The post IS open — but the action bar (Like/Comment/Repost/Send) is
+        // rendered below the physical screen bottom in a tall feed-post layout.
+        // In this device's Instagram build, posts opened from the profile grid
+        // position the video at ~y=1218 on a 1280px screen and place the icon
+        // bar at ~y=2202 — outside the a11y y-range that findFeedActionIcons
+        // accepts. A single scroll-down swipe brings the bar onto screen and
+        // makes the icons reachable.
+        //
+        // Only press Back (give up) if icons are STILL null after scrolling.
+        onLog?.("Inject Browsing: post opened — action bar is below screen bottom, scrolling down to reveal icons");
+        logger.info({ serial }, "[inject-browsing] findFeedActionIcons=null, isInPostViewer=true — action bar below screen bottom; scrolling down within post to reveal icons");
+        const midX = Math.round(w * 0.5);
+        // Swipe UP (finger starts low, ends high) → content scrolls down → icons come into view.
+        await android.swipe(serial, midX, Math.round(h * 0.70), midX, Math.round(h * 0.25), 400);
+        await sleepOrAbort(serial, 800);
+        icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
+        if (!icons) {
+          onLog?.("Inject Browsing: icons still not found after scrolling down — pressing Back to profile");
+          logger.info({ serial }, "[inject-browsing] icons still null after scroll-down recovery; pressing Back");
+          await android.pressBack(serial);
+          await sleepOrAbort(serial, 500);
+          return;
+        }
+        onLog?.("Inject Browsing: icons found after scrolling down within post — continuing");
       }
       // Case A: still on profile grid — scroll up and retry once.
       onLog?.("Inject Browsing: no post opened here (empty grid cell) — scrolling up and retrying");

@@ -4,6 +4,16 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.592] — 2026-07-15
+
+### Fix: Inject Browsing — action bar below screen bottom now recovered with a scroll-down before giving up
+
+**Root cause:** On this device's Instagram build, posts opened from the profile grid place the video at ~y=1218 on a 1280 px screen and render the action bar (Like / Comment / Repost / Send / Save) at ~y=2202 — 922 px below the physical screen bottom. The a11y tree contains the nodes and they are real and tappable, but `findFeedActionIcons` only accepts nodes within the physical screen height, so it returns null. The v1.1.590 `isInPostViewer` guard then correctly identified "we are inside a post" but immediately pressed Back — the right call for a genuine unreadable-icon situation, but wrong here where a single scroll-down would have revealed the action bar.
+
+**Fix:** When `isInPostViewer=true` and `findFeedActionIcons=null`, instead of pressing Back immediately, execute one scroll-down swipe (finger from 70 % → 25 % screen height, 400 ms) to bring the action bar into the visible area, wait 800 ms, and retry `findFeedActionIcons`. Only if the retry also returns null does the code fall back to pressing Back. This mirrors the profile-grid scroll-up recovery pattern and adds zero risk — if the scroll reveals nothing, behaviour is identical to before.
+
+---
+
 ## [1.1.591] — 2026-07-15
 
 ### Fix: Inject Browsing Share-to-DM — pure-numeric count nodes no longer picked as recipients
