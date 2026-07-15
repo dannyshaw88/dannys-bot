@@ -957,6 +957,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     followEnabled: z.boolean().default(false),
     followUsersMin: z.number().min(0).max(9999).default(1),
     followUsersMax: z.number().min(0).max(9999).default(3),
+    followSkipFollowed: z.boolean().default(true),
     followSources: z.array(followSourceSchema).default([]),
     injectBrowsingEnabled: z.boolean().default(false),
     injectBrowsingActivatePctMin: z.number().min(0).max(100).default(0),
@@ -2425,6 +2426,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     followEnabled: z.boolean().default(false),
     followUsersMin: z.number().min(0).max(9999).default(1),
     followUsersMax: z.number().min(0).max(9999).default(3),
+    followSkipFollowed: z.boolean().default(true),
     followSources: z.array(z.object({ type: z.string(), value: z.string() })).default([]),
     // Inject Browsing — per-user profile-browsing behaviour woven into the
     // Follow Users flow itself (12 Jul 2026 rework). There is no per-item
@@ -3352,9 +3354,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       onLog?: (msg: string) => void;
       recordFollow?: (username: string, source: string) => void;
       browsing?: InjectBrowsingParams;
+      /** Pre-built set of lowercase usernames already followed — candidates
+       *  matching any entry are dropped before the follow loop begins, so no
+       *  browsing time is wasted on a target that has already been followed. */
+      skipFollowedUsernames?: Set<string>;
     },
   ): Promise<number> {
-    const { usersMin, usersMax, sources, onLog, recordFollow, browsing } = params;
+    const { usersMin, usersMax, sources, onLog, recordFollow, browsing, skipFollowedUsernames } = params;
 
     if (!sources.length) {
       onLog?.("Follow: no target sources configured — skipping");
@@ -3411,7 +3417,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     if (!candidates.length) { onLog?.("Follow: no candidates collected — skipping"); return 0; }
 
-    const targets = [...new Set(candidates)].sort(() => Math.random() - 0.5).slice(0, targetCount);
+    // Deduplicate and shuffle first, then filter out already-followed users
+    // (checked before any browsing/follow attempt so no time is wasted).
+    const unique = [...new Set(candidates)].sort(() => Math.random() - 0.5);
+    let filtered = unique;
+    if (skipFollowedUsernames?.size) {
+      filtered = unique.filter(u => !skipFollowedUsernames.has(u.toLowerCase()));
+      const skipped = unique.length - filtered.length;
+      if (skipped > 0) onLog?.(`Follow: skipped ${skipped} already-followed user${skipped !== 1 ? 's' : ''}`);
+    }
+    const targets = filtered.slice(0, targetCount);
     onLog?.(`Follow: following ${targets.length} unique users`);
 
     let followed = 0;
@@ -3631,7 +3646,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewReelsShareFeedPercentMin, viewReelsShareFeedPercentMax,
         viewReelsShareDmPercentMin, viewReelsShareDmPercentMax,
         viewReelsActivatePctMin, viewReelsActivatePctMax,
-        followEnabled, followUsersMin, followUsersMax, followSources,
+        followEnabled, followUsersMin, followUsersMax, followSkipFollowed, followSources,
         injectBrowsingEnabled,
         injectBrowsingActivatePctMin, injectBrowsingActivatePctMax,
         injectBrowsingBeforeFollowPctMin, injectBrowsingBeforeFollowPctMax,
@@ -3828,6 +3843,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             sources: followSources,
             onLog: (msg) => tLog(`  ${msg}`),
             recordFollow: (username, source) => recordMobileFollow(serial, username, source),
+            skipFollowedUsernames: followSkipFollowed
+              ? new Set(getMobileFollowedList(serial).map(e => e.username.toLowerCase()))
+              : undefined,
             browsing: injectBrowsingEnabled ? {
               activatePctMin: injectBrowsingActivatePctMin, activatePctMax: injectBrowsingActivatePctMax,
               beforeFollowPctMin: injectBrowsingBeforeFollowPctMin, beforeFollowPctMax: injectBrowsingBeforeFollowPctMax,

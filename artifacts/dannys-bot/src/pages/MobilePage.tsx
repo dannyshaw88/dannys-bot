@@ -1545,6 +1545,7 @@ interface AutomationSettingsData {
   followEnabled: boolean;
   followUsersMin: number;
   followUsersMax: number;
+  followSkipFollowed: boolean;
   followSources: { type: string; value: string }[];
   // Inject Browsing — per-user profile-browsing behaviour woven into the
   // Follow Users flow (12 Jul 2026 rework). No per-item toggles: search
@@ -1626,6 +1627,7 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   viewReelsWatchPctMin: 30, viewReelsWatchPctMax: 70,
   followEnabled: false,
   followUsersMin: 1, followUsersMax: 3,
+  followSkipFollowed: true,
   followSources: [],
   injectBrowsingEnabled: false,
   injectBrowsingActivatePctMin: 0, injectBrowsingActivatePctMax: 0,
@@ -1839,6 +1841,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             followEnabled: s.followEnabled,
             followUsersMin: s.followUsersMin,
             followUsersMax: s.followUsersMax,
+            followSkipFollowed: s.followSkipFollowed,
             followSources: s.followSources,
             injectBrowsingEnabled: s.injectBrowsingEnabled,
             injectBrowsingActivatePctMin: s.injectBrowsingActivatePctMin,
@@ -2556,6 +2559,24 @@ function AutomationSettingsPanel({
                 onChange={e => setSettings(s => ({ ...s, followUsersMax: clamp4(Number(e.target.value)) }))}
                 disabled={loading} />
             </div>
+          </div>
+
+          {/* Skip Followed Users — vertically centred alongside the row above */}
+          <div className="flex items-center gap-2 self-center mt-4">
+            <input
+              type="checkbox"
+              id="follow-skip-followed"
+              checked={settings.followSkipFollowed}
+              onChange={e => setSettings(s => ({ ...s, followSkipFollowed: e.target.checked }))}
+              disabled={loading}
+              className="w-4 h-4 accent-primary cursor-pointer shrink-0"
+            />
+            <label
+              htmlFor="follow-skip-followed"
+              className="text-sm font-medium text-foreground cursor-pointer select-none whitespace-nowrap"
+            >
+              Skip Followed Users
+            </label>
           </div>
         </div>}
 
