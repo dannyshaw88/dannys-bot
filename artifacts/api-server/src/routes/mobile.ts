@@ -670,7 +670,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               // be off" message is suppressed as it clutters the log uselessly.
               const cycleActive = automationCycleInProgress.has(serial);
               if (!sawRealFrame && ws.readyState === 1) {
-                ws.send(JSON.stringify({ info: "Stream paused — DRM surface blocked (Instagram). Restarting…" }));
+                // DRM block message suppressed — too noisy in the log.
               } else if (sawRealFrame && cycleActive && ws.readyState === 1) {
                 ws.send(JSON.stringify({ info: "Stream paused — automation busy (UIAutomator / adb). Restarting stream…" }));
               }

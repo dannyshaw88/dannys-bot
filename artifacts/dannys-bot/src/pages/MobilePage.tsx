@@ -3375,7 +3375,19 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize }: 
       if (r.ok) {
         const body = await r.json();
         setRecStatus({ recording: body.recording, eventCount: body.eventCount ?? 0 });
-        addLog?.(starting ? "● Session recording started — every tap, log line, and UI dump will be captured." : `⏹ Session recording stopped — ${body.eventCount} events captured. Use Export Session to download.`);
+        if (starting) {
+          addLog?.("● Macro recording started.");
+        } else {
+          // Auto-download JSON immediately on stop
+          addLog?.(`⏹ Macro recording stopped — ${body.eventCount} events. Saving JSON…`);
+          const exportUrl = `/api/mobile/devices/${encodeURIComponent(serial)}/session-recorder/export.json`;
+          const a = document.createElement("a");
+          a.href = exportUrl;
+          a.download = `equinox-macro-${serial}-${Date.now()}.json`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        }
       }
     } catch (e: any) { addLog?.(`Session recorder error: ${e?.message ?? "network error"}`); }
   };
@@ -3454,7 +3466,22 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize }: 
                 disabled={checkingInfo}
                 title="Prints the device's raw wm size / wm density into the log, and flags a resolution override if one is active. Use this before Reset."
               >
-                {checkingInfo ? "Checking…" : "📐 Check Screen Info"}
+                {checkingInfo ? "Checking…" : "📐 ScreenInfo"}
+              </Button>
+            )}
+            {serial && (
+              <Button
+                type="button"
+                variant={recStatus?.recording ? "destructive" : "secondary"}
+                onClick={handleRecordToggle}
+                className="gap-1.5"
+                title={recStatus?.recording
+                  ? "Stop recording — JSON saves automatically to Downloads"
+                  : "Record macro — captures every tap + screen state; JSON auto-saves on stop"}
+              >
+                {recStatus?.recording
+                  ? `⏹ Stop${recStatus.eventCount ? ` (${recStatus.eventCount})` : ""}`
+                  : "● Record Session"}
               </Button>
             )}
             <Button type="button" variant="secondary" onClick={handleCopyLog} disabled={lines.length === 0}>
@@ -3468,56 +3495,6 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize }: 
             </Button>
           </div>
         </div>
-
-        {/* Session Recorder row — visible whenever a phone is connected */}
-        {serial && (
-          <div className="flex items-center gap-2 px-1 py-1 bg-black/30 rounded-lg border border-border/50">
-            <Button
-              type="button"
-              variant={recStatus?.recording ? "destructive" : "secondary"}
-              onClick={handleRecordToggle}
-              className="text-xs h-7 px-3 gap-1.5"
-              title={recStatus?.recording
-                ? "Stop recording — then export the file and send it to diagnose automation issues"
-                : "Start recording — captures every tap, log line, and accessibility tree dump so you can share the exact sequence with the developer"}
-            >
-              {recStatus?.recording ? "⏹ Stop Recording" : "● Record Session"}
-            </Button>
-            {recStatus?.recording && (
-              <span className="text-[10px] text-red-400 animate-pulse font-mono">
-                ● REC &nbsp;{recStatus.eventCount} events
-              </span>
-            )}
-            {!recStatus?.recording && (recStatus?.eventCount ?? 0) > 0 && (
-              <>
-                <span className="text-[10px] text-muted-foreground font-mono">{recStatus!.eventCount} events captured</span>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => handleExportSession("html")}
-                  className="text-xs h-7 px-2"
-                  title="Download a self-contained HTML report — open in any browser to see every tap + UI dump side by side"
-                >
-                  🎬 Export Session (HTML)
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => handleExportSession("json")}
-                  className="text-xs h-7 px-2"
-                  title="Download raw JSON — includes full uiautomator XML for every dump"
-                >
-                  { } JSON
-                </Button>
-              </>
-            )}
-            {!recStatus?.recording && (recStatus?.eventCount ?? 0) === 0 && (
-              <span className="text-[10px] text-muted-foreground">
-                Records every tap, log line &amp; accessibility tree dump → export → send to developer
-              </span>
-            )}
-          </div>
-        )}
 
         {/* Capture action row — only visible after a capture has been taken */}
         {lastCapture && (
