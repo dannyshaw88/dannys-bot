@@ -1175,50 +1175,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     return { w, h };
   }
 
-  // Instagram's "Share" / "Send to" sheet — measured positions from a live
-  // accessibility dump on the user's 1080×2226 device (captured 2026-07-11):
-  //
-  //   Sheet starts at y≈1651 (74.2%) — the LinearLayout container.
-  //   Drag-handle pill  y≈1672 (75.1%)
-  //   User avatar row   y≈1749 (78.6%) — the clickable recipient bubbles
-  //   Username labels   y≈1836 (82.5%) — text beneath each bubble
-  //   "more" button     x≈941 (87.1%), y≈1836 — "expand to see more users"
-  //
-  // Previous coordinates (0.625/0.740 y) were WRONG:
-  //   0.625 × 2226 = 1391 px  → above the sheet entirely (taps the post behind)
-  //   0.740 × 2226 = 1647 px  → right at the drag-handle (1672), causing the
-  //                              sheet to EXPAND to full screen rather than
-  //                              selecting a recipient — this was "clicking to
-  //                              expand to see more users" bug the user reported.
-  //
-  // Measured x positions of the 4 visible bubbles:
-  //   163 px (15.1%), 354 px (32.8%), 526 px (48.7%), 693 px (64.2%)
-  //
-  // All slots now use y=0.786 (1749 px on this device), well below the
-  // drag-handle zone and well above the "more" button.
-  const SHARE_SHEET_AVATAR_SLOTS: { xPct: number; yPct: number }[] = [
-    { xPct: 0.151, yPct: 0.786 },  // bubble 1  — x≈163
-    { xPct: 0.328, yPct: 0.786 },  // bubble 2  — x≈354
-    { xPct: 0.487, yPct: 0.786 },  // bubble 3  — x≈526
-    { xPct: 0.642, yPct: 0.786 },  // bubble 4  — x≈693
-  ];
-
   /** Taps one randomly-chosen recipient avatar in an open Share sheet. */
-  async function tapRandomShareSheetRecipient(serial: string, w: number, h: number, onLog?: (line: string) => void): Promise<void> {
-    // Primary: scan the accessibility tree for tappable recipient rows/bubbles.
-    // The DM share sheet presents suggested contacts as clickable nodes with
-    // display-name or username labels; their pixel positions vary by device/
-    // screen size, so fixed coordinates are unreliable. The a11y scan finds
-    // whatever contacts are actually rendered.
+  async function tapRandomShareSheetRecipient(serial: string, onLog?: (line: string) => void): Promise<boolean> {
+    // Find recipient avatar buttons by resource-id (confirmed on device:
+    // rid=com.instagram.android:id/grid_view_pog_avatar_view).  Their pixel
+    // positions vary by device/screen size — resource-id targeting is the
+    // only reliable approach; coordinate slots have been removed.
     const recipients = await android.findShareSheetRecipients(serial, onLog).catch(() => [] as { x: number; y: number }[]);
-    if (recipients.length > 0) {
-      const pick = recipients[Math.floor(Math.random() * recipients.length)];
-      await android.tap(serial, pick.x, pick.y);
-      return;
+    if (recipients.length === 0) {
+      onLog?.("[share-sheet] no recipient avatars found via a11y — cannot select recipient");
+      return false;
     }
-    // Fallback: coordinate tap at an approximate avatar-bubble position.
-    const slot = SHARE_SHEET_AVATAR_SLOTS[Math.floor(Math.random() * SHARE_SHEET_AVATAR_SLOTS.length)];
-    await android.tap(serial, Math.round(w * slot.xPct), Math.round(h * slot.yPct));
+    const pick = recipients[Math.floor(Math.random() * recipients.length)];
+    onLog?.(`[share-sheet] tapping recipient at (${pick.x},${pick.y})`);
+    await android.tap(serial, pick.x, pick.y);
+    return true;
   }
 
   /**
@@ -1581,7 +1552,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 // recipient is selected — previously this just opened the
                 // sheet and pressed Back, never actually sending to anyone.
                 onLog?.(`Scroll ${i + 1}/${count}: picking DM recipient…`);
-                await tapRandomShareSheetRecipient(serial, w, h, onLog);
+                await tapRandomShareSheetRecipient(serial, onLog);
                 // 1500ms instead of 700ms — UIAutomator (now async) takes
                 // ~4s on this device. 700ms was never enough time for the
                 // blue Send button to finish rendering before we looked for it.
@@ -2083,12 +2054,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // Pick a random recipient, then look for the real Send button —
           // previously this just opened the sheet and pressed Back, never
           // actually sending to anyone (same bug as the feed's share-to-DM).
-          await tapRandomShareSheetRecipient(serial, w, h, onLog);
-          await sleepOrAbort(serial, 900); // 1500→900ms: still enough for the Send button to render
+          const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog);
+          if (!recipientPicked) {
+            // No recipient avatar found — close the sheet and skip.  Firing
+            // Send with no recipient selected silently closes the sheet without
+            // sending anything, making it look like a success (confirmed from
+            // device log, 15 Jul 2026).
+            await android.pressBack(serial);
+            logger.warn({ serial, story: s + 1 }, "[view-stories] no recipient found — closed share sheet without sending");
+            onLog?.(`Story ${s + 1}: share skipped — no recipient avatars found in sheet (closed without sending)`);
+          } else {
+          await sleepOrAbort(serial, 900); // wait for Send button to activate after selection
           // Final checkpoint before the last tap: if the sheet/story is
-          // already gone by now, tapping "Send"'s coordinates blind would
-          // land on the feed (exactly the reported "liked a reel" bug) —
-          // skip the tap entirely instead of firing it regardless.
+          // already gone by now, tapping "Send" blind would land on the feed.
           if (!(await stillInStoryViewer())) {
             logger.warn({ serial, story: s + 1 }, "[view-stories] story/sheet gone before Send — skipped final tap");
             onLog?.(`Story ${s + 1}: share aborted — story ended before Send could be tapped (no tap sent)`);
@@ -2108,6 +2086,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             logger.info({ serial, story: s + 1 }, "[view-stories] Send button not found — closed DM picker");
             onLog?.(`Story ${s + 1}: Send button not found — closed DM picker`);
             await sleepOrAbort(serial, 600);
+          }
           }
           }
           }
@@ -3062,7 +3041,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           await android.tap(serial, sendIcon.x, sendIcon.y);
           logger.info({ serial, x: sendIcon.x, y: sendIcon.y }, "[inject-browsing] tapped Send icon");
           await sleepOrAbort(serial, 1200);
-          await tapRandomShareSheetRecipient(serial, w, h, onLog);
+          await tapRandomShareSheetRecipient(serial, onLog);
           await sleepOrAbort(serial, 1500);
           const sent = await sendShareSheet(serial, w, h);
           if (sent === true) { onLog?.("Inject Browsing: shared the post via DM"); await sleepOrAbort(serial, 600); }

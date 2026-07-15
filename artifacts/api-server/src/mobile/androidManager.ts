@@ -1859,32 +1859,32 @@ export async function findStoryActionIcons(serial: string): Promise<{ x: number;
  * UIAutomator accessibility tree BEFORE falling back to the pixel-scan in
  * `findStoryActionIcons`.
  *
- * Instagram renders the story reply-bar as a canvas with no accessible child
- * elements on most device/version combos.  The ONLY accessible element in
- * the bar is the text-input field ("Send message" placeholder) — the heart
- * and paper-plane icons are canvas-drawn with no content-desc, resource-id,
- * or text attributes.
+ * CONFIRMED (device log, 15 Jul 2026): Instagram DOES expose the paper-plane
+ * icon as a proper accessible element on this device/build:
  *
- * Two strategies (in order):
- *  1. Label probe — known content-desc strings the paper-plane has been
- *     labelled with on some Instagram builds (rare but free to try).
- *  2. Text-field anchor — find the reply-bar text input by its placeholder
- *     text, read its LIVE right-edge x from the dump, then place the
- *     paper-plane at 75 % of the remaining width to the right.  The paper-
- *     plane is always the rightmost element in the bar; 75 % reliably lands
- *     on it whether there are 1 or 2 icons sharing that space.  The
- *     coordinate is derived from real rendered bounds — not a hardcoded pixel.
+ *   class=android.widget.ImageView
+ *   rid=com.instagram.android:id/toolbar_reshare_button
+ *   cd=Share
+ *   bounds=[948,2122][1058,2226]   (1080×2460 device)
  *
- * REMOVED (v1.1.581): the positional probe (find all clickable nodes in the
- * bar zone, return rightmost). It consistently found the text-input field
- * centre (~60 % of screen width) instead of the paper-plane (~88–93 %),
- * causing three keyboard-opening retries per story and burning the slide
- * timer.  Do not re-add without a UIAutomator dump confirming the paper-
- * plane is actually accessible on the target build.
+ * Strategy 1 (primary): find by resource-id `toolbar_reshare_button` and
+ * return its bounds-centre.  The resource-id is stable across screen sizes
+ * and does not require any arithmetic, percentage estimates, or coordinate
+ * guessing — it directly addresses the real element.
+ *
+ * Strategy 2 (fallback): label probe — known content-desc strings the
+ * paper-plane has been labelled with on some Instagram builds.  Must pass
+ * a sanity check: x > 60 % of screen width AND y in the lower 40 % of
+ * screen height to reject accidental matches elsewhere in the tree.
+ *
+ * REMOVED (v1.1.581): positional probe — found the text-input field.
+ * REMOVED (v1.1.582): text-field anchor — was a coordinate estimate (75 %
+ *   of the remaining icon zone), not a true a11y lookup.  Replaced by the
+ *   resource-id lookup above, which addresses the button directly.
  *
  * Comprehensive diagnostic logging of every node in the lower 35 % of the
- * screen is written via `onLog` so a single Log-tab run captures the full
- * a11y tree at the moment of share-attempt.
+ * screen is written via `onLog` on every call so a single Log-tab run shows
+ * the full a11y tree at the moment of each share attempt.
  */
 export async function findStoryShareButtonViaA11y(
   serial: string,
@@ -1900,7 +1900,7 @@ export async function findStoryShareButtonViaA11y(
   //    35 % of the screen (the story reply-bar zone).  class, resource-id,
   //    content-desc, text, bounds, and clickability are all included so a
   //    single Log-tab output is enough to identify the real a11y signal on
-  //    any device / Instagram build — no separate debug run needed.
+  //    any device / Instagram build.
   const diagYMin = Math.round(h * 0.65);
   {
     const nodeRe2 = /<node\s([^>]+?)\s*\/?>/g;
@@ -1912,10 +1912,10 @@ export async function findStoryShareButtonViaA11y(
       if (!bm) continue;
       const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
       if (cy < diagYMin) continue;
-      const cls = (a.match(/\bclass="([^"]*)"/)  ?? [])[1] ?? "";
+      const cls = (a.match(/\bclass="([^"]*)"/)    ?? [])[1] ?? "";
       const rid = (a.match(/resource-id="([^"]*)"/) ?? [])[1] ?? "";
       const cd  = (a.match(/content-desc="([^"]*)"/) ?? [])[1] ?? "";
-      const txt = (a.match(/\btext="([^"]*)"/)  ?? [])[1] ?? "";
+      const txt = (a.match(/\btext="([^"]*)"/)     ?? [])[1] ?? "";
       const clk = /clickable="true"/.test(a) ? "clickable" : "non-clickable";
       diagLines.push(
         `  [a11y-diag] ${clk} | class=${cls} | rid=${rid}` +
@@ -1923,69 +1923,61 @@ export async function findStoryShareButtonViaA11y(
       );
     }
     if (diagLines.length === 0) {
-      onLog?.(`  [a11y-diag] no nodes in lower 35% of screen (y>${diagYMin}, screen ${w}x${h})`);
+      onLog?.(`  [a11y-diag] no nodes in lower 35% (y>${diagYMin}, screen ${w}x${h})`);
     } else {
       onLog?.(`  [a11y-diag] ${diagLines.length} node(s) in lower 35% (y>${diagYMin}, screen ${w}x${h}):`);
       diagLines.forEach(l => onLog?.(l));
     }
   }
 
-  // ── Strategy 1: label probe — check if this build exposes the paper-plane
-  //    via a content-desc (rare but possible on some Instagram versions).
+  // ── Strategy 1: resource-id lookup (primary).
+  //    toolbar_reshare_button is the paper-plane icon — confirmed present
+  //    and clickable on this device build with cd="Share".  Finding it by
+  //    resource-id requires no coordinate arithmetic at all.
+  {
+    const RID = "com.instagram.android:id/toolbar_reshare_button";
+    const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+    let m: RegExpExecArray | null;
+    while ((m = nodeRe.exec(xml)) !== null) {
+      const a = m[1];
+      if (!a.includes(RID)) continue;
+      const bm = a.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (!bm) continue;
+      const cx = Math.round((Number(bm[1]) + Number(bm[3])) / 2);
+      const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
+      // Sanity: must be in the lower half of the screen (not a header icon
+      // from some other screen that happens to share the resource-id).
+      if (cy < h * 0.50) continue;
+      onLog?.(
+        `  [a11y-diag] Strategy 1 (resource-id): found toolbar_reshare_button` +
+        ` at (${cx},${cy}) from bounds=[${bm[1]},${bm[2]}][${bm[3]},${bm[4]}]`,
+      );
+      return { x: cx, y: cy };
+    }
+    onLog?.("  [a11y-diag] Strategy 1: toolbar_reshare_button not in tree — trying label probe");
+  }
+
+  // ── Strategy 2: label probe fallback.
+  //    Rare, but some Instagram builds label the icon with a content-desc.
   const labelCandidates = [
     "Share to Direct", "Send to Direct", "Direct", "Share to",
     "story_share", "direct_share",
   ];
   for (const label of labelCandidates) {
     const found = _findElem(xml, label);
-    // Sanity: paper-plane must be right of 60 % of screen width AND in the
-    // lower 40 % of height.  Anything left of centre is a false match.
+    // Paper-plane must be right of 60 % of screen width AND in lower 40 %
+    // of height.  Anything left of centre is a false match elsewhere.
     if (found && found.x > w * 0.60 && found.y > h * 0.60) {
       onLog?.(
-        `  [a11y-diag] label probe: matched "${label}" at (${found.x},${found.y}) — using as paper-plane`,
+        `  [a11y-diag] Strategy 2 (label): matched "${label}" at (${found.x},${found.y})`,
       );
       return found;
     } else if (found) {
       onLog?.(
-        `  [a11y-diag] label probe: matched "${label}" at (${found.x},${found.y})` +
+        `  [a11y-diag] Strategy 2 (label): matched "${label}" at (${found.x},${found.y})` +
         ` but failed sanity check (need x>${Math.round(w * 0.60)}, y>${Math.round(h * 0.60)}) — rejected`,
       );
     }
-  }
-
-  // ── Strategy 2: text-field anchor.
-  //    The story reply-bar text input IS accessible (confirmed on the user's
-  //    device — it is the element the v1.1.580 positional probe was finding
-  //    at ~60 % of screen width).  We read its LIVE right-edge x from the
-  //    UIAutomator dump, then estimate the paper-plane position as 75 % of
-  //    the icon-zone width to the right of that edge.  This is derived from
-  //    the real rendered bounds, not a hardcoded pixel value.
-  const textFieldCandidates = [
-    "Send message", "Message\u2026", "Message", "Reply\u2026", "Reply",
-    "Write a reply", "Send",
-  ];
-  for (const label of textFieldCandidates) {
-    const esc = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const attrRe = new RegExp(
-      `(?:text|content-desc|hint)="[^"]*${esc}[^"]*"[^>]*bounds="\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]"`,
-      "i",
-    );
-    const bm = xml.match(attrRe);
-    if (!bm) continue;
-    const fieldX1 = Number(bm[1]), fieldY1 = Number(bm[2]);
-    const fieldX2 = Number(bm[3]), fieldY2 = Number(bm[4]);
-    const fieldCy = Math.round((fieldY1 + fieldY2) / 2);
-    if (fieldCy < h * 0.60) continue; // must be in the lower bar zone
-    const iconZoneWidth = w - fieldX2;
-    if (iconZoneWidth < w * 0.04) continue; // sanity: icon zone too narrow
-    // 75 % into the icon zone lands on the rightmost icon (paper-plane)
-    // whether the space contains 1 or 2 icons.
-    const paperPlaneX = Math.round(fieldX2 + iconZoneWidth * 0.75);
-    onLog?.(
-      `  [a11y-diag] text-field anchor: "${label}" bounds=[${fieldX1},${fieldY1}][${fieldX2},${fieldY2}]` +
-      ` → iconZone=${iconZoneWidth}px → paper-plane estimated at (${paperPlaneX},${fieldCy})`,
-    );
-    return { x: paperPlaneX, y: fieldCy };
   }
 
   onLog?.("  [a11y-diag] no usable a11y signal — falling back to pixel scan");
@@ -2166,17 +2158,60 @@ export async function findShareSheetRecipients(serial: string, onLog?: (line: st
   if (!xml) return [];
 
   const { w, h } = getScreenSize(serial);
-  const minY = Math.round(h * 0.30);
-  const maxY = Math.round(h * 0.90);
-  const maxWidth = Math.round(w * 0.80);
-  const UI_CHROME = /^(send|search|write a message|direct|share|to|message|cancel|ok|close|suggested)$/i;
-  // Known share-destination shortcuts, not people — see doc comment above.
-  const SHARE_DESTINATIONS = /^(your story|close friends|add to story|add to your story|story|notes)$/i;
-
-  const results: { x: number; y: number }[] = [];
+  const minY = Math.round(h * 0.20);
+  const maxY = Math.round(h * 0.95);
   const dump: string[] = [];
   const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
   let m: RegExpExecArray | null;
+
+  // ── Strategy 1 (primary): resource-id lookup.
+  //
+  // CONFIRMED (device log, 15 Jul 2026): Instagram's DM share-sheet recipient
+  // avatar buttons have:
+  //   rid=com.instagram.android:id/grid_view_pog_avatar_view
+  //   class=android.widget.Button   (clickable, but NO content-desc or text)
+  //
+  // The parent ViewGroup DOES carry the human-readable content-desc
+  // ("Instagram Verified Chat not selected") but is NOT clickable.
+  // The Button IS clickable but has NO label — so the old label-based filter
+  // returned 0 results for every recipient, fell through to the hardcoded-
+  // coordinate slot fallback, and the slot tap frequently missed, meaning
+  // Send fired with no recipient selected and no DM was actually sent.
+  //
+  // Fix: find avatar buttons by resource-id; return all of them.  The caller
+  // picks one at random from this list.  No label or width filter is needed
+  // because the resource-id uniquely identifies these elements.
+  const RID_AVATAR = "com.instagram.android:id/grid_view_pog_avatar_view";
+  const avatarResults: { x: number; y: number }[] = [];
+
+  {
+    const re2 = /<node\s([^>]+?)\s*\/?>/g;
+    let m2: RegExpExecArray | null;
+    while ((m2 = re2.exec(xml)) !== null) {
+      const a = m2[1];
+      if (!a.includes(RID_AVATAR)) continue;
+      const bm = a.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (!bm) continue;
+      const cx = Math.round((Number(bm[1]) + Number(bm[3])) / 2);
+      const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
+      if (cy < minY || cy > maxY) continue;
+      avatarResults.push({ x: cx, y: cy });
+    }
+  }
+
+  if (avatarResults.length > 0) {
+    onLog?.(`[share-sheet] Strategy 1 (resource-id): ${avatarResults.length} avatar button(s) found via grid_view_pog_avatar_view — ${avatarResults.map(r => `(${r.x},${r.y})`).join(", ")}`);
+    return avatarResults;
+  }
+  onLog?.("[share-sheet] Strategy 1: grid_view_pog_avatar_view not found — falling back to label scan");
+
+  // ── Strategy 2 (fallback): label scan — used on Instagram builds that
+  //    expose recipient rows as labelled clickable nodes rather than un-labelled
+  //    Button children.
+  const maxWidth = Math.round(w * 0.80);
+  const UI_CHROME = /^(send|search|write a message|direct|share|to|message|cancel|ok|close|suggested)$/i;
+  const SHARE_DESTINATIONS = /^(your story|close friends|add to story|add to your story|story|notes)$/i;
+  const results: { x: number; y: number }[] = [];
 
   while ((m = nodeRe.exec(xml)) !== null) {
     const attrs = m[1];
@@ -2189,15 +2224,10 @@ export async function findShareSheetRecipients(serial: string, onLog?: (line: st
     if (cy < minY || cy > maxY) continue;
     const width = x2 - x1;
     const textM = attrs.match(/\btext="([^"]*)"/);
-    const cdM = attrs.match(/content-desc="([^"]*)"/);
-    const ridM = attrs.match(/resource-id="([^"]*)"/);
-    const clsM = attrs.match(/\bclass="([^"]*)"/);
+    const cdM   = attrs.match(/content-desc="([^"]*)"/);
+    const ridM  = attrs.match(/resource-id="([^"]*)"/);
+    const clsM  = attrs.match(/\bclass="([^"]*)"/);
     const label = (textM?.[1] || cdM?.[1] || "").trim();
-    // Diagnostic-only dump of every clickable node in the sheet's y-zone,
-    // regardless of whether it passes the filters below, so a real device
-    // run's log shows exactly what candidates existed (name/class/resource-id
-    // /width) — needed to confirm real recipient rows carry a usable label at
-    // all, the same way the feed action-bar icons initially didn't.
     dump.push(`x=${cx} y=${cy} w=${width} cd="${cdM?.[1] ?? ""}" rid="${ridM?.[1] ?? ""}" cls="${clsM?.[1] ?? ""}" txt="${textM?.[1] ?? ""}"`);
     if (width > maxWidth) continue;
     if (!label || label.length > 50) continue;
@@ -2205,7 +2235,7 @@ export async function findShareSheetRecipients(serial: string, onLog?: (line: st
     if (SHARE_DESTINATIONS.test(label.trim())) continue;
     results.push({ x: cx, y: cy });
   }
-  if (dump.length) onLog?.(`[share-sheet] recipient-zone node dump: ${dump.join(" | ")}`);
+  if (dump.length) onLog?.(`[share-sheet] Strategy 2 label-scan node dump: ${dump.join(" | ")}`);
   return results;
 }
 

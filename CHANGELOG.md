@@ -4,6 +4,25 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.582] — 2026-07-15
+
+### Fix: story Share-to-DM — paper-plane by resource-id, recipients by resource-id, no coordinate fallbacks
+
+Root causes identified from the v1.1.581 device log (15 Jul 2026):
+
+**Bug A — paper-plane tap used a coordinate estimate (rule violation):**
+The text-field-anchor approach (Strategy 2 in v1.1.581) calculated the paper-plane position as 75% of the icon-zone width to the right of the text field's right edge. This is still a coordinate estimate — even though it derived from live bounds. The log showed the paper-plane IS directly accessible: `rid=com.instagram.android:id/toolbar_reshare_button`, `cd=Share`, clickable, bounds=[948,2122][1058,2226]. Fix: `findStoryShareButtonViaA11y` now finds the button by `toolbar_reshare_button` resource-id and returns its exact bounds-centre. Zero arithmetic.
+
+**Bug B — no recipient was ever selected, but Send was tapped anyway:**
+`findShareSheetRecipients` filtered by label. The actual tappable avatar buttons (`rid=...grid_view_pog_avatar_view`, `class=android.widget.Button`) have NO `content-desc` or `text`, so they were filtered out entirely. The fallback was hardcoded percentage-coordinate slots which frequently miss. Fix: `findShareSheetRecipients` now searches for `grid_view_pog_avatar_view` by resource-id first — no label or width filter needed. If found, returns those immediately. Label scan is kept as fallback for other Instagram builds.
+
+**Bug C — Send fired even when no recipient was selected:**
+`tapRandomShareSheetRecipient` fell through to coordinate slots, which may or may not have selected anyone. Send was then fired regardless of whether a recipient was confirmed. Fix: function now returns `boolean`; call site in `runViewStoriesFromFeedLoop` skips Send (and closes the sheet) if `false` is returned.
+
+**Removed:** `SHARE_SHEET_AVATAR_SLOTS` hardcoded percentage-coordinate table — all coordinate fallbacks eliminated from the recipient-selection path.
+
+---
+
 ## [1.1.581] — 2026-07-15
 
 ### Fix: story Share-to-DM — remove positional probe, add diagnostic dump + text-field anchor
