@@ -4,6 +4,32 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.610] — 2026-07-15
+
+### Feature: Log Record mode — visual expected-vs-actual tap comparison overlay
+
+**What it is.** A new "📍 Log Record" button in the Log tab lets you annotate the mirror in real-time while automation runs, then export a JSON file showing exactly where you expected taps to land versus where the bot actually sent them.
+
+**How it works:**
+
+1. Press **📍 Log Record** in the Log tab toolbar while automation is executing (or at any time).
+2. The mirror immediately enters annotation mode — a teal "📍 LOG RECORD — tap to place expected marker" banner appears at the top of the mirror.
+   - **Cyan dots (you):** click anywhere on the mirror to drop a marker at that phone coordinate — these are your "I expected a tap here" pins.
+   - **Orange dots (bot):** any automation log line matching `tapping/tapped … at (X,Y)` is automatically parsed and placed as an orange marker in the same coordinate space.
+   - Each dot is numbered in sequence (1, 2, 3…) so you can correlate with the log.
+3. The mirror is **read-only while recording** — your clicks place markers only, they are NOT forwarded to the phone. Normal tap/swipe/double-tap behaviour resumes the instant you stop.
+4. Press **⏹ Stop (Ncyan Norange)** to end the session. A JSON file downloads automatically containing every marker's phone coordinates, type, timestamp, and label (trimmed log line for bot taps). The phone mirror is immediately interactive again.
+
+**Export schema:**
+```json
+{ "exportedAt", "serial", "phoneSize", "markerCount", "expectedCount", "botCount",
+  "markers": [{ "x", "y", "t", "type": "expected|bot", "label" }] }
+```
+
+**Implementation:** entirely client-side — no new API routes, no server changes. State lives in `MobilePage`, passed via props to `PhoneSlot → LiveCanvas` (renders the overlay) and `LogPanel` (hosts the button). Bot taps are extracted from the shared `addLog` callback using `BOT_TAP_RE`.
+
+---
+
 ## [1.1.609] — 2026-07-15
 
 ### Fix: profile grid post tap used forbidden hardcoded coordinates — replaced with live a11y tree lookup

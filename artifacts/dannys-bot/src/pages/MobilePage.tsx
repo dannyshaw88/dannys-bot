@@ -109,6 +109,18 @@ const WEBCODECS_SUPPORTED = typeof window !== "undefined" && "VideoDecoder" in w
 
 type LiveCanvasHandle = { clearToBlack: () => void; getVideoSize: () => { w: number; h: number } | null };
 
+/** A single marker placed on the mirror overlay during Log Record mode. */
+type LogMarker = {
+  /** Phone-coordinate space (matches what the bot sends / what mapToPhone returns). */
+  x: number; y: number;
+  /** Unix-ms timestamp. */
+  t: number;
+  /** "expected" = user clicked on mirror (cyan).  "bot" = automation tapped (orange). */
+  type: "expected" | "bot";
+  /** Short label drawn next to the dot (e.g. the trimmed log line for bot taps). */
+  label?: string;
+};
+
 type InspectNode = {
   cls: string; resourceId: string; contentDesc: string; text: string;
   bounds: string; boundsRaw: [number,number,number,number];
@@ -122,7 +134,7 @@ type InspectResult = {
   _cssX?: number; _cssY?: number;
 };
 
-const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; inspectMode?: boolean; onInspectResult?: (r: InspectResult) => void; clickTestMode?: boolean }>(function LiveCanvas({ serial, onLog, onDimensions, inspectMode, onInspectResult, clickTestMode }, ref) {
+const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; inspectMode?: boolean; onInspectResult?: (r: InspectResult) => void; clickTestMode?: boolean; logRecMode?: boolean; logMarkers?: LogMarker[]; onExpectedTap?: (x: number, y: number) => void }>(function LiveCanvas({ serial, onLog, onDimensions, inspectMode, onInspectResult, clickTestMode, logRecMode, logMarkers, onExpectedTap }, ref) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   // Cache the 2D context so we don't re-call getContext() every frame.
   const ctxRef       = useRef<CanvasRenderingContext2D | null>(null);
@@ -701,6 +713,17 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         return;
       }
 
+      // ── Log Record mode — place an "expected" marker instead of tapping ──
+      // While Log Record is active the mirror is read-only for navigation:
+      // clicks place a cyan "expected" dot rather than being forwarded to
+      // the phone.  The user marks the taps they expect the bot to make;
+      // the bot's actual automated taps are added as orange dots via addLog
+      // parsing.  Normal interaction resumes once recording stops.
+      if (logRecMode) {
+        onExpectedTap?.(drag.startX, drag.startY);
+        return;
+      }
+
       // Short/no movement — treat as a tap at the press point (matches the
       // previous click-to-tap behavior exactly). A lone tap is held for
       // DOUBLE_TAP_MS instead of firing right away: if a second tap lands
@@ -910,6 +933,66 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         </>
       )}
 
+      {/* ── Log Record marker overlay ──────────────────────────────────────
+           Cyan  = user-placed "expected" tap (what you thought would happen)
+           Orange = bot-placed tap (what automation actually sent)
+           Markers are in phone-coordinate space; we reverse-map them to
+           canvas-pixel CSS positions using the same drawRectRef as mapToPhone
+           so they always land on the correct pixel even after resize.       */}
+      {logRecMode && logMarkers && logMarkers.length > 0 && (() => {
+        const ps  = phoneSizeRef.current;
+        const dr  = drawRectRef.current;
+        if (!ps || !dr) return null;
+        const { w: phoneW, h: phoneH } = ps;
+        const { dx, dy, dw, dh } = dr;
+        return (
+          <>
+            {logMarkers.map((m, i) => {
+              const cssX = dx + (m.x / phoneW) * dw;
+              const cssY = dy + (m.y / phoneH) * dh;
+              const isBot = m.type === "bot";
+              return (
+                <React.Fragment key={i}>
+                  <div style={{
+                    position: "absolute",
+                    left: cssX, top: cssY,
+                    width: isBot ? 16 : 20, height: isBot ? 16 : 20,
+                    marginLeft: isBot ? -8 : -10, marginTop: isBot ? -8 : -10,
+                    borderRadius: "50%",
+                    background: isBot ? "rgba(255,120,20,0.85)" : "rgba(0,210,210,0.85)",
+                    border: "2px solid white",
+                    zIndex: 25,
+                    pointerEvents: "none",
+                    boxShadow: isBot ? "0 0 6px rgba(255,120,20,0.7)" : "0 0 6px rgba(0,210,210,0.7)",
+                  }} />
+                  {/* Sequence number label */}
+                  <div style={{
+                    position: "absolute",
+                    left: cssX + (isBot ? 8 : 10), top: cssY - (isBot ? 8 : 10),
+                    fontSize: 8, lineHeight: 1, fontWeight: 700, color: "white",
+                    background: isBot ? "rgba(180,70,0,0.9)" : "rgba(0,140,140,0.9)",
+                    borderRadius: 3, padding: "1px 2px",
+                    zIndex: 26, pointerEvents: "none",
+                    whiteSpace: "nowrap",
+                  }}>
+                    {i + 1}
+                  </div>
+                </React.Fragment>
+              );
+            })}
+          </>
+        );
+      })()}
+
+      {/* Log Record mode banner */}
+      {logRecMode && (
+        <div style={{ position: "absolute", top: 6, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 30, pointerEvents: "none" }}>
+          <span style={{ background: "rgba(0,180,180,0.92)", color: "white", fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 10, letterSpacing: 1 }}>
+            📍 LOG RECORD — tap to place expected marker
+          </span>
+        </div>
+      )}
+
       {/* FPS */}
       {status === "live" && (
         <span className="absolute top-1 right-1.5 text-[8px] font-mono text-white/30 select-none z-10">
@@ -941,7 +1024,7 @@ function EmptyShell({ idx }: { idx: number }) {
 
 type PhoneSlotHandle = { getVideoSize: () => { w: number; h: number } | null };
 
-const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; live: boolean; onPower: () => void; phoneDims: { w: number; h: number } | null; paneSize: { w: number; h: number } | null }>(function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower, phoneDims, paneSize }, ref) {
+const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; live: boolean; onPower: () => void; phoneDims: { w: number; h: number } | null; paneSize: { w: number; h: number } | null; logRecMode?: boolean; logMarkers?: LogMarker[]; onExpectedTap?: (x: number, y: number) => void }>(function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower, phoneDims, paneSize, logRecMode, logMarkers, onExpectedTap }, ref) {
   const liveCanvasRef = useRef<LiveCanvasHandle>(null);
   // Re-exposes LiveCanvas's own handle so the page-level Log tab (rendered
   // as a sibling, not a child, of this slot) can read the mirror's live
@@ -1145,6 +1228,9 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
             inspectMode={inspectMode}
             onInspectResult={handleInspectResult}
             clickTestMode={clickTestMode}
+            logRecMode={logRecMode}
+            logMarkers={logMarkers}
+            onExpectedTap={onExpectedTap}
           />
         )}
         {isReady && phone && !live && (
@@ -3264,7 +3350,7 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
   );
 }
 
-function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize }: {
+function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, logRecMode, onToggleLogRec, logMarkers, phoneDims }: {
   lines: string[];
   onClear: () => void;
   serial?: string | null;
@@ -3277,6 +3363,15 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize }: 
    *  otherwise only visible transiently in the scrolling log ("Frame WxH")
    *  and disappears once the stream reconnects or the log scrolls past it. */
   getVideoSize?: () => { w: number; h: number } | null;
+  /** True while Log Record mode is active — mirror clicks place expectation
+   *  markers instead of tapping the phone. */
+  logRecMode?: boolean;
+  /** Toggle Log Record on/off. */
+  onToggleLogRec?: () => void;
+  /** The accumulated markers (expected + bot) from the current recording. */
+  logMarkers?: LogMarker[];
+  /** Phone screen size, needed to annotate the exported JSON. */
+  phoneDims?: { w: number; h: number } | null;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [scanning,       setScanning]       = React.useState(false);
@@ -3284,23 +3379,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize }: 
   const [copiedCapture,  setCopiedCapture]  = React.useState(false);
   const [lastCapture,    setLastCapture]    = React.useState<string[] | null>(null);
   const [checkingInfo,   setCheckingInfo]   = React.useState(false);
-  const [recStatus,      setRecStatus]      = React.useState<{ recording: boolean; eventCount: number } | null>(null);
-  const recPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => { bottomRef.current?.scrollIntoView({ block: "end" }); }, [lines.length]);
-
-  // Poll recorder status every 2 s while panel is open (cheap, stateless).
-  useEffect(() => {
-    if (!serial) return;
-    const poll = async () => {
-      try {
-        const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/session-recorder/status`);
-        if (r.ok) setRecStatus(await r.json());
-      } catch { /* network error — keep last known state */ }
-    };
-    poll();
-    recPollRef.current = setInterval(poll, 2000);
-    return () => { if (recPollRef.current) clearInterval(recPollRef.current); };
-  }, [serial]);
 
   const handleCheckScreenInfo = async () => {
     if (!serial) return;
@@ -3366,41 +3445,32 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize }: 
     } finally { setScanning(false); }
   };
 
-  const handleRecordToggle = async () => {
-    if (!serial) return;
-    const starting = !recStatus?.recording;
-    try {
-      const url = `/api/mobile/devices/${encodeURIComponent(serial)}/session-recorder/${starting ? "start" : "stop"}`;
-      const r = await fetch(url, { method: "POST" });
-      if (r.ok) {
-        const body = await r.json();
-        setRecStatus({ recording: body.recording, eventCount: body.eventCount ?? 0 });
-        if (starting) {
-          addLog?.("● Macro recording started.");
-        } else {
-          // Auto-download JSON immediately on stop
-          addLog?.(`⏹ Macro recording stopped — ${body.eventCount} events. Saving JSON…`);
-          const exportUrl = `/api/mobile/devices/${encodeURIComponent(serial)}/session-recorder/export.json`;
-          const a = document.createElement("a");
-          a.href = exportUrl;
-          a.download = `equinox-macro-${serial}-${Date.now()}.json`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-        }
-      }
-    } catch (e: any) { addLog?.(`Session recorder error: ${e?.message ?? "network error"}`); }
-  };
-
-  const handleExportSession = (format: "html" | "json") => {
-    if (!serial) return;
-    const url = `/api/mobile/devices/${encodeURIComponent(serial)}/session-recorder/export.${format}`;
-    const a   = document.createElement("a");
-    a.href    = url;
-    a.download = "";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  /** Export the accumulated Log Record markers as a JSON file and stop. */
+  const handleLogRecordStop = () => {
+    if (logMarkers && logMarkers.length > 0) {
+      const payload = {
+        exportedAt:  new Date().toISOString(),
+        serial:      serial ?? "unknown",
+        phoneSize:   phoneDims ?? null,
+        markerCount: logMarkers.length,
+        expectedCount: logMarkers.filter(m => m.type === "expected").length,
+        botCount:      logMarkers.filter(m => m.type === "bot").length,
+        markers:     logMarkers,
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = `equinox-log-record-${serial ?? "unknown"}-${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      addLog?.(`📍 Log Record stopped — ${logMarkers.length} markers exported (${payload.expectedCount} expected, ${payload.botCount} bot).`);
+    } else {
+      addLog?.("📍 Log Record stopped — no markers to export.");
+    }
+    onToggleLogRec?.();
   };
 
   const handleCopyLog = async () => {
@@ -3472,16 +3542,16 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize }: 
             {serial && (
               <Button
                 type="button"
-                variant={recStatus?.recording ? "destructive" : "secondary"}
-                onClick={handleRecordToggle}
+                variant={logRecMode ? "destructive" : "secondary"}
+                onClick={logRecMode ? handleLogRecordStop : onToggleLogRec}
                 className="gap-1.5"
-                title={recStatus?.recording
-                  ? "Stop recording — JSON saves automatically to Downloads"
-                  : "Record macro — captures every tap + screen state; JSON auto-saves on stop"}
+                title={logRecMode
+                  ? `Stop Log Record — exports ${(logMarkers ?? []).length} marker(s) as JSON`
+                  : "Log Record — mirror clicks place cyan 'expected' markers; bot taps are marked orange. Export on stop."}
               >
-                {recStatus?.recording
-                  ? `⏹ Stop${recStatus.eventCount ? ` (${recStatus.eventCount})` : ""}`
-                  : "● Record Session"}
+                {logRecMode
+                  ? `⏹ Stop (${(logMarkers ?? []).length}🔵${(logMarkers ?? []).filter(m => m.type === "expected").length} 🟠${(logMarkers ?? []).filter(m => m.type === "bot").length})`
+                  : "📍 Log Record"}
               </Button>
             )}
             <Button type="button" variant="secondary" onClick={handleCopyLog} disabled={lines.length === 0}>
@@ -3552,6 +3622,12 @@ const MOBILE_TABS: { id: MobileTab; label: string }[] = [
 ];
 const LOG_MAX_LINES = 500;
 
+// Regex for detecting bot automation taps in log lines.
+// Matches "tapping … at (X,Y)" / "tapped … (X,Y)" patterns emitted by the
+// automation engine.  Plain manual "Tap → (X,Y)" lines are deliberately
+// excluded so user taps aren't double-counted as bot markers.
+const BOT_TAP_RE = /tapp(?:ing|ed)[^\n(]*\((\d+),\s*(\d+)\)/i;
+
 export function MobilePage() {
   const [data,    setData]    = useState<PhonesResponse | null>(null);
   const [error,   setError]   = useState<string | null>(null);
@@ -3589,12 +3665,39 @@ export function MobilePage() {
   // automation toggle being enabled does.
   const [liveOn, setLiveOn] = useState<Record<string, boolean>>({});
   const [logLines, setLogLines] = useState<string[]>([]);
+
+  // ── Log Record state ────────────────────────────────────────────────────────
+  const [logRecMode,    setLogRecMode]    = useState(false);
+  const [logMarkers,    setLogMarkers]    = useState<LogMarker[]>([]);
+  // Ref so addLog's stable useCallback closure can read current logRecMode
+  // without going stale (addLog has [] deps to avoid re-creating every render).
+  const logRecModeRef = useRef(false);
+  useEffect(() => { logRecModeRef.current = logRecMode; }, [logRecMode]);
+
+  const addLogMarker = useCallback((m: LogMarker) => {
+    setLogMarkers(prev => [...prev, m]);
+  }, []);
+
   const addLog = useCallback((msg: string) => {
     const stamp = new Date().toLocaleTimeString();
     setLogLines(prev => {
       const next = [...prev, `[${stamp}] ${msg}`];
       return next.length > LOG_MAX_LINES ? next.slice(next.length - LOG_MAX_LINES) : next;
     });
+    // When Log Record is active, parse automation taps and add orange bot markers.
+    if (logRecModeRef.current) {
+      const m = BOT_TAP_RE.exec(msg);
+      if (m) {
+        setLogMarkers(prev => [...prev, {
+          x: parseInt(m[1], 10),
+          y: parseInt(m[2], 10),
+          t: Date.now(),
+          type: "bot",
+          label: msg.length > 80 ? msg.substring(0, 77) + "…" : msg,
+        }]);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const refresh = useCallback(async (showSpinner = false) => {
@@ -3740,6 +3843,9 @@ export function MobilePage() {
                   live={!!(phone && (liveOn[phone.serial] || automation.running))}
                   onPower={() => { if (phone) setLiveOn(s => ({ ...s, [phone.serial]: true })); }}
                   ref={phone?.serial === activeSerial ? activeSlotRef : undefined}
+                  logRecMode={logRecMode}
+                  logMarkers={logMarkers}
+                  onExpectedTap={(x, y) => addLogMarker({ x, y, t: Date.now(), type: "expected" })}
                 />
               ))}
             </div>
@@ -3781,6 +3887,19 @@ export function MobilePage() {
                     serial={activeSerial}
                     addLog={addLog}
                     getVideoSize={() => activeSlotRef.current?.getVideoSize() ?? null}
+                    logRecMode={logRecMode}
+                    onToggleLogRec={() => {
+                      if (logRecMode) {
+                        // Stopping: export happens inside LogPanel's handleLogRecordStop
+                      } else {
+                        // Starting: clear old markers
+                        setLogMarkers([]);
+                        addLog("📍 Log Record started — click the mirror to place expected-tap markers (cyan). Bot taps auto-marked orange.");
+                      }
+                      setLogRecMode(v => !v);
+                    }}
+                    logMarkers={logMarkers}
+                    phoneDims={phoneDims}
                     onScanTray={activeSerial ? async () => {
                       addLog("── Capturing screen layout… ──");
                       try {
