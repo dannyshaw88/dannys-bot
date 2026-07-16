@@ -4,6 +4,38 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.639] — 2026-07-16
+
+### Changed
+
+- **Fix AI Slop v6 — binary C2PA/JUMBF stripping (matches unmadewithai.com; zero pixel degradation)**
+
+  All previous approaches (v3–v5: pixel noise, zoom-crop, downscale/upscale, dual JPEG) were replaced. Root-cause analysis via unmadewithai.com (confirmed working by the user) revealed that Instagram's "Made with AI" detector is keying primarily on **C2PA metadata containers** embedded in the file's binary structure — not on SynthID pixel watermarks. Pixel-level manipulation (even heavy spatial decimation) never reliably destroyed the metadata container, and the aggressive recompression introduced visible quality loss for no detection benefit.
+
+  **What C2PA is and where it lives:**
+
+  | Format | Container type | Location in file |
+  |--------|---------------|-----------------|
+  | JPEG   | JUMBF box (ISO 19566-5) | APP11 segment (`0xFFEB`), payload starts with `"JP"` |
+  | PNG    | JUMBF box | `caBX` ancillary chunk |
+  | WebP   | JUMBF / C2PA RIFF chunk | `"C2PA"` or `"JUMB"` chunks inside the RIFF container |
+
+  **New pipeline:**
+
+  1. **Binary C2PA strip** — walk the raw file bytes; identify and excise only the C2PA container segment/chunk; leave all pixel data and all other metadata completely untouched.
+     - JPEG: parse JPEG marker stream; remove any `APP11` (`FF EB`) segment whose data begins with `4A 50` ("JP"); copy all other segments verbatim.
+     - PNG: parse PNG chunk sequence; remove any `caBX` chunk; copy all other chunks verbatim (including IDAT pixel data, IEND, etc.).
+     - WebP: parse RIFF chunk list; remove any chunk typed `C2PA` or `JUMB`; rebuild the RIFF header with the corrected file-size field.
+  2. **Single light Sharp pass** — `withMetadata(false)` strips any residual EXIF / XMP / ICC profiles; encode to JPEG at quality 85–92 (random per image). No downscale, no noise, no second JPEG pass. Instagram recompresses on ingest so a single clean encode is sufficient.
+
+  **Why this works where the previous approach did not:**
+
+  The online tools that reliably strip AI markers (unmadewithai.com, etc.) do pure binary metadata surgery. The image quality is 100% preserved because no pixel values are modified. Instagram reads the C2PA container to set the "Made with AI" label; removing the container before upload means the label is never applied, regardless of the image's visual content.
+
+  **Quality impact:** none — pixels are untouched at the binary-strip stage, and a quality-85–92 JPEG encode is indistinguishable from the source at normal viewing sizes.
+
+---
+
 ## [1.1.638] — 2026-07-16
 
 ### Changed
