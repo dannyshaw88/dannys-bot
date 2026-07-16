@@ -2858,7 +2858,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
 
     // Caption screen — verify we're actually there before typing/sharing.
-    const shareBtn = await android.findButtonByLabel(serial, "Share").catch(() => null);
+    const shareBtn = await android.findShareFooterButton(serial).catch(() => null);
     if (!shareBtn) {
       onLog?.("Make a Post: caption/share screen not confirmed (no \"Share\" control found) — aborting this attempt");
       await android.removeDeviceFile(serial, devicePath).catch(() => {});
@@ -2897,7 +2897,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
 
     // Re-find Share (screen may have re-rendered after the caption/advanced steps).
-    const finalShareBtn = await android.findButtonByLabel(serial, "Share").catch(() => null) ?? shareBtn;
+    const finalShareBtn = await android.findShareFooterButton(serial).catch(() => null) ?? shareBtn;
     onLog?.("Make a Post: tapping Share…");
     await android.tap(serial, finalShareBtn.x, finalShareBtn.y);
 
@@ -2913,7 +2913,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let shareConfirmed = false;
     for (let attempt = 0; attempt < 10; attempt++) {
       await sleepOrAbort(serial, 1500);
-      const shareStillVisible = await android.findButtonByLabel(serial, "Share").catch(() => null);
+      const shareStillVisible = await android.findShareFooterButton(serial).catch(() => null);
       if (!shareStillVisible) {
         shareConfirmed = true;
         break;
@@ -2921,7 +2921,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (attempt === 3) {
         // Still on caption screen after ~6 s — retry the Share tap once.
         onLog?.("Make a Post: Share still visible after 6 s — retrying tap…");
-        const retryShareBtn = await android.findButtonByLabel(serial, "Share").catch(() => null) ?? finalShareBtn;
+        const retryShareBtn = await android.findShareFooterButton(serial).catch(() => null) ?? finalShareBtn;
         await android.tap(serial, retryShareBtn.x, retryShareBtn.y);
       }
     }
@@ -2941,6 +2941,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (deleteAfterUpload) {
       try { await fsPromises.unlink(localFilePath); } catch { /* best effort */ }
     }
+    // Always remove the temp copy pushed to the device — it is only needed
+    // for the picker/upload. Leaving it behind fills up the camera roll.
+    await android.removeDeviceFile(serial, devicePath).catch(() => {});
     onLog?.(`Make a Post: ✓ posted "${fileName}"`);
     return { posted: true, fileName };
   }

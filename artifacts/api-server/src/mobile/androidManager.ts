@@ -2454,6 +2454,36 @@ export async function findButtonByLabel(serial: string, label: string): Promise<
 }
 
 /**
+ * Finds the Share footer button on Instagram's "New post" caption screen.
+ *
+ * Uses resource-id as the primary signal (confirmed from real-device dump,
+ * Jul 2026):
+ *   - share_footer_button  (the Share button itself, desc="Share")
+ *   - footer_button_container  (its parent ViewGroup — taller tap area)
+ * Falls back to content-desc/text "Share" via _findElem for future IG builds
+ * that might rename the resource-id.
+ *
+ * Dedicated function because findButtonByLabel("Share") risks matching other
+ * "Share" nodes on unrelated screens (story share bar, DM share sheet, etc.)
+ * and the share_footer_button sits in an extremely narrow strip at the very
+ * bottom of the screen where an imprecise coordinate is unreliable.
+ */
+export async function findShareFooterButton(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+  // Prefer share_footer_button (the actual button); footer_button_container
+  // is its taller parent and gives a larger tap target if the button itself
+  // isn't returned as a separate node on some builds.
+  return (
+    _findByResId(xml, ":id/share_footer_button") ??
+    _findByResId(xml, ":id/footer_button_container") ??
+    _findElem(xml, "Share")
+  );
+}
+
+/**
  * Scans the accessibility tree for tappable recipient items inside Instagram's
  * DM share sheet.
  *
@@ -3034,9 +3064,10 @@ export async function findExpandPhotoButton(serial: string): Promise<{ x: number
   const xml = await _uiDump(adb, serial).catch(() => "");
   if (!xml) return null;
 
-  const byLabel = _findElem(xml, "Expand", "Zoom out", "Photo size", "Original size", "Toggle photo size");
+  // "Change crop" / "croptype_toggle_button" is the desc/id confirmed from real-device dump (Jul 2026).
+  const byLabel = _findElem(xml, "Change crop", "Expand", "Zoom out", "Photo size", "Original size", "Toggle photo size");
   if (byLabel) return byLabel;
-  const byResId = _findByResId(xml, ":id/expand_photo_button", ":id/original_media_full_size_toggle_button", ":id/media_size_toggle");
+  const byResId = _findByResId(xml, ":id/croptype_toggle_button", ":id/expand_photo_button", ":id/original_media_full_size_toggle_button", ":id/media_size_toggle");
   if (byResId) return byResId;
 
   const { w, h } = getScreenSize(serial);
