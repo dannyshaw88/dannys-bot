@@ -4,6 +4,14 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.628] — 2026-07-16
+
+### Fixed
+
+- **View Reels — Share via DM: blue Send button not clicked after user selection** — The pre-selection scan (`_vrSendBtn0`) was being re-used after the recipient tap via the `??` short-circuit. That stale value was wrong: when no recipient is selected the sheet has no `direct_send_button_multi_select` yet, so `_findElem("Send")` substring-matched `text="Send message"` on the composer text box and stored its centre (199, 2169) instead. The code then tapped the text input, the sheet stayed open, and Back was pressed. Fix: always discard the pre-selection value and do a fresh `findButtonByLabel("Send")` after tapping the recipient — at that point `text="Send"` exact-matches the Send button's own TextView (node [141]) and returns the correct coordinate. Post-Send wait also increased from 300 ms → 1 000 ms so the sheet has time to fully dismiss before the open-check fires. No other tool's code was touched.
+
+---
+
 ## [1.1.627] — 2026-07-16
 
 ### Fixed

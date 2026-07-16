@@ -2281,18 +2281,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                       return _x.includes("direct_private_share") || _x.includes("grid_view_pog_avatar_view") ||
                              _x.includes("android.widget.EditText") || _x.includes("Copy link") || _x.includes("Add to story");
                     };
-                    const _vrSb = _vrSendBtn0 ?? await android.findButtonByLabel(serial, "Send").catch(() => null);
+                    // Always do a fresh lookup after recipient tap — the Send button
+                    // (direct_send_button_multi_select) only appears once a recipient is
+                    // selected, so _vrSendBtn0 (from the pre-selection scan) is stale and
+                    // will have matched the wrong element (e.g. "Send message" text box).
+                    const _vrSb = await android.findButtonByLabel(serial, "Send").catch(() => null);
                     if (_vrSb) {
                       await android.tap(serial, _vrSb.x, _vrSb.y);
-                      await sleepOrAbort(serial, 300);
+                      await sleepOrAbort(serial, 1000);
                       if (!(await _vrIsOpen())) {
                         _vrDmSent = true;
                         logger.info({ serial }, "[view-reels] shared post via DM — Send tapped");
                         onLog?.(`${_vrPfx}: ✓ shared via DM — Send tapped`);
                         await sleepOrAbort(serial, 300);
                       } else {
-                        logger.info({ serial }, "[view-reels] Send button not found after picking recipient — pressing Back");
-                        onLog?.(`${_vrPfx}: Send button not found after picking DM recipient — pressing Back`);
+                        logger.info({ serial }, "[view-reels] Send tapped but sheet still open — pressing Back");
+                        onLog?.(`${_vrPfx}: Send tapped but sheet did not close — pressing Back`);
                         await android.pressBack(serial);
                         await sleepOrAbort(serial, 200);
                       }
