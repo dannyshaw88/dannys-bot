@@ -4,6 +4,13 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.620] — 2026-07-16
+
+### Fixed
+- **Phone Mirror — Inspect: instant Chrome-style hover highlight**: replaced the React state-driven hover overlay (which batched updates through React's render cycle, adding per-frame lag) with direct DOM ref manipulation. The highlight box now updates synchronously on every `pointermove` with zero React overhead — identical to how Chrome DevTools draws its hover highlight. Also removed the 50ms CSS transition that made the box visually trail behind the cursor. Highlight colour changed from gold to Chrome blue (`#1a73e8`) with a matching tooltip showing class/id and element size in px. The overlay is always in the DOM but `display:none` until a node is hit, eliminating the mount/unmount overhead on every node change.
+
+---
+
 ## [1.1.619] — 2026-07-16
 
 ### Fixed

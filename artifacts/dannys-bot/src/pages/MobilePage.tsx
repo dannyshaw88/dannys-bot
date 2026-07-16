@@ -176,7 +176,16 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   // Kept in a ref (not state) so the pointer-event handlers always see the
   // latest value without needing to be recreated on every toggle.
   const inspectModeRef = useRef(false);
-  useEffect(() => { inspectModeRef.current = !!inspectMode; }, [inspectMode]);
+  useEffect(() => {
+    inspectModeRef.current = !!inspectMode;
+    if (!inspectMode) {
+      // Hide the overlay immediately when leaving inspect mode — don't wait
+      // for the next pointermove to clear it.
+      hoverNodeRef.current = null;
+      const el = inspectOverlayRef.current;
+      if (el) el.style.display = "none";
+    }
+  }, [inspectMode]);
   useEffect(() => {
     clickTestModeRef.current = !!clickTestMode;
     if (!clickTestMode) { clickTestPhaseRef.current = "idle"; setTapDots(null); }
@@ -188,8 +197,12 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   const onHoverNodeRef = useRef(onHoverNode);
   useEffect(() => { onHoverNodeRef.current = onHoverNode; }, [onHoverNode]);
   const hoverNodeRef = useRef<InspectNode | null>(null);
-  const [hoverNodeCss, setHoverNodeCss] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
-  const [hoverLabel, setHoverLabel] = useState<string>("");
+  // Direct DOM ref for the inspect hover overlay — bypasses React state so
+  // every pointer move updates the highlight instantly (no render cycle),
+  // exactly like Chrome DevTools which draws highlights synchronously.
+  const inspectOverlayRef = useRef<HTMLDivElement>(null);
+  const inspectLabelRef   = useRef<HTMLDivElement>(null);
+  const inspectSizeRef    = useRef<HTMLDivElement>(null);
 
   const [status, setStatus] = useState<"connecting" | "waiting" | "live" | "asleep" | "error">("connecting");
   const [fps,    setFps]    = useState(0);
@@ -687,30 +700,36 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
           onHoverNodeRef.current?.(hit);
           const dr = drawRectRef.current;
           const ps = phoneSizeRef.current;
-          if (hit && dr && ps) {
+          const el = inspectOverlayRef.current;
+          if (hit && dr && ps && el) {
             const [x1, y1, x2, y2] = hit.boundsRaw;
-            setHoverNodeCss({
-              left:   dr.dx + (x1 / ps.w) * dr.dw,
-              top:    dr.dy + (y1 / ps.h) * dr.dh,
-              width:  ((x2 - x1) / ps.w) * dr.dw,
-              height: ((y2 - y1) / ps.h) * dr.dh,
-            });
-            setHoverLabel(hit.resourceId || hit.contentDesc || hit.text || hit.cls || "");
-          } else {
-            setHoverNodeCss(null);
-            setHoverLabel("");
+            const left   = dr.dx + (x1 / ps.w) * dr.dw;
+            const top    = dr.dy + (y1 / ps.h) * dr.dh;
+            const width  = ((x2 - x1) / ps.w) * dr.dw;
+            const height = ((y2 - y1) / ps.h) * dr.dh;
+            // Direct DOM update — no React render cycle, instant like Chrome DevTools
+            el.style.display = "block";
+            el.style.left    = `${left}px`;
+            el.style.top     = `${top}px`;
+            el.style.width   = `${width}px`;
+            el.style.height  = `${height}px`;
+            const label = hit.resourceId || hit.contentDesc || hit.text || hit.cls || "";
+            if (inspectLabelRef.current) inspectLabelRef.current.textContent = label;
+            if (inspectSizeRef.current)  inspectSizeRef.current.textContent  = `${x2 - x1}×${y2 - y1}`;
+          } else if (el) {
+            el.style.display = "none";
           }
         }
       } else if (hoverNodeRef.current !== null) {
         hoverNodeRef.current = null;
-        setHoverNodeCss(null);
-        setHoverLabel("");
+        const el = inspectOverlayRef.current;
+        if (el) el.style.display = "none";
         onHoverNodeRef.current?.(null);
       }
     } else if (hoverNodeRef.current !== null) {
       hoverNodeRef.current = null;
-      setHoverNodeCss(null);
-      setHoverLabel("");
+      const el = inspectOverlayRef.current;
+      if (el) el.style.display = "none";
     }
 
     const drag = dragRef.current;
@@ -943,40 +962,40 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       />
 
       {/* Inspect hover highlight ─────────────────────────────────────────────
-           Gold border + translucent fill drawn over the innermost accessibility
-           node currently under the cursor. No server round-trip — computed
-           entirely from the cached dump in inspectNodesRef.                   */}
-      {inspectMode && hoverNodeCss && (
-        <div
-          className="absolute pointer-events-none"
-          style={{
-            left:   hoverNodeCss.left,
-            top:    hoverNodeCss.top,
-            width:  hoverNodeCss.width,
-            height: hoverNodeCss.height,
-            border: "2px solid #FFD700",
-            background: "rgba(255, 215, 0, 0.08)",
-            boxShadow: "0 0 0 1px rgba(0,0,0,0.15) inset",
-            transition: "left 50ms, top 50ms, width 50ms, height 50ms",
-            zIndex: 30,
-          }}
-        >
-          {/* Element label — resource-id / content-desc / class */}
-          {hoverLabel && (
-            <div style={{
-              position: "absolute", bottom: "calc(100% + 2px)", left: 0,
-              background: "#FFD700", color: "#000",
-              fontSize: 8, fontWeight: 700, fontFamily: "monospace",
-              padding: "1px 4px", borderRadius: 3,
-              whiteSpace: "nowrap", maxWidth: 220,
-              overflow: "hidden", textOverflow: "ellipsis",
-              pointerEvents: "none", zIndex: 31,
-            }}>
-              {hoverLabel}
-            </div>
-          )}
+           Chrome DevTools-style blue border drawn over the innermost
+           accessibility node under the cursor. Always rendered but hidden
+           (display:none) — direct DOM ref updates bypass React state so the
+           highlight moves instantly on every pointermove, with zero render lag.
+           No transition, no state batching delay.                             */}
+      <div
+        ref={inspectOverlayRef}
+        className="pointer-events-none"
+        style={{
+          display:    "none",
+          position:   "absolute",
+          border:     "2px solid #1a73e8",
+          background: "rgba(26,115,232,0.08)",
+          zIndex:     30,
+        }}
+      >
+        {/* Chrome-style tooltip: "ClassName · resource-id  WxH px" */}
+        <div style={{
+          position: "absolute", bottom: "calc(100% + 3px)", left: 0,
+          display: "flex", alignItems: "center", gap: 4,
+          background: "#1a73e8", color: "#fff",
+          fontSize: 9, fontWeight: 600, fontFamily: "monospace",
+          padding: "2px 6px", borderRadius: 3,
+          whiteSpace: "nowrap", maxWidth: 300,
+          overflow: "hidden", textOverflow: "ellipsis",
+          pointerEvents: "none", zIndex: 31,
+          boxShadow: "0 1px 4px rgba(0,0,0,0.4)",
+        }}>
+          <span ref={inspectLabelRef} style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis" }} />
+          <span style={{ opacity: 0.7, flexShrink: 0 }}>·</span>
+          <span ref={inspectSizeRef} style={{ opacity: 0.85, flexShrink: 0 }} />
+          <span style={{ opacity: 0.6, flexShrink: 0 }}>px</span>
         </div>
-      )}
+      </div>
 
       {/* Tap indicator dots — red = where mouse clicked, blue = where tap was sent.
            If they don't overlap, mapToPhone() has an offset bug. */}
