@@ -1942,6 +1942,12 @@ interface AutomationSettingsData {
   injectBrowsingLikePctMin: number; injectBrowsingLikePctMax: number;
   injectBrowsingShareFeedPctMin: number; injectBrowsingShareFeedPctMax: number;
   injectBrowsingShareDmPctMin: number; injectBrowsingShareDmPctMax: number;
+  // Follow Filters — profile-quality gates applied before each follow action.
+  // Not wired to execution logic yet — UI-only until the automation hooks are built.
+  followFiltersEnabled: boolean;
+  followFilterPrivateUsers: boolean;
+  followFilterEnglishSpeaking: boolean;
+  followFilterMinFollowers250: boolean;
   // Random Jitter — human-like interstitial actions fired probabilistically
   // on each cycle run. Master gate: randomJitterEnabled tickbox.
   randomJitterEnabled: boolean;
@@ -2017,6 +2023,10 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   injectBrowsingLikePctMin: 0, injectBrowsingLikePctMax: 0,
   injectBrowsingShareFeedPctMin: 0, injectBrowsingShareFeedPctMax: 0,
   injectBrowsingShareDmPctMin: 0, injectBrowsingShareDmPctMax: 0,
+  followFiltersEnabled: false,
+  followFilterPrivateUsers: false,
+  followFilterEnglishSpeaking: false,
+  followFilterMinFollowers250: false,
   randomJitterEnabled: false,
   checkNotificationsPctMin: 0, checkNotificationsPctMax: 0,
   checkNotificationsScrollsMin: 2, checkNotificationsScrollsMax: 5,
@@ -2239,6 +2249,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             injectBrowsingShareFeedPctMax: s.injectBrowsingShareFeedPctMax,
             injectBrowsingShareDmPctMin: s.injectBrowsingShareDmPctMin,
             injectBrowsingShareDmPctMax: s.injectBrowsingShareDmPctMax,
+            followFiltersEnabled: s.followFiltersEnabled,
+            followFilterPrivateUsers: s.followFilterPrivateUsers,
+            followFilterEnglishSpeaking: s.followFilterEnglishSpeaking,
+            followFilterMinFollowers250: s.followFilterMinFollowers250,
             randomJitterEnabled: s.randomJitterEnabled,
             checkNotificationsPctMin: s.checkNotificationsPctMin,
             checkNotificationsPctMax: s.checkNotificationsPctMax,
@@ -3169,6 +3183,57 @@ function AutomationSettingsPanel({
             </div>
           </div>
           </>)}
+
+          {/* ── Filters — profile-quality gates applied before each follow ── */}
+          <div className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              id="follow-filters-enabled"
+              checked={settings.followFiltersEnabled}
+              onChange={e => setSettings(s => ({ ...s, followFiltersEnabled: e.target.checked }))}
+              disabled={loading || !settings.followEnabled}
+              className="w-4 h-4 accent-primary cursor-pointer"
+            />
+            <label htmlFor="follow-filters-enabled" className={`text-sm font-semibold cursor-pointer select-none ${settings.followEnabled ? 'text-foreground' : 'text-muted-foreground'}`}>Filters</label>
+          </div>
+
+          {settings.followFiltersEnabled && (
+            <div className="flex items-center gap-6 flex-wrap pl-1">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="filter-private-users"
+                  checked={settings.followFilterPrivateUsers}
+                  onChange={e => setSettings(s => ({ ...s, followFilterPrivateUsers: e.target.checked }))}
+                  disabled={loading}
+                  className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                />
+                <label htmlFor="filter-private-users" className="text-xs text-muted-foreground cursor-pointer select-none">Private Users</label>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="filter-english-speaking"
+                  checked={settings.followFilterEnglishSpeaking}
+                  onChange={e => setSettings(s => ({ ...s, followFilterEnglishSpeaking: e.target.checked }))}
+                  disabled={loading}
+                  className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                />
+                <label htmlFor="filter-english-speaking" className="text-xs text-muted-foreground cursor-pointer select-none">English Speaking</label>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="filter-min-followers-250"
+                  checked={settings.followFilterMinFollowers250}
+                  onChange={e => setSettings(s => ({ ...s, followFilterMinFollowers250: e.target.checked }))}
+                  disabled={loading}
+                  className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                />
+                <label htmlFor="filter-min-followers-250" className="text-xs text-muted-foreground cursor-pointer select-none">250 Followers+</label>
+              </div>
+            </div>
+          )}
         </div>}
 
         {/* ── Random Jitter — probabilistic human-like actions each cycle ─ */}

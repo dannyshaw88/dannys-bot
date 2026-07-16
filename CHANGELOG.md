@@ -4,6 +4,30 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.642] — 2026-07-16
+
+### Added
+
+- **Follow Tool → Filters section (UI-only, wired up later)**
+
+  A new **Filters** tickbox has been added directly below the Inject Browsing settings block inside the Follow Users tool. When ticked, three filter checkboxes appear on a single row:
+
+  | Checkbox | What it will do |
+  |---|---|
+  | **Private Users** | Only follow accounts whose profile is set to private |
+  | **English Speaking** | Only follow accounts that appear to post in English |
+  | **250 Followers+** | Only follow accounts with at least 250 followers |
+
+  All three checkboxes are wired into the settings schema and persisted to the database with the rest of the Follow settings — so whatever you tick is saved and will survive app restarts. The actual execution-time filtering logic (checking the profile before following) is not implemented yet; that will be wired up in a separate task.
+
+  **New settings fields added:**
+  - `followFiltersEnabled` — master gate tickbox
+  - `followFilterPrivateUsers` — private-account filter flag
+  - `followFilterEnglishSpeaking` — English-language filter flag
+  - `followFilterMinFollowers250` — 250-follower minimum filter flag
+
+---
+
 ## [1.1.641] — 2026-07-16
 
 ### Changed
