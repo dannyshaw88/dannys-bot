@@ -116,6 +116,7 @@ function Router() {
       <Route path="/browser/:id" component={StandaloneBrowserPage} />
       <Route path="/bulk-import"><Redirect to="/settings" /></Route>
       <Route path="/mobile" component={MobileDevicesPage} />
+      <Route path="/mobile/farm/:serial" component={MobilePage} />
       <Route path="/mobile/farm" component={MobilePage} />
       <Route path="/trust-scores" component={TrustScoresPage} />
       <Route path="/trust-scores/:trustScoreId" component={TrustScoreDetailPage} />

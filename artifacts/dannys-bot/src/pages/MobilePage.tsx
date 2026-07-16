@@ -3,6 +3,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, type ReactNode } from "react";
+import { useParams } from "wouter";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -4128,6 +4129,12 @@ const LOG_MAX_LINES = 500;
 const BOT_TAP_RE = /tapp(?:ing|ed)[^\n(]*\((\d+),\s*(\d+)\)/i;
 
 export function MobilePage() {
+  // When navigated from the Phone Farm grid (/mobile/farm/:serial), only this
+  // phone's serial is shown. When navigated directly (/mobile/farm with no
+  // param) all connected phones are shown as before.
+  const params = useParams<{ serial?: string }>();
+  const targetSerial = params.serial ? decodeURIComponent(params.serial) : null;
+
   const [data,    setData]    = useState<PhonesResponse | null>(null);
   const [error,   setError]   = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -4217,7 +4224,11 @@ export function MobilePage() {
     return () => clearInterval(id);
   }, [refresh]);
 
-  const phones = data?.phones ?? [];
+  const allPhones = data?.phones ?? [];
+  // When a specific serial is requested (from Phone Farm grid), show only that phone.
+  const phones = targetSerial
+    ? allPhones.filter(p => p.serial === targetSerial)
+    : allPhones;
   const slots: (UsbPhone | null)[] = Array.from({ length: TOTAL_SLOTS }, (_, i) => phones[i] ?? null);
   const activeSerial = slots[0]?.serial ?? null;
   // Points at whichever rendered PhoneSlot corresponds to activeSerial, so

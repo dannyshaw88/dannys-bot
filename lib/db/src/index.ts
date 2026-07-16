@@ -270,6 +270,16 @@ sqlite.exec(`
     endpoint_count INTEGER DEFAULT 0,
     endpoint_snapshot TEXT DEFAULT '[]'
   );
+
+  CREATE TABLE IF NOT EXISTS phone_farm_devices (
+    slot_index INTEGER PRIMARY KEY,
+    serial TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL DEFAULT '',
+    model TEXT NOT NULL DEFAULT '',
+    manufacturer TEXT NOT NULL DEFAULT '',
+    android_version TEXT NOT NULL DEFAULT '',
+    added_at TEXT NOT NULL
+  );
 `);
 
 // Seed owner license account if not already present

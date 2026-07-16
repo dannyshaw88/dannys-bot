@@ -4,6 +4,43 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.640] — 2026-07-16
+
+### Added
+
+- **Phone Farm multi-device grid — registered device slots with Add Device flow**
+
+  The Phone Farm page has been completely reworked to support multiple physical phones as isolated, independently-controlled devices.
+
+  **Grid behaviour:**
+  - Only slots up to the next available one are visible — no greyed-out empty rows.
+  - Each registered device occupies a numbered slot (Slot 1 = row 1 / cell 1, Slot 2 = row 1 / cell 2, Slot 3 = row 1 / cell 3, Slot 4 = row 2 / cell 1, etc.).
+  - The first empty slot after the last registered device shows an **Add Device** card.
+  - All subsequent slots are hidden until a device is added.
+  - Clicking a device card opens that phone's full control page (`/mobile/farm/:serial`).
+  - A trash icon appears on hover to remove a device from a slot.
+
+  **Add Device flow:**
+  - Clicking Add Device opens an inline panel on the right side of the grid.
+  - The panel polls `/api/mobile/usb-phones` every 3 s and lists all connected phones that are not yet registered (filtering out already-assigned serials).
+  - Ready phones (ADB state `device`) show a green icon and are clickable to assign.
+  - Unauthorized/offline phones show an amber warning — user must accept the USB debugging dialog.
+  - Clicking a phone registers it to the next available slot via POST `/api/mobile/farm-devices`.
+
+  **Slot-to-phone tracking:**
+  Slots are bound to the phone's **ADB serial number** (hardware-burned into device firmware), not to the USB port. Swapping USB cables around does not reassign or confuse slots — the serial travels with the physical phone, not the wire. The mapping is persisted in the new `phone_farm_devices` SQLite table (survives restarts).
+
+  **Device isolation:**
+  Each registered phone navigates to `/mobile/farm/:serial`. The Mobile control page now reads the serial from the route parameter and filters its ADB polling to only that device — the two phones have completely independent mirror streams, automation cycles, settings, and log panels.
+
+- **`phone_farm_devices` DB table** — persists slot_index → serial mappings with model, manufacturer, and Android version metadata.
+
+- **`GET /api/mobile/farm-devices`** — list all registered farm devices ordered by slot.
+- **`POST /api/mobile/farm-devices`** — register a phone serial to the next available slot.
+- **`DELETE /api/mobile/farm-devices/:slotIndex`** — remove a device from a slot.
+
+---
+
 ## [1.1.639] — 2026-07-16
 
 ### Changed
