@@ -1,200 +1,296 @@
 /**
  * fixAiSlop.ts — Strip AI-detectable signals from images before posting.
  *
- * Online "AI watermark remover" tools reliably strip all known watermark
- * types (C2PA metadata, SynthID, DCT-domain steganography) at the cost of
- * some image quality. The quality loss is an inevitable side effect of the
- * technique that actually works — spatial decimation (significant downscale
- * followed by upscale). This module replicates that approach.
+ * ── What actually works (learned from unmadewithai.com) ──────────────────────
+ * Instagram's "Made with AI" label is driven primarily by C2PA metadata —
+ * a cryptographic manifest embedded in the file's binary structure:
  *
- * ──────────────────────────────────────────────────────────────────────────
- * VECTOR 1 — Metadata (C2PA / EXIF / XMP / IPTC)
- * ──────────────────────────────────────────────────────────────────────────
- * ChatGPT/DALL-E images embed C2PA cryptographic manifests in JPEG APP11
- * (JUMBF container) plus EXIF/XMP software tags proving AI origin.
+ *   • JPEG  — APP11 segment (marker 0xFFEB) whose payload starts with "JP"
+ *             (JUMBF container, per ISO 19566-5).
+ *   • PNG   — "caBX" ancillary chunk (JUMBF container embedded in PNG).
+ *   • WebP  — "C2PA" or "JUMB" RIFF chunk inside the RIFF container.
  *
- * Fix: decode to a raw PNG buffer first (destroys all JPEG APP segments
- * including APP11/C2PA/JUMBF). withMetadata(false) on all subsequent
- * operations prevents re-injection.
+ * The reliable fix is binary-level chunk/segment removal — walk the file
+ * structure, excise only the C2PA chunks, leave all pixel data untouched.
+ * No downscaling, no noise injection, no recompression artefacts.
+ * This is what unmadewithai.com does, and it passes Instagram detection.
  *
- * ──────────────────────────────────────────────────────────────────────────
- * VECTOR 2 — Invisible / steganographic watermarks (SynthID, DCT)
- * ──────────────────────────────────────────────────────────────────────────
- * SynthID (used by ChatGPT/DALL-E and Gemini) is a spread-spectrum signal
- * embedded across all pixel values. It is designed to survive JPEG
- * compression, colour adjustments, and moderate cropping.
+ * After binary stripping we do ONE light Sharp pass (withMetadata:false) to
+ * remove any residual EXIF / XMP / ICC metadata and produce the final JPEG.
+ * Quality is kept high (85–92) so the image looks clean on-screen; Instagram
+ * recompresses everything on ingest anyway.
  *
- * What actually defeats it: spatial decimation. Downscaling to 50–70% of
- * the original resolution with bilinear/lanczos interpolation replaces every
- * pixel with a weighted average of its neighbours. The spread-spectrum
- * detector integrates signal across the image against a fixed spatial key —
- * after decimation the signal's spatial layout no longer matches that key.
- * Upscaling back to the original size via bicubic/lanczos compounds the
- * disruption (the upsampled values are further blends). This is exactly what
- * commercial "remove AI watermark" tools do, and it is why they produce
- * slightly softer images.
- *
- * Additional layers:
- *  a. Per-pixel crypto-random noise ±4–8/channel injected into raw pixel
- *     buffer before downscale — adds incoherent values the correlator must
- *     average against, breaking SNR independently of the spatial step.
- *  b. Downscale to 50–65% of original (random per image, lanczos3).
- *  c. Upscale back to original dimensions (lanczos3). Every pixel is now
- *     a multi-neighbour interpolated blend — spatial key is destroyed.
- *  d. Sub-pixel Gaussian blur σ 0.3–0.7 attenuates any residual HF components.
- *  e. HSL micro-jitter (hue ±2°, sat ±3%, brightness ±0.2%).
- *  f. First JPEG encode quality 82–90 — destroys DCT steganography.
- *  g. Second JPEG encode quality 65–75 — second independent quantisation
- *     pass; lower quality than the first to maximise DCT disruption.
- *     Instagram recompresses uploads regardless, so further loss is negligible.
- *  h. Small symmetric 1–3 px random edge crops — breaks identical-frame
- *     fingerprinting across repeated posts of the same source image.
+ * Previous approach (heavy downscale → upscale → dual JPEG) was retired
+ * because: (a) it did not reliably pass detection, and (b) it introduced
+ * visible quality loss that made images look worse than the binary-strip path.
  */
 
 import { randomBytes } from "crypto";
-import { readFile, unlink } from "fs/promises";
+import { readFile, unlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Binary C2PA / JUMBF strippers
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
- * Processes an image to strip AI-detectable signals and returns the path of
- * a processed temp file. If the input path is returned unchanged, either
- * sharp was unavailable or processing failed — no temp file was created.
+ * Strips JUMBF/C2PA containers from a JPEG buffer.
+ *
+ * JPEG structure: FF D8 [segments…] FF DA [entropy-coded data] FF D9
+ * Each segment: [FF][marker][2-byte big-endian length incl. the 2 len bytes][data]
+ *
+ * APP11 (FF EB) whose payload begins with 0x4A 0x50 ("JP") is the JUMBF
+ * container used by C2PA. We skip those segments and copy everything else.
+ */
+function stripJpegC2pa(buf: Buffer): Buffer {
+  if (buf.length < 2 || buf[0] !== 0xff || buf[1] !== 0xd8) return buf;
+
+  const out: number[] = [0xff, 0xd8];
+  let removed = 0;
+  let off = 2;
+
+  while (off < buf.length - 1) {
+    if (buf[off] !== 0xff) {
+      // Shouldn't happen in a valid JPEG; copy the rest and stop
+      for (let i = off; i < buf.length; i++) out.push(buf[i]);
+      break;
+    }
+
+    const marker = buf.readUInt16BE(off);
+
+    // SOI / EOI / RST markers — no length field
+    if (
+      marker === 0xffd8 || // SOI (already handled)
+      marker === 0xffd9 || // EOI
+      (marker >= 0xffd0 && marker <= 0xffd7) // RST0–RST7
+    ) {
+      out.push(0xff, marker & 0xff);
+      off += 2;
+      if (marker === 0xffd9) break;
+      continue;
+    }
+
+    // SOS — rest of the buffer is entropy-coded; copy verbatim
+    if (marker === 0xffda) {
+      for (let i = off; i < buf.length; i++) out.push(buf[i]);
+      break;
+    }
+
+    // All other segments have a 2-byte length
+    if (off + 3 >= buf.length) break;
+    const segLen = buf.readUInt16BE(off + 2); // includes the 2 length bytes
+    const segEnd = off + 2 + segLen; // exclusive
+
+    // APP11 (FF EB) — check for JUMBF/C2PA "JP" prefix
+    if (marker === 0xffeb && segLen >= 4) {
+      const p0 = buf[off + 4]; // first data byte (after FF EB LL LL)
+      const p1 = buf[off + 5];
+      if (p0 === 0x4a && p1 === 0x50) {
+        // "JP" — this is a JUMBF/C2PA segment; skip it
+        removed++;
+        off = Math.min(segEnd, buf.length);
+        continue;
+      }
+    }
+
+    // Copy segment as-is
+    for (let i = off; i < Math.min(segEnd, buf.length); i++) out.push(buf[i]);
+    off = Math.min(segEnd, buf.length);
+  }
+
+  if (removed > 0) {
+    console.log(`[fixAiSlop] JPEG: removed ${removed} JUMBF/C2PA APP11 segment(s)`);
+  }
+  return Buffer.from(out);
+}
+
+/**
+ * Strips JUMBF/C2PA containers from a PNG buffer.
+ *
+ * PNG structure: 8-byte signature + [chunks…]
+ * Each chunk: [4-byte big-endian data length][4-byte type][data][4-byte CRC]
+ *
+ * "caBX" is the chunk type used for JUMBF containers (C2PA).
+ */
+function stripPngC2pa(buf: Buffer): Buffer {
+  const PNG_SIG = [137, 80, 78, 71, 13, 10, 26, 10];
+  if (buf.length < 8) return buf;
+  for (let i = 0; i < 8; i++) {
+    if (buf[i] !== PNG_SIG[i]) return buf;
+  }
+
+  const out: number[] = [...PNG_SIG];
+  let removed = 0;
+  let off = 8;
+
+  while (off + 12 <= buf.length) {
+    const dataLen = buf.readUInt32BE(off);
+    const chunkType = buf.slice(off + 4, off + 8).toString("ascii");
+    const totalSize = 4 + 4 + dataLen + 4; // len + type + data + CRC
+
+    if (chunkType === "caBX") {
+      // JUMBF/C2PA chunk — skip
+      removed++;
+      off += totalSize;
+      continue;
+    }
+
+    // Copy chunk as-is
+    const end = Math.min(off + totalSize, buf.length);
+    for (let i = off; i < end; i++) out.push(buf[i]);
+
+    if (chunkType === "IEND") break;
+    off += totalSize;
+  }
+
+  if (removed > 0) {
+    console.log(`[fixAiSlop] PNG: removed ${removed} caBX JUMBF/C2PA chunk(s)`);
+  }
+  return Buffer.from(out);
+}
+
+/**
+ * Strips C2PA containers from a WebP (RIFF) buffer.
+ *
+ * RIFF structure: "RIFF"[4-byte LE file size]"WEBP"[chunks…]
+ * Each chunk: [4-byte type][4-byte LE data size][data (padded to even)]
+ *
+ * Chunks to remove: "C2PA", "JUMB" (JUMBF container in WebP).
+ */
+function stripWebpC2pa(buf: Buffer): Buffer {
+  if (buf.length < 12) return buf;
+  const riff = buf.slice(0, 4).toString("ascii");
+  const webp = buf.slice(8, 12).toString("ascii");
+  if (riff !== "RIFF" || webp !== "WEBP") return buf;
+
+  const C2PA_CHUNKS = new Set(["C2PA", "JUMB"]);
+  const bodyChunks: Buffer[] = [];
+  let removed = 0;
+  let off = 12;
+
+  while (off + 8 <= buf.length) {
+    const type = buf.slice(off, off + 4).toString("ascii");
+    const dataSize = buf.readUInt32LE(off + 4);
+    const paddedSize = dataSize + (dataSize & 1); // RIFF chunks are word-aligned
+    const chunkEnd = off + 8 + paddedSize;
+
+    if (C2PA_CHUNKS.has(type)) {
+      removed++;
+      off = Math.min(chunkEnd, buf.length);
+      continue;
+    }
+
+    bodyChunks.push(buf.slice(off, Math.min(chunkEnd, buf.length)));
+    off = Math.min(chunkEnd, buf.length);
+  }
+
+  if (removed === 0) return buf;
+
+  console.log(`[fixAiSlop] WebP: removed ${removed} C2PA/JUMB chunk(s)`);
+
+  // Rebuild RIFF container
+  const body = Buffer.concat(bodyChunks);
+  const out = Buffer.alloc(12 + body.length);
+  out.write("RIFF", 0, "ascii");
+  out.writeUInt32LE(4 + body.length, 4); // file size field
+  out.write("WEBP", 8, "ascii");
+  body.copy(out, 12);
+  return out;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Format detection
+// ─────────────────────────────────────────────────────────────────────────────
+
+type ImageFormat = "jpeg" | "png" | "webp" | "unknown";
+
+function detectFormat(buf: Buffer): ImageFormat {
+  if (buf.length < 4) return "unknown";
+  if (buf[0] === 0xff && buf[1] === 0xd8) return "jpeg";
+  if (
+    buf[0] === 137 &&
+    buf[1] === 80 &&
+    buf[2] === 78 &&
+    buf[3] === 71
+  )
+    return "png";
+  if (
+    buf.slice(0, 4).toString("ascii") === "RIFF" &&
+    buf.slice(8, 12).toString("ascii") === "WEBP"
+  )
+    return "webp";
+  return "unknown";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Public API
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Strips AI-detectable signals from an image file and returns the path of a
+ * processed temp file. If the input cannot be processed, the original path is
+ * returned unchanged and no temp file is created.
  *
  * The caller MUST call cleanupAiSlopTemp() after using the result.
  */
 export async function fixAiSlop(inputPath: string): Promise<string> {
-  let sharp: any;
-  try {
-    sharp = (await import("sharp")).default;
-  } catch {
-    return inputPath; // sharp unavailable — pass through unmodified
-  }
-
   const tmp = join(
     tmpdir(),
     `equinox_fixaislop_${randomBytes(8).toString("hex")}.jpg`,
   );
 
   try {
-    const buf = await readFile(inputPath);
+    const raw = await readFile(inputPath);
+    const fmt = detectFormat(raw);
 
-    // ── Step 1: decode → raw PNG (strips ALL JPEG APP segments, incl. C2PA) ─
-    const pngBuf: Buffer = await sharp(buf)
-      .withMetadata(false)
-      .png({ compressionLevel: 1, force: true })
-      .toBuffer();
-
-    // ── Step 2: get dimensions ────────────────────────────────────────────
-    const meta = await sharp(pngBuf).metadata();
-    const origW = meta.width ?? 0;
-    const origH = meta.height ?? 0;
-    const channels = (meta.channels ?? 3) as 3 | 4;
-
-    if (origW < 10 || origH < 10) {
-      await unlink(tmp).catch(() => {});
-      return inputPath;
+    // ── Step 1: Binary C2PA / JUMBF strip ──────────────────────────────────
+    // Walk the file structure and excise only the C2PA metadata containers.
+    // Pixels are completely untouched at this stage.
+    let stripped: Buffer;
+    if (fmt === "jpeg") {
+      stripped = stripJpegC2pa(raw);
+    } else if (fmt === "png") {
+      stripped = stripPngC2pa(raw);
+    } else if (fmt === "webp") {
+      stripped = stripWebpC2pa(raw);
+    } else {
+      // Unknown format — pass through
+      stripped = raw;
     }
 
-    // ── Step 3: per-pixel random noise injection into raw pixel buffer ─────
-    const rawBuf: Buffer = await sharp(pngBuf)
-      .withMetadata(false)
-      .raw()
-      .toBuffer();
-
-    const noiseAmp = 4 + Math.floor(Math.random() * 5); // 4–8 per channel
-    const noiseBytes = randomBytes(rawBuf.length);
-    for (let i = 0; i < rawBuf.length; i++) {
-      if (channels === 4 && (i & 3) === 3) continue; // skip alpha
-      const offset = Math.round((noiseBytes[i] / 255) * 2 * noiseAmp) - noiseAmp;
-      rawBuf[i] = Math.max(0, Math.min(255, rawBuf[i] + offset));
+    // ── Step 2: Sharp pass — strip residual EXIF / XMP / ICC + JPEG encode ─
+    // withMetadata(false) removes APP1/EXIF, XMP, ICC profiles.
+    // A single JPEG encode at quality 85–92 is enough to clean up any
+    // remaining metadata while keeping visible quality high.
+    let sharp: any;
+    try {
+      sharp = (await import("sharp")).default;
+    } catch {
+      // Sharp unavailable — write binary-stripped file and return
+      await writeFile(tmp, stripped);
+      return tmp;
     }
 
-    const noisedPng: Buffer = await sharp(rawBuf, {
-      raw: { width: origW, height: origH, channels },
-    })
+    const quality = 85 + Math.floor(Math.random() * 8); // 85–92
+    await sharp(stripped)
       .withMetadata(false)
-      .png({ compressionLevel: 1, force: true })
-      .toBuffer();
-
-    // ── Step 4: spatial decimation — the primary watermark destroyer ───────
-    // Downscale to 50–65 % (randomised), then upscale back to original.
-    // This replaces every pixel with a multi-neighbour interpolated blend,
-    // destroying the spatial layout that spread-spectrum detectors rely on.
-    // This is the technique "AI watermark remover" tools use; the slight
-    // softness in output is its unavoidable side-effect.
-    const scalePct = 0.50 + Math.random() * 0.15; // 0.50 – 0.65
-    const downW = Math.max(8, Math.round(origW * scalePct));
-    const downH = Math.max(8, Math.round(origH * scalePct));
-
-    const decimatedBuf: Buffer = await sharp(noisedPng)
-      .withMetadata(false)
-      .resize(downW, downH, { kernel: "lanczos3", fastShrinkOnLoad: false })
-      .resize(origW, origH, { kernel: "lanczos3" })
-      .png({ compressionLevel: 1, force: true })
-      .toBuffer();
-
-    // ── Randomised processing parameters ─────────────────────────────────
-
-    // Sub-pixel blur σ 0.3–0.7
-    const blurSigma = parseFloat((0.3 + Math.random() * 0.4).toFixed(2));
-
-    // Hue rotation: ±2 degrees
-    const hueDeg = Math.floor(Math.random() * 5) - 2;
-
-    // Saturation multiplier: 0.97–1.03
-    const satMod = parseFloat((0.97 + Math.random() * 0.06).toFixed(3));
-
-    // Brightness multiplier: 0.998–1.002
-    const brightnessMod = parseFloat((0.998 + Math.random() * 0.004).toFixed(4));
-
-    // Small symmetric edge crops: 1–3 px per side
-    const cropL = 1 + Math.floor(Math.random() * 3);
-    const cropT = 1 + Math.floor(Math.random() * 3);
-    const cropR = 1 + Math.floor(Math.random() * 3);
-    const cropB = 1 + Math.floor(Math.random() * 3);
-    const cropW = origW - cropL - cropR;
-    const cropH = origH - cropT - cropB;
-
-    // First JPEG quality: 82–90
-    const quality1 = 82 + Math.floor(Math.random() * 9);
-
-    // Second JPEG quality: 65–75
-    const quality2 = 65 + Math.floor(Math.random() * 11);
-
-    // ── Step 5: first JPEG encode — crop + blur + colour jitter ──────────
-    const pass1Buf: Buffer = cropW > 100 && cropH > 100
-      ? await sharp(decimatedBuf)
-          .withMetadata(false)
-          .extract({ left: cropL, top: cropT, width: cropW, height: cropH })
-          .blur(blurSigma)
-          .modulate({ brightness: brightnessMod, hue: hueDeg, saturation: satMod })
-          .jpeg({ quality: quality1, chromaSubsampling: "4:2:0", force: true })
-          .toBuffer()
-      : await sharp(decimatedBuf)
-          .withMetadata(false)
-          .blur(blurSigma)
-          .modulate({ brightness: brightnessMod, hue: hueDeg, saturation: satMod })
-          .jpeg({ quality: quality1, chromaSubsampling: "4:2:0", force: true })
-          .toBuffer();
-
-    // ── Step 6: second JPEG encode — different quantisation table ─────────
-    await sharp(pass1Buf)
-      .withMetadata(false)
-      .jpeg({ quality: quality2, chromaSubsampling: "4:2:0", force: true })
+      .jpeg({ quality, chromaSubsampling: "4:2:0", force: true })
       .toFile(tmp);
 
+    console.log(`[fixAiSlop] done — format=${fmt} jpegQuality=${quality}`);
     return tmp;
-  } catch {
+  } catch (err) {
+    console.error("[fixAiSlop] failed:", err);
     await unlink(tmp).catch(() => {});
     return inputPath;
   }
 }
 
 /**
- * Deletes the temp file produced by fixAiSlop, but only if it is different
- * from the original input path (i.e. processing actually produced a new file).
- * Safe to call even when fixAiSlop fell back to returning the original path.
+ * Deletes the temp file produced by fixAiSlop, but only if it differs from
+ * the original input path. Safe to call even when fixAiSlop fell back to
+ * returning the original path.
  */
 export async function cleanupAiSlopTemp(
   tmpPath: string,
