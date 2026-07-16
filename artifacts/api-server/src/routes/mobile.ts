@@ -4557,6 +4557,54 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
+  // ── Inspect All Nodes ─────────────────────────────────────────────────────
+  // Returns every node in the current UI dump so the frontend can do all
+  // hover hit-testing client-side — one fetch on inspect-mode entry, zero
+  // server calls on hover (Chrome-DevTools F12 style).
+  app.get("/api/mobile/devices/:serial/inspect-all-nodes", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const xml = await android.dumpUi(serial);
+      if (!xml || xml.length < 200) {
+        res.json({ ok: false, nodes: [], error: "Empty dump — is the phone awake and unlocked?" });
+        return;
+      }
+      const rootM = xml.match(/bounds="\[0,0\]\[(\d+),(\d+)\]"/);
+      const W = rootM ? parseInt(rootM[1]) : 0;
+      const H = rootM ? parseInt(rootM[2]) : 0;
+      interface AllNode {
+        index: number; cls: string; resourceId: string; contentDesc: string; text: string;
+        bounds: string; boundsRaw: [number,number,number,number];
+        center: { x: number; y: number }; clickable: boolean; area: number;
+      }
+      const nodes: AllNode[] = [];
+      const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+      let m2: RegExpExecArray | null;
+      let idx = 0;
+      while ((m2 = nodeRe.exec(xml)) !== null) {
+        const attrs = m2[1];
+        const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+        if (!bm) continue;
+        const [x1, y1, x2, y2] = [bm[1], bm[2], bm[3], bm[4]].map(Number);
+        if (x2 - x1 < 2 || y2 - y1 < 2) continue;
+        const get = (attr: string) => { const a = attrs.match(new RegExp(`${attr}="([^"]*)"`)); return a ? a[1] : ""; };
+        nodes.push({
+          index: idx++,
+          cls:         get("class").replace(/^.*\./, ""),
+          resourceId:  get("resource-id").replace(/^[^/]+\//, ""),
+          contentDesc: get("content-desc"),
+          text:        get("text"),
+          bounds:      `[${x1},${y1}][${x2},${y2}]`,
+          boundsRaw:   [x1, y1, x2, y2],
+          center:      { x: Math.round((x1+x2)/2), y: Math.round((y1+y2)/2) },
+          clickable:   get("clickable") === "true",
+          area:        (x2-x1) * (y2-y1),
+        });
+      }
+      res.json({ ok: true, nodes, screenW: W, screenH: H });
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
+
   // ── Element Inspector ─────────────────────────────────────────────────────
   // Like Chrome DevTools F12 — click a point on the phone mirror and get back
   // every accessibility node whose bounds contain that point, sorted from most
