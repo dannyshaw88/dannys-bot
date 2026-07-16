@@ -1210,9 +1210,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     return { w, h };
   }
 
-  // Tracks the last recipient tapped per device so consecutive runs (across
-  // all tools) never land on the same person. Keyed by serial.
-  const lastPickedRecipient = new Map<string, { x: number; y: number }>();
+  // Each tool tracks its own last DM recipient independently — no cross-tool
+  // sharing so that changing one tool's Share-to-DM code can never affect
+  // another tool's recipient state. All four Maps are keyed by serial.
+  const _viewFeedLastDmRecipient        = new Map<string, { x: number; y: number }>();
+  const _viewStoriesLastDmRecipient     = new Map<string, { x: number; y: number }>();
+  const _viewReelsLastDmRecipient       = new Map<string, { x: number; y: number }>();
+  const _injectBrowsingLastDmRecipient  = new Map<string, { x: number; y: number }>();
 
   // Shared by the standalone `/check-feed` route and the full
   // `/automation-cycle` route below — the scroll/like/share loop.
@@ -1534,11 +1538,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     logger.warn({ serial }, "[check-feed] no recipient found — closed share sheet without sending");
                     onLog?.(`${_cfPfx}: share skipped — no recipient avatars found (closed without sending)`);
                   } else {
-                    const _cfLast = lastPickedRecipient.get(serial);
+                    const _cfLast = _viewFeedLastDmRecipient.get(serial);
                     const _cfPool = _cfLast ? _cfRecipients.filter(r => !(r.x === _cfLast.x && r.y === _cfLast.y)) : _cfRecipients;
                     const _cfCands = _cfPool.length > 0 ? _cfPool : _cfRecipients;
                     const _cfPick = _cfCands[Math.floor(Math.random() * _cfCands.length)];
-                    lastPickedRecipient.set(serial, { x: _cfPick.x, y: _cfPick.y });
+                    _viewFeedLastDmRecipient.set(serial, { x: _cfPick.x, y: _cfPick.y });
                     onLog?.(`${_cfPfx}: tapping recipient at (${_cfPick.x},${_cfPick.y})${(_cfPick as any).name ? ` (${(_cfPick as any).name})` : ""}`);
                     await android.tap(serial, _cfPick.x, _cfPick.y);
                     await sleepOrAbort(serial, 800);
@@ -2041,11 +2045,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             logger.warn({ serial, story: s + 1 }, "[view-stories] no recipient found — closed share sheet without sending");
             onLog?.(`Story ${s + 1}: share skipped — no recipient avatars found in sheet (closed without sending)`);
           } else {
-            const _stLast = lastPickedRecipient.get(serial);
+            const _stLast = _viewStoriesLastDmRecipient.get(serial);
             const _stPool = _stLast ? _stRecipients.filter(r => !(r.x === _stLast.x && r.y === _stLast.y)) : _stRecipients;
             const _stCands = _stPool.length > 0 ? _stPool : _stRecipients;
             const _stPick = _stCands[Math.floor(Math.random() * _stCands.length)];
-            lastPickedRecipient.set(serial, { x: _stPick.x, y: _stPick.y });
+            _viewStoriesLastDmRecipient.set(serial, { x: _stPick.x, y: _stPick.y });
             onLog?.(`Story ${s + 1}: tapping recipient at (${_stPick.x},${_stPick.y})${(_stPick as any).name ? ` (${(_stPick as any).name})` : ""}`);
             await android.tap(serial, _stPick.x, _stPick.y);
             await sleepOrAbort(serial, 200); // brief pause for selection to register
@@ -2275,18 +2279,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     logger.warn({ serial }, "[view-reels] no recipient found — closed share sheet without sending");
                     onLog?.(`${_vrPfx}: share skipped — no recipient avatars found (closed without sending)`);
                   } else {
-                    const _vrLast = lastPickedRecipient.get(serial);
+                    const _vrLast = _viewReelsLastDmRecipient.get(serial);
                     const _vrPool = _vrLast ? _vrRecipients.filter(r => !(r.x === _vrLast.x && r.y === _vrLast.y)) : _vrRecipients;
                     const _vrCands = _vrPool.length > 0 ? _vrPool : _vrRecipients;
                     const _vrPick = _vrCands[Math.floor(Math.random() * _vrCands.length)];
-                    lastPickedRecipient.set(serial, { x: _vrPick.x, y: _vrPick.y });
+                    _viewReelsLastDmRecipient.set(serial, { x: _vrPick.x, y: _vrPick.y });
                     onLog?.(`${_vrPfx}: tapping recipient at (${_vrPick.x},${_vrPick.y})${(_vrPick as any).name ? ` (${(_vrPick as any).name})` : ""}`);
                     await android.tap(serial, _vrPick.x, _vrPick.y);
                     await sleepOrAbort(serial, 800);
                     const _vrIsOpen = async () => {
                       const _x = await android.dumpUi(serial).catch(() => "");
+                      // "Add to story" removed — home-feed story tray has this label
+                      // and causes a false-positive after the sheet closes.
                       return _x.includes("direct_private_share") || _x.includes("grid_view_pog_avatar_view") ||
-                             _x.includes("android.widget.EditText") || _x.includes("Copy link") || _x.includes("Add to story");
+                             _x.includes("android.widget.EditText") || _x.includes("Copy link");
                     };
                     // Always do a fresh lookup after recipient tap — the Send button
                     // (direct_send_button_multi_select) only appears once a recipient is
@@ -3355,18 +3361,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             logger.warn({ serial }, "[inject-browsing] no recipient found — closed share sheet without sending");
             onLog?.("Inject Browsing: share skipped — no recipient avatars found (closed without sending)");
           } else {
-            const _ibLast = lastPickedRecipient.get(serial);
+            const _ibLast = _injectBrowsingLastDmRecipient.get(serial);
             const _ibPool = _ibLast ? _ibRecipients.filter(r => !(r.x === _ibLast.x && r.y === _ibLast.y)) : _ibRecipients;
             const _ibCands = _ibPool.length > 0 ? _ibPool : _ibRecipients;
             const _ibPick = _ibCands[Math.floor(Math.random() * _ibCands.length)];
-            lastPickedRecipient.set(serial, { x: _ibPick.x, y: _ibPick.y });
+            _injectBrowsingLastDmRecipient.set(serial, { x: _ibPick.x, y: _ibPick.y });
             onLog?.(`Inject Browsing: tapping recipient at (${_ibPick.x},${_ibPick.y})${(_ibPick as any).name ? ` (${(_ibPick as any).name})` : ""}`);
             await android.tap(serial, _ibPick.x, _ibPick.y);
             await sleepOrAbort(serial, 800);
             const _ibIsOpen = async () => {
               const _x = await android.dumpUi(serial).catch(() => "");
+              // "Add to story" removed — home-feed story tray has this label
+              // and causes a false-positive after the sheet closes.
               return _x.includes("direct_private_share") || _x.includes("grid_view_pog_avatar_view") ||
-                     _x.includes("android.widget.EditText") || _x.includes("Copy link") || _x.includes("Add to story");
+                     _x.includes("android.widget.EditText") || _x.includes("Copy link");
             };
             const _ibSb = _ibSendBtn0 ?? await android.findButtonByLabel(serial, "Send").catch(() => null);
             if (_ibSb) {

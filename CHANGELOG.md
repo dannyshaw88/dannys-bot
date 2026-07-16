@@ -4,6 +4,16 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.631] — 2026-07-16
+
+### Fixed
+
+- **Full isolation of Share-to-DM recipient state across all tools** — A single shared `lastPickedRecipient` Map at the outer handler scope was read and written by View Feed, View Stories, View Reels, and Inject Browsing. Any edit to one tool's DM code could silently affect another tool's recipient deduplication. Split into four completely separate, privately-named Maps (`_viewFeedLastDmRecipient`, `_viewStoriesLastDmRecipient`, `_viewReelsLastDmRecipient`, `_injectBrowsingLastDmRecipient`), each owned exclusively by its own tool block and invisible to all others.
+
+- **View Reels + Inject Browsing — "Add to story" false-positive in sheet-open check** — `_vrIsOpen` and `_ibIsOpen` both contained the same "Add to story" signal that was fixed for View Feed in v1.1.630. Home-feed story tray badges carry `desc="Add to story"` and were causing both tools to treat a closed sheet as still-open, log a false "sheet still open" warning, and press Back after a successful DM send. Removed from both checks; remaining signals are unique to the share sheet.
+
+---
+
 ## [1.1.630] — 2026-07-16
 
 ### Fixed
