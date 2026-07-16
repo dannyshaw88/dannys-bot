@@ -4,6 +4,16 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.624] — 2026-07-16
+
+### Fixed
+- **Share-to-DM: Send button now reliably found and tapped after recipient selection** — the 200ms wait between tapping a recipient and searching for the Send button was far too short. On MIUI devices the recipient avatar animates a blue checkmark selection state before Instagram renders the Send button in the accessibility tree, a process that takes 600–900ms. Fixed:
+  1. Wait after recipient tap increased from 200ms → 800ms in `shareCurrentPostViaDm` so the first scan is more likely to succeed without any retry.
+  2. `sendShareSheet` now retries the Send button lookup once (after an additional 700ms) before falling back to coordinates — covers cases where the first scan still misses the button.
+  3. Coordinate fallback corrected: x changed from 42.2% → 50% (centred on the full-width Send button); y adjusted to 94.0% which lands in the middle of `direct_private_share_bottom_control_container` (confirmed bounds `[0,1995][1080,2226]` from UIAutomator dump).
+
+---
+
 ## [1.1.623] — 2026-07-16
 
 ### Fixed
