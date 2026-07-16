@@ -4,6 +4,15 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.646] — 2026-07-16
+
+### Fixed
+- **Phone Farm crash — "useRef is not defined"**: Opening the Phone Farm page threw a `ReferenceError: useRef is not defined` immediately on render, making the page completely inaccessible. The crash had two root causes introduced together in v1.1.644:
+  1. `useRef` was added to `MobileDevicesPage` (for the polling interval ref used by the live-thumbnail feature) but never added to the React import — the import line only had `useState`, `useEffect`, and `useCallback`.
+  2. The `PhoneShell` sub-component (the phone silhouette SVG rendered inside each device card) still called `React.useRef` for its per-instance clip-path ID, which also fails when `React` is not imported as a namespace object. Both call-sites now use the imported `useRef` hook directly, and the import has been corrected to include it.
+
+---
+
 ## [1.1.645] — 2026-07-16
 
 ### Fixed
