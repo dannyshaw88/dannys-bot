@@ -2328,31 +2328,40 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               await sleepOrAbort(serial, 1500);
               onLog?.(`Reel ${i + 1}/${totalReels}: confirming share sheet opened and picking DM recipient…`);
               const reelShareScan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
-              if (!reelShareScan || !reelShareScan.sheetOpen) {
-                // Gate on sheetOpen, NOT on sendBtn — Send only appears after a
-                // recipient is selected, so gating on sendBtn caused the code to
-                // skip entirely on a clean (nothing pre-selected) share sheet.
-                onLog?.(`Reel ${i + 1}/${totalReels}: share sheet did not open — skipping DM`);
-                logger.warn({ serial, reel: i + 1 }, "[view-reels] share sheet not confirmed open");
-                await android.pressBack(serial);
-                await sleepOrAbort(serial, 200);
+              const sheetSendBtn = reelShareScan?.sendBtn ?? null;
+              if (!sheetSendBtn) {
+                // Mirror the Stories gate: require a visible Send button before
+                // touching the sheet. If Send is absent the sheet either never
+                // opened or is in an ambiguous pre-selection state — tapping a
+                // recipient without this confirmation risks creating a group
+                // chat or tapping the Reel underneath.
+                logger.warn({ serial, reel: i + 1 }, "[view-reels] share sheet not confirmed open (no Send button found) — skipping recipient tap");
+                onLog?.(`Reel ${i + 1}/${totalReels}: share aborted — could not confirm share sheet opened (no Send button found)`);
               } else {
-                const sheetSendBtn = reelShareScan.sendBtn ?? null;
-                const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog, reelShareScan.recipients);
+                const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog, reelShareScan?.recipients);
                 if (!recipientPicked) {
                   await android.pressBack(serial);
-                  onLog?.(`Reel ${i + 1}/${totalReels}: no recipient found — closed share sheet without sending`);
+                  logger.warn({ serial, reel: i + 1 }, "[view-reels] no recipient found — closed share sheet without sending");
+                  onLog?.(`Reel ${i + 1}/${totalReels}: share skipped — no recipient avatars found in sheet (closed without sending)`);
                 } else {
                   await sleepOrAbort(serial, 200);
                   const sent = await sendShareSheet(serial, w, h, sheetSendBtn);
-                  if (sent === true || sent === null) {
+                  if (sent === true) {
                     sharesDm++;
-                    onLog?.(`Reel ${i + 1}/${totalReels}: ✓ shared via DM`);
+                    logger.info({ serial, reel: i + 1 }, "[view-reels] shared reel via DM — Send tapped");
+                    onLog?.(`Reel ${i + 1}/${totalReels}: ✓ shared via DM — Send tapped`);
+                    await sleepOrAbort(serial, 200);
+                  } else if (sent === null) {
+                    sharesDm++;
+                    logger.info({ serial, reel: i + 1 }, "[view-reels] share sheet already closed — DM likely sent by recipient tap");
+                    onLog?.(`Reel ${i + 1}/${totalReels}: ✓ shared via DM — sheet auto-dismissed (sent by recipient tap)`);
+                    await sleepOrAbort(serial, 150);
                   } else {
                     await android.pressBack(serial);
+                    logger.info({ serial, reel: i + 1 }, "[view-reels] Send button not found after picking recipient — pressing Back");
                     onLog?.(`Reel ${i + 1}/${totalReels}: Send button not found — closed DM picker`);
+                    await sleepOrAbort(serial, 200);
                   }
-                  await sleepOrAbort(serial, 250);
                 }
               }
             }

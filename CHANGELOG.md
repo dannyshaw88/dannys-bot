@@ -4,6 +4,14 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.617] — 2026-07-16
+
+### Fixed
+- **View Reels — Share via DM (recipient selection)**: replaced post-sheet gate logic with the Stories pattern. Now gates on the Send button being visible (`sheetSendBtn`) rather than `sheetOpen`. If no Send button is found after the dump, the action is aborted entirely rather than proceeding to recipient selection — this was the root cause of group-chat creation (proceeding without a confirmed Send button meant tapping a recipient in an ambiguous state, which selected them into an existing group or added a second recipient). Logging now mirrors Stories exactly: separate warn lines for "no Send button" vs "no recipients" vs "send failed", and `sent === null` (sheet auto-dismissed by recipient tap) is now counted as a success and logs correctly.
+- **Farm page — 3×2 device grid**: cards now fill the full screen height. Grid container changed from `overflow-y-auto` to `overflow-hidden` with `h-full` on the inner grid, so `repeat(2, 1fr)` row heights resolve against the actual available viewport height instead of content height.
+
+---
+
 ## [1.1.616] — 2026-07-16
 
 ### Fixed
