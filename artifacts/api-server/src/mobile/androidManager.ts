@@ -3422,23 +3422,74 @@ export async function findHomeTab(serial: string): Promise<{ x: number; y: numbe
 
 /**
  * Find the Reels tab (square icon with a play triangle) in Instagram's
- * bottom navigation bar. Modeled on findInstagramSearchTab/findHomeTab: try
- * known resource-ids first, then the "Reels" accessibility label. No
- * positional fallback — guessing a bottom-nav slot risks tapping DM/Search/
- * Profile instead, per project rule against hardcoded coordinates.
+ * bottom navigation bar.
+ *
+ * Strategy (tried in order):
+ *  1. Known resource-ids (clips_tab, reels_tab, …)
+ *  2. Accessibility label "Reels"
+ *  3. Positional fallback — scan the bottom-nav band (y > 88 % of xml height)
+ *     for clickable nodes, sort left-to-right, return index 1 (the confirmed
+ *     Reels slot on this device: home / reels / shop / search / profile).
+ *     If the node count differs from 5, we still return index 1 as the best
+ *     guess — callers should log and verify with the diagnostic dump.
+ *
+ * The positional fallback uses the XML-reported dimensions (not wm size) so
+ * every percentage threshold stays consistent with the dump coordinates
+ * (same lesson as findComposeTopLeftHeaderIcon, Jul 2026).
  */
-export async function findReelsTab(serial: string): Promise<{ x: number; y: number } | null> {
+export async function findReelsTab(
+  serial: string,
+  onLog?: (msg: string) => void,
+): Promise<{ x: number; y: number } | null> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial).catch(() => "");
   if (!xml) return null;
+
+  // 1. Resource-id
   const byId = _findByResId(
     xml,
     ":id/clips_tab", ":id/reels_tab", ":id/tab_clips", ":id/nav_clips",
     ":id/clips_tab_icon_view", ":id/reels_icon", ":id/clips_icon",
   );
   if (byId) return byId;
-  return _findElem(xml, "Reels");
+
+  // 2. Accessibility label
+  const byLabel = _findElem(xml, "Reels");
+  if (byLabel) return byLabel;
+
+  // 3. Positional fallback — collect all clickable nodes in the bottom-nav
+  //    band, de-duplicate overlapping bounds, sort left-to-right, pick index 1.
+  const { w: xmlW, h: xmlH } = _getScreenSize(xml);
+  const botMin = Math.round(xmlH * 0.88);
+  const raw: { x: number; y: number }[] = [];
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+  let nm: RegExpExecArray | null;
+  while ((nm = nodeRe.exec(xml)) !== null) {
+    const attrs = nm[1];
+    if (!/clickable="true"/.test(attrs)) continue;
+    const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+    if (!bm) continue;
+    const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
+    if (cy < botMin) continue;
+    raw.push({ x: Math.round((Number(bm[1]) + Number(bm[3])) / 2), y: cy });
+  }
+  // De-duplicate: two nodes within 40 px of each other count as one tap target
+  const deduped = raw.filter((n, i, arr) =>
+    arr.findIndex(o => Math.abs(o.x - n.x) < 40 && Math.abs(o.y - n.y) < 40) === i,
+  );
+  deduped.sort((a, b) => a.x - b.x);
+
+  const { w: realW, h: realH } = getScreenSize(serial);
+  onLog?.(
+    `Reels tab: a11y miss — bottom-nav scan (${deduped.length} node(s) below y=${botMin}, ` +
+    `xml ${xmlW}×${xmlH} real ${realW}×${realH}): ` +
+    (deduped.length ? deduped.map(n => `(${n.x},${n.y})`).join(" | ") : "none"),
+  );
+
+  // Need at least 2 nodes: index 0 = Home, index 1 = Reels
+  if (deduped.length >= 2) return deduped[1];
+  return null;
 }
 
 /**

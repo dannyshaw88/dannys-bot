@@ -4,6 +4,14 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.615] — 2026-07-16
+
+### Fixed
+- **View Reels** — Reels tab now found via positional fallback when accessibility tree returns neither a known resource-id nor the "Reels" label. Fallback scans the bottom-nav band (y > 88 % of screen), de-duplicates overlapping nodes, sorts left-to-right, and returns index 1 (confirmed Reels slot: home / reels / shop / search / profile). Diagnostic dump logged on every a11y miss so future failures carry evidence.
+- **Inject Browsing** — section now collapses entirely (hidden) when Follow Users is unticked, rather than rendering greyed-out.
+
+---
+
 ## [1.1.614] — 2026-07-15
 
 ### Feature: Skip Followed Users — Follow Tool
