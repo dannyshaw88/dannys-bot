@@ -140,9 +140,24 @@ type InspectNode = {
 type InspectResult = {
   ok: boolean; nodes: InspectNode[]; screenW: number; screenH: number;
   tappedAt: { x: number; y: number }; error?: string;
-  // Client-only: CSS-pixel position of the click relative to the canvas
-  // container top-left, used to render the crosshair dot on the mirror.
   _cssX?: number; _cssY?: number;
+};
+
+/** A user-placed pin on the Scan screenshot for an element UIAutomator can't see. */
+type CustomPin = {
+  id: string;
+  name: string;
+  phoneX: number;
+  phoneY: number;
+  /** Smallest containing UIAutomator node, used to anchor the coordinate. */
+  parentNode: InspectNode | null;
+};
+/** Transient state while the user is typing the name for a new pin. */
+type PendingPin = {
+  /** Position on the rendered scan image (CSS px) for the floating name input. */
+  cssX: number; cssY: number;
+  phoneX: number; phoneY: number;
+  parentNode: InspectNode | null;
 };
 
 const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; inspectMode?: boolean; inspectNodes?: InspectNode[] | null; onInspectResult?: (r: InspectResult) => void; onHoverNode?: (n: InspectNode | null) => void; clickTestMode?: boolean; logRecMode?: boolean; logMarkers?: LogMarker[]; onExpectedTap?: (x: number, y: number, kind?: "expected" | "vicinity") => void }>(function LiveCanvas({ serial, onLog, onDimensions, inspectMode, inspectNodes, onInspectResult, onHoverNode, clickTestMode, logRecMode, logMarkers, onExpectedTap }, ref) {
@@ -1180,20 +1195,34 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
 
   // ── Element tree inspector ─────────────────────────────────────────────────
   // Full UIAutomator node tree shown below the mirror when inspect mode is on.
-  // Any node can be hovered to highlight its bounds on the mirror; hovering
-  // the mirror scrolls the matching tree row into view.
+  // "Tree" tab: hover a row to highlight its bounds on the mirror; hover the
+  // mirror to scroll the matching row into view.
+  // "Scan" tab: full screenshot with UIAutomator bounds overlaid as rectangles,
+  // plus click-to-pin for custom-drawn elements UIAutomator can't see.
+  const [inspectTab,     setInspectTab]     = useState<'tree' | 'scan'>('tree');
   const [inspectNodes,   setInspectNodes]   = useState<InspectNode[] | null>(null);
   const [inspectLoading, setInspectLoading] = useState(false);
-  // Index of the tree node currently under the mirror cursor (for row highlighting).
   const [mirrorHoveredIdx, setMirrorHoveredIdx] = useState<number | null>(null);
-  // Ref to the scrollable tree container so we can scroll-to-row on mirror hover.
   const treeRef = useRef<HTMLDivElement>(null);
+
+  // Scan tab state
+  const [scanImage,   setScanImage]   = useState<string | null>(null);
+  const [scanLoading, setScanLoading] = useState(false);
+  const [customPins,  setCustomPins]  = useState<CustomPin[]>([]);
+  const [pendingPin,  setPendingPin]  = useState<PendingPin | null>(null);
+  const [imgNatural,  setImgNatural]  = useState<{ w: number; h: number } | null>(null);
+  const scanImgRef  = useRef<HTMLImageElement>(null);
+  const pinInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-fetch the full accessibility tree whenever inspect mode is entered.
   useEffect(() => {
     if (!inspectMode || !phone) {
       setInspectNodes(null);
       setMirrorHoveredIdx(null);
+      setScanImage(null);
+      setCustomPins([]);
+      setPendingPin(null);
+      setInspectTab('tree');
       return;
     }
     let cancelled = false;
@@ -1219,8 +1248,60 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
       .finally(() => setInspectLoading(false));
   };
 
-  // Called by LiveCanvas on every mirror pointermove — scroll the matching
-  // tree row into view so the tree stays in sync with the cursor.
+  // Scan tab — take a screenshot and display it.
+  const runScan = async () => {
+    if (!phone) return;
+    setScanLoading(true);
+    setScanImage(null);
+    setImgNatural(null);
+    setPendingPin(null);
+    try {
+      const r    = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/screencap-base64`);
+      const body = await r.json();
+      if (body.ok) setScanImage(body.image);
+    } finally { setScanLoading(false); }
+  };
+
+  // Click anywhere on the scan screenshot — find the nearest UIAutomator node
+  // (for context/anchoring) then either highlight it or prompt for a custom pin name.
+  const handleScanClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const img = scanImgRef.current;
+    if (!img || !imgNatural) return;
+    const rect = img.getBoundingClientRect();
+    const cssX  = e.clientX - rect.left;
+    const cssY  = e.clientY - rect.top;
+    const scaleX = rect.width  / imgNatural.w;
+    const scaleY = rect.height / imgNatural.h;
+    const phoneX = Math.round(cssX / scaleX);
+    const phoneY = Math.round(cssY / scaleY);
+
+    // Find the smallest UIAutomator node that contains this point (may be null).
+    const nodes = inspectNodes ?? [];
+    const hits  = nodes
+      .filter(n => phoneX >= n.boundsRaw[0] && phoneX <= n.boundsRaw[2] && phoneY >= n.boundsRaw[1] && phoneY <= n.boundsRaw[3])
+      .sort((a, b) => a.area - b.area);
+    const parentNode = hits[0] ?? null;
+
+    setPendingPin({ cssX, cssY, phoneX, phoneY, parentNode });
+    setTimeout(() => pinInputRef.current?.focus(), 0);
+  };
+
+  // Confirm the pending pin with the typed name.
+  const confirmPendingPin = (name: string) => {
+    if (!pendingPin) return;
+    if (name.trim()) {
+      setCustomPins(prev => [...prev, {
+        id: `pin_${Date.now()}`,
+        name: name.trim(),
+        phoneX: pendingPin.phoneX,
+        phoneY: pendingPin.phoneY,
+        parentNode: pendingPin.parentNode,
+      }]);
+    }
+    setPendingPin(null);
+  };
+
+  // Called by LiveCanvas on every mirror pointermove.
   const handleMirrorHoverNode = useCallback((n: InspectNode | null) => {
     const idx = n?.index ?? null;
     setMirrorHoveredIdx(idx);
@@ -1230,16 +1311,28 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
     }
   }, []);
 
-  // Dump the entire tree as a copyable text block.
+  // Dump the entire tree + custom pins as a copyable text block.
   const dumpTree = async () => {
-    if (!inspectNodes?.length) return;
-    const lines = [
-      `── UIAutomator Tree — ${inspectNodes.length} nodes ──`,
-      ...inspectNodes.map(n =>
-        `[${n.index ?? "?"}] ${n.clickable ? "● TAP" : "○ view"} ${n.cls}${n.resourceId ? `  id="${n.resourceId}"` : ""}${n.contentDesc ? `  desc="${n.contentDesc}"` : ""}${n.text ? `  text="${n.text}"` : ""}  ${n.bounds}  center=(${n.center.x},${n.center.y})`
-      ),
-    ].join("\n");
-    try { await navigator.clipboard.writeText(lines); } catch { /* ignore */ }
+    const lines: string[] = [];
+    if (inspectNodes?.length) {
+      lines.push(`── UIAutomator Tree — ${inspectNodes.length} nodes ──`);
+      inspectNodes.forEach(n =>
+        lines.push(`[${n.index ?? "?"}] ${n.clickable ? "● TAP" : "○ view"} ${n.cls}${n.resourceId ? `  id="${n.resourceId}"` : ""}${n.contentDesc ? `  desc="${n.contentDesc}"` : ""}${n.text ? `  text="${n.text}"` : ""}  ${n.bounds}  center=(${n.center.x},${n.center.y})`)
+      );
+    }
+    if (customPins.length) {
+      lines.push("");
+      lines.push(`── Custom Elements (user-tagged) — ${customPins.length} pins ──`);
+      customPins.forEach(pin => {
+        const parent = pin.parentNode;
+        const anchor = parent
+          ? `inside ${parent.cls}${parent.resourceId ? ` id="${parent.resourceId}"` : ""} ${parent.bounds}  offset=(${pin.phoneX - parent.center.x},${pin.phoneY - parent.center.y}) from node center`
+          : "⚠ no UIAutomator parent — custom-drawn view with no accessibility node";
+        lines.push(`[${pin.name}]  phone=(${pin.phoneX},${pin.phoneY})  ${anchor}`);
+      });
+    }
+    if (!lines.length) return;
+    try { await navigator.clipboard.writeText(lines.join("\n")); } catch { /* ignore */ }
   };
 
   // ── Exact shell sizing ──────────────────────────────────────────────────
@@ -1365,100 +1458,278 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
         )}
       </div>
 
-      {/* ── Element Tree Browser ────────────────────────────────────────────────
-           Full UIAutomator accessibility tree shown below the mirror when
-           inspect is active.
-           • Hover a row → its bounds are highlighted on the mirror instantly.
-           • Hover the mirror → matching row scrolls into view + is highlighted.
-           • Dump copies the complete indexed tree as text (paste to the dev).
+      {/* ── Element Inspector Panel ─────────────────────────────────────────────
+           Two tabs below the mirror:
+           TREE — Full UIAutomator accessibility node list. Hover row → bounds
+                  highlight on mirror. Hover mirror → row scrolls into view.
+           SCAN — Full screenshot with UIAutomator bounds overlaid as outlines.
+                  Click any area to drop a named pin. Bare screen areas with no
+                  blue outline have NO accessibility node (custom-drawn views) —
+                  pin them here so the developer has a named index entry.
            ─────────────────────────────────────────────────────────────────── */}
       {inspectMode && (
         <div className="flex-1 min-h-0 flex flex-col border-t border-blue-400/20 bg-zinc-950 font-mono text-[9px]">
 
-          {/* Toolbar */}
-          <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 border-b border-white/6 shrink-0">
-            <span className="text-blue-300 font-bold text-[8px] shrink-0">
-              🔍 Element Tree
-              {inspectNodes && <span className="text-white/30 font-normal ml-1">({inspectNodes.length} nodes)</span>}
-            </span>
+          {/* Tab bar + context actions */}
+          <div className="flex items-center gap-0 px-1 py-1 bg-zinc-900/80 border-b border-white/6 shrink-0">
+            {/* Tabs */}
+            <button
+              onClick={() => setInspectTab('tree')}
+              className={`text-[8px] font-bold px-2 py-0.5 rounded transition-colors ${inspectTab === 'tree' ? "bg-blue-500/25 text-blue-300 border border-blue-400/40" : "text-white/30 hover:text-white/60"}`}>
+              Tree {inspectNodes ? `(${inspectNodes.length})` : ""}
+            </button>
+            <button
+              onClick={() => { setInspectTab('scan'); if (!scanImage && !scanLoading) runScan(); }}
+              className={`text-[8px] font-bold px-2 py-0.5 rounded transition-colors ml-0.5 ${inspectTab === 'scan' ? "bg-orange-500/25 text-orange-300 border border-orange-400/40" : "text-white/30 hover:text-white/60"}`}>
+              Scan {customPins.length > 0 ? `(${customPins.length} pins)` : ""}
+            </button>
+
+            {/* Context actions */}
             <div className="flex gap-1 ml-auto shrink-0">
-              <button onClick={refreshInspectNodes}
-                className="text-[8px] text-white/50 hover:text-white px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 transition-colors">
-                ↻ Re-dump
-              </button>
-              <button onClick={dumpTree}
-                title="Copy the full tree index to clipboard — paste it to the developer"
-                className="text-[8px] text-blue-300 hover:text-white px-1.5 py-0.5 rounded bg-blue-500/15 hover:bg-blue-500/25 border border-blue-400/30 transition-colors">
-                📋 Dump All
-              </button>
+              {inspectTab === 'tree' && <>
+                <button onClick={refreshInspectNodes}
+                  className="text-[8px] text-white/40 hover:text-white px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 transition-colors">
+                  ↻ Re-dump
+                </button>
+                <button onClick={dumpTree}
+                  title="Copy the full tree + any custom pins to clipboard"
+                  className="text-[8px] text-blue-300 hover:text-white px-1.5 py-0.5 rounded bg-blue-500/15 hover:bg-blue-500/25 border border-blue-400/30 transition-colors">
+                  📋 Dump All
+                </button>
+              </>}
+              {inspectTab === 'scan' && <>
+                <button onClick={runScan} disabled={scanLoading}
+                  className="text-[8px] text-white/40 hover:text-white px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 transition-colors disabled:opacity-40">
+                  {scanLoading ? "…" : "📸 Re-scan"}
+                </button>
+                <button onClick={dumpTree} disabled={!customPins.length && !inspectNodes?.length}
+                  title="Copy UIAutomator tree + all named pins to clipboard"
+                  className="text-[8px] text-orange-300 hover:text-white px-1.5 py-0.5 rounded bg-orange-500/15 hover:bg-orange-500/25 border border-orange-400/30 transition-colors disabled:opacity-30">
+                  📋 Dump Pins
+                </button>
+              </>}
             </div>
           </div>
 
-          {/* Tree body */}
-          {inspectLoading && (
-            <div className="flex-1 flex items-center justify-center">
-              <span className="text-white/40 text-[9px]">Scanning accessibility tree…</span>
-            </div>
-          )}
-          {!inspectLoading && !inspectNodes && (
-            <div className="flex-1 flex items-center justify-center">
-              <span className="text-red-400/70 text-[9px]">Dump failed — phone must be awake &amp; unlocked</span>
-            </div>
-          )}
-          {!inspectLoading && inspectNodes && inspectNodes.length === 0 && (
-            <div className="flex-1 flex items-center justify-center">
-              <span className="text-white/30 text-[9px]">No accessibility nodes returned</span>
-            </div>
-          )}
-          {!inspectLoading && inspectNodes && inspectNodes.length > 0 && (
-            <div ref={treeRef} className="flex-1 overflow-y-auto">
-              {inspectNodes.map(n => {
-                const isHovered = n.index === mirrorHoveredIdx;
-                return (
-                  <div
-                    key={n.index}
-                    data-node-idx={n.index}
-                    className={`px-2 py-1 border-b border-white/4 cursor-default select-none transition-colors ${
-                      isHovered
-                        ? "bg-blue-500/20 border-l-2 border-l-blue-400"
-                        : "hover:bg-white/5"
-                    }`}
-                    onMouseEnter={() => liveCanvasRef.current?.setForcedHighlight(n.boundsRaw)}
-                    onMouseLeave={() => liveCanvasRef.current?.setForcedHighlight(null)}
-                  >
-                    {/* Row: index · tap/view dot · class · id/desc/text */}
-                    <div className="flex items-baseline gap-1.5 min-w-0">
-                      <span className="text-white/25 text-[7px] shrink-0 w-6 text-right">[{n.index}]</span>
-                      <span className={`text-[7px] shrink-0 ${n.clickable ? "text-green-400" : "text-white/20"}`}>
-                        {n.clickable ? "●" : "○"}
-                      </span>
-                      <span className={`font-semibold truncate ${isHovered ? "text-blue-200" : "text-white/70"}`}>
-                        {n.cls}
-                      </span>
-                      {n.resourceId  && <span className="text-orange-300/80 truncate shrink-0 max-w-[45%]">id="{n.resourceId}"</span>}
-                      {!n.resourceId && n.contentDesc && <span className="text-lime-300/80 truncate shrink-0 max-w-[45%]">"{n.contentDesc}"</span>}
-                      {!n.resourceId && !n.contentDesc && n.text && <span className="text-sky-300/80 truncate shrink-0 max-w-[45%]">"{n.text}"</span>}
-                    </div>
-                    {/* Second line: bounds (only when hovered, to save space) */}
-                    {isHovered && (
-                      <div className="text-white/30 text-[7px] mt-0.5 pl-8">
-                        {n.bounds}
-                        {n.contentDesc && n.resourceId && <span className="ml-2 text-lime-300/60">desc="{n.contentDesc}"</span>}
-                        {n.text        && n.resourceId && <span className="ml-2 text-sky-300/60">text="{n.text}"</span>}
+          {/* ── TREE TAB ── */}
+          {inspectTab === 'tree' && <>
+            {inspectLoading && (
+              <div className="flex-1 flex items-center justify-center">
+                <span className="text-white/40 text-[9px]">Scanning accessibility tree…</span>
+              </div>
+            )}
+            {!inspectLoading && !inspectNodes && (
+              <div className="flex-1 flex items-center justify-center">
+                <span className="text-red-400/70 text-[9px]">Dump failed — phone must be awake &amp; unlocked</span>
+              </div>
+            )}
+            {!inspectLoading && inspectNodes && inspectNodes.length === 0 && (
+              <div className="flex-1 flex items-center justify-center">
+                <span className="text-white/30 text-[9px]">No accessibility nodes returned</span>
+              </div>
+            )}
+            {!inspectLoading && inspectNodes && inspectNodes.length > 0 && (
+              <div ref={treeRef} className="flex-1 overflow-y-auto">
+                {inspectNodes.map(n => {
+                  const isHovered = n.index === mirrorHoveredIdx;
+                  return (
+                    <div
+                      key={n.index}
+                      data-node-idx={n.index}
+                      className={`px-2 py-1 border-b border-white/4 cursor-default select-none transition-colors ${isHovered ? "bg-blue-500/20 border-l-2 border-l-blue-400" : "hover:bg-white/5"}`}
+                      onMouseEnter={() => liveCanvasRef.current?.setForcedHighlight(n.boundsRaw)}
+                      onMouseLeave={() => liveCanvasRef.current?.setForcedHighlight(null)}
+                    >
+                      <div className="flex items-baseline gap-1.5 min-w-0">
+                        <span className="text-white/25 text-[7px] shrink-0 w-6 text-right">[{n.index}]</span>
+                        <span className={`text-[7px] shrink-0 ${n.clickable ? "text-green-400" : "text-white/20"}`}>{n.clickable ? "●" : "○"}</span>
+                        <span className={`font-semibold truncate ${isHovered ? "text-blue-200" : "text-white/70"}`}>{n.cls}</span>
+                        {n.resourceId  && <span className="text-orange-300/80 truncate shrink-0 max-w-[45%]">id="{n.resourceId}"</span>}
+                        {!n.resourceId && n.contentDesc && <span className="text-lime-300/80 truncate shrink-0 max-w-[45%]">"{n.contentDesc}"</span>}
+                        {!n.resourceId && !n.contentDesc && n.text && <span className="text-sky-300/80 truncate shrink-0 max-w-[45%]">"{n.text}"</span>}
                       </div>
-                    )}
+                      {isHovered && (
+                        <div className="text-white/30 text-[7px] mt-0.5 pl-8">
+                          {n.bounds}
+                          {n.contentDesc && n.resourceId && <span className="ml-2 text-lime-300/60">desc="{n.contentDesc}"</span>}
+                          {n.text        && n.resourceId && <span className="ml-2 text-sky-300/60">text="{n.text}"</span>}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <div className="px-2 py-0.5 border-t border-white/4 shrink-0">
+              <span className="text-[7px] text-white/15">Hover row → highlight on mirror · Hover mirror → row scrolls here · ● tappable · ○ view-only</span>
+            </div>
+          </>}
+
+          {/* ── SCAN TAB ── */}
+          {inspectTab === 'scan' && (
+            <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
+
+              {/* No scan yet */}
+              {!scanImage && !scanLoading && (
+                <div className="flex-1 flex flex-col items-center justify-center gap-2">
+                  <span className="text-white/30 text-[9px]">Click "📸 Re-scan" to capture the screen</span>
+                  <span className="text-white/15 text-[8px] text-center px-4">
+                    UIAutomator nodes shown as blue outlines. Bare areas with no outline = custom-drawn, no accessibility node. Click anywhere to name and pin elements.
+                  </span>
+                </div>
+              )}
+              {scanLoading && (
+                <div className="flex-1 flex items-center justify-center">
+                  <span className="text-white/40 text-[9px]">Taking screenshot…</span>
+                </div>
+              )}
+
+              {/* Screenshot + overlays */}
+              {scanImage && !scanLoading && (
+                <div
+                  className="relative w-full cursor-crosshair shrink-0"
+                  onClick={handleScanClick}
+                >
+                  <img
+                    ref={scanImgRef}
+                    src={scanImage}
+                    className="w-full h-auto block select-none"
+                    draggable={false}
+                    onLoad={e => {
+                      const img = e.currentTarget;
+                      setImgNatural({ w: img.naturalWidth, h: img.naturalHeight });
+                    }}
+                  />
+
+                  {/* SVG overlay — UIAutomator node bounds + custom pins */}
+                  {imgNatural && (
+                    <svg
+                      className="absolute inset-0 w-full h-full pointer-events-none"
+                      viewBox={`0 0 ${imgNatural.w} ${imgNatural.h}`}
+                      preserveAspectRatio="none"
+                    >
+                      {/* UIAutomator node outlines
+                          - Named nodes (have id/desc/text): blue, slightly opaque
+                          - Container nodes (no identity attrs): very faint grey
+                          Blue outlines = accessibility node exists. Bare areas = invisible to UIAutomator. */}
+                      {inspectNodes?.map(n => {
+                        const hasId = !!(n.resourceId || n.contentDesc || n.text);
+                        return (
+                          <rect
+                            key={n.index}
+                            x={n.boundsRaw[0]} y={n.boundsRaw[1]}
+                            width={n.boundsRaw[2] - n.boundsRaw[0]}
+                            height={n.boundsRaw[3] - n.boundsRaw[1]}
+                            fill="none"
+                            stroke={hasId ? "rgba(30,144,255,0.55)" : "rgba(255,255,255,0.07)"}
+                            strokeWidth={hasId ? 5 : 2}
+                          />
+                        );
+                      })}
+
+                      {/* Custom pin dots */}
+                      {customPins.map(pin => (
+                        <g key={pin.id}>
+                          <circle cx={pin.phoneX} cy={pin.phoneY} r={18} fill="rgba(251,146,60,0.85)" stroke="white" strokeWidth={4} />
+                          <text
+                            x={pin.phoneX + 24} y={pin.phoneY + 10}
+                            fill="#fb923c" fontSize={32} fontWeight="bold"
+                            fontFamily="monospace"
+                            style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.9))" }}
+                          >{pin.name}</text>
+                        </g>
+                      ))}
+
+                      {/* Pending pin crosshair */}
+                      {pendingPin && imgNatural && (
+                        <g>
+                          <line
+                            x1={pendingPin.phoneX - 30} y1={pendingPin.phoneY}
+                            x2={pendingPin.phoneX + 30} y2={pendingPin.phoneY}
+                            stroke="rgba(251,146,60,0.9)" strokeWidth={4} />
+                          <line
+                            x1={pendingPin.phoneX} y1={pendingPin.phoneY - 30}
+                            x2={pendingPin.phoneX} y2={pendingPin.phoneY + 30}
+                            stroke="rgba(251,146,60,0.9)" strokeWidth={4} />
+                        </g>
+                      )}
+                    </svg>
+                  )}
+
+                  {/* Floating name input for pending pin */}
+                  {pendingPin && imgNatural && scanImgRef.current && (() => {
+                    const img = scanImgRef.current;
+                    // Convert phone coords → % position on the rendered image
+                    const leftPct = (pendingPin.phoneX / imgNatural.w) * 100;
+                    const topPct  = (pendingPin.phoneY / imgNatural.h) * 100;
+                    return (
+                      <div
+                        className="absolute z-50"
+                        style={{ left: `${leftPct}%`, top: `${topPct}%`, transform: "translate(8px, -50%)" }}
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <input
+                          ref={pinInputRef}
+                          className="text-[10px] font-mono bg-zinc-900 border-2 border-orange-400 text-orange-200 placeholder-white/25 px-2 py-0.5 rounded shadow-2xl outline-none w-36"
+                          placeholder="name this element"
+                          onKeyDown={e => {
+                            if (e.key === "Enter")  confirmPendingPin((e.target as HTMLInputElement).value);
+                            if (e.key === "Escape") setPendingPin(null);
+                          }}
+                        />
+                        <div className="text-[7px] text-white/30 mt-0.5">
+                          {pendingPin.parentNode
+                            ? <span className="text-blue-300/60">inside {pendingPin.parentNode.resourceId || pendingPin.parentNode.cls}</span>
+                            : <span className="text-orange-400/70">⚠ no UIAutomator node here</span>}
+                          {" · Enter to save · Esc cancel"}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Custom pins list */}
+              {customPins.length > 0 && (
+                <div className="shrink-0 border-t border-orange-400/20 bg-zinc-900/50 p-1.5 space-y-0.5">
+                  <div className="text-[8px] text-orange-300/60 font-bold mb-1 uppercase tracking-wider">
+                    Custom Elements ({customPins.length})
                   </div>
-                );
-              })}
+                  {customPins.map(pin => (
+                    <div key={pin.id} className="flex items-start gap-1.5 text-[8px] font-mono">
+                      <span className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0 mt-1" />
+                      <div className="min-w-0 flex-1">
+                        <span className="text-orange-200 font-bold">{pin.name}</span>
+                        <span className="text-white/30 ml-1.5">({pin.phoneX},{pin.phoneY})</span>
+                        <div className="text-white/20 text-[7px] truncate">
+                          {pin.parentNode
+                            ? <>inside <span className="text-blue-300/60">{pin.parentNode.resourceId || pin.parentNode.cls}</span> {pin.parentNode.bounds}</>
+                            : <span className="text-red-400/50">⚠ no UIAutomator parent — pure custom-drawn view</span>}
+                        </div>
+                      </div>
+                      <button
+                        onClick={e => { e.stopPropagation(); setCustomPins(p => p.filter(x => x.id !== pin.id)); }}
+                        className="text-white/20 hover:text-red-400 transition-colors shrink-0 text-[9px] mt-0.5">
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  <div className="text-[7px] text-white/15 pt-0.5">
+                    Click "📋 Dump Pins" to copy the full index (UIAutomator tree + all pins) to clipboard
+                  </div>
+                </div>
+              )}
+
+              {/* Scan hint (no pins yet, image loaded) */}
+              {scanImage && !scanLoading && customPins.length === 0 && (
+                <div className="shrink-0 px-2 py-1 border-t border-white/4">
+                  <span className="text-[7px] text-white/15">
+                    Blue outlines = UIAutomator can see this element · Bare areas = custom-drawn, no accessibility node · Click anywhere to name &amp; pin
+                  </span>
+                </div>
+              )}
             </div>
           )}
-
-          {/* Footer hint */}
-          <div className="px-2 py-0.5 border-t border-white/4 shrink-0">
-            <span className="text-[7px] text-white/15">
-              Hover row → highlight on mirror · Hover mirror → row scrolls here · ● tappable · ○ view-only
-            </span>
-          </div>
         </div>
       )}
 

@@ -4605,6 +4605,38 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
+  // ── Screenshot capture (base64 PNG) ──────────────────────────────────────
+  // Returns a single full-resolution screenshot as a base64 data URI.
+  // Used by the Scan tab in the element inspector: the image is displayed in
+  // the browser with UIAutomator node bounds overlaid as SVG rectangles, so
+  // the user can visually identify custom-drawn elements that have no
+  // accessibility node and pin them with a name for the developer's index.
+  app.get("/api/mobile/devices/:serial/screencap-base64", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const adbPath = (await android.getTools()).adb.path;
+      const chunks: Buffer[] = [];
+      let stderrOut = "";
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn(adbPath, ["-s", serial, "exec-out", "screencap", "-p"]);
+        child.stdout.on("data", (d: Buffer) => chunks.push(d));
+        child.stderr?.on("data", (d: Buffer) => { stderrOut += d.toString(); });
+        child.on("error", reject);
+        child.on("close", () => resolve());
+      });
+      let frame = Buffer.concat(chunks);
+      // Strip CRLF line endings that some Windows ADB versions inject
+      if (frame.length > 8 && !isPng(frame)) {
+        frame = stripCrlf(frame);
+      }
+      if (!isPng(frame)) {
+        res.json({ ok: false, error: `Not a valid PNG (${frame.length} bytes)${stderrOut ? " — " + stderrOut.trim() : ""}` });
+        return;
+      }
+      res.json({ ok: true, image: "data:image/png;base64," + frame.toString("base64") });
+    } catch (e: any) { res.status(400).json({ ok: false, error: e?.message }); }
+  });
+
   // ── Element Inspector ─────────────────────────────────────────────────────
   // Like Chrome DevTools F12 — click a point on the phone mirror and get back
   // every accessibility node whose bounds contain that point, sorted from most

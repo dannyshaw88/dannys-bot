@@ -4,6 +4,33 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.622] — 2026-07-16
+
+### Added
+- **Phone Mirror — Inspect: Scan tab for elements UIAutomator cannot see**: the element inspector panel now has two tabs — **Tree** (existing UIAutomator node list) and **Scan** (new).
+
+  **The problem this solves:** UIAutomator's accessibility tree only exposes elements that Instagram chose to mark as accessible. Large parts of the UI — most action-bar icons, custom-drawn story elements, bottom-nav tabs, Reels controls — have no accessibility node at all. The Tree tab can't list them, so there is no way to know where they are or give them a stable identifier for the automation code.
+
+  **What Scan does:**
+  - Click **"📸 Re-scan"** to take a full-resolution screenshot from the phone via ADB.
+  - The screenshot is displayed in the panel. Every UIAutomator accessibility node is drawn on top of it as a **blue outline rectangle** — elements with a resource-id, content-desc, or text get a bright blue outline; anonymous containers get a faint grey one.
+  - **Bare screen areas with no blue outline = custom-drawn views with zero accessibility data.** These are the elements the automation code previously couldn't find. The scan makes them visible by showing exactly where they sit relative to the elements UIAutomator CAN see.
+  - **Click anywhere** on the screenshot to drop a named pin. A crosshair appears at the click position; a floating input lets you type a name (Enter to save, Escape to cancel). The input also shows which UIAutomator node contains that point (for anchoring context), or warns "⚠ no UIAutomator parent" for areas in a true dead zone.
+  - All saved pins are listed below the screenshot with their phone coordinates and the name of the nearest UIAutomator parent node (the stable anchor the code will use to offset from).
+  - **"📋 Dump Pins"** copies the complete index to clipboard: full UIAutomator tree + every named pin with phone coordinates and offset from its parent node center. Paste this directly to the developer — it contains everything needed to write stable automation code for both accessible and non-accessible elements.
+
+  **Workflow for fixing "bot can't find X" bugs:**
+  1. Navigate the phone to the failing screen.
+  2. Open Inspect → Scan tab → Re-scan.
+  3. Identify the element on the screenshot — note whether it has a blue outline (UIAutomator sees it) or not (it doesn't).
+  4. Click the element, name it (e.g. `like_icon`, `audio_mute_btn`).
+  5. Dump Pins → paste to the developer.
+  6. Developer now has: exact phone coords, the stable UIAutomator anchor node with its resource-id, and the offset from that node's center — enough to write detection code that works regardless of layout shifts.
+
+  **Backend:** new `GET /api/mobile/devices/:serial/screencap-base64` endpoint runs `adb exec-out screencap -p`, applies the same CRLF-strip as the mirror stream to handle Windows ADB, and returns the PNG as a base64 data URI. Pins are stored client-side only (no server persistence needed — they're meant to be dumped and pasted, not saved across sessions).
+
+---
+
 ## [1.1.621] — 2026-07-16
 
 ### Changed
