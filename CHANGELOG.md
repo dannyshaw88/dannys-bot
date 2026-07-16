@@ -4,6 +4,14 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.618] — 2026-07-16
+
+### Fixed
+- **View Reels — Share via DM (sheet detection gating removed)**: `confirmAndScanShareSheet` result no longer gates whether the recipient-tap and Send sequence runs. The dump occasionally captures the Reels screen before the wider share panel has fully rendered in the accessibility tree, so none of the sheet markers fire even when the sheet is visually open. The code now treats the scan as best-effort (logs a warning if markers are absent) and always proceeds to `tapRandomShareSheetRecipient` + `sendShareSheet`. If the sheet genuinely never opened, `tapRandomShareSheetRecipient` will find zero recipients and return false, triggering a clean Back press — no blind taps.
+- **Farm — device card scaling**: phone SVG now scales to fill the cell height (`flex-1 min-h-0 w-auto`) instead of being fixed at 100 px wide. Card is `h-full` so it occupies the full grid-row height. Text row is `shrink-0` to stay pinned at the bottom. Applies to the populated card; empty-slot card unchanged.
+
+---
+
 ## [1.1.617] — 2026-07-16
 
 ### Fixed

@@ -135,10 +135,10 @@ export function MobileDevicesPage() {
                   <button
                     key={device.serial}
                     onClick={() => setLocation("/mobile/farm")}
-                    className="group flex flex-col items-center gap-3 p-5 rounded-2xl border border-border bg-card hover:border-primary/50 hover:bg-card/80 transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    className="group h-full flex flex-col items-center gap-2 py-4 px-3 rounded-2xl border border-border bg-card hover:border-primary/50 hover:bg-card/80 transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40"
                   >
-                    <XiaomiPhoneShell className="w-[100px] h-auto drop-shadow-lg group-hover:scale-[1.03] transition-transform duration-200" />
-                    <div className="text-center space-y-1">
+                    <XiaomiPhoneShell className="flex-1 min-h-0 w-auto max-w-[120px] drop-shadow-lg group-hover:scale-[1.03] transition-transform duration-200" />
+                    <div className="shrink-0 text-center space-y-0.5">
                       <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
                         {device.displayName}
                       </p>
