@@ -1372,9 +1372,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // but giving the sheet more time to open reduces unnecessary retries.
       await sleepOrAbort(serial, 1500);
       onLog?.(`${logPrefix}: confirming share sheet opened and picking DM recipient…`);
-      const scan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
-      if (!scan || !scan.sheetOpen) {
-        logger.warn({ serial }, `${logTag} share sheet not confirmed open — closing and skipping DM`);
+      let scan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
+      if (!scan?.sheetOpen) {
+        // Reels' share panel renders slower than Feed's — give it one more
+        // chance before giving up. 1500ms extra is enough on the slowest
+        // MIUI devices we've seen.
+        onLog?.(`${logPrefix}: share sheet not yet visible — waiting 1500ms and retrying…`);
+        await sleepOrAbort(serial, 1500);
+        scan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
+      }
+      if (!scan?.sheetOpen) {
+        logger.warn({ serial }, `${logTag} share sheet not confirmed open after retry — closing and skipping DM`);
         onLog?.(`${logPrefix}: share aborted — share sheet did not open`);
         await android.pressBack(serial);
         await sleepOrAbort(serial, 200);
