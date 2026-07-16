@@ -6,7 +6,20 @@
 
 import { useLocation } from "wouter";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { Smartphone } from "lucide-react";
+
+function PhoneFarmIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+      <rect x="0.5" y="8.5" width="4" height="1.6" rx="0.8"/>
+      <rect x="0.5" y="11.5" width="3" height="1.6" rx="0.8"/>
+      <rect x="5" y="1" width="11" height="19" rx="2"/>
+      <rect x="6.5" y="3" width="8" height="13" rx="1" fill="var(--background,#0f172a)"/>
+      <circle cx="10.5" cy="18" r="1" fill="var(--background,#0f172a)"/>
+      <path d="M17,10.5 L17.8,11.61 L19.17,11.75 L18.6,13 L19.17,14.25 L17.8,14.39 L17,15.5 L16.2,14.39 L14.84,14.25 L15.4,13 L14.84,11.75 L16.2,11.61Z"/>
+      <circle cx="17" cy="13" r="1.1" fill="var(--background,#0f172a)"/>
+    </svg>
+  );
+}
 
 // ─── Xiaomi 23076RN8DY phone shell SVG ───────────────────────────────────────
 
@@ -121,8 +134,8 @@ export function MobileDevicesPage() {
       <main className="ml-[133px] flex-1 h-screen flex flex-col overflow-hidden">
         {/* Header */}
         <div className="shrink-0 z-10 bg-background/95 backdrop-blur border-b border-border px-6 py-3 flex items-center gap-3">
-          <Smartphone className="w-5 h-5 text-primary" />
-          <h1 className="text-lg font-bold text-foreground">Mobile Farm</h1>
+          <PhoneFarmIcon className="w-5 h-5 text-primary" />
+          <h1 className="text-lg font-bold text-foreground">Phone Farm</h1>
         </div>
 
         {/* Device grid — fixed 3 cols × 2 rows = 6 slots, fills the screen */}

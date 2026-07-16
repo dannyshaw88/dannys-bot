@@ -2318,54 +2318,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             if (!icons.shareDm) {
               onLog?.(`Reel ${i + 1}/${totalReels}: Share via DM icon not found — skipping`);
             } else {
-              await android.tap(serial, icons.shareDm.x, icons.shareDm.y);
-              onLog?.(`Reel ${i + 1}/${totalReels}: tapped DM icon at (${icons.shareDm.x},${icons.shareDm.y}) — waiting for share sheet`);
-              // 1500ms matches shareCurrentPostViaDm — gives the sheet time to
-              // fully animate in before dumping. 400ms was too short: the dump
-              // ran before the sheet appeared, falling through to feed-post
-              // nodes and in some cases finding a pre-populated Send button
-              // (group selection) that caused an extra recipient to be added.
-              await sleepOrAbort(serial, 1500);
-              onLog?.(`Reel ${i + 1}/${totalReels}: scanning share sheet for recipients…`);
-              // Best-effort scan — detection result does NOT gate the flow.
-              // The dump occasionally captures the screen before the share
-              // sheet has fully rendered (Reels' wider share panel takes
-              // longer to load than the narrow DM picker), so none of the
-              // sheet markers are found even when the sheet is visibly open.
-              // We proceed regardless: tapRandomShareSheetRecipient will find
-              // nothing and return false if the sheet genuinely isn't there.
-              const reelShareScan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
-              if (!reelShareScan?.sheetOpen) {
-                onLog?.(`Reel ${i + 1}/${totalReels}: sheet-open markers not detected — proceeding anyway`);
-              }
-              // sheetSendBtn may be null if no recipient is pre-selected yet —
-              // sendShareSheet will do its own fresh lookup after the tap.
-              const sheetSendBtn = reelShareScan?.sendBtn ?? null;
-              const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog, reelShareScan?.recipients);
-              if (!recipientPicked) {
-                await android.pressBack(serial);
-                logger.warn({ serial, reel: i + 1 }, "[view-reels] no recipient found — closed share sheet without sending");
-                onLog?.(`Reel ${i + 1}/${totalReels}: share skipped — no recipient avatars found in sheet (closed without sending)`);
-              } else {
-                await sleepOrAbort(serial, 200);
-                const sent = await sendShareSheet(serial, w, h, sheetSendBtn ?? undefined);
-                if (sent === true) {
-                  sharesDm++;
-                  logger.info({ serial, reel: i + 1 }, "[view-reels] shared reel via DM — Send tapped");
-                  onLog?.(`Reel ${i + 1}/${totalReels}: ✓ shared via DM — Send tapped`);
-                  await sleepOrAbort(serial, 200);
-                } else if (sent === null) {
-                  sharesDm++;
-                  logger.info({ serial, reel: i + 1 }, "[view-reels] share sheet already closed — DM likely sent by recipient tap");
-                  onLog?.(`Reel ${i + 1}/${totalReels}: ✓ shared via DM — sheet auto-dismissed (sent by recipient tap)`);
-                  await sleepOrAbort(serial, 150);
-                } else {
-                  await android.pressBack(serial);
-                  logger.info({ serial, reel: i + 1 }, "[view-reels] Send button not found after picking recipient — pressing Back");
-                  onLog?.(`Reel ${i + 1}/${totalReels}: Send button not found — closed DM picker`);
-                  await sleepOrAbort(serial, 200);
-                }
-              }
+              // Use the exact same shared implementation as View Feed — no
+              // inline copy. shareCurrentPostViaDm taps the icon, waits for
+              // the sheet, confirms it, picks a recipient, and sends.
+              const sent = await shareCurrentPostViaDm(
+                serial, w, h, icons.shareDm,
+                `Reel ${i + 1}/${totalReels}`, "[view-reels]", onLog,
+              );
+              if (sent) sharesDm++;
             }
           }
         }

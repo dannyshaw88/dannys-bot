@@ -4,6 +4,15 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.619] — 2026-07-16
+
+### Fixed
+- **View Reels — Share via DM**: replaced every previous iteration of the inline post-sheet block with a direct call to `shareCurrentPostViaDm` — the exact same shared implementation View Feed uses. No more hand-copied variant that can drift. All share-sheet logic (icon tap, 1500ms wait, `confirmAndScanShareSheet`, recipient pick, Send) now runs through one code path.
+- **Phone Farm — nav label & page title**: renamed "Farm" → "Phone Farm" in the sidebar nav (label and short label) and the page header.
+- **Phone Farm — icon**: sidebar nav icon and page header icon updated to phone + gear badge + speed-lines design (matches uploaded reference image), filled with the app's cyan primary colour when active.
+
+---
+
 ## [1.1.618] — 2026-07-16
 
 ### Fixed
