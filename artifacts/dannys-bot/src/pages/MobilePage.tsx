@@ -3206,7 +3206,7 @@ function AutomationSettingsPanel({
                   checked={settings.followFilterPrivateUsers}
                   onChange={e => setSettings(s => ({ ...s, followFilterPrivateUsers: e.target.checked }))}
                   disabled={loading}
-                  className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                  className="w-4 h-4 accent-primary cursor-pointer"
                 />
                 <label htmlFor="filter-private-users" className="text-xs text-muted-foreground cursor-pointer select-none">Private Users</label>
               </div>
@@ -3217,7 +3217,7 @@ function AutomationSettingsPanel({
                   checked={settings.followFilterEnglishSpeaking}
                   onChange={e => setSettings(s => ({ ...s, followFilterEnglishSpeaking: e.target.checked }))}
                   disabled={loading}
-                  className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                  className="w-4 h-4 accent-primary cursor-pointer"
                 />
                 <label htmlFor="filter-english-speaking" className="text-xs text-muted-foreground cursor-pointer select-none">English Speaking</label>
               </div>
@@ -3228,7 +3228,7 @@ function AutomationSettingsPanel({
                   checked={settings.followFilterMinFollowers250}
                   onChange={e => setSettings(s => ({ ...s, followFilterMinFollowers250: e.target.checked }))}
                   disabled={loading}
-                  className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                  className="w-4 h-4 accent-primary cursor-pointer"
                 />
                 <label htmlFor="filter-min-followers-250" className="text-xs text-muted-foreground cursor-pointer select-none">250 Followers+</label>
               </div>
@@ -3472,7 +3472,6 @@ function AutomationSettingsPanel({
                 {settings.makePostLocalFolderEnabled && (
                   <div className="space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2">
-                      {/* Folder icon — green tick when a path is set, red cross when empty */}
                       <button
                         type="button"
                         disabled={loading}
@@ -3483,22 +3482,14 @@ function AutomationSettingsPanel({
                           if (result?.canceled || !result?.folder) return;
                           setSettings(s => ({ ...s, makePostLocalFolderPath: result.folder }));
                         }}
-                        title={settings.makePostLocalFolderPath || "No folder selected — click to browse"}
-                        className="relative h-10 w-10 rounded border border-border bg-background hover:border-foreground/30 transition-colors flex items-center justify-center shrink-0"
+                        className="h-7 px-3 text-xs rounded border border-border bg-background hover:border-foreground/30 hover:bg-accent transition-colors shrink-0 font-medium text-foreground"
                       >
-                        <FolderOpen className={`w-5 h-5 ${settings.makePostLocalFolderPath ? "text-foreground" : "text-muted-foreground/50"}`} />
-                        {settings.makePostLocalFolderPath ? (
-                          <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-green-500 flex items-center justify-center text-[9px] text-white font-bold leading-none select-none">✓</span>
-                        ) : (
-                          <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 flex items-center justify-center text-[9px] text-white font-bold leading-none select-none">✕</span>
-                        )}
+                        {settings.makePostLocalFolderPath ? "Assigned Directory" : "Browse"}
                       </button>
-                      {settings.makePostLocalFolderPath ? (
+                      {settings.makePostLocalFolderPath && (
                         <span className="text-[10px] font-mono text-muted-foreground max-w-[240px] truncate" title={settings.makePostLocalFolderPath}>
                           {settings.makePostLocalFolderPath}
                         </span>
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground/50 italic">No folder selected</span>
                       )}
                       <div className="flex items-center gap-2">
                         <input type="checkbox" id="make-a-post-local-no-repeat"
@@ -3518,57 +3509,57 @@ function AutomationSettingsPanel({
                       </div>
                     </div>
 
-                    {/* Posted Media panel — mirrors the Sources panel aesthetic */}
-                    {showPostedMedia && (
-                      <div className="border border-border rounded-lg p-3 space-y-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs text-muted-foreground flex-1">
-                            {postedMediaFiles.length} image{postedMediaFiles.length !== 1 ? 's' : ''} posted
-                          </span>
-                          <Button
-                            variant="outline" size="sm" className="h-7 text-xs px-2.5 gap-1 shrink-0"
-                            onClick={loadPostedMedia}
-                            disabled={loadingPostedMedia}
-                          >Refresh</Button>
-                          {postedMediaFiles.length > 0 && (
-                            <Button
-                              variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:text-destructive shrink-0"
-                              disabled={loadingPostedMedia}
-                              onClick={async () => {
-                                if (!phone?.serial) return;
-                                // Clear all — delete each entry via the API
-                                await Promise.all(postedMediaFiles.map(f =>
-                                  fetch(`/api/mobile/devices/${encodeURIComponent(phone!.serial)}/posted-media/${encodeURIComponent(f)}`, { method: 'DELETE' })
-                                ));
-                                setPostedMediaFiles([]);
-                              }}
-                            >Clear all</Button>
-                          )}
-                        </div>
-                        {postedMediaFiles.length > 0 ? (
-                          <div className="space-y-1 max-h-[260px] overflow-y-auto pr-0.5">
-                            {postedMediaFiles.map((fname, i) => (
-                              <div key={i} className="flex items-center gap-2 text-xs">
-                                <span className="flex-1 text-foreground font-mono truncate">{fname}</span>
-                                <button
-                                  onClick={() => deletePostedMediaEntry(fname)}
-                                  disabled={loadingPostedMedia}
-                                  title="Remove — allows this image to be reposted"
-                                  className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
-                                >✕</button>
-                              </div>
-                            ))}
-                          </div>
-                        ) : loadingPostedMedia ? (
-                          <p className="text-xs text-muted-foreground">Loading…</p>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">No images posted yet.</p>
-                        )}
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
+
+              {/* Posted Media panel — shown when the Posted Media button is toggled */}
+              {showPostedMedia && (
+                <div className="border border-border rounded-lg p-3 space-y-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs text-muted-foreground flex-1">
+                      {postedMediaFiles.length} image{postedMediaFiles.length !== 1 ? 's' : ''} posted
+                    </span>
+                    <Button
+                      variant="outline" size="sm" className="h-7 text-xs px-2.5 gap-1 shrink-0"
+                      onClick={loadPostedMedia}
+                      disabled={loadingPostedMedia}
+                    >Refresh</Button>
+                    {postedMediaFiles.length > 0 && (
+                      <Button
+                        variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:text-destructive shrink-0"
+                        disabled={loadingPostedMedia}
+                        onClick={async () => {
+                          if (!phone?.serial) return;
+                          await Promise.all(postedMediaFiles.map(f =>
+                            fetch(`/api/mobile/devices/${encodeURIComponent(phone!.serial)}/posted-media/${encodeURIComponent(f)}`, { method: 'DELETE' })
+                          ));
+                          setPostedMediaFiles([]);
+                        }}
+                      >Clear all</Button>
+                    )}
+                  </div>
+                  {postedMediaFiles.length > 0 ? (
+                    <div className="space-y-1 max-h-[260px] overflow-y-auto pr-0.5">
+                      {postedMediaFiles.map((fname, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs">
+                          <span className="flex-1 text-foreground font-mono truncate">{fname}</span>
+                          <button
+                            onClick={() => deletePostedMediaEntry(fname)}
+                            disabled={loadingPostedMedia}
+                            title="Remove — allows this image to be reposted"
+                            className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                          >✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : loadingPostedMedia ? (
+                    <p className="text-xs text-muted-foreground">Loading…</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No images posted yet.</p>
+                  )}
+                </div>
+              )}
 
               {/* Caption */}
               <div className="space-y-2">

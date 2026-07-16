@@ -4,6 +4,37 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.643] — 2026-07-16
+
+### Changed
+
+- **Make a Post → SOURCE: MY COMPUTER — Browse / Assigned Directory button**
+
+  The folder icon button with its red-cross / green-tick badge has been replaced with a plain text button:
+
+  - Shows **Browse** when no directory has been selected yet.
+  - Changes to **Assigned Directory** (with the path shown alongside it) once a folder is picked.
+  - Clicking the button in either state opens the native folder picker as before.
+  - The red-cross "not set" badge has been removed entirely.
+
+- **Make a Post → Posted Media panel — no longer hidden when local folder is disabled**
+
+  The Posted Media panel was previously nested inside the "Source: My Computer" enabled condition, which meant it would disappear (and appear empty) if the local-folder source was unchecked while checking post history. The panel is now rendered at the Make a Post section level — it is always visible when the "Posted Media" toggle is active, regardless of whether the local-folder source is currently enabled.
+
+- **Follow Tool → Filters checkboxes — same size as all other checkboxes**
+
+  The three filter checkboxes (Private Users, English Speaking, 250 Followers+) were `w-3.5 h-3.5`. They are now `w-4 h-4`, matching every other checkbox in the tool.
+
+- **Phone Farm page header — cyan icon, removed device count**
+
+  The PhoneFarm icon in the page header is now explicitly `#1AD2F2` (Equinox cyan). The "N devices registered" label that sat next to the title has been removed.
+
+- **Phone Farm grid — always 2 rows × 3 columns**
+
+  The device grid previously collapsed to a single row when fewer than 4 devices were registered. It now always renders exactly 6 slots in a fixed 2-row × 3-column layout regardless of how many devices are connected. Phone images are larger (`max-w-[150px]` up from `max-w-[110px]`) and vertical padding on each card is tighter (`py-2 px-2`) to eliminate excess white space above and below the phone graphic.
+
+---
+
 ## [1.1.642] — 2026-07-16
 
 ### Added

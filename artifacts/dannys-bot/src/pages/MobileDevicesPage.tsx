@@ -314,10 +314,10 @@ function DeviceCard({
     <div className="group h-full relative flex flex-col">
       <button
         onClick={onClick}
-        className="flex-1 flex flex-col items-center gap-2 py-4 px-3 rounded-2xl border border-border bg-card hover:border-primary/50 hover:bg-card/80 transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40"
+        className="flex-1 flex flex-col items-center gap-1.5 py-2 px-2 rounded-2xl border border-border bg-card hover:border-primary/50 hover:bg-card/80 transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40"
       >
         <PhoneShell
-          className="flex-1 min-h-0 w-auto max-w-[110px] drop-shadow-lg group-hover:scale-[1.03] transition-transform duration-200"
+          className="flex-1 min-h-0 w-auto max-w-[150px] drop-shadow-lg group-hover:scale-[1.03] transition-transform duration-200"
           online={online}
         />
         <div className="shrink-0 text-center space-y-0.5">
@@ -420,7 +420,7 @@ export function MobileDevicesPage() {
   // All slots beyond that are hidden.
   const maxSlot   = devices.length > 0 ? Math.max(...devices.map(d => d.slotIndex)) : 0;
   const addSlot   = maxSlot + 1;  // the "Add Device" cell index (1-based)
-  const visibleUp = Math.min(addSlot, 6); // never exceed 6 slots
+  const visibleUp = 6; // always show all 6 slots (2 rows × 3 columns)
 
   // slotMap: slot index → device (or null)
   const slotMap = new Map<number, FarmDevice>();
@@ -451,11 +451,8 @@ export function MobileDevicesPage() {
       <main className="ml-[133px] flex-1 h-screen flex flex-col overflow-hidden">
         {/* Header */}
         <div className="shrink-0 z-10 bg-background/95 backdrop-blur border-b border-border px-6 py-3 flex items-center gap-3">
-          <PhoneFarmIcon className="w-5 h-5 text-primary" />
+          <PhoneFarmIcon className="w-5 h-5" style={{ color: "#1AD2F2" }} />
           <h1 className="text-lg font-bold text-foreground">Phone Farm</h1>
-          <span className="text-xs text-muted-foreground ml-1">
-            {devices.length} device{devices.length !== 1 ? "s" : ""} registered
-          </span>
         </div>
 
         {loadingDb ? (
@@ -469,7 +466,7 @@ export function MobileDevicesPage() {
               className="flex-1 grid gap-4"
               style={{
                 gridTemplateColumns: "repeat(3, 1fr)",
-                gridTemplateRows:    visibleUp <= 3 ? "1fr" : "repeat(2, 1fr)",
+                gridTemplateRows:    "repeat(2, 1fr)",
                 // If add panel open, shrink the grid to make room
                 maxWidth: showingAddPanel ? "55%" : "100%",
               }}
