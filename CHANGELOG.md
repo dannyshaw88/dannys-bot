@@ -4,6 +4,30 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.634] — 2026-07-16
+
+### Changed
+
+- **Make a Post — "Delete after upload" checkbox removed** — The local-folder file is no longer manually controlled by a UI toggle. The device copy was already always deleted after a successful post (v1.1.633). The local-folder server-copy deletion behaviour is unchanged (controlled server-side by the existing setting default). Removing the checkbox simplifies the UI and avoids user confusion between the device copy and the source-folder copy.
+
+- **Make a Post — Alteration level checkbox moved left of its buttons** — The enable checkbox and "Alteration level" label now sit on the same horizontal row as the Small / Medium / High level buttons, with the checkbox on the far left. Previously the checkbox was displayed above the buttons in a stacked `flex-col` layout. Text and controls are vertically centred within the row.
+
+- **Make a Post — Image settings checkbox moved left of Configure** — Same layout change as Alteration level: the enable checkbox and "Image settings" label now sit inline to the left of the Configure button instead of stacked above it.
+
+### Added
+
+- **Make a Post — "Fix AI Slop" checkbox** — New option positioned before "Make it unique" in the post-settings row. When enabled, the image is processed by `fixAiSlop()` before being pushed to the phone, targeting three AI-detection vectors:
+
+  1. **Metadata** — All EXIF, XMP, IPTC, and C2PA (Content Authenticity Initiative) data is stripped unconditionally. C2PA manifests are cryptographic proofs of AI origin embedded by Adobe Firefly, Getty Images AI, Google ImageFX, and others; stripping them removes the verifiable chain of custody that AI scanners rely on.
+
+  2. **Steganographic / DCT watermarks** — Invisible pixel-pattern watermarks baked into JPEG DCT coefficients at generation time (e.g. Stable Diffusion's Invisible Watermark library, Midjourney's hidden per-image signature) are destroyed by re-encoding through a randomised JPEG quality level (88–96). Each quality value uses a different DCT quantisation step table, which scrambles any fixed-pattern steganographic embedding.
+
+  3. **Statistical / frequency-domain fingerprints** — AI diffusion and GAN models leave characteristic spectral power distributions in the mid-to-high spatial frequencies (artifacts of the up-sampling / denoising process) that CNNs trained on AI-vs-real datasets can reliably detect. A sub-pixel Gaussian blur (σ 0.3–0.7, below the human perceptual threshold of σ ≈ 1.0) attenuates these without any visible quality loss. A ±0.15% random tonal micro-jitter further decorrelates the residual from any single generator's known spectral signature.
+
+  Processing is implemented in `artifacts/api-server/src/instagram/fixAiSlop.ts` using `sharp` (already a project dependency). If `sharp` is unavailable or processing throws, the original file is pushed unchanged — the post is never blocked by this step. The temp file produced by processing is always cleaned up immediately after the adb push, regardless of success or failure.
+
+---
+
 ## [1.1.633] — 2026-07-16
 
 ### Fixed

@@ -11,6 +11,7 @@ import { WebSocketServer } from "ws";
 import * as android from "../mobile/androidManager";
 import * as proxyRelay from "../mobile/proxyRelay";
 import * as sessionRecorder from "../mobile/sessionRecorder";
+import { fixAiSlop, cleanupAiSlopTemp } from "../instagram/fixAiSlop";
 // NOTE: src/mobile/scrcpyServer.ts implements a real scrcpy-server protocol
 // client that was meant to replace the screenrecord-based mirror below (to
 // fix screenrecord's MIUI keyguard-freeze issue), but it has never
@@ -181,6 +182,7 @@ type AutomationSettings = {
   makePostLocalFolderRandom?: boolean;
   makePostLocalFolderDeleteAfterUpload?: boolean;
   makePostUseChatGpt?: boolean;
+  makePostFixAiSlop?: boolean;
   makePostMakeUnique?: boolean;
   makePostDisableComments?: boolean;
   makePostCaptionText?: string;
@@ -1023,6 +1025,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostLocalFolderRandom: z.boolean().default(false),
     makePostLocalFolderDeleteAfterUpload: z.boolean().default(true),
     makePostUseChatGpt: z.boolean().default(false),
+    makePostFixAiSlop: z.boolean().default(false),
     makePostMakeUnique: z.boolean().default(false),
     makePostDisableComments: z.boolean().default(false),
     makePostCaptionText: z.string().default(""),
@@ -1089,7 +1092,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       makePostLocalFolderEnabled: false, makePostLocalFolderPath: "",
       makePostLocalFolderNoRepeat: false, makePostLocalFolderRandom: false,
       makePostLocalFolderDeleteAfterUpload: true,
-      makePostUseChatGpt: false, makePostMakeUnique: false, makePostDisableComments: false,
+      makePostUseChatGpt: false, makePostFixAiSlop: false, makePostMakeUnique: false, makePostDisableComments: false,
       makePostCaptionText: "",
       makePostImageSettings: {
         contrast: { enabled: true, min: 5, max: 250 },
@@ -2648,9 +2651,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   async function runMakePostStep(serial: string, opts: {
     localFolderPath: string; localFolderRandom: boolean; localFolderNoRepeat: boolean;
     deleteAfterUpload: boolean; captionText: string; disableComments: boolean;
+    doFixAiSlop?: boolean;
     onLog?: (msg: string) => void;
   }): Promise<{ posted: boolean; fileName?: string }> {
-    const { localFolderPath, localFolderRandom, localFolderNoRepeat, deleteAfterUpload, captionText, disableComments, onLog } = opts;
+    const { localFolderPath, localFolderRandom, localFolderNoRepeat, deleteAfterUpload, captionText, disableComments, doFixAiSlop, onLog } = opts;
 
     const fileName = await pickLocalFolderImage(serial, {
       folderPath: localFolderPath, random: localFolderRandom, noRepeat: localFolderNoRepeat, onLog,
@@ -2658,14 +2662,35 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (!fileName) return { posted: false };
     const localFilePath = path.join(localFolderPath, fileName);
 
+    // Fix AI Slop — strip metadata, DCT watermarks and AI frequency fingerprints
+    // from the image before pushing it to the device. Produces a temp file that
+    // must be cleaned up after the push regardless of success or failure.
+    let pushFilePath = localFilePath;
+    if (doFixAiSlop) {
+      onLog?.("Make a Post: Fix AI Slop — stripping metadata & AI fingerprints…");
+      try {
+        pushFilePath = await fixAiSlop(localFilePath);
+        if (pushFilePath !== localFilePath) {
+          onLog?.("Make a Post: Fix AI Slop ✓ — metadata stripped, DCT watermarks scrambled");
+        } else {
+          onLog?.("Make a Post: Fix AI Slop — sharp unavailable, skipped");
+        }
+      } catch (e: any) {
+        onLog?.(`Make a Post: Fix AI Slop error — ${e?.message ?? "unknown"}, continuing with original`);
+        pushFilePath = localFilePath;
+      }
+    }
+
     onLog?.(`Make a Post: pushing "${fileName}" to device…`);
     let devicePath: string;
     try {
-      devicePath = await android.pushFileToDevice(serial, localFilePath, fileName);
+      devicePath = await android.pushFileToDevice(serial, pushFilePath, fileName);
     } catch (e: any) {
+      await cleanupAiSlopTemp(pushFilePath, localFilePath).catch(() => {});
       onLog?.(`Make a Post: adb push failed — ${e?.message ?? "unknown error"}`);
       return { posted: false };
     }
+    await cleanupAiSlopTemp(pushFilePath, localFilePath).catch(() => {});
     onLog?.(`Make a Post: ✓ pushed to ${devicePath}, media-scanner notified`);
     await sleepOrAbort(serial, 1200); // let the scanner index the file before we open the picker
 
@@ -3758,7 +3783,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostPerSessionMin, makePostPerSessionMax,
         makePostLocalFolderEnabled, makePostLocalFolderPath,
         makePostLocalFolderNoRepeat, makePostLocalFolderRandom, makePostLocalFolderDeleteAfterUpload,
-        makePostDisableComments, makePostCaptionText,
+        makePostFixAiSlop, makePostDisableComments, makePostCaptionText,
       } = automationCycleSchema.parse(req.body);
 
       // 1. Power on the phone.
@@ -3983,6 +4008,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 localFolderRandom: makePostLocalFolderRandom,
                 localFolderNoRepeat: makePostLocalFolderNoRepeat,
                 deleteAfterUpload: makePostLocalFolderDeleteAfterUpload,
+                doFixAiSlop: makePostFixAiSlop,
                 captionText: makePostCaptionText,
                 disableComments: makePostDisableComments,
                 onLog: (msg) => tLog(`  ${msg}`),

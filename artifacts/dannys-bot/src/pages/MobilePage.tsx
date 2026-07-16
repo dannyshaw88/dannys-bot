@@ -1978,6 +1978,7 @@ interface AutomationSettingsData {
   makePostLocalFolderRandom: boolean;
   makePostLocalFolderDeleteAfterUpload: boolean;
   makePostUseChatGpt: boolean;
+  makePostFixAiSlop: boolean;
   makePostMakeUnique: boolean;
   makePostDisableComments: boolean;
   makePostCaptionText: string;
@@ -2042,6 +2043,7 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   makePostLocalFolderRandom: false,
   makePostLocalFolderDeleteAfterUpload: true,
   makePostUseChatGpt: false,
+  makePostFixAiSlop: false,
   makePostMakeUnique: false,
   makePostDisableComments: false,
   makePostCaptionText: "",
@@ -2266,6 +2268,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             makePostLocalFolderRandom: s.makePostLocalFolderRandom,
             makePostLocalFolderDeleteAfterUpload: s.makePostLocalFolderDeleteAfterUpload,
             makePostUseChatGpt: s.makePostUseChatGpt,
+            makePostFixAiSlop: s.makePostFixAiSlop,
             makePostMakeUnique: s.makePostMakeUnique,
             makePostDisableComments: s.makePostDisableComments,
             makePostCaptionText: s.makePostCaptionText,
@@ -3414,14 +3417,6 @@ function AutomationSettingsPanel({
                           className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                         <label htmlFor="make-a-post-local-random" className="text-xs text-muted-foreground cursor-pointer select-none">Pick at random</label>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <input type="checkbox" id="make-a-post-local-delete-after"
-                          checked={settings.makePostLocalFolderDeleteAfterUpload}
-                          onChange={e => setSettings(s => ({ ...s, makePostLocalFolderDeleteAfterUpload: e.target.checked }))}
-                          disabled={loading}
-                          className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                        <label htmlFor="make-a-post-local-delete-after" className="text-xs text-muted-foreground cursor-pointer select-none">Delete after upload</label>
-                      </div>
                     </div>
                   </div>
                 )}
@@ -3451,19 +3446,17 @@ function AutomationSettingsPanel({
                   disabled={loading}
                 />
                 {/* Image alteration — applies to whichever source produced the image.
-                    Each control has its own enable checkbox; when off, the control
-                    stays visible (not hidden) but shows as inactive/disabled rather
-                    than disappearing. */}
-                <div className="flex flex-wrap items-end gap-4">
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <input type="checkbox" id="make-a-post-alteration-enabled"
-                        checked={settings.makePostAlterationEnabled}
-                        onChange={e => setSettings(s => ({ ...s, makePostAlterationEnabled: e.target.checked }))}
-                        disabled={loading}
-                        className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                      <label htmlFor="make-a-post-alteration-enabled" className="text-xs text-muted-foreground cursor-pointer select-none">Alteration level</label>
-                    </div>
+                    Each control has its own enable checkbox on the LEFT of its
+                    associated controls, all on one row. */}
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                  {/* Alteration level — checkbox left of Small/Medium/High */}
+                  <div className="flex items-center gap-2">
+                    <input type="checkbox" id="make-a-post-alteration-enabled"
+                      checked={settings.makePostAlterationEnabled}
+                      onChange={e => setSettings(s => ({ ...s, makePostAlterationEnabled: e.target.checked }))}
+                      disabled={loading}
+                      className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0" />
+                    <label htmlFor="make-a-post-alteration-enabled" className="text-xs text-muted-foreground cursor-pointer select-none shrink-0">Alteration level</label>
                     <div className="flex gap-1">
                       {(["small", "medium", "high"] as const).map(lvl => (
                         <button key={lvl} type="button" disabled={loading || !settings.makePostAlterationEnabled}
@@ -3479,15 +3472,14 @@ function AutomationSettingsPanel({
                       ))}
                     </div>
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <input type="checkbox" id="make-a-post-image-settings-enabled"
-                        checked={settings.makePostImageSettingsEnabled}
-                        onChange={e => setSettings(s => ({ ...s, makePostImageSettingsEnabled: e.target.checked }))}
-                        disabled={loading}
-                        className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                      <label htmlFor="make-a-post-image-settings-enabled" className="text-xs text-muted-foreground cursor-pointer select-none">Image settings</label>
-                    </div>
+                  {/* Image settings — checkbox left of Configure button */}
+                  <div className="flex items-center gap-2">
+                    <input type="checkbox" id="make-a-post-image-settings-enabled"
+                      checked={settings.makePostImageSettingsEnabled}
+                      onChange={e => setSettings(s => ({ ...s, makePostImageSettingsEnabled: e.target.checked }))}
+                      disabled={loading}
+                      className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0" />
+                    <label htmlFor="make-a-post-image-settings-enabled" className="text-xs text-muted-foreground cursor-pointer select-none shrink-0">Image settings</label>
                     <button type="button" disabled={loading || !settings.makePostImageSettingsEnabled}
                       onClick={() => setMakePostImageSettingsOpen(true)}
                       className={`h-8 px-3 text-xs rounded border transition-colors ${
@@ -3497,7 +3489,17 @@ function AutomationSettingsPanel({
                       }`}
                     >Configure</button>
                   </div>
-                  <div className="flex items-center gap-1.5 pb-2.5">
+                  {/* Fix AI Slop */}
+                  <div className="flex items-center gap-1.5">
+                    <input type="checkbox" id="make-a-post-fix-ai-slop"
+                      checked={settings.makePostFixAiSlop}
+                      onChange={e => setSettings(s => ({ ...s, makePostFixAiSlop: e.target.checked }))}
+                      disabled={loading}
+                      className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                    <label htmlFor="make-a-post-fix-ai-slop" className="text-xs text-muted-foreground cursor-pointer select-none">Fix AI Slop</label>
+                  </div>
+                  {/* Make it unique */}
+                  <div className="flex items-center gap-1.5">
                     <input type="checkbox" id="make-a-post-make-unique"
                       checked={settings.makePostMakeUnique}
                       onChange={e => setSettings(s => ({ ...s, makePostMakeUnique: e.target.checked }))}
@@ -3505,7 +3507,8 @@ function AutomationSettingsPanel({
                       className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                     <label htmlFor="make-a-post-make-unique" className="text-xs text-muted-foreground cursor-pointer select-none">Make it unique</label>
                   </div>
-                  <div className="flex items-center gap-1.5 pb-2.5">
+                  {/* Disable comments */}
+                  <div className="flex items-center gap-1.5">
                     <input type="checkbox" id="make-a-post-disable-comments"
                       checked={settings.makePostDisableComments}
                       onChange={e => setSettings(s => ({ ...s, makePostDisableComments: e.target.checked }))}
