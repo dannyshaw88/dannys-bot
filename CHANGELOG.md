@@ -4,6 +4,25 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.641] — 2026-07-16
+
+### Changed
+
+- **Make a Post → Source: My Computer — directory field replaced with folder icon indicator**
+  The text input + "Browse…" button combo has been replaced with a compact folder icon button that shows:
+  - 🟢 **Green tick badge** when a folder path has been selected
+  - 🔴 **Red cross badge** when no folder is selected
+  - Clicking the icon still opens the native folder picker dialog (same as before)
+  - The selected path is displayed as small monospace text beside the icon; "No folder selected" placeholder when empty
+
+- **Human Session Tool — removed redundant `%` suffix after min/max value pairs**
+  All tools (View Feed, View Stories from Feed, View Reels, Follow Users) had a trailing `%` symbol at the end of their Activate Percentage / Like % / Share % etc. rows. These are now removed — the `%` is already indicated in each field's title label, so the suffix was duplicating information.
+
+- **Random Jitter — reduced label text size so section headers fit on one row**
+  The section group titles ("Activate Percentage", "Check Notifications", "Visit My Profile") and their "Chance %" sub-labels have been reduced from `text-xs` (12px) to `text-[10px]` so each group header fits on a single line without wrapping.
+
+---
+
 ## [1.1.640] — 2026-07-16
 
 ### Added

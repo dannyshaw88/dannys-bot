@@ -2541,7 +2541,7 @@ function AutomationSettingsPanel({
                 value={settings.feedActivatePctMax}
                 onChange={e => setSettings(s => ({ ...s, feedActivatePctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
-              <span className="text-muted-foreground text-sm">%</span>
+
             </div>
           </div>
 
@@ -2621,7 +2621,7 @@ function AutomationSettingsPanel({
                 onChange={e => setSettings(s => ({ ...s, likePercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading}
               />
-              <span className="text-muted-foreground text-sm">%</span>
+
             </div>
           </div>
 
@@ -2649,7 +2649,7 @@ function AutomationSettingsPanel({
                 onChange={e => setSettings(s => ({ ...s, shareFeedPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading}
               />
-              <span className="text-muted-foreground text-sm">%</span>
+
             </div>
           </div>
 
@@ -2677,7 +2677,7 @@ function AutomationSettingsPanel({
                 onChange={e => setSettings(s => ({ ...s, shareDmPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading}
               />
-              <span className="text-muted-foreground text-sm">%</span>
+
             </div>
           </div>
         </div>}
@@ -2715,7 +2715,7 @@ function AutomationSettingsPanel({
                 value={settings.viewStoriesActivatePctMax}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesActivatePctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
-              <span className="text-muted-foreground text-sm">%</span>
+
             </div>
           </div>
 
@@ -2746,7 +2746,7 @@ function AutomationSettingsPanel({
                 value={settings.viewStoriesSlideWatchPctMax}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesSlideWatchPctMax: Math.min(100, Math.max(1, clamp4(Number(e.target.value)))) }))}
                 disabled={loading} />
-              <span className="text-muted-foreground text-sm">%</span>
+
             </div>
           </div>
 
@@ -2762,7 +2762,7 @@ function AutomationSettingsPanel({
                 value={settings.viewStoriesLikePercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesLikePercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
-              <span className="text-muted-foreground text-sm">%</span>
+
             </div>
           </div>
 
@@ -2778,7 +2778,7 @@ function AutomationSettingsPanel({
                 value={settings.viewStoriesShareDmPercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesShareDmPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
-              <span className="text-muted-foreground text-sm">%</span>
+
             </div>
           </div>
         </div>}
@@ -2815,7 +2815,7 @@ function AutomationSettingsPanel({
                 value={settings.viewReelsActivatePctMax}
                 onChange={e => setSettings(s => ({ ...s, viewReelsActivatePctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
-              <span className="text-muted-foreground text-sm">%</span>
+
             </div>
           </div>
 
@@ -2846,7 +2846,7 @@ function AutomationSettingsPanel({
                 value={settings.viewReelsWatchPctMax}
                 onChange={e => setSettings(s => ({ ...s, viewReelsWatchPctMax: Math.min(100, Math.max(1, clamp4(Number(e.target.value)))) }))}
                 disabled={loading} />
-              <span className="text-muted-foreground text-sm">%</span>
+
             </div>
           </div>
 
@@ -2862,7 +2862,7 @@ function AutomationSettingsPanel({
                 value={settings.viewReelsLikePercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewReelsLikePercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
-              <span className="text-muted-foreground text-sm">%</span>
+
             </div>
           </div>
 
@@ -2878,7 +2878,7 @@ function AutomationSettingsPanel({
                 value={settings.viewReelsShareFeedPercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewReelsShareFeedPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
-              <span className="text-muted-foreground text-sm">%</span>
+
             </div>
           </div>
 
@@ -2894,7 +2894,7 @@ function AutomationSettingsPanel({
                 value={settings.viewReelsShareDmPercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewReelsShareDmPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
-              <span className="text-muted-foreground text-sm">%</span>
+
             </div>
           </div>
         </div>}
@@ -2942,7 +2942,7 @@ function AutomationSettingsPanel({
                 value={settings.followActivatePctMax}
                 onChange={e => setSettings(s => ({ ...s, followActivatePctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
-              <span className="text-muted-foreground text-sm">%</span>
+
             </div>
           </div>
 
@@ -3194,10 +3194,10 @@ function AutomationSettingsPanel({
                 {/* ── Activate Percentage — outer gate for the whole Random
                      Jitter tool this execution, independent of each
                      sub-action's own chance below. ── */}
-                <div className="space-y-2">
-                  <Label className="text-xs font-medium text-foreground">Activate Percentage</Label>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Chance %</Label>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-medium text-foreground">Activate Percentage</Label>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-muted-foreground">Chance %</Label>
                     <div className="flex items-center gap-2">
                       <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                         value={settings.randomJitterActivatePctMin}
@@ -3213,11 +3213,11 @@ function AutomationSettingsPanel({
                 </div>
 
                 {/* ── Check Notifications group ── */}
-                <div className="space-y-2">
-                  <Label className="text-xs font-medium text-foreground">Check Notifications</Label>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-medium text-foreground">Check Notifications</Label>
                   <div className="flex items-start gap-6 flex-wrap">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Chance %</Label>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">Chance %</Label>
                       <div className="flex items-center gap-2">
                         <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                           value={settings.checkNotificationsPctMin}
@@ -3262,10 +3262,10 @@ function AutomationSettingsPanel({
                 </div>
 
                 {/* ── Visit My Profile group — same row via flex-wrap ── */}
-                <div className="space-y-2">
-                  <Label className="text-xs font-medium text-foreground">Visit My Profile</Label>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Chance %</Label>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-medium text-foreground">Visit My Profile</Label>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-muted-foreground">Chance %</Label>
                     <div className="flex items-center gap-2">
                       <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                         value={settings.visitProfilePctMin}
@@ -3407,10 +3407,7 @@ function AutomationSettingsPanel({
                 {settings.makePostLocalFolderEnabled && (
                   <div className="space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Input type="text" placeholder="C:\Users\You\Pictures\Posts" className="h-8 text-xs font-mono w-[280px]"
-                        value={settings.makePostLocalFolderPath}
-                        onChange={e => setSettings(s => ({ ...s, makePostLocalFolderPath: e.target.value }))}
-                        disabled={loading} />
+                      {/* Folder icon — green tick when a path is set, red cross when empty */}
                       <button
                         type="button"
                         disabled={loading}
@@ -3421,11 +3418,23 @@ function AutomationSettingsPanel({
                           if (result?.canceled || !result?.folder) return;
                           setSettings(s => ({ ...s, makePostLocalFolderPath: result.folder }));
                         }}
-                        className="h-8 px-3 text-xs rounded border border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors flex items-center gap-1.5 shrink-0"
+                        title={settings.makePostLocalFolderPath || "No folder selected — click to browse"}
+                        className="relative h-10 w-10 rounded border border-border bg-background hover:border-foreground/30 transition-colors flex items-center justify-center shrink-0"
                       >
-                        <FolderOpen className="w-3.5 h-3.5" />
-                        Browse…
+                        <FolderOpen className={`w-5 h-5 ${settings.makePostLocalFolderPath ? "text-foreground" : "text-muted-foreground/50"}`} />
+                        {settings.makePostLocalFolderPath ? (
+                          <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-green-500 flex items-center justify-center text-[9px] text-white font-bold leading-none select-none">✓</span>
+                        ) : (
+                          <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 flex items-center justify-center text-[9px] text-white font-bold leading-none select-none">✕</span>
+                        )}
                       </button>
+                      {settings.makePostLocalFolderPath ? (
+                        <span className="text-[10px] font-mono text-muted-foreground max-w-[240px] truncate" title={settings.makePostLocalFolderPath}>
+                          {settings.makePostLocalFolderPath}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground/50 italic">No folder selected</span>
+                      )}
                       <div className="flex items-center gap-2">
                         <input type="checkbox" id="make-a-post-local-no-repeat"
                           checked={settings.makePostLocalFolderNoRepeat}
