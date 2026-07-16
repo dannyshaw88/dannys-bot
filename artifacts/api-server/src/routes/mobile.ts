@@ -1544,8 +1544,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     await sleepOrAbort(serial, 800);
                     const _cfIsOpen = async () => {
                       const _x = await android.dumpUi(serial).catch(() => "");
+                      // "Add to story" removed — the home feed's story tray has
+                      // desc="Add to story" on the reel badge, so it's present in the
+                      // tree even after the share sheet closes, causing a false-positive
+                      // that made the code think the sheet was still open and press Back.
                       return _x.includes("direct_private_share") || _x.includes("grid_view_pog_avatar_view") ||
-                             _x.includes("android.widget.EditText") || _x.includes("Copy link") || _x.includes("Add to story");
+                             _x.includes("android.widget.EditText") || _x.includes("Copy link");
                     };
                     // Always fresh lookup after recipient tap — direct_send_button_multi_select
                     // only appears once a recipient is selected, so _cfSendBtn0 (from the

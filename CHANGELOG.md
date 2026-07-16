@@ -4,6 +4,14 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.630] — 2026-07-16
+
+### Fixed
+
+- **View Feed — Share via DM: "Add to story" false-positive in sheet-open check** — After the DM is sent and the share sheet closes, the home feed's story tray contains `desc="Add to story"` on the reel badge. The `_cfIsOpen` check included `"Add to story"` as a sheet-open signal, so it incorrectly returned true even after the sheet had closed — causing the code to log "sheet still open" and press Back on the feed on every successful send. Removed `"Add to story"` from `_cfIsOpen`; the remaining signals (`direct_private_share`, `grid_view_pog_avatar_view`, `android.widget.EditText`, `Copy link`) are unique to the share sheet and not present in the regular feed. View Feed block only — no other tool touched.
+
+---
+
 ## [1.1.629] — 2026-07-16
 
 ### Fixed
