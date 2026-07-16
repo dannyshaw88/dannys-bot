@@ -84,6 +84,7 @@ export interface IStorage {
   bulkInsertPreStatusChangeHits(hits: { profileId: number; username: string; operationName: string; fromStatus: string; toStatus: string; occurredAt: string }[]): Promise<void>;
 
   // Followed Users
+  getAllFollowedUsernames(limit?: number): Promise<Set<string>>;
   getFollowedUsersByProfile(profileId: number, limit?: number): Promise<FollowedUser[]>;
   createFollowedUser(entry: InsertFollowedUser): Promise<FollowedUser>;
   deleteFollowedUser(id: number): Promise<void>;
@@ -690,6 +691,16 @@ export class DatabaseStorage implements IStorage {
       .where(eq(followedUsers.profileId, profileId))
       .orderBy(desc(followedUsers.followedAt))
       .limit(limit);
+  }
+
+  /** Return the set of ALL followed Instagram usernames (lowercased) across
+   *  every profile — used by the phone automation engine to build the global
+   *  skip set without requiring a profile-scoped lookup. */
+  async getAllFollowedUsernames(limit = 100_000): Promise<Set<string>> {
+    const rows = await db.select({ u: followedUsers.instagramUsername })
+      .from(followedUsers)
+      .limit(limit);
+    return new Set(rows.map(r => r.u.toLowerCase()));
   }
 
   async createFollowedUser(entry: InsertFollowedUser): Promise<FollowedUser> {

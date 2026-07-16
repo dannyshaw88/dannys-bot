@@ -2572,6 +2572,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     list.unshift({ username, source, followedAt: Date.now() });
     // Persist to disk so data survives server restarts.
     try { fs.writeFileSync(_followedFilePath(serial), JSON.stringify(list), "utf8"); } catch { /* best effort */ }
+    // Also write to the shared global followed_users table so ALL phones see
+    // this follow when checking the global skip list. profileId = 0 is the
+    // phone-automation sentinel (no real browser-bot profile). SQLite does not
+    // enforce the FK constraint so the insert succeeds cleanly.
+    storage.createFollowedUser({
+      profileId: 0,
+      instagramUsername: username,
+      instagramUserId: "",
+      sourceValue: source,
+      sourceType: "phone",
+      followedAt: new Date().toISOString(),
+    }).catch(() => { /* best-effort — don't abort automation on a DB write failure */ });
   };
 
   // ── Make a Post — local-folder file picker ──────────────────────────────
@@ -3457,12 +3469,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
        *  matching any entry are dropped before the follow loop begins, so no
        *  browsing time is wasted on a target that has already been followed. */
       skipFollowedUsernames?: Set<string>;
+      /** Usernames in the global skipped list — candidates matching any entry
+       *  are dropped before the follow loop so they are never re-scraped. */
+      skipSkippedUsernames?: Set<string>;
       /** Profile-quality gates to apply after navigating to the target's
        *  profile but before the Follow tap. */
       filters?: { skipVerified?: boolean };
     },
   ): Promise<number> {
-    const { usersMin, usersMax, sources, onLog, recordFollow, browsing, skipFollowedUsernames, filters } = params;
+    const { usersMin, usersMax, sources, onLog, recordFollow, browsing, skipFollowedUsernames, skipSkippedUsernames, filters } = params;
 
     if (!sources.length) {
       onLog?.("Follow: no target sources configured — skipping");
@@ -3527,6 +3542,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       filtered = unique.filter(u => !skipFollowedUsernames.has(u.toLowerCase()));
       const skipped = unique.length - filtered.length;
       if (skipped > 0) onLog?.(`Follow: skipped ${skipped} already-followed user${skipped !== 1 ? 's' : ''}`);
+    }
+    if (skipSkippedUsernames?.size) {
+      const before = filtered.length;
+      filtered = filtered.filter(u => !skipSkippedUsernames.has(u.toLowerCase()));
+      const skipped = before - filtered.length;
+      if (skipped > 0) onLog?.(`Follow: skipped ${skipped} user${skipped !== 1 ? 's' : ''} already in the global skip list`);
     }
     const targets = filtered.slice(0, targetCount);
     onLog?.(`Follow: following ${targets.length} unique users`);
@@ -3632,6 +3653,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               profileXml.includes(":id/verified_checkmark");
             if (isVerified) {
               onLog?.(`Follow: @${username} is verified — skipping (Skip Verified filter)`);
+              // Add to global skipped list so HikerAPI won't scrape this
+              // username again in future cycles.
+              storage.addSkippedUser(username, "verified-badge").catch(() => {});
               await android.pressBack(serial);
               await sleepOrAbort(serial, 500);
               continue;
@@ -3823,6 +3847,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostFixAiSlop, makePostCaptionText,
       } = automationCycleSchema.parse(req.body);
 
+      // ── Global followed / skipped settings ─────────────────────────────────
+      // Read the shared global settings store (Settings → Scraping).  These
+      // are the same flags the browser-bot engine reads — wiring them here
+      // gives phone automation a single, shared "already followed" / "skip
+      // list" that spans all devices and all browser-bot accounts.
+      const globalCycleSettings = await storage.getGlobalSettings();
+      const globalSkipFollowed  = globalCycleSettings.skipFollowedUsers       === "true";
+      const globalSkipSkipped   = globalCycleSettings.skipAlreadySkippedUsers === "true";
+
       // 1. Power on the phone.
       tLog("▶ Waking screen…");
       await android.wakeScreen(serial);
@@ -3994,9 +4027,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             sources: followSources,
             onLog: (msg) => tLog(`  ${msg}`),
             recordFollow: (username, source) => recordMobileFollow(serial, username, source),
-            skipFollowedUsernames: followSkipFollowed
-              ? new Set(getMobileFollowedList(serial).map(e => e.username.toLowerCase()))
-              : undefined,
+            skipFollowedUsernames: await (async () => {
+              if (!followSkipFollowed && !globalSkipFollowed) return undefined;
+              // Start with the per-device JSON log (always available, fast).
+              const local = new Set(getMobileFollowedList(serial).map(e => e.username.toLowerCase()));
+              // Merge the global DB list when the setting is on — covers every
+              // username ever followed by any phone or browser-bot account.
+              if (globalSkipFollowed) {
+                const globalSet = await storage.getAllFollowedUsernames();
+                for (const u of globalSet) local.add(u);
+              }
+              return local;
+            })(),
+            skipSkippedUsernames: await (async () => {
+              if (!globalSkipSkipped) return undefined;
+              const rows = await storage.getSkippedUsers(100_000);
+              return new Set(rows.map(s => s.instagramUsername.toLowerCase()));
+            })(),
             browsing: injectBrowsingEnabled ? {
               activatePctMin: injectBrowsingActivatePctMin, activatePctMax: injectBrowsingActivatePctMax,
               beforeFollowPctMin: injectBrowsingBeforeFollowPctMin, beforeFollowPctMax: injectBrowsingBeforeFollowPctMax,

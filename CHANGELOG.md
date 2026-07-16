@@ -4,6 +4,16 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.645] — 2026-07-16
+
+### Fixed
+- **Crash on startup ("React is not defined")**: `MobileDevicesPage` used `React.useRef` without importing React — changed to the already-in-scope `useRef` hook, eliminating the runtime ReferenceError that showed "Equinox failed to start" when opening the Phone Farm.
+
+### Added
+- **Global followed/skipped list wired to phone automation**: The "Skip Already Followed Users" and "Skip Already Skipped Users" toggles in Settings → Scraping now apply to phone automation cycles. When enabled: the follow step merges the per-device follow log with every username ever followed across all devices and browser-bot accounts before selecting targets; usernames in the global skipped list are dropped from HikerAPI candidates before any follow attempt; verified-badge skips are written to the global skipped list so those accounts are never re-scraped. Every successful phone follow is also written to the shared `followed_users` table (profileId = 0 sentinel) so all devices and the browser-bot see it immediately.
+
+---
+
 ## [1.1.644] — 2026-07-16
 
 ### Added

@@ -439,7 +439,7 @@ export function MobileDevicesPage() {
   // ── Screenshot thumbnail polling ──────────────────────────────────────────
   // Keeps a current-screen snapshot for each online device, refreshing every
   // 4 s.  Uses a ref so the interval doesn't restart when USB state refreshes.
-  const onlineSerialsRef = React.useRef<Set<string>>(new Set());
+  const onlineSerialsRef = useRef<Set<string>>(new Set());
   useEffect(() => { onlineSerialsRef.current = onlineSerials; });
 
   useEffect(() => {
