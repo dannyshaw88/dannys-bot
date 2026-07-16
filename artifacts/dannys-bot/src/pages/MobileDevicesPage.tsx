@@ -123,24 +123,21 @@ export function MobileDevicesPage() {
         <div className="shrink-0 z-10 bg-background/95 backdrop-blur border-b border-border px-6 py-3 flex items-center gap-3">
           <Smartphone className="w-5 h-5 text-primary" />
           <h1 className="text-lg font-bold text-foreground">Mobile Farm</h1>
-          <span className="text-xs text-muted-foreground">{DEVICES.length} device{DEVICES.length !== 1 ? "s" : ""} configured</span>
         </div>
 
-        {/* Device grid */}
-        <div className="flex-1 overflow-y-auto p-8">
-          <div className="max-w-4xl mx-auto">
-            <p className="text-xs text-muted-foreground mb-6 uppercase tracking-widest font-semibold">Select a device to manage</p>
-            <div className="flex flex-wrap gap-6">
-              {DEVICES.map(device => (
+        {/* Device grid — left-aligned, 3 cols × 2 rows, each cell centres its card */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <p className="text-xs text-muted-foreground mb-5 uppercase tracking-widest font-semibold">Select a device to manage</p>
+          <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(3, minmax(0, 180px))", gridTemplateRows: "repeat(2, auto)" }}>
+            {DEVICES.map(device => (
+              <div key={device.serial} className="flex items-center justify-center">
                 <button
-                  key={device.serial}
                   onClick={() => setLocation("/mobile/farm")}
-                  className="group flex flex-col items-center gap-4 p-6 rounded-2xl border border-border bg-card hover:border-primary/50 hover:bg-card/80 transition-all duration-200 w-[200px] cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  className="group flex flex-col items-center gap-3 p-5 rounded-2xl border border-border bg-card hover:border-primary/50 hover:bg-card/80 transition-all duration-200 w-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40"
                 >
-                  <XiaomiPhoneShell className="w-[120px] h-auto drop-shadow-lg group-hover:scale-[1.03] transition-transform duration-200" />
-
+                  <XiaomiPhoneShell className="w-[100px] h-auto drop-shadow-lg group-hover:scale-[1.03] transition-transform duration-200" />
                   <div className="text-center space-y-1">
-                    <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
+                    <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
                       {device.displayName}
                     </p>
                     <p className="text-xs text-muted-foreground">{device.model}</p>
@@ -150,8 +147,8 @@ export function MobileDevicesPage() {
                     </div>
                   </div>
                 </button>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
         </div>
       </main>

@@ -88,22 +88,34 @@ function FilledHammerIcon({ className, style }: { className?: string; style?: Re
   );
 }
 
-function FilledSmartphoneIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+function FilledFarmIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  // 2×3 grid of tiny phone shapes — represents a phone farm
   return (
     <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
-      {/* Phone body */}
-      <rect x="4" y="1" width="16" height="22" rx="3.5" fill="currentColor"/>
-      {/* Screen area */}
-      <rect x="6" y="4" width="12" height="14" rx="1" fill="var(--card,#1e293b)"/>
-      {/* Punch-hole camera */}
-      <circle cx="12" cy="2.6" r="0.9" fill="var(--card,#1e293b)"/>
-      {/* Home indicator pill */}
-      <rect x="9.5" y="20.2" width="5" height="1.4" rx="0.7" fill="var(--card,#1e293b)"/>
-      {/* Side volume button */}
-      <rect x="20" y="7.5" width="1.2" height="3" rx="0.5" fill="currentColor" opacity="0.6"/>
-      <rect x="20" y="11.5" width="1.2" height="3" rx="0.5" fill="currentColor" opacity="0.6"/>
-      {/* Power button left */}
-      <rect x="2.8" y="8.5" width="1.2" height="4" rx="0.5" fill="currentColor" opacity="0.6"/>
+      {/* Row 1, col 1 */}
+      <rect x="1"   y="1"  width="6" height="10" rx="1.4" fill="currentColor"/>
+      <rect x="2"   y="2.6"  width="4" height="5.8" rx="0.5" fill="var(--card,#1e293b)"/>
+      <rect x="3.2" y="9.1"  width="1.6" height="0.8" rx="0.4" fill="var(--card,#1e293b)"/>
+      {/* Row 1, col 2 */}
+      <rect x="9"   y="1"  width="6" height="10" rx="1.4" fill="currentColor"/>
+      <rect x="10"  y="2.6"  width="4" height="5.8" rx="0.5" fill="var(--card,#1e293b)"/>
+      <rect x="11.2" y="9.1" width="1.6" height="0.8" rx="0.4" fill="var(--card,#1e293b)"/>
+      {/* Row 1, col 3 */}
+      <rect x="17"  y="1"  width="6" height="10" rx="1.4" fill="currentColor"/>
+      <rect x="18"  y="2.6"  width="4" height="5.8" rx="0.5" fill="var(--card,#1e293b)"/>
+      <rect x="19.2" y="9.1" width="1.6" height="0.8" rx="0.4" fill="var(--card,#1e293b)"/>
+      {/* Row 2, col 1 */}
+      <rect x="1"   y="13" width="6" height="10" rx="1.4" fill="currentColor"/>
+      <rect x="2"   y="14.6" width="4" height="5.8" rx="0.5" fill="var(--card,#1e293b)"/>
+      <rect x="3.2" y="21.1" width="1.6" height="0.8" rx="0.4" fill="var(--card,#1e293b)"/>
+      {/* Row 2, col 2 */}
+      <rect x="9"   y="13" width="6" height="10" rx="1.4" fill="currentColor"/>
+      <rect x="10"  y="14.6" width="4" height="5.8" rx="0.5" fill="var(--card,#1e293b)"/>
+      <rect x="11.2" y="21.1" width="1.6" height="0.8" rx="0.4" fill="var(--card,#1e293b)"/>
+      {/* Row 2, col 3 */}
+      <rect x="17"  y="13" width="6" height="10" rx="1.4" fill="currentColor"/>
+      <rect x="18"  y="14.6" width="4" height="5.8" rx="0.5" fill="var(--card,#1e293b)"/>
+      <rect x="19.2" y="21.1" width="1.6" height="0.8" rx="0.4" fill="var(--card,#1e293b)"/>
     </svg>
   );
 }
@@ -126,7 +138,7 @@ export function Sidebar() {
   const BRAND = "#1AD2F2";
   const navItems = [
     { name: "Dashboard",       shortLabel: "DASHBOARD",      path: "/dashboard",    icon: FilledDashboardIcon   },
-    { name: "Accounts",        shortLabel: "ACCOUNTS",       path: "/mobile",       icon: FilledPersonIcon      },
+    { name: "Farm",             shortLabel: "FARM",           path: "/mobile",       icon: FilledFarmIcon        },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon    },
     { name: "Tools",           shortLabel: "TOOLS",          path: "/tools",        icon: FilledHammerIcon      },
   ];
