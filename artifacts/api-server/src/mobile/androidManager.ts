@@ -2564,12 +2564,25 @@ function _extractShareSheetRecipients(xml: string, serial: string, onLog?: (line
         onLog?.(`[share-sheet] Strategy 1: excluded avatar at (${cx},${cy}) — parent content-desc "${parentCd}" is a story destination, not a DM contact`);
         continue;
       }
-      avatarResults.push({ x: cx, y: cy, name: parentCd || undefined } as { x: number; y: number; name?: string });
+      // Detect pre-selected state: Instagram marks already-selected recipients
+      // with "selected" (without "not") in the parent ViewGroup's content-desc,
+      // e.g. "Zainab Patanwala Verified Chat selected" vs the normal
+      // "Zainab Patanwala Verified Chat not selected".
+      // A pre-selected recipient from a prior failed run will STILL be selected
+      // when the sheet reopens. If we pick a SECOND person on top of them the
+      // DM sheet now has two recipients → Instagram creates a group DM instead.
+      // Flag these so the caller can deselect them before picking a fresh target.
+      const alreadySelected = /\bselected\b/i.test(parentCd) && !/\bnot selected\b/i.test(parentCd);
+      if (alreadySelected) {
+        onLog?.(`[share-sheet] Strategy 1: pre-selected recipient at (${cx},${cy}) — "${parentCd}" — will deselect first`);
+      }
+      avatarResults.push({ x: cx, y: cy, name: parentCd || undefined, preSelected: alreadySelected } as { x: number; y: number; name?: string; preSelected?: boolean });
     }
   }
 
   if (avatarResults.length > 0) {
-    onLog?.(`[share-sheet] Strategy 1 (resource-id): ${avatarResults.length} DM contact avatar(s) found — ${avatarResults.map(r => `(${r.x},${r.y})`).join(", ")}`);
+    const preSelCount = avatarResults.filter(r => (r as any).preSelected).length;
+    onLog?.(`[share-sheet] Strategy 1 (resource-id): ${avatarResults.length} DM contact avatar(s) found (${preSelCount} pre-selected) — ${avatarResults.map(r => `(${r.x},${r.y})`).join(", ")}`);
     return avatarResults;
   }
   onLog?.("[share-sheet] Strategy 1: no non-story grid_view_pog_avatar_view nodes found — falling back to label scan");
@@ -2661,7 +2674,7 @@ function _extractShareSheetRecipients(xml: string, serial: string, onLog?: (line
 export async function confirmAndScanShareSheet(
   serial: string,
   onLog?: (line: string) => void,
-): Promise<{ sheetOpen: boolean; sendBtn: { x: number; y: number } | null; recipients: { x: number; y: number; name?: string }[] }> {
+): Promise<{ sheetOpen: boolean; sendBtn: { x: number; y: number } | null; recipients: { x: number; y: number; name?: string }[]; preSelectedRecipients: { x: number; y: number; name?: string }[] }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial).catch(() => "");
@@ -2716,12 +2729,17 @@ export async function confirmAndScanShareSheet(
     xml.includes("android.widget.EditText");
   if (!sheetOpen) {
     onLog?.("[share-sheet] no share-sheet marker found — sheet not open");
-    return { sheetOpen: false, sendBtn: null, recipients: [] };
+    return { sheetOpen: false, sendBtn: null, recipients: [], preSelectedRecipients: [] };
   }
   const sendBtn = _findElem(xml, "Send");
-  const recipients = _extractShareSheetRecipients(xml, serial, onLog);
-  onLog?.(`[share-sheet] sheet confirmed open — sendBtn: ${sendBtn ? `(${sendBtn.x},${sendBtn.y})` : "null (will re-scan after recipient tap)"} | recipients found: ${recipients.length}`);
-  return { sheetOpen, sendBtn, recipients };
+  const allRecipients = _extractShareSheetRecipients(xml, serial, onLog);
+  // Split into already-selected (from a prior failed run) vs fresh candidates.
+  // Pre-selected ones must be tapped to deselect before picking a new target,
+  // otherwise Instagram accumulates multiple recipients and creates a group DM.
+  const preSelectedRecipients = allRecipients.filter(r => (r as any).preSelected);
+  const recipients = allRecipients.filter(r => !(r as any).preSelected);
+  onLog?.(`[share-sheet] sheet confirmed open — sendBtn: ${sendBtn ? `(${sendBtn.x},${sendBtn.y})` : "null (will re-scan after recipient tap)"} | available: ${recipients.length} | pre-selected (will deselect): ${preSelectedRecipients.length}`);
+  return { sheetOpen, sendBtn, recipients, preSelectedRecipients };
 }
 
 /**

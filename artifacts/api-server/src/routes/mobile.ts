@@ -1392,6 +1392,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // recipient is selected. sendShareSheet does its own fresh lookup
       // when knownSendBtn is null, so passing null is correct.
       const sheetSendBtn = scan.sendBtn ?? null;
+
+      // Deselect any recipients left selected from a prior failed run.
+      // If we skip this and pick a new person, Instagram sees two recipients
+      // and creates a group DM instead of a 1:1 message.
+      if (scan.preSelectedRecipients && scan.preSelectedRecipients.length > 0) {
+        onLog?.(`${logPrefix}: deselecting ${scan.preSelectedRecipients.length} pre-selected recipient(s) from prior run…`);
+        for (const r of scan.preSelectedRecipients) {
+          const nameTag = (r as any).name ? ` (${(r as any).name})` : "";
+          onLog?.(`${logPrefix}: deselecting pre-selected${nameTag} at (${r.x},${r.y})`);
+          await android.tap(serial, r.x, r.y);
+          await sleepOrAbort(serial, 400);
+        }
+      }
+
       const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog, scan.recipients);
       if (!recipientPicked) {
         await android.pressBack(serial);

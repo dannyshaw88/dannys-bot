@@ -4,6 +4,20 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.623] — 2026-07-16
+
+### Fixed
+- **Reels Share-to-DM: group chat bug eliminated** — Instagram remembers a recipient selected in a prior failed run (e.g. the sheet was opened, a person was tapped, but Send could not be pressed so Back was pressed instead). When the sheet reopens on the next cycle that person is *still* selected. The bot was then picking a fresh random recipient on top of the existing selection, giving Instagram two recipients and creating an unwanted group DM.
+
+  Root cause was confirmed via UIAutomator dump: each recipient's parent `ViewGroup` (`direct_share_sheet_grid_view_pog`) carries a `content-desc` that ends with either **"not selected"** (available) or **"selected"** (already tapped in a prior run). The old `_extractShareSheetRecipients` code ignored this field entirely and returned all avatars as equivalent candidates.
+
+  Fix:
+  1. `_extractShareSheetRecipients` (Strategy 1) now reads the parent `content-desc` for each avatar button and sets `preSelected: true` when the desc contains `"selected"` but not `"not selected"`.
+  2. `confirmAndScanShareSheet` splits the result into `recipients` (safe to pick from) and `preSelectedRecipients` (must be deselected first), and returns both.
+  3. `shareCurrentPostViaDm` (the shared function used by all Share-to-DM flows — View Feed, Reels, Inject Browsing) taps each pre-selected recipient to deselect it (400 ms pause between each) before calling `tapRandomShareSheetRecipient`. The bot now always sends to exactly one person.
+
+---
+
 ## [1.1.622] — 2026-07-16
 
 ### Added
