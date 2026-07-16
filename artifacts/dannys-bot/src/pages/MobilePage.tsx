@@ -1332,7 +1332,13 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
       });
     }
     if (!lines.length) return;
-    try { await navigator.clipboard.writeText(lines.join("\n")); } catch { /* ignore */ }
+    const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `equinox-inspect-dump-${Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // ── Exact shell sizing ──────────────────────────────────────────────────

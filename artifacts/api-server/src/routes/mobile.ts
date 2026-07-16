@@ -1210,244 +1210,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     return { w, h };
   }
 
-  /**
-   * Taps one randomly-chosen recipient avatar in an open Share sheet.
-   *
-   * `preScanned` lets a caller that already ran confirmAndScanShareSheet (one
-   * dump, covers both Send-button confirmation and the recipient list) pass
-   * those results straight through instead of paying for a second ~9s dump
-   * here. Only used when no preScanned list is supplied does this fall back
-   * to taking its own fresh dump.
-   */
-  // Tracks the last recipient tapped per device so consecutive runs never
-  // land on the same person. Keyed by serial, value is the (x,y) centre of
-  // the previously-picked avatar button.
+  // Tracks the last recipient tapped per device so consecutive runs (across
+  // all tools) never land on the same person. Keyed by serial.
   const lastPickedRecipient = new Map<string, { x: number; y: number }>();
-
-  async function tapRandomShareSheetRecipient(serial: string, onLog?: (line: string) => void, preScanned?: { x: number; y: number; name?: string }[]): Promise<boolean> {
-    // Find recipient avatar buttons by resource-id (confirmed on device:
-    // rid=com.instagram.android:id/grid_view_pog_avatar_view).  Their pixel
-    // positions vary by device/screen size — resource-id targeting is the
-    // only reliable approach; coordinate slots have been removed.
-    const recipients = preScanned ?? await android.findShareSheetRecipients(serial, onLog).catch(() => [] as { x: number; y: number; name?: string }[]);
-    if (recipients.length === 0) {
-      onLog?.("[share-sheet] no recipient avatars found via a11y — cannot select recipient");
-      return false;
-    }
-    // Exclude the last-picked recipient so consecutive runs always land on a
-    // different person. If excluding it leaves the pool empty (only 1 contact
-    // visible on screen), fall back to the full list.
-    const last = lastPickedRecipient.get(serial);
-    const pool = last
-      ? recipients.filter(r => !(r.x === last.x && r.y === last.y))
-      : recipients;
-    const candidates = pool.length > 0 ? pool : recipients;
-    if (last && pool.length === 0) {
-      onLog?.("[share-sheet] only one recipient visible — re-using same contact (no alternative)");
-    }
-    const pick = candidates[Math.floor(Math.random() * candidates.length)];
-    lastPickedRecipient.set(serial, { x: pick.x, y: pick.y });
-    const nameTag = (pick as { name?: string }).name ? ` (${(pick as { name?: string }).name})` : "";
-    onLog?.(`[share-sheet] tapping recipient at (${pick.x},${pick.y})${nameTag}`);
-    await android.tap(serial, pick.x, pick.y);
-    return true;
-  }
-
-  /**
-   * Taps the blue "Send" button in Instagram's DM share sheet.
-   *
-   * Primary: UIAutomator accessibility lookup for the "Send" button text —
-   * reliable when the UI is settled and the label is present.
-   *
-   * Fallback: coordinate tap at the Send button's known position (~y=94.8%
-   * of screen height, ~x=42.2% for the button center). The Send button is
-   * always the large full-width blue row at the bottom of the share sheet
-   * immediately above the Android nav bar, so this coordinate is stable
-   * across Instagram versions even when the accessibility label varies.
-   *
-   * NOTE: _uiDump is now async (non-blocking) so calling this no longer
-   * stalls the video WebSocket.
-   */
-  /**
-   * Returns:
-   *   true  — Send was tapped and the sheet closed (DM sent)
-   *   false — Send was tapped (or fallback coordinate used) but sheet stayed open (no recipient selected / send failed)
-   *   null  — sheet was already gone when we checked (DM likely sent by the recipient-tap itself); caller must NOT press Back
-   *
-   * Sheet-open detection uses the DM-specific search-box resource-id
-   * ("direct_private_share") rather than label strings like "Direct" / "Share":
-   *  - findButtonByLabel("Direct") matched resource-id="...direct_private_share_sticky_search_box..."
-   *    via substring — always truthy while the sheet was open, making "send confirmed"
-   *    unreachable and always returning false even after a successful send.
-   *  - findButtonByLabel("Share") matched the "Share via other apps" pill in the
-   *    external-app row, also always present — the null (already-dismissed) path
-   *    was similarly unreachable.
-   */
-  async function sendShareSheet(
-    serial: string, w: number, h: number,
-    // Caller may pass a pre-found Send button position (captured during sheet
-    // confirmation) so this function can skip its own a11y dump — saves 2–3s
-    // on every DM send (the dump is the bottleneck, not the tap itself).
-    knownSendBtn?: { x: number; y: number },
-  ): Promise<boolean | null> {
-    // Is the DM share sheet currently visible?
-    // `direct_private_share` is the DM sheet's sticky search container —
-    // only appears inside the sheet, never on feed or nav.
-    // Using a single dump here (no second fallback label) saves another 2–3s
-    // on every post-send confirmation pass where the sheet is already gone.
-    // Sheet-open check: works for BOTH the narrow DM sheet (direct_private_share)
-    // and the wider share sheet (android.widget.EditText = search box).
-    const isDmSheetOpen = async (): Promise<boolean> => {
-      const xml = await android.dumpUi(serial).catch(() => "");
-      return xml.includes("direct_private_share") ||
-             xml.includes("grid_view_pog_avatar_view") ||
-             xml.includes("android.widget.EditText") ||
-             xml.includes("Copy link") ||
-             xml.includes("Add to story");
-    };
-
-    // Use the pre-found button if provided, otherwise dump the a11y tree.
-    // _findElem searches text, content-desc, hint AND resource-id (substring)
-    // so any element whose resource-id contains "send" is also found —
-    // e.g. com.instagram.android:id/direct_send_button_multi_select.
-    const sendBtn = knownSendBtn ?? await android.findButtonByLabel(serial, "Send").catch(() => null);
-    if (sendBtn) {
-      await android.tap(serial, sendBtn.x, sendBtn.y);
-      // A successful send closes the sheet within one frame.
-      await sleepOrAbort(serial, 300);
-      return !(await isDmSheetOpen());
-    }
-    // "Send" button not visible — either the sheet is already gone (recipient
-    // tap auto-sent the DM on this device), or no recipient is selected yet.
-    if (!(await isDmSheetOpen())) {
-      // Sheet already dismissed — return null so the caller knows NOT to press
-      // Back (Back on the home feed scrolls to top + triggers pull-to-refresh).
-      return null;
-    }
-    // Sheet is open but Send button not found via a11y — tap the coordinate
-    // fallback.
-    // Confirmed from UIAutomator dump (1080×2226 device):
-    //   direct_send_group_button_container  [0,2147][1080,2226]
-    //   direct_send_button_multi_select     [44,2147][1036,2226]  center=(540,2187)
-    // y = 2187 / 2226 ≈ 98.2 % of screen height.
-    // The previous 94–94.8 % values (≈2092–2110 px) landed inside the
-    // "Write a message…" text box [0,2009][1047,2147] and never hit Send.
-    const fbX = Math.round(w * 0.50), fbY = Math.round(h * 0.982);
-    onLog?.(`[share-sheet] Send button not found via a11y — tapping coordinate fallback (${fbX},${fbY})`);
-    await android.tap(serial, fbX, fbY);
-    await sleepOrAbort(serial, 300);
-    // Sheet closed = DM sent; sheet still open = send failed / no recipient.
-    return !(await isDmSheetOpen());
-  }
-
-  /**
-   * Shares the currently-open post via DM: taps the paper-plane icon,
-   * confirms the share sheet opened, picks a random recipient, taps Send.
-   *
-   * Extracted 15 Jul 2026 so View Feed and Inject Browsing can NEVER drift
-   * apart again. Before this, each flow kept its own hand-copied version of
-   * this exact sequence — every time one got a real-device fix (the
-   * grid_view_pog_avatar_view resource-id lookup, the numeric/hashtag/
-   * abbreviated-count label exclusions, the sheet-already-closed vs.
-   * sheet-never-opened distinction), the other quietly kept the stale
-   * behavior until someone noticed it "still doesn't work" on only one of
-   * the two tools. There is now exactly one implementation; both call sites
-   * pass it their own log prefix/tag and get identical behavior by
-   * construction, not by manual copy-paste.
-   *
-   * Returns true if the DM was actually sent (Send tapped and confirmed, or
-   * the sheet auto-dismissed because the recipient tap itself sent it).
-   */
-  async function shareCurrentPostViaDm(
-    serial: string, w: number, h: number,
-    shareDmIcon: { x: number; y: number },
-    logPrefix: string, logTag: string,
-    onLog?: (msg: string) => void,
-  ): Promise<boolean> {
-    if (isCycleAborted(serial)) throw new Error("cycle-aborted");
-    try {
-      await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
-      onLog?.(`${logPrefix}: tapping share-via-DM icon at (${shareDmIcon.x},${shareDmIcon.y})…`);
-      await android.tap(serial, shareDmIcon.x, shareDmIcon.y);
-      logger.info({ serial, x: shareDmIcon.x, y: shareDmIcon.y }, `${logTag} tapped share-to-DM icon`);
-      // Wait 1500ms before dumping: the share sheet needs time to animate in.
-      // 400ms was too short on this MIUI device — the dump started before the
-      // sheet appeared, so `direct_private_share` was absent and the scan
-      // fell through to feed-post nodes. confirmAndScanShareSheet now gates
-      // on direct_private_share first (if not found → sendBtn:null,
-      // recipients:[]) so a short-wait false-negative always triggers a retry,
-      // but giving the sheet more time to open reduces unnecessary retries.
-      await sleepOrAbort(serial, 1500);
-      onLog?.(`${logPrefix}: confirming share sheet opened and picking DM recipient…`);
-      let scan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
-      if (!scan?.sheetOpen) {
-        // Reels' share panel renders slower than Feed's — give it one more
-        // chance before giving up. 1500ms extra is enough on the slowest
-        // MIUI devices we've seen.
-        onLog?.(`${logPrefix}: share sheet not yet visible — waiting 1500ms and retrying…`);
-        await sleepOrAbort(serial, 1500);
-        scan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
-      }
-      if (!scan?.sheetOpen) {
-        logger.warn({ serial }, `${logTag} share sheet not confirmed open after retry — closing and skipping DM`);
-        onLog?.(`${logPrefix}: share aborted — share sheet did not open`);
-        await android.pressBack(serial);
-        await sleepOrAbort(serial, 200);
-        return false;
-      }
-      // sendBtn may be null here — the Send button only appears after a
-      // recipient is selected. sendShareSheet does its own fresh lookup
-      // when knownSendBtn is null, so passing null is correct.
-      const sheetSendBtn = scan.sendBtn ?? null;
-
-      // Deselect any recipients left selected from a prior failed run.
-      // If we skip this and pick a new person, Instagram sees two recipients
-      // and creates a group DM instead of a 1:1 message.
-      if (scan.preSelectedRecipients && scan.preSelectedRecipients.length > 0) {
-        onLog?.(`${logPrefix}: deselecting ${scan.preSelectedRecipients.length} pre-selected recipient(s) from prior run…`);
-        for (const r of scan.preSelectedRecipients) {
-          const nameTag = (r as any).name ? ` (${(r as any).name})` : "";
-          onLog?.(`${logPrefix}: deselecting pre-selected${nameTag} at (${r.x},${r.y})`);
-          await android.tap(serial, r.x, r.y);
-          await sleepOrAbort(serial, 400);
-        }
-      }
-
-      const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog, scan.recipients);
-      if (!recipientPicked) {
-        await android.pressBack(serial);
-        logger.warn({ serial }, `${logTag} no recipient found — closed share sheet without sending`);
-        onLog?.(`${logPrefix}: share skipped — no recipient avatars found (closed without sending)`);
-        return false;
-      }
-      // Give the Send button time to appear after the recipient tap before
-      // sendShareSheet does its a11y lookup.
-      await sleepOrAbort(serial, 800);
-      const sent = await sendShareSheet(serial, w, h, sheetSendBtn);
-      if (sent === true) {
-        logger.info({ serial }, `${logTag} shared post via DM — Send tapped`);
-        onLog?.(`${logPrefix}: ✓ shared via DM — Send tapped`);
-        await sleepOrAbort(serial, 300);
-        return true;
-      } else if (sent === null) {
-        // Sheet was already gone — the recipient tap likely auto-sent the DM.
-        logger.info({ serial }, `${logTag} share sheet already closed — DM likely sent by recipient tap`);
-        onLog?.(`${logPrefix}: ✓ shared via DM — sheet auto-dismissed (sent by recipient tap)`);
-        await sleepOrAbort(serial, 200);
-        return true;
-      } else {
-        logger.info({ serial }, `${logTag} Send button not found after picking recipient — pressing Back`);
-        onLog?.(`${logPrefix}: Send button not found after picking DM recipient — pressing Back`);
-        await android.pressBack(serial);
-        await sleepOrAbort(serial, 200);
-        return false;
-      }
-    } catch (e: any) {
-      if (e?.message === "cycle-aborted") throw e;
-      onLog?.(`${logPrefix}: share-via-DM error — ${e?.message}`);
-      return false;
-    }
-  }
 
   // Shared by the standalone `/check-feed` route and the full
   // `/automation-cycle` route below — the scroll/like/share loop.
@@ -1732,11 +1497,97 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               onLog?.(`Scroll ${i + 1}/${count}: skipped share-via-DM — paper-plane icon not found on this post`);
             }
             if (wantShareDm && icons.shareDm) {
-              const sent = await shareCurrentPostViaDm(
-                serial, w, h, icons.shareDm,
-                `Scroll ${i + 1}/${count}`, "[check-feed]", onLog,
-              );
-              if (sent) sharesDm++;
+              // ── View Feed — Share via DM (isolated; not shared with any other tool) ──
+              const _cfPfx = `Scroll ${i + 1}/${count}`;
+              let _cfDmSent = false;
+              try {
+                if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+                await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
+                onLog?.(`${_cfPfx}: tapping share-via-DM icon at (${icons.shareDm.x},${icons.shareDm.y})…`);
+                await android.tap(serial, icons.shareDm.x, icons.shareDm.y);
+                await sleepOrAbort(serial, 1500);
+                onLog?.(`${_cfPfx}: confirming share sheet opened and picking DM recipient…`);
+                let _cfScan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
+                if (!_cfScan?.sheetOpen) {
+                  onLog?.(`${_cfPfx}: share sheet not yet visible — waiting 1500ms and retrying…`);
+                  await sleepOrAbort(serial, 1500);
+                  _cfScan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
+                }
+                if (!_cfScan?.sheetOpen) {
+                  logger.warn({ serial }, "[check-feed] share sheet not confirmed open after retry — closing and skipping DM");
+                  onLog?.(`${_cfPfx}: share aborted — share sheet did not open`);
+                  await android.pressBack(serial);
+                  await sleepOrAbort(serial, 200);
+                } else {
+                  const _cfSendBtn0 = _cfScan.sendBtn ?? null;
+                  if (_cfScan.preSelectedRecipients && _cfScan.preSelectedRecipients.length > 0) {
+                    onLog?.(`${_cfPfx}: deselecting ${_cfScan.preSelectedRecipients.length} pre-selected recipient(s) from prior run…`);
+                    for (const _r of _cfScan.preSelectedRecipients) {
+                      onLog?.(`${_cfPfx}: deselecting${(_r as any).name ? ` (${(_r as any).name})` : ""} at (${_r.x},${_r.y})`);
+                      await android.tap(serial, _r.x, _r.y);
+                      await sleepOrAbort(serial, 400);
+                    }
+                  }
+                  const _cfRecipients = _cfScan.recipients ?? [];
+                  if (_cfRecipients.length === 0) {
+                    await android.pressBack(serial);
+                    logger.warn({ serial }, "[check-feed] no recipient found — closed share sheet without sending");
+                    onLog?.(`${_cfPfx}: share skipped — no recipient avatars found (closed without sending)`);
+                  } else {
+                    const _cfLast = lastPickedRecipient.get(serial);
+                    const _cfPool = _cfLast ? _cfRecipients.filter(r => !(r.x === _cfLast.x && r.y === _cfLast.y)) : _cfRecipients;
+                    const _cfCands = _cfPool.length > 0 ? _cfPool : _cfRecipients;
+                    const _cfPick = _cfCands[Math.floor(Math.random() * _cfCands.length)];
+                    lastPickedRecipient.set(serial, { x: _cfPick.x, y: _cfPick.y });
+                    onLog?.(`${_cfPfx}: tapping recipient at (${_cfPick.x},${_cfPick.y})${(_cfPick as any).name ? ` (${(_cfPick as any).name})` : ""}`);
+                    await android.tap(serial, _cfPick.x, _cfPick.y);
+                    await sleepOrAbort(serial, 800);
+                    const _cfIsOpen = async () => {
+                      const _x = await android.dumpUi(serial).catch(() => "");
+                      return _x.includes("direct_private_share") || _x.includes("grid_view_pog_avatar_view") ||
+                             _x.includes("android.widget.EditText") || _x.includes("Copy link") || _x.includes("Add to story");
+                    };
+                    const _cfSb = _cfSendBtn0 ?? await android.findButtonByLabel(serial, "Send").catch(() => null);
+                    if (_cfSb) {
+                      await android.tap(serial, _cfSb.x, _cfSb.y);
+                      await sleepOrAbort(serial, 300);
+                      if (!(await _cfIsOpen())) {
+                        _cfDmSent = true;
+                        logger.info({ serial }, "[check-feed] shared post via DM — Send tapped");
+                        onLog?.(`${_cfPfx}: ✓ shared via DM — Send tapped`);
+                        await sleepOrAbort(serial, 300);
+                      } else {
+                        logger.info({ serial }, "[check-feed] Send button not found after picking recipient — pressing Back");
+                        onLog?.(`${_cfPfx}: Send button not found after picking DM recipient — pressing Back`);
+                        await android.pressBack(serial);
+                        await sleepOrAbort(serial, 200);
+                      }
+                    } else if (!(await _cfIsOpen())) {
+                      _cfDmSent = true;
+                      logger.info({ serial }, "[check-feed] share sheet already closed — DM likely sent by recipient tap");
+                      onLog?.(`${_cfPfx}: ✓ shared via DM — sheet auto-dismissed (sent by recipient tap)`);
+                      await sleepOrAbort(serial, 200);
+                    } else {
+                      const _cfFbX = Math.round(w * 0.50), _cfFbY = Math.round(h * 0.982);
+                      onLog?.(`${_cfPfx}: Send button not found via a11y — tapping coordinate fallback (${_cfFbX},${_cfFbY})`);
+                      await android.tap(serial, _cfFbX, _cfFbY);
+                      await sleepOrAbort(serial, 300);
+                      if (!(await _cfIsOpen())) {
+                        _cfDmSent = true;
+                        onLog?.(`${_cfPfx}: ✓ shared via DM — sent via coordinate fallback`);
+                        await sleepOrAbort(serial, 300);
+                      } else {
+                        await android.pressBack(serial);
+                        await sleepOrAbort(serial, 200);
+                      }
+                    }
+                  }
+                }
+              } catch (e: any) {
+                if (e?.message === "cycle-aborted") throw e;
+                onLog?.(`${_cfPfx}: share-via-DM error — ${e?.message}`);
+              }
+              if (_cfDmSent) sharesDm++;
               await verifyStillInInstagram();
             }
           }
@@ -2172,35 +2023,62 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             logger.warn({ serial, story: s + 1 }, "[view-stories] share sheet not confirmed open (no Send button found) — skipping recipient tap to avoid a blind tap on the story underneath");
             onLog?.(`Story ${s + 1}: share aborted — could not confirm the share sheet actually opened (no Send button found) — skipped recipient tap rather than risk tapping the story underneath`);
           } else {
-          // Pick a random recipient from the same dump — look for the real Send button.
-          const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog, storyShareScan?.recipients);
-          if (!recipientPicked) {
+          // ── View Stories — Share via DM: recipient pick + send (isolated; not shared with any other tool) ──
+          const _stRecipients = storyShareScan?.recipients ?? [];
+          if (_stRecipients.length === 0) {
             await android.pressBack(serial);
             logger.warn({ serial, story: s + 1 }, "[view-stories] no recipient found — closed share sheet without sending");
             onLog?.(`Story ${s + 1}: share skipped — no recipient avatars found in sheet (closed without sending)`);
           } else {
-          await sleepOrAbort(serial, 200); // brief pause for selection to register
-          // No "still in story viewer?" check here — sheetSendBtn already confirms
-          // the story was showing when the sheet opened. Adding an a11y dump
-          // (fast 1–1.5s + slow 2.7s = 4.2s) burns the remaining slide budget
-          // without providing meaningful protection.
-          const sent = await sendShareSheet(serial, w, h, sheetSendBtn);
-          if (sent === true) {
-            logger.info({ serial, story: s + 1 }, "[view-stories] shared story via DM — Send tapped");
-            onLog?.(`Story ${s + 1}: shared via DM — Send tapped`);
-            await sleepOrAbort(serial, 200);
-          } else if (sent === null) {
-            // Sheet already gone — recipient tap auto-sent it; no Back needed.
-            logger.info({ serial, story: s + 1 }, "[view-stories] share sheet already closed — DM likely sent by recipient tap");
-            onLog?.(`Story ${s + 1}: shared via DM — sheet auto-dismissed (sent by recipient tap)`);
-            await sleepOrAbort(serial, 150);
-          } else {
-            await android.pressBack(serial);
-            logger.info({ serial, story: s + 1 }, "[view-stories] Send button not found — closed DM picker");
-            onLog?.(`Story ${s + 1}: Send button not found — closed DM picker`);
-            await sleepOrAbort(serial, 200);
+            const _stLast = lastPickedRecipient.get(serial);
+            const _stPool = _stLast ? _stRecipients.filter(r => !(r.x === _stLast.x && r.y === _stLast.y)) : _stRecipients;
+            const _stCands = _stPool.length > 0 ? _stPool : _stRecipients;
+            const _stPick = _stCands[Math.floor(Math.random() * _stCands.length)];
+            lastPickedRecipient.set(serial, { x: _stPick.x, y: _stPick.y });
+            onLog?.(`Story ${s + 1}: tapping recipient at (${_stPick.x},${_stPick.y})${(_stPick as any).name ? ` (${(_stPick as any).name})` : ""}`);
+            await android.tap(serial, _stPick.x, _stPick.y);
+            await sleepOrAbort(serial, 200); // brief pause for selection to register
+            // No "still in story viewer?" check here — sheetSendBtn already confirms
+            // the story was showing when the sheet opened. Adding an a11y dump
+            // (fast 1–1.5s + slow 2.7s = 4.2s) burns the remaining slide budget
+            // without providing meaningful protection.
+            const _stIsOpen = async () => {
+              const _x = await android.dumpUi(serial).catch(() => "");
+              return _x.includes("direct_private_share") || _x.includes("grid_view_pog_avatar_view") ||
+                     _x.includes("android.widget.EditText") || _x.includes("Copy link") || _x.includes("Add to story");
+            };
+            const _stSb = sheetSendBtn ?? await android.findButtonByLabel(serial, "Send").catch(() => null);
+            if (_stSb) {
+              await android.tap(serial, _stSb.x, _stSb.y);
+              await sleepOrAbort(serial, 300);
+              if (!(await _stIsOpen())) {
+                logger.info({ serial, story: s + 1 }, "[view-stories] shared story via DM — Send tapped");
+                onLog?.(`Story ${s + 1}: shared via DM — Send tapped`);
+                await sleepOrAbort(serial, 200);
+              } else {
+                await android.pressBack(serial);
+                logger.info({ serial, story: s + 1 }, "[view-stories] Send button not found — closed DM picker");
+                onLog?.(`Story ${s + 1}: Send button not found — closed DM picker`);
+                await sleepOrAbort(serial, 200);
+              }
+            } else if (!(await _stIsOpen())) {
+              logger.info({ serial, story: s + 1 }, "[view-stories] share sheet already closed — DM likely sent by recipient tap");
+              onLog?.(`Story ${s + 1}: shared via DM — sheet auto-dismissed (sent by recipient tap)`);
+              await sleepOrAbort(serial, 150);
+            } else {
+              const _stFbX = Math.round(w * 0.50), _stFbY = Math.round(h * 0.982);
+              onLog?.(`Story ${s + 1}: Send button not found via a11y — tapping coordinate fallback (${_stFbX},${_stFbY})`);
+              await android.tap(serial, _stFbX, _stFbY);
+              await sleepOrAbort(serial, 300);
+              if (!(await _stIsOpen())) {
+                onLog?.(`Story ${s + 1}: ✓ shared via DM — sent via coordinate fallback`);
+                await sleepOrAbort(serial, 200);
+              } else {
+                await android.pressBack(serial);
+                await sleepOrAbort(serial, 200);
+              }
+            }
           }
-          } // closes recipientPicked else
           } // closes sheetSendBtn else
         }
       }
@@ -2349,14 +2227,97 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             if (!icons.shareDm) {
               onLog?.(`Reel ${i + 1}/${totalReels}: Share via DM icon not found — skipping`);
             } else {
-              // Use the exact same shared implementation as View Feed — no
-              // inline copy. shareCurrentPostViaDm taps the icon, waits for
-              // the sheet, confirms it, picks a recipient, and sends.
-              const sent = await shareCurrentPostViaDm(
-                serial, w, h, icons.shareDm,
-                `Reel ${i + 1}/${totalReels}`, "[view-reels]", onLog,
-              );
-              if (sent) sharesDm++;
+              // ── View Reels — Share via DM (isolated; not shared with any other tool) ──
+              const _vrPfx = `Reel ${i + 1}/${totalReels}`;
+              let _vrDmSent = false;
+              try {
+                if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+                await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
+                onLog?.(`${_vrPfx}: tapping share-via-DM icon at (${icons.shareDm.x},${icons.shareDm.y})…`);
+                await android.tap(serial, icons.shareDm.x, icons.shareDm.y);
+                await sleepOrAbort(serial, 1500);
+                onLog?.(`${_vrPfx}: confirming share sheet opened and picking DM recipient…`);
+                let _vrScan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
+                if (!_vrScan?.sheetOpen) {
+                  onLog?.(`${_vrPfx}: share sheet not yet visible — waiting 1500ms and retrying…`);
+                  await sleepOrAbort(serial, 1500);
+                  _vrScan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
+                }
+                if (!_vrScan?.sheetOpen) {
+                  logger.warn({ serial }, "[view-reels] share sheet not confirmed open after retry — closing and skipping DM");
+                  onLog?.(`${_vrPfx}: share aborted — share sheet did not open`);
+                  await android.pressBack(serial);
+                  await sleepOrAbort(serial, 200);
+                } else {
+                  const _vrSendBtn0 = _vrScan.sendBtn ?? null;
+                  if (_vrScan.preSelectedRecipients && _vrScan.preSelectedRecipients.length > 0) {
+                    onLog?.(`${_vrPfx}: deselecting ${_vrScan.preSelectedRecipients.length} pre-selected recipient(s) from prior run…`);
+                    for (const _r of _vrScan.preSelectedRecipients) {
+                      onLog?.(`${_vrPfx}: deselecting${(_r as any).name ? ` (${(_r as any).name})` : ""} at (${_r.x},${_r.y})`);
+                      await android.tap(serial, _r.x, _r.y);
+                      await sleepOrAbort(serial, 400);
+                    }
+                  }
+                  const _vrRecipients = _vrScan.recipients ?? [];
+                  if (_vrRecipients.length === 0) {
+                    await android.pressBack(serial);
+                    logger.warn({ serial }, "[view-reels] no recipient found — closed share sheet without sending");
+                    onLog?.(`${_vrPfx}: share skipped — no recipient avatars found (closed without sending)`);
+                  } else {
+                    const _vrLast = lastPickedRecipient.get(serial);
+                    const _vrPool = _vrLast ? _vrRecipients.filter(r => !(r.x === _vrLast.x && r.y === _vrLast.y)) : _vrRecipients;
+                    const _vrCands = _vrPool.length > 0 ? _vrPool : _vrRecipients;
+                    const _vrPick = _vrCands[Math.floor(Math.random() * _vrCands.length)];
+                    lastPickedRecipient.set(serial, { x: _vrPick.x, y: _vrPick.y });
+                    onLog?.(`${_vrPfx}: tapping recipient at (${_vrPick.x},${_vrPick.y})${(_vrPick as any).name ? ` (${(_vrPick as any).name})` : ""}`);
+                    await android.tap(serial, _vrPick.x, _vrPick.y);
+                    await sleepOrAbort(serial, 800);
+                    const _vrIsOpen = async () => {
+                      const _x = await android.dumpUi(serial).catch(() => "");
+                      return _x.includes("direct_private_share") || _x.includes("grid_view_pog_avatar_view") ||
+                             _x.includes("android.widget.EditText") || _x.includes("Copy link") || _x.includes("Add to story");
+                    };
+                    const _vrSb = _vrSendBtn0 ?? await android.findButtonByLabel(serial, "Send").catch(() => null);
+                    if (_vrSb) {
+                      await android.tap(serial, _vrSb.x, _vrSb.y);
+                      await sleepOrAbort(serial, 300);
+                      if (!(await _vrIsOpen())) {
+                        _vrDmSent = true;
+                        logger.info({ serial }, "[view-reels] shared post via DM — Send tapped");
+                        onLog?.(`${_vrPfx}: ✓ shared via DM — Send tapped`);
+                        await sleepOrAbort(serial, 300);
+                      } else {
+                        logger.info({ serial }, "[view-reels] Send button not found after picking recipient — pressing Back");
+                        onLog?.(`${_vrPfx}: Send button not found after picking DM recipient — pressing Back`);
+                        await android.pressBack(serial);
+                        await sleepOrAbort(serial, 200);
+                      }
+                    } else if (!(await _vrIsOpen())) {
+                      _vrDmSent = true;
+                      logger.info({ serial }, "[view-reels] share sheet already closed — DM likely sent by recipient tap");
+                      onLog?.(`${_vrPfx}: ✓ shared via DM — sheet auto-dismissed (sent by recipient tap)`);
+                      await sleepOrAbort(serial, 200);
+                    } else {
+                      const _vrFbX = Math.round(w * 0.50), _vrFbY = Math.round(h * 0.982);
+                      onLog?.(`${_vrPfx}: Send button not found via a11y — tapping coordinate fallback (${_vrFbX},${_vrFbY})`);
+                      await android.tap(serial, _vrFbX, _vrFbY);
+                      await sleepOrAbort(serial, 300);
+                      if (!(await _vrIsOpen())) {
+                        _vrDmSent = true;
+                        onLog?.(`${_vrPfx}: ✓ shared via DM — sent via coordinate fallback`);
+                        await sleepOrAbort(serial, 300);
+                      } else {
+                        await android.pressBack(serial);
+                        await sleepOrAbort(serial, 200);
+                      }
+                    }
+                  }
+                }
+              } catch (e: any) {
+                if (e?.message === "cycle-aborted") throw e;
+                onLog?.(`${_vrPfx}: share-via-DM error — ${e?.message}`);
+              }
+              if (_vrDmSent) sharesDm++;
             }
           }
         }
@@ -3344,10 +3305,91 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       logger.info({ serial }, "[inject-browsing] skipped share-via-DM — icon not identifiable on this post (disabled or ambiguous layout)");
       onLog?.("Inject Browsing: skipped share-via-DM — paper-plane icon not found on this post");
     } else {
-      // Same shared implementation View Feed uses — see shareCurrentPostViaDm's
-      // doc comment for why this is now a single function instead of two
-      // hand-copied versions that kept drifting apart.
-      await shareCurrentPostViaDm(serial, w, h, icons.shareDm, "Inject Browsing", "[inject-browsing]", onLog);
+      // ── Inject Browsing — Share via DM (isolated; not shared with any other tool) ──
+      try {
+        if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+        await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
+        onLog?.(`Inject Browsing: tapping share-via-DM icon at (${icons.shareDm.x},${icons.shareDm.y})…`);
+        await android.tap(serial, icons.shareDm.x, icons.shareDm.y);
+        await sleepOrAbort(serial, 1500);
+        onLog?.("Inject Browsing: confirming share sheet opened and picking DM recipient…");
+        let _ibScan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
+        if (!_ibScan?.sheetOpen) {
+          onLog?.("Inject Browsing: share sheet not yet visible — waiting 1500ms and retrying…");
+          await sleepOrAbort(serial, 1500);
+          _ibScan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
+        }
+        if (!_ibScan?.sheetOpen) {
+          logger.warn({ serial }, "[inject-browsing] share sheet not confirmed open after retry — closing and skipping DM");
+          onLog?.("Inject Browsing: share aborted — share sheet did not open");
+          await android.pressBack(serial);
+          await sleepOrAbort(serial, 200);
+        } else {
+          const _ibSendBtn0 = _ibScan.sendBtn ?? null;
+          if (_ibScan.preSelectedRecipients && _ibScan.preSelectedRecipients.length > 0) {
+            onLog?.(`Inject Browsing: deselecting ${_ibScan.preSelectedRecipients.length} pre-selected recipient(s) from prior run…`);
+            for (const _r of _ibScan.preSelectedRecipients) {
+              onLog?.(`Inject Browsing: deselecting${(_r as any).name ? ` (${(_r as any).name})` : ""} at (${_r.x},${_r.y})`);
+              await android.tap(serial, _r.x, _r.y);
+              await sleepOrAbort(serial, 400);
+            }
+          }
+          const _ibRecipients = _ibScan.recipients ?? [];
+          if (_ibRecipients.length === 0) {
+            await android.pressBack(serial);
+            logger.warn({ serial }, "[inject-browsing] no recipient found — closed share sheet without sending");
+            onLog?.("Inject Browsing: share skipped — no recipient avatars found (closed without sending)");
+          } else {
+            const _ibLast = lastPickedRecipient.get(serial);
+            const _ibPool = _ibLast ? _ibRecipients.filter(r => !(r.x === _ibLast.x && r.y === _ibLast.y)) : _ibRecipients;
+            const _ibCands = _ibPool.length > 0 ? _ibPool : _ibRecipients;
+            const _ibPick = _ibCands[Math.floor(Math.random() * _ibCands.length)];
+            lastPickedRecipient.set(serial, { x: _ibPick.x, y: _ibPick.y });
+            onLog?.(`Inject Browsing: tapping recipient at (${_ibPick.x},${_ibPick.y})${(_ibPick as any).name ? ` (${(_ibPick as any).name})` : ""}`);
+            await android.tap(serial, _ibPick.x, _ibPick.y);
+            await sleepOrAbort(serial, 800);
+            const _ibIsOpen = async () => {
+              const _x = await android.dumpUi(serial).catch(() => "");
+              return _x.includes("direct_private_share") || _x.includes("grid_view_pog_avatar_view") ||
+                     _x.includes("android.widget.EditText") || _x.includes("Copy link") || _x.includes("Add to story");
+            };
+            const _ibSb = _ibSendBtn0 ?? await android.findButtonByLabel(serial, "Send").catch(() => null);
+            if (_ibSb) {
+              await android.tap(serial, _ibSb.x, _ibSb.y);
+              await sleepOrAbort(serial, 300);
+              if (!(await _ibIsOpen())) {
+                logger.info({ serial }, "[inject-browsing] shared post via DM — Send tapped");
+                onLog?.("Inject Browsing: ✓ shared via DM — Send tapped");
+                await sleepOrAbort(serial, 300);
+              } else {
+                logger.info({ serial }, "[inject-browsing] Send button not found after picking recipient — pressing Back");
+                onLog?.("Inject Browsing: Send button not found after picking DM recipient — pressing Back");
+                await android.pressBack(serial);
+                await sleepOrAbort(serial, 200);
+              }
+            } else if (!(await _ibIsOpen())) {
+              logger.info({ serial }, "[inject-browsing] share sheet already closed — DM likely sent by recipient tap");
+              onLog?.("Inject Browsing: ✓ shared via DM — sheet auto-dismissed (sent by recipient tap)");
+              await sleepOrAbort(serial, 200);
+            } else {
+              const _ibFbX = Math.round(w * 0.50), _ibFbY = Math.round(h * 0.982);
+              onLog?.(`Inject Browsing: Send button not found via a11y — tapping coordinate fallback (${_ibFbX},${_ibFbY})`);
+              await android.tap(serial, _ibFbX, _ibFbY);
+              await sleepOrAbort(serial, 300);
+              if (!(await _ibIsOpen())) {
+                onLog?.("Inject Browsing: ✓ shared via DM — sent via coordinate fallback");
+                await sleepOrAbort(serial, 300);
+              } else {
+                await android.pressBack(serial);
+                await sleepOrAbort(serial, 200);
+              }
+            }
+          }
+        }
+      } catch (e: any) {
+        if (e?.message === "cycle-aborted") throw e;
+        onLog?.(`Inject Browsing: share-via-DM error — ${e?.message}`);
+      }
     }
 
     // Back out of the opened post to the profile grid before continuing.

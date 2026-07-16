@@ -4,6 +4,21 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.626] — 2026-07-16
+
+### Changed
+- **All tools: Share via DM code fully isolated per tool — zero cross-tool sharing**: the single shared `shareCurrentPostViaDm` function and its two shared helpers (`tapRandomShareSheetRecipient`, `sendShareSheet`) have been removed. Each tool that shares via DM now has its own completely independent, fully inlined implementation:
+  - **View Feed** — its own inline block inside `runCheckFeedLoop`
+  - **View Reels** — its own inline block inside `runViewReelsLoop`
+  - **Inject Browsing** — its own inline block inside `runProfileBrowsingSequence`
+  - **View Stories** — recipient-pick and send logic inlined directly in the story loop (was calling shared helpers; those are now gone)
+
+  Each tool's implementation can now be tuned independently for its specific Instagram layout without risking regressions in the others. The `lastPickedRecipient` Map (per-device state that prevents the same recipient being picked twice in a row) is retained as module-level shared state — it is not tool logic, it is device-scoped memory.
+
+- **Inspect — Dump All / Dump Pins now downloads a `.txt` file instead of copying to clipboard**: clicking either dump button immediately saves `equinox-inspect-dump-<timestamp>.txt` to your Downloads folder. No clipboard permission required, and the file persists for later review rather than disappearing the moment you copy something else.
+
+---
+
 ## [1.1.625] — 2026-07-16
 
 ### Fixed
