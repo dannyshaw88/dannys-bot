@@ -4,6 +4,14 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.632] — 2026-07-16
+
+### Fixed
+
+- **View Feed — Share-to-Feed double-tap guard** — When `findFeedActionIcons` resolves `shareDm` to the same screen coordinate as `shareFeed` (ambiguous icon layout on some posts or device/build combos), the Share-to-DM block was tapping the repost icon a second time. Added an explicit overlap guard: if `icons.shareDm` is within 15 px of `icons.shareFeed`, the DM tap is skipped entirely and a warning is logged showing both coordinates, so the detection ambiguity can be diagnosed from the log output. The Share-to-Feed block is unchanged.
+
+---
+
 ## [1.1.631] — 2026-07-16
 
 ### Fixed

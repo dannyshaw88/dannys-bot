@@ -1500,7 +1500,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               logger.info({ serial }, "[check-feed] skipped share-via-DM — icon not identifiable on this post (disabled or ambiguous layout)");
               onLog?.(`Scroll ${i + 1}/${count}: skipped share-via-DM — paper-plane icon not found on this post`);
             }
-            if (wantShareDm && icons.shareDm) {
+            // Guard: if icon detection resolved shareDm to the same screen
+            // position as shareFeed (ambiguous layout on this post/build),
+            // tapping it would double-tap the repost icon. Skip DM entirely
+            // and log so the icon-detection logic can be diagnosed.
+            const _cfDmOverlap = !!icons.shareDm && !!icons.shareFeed &&
+              Math.abs(icons.shareDm.x - icons.shareFeed.x) < 15 &&
+              Math.abs(icons.shareDm.y - icons.shareFeed.y) < 15;
+            if (wantShareDm && icons.shareDm && _cfDmOverlap) {
+              logger.warn({ serial, shareDm: icons.shareDm, shareFeed: icons.shareFeed }, "[check-feed] shareDm coord overlaps shareFeed — skipping DM to prevent double-tap of repost icon");
+              onLog?.(`Scroll ${i + 1}/${count}: share-to-DM skipped — icon at (${icons.shareDm.x},${icons.shareDm.y}) overlaps share-to-feed icon — detection ambiguous, preventing double-tap`);
+            }
+            if (wantShareDm && icons.shareDm && !_cfDmOverlap) {
               // ── View Feed — Share via DM (isolated; not shared with any other tool) ──
               const _cfPfx = `Scroll ${i + 1}/${count}`;
               let _cfDmSent = false;
