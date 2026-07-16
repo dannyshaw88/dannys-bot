@@ -1547,7 +1547,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                       return _x.includes("direct_private_share") || _x.includes("grid_view_pog_avatar_view") ||
                              _x.includes("android.widget.EditText") || _x.includes("Copy link") || _x.includes("Add to story");
                     };
-                    const _cfSb = _cfSendBtn0 ?? await android.findButtonByLabel(serial, "Send").catch(() => null);
+                    // Always fresh lookup after recipient tap — direct_send_button_multi_select
+                    // only appears once a recipient is selected, so _cfSendBtn0 (from the
+                    // pre-selection scan) is stale and points to the wrong element.
+                    const _cfSb = await android.findButtonByLabel(serial, "Send").catch(() => null);
                     if (_cfSb) {
                       await android.tap(serial, _cfSb.x, _cfSb.y);
                       // 1500ms — sheet animates closed after Send; 300ms was too

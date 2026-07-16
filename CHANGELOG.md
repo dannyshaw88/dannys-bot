@@ -4,6 +4,14 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.629] — 2026-07-16
+
+### Fixed
+
+- **View Feed — Share via DM: blue Send button not clicked after user selection** — Same root cause as the v1.1.628 View Reels fix: `_cfSendBtn0` is captured from the initial sheet scan (before any recipient is selected), so `direct_send_button_multi_select` doesn't exist yet and `_findElem("Send")` matched the wrong element. The `??` short-circuit then reused that stale coordinate after the recipient tap instead of doing a fresh lookup. Fix: always call `findButtonByLabel("Send")` fresh after the recipient tap so the correct Send button coordinate is found. No other tool's code was touched.
+
+---
+
 ## [1.1.628] — 2026-07-16
 
 ### Fixed
