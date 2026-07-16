@@ -89,24 +89,12 @@ function FilledHammerIcon({ className, style }: { className?: string; style?: Re
 }
 
 function FilledFarmIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
-  // 3-col × 2-row grid of phone shapes snapped to 8×12 cells (1 px gaps, 0.5 px outer padding).
-  // Each phone: 7 × 11 px, rx 1.5, with a screen cutout and home-button dot.
-  const cols = [0.5, 8.5, 16.5];
-  const rows = [0.5, 12.5];
+  // Single phone / smartphone shape
   return (
-    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      {rows.map(y =>
-        cols.map(x => (
-          <g key={`${x}-${y}`}>
-            {/* Phone body */}
-            <rect x={x} y={y} width="7" height="11" rx="1.5" fill="currentColor" />
-            {/* Screen */}
-            <rect x={x + 0.9} y={y + 1.5} width="5.2" height="7" rx="0.5" fill="var(--background, #0f172a)" />
-            {/* Home button */}
-            <circle cx={x + 3.5} cy={y + 9.8} r="0.75" fill="var(--background, #0f172a)" />
-          </g>
-        ))
-      )}
+    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+      <rect x="5" y="1" width="14" height="22" rx="3" fill="currentColor"/>
+      <rect x="7" y="4" width="10" height="14" rx="1" fill="var(--background,#0f172a)"/>
+      <circle cx="12" cy="20.5" r="1.1" fill="var(--background,#0f172a)"/>
     </svg>
   );
 }

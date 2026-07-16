@@ -125,30 +125,44 @@ export function MobileDevicesPage() {
           <h1 className="text-lg font-bold text-foreground">Mobile Farm</h1>
         </div>
 
-        {/* Device grid — left-aligned, 3 cols × 2 rows, each cell centres its card */}
+        {/* Device grid — fixed 3 cols × 2 rows = 6 slots */}
         <div className="flex-1 overflow-y-auto p-6">
-          <p className="text-xs text-muted-foreground mb-5 uppercase tracking-widest font-semibold">Select a device to manage</p>
-          <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(3, minmax(0, 180px))", gridTemplateRows: "repeat(2, auto)" }}>
-            {DEVICES.map(device => (
-              <div key={device.serial} className="flex items-center justify-center">
-                <button
-                  onClick={() => setLocation("/mobile/farm")}
-                  className="group flex flex-col items-center gap-3 p-5 rounded-2xl border border-border bg-card hover:border-primary/50 hover:bg-card/80 transition-all duration-200 w-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40"
-                >
-                  <XiaomiPhoneShell className="w-[100px] h-auto drop-shadow-lg group-hover:scale-[1.03] transition-transform duration-200" />
-                  <div className="text-center space-y-1">
-                    <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
-                      {device.displayName}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{device.model}</p>
-                    <div className="flex items-center justify-center gap-1.5 mt-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
-                      <span className="text-[10px] text-muted-foreground">Ready</span>
+          <div className="grid grid-cols-3 gap-4" style={{ gridTemplateRows: "repeat(2, 1fr)" }}>
+            {Array.from({ length: 6 }).map((_, i) => {
+              const device = DEVICES[i];
+              if (device) {
+                return (
+                  <button
+                    key={device.serial}
+                    onClick={() => setLocation("/mobile/farm")}
+                    className="group flex flex-col items-center gap-3 p-5 rounded-2xl border border-border bg-card hover:border-primary/50 hover:bg-card/80 transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  >
+                    <XiaomiPhoneShell className="w-[100px] h-auto drop-shadow-lg group-hover:scale-[1.03] transition-transform duration-200" />
+                    <div className="text-center space-y-1">
+                      <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
+                        {device.displayName}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{device.model}</p>
+                      <div className="flex items-center justify-center gap-1.5 mt-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                        <span className="text-[10px] text-muted-foreground">Ready</span>
+                      </div>
                     </div>
+                  </button>
+                );
+              }
+              return (
+                <div
+                  key={i}
+                  className="flex flex-col items-center justify-center gap-3 p-5 rounded-2xl border border-dashed border-border/40 bg-card/30 opacity-40"
+                >
+                  <div className="w-[100px] aspect-[220/440] rounded-2xl bg-muted/30 flex items-center justify-center">
+                    <Smartphone className="w-8 h-8 text-muted-foreground/30" />
                   </div>
-                </button>
-              </div>
-            ))}
+                  <p className="text-xs text-muted-foreground/50">Empty slot</p>
+                </div>
+              );
+            })}
           </div>
         </div>
       </main>
