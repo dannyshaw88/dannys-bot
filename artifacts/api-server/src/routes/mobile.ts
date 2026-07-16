@@ -184,7 +184,6 @@ type AutomationSettings = {
   makePostUseChatGpt?: boolean;
   makePostFixAiSlop?: boolean;
   makePostMakeUnique?: boolean;
-  makePostDisableComments?: boolean;
   makePostCaptionText?: string;
   makePostImageSettings?: {
     contrast: { enabled: boolean; min: number; max: number };
@@ -1027,7 +1026,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostUseChatGpt: z.boolean().default(false),
     makePostFixAiSlop: z.boolean().default(false),
     makePostMakeUnique: z.boolean().default(false),
-    makePostDisableComments: z.boolean().default(false),
     makePostCaptionText: z.string().default(""),
     makePostImageSettings: z.object({
       contrast: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
@@ -1092,7 +1090,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       makePostLocalFolderEnabled: false, makePostLocalFolderPath: "",
       makePostLocalFolderNoRepeat: false, makePostLocalFolderRandom: false,
       makePostLocalFolderDeleteAfterUpload: true,
-      makePostUseChatGpt: false, makePostFixAiSlop: false, makePostMakeUnique: false, makePostDisableComments: false,
+      makePostUseChatGpt: false, makePostFixAiSlop: false, makePostMakeUnique: false,
       makePostCaptionText: "",
       makePostImageSettings: {
         contrast: { enabled: true, min: 5, max: 250 },
@@ -2510,7 +2508,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostLocalFolderNoRepeat: z.boolean().default(false),
     makePostLocalFolderRandom: z.boolean().default(false),
     makePostLocalFolderDeleteAfterUpload: z.boolean().default(true),
-    makePostDisableComments: z.boolean().default(false),
     makePostCaptionText: z.string().default(""),
   });
   const automationCycleInProgress = new Set<string>();
@@ -2650,11 +2647,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
    */
   async function runMakePostStep(serial: string, opts: {
     localFolderPath: string; localFolderRandom: boolean; localFolderNoRepeat: boolean;
-    deleteAfterUpload: boolean; captionText: string; disableComments: boolean;
+    deleteAfterUpload: boolean; captionText: string;
     doFixAiSlop?: boolean;
     onLog?: (msg: string) => void;
   }): Promise<{ posted: boolean; fileName?: string }> {
-    const { localFolderPath, localFolderRandom, localFolderNoRepeat, deleteAfterUpload, captionText, disableComments, doFixAiSlop, onLog } = opts;
+    const { localFolderPath, localFolderRandom, localFolderNoRepeat, deleteAfterUpload, captionText, doFixAiSlop, onLog } = opts;
 
     const fileName = await pickLocalFolderImage(serial, {
       folderPath: localFolderPath, random: localFolderRandom, noRepeat: localFolderNoRepeat, onLog,
@@ -2901,23 +2898,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         await sleepOrAbort(serial, 400);
       } else {
         onLog?.("Make a Post: caption field not found — posting without a caption");
-      }
-    }
-
-    if (disableComments) {
-      const advanced = await android.findButtonByLabel(serial, "Advanced settings").catch(() => null);
-      if (advanced) {
-        await android.tap(serial, advanced.x, advanced.y);
-        await sleepOrAbort(serial, 1000);
-        const turnOffComments = await android.findButtonByLabel(serial, "Turn off commenting").catch(() => null);
-        if (turnOffComments) {
-          await android.tap(serial, turnOffComments.x, turnOffComments.y);
-          await sleepOrAbort(serial, 400);
-        }
-        await android.pressBack(serial);
-        await sleepOrAbort(serial, 800);
-      } else {
-        onLog?.("Make a Post: \"Advanced settings\" not found — could not disable comments for this post");
       }
     }
 
@@ -3702,6 +3682,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     res.json({ ok: true, users: list });
   });
 
+  // Posted Media — list of local-folder filenames that have already been posted
+  // for this serial (the "Do not repost the same image" no-repeat tracking list).
+  app.get("/api/mobile/devices/:serial/posted-media", (req: Request, res: Response) => {
+    const serial = req.params.serial as string;
+    const files = getPostedLocalFiles(serial);
+    res.json({ ok: true, files });
+  });
+
+  // Remove one filename from the posted list so it can be reposted.
+  // The filename is passed as a URL-encoded path parameter.
+  app.delete("/api/mobile/devices/:serial/posted-media/:filename", (req: Request, res: Response) => {
+    const serial = req.params.serial as string;
+    const filename = decodeURIComponent(req.params.filename as string);
+    const list = getPostedLocalFiles(serial);
+    const next = list.filter(f => f !== filename);
+    mobilePostedLocalFiles.set(serial, next);
+    try { fs.writeFileSync(_postedFilePath(serial), JSON.stringify(next), "utf8"); } catch { /* best effort */ }
+    res.json({ ok: true, removed: list.length - next.length });
+  });
+
   // Abort endpoint — called by the frontend when the master toggle is switched
   // off mid-cycle.  The frontend passes the same cycleId it used to start the
   // cycle so we can ignore stale abort POSTs that arrive after the next cycle
@@ -3783,7 +3783,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostPerSessionMin, makePostPerSessionMax,
         makePostLocalFolderEnabled, makePostLocalFolderPath,
         makePostLocalFolderNoRepeat, makePostLocalFolderRandom, makePostLocalFolderDeleteAfterUpload,
-        makePostFixAiSlop, makePostDisableComments, makePostCaptionText,
+        makePostFixAiSlop, makePostCaptionText,
       } = automationCycleSchema.parse(req.body);
 
       // 1. Power on the phone.
@@ -4010,7 +4010,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 deleteAfterUpload: makePostLocalFolderDeleteAfterUpload,
                 doFixAiSlop: makePostFixAiSlop,
                 captionText: makePostCaptionText,
-                disableComments: makePostDisableComments,
                 onLog: (msg) => tLog(`  ${msg}`),
               });
               if (result.posted) posted++;

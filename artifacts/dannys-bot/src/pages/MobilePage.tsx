@@ -1980,7 +1980,6 @@ interface AutomationSettingsData {
   makePostUseChatGpt: boolean;
   makePostFixAiSlop: boolean;
   makePostMakeUnique: boolean;
-  makePostDisableComments: boolean;
   makePostCaptionText: string;
   makePostImageSettings: ImageFilterSettings;
 }
@@ -2045,7 +2044,6 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   makePostUseChatGpt: false,
   makePostFixAiSlop: false,
   makePostMakeUnique: false,
-  makePostDisableComments: false,
   makePostCaptionText: "",
   makePostImageSettings: {
     contrast: { enabled: true, min: 5, max: 250 },
@@ -2270,7 +2268,6 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             makePostUseChatGpt: s.makePostUseChatGpt,
             makePostFixAiSlop: s.makePostFixAiSlop,
             makePostMakeUnique: s.makePostMakeUnique,
-            makePostDisableComments: s.makePostDisableComments,
             makePostCaptionText: s.makePostCaptionText,
             makePostImageSettings: s.makePostImageSettings,
           }),
@@ -2407,6 +2404,9 @@ function AutomationSettingsPanel({
   const [loadingFollowed, setLoadingFollowed] = useState(false);
   // Make a Post UI local state
   const [makePostImageSettingsOpen, setMakePostImageSettingsOpen] = useState(false);
+  const [showPostedMedia, setShowPostedMedia] = useState(false);
+  const [postedMediaFiles, setPostedMediaFiles] = useState<string[]>([]);
+  const [loadingPostedMedia, setLoadingPostedMedia] = useState(false);
 
   const loadFollowedUsers = React.useCallback(async () => {
     if (!phone?.serial) return;
@@ -2417,6 +2417,24 @@ function AutomationSettingsPanel({
       if (data?.users) setMobileFollowedList(data.users);
     } catch {} finally { setLoadingFollowed(false); }
   }, [phone?.serial]);
+
+  const loadPostedMedia = React.useCallback(async () => {
+    if (!phone?.serial) return;
+    setLoadingPostedMedia(true);
+    try {
+      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/posted-media`);
+      const data = await r.json().catch(() => null);
+      if (data?.files) setPostedMediaFiles(data.files);
+    } catch {} finally { setLoadingPostedMedia(false); }
+  }, [phone?.serial]);
+
+  const deletePostedMediaEntry = async (filename: string) => {
+    if (!phone?.serial) return;
+    try {
+      await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/posted-media/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+      setPostedMediaFiles(f => f.filter(x => x !== filename));
+    } catch {}
+  };
 
   // Auto-refresh the followed list every 5 s while the panel is open so
   // users followed during a running cycle appear without manual re-toggle.
@@ -3408,6 +3426,12 @@ function AutomationSettingsPanel({
                           disabled={loading}
                           className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                         <label htmlFor="make-a-post-local-no-repeat" className="text-xs text-muted-foreground cursor-pointer select-none">Do not repost the same image</label>
+                        <Button
+                          variant="outline" size="sm"
+                          className="h-6 text-xs px-2.5 ml-1"
+                          onClick={() => { setShowPostedMedia(v => !v); if (!showPostedMedia) loadPostedMedia(); }}
+                          disabled={loading}
+                        >{showPostedMedia ? 'Hide' : 'Posted Media'}</Button>
                       </div>
                       <div className="flex items-center gap-2">
                         <input type="checkbox" id="make-a-post-local-random"
@@ -3418,6 +3442,55 @@ function AutomationSettingsPanel({
                         <label htmlFor="make-a-post-local-random" className="text-xs text-muted-foreground cursor-pointer select-none">Pick at random</label>
                       </div>
                     </div>
+
+                    {/* Posted Media panel — mirrors the Sources panel aesthetic */}
+                    {showPostedMedia && (
+                      <div className="border border-border rounded-lg p-3 space-y-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs text-muted-foreground flex-1">
+                            {postedMediaFiles.length} image{postedMediaFiles.length !== 1 ? 's' : ''} posted
+                          </span>
+                          <Button
+                            variant="outline" size="sm" className="h-7 text-xs px-2.5 gap-1 shrink-0"
+                            onClick={loadPostedMedia}
+                            disabled={loadingPostedMedia}
+                          >Refresh</Button>
+                          {postedMediaFiles.length > 0 && (
+                            <Button
+                              variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:text-destructive shrink-0"
+                              disabled={loadingPostedMedia}
+                              onClick={async () => {
+                                if (!phone?.serial) return;
+                                // Clear all — delete each entry via the API
+                                await Promise.all(postedMediaFiles.map(f =>
+                                  fetch(`/api/mobile/devices/${encodeURIComponent(phone!.serial)}/posted-media/${encodeURIComponent(f)}`, { method: 'DELETE' })
+                                ));
+                                setPostedMediaFiles([]);
+                              }}
+                            >Clear all</Button>
+                          )}
+                        </div>
+                        {postedMediaFiles.length > 0 ? (
+                          <div className="space-y-1 max-h-[260px] overflow-y-auto pr-0.5">
+                            {postedMediaFiles.map((fname, i) => (
+                              <div key={i} className="flex items-center gap-2 text-xs">
+                                <span className="flex-1 text-foreground font-mono truncate">{fname}</span>
+                                <button
+                                  onClick={() => deletePostedMediaEntry(fname)}
+                                  disabled={loadingPostedMedia}
+                                  title="Remove — allows this image to be reposted"
+                                  className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                                >✕</button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : loadingPostedMedia ? (
+                          <p className="text-xs text-muted-foreground">Loading…</p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">No images posted yet.</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -3506,15 +3579,6 @@ function AutomationSettingsPanel({
                       disabled={loading}
                       className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                     <label htmlFor="make-a-post-make-unique" className="text-xs text-muted-foreground cursor-pointer select-none">Make it unique</label>
-                  </div>
-                  {/* Disable comments */}
-                  <div className="flex items-center gap-1.5">
-                    <input type="checkbox" id="make-a-post-disable-comments"
-                      checked={settings.makePostDisableComments}
-                      onChange={e => setSettings(s => ({ ...s, makePostDisableComments: e.target.checked }))}
-                      disabled={loading}
-                      className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                    <label htmlFor="make-a-post-disable-comments" className="text-xs text-muted-foreground cursor-pointer select-none">Disable comments</label>
                   </div>
                 </div>
               </div>

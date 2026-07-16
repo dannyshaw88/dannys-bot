@@ -4,6 +4,34 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.635] — 2026-07-16
+
+### Removed
+
+- **Make a Post — "Disable comments" option removed** — The Advanced settings / Turn off commenting tap-flow was untested on real hardware and added unnecessary steps between the caption screen and the final Share tap. Removed from schema, server defaults, `runMakePostStep`, and UI.
+
+### Changed
+
+- **Fix AI Slop — significantly stronger (replaces v1.1.634 implementation)**
+
+  The v1.1.634 approach used a single-pass JPEG re-encode with a sub-pixel blur. Instagram was still flagging images as AI-generated. The new implementation uses a four-step pipeline that addresses all three detection vectors more aggressively:
+
+  1. **PNG intermediate pass** (new): The source image is decoded to a raw-pixel PNG buffer before any JPEG is written. PNG has no JPEG APP segment structure, so this unconditionally destroys every JPEG APP segment in the original — including APP11 (JUMBF container), which is where C2PA manifests are embedded. The previous approach re-encoded from the JPEG directly; some JUMBF readers can survive a naïve JPEG-to-JPEG re-encode if the decoder passes segments through.
+
+  2. **Random edge crop, 1–3 px per side independently** (new): Trims a different number of pixels from each of the four edges. This changes the image dimensions slightly and disrupts CNN spatial-grid detectors that are calibrated to the generator's native output resolution.
+
+  3. **Wider blur + full HSL micro-jitter** (stronger): Gaussian blur raised from σ 0.3–0.7 to σ 0.4–1.0. Hue (±3°) and saturation (±3%) jitter added alongside the existing brightness jitter, shifting all three per-channel statistics away from the generator's known colour signature.
+
+  4. **Double JPEG encode** (new): Two sequential JPEG re-encodes at independently randomised qualities (pass 1: 90–96, pass 2: 87–93). Each pass uses a different DCT quantisation step table, further scrambling any steganographic DCT embedding that survived the PNG intermediate.
+
+### Added
+
+- **Make a Post — "Posted Media" panel** — A collapsible panel (toggled by the new "Posted Media" button beside the "Do not repost the same image" checkbox) shows the list of local-folder filenames that have already been posted for this phone. Each entry has a ✕ delete button — clicking it removes the filename from the no-repeat list so that image can be reposted. A "Clear all" button removes the entire list at once. The panel is styled to match the Sources panel in Follow Users (bordered card, scrollable list, count header). Backed by two new server endpoints:
+  - `GET /api/mobile/devices/:serial/posted-media` — returns the current list
+  - `DELETE /api/mobile/devices/:serial/posted-media/:filename` — removes one entry
+
+---
+
 ## [1.1.634] — 2026-07-16
 
 ### Changed
