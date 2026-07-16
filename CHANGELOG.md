@@ -4,6 +4,26 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.636] — 2026-07-16
+
+### Changed
+
+- **Posted Media button moved to the Make a Post header row** — The "Posted Media" toggle button is now on the far right of the "Make a Post" title row (same pattern as Sources / Followed in the Follow Users section). It was previously tucked beside the "Do not repost the same image" checkbox inside the Sources: My Computer panel, which was hard to find. The panel it opens is unchanged.
+
+- **Fix AI Slop v3 — Gemini visible watermark removal + stronger SynthID disruption**
+
+  Two gaps identified from Google's published documentation on Gemini Image Creator markers:
+
+  **Gap 1 — Visible watermark (was missing):**
+  Gemini embeds a small diagonal sparkle/Gemini logomark in the lower-right corner of every downloaded full-resolution image. The previous implementation's 1–3 px random edge crop was far too small to touch this logo. The new implementation crops 4–7 % of the image width from the right edge and 4–7 % of the image height from the bottom edge (randomised within that range per image), which at Gemini's native 1024 × 1024 output translates to ~41–72 px — enough to fully remove the watermark badge. Crop percentages are randomised so repeated posts do not share an identical bounding box.
+
+  **Gap 2 — SynthID survival threshold (was under-addressed):**
+  Gemini uses Google DeepMind's SynthID invisible watermarking — a spread-spectrum pixel-level signal designed to survive JPEG compression, colour edits, and moderate cropping. SynthID researchers have noted the signal degrades significantly below JPEG quality 80. The previous second-pass quality range was 87–93, which is above that threshold. The new second-pass quality range is 72–82, intentionally straddling the SynthID survival boundary. The first pass remains at 88–95 to preserve perceptual quality; Instagram recompresses on upload regardless.
+
+  Other parameters also tightened: blur raised to σ 0.5–1.2 (from 0.4–1.0), saturation jitter widened to ±4 % (from ±3 %).
+
+---
+
 ## [1.1.635] — 2026-07-16
 
 ### Removed

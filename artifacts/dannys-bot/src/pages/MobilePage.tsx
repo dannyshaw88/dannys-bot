@@ -3300,6 +3300,12 @@ function AutomationSettingsPanel({
               className="w-4 h-4 accent-primary cursor-pointer"
             />
             <label htmlFor="make-a-post-enabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">Make a Post</label>
+            <Button
+              variant="outline" size="sm"
+              className="h-7 text-xs px-3 ml-auto"
+              onClick={() => { setShowPostedMedia(v => !v); if (!showPostedMedia) loadPostedMedia(); }}
+              disabled={loading}
+            >{showPostedMedia ? 'Hide' : 'Posted Media'}</Button>
           </div>
 
           {settings.makePostEnabled && (
@@ -3426,12 +3432,6 @@ function AutomationSettingsPanel({
                           disabled={loading}
                           className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                         <label htmlFor="make-a-post-local-no-repeat" className="text-xs text-muted-foreground cursor-pointer select-none">Do not repost the same image</label>
-                        <Button
-                          variant="outline" size="sm"
-                          className="h-6 text-xs px-2.5 ml-1"
-                          onClick={() => { setShowPostedMedia(v => !v); if (!showPostedMedia) loadPostedMedia(); }}
-                          disabled={loading}
-                        >{showPostedMedia ? 'Hide' : 'Posted Media'}</Button>
                       </div>
                       <div className="flex items-center gap-2">
                         <input type="checkbox" id="make-a-post-local-random"
