@@ -4,6 +4,18 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.633] — 2026-07-16
+
+### Fixed
+
+- **Make a Post — crop-to-fit toggle now correctly found and pressed** — `findExpandPhotoButton` was searching for labels like `"Expand"` / `"Zoom out"` and resource-ids like `expand_photo_button`, none of which match the button this device actually exposes. Real-device UIAutomator dump (16 Jul 2026) confirmed the button has `content-desc="Change crop"` and `resource-id="croptype_toggle_button"`. Both are now the first candidates checked — ahead of all other labels and resource-ids — so the toggle is reliably found and tapped immediately after the image is selected in the picker, switching Instagram from its default centre-crop square frame to the full original photo. The positional heuristic fallback that was previously skipping this button (because it had a non-empty `content-desc` and was excluded by the "icon-only" filter) is now only reached as a last resort for builds where neither label nor resource-id is present.
+
+- **Make a Post — Share button found by resource-id instead of generic label match** — All four places in the caption/share flow that called `findButtonByLabel("Share")` have been replaced with a new dedicated `findShareFooterButton` function. The function looks up `share_footer_button` by resource-id first (confirmed from real-device dump: `[44,2209][1036,2226]`, `desc="Share"`), then falls back to `footer_button_container` (its taller parent ViewGroup, `[0,2169][1080,2226]`) for a more reliable tap target, then finally falls back to the generic `content-desc="Share"` text match. The previous `findButtonByLabel("Share")` approach risked matching `"Share"` nodes on unrelated screens (story share bar, DM send sheet) and was prone to returning the wrong coordinate on the caption screen. All four call sites updated: the initial caption-screen confirmation check, the re-find after caption typing, the post-submission poll loop, and the single-retry tap.
+
+- **Make a Post — pushed image automatically removed from camera roll after posting** — The temporary image file pushed to the phone via `adb push` is now deleted from the device (`removeDeviceFile`) immediately after a confirmed successful post, before the `"✓ posted"` log line. Previously `removeDeviceFile` was only called on the failure and abort paths; a successful post left the file permanently in `/sdcard/DCIM/Camera/`, causing the camera roll to accumulate one copy per post indefinitely. The deletion is fire-and-forget (`.catch(() => {})`) so a failed cleanup never blocks the success result.
+
+---
+
 ## [1.1.632] — 2026-07-16
 
 ### Fixed
