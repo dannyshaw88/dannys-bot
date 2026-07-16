@@ -4,6 +4,25 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.621] — 2026-07-16
+
+### Changed
+- **Phone Mirror — Inspect: full element tree browser**: completely replaced the old cursor-hover panel (which only showed the 1–5 accessibility nodes directly under the mouse, covering a minority of elements) with a full UIAutomator tree browser that runs below the mirror as a permanent scrollable list alongside the live view.
+
+  **What the new panel does:**
+  - Shows **every single accessibility node** returned by the UIAutomator dump — all of them, listed in index order with stable identifiers: `[N]`, tappable/view-only flag, class name, `resource-id`, `content-desc`, and text.
+  - **Hover a row in the tree** → that element's exact bounds are immediately highlighted on the mirror with a blue overlay (no round-trip — bounds are applied directly to the DOM via `setForcedHighlight` on the canvas handle, bypassing React's render cycle entirely).
+  - **Hover the mirror** → the matching node in the tree scrolls smoothly into view and the row highlights blue, keeping mirror position and tree position permanently in sync.
+  - **Dump All** button copies the complete indexed tree as plain text to the clipboard — every node with its index, class, resource-id, content-desc, bounds, and center coordinates — ready to paste to the developer for element identification without guessing.
+  - **Re-dump** button re-fetches the accessibility tree from the phone instantly (useful after navigating to a new screen).
+  - Mirror clicks are now blocked in inspect mode to prevent accidental phone taps while browsing.
+
+  **Why this matters:** UIAutomator's accessibility tree is the only reliable source of stable element identifiers on Android — resource-ids and content-descs don't shift when Instagram's layout changes, unlike pixel coordinates. The old hover-only approach required the user to scan with their cursor and could only show what was directly under the pointer at any moment. The new tree panel exposes the complete structure at once, making it possible to locate any element by name and tell the developer its exact stable identifier (`[N] id="resource_id"`) for permanent use in automation code.
+
+  **Technical notes:** `LiveCanvasHandle` gains a `setForcedHighlight(bounds | null)` imperative method so the tree panel can drive the mirror overlay without triggering a React re-render. A `forcedHighlightActiveRef` boolean gates the mirror's own `pointermove` overlay updates — panel hover takes priority while the mouse is over the tree, mirror hover resumes the moment the mouse returns to the canvas. The tree panel lives below the mirror area in the PhoneSlot flex column (not overlaid on top of it), so both are visible simultaneously. Mirror shrinks to ~50% of the shell height when inspect is active to give the tree room.
+
+---
+
 ## [1.1.620] — 2026-07-16
 
 ### Fixed
