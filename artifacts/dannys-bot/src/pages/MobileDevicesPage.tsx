@@ -170,7 +170,7 @@ export function MobileDevicesPage() {
                   className="flex flex-col items-center justify-center gap-3 p-5 rounded-2xl border border-dashed border-border/40 bg-card/30 opacity-40"
                 >
                   <div className="w-[100px] aspect-[220/440] rounded-2xl bg-muted/30 flex items-center justify-center">
-                    <Smartphone className="w-8 h-8 text-muted-foreground/30" />
+                    <PhoneFarmIcon className="w-8 h-8 text-muted-foreground/30" />
                   </div>
                   <p className="text-xs text-muted-foreground/50">Empty slot</p>
                 </div>
