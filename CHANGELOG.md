@@ -4,6 +4,24 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.650] — 2026-07-16
+
+### Removed
+The following settings sections have been removed from the Settings page:
+- **HikerAPI Per-Tool Endpoints** (Scraping tab) — granular per-tool HikerAPI endpoint toggles
+- **Protect Accounts** (Automation tab) — automatic sibling-account pause on ban detection
+- **Scraped User Skip Settings** (Automation tab) — global cross-account scraped-user deduplication
+- **Verify Delay Mode** (Automation tab) — mode selector for sequential vs same-proxy verify delays
+- **Verify All Accounts Delay** (Automation tab) — flat sequential delay between account verifications
+- **Verify Accounts Sharing the Same Proxy — Delay** (Automation tab) — per-proxy stagger delay for verifications
+- **Pre-filled Phone Number** (Automation tab) — phone number pre-filled into the Embedded Browser toolbar
+- **Jarvee Import Followed Users** (Data tab) — Jarvee FOLLOWEDUSERS export importer
+- **Server Debug Log** (Data tab) — in-app server log viewer and downloader
+
+All associated internal state, refs, helper functions, and type definitions (`JarveeEntry`, `JarveeGroup`, `parseJarveeFile`, `jarveeDateToISO`, and the `ImportResult` inline type) have been removed alongside their UI.
+
+---
+
 ## [1.1.649] — 2026-07-16
 
 ### Fixed
