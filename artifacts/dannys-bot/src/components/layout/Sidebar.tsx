@@ -89,33 +89,24 @@ function FilledHammerIcon({ className, style }: { className?: string; style?: Re
 }
 
 function FilledFarmIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
-  // 2×3 grid of tiny phone shapes — represents a phone farm
+  // 3-col × 2-row grid of phone shapes snapped to 8×12 cells (1 px gaps, 0.5 px outer padding).
+  // Each phone: 7 × 11 px, rx 1.5, with a screen cutout and home-button dot.
+  const cols = [0.5, 8.5, 16.5];
+  const rows = [0.5, 12.5];
   return (
-    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
-      {/* Row 1, col 1 */}
-      <rect x="1"   y="1"  width="6" height="10" rx="1.4" fill="currentColor"/>
-      <rect x="2"   y="2.6"  width="4" height="5.8" rx="0.5" fill="var(--card,#1e293b)"/>
-      <rect x="3.2" y="9.1"  width="1.6" height="0.8" rx="0.4" fill="var(--card,#1e293b)"/>
-      {/* Row 1, col 2 */}
-      <rect x="9"   y="1"  width="6" height="10" rx="1.4" fill="currentColor"/>
-      <rect x="10"  y="2.6"  width="4" height="5.8" rx="0.5" fill="var(--card,#1e293b)"/>
-      <rect x="11.2" y="9.1" width="1.6" height="0.8" rx="0.4" fill="var(--card,#1e293b)"/>
-      {/* Row 1, col 3 */}
-      <rect x="17"  y="1"  width="6" height="10" rx="1.4" fill="currentColor"/>
-      <rect x="18"  y="2.6"  width="4" height="5.8" rx="0.5" fill="var(--card,#1e293b)"/>
-      <rect x="19.2" y="9.1" width="1.6" height="0.8" rx="0.4" fill="var(--card,#1e293b)"/>
-      {/* Row 2, col 1 */}
-      <rect x="1"   y="13" width="6" height="10" rx="1.4" fill="currentColor"/>
-      <rect x="2"   y="14.6" width="4" height="5.8" rx="0.5" fill="var(--card,#1e293b)"/>
-      <rect x="3.2" y="21.1" width="1.6" height="0.8" rx="0.4" fill="var(--card,#1e293b)"/>
-      {/* Row 2, col 2 */}
-      <rect x="9"   y="13" width="6" height="10" rx="1.4" fill="currentColor"/>
-      <rect x="10"  y="14.6" width="4" height="5.8" rx="0.5" fill="var(--card,#1e293b)"/>
-      <rect x="11.2" y="21.1" width="1.6" height="0.8" rx="0.4" fill="var(--card,#1e293b)"/>
-      {/* Row 2, col 3 */}
-      <rect x="17"  y="13" width="6" height="10" rx="1.4" fill="currentColor"/>
-      <rect x="18"  y="14.6" width="4" height="5.8" rx="0.5" fill="var(--card,#1e293b)"/>
-      <rect x="19.2" y="21.1" width="1.6" height="0.8" rx="0.4" fill="var(--card,#1e293b)"/>
+    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      {rows.map(y =>
+        cols.map(x => (
+          <g key={`${x}-${y}`}>
+            {/* Phone body */}
+            <rect x={x} y={y} width="7" height="11" rx="1.5" fill="currentColor" />
+            {/* Screen */}
+            <rect x={x + 0.9} y={y + 1.5} width="5.2" height="7" rx="0.5" fill="var(--background, #0f172a)" />
+            {/* Home button */}
+            <circle cx={x + 3.5} cy={y + 9.8} r="0.75" fill="var(--background, #0f172a)" />
+          </g>
+        ))
+      )}
     </svg>
   );
 }
