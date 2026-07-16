@@ -12,7 +12,7 @@
  * reassigns slots because the serial travels with the hardware, not the wire.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw } from "lucide-react";
@@ -57,7 +57,7 @@ function PhoneFarmIcon({ className }: { className?: string }) {
 function PhoneShell({ className, online, screenshotUrl }: { className?: string; online?: boolean; screenshotUrl?: string }) {
   // Unique clip-path id per component instance (avoids DOM id collisions when
   // multiple PhoneShell SVGs are rendered side-by-side in the farm grid).
-  const clipIdRef = React.useRef(`sc-${Math.random().toString(36).slice(2)}`);
+  const clipIdRef = useRef(`sc-${Math.random().toString(36).slice(2)}`);
   const glowId    = online ? "glow-on" : "glow-off";
   const clipId    = clipIdRef.current;
   return (
