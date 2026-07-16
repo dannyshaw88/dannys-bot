@@ -125,9 +125,9 @@ export function MobileDevicesPage() {
           <h1 className="text-lg font-bold text-foreground">Mobile Farm</h1>
         </div>
 
-        {/* Device grid — fixed 3 cols × 2 rows = 6 slots */}
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="grid grid-cols-3 gap-4" style={{ gridTemplateRows: "repeat(2, 1fr)" }}>
+        {/* Device grid — fixed 3 cols × 2 rows = 6 slots, fills the screen */}
+        <div className="flex-1 overflow-hidden p-6">
+          <div className="grid grid-cols-3 gap-4 h-full" style={{ gridTemplateRows: "repeat(2, 1fr)" }}>
             {Array.from({ length: 6 }).map((_, i) => {
               const device = DEVICES[i];
               if (device) {
