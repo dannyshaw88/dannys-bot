@@ -1309,16 +1309,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Use the pre-found button if provided, otherwise dump the a11y tree.
     // _findElem searches text, content-desc, hint AND resource-id (substring)
     // so any element whose resource-id contains "send" is also found —
-    // e.g. com.instagram.android:id/direct_message_share_send_button.
-    let sendBtn = knownSendBtn ?? await android.findButtonByLabel(serial, "Send").catch(() => null);
-    if (!sendBtn && !knownSendBtn) {
-      // The Send button renders asynchronously after the recipient avatar
-      // animates its selection state (blue checkmark). On MIUI devices this
-      // takes 600–900ms. If the first dump missed it, wait and retry once.
-      onLog?.(`[share-sheet] Send button not found on first scan — waiting 700ms and retrying…`);
-      await sleepOrAbort(serial, 700);
-      sendBtn = await android.findButtonByLabel(serial, "Send").catch(() => null);
-    }
+    // e.g. com.instagram.android:id/direct_send_button_multi_select.
+    const sendBtn = knownSendBtn ?? await android.findButtonByLabel(serial, "Send").catch(() => null);
     if (sendBtn) {
       await android.tap(serial, sendBtn.x, sendBtn.y);
       // A successful send closes the sheet within one frame.
@@ -1333,11 +1325,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return null;
     }
     // Sheet is open but Send button not found via a11y — tap the coordinate
-    // fallback. Confirmed from UIAutomator dump: direct_private_share_bottom_
-    // control_container lives at [0,1995][1080,2226] on this 1080×2226 device.
-    // x=50% centres on the full-width Send button; y=94% lands in the middle
-    // of that container (above the Android nav-bar gesture strip).
-    const fbX = Math.round(w * 0.50), fbY = Math.round(h * 0.940);
+    // fallback.
+    // Confirmed from UIAutomator dump (1080×2226 device):
+    //   direct_send_group_button_container  [0,2147][1080,2226]
+    //   direct_send_button_multi_select     [44,2147][1036,2226]  center=(540,2187)
+    // y = 2187 / 2226 ≈ 98.2 % of screen height.
+    // The previous 94–94.8 % values (≈2092–2110 px) landed inside the
+    // "Write a message…" text box [0,2009][1047,2147] and never hit Send.
+    const fbX = Math.round(w * 0.50), fbY = Math.round(h * 0.982);
     onLog?.(`[share-sheet] Send button not found via a11y — tapping coordinate fallback (${fbX},${fbY})`);
     await android.tap(serial, fbX, fbY);
     await sleepOrAbort(serial, 300);
@@ -1425,11 +1420,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         onLog?.(`${logPrefix}: share skipped — no recipient avatars found (closed without sending)`);
         return false;
       }
-      // Give the Send button time to appear: after tapping a recipient the
-      // avatar animates a blue checkmark and only THEN does Instagram render
-      // the Send button in the a11y tree. 200ms was always too short on MIUI.
-      // sendShareSheet also has its own 700ms retry, but starting later means
-      // the first scan is more likely to succeed without the retry penalty.
+      // Give the Send button time to appear after the recipient tap before
+      // sendShareSheet does its a11y lookup.
       await sleepOrAbort(serial, 800);
       const sent = await sendShareSheet(serial, w, h, sheetSendBtn);
       if (sent === true) {

@@ -4,6 +4,14 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.625] — 2026-07-16
+
+### Fixed
+- **Share-to-DM: coordinate fallback for Send button was landing in the wrong widget** — previous values of `h * 0.94–0.948` (≈2092–2110 px on a 2226 px screen) hit the "Write a message…" text box `[0,2009][1047,2147]`, not the Send button. UIAutomator dump confirms the actual Send button (`direct_send_button_multi_select`) is at `[44,2147][1036,2226]` centre=(540,2187) = **98.2% of screen height**. Fallback corrected to `h * 0.982`.
+- **Share-to-DM: removed retry added in v1.1.624** — per project rule, no retry loops anywhere in automation; the retry inside `sendShareSheet` has been removed.
+
+---
+
 ## [1.1.624] — 2026-07-16
 
 ### Fixed
