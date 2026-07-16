@@ -4,6 +4,13 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.648] — 2026-07-16
+
+### Fixed
+- **Inject Browsing — pull-to-refresh on target profile instead of scrolling to Follow button**: After the "browse before follow" branch ran `runProfileBrowsingSequence`, the code unconditionally executed a 4-swipe loop intended to scroll the profile back to the top (so the Follow button was on-screen). The bug: when the feed-scroll roll inside `runProfileBrowsingSequence` was *missed* (log line "feed-scroll roll missed — skipping grid scroll"), the function returned immediately having done nothing — the profile was never scrolled down and was already showing the header/Follow button at the top. Running the 4 downward swipes on a profile that is already at the top caused Instagram to interpret each swipe as a pull-to-refresh gesture, visibly refreshing the profile 3–5 times before the Follow tap. Fixed by making `runProfileBrowsingSequence` return `boolean` (`true` = grid was actually scrolled, `false` = skipped/no-op). The scroll-back-to-top loop in the caller now only runs when the function returned `true`. If the feed-scroll roll missed, no extra gestures are performed and the Follow tap fires immediately.
+
+---
+
 ## [1.1.647] — 2026-07-16
 
 ### Fixed

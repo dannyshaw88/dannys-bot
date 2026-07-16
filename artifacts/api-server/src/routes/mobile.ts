@@ -3141,23 +3141,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
    * expected icon/button can't be located — per spec, a missing icon just
    * means that step is skipped for this user.
    */
+  // Returns true if the profile grid was actually scrolled (so the caller
+  // knows whether a scroll-back-to-top is needed before tapping Follow),
+  // false if the feed-scroll roll was missed or rolled 0 rows (profile is
+  // still at the top — no scroll-back needed, and doing one would pull-to-refresh).
   async function runProfileBrowsingSequence(
     serial: string,
     browsing: InjectBrowsingParams,
     onLog?: (msg: string) => void,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const { w, h } = getScreenSize(serial);
 
     const feedChance = rollRange(browsing.feedChanceMin, browsing.feedChanceMax) / 100;
     if (!(feedChance > 0 && Math.random() < feedChance)) {
       onLog?.("Inject Browsing: feed-scroll roll missed — skipping grid scroll");
-      return;
+      return false;
     }
 
     const rows = Math.max(0, Math.round(rollRange(browsing.feedMin, browsing.feedMax)));
     if (rows === 0) {
       onLog?.("Inject Browsing: feed posts rolled to 0 — skipping grid scroll");
-      return;
+      return false;
     }
     onLog?.(`Inject Browsing: scrolling profile grid — ${rows} row(s)`);
     const x = Math.round(w / 2);
@@ -3454,6 +3458,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Back out of the opened post to the profile grid before continuing.
     await android.pressBack(serial);
     await sleepOrAbort(serial, 500);
+    return true;
   }
 
   async function runFollowUsersStep(
@@ -3677,21 +3682,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
         if (browsing && willBrowse && browseBeforeFollow) {
           onLog?.("Inject Browsing: rolled to browse this profile before following");
-          await runProfileBrowsingSequence(serial, browsing, onLog).catch((e: any) => {
+          const didScroll = await runProfileBrowsingSequence(serial, browsing, onLog).catch((e: any) => {
             if (e?.message === "cycle-aborted") throw e;
             onLog?.(`Inject Browsing: error — ${e?.message}`);
+            return false;
           });
-          // Browsing may have scrolled the profile grid, pushing the Follow
-          // button (in the profile header) off-screen. Scroll back to the top
-          // of the profile before attempting the Follow tap. Only needed on
-          // this branch — the after-follow branch below taps Follow first,
-          // while still at the top of the profile, so no scroll-up is needed.
-          const { w: bw, h: bh } = getScreenSize(serial);
-          for (let _si = 0; _si < 4; _si++) {
-            await android.swipe(serial, Math.round(bw / 2), Math.round(bh * 0.30), Math.round(bw / 2), Math.round(bh * 0.75), 280);
-            await sleepOrAbort(serial, 180);
+          // Only scroll back to top if browsing actually scrolled the grid.
+          // If the feed-scroll roll was missed the profile is already at the
+          // top — doing a downward swipe there triggers pull-to-refresh, not
+          // a scroll-up, which is both wrong and bot-like.
+          if (didScroll) {
+            const { w: bw, h: bh } = getScreenSize(serial);
+            for (let _si = 0; _si < 4; _si++) {
+              await android.swipe(serial, Math.round(bw / 2), Math.round(bh * 0.30), Math.round(bw / 2), Math.round(bh * 0.75), 280);
+              await sleepOrAbort(serial, 180);
+            }
+            await sleepOrAbort(serial, 400);
           }
-          await sleepOrAbort(serial, 400);
         } else if (browsing && willBrowse && !browseBeforeFollow) {
           onLog?.("Inject Browsing: rolled to browse this profile after following");
         }
