@@ -4,6 +4,15 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.649] — 2026-07-16
+
+### Fixed
+- **Phone Farm mirror — shows phone wallpaper when automation is idle**: The live screenshot thumbnail was displayed for any connected device regardless of whether the Human Session Tool was actually running a cycle. Now the mirror is black (dark phone silhouette) when the tool is idle and only shows live frames when an automation cycle is actively in progress. A new server endpoint `GET /api/mobile/cycle-active` returns the set of device serials currently running a cycle; the farm page polls it every 2 s and gates the screenshot URL on membership in that set.
+- **Phone Farm mirror — thumbnail does not update while automation is running**: The SVG `<image>` element was missing a `key` prop, so when the URL changed (every poll tick) React reused the same DOM node and some browsers served the stale cached frame instead of fetching the new URL. Adding `key={screenshotUrl}` forces React to replace the element on every tick, guaranteeing a fresh fetch.
+- **Phone Farm mirror — goes dead after navigating away and returning**: The poll counter was stored as an integer tick (`screencapTick`) that reset to `0` on component remount. On return to the page the URL became `screencap.png?t=0` again — the same URL the browser had already cached — so the old frame was served indefinitely. Replaced the tick counter with `Date.now()` (updated every 2 s) so the URL is always a unique timestamp on remount, and the browser always fetches a fresh frame. The poll interval was also tightened from 4 s to 2 s across USB status, cycle-active, and screenshot refresh for more responsive feedback.
+
+---
+
 ## [1.1.648] — 2026-07-16
 
 ### Fixed

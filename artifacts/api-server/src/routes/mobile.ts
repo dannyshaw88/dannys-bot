@@ -4887,6 +4887,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch { res.status(500).end(); }
   });
 
+  // Returns the set of device serials that currently have an automation cycle
+  // running.  The farm page polls this every 2 s so it can gate the live mirror
+  // thumbnail — black when idle, live screenshot when the cycle is active.
+  app.get("/api/mobile/cycle-active", (_req: Request, res: Response) => {
+    res.json({ serials: [...automationCycleInProgress] });
+  });
+
   // ── Element Inspector ─────────────────────────────────────────────────────
   // Like Chrome DevTools F12 — click a point on the phone mirror and get back
   // every accessibility node whose bounds contain that point, sorted from most

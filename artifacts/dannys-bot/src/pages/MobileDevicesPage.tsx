@@ -93,6 +93,7 @@ function PhoneShell({ className, online, screenshotUrl }: { className?: string; 
       <rect x="12" y="14" width="196" height="412" rx="26" fill="url(#wallpaper)"/>
       {screenshotUrl && (
         <image
+          key={screenshotUrl}
           href={screenshotUrl}
           x="12" y="14" width="196" height="412"
           clipPath={`url(#${clipId})`}
@@ -406,13 +407,20 @@ export function MobileDevicesPage() {
 
   const [devices,    setDevices]    = useState<FarmDevice[]>([]);
   const [loadingDb,  setLoadingDb]  = useState(true);
-  const [addingSlot, setAddingSlot] = useState<number | null>(null); // slot currently showing the add panel
-  // Tick counter incremented every 4 s — appended as ?t=N to the screencap URL
-  // so the browser fetches a fresh frame without needing React state per device.
-  const [screencapTick, setScreencapTick] = useState(0);
+  const [addingSlot, setAddingSlot] = useState<number | null>(null);
 
-  // Live USB status — polled only for "online" badge, not for the grid itself
+  // Live USB status — polled every 2 s for the Connected/Offline badge.
   const [usbPhones, setUsbPhones] = useState<UsbPhone[]>([]);
+
+  // Serials with an active automation cycle — polled every 2 s.
+  // Screenshot URL is only set when the cycle is running, so the phone silhouette
+  // shows black when idle and live updates when the Human Session Tool is working.
+  const [activeCycleSerials, setActiveCycleSerials] = useState<Set<string>>(new Set());
+
+  // Timestamp cache-buster updated every 2 s.  Using Date.now() (not a counter)
+  // means the URL is always fresh after a navigate-away / remount, so the browser
+  // never serves a stale frame when you return to this page.
+  const [screencapTs, setScreencapTs] = useState(() => Date.now());
 
   const refreshDevices = useCallback(async () => {
     try {
@@ -427,13 +435,25 @@ export function MobileDevicesPage() {
     setUsbPhones(p);
   }, []);
 
+  const refreshCycleActive = useCallback(async () => {
+    try {
+      const r = await fetch("/api/mobile/cycle-active");
+      if (r.ok) {
+        const d = await r.json();
+        setActiveCycleSerials(new Set(d.serials as string[]));
+      }
+    } catch { /* ignore — API server may be starting up */ }
+  }, []);
+
   useEffect(() => {
     refreshDevices();
     refreshUsb();
-    const usbId  = setInterval(refreshUsb,          4_000);
-    const tickId = setInterval(() => setScreencapTick(t => t + 1), 4_000);
-    return () => { clearInterval(usbId); clearInterval(tickId); };
-  }, [refreshDevices, refreshUsb]);
+    refreshCycleActive();
+    const usbId    = setInterval(refreshUsb,         2_000);
+    const cycleId  = setInterval(refreshCycleActive, 2_000);
+    const tsId     = setInterval(() => setScreencapTs(Date.now()), 2_000);
+    return () => { clearInterval(usbId); clearInterval(cycleId); clearInterval(tsId); };
+  }, [refreshDevices, refreshUsb, refreshCycleActive]);
 
   const onlineSerials = new Set(
     usbPhones.filter(p => p.state === "device").map(p => p.serial)
@@ -510,8 +530,8 @@ export function MobileDevicesPage() {
                       online={onlineSerials.has(device.serial)}
                       onClick={() => setLocation(`/mobile/farm/${encodeURIComponent(device.serial)}`)}
                       onRemove={() => handleRemove(device.slotIndex)}
-                      screenshotUrl={onlineSerials.has(device.serial)
-                        ? `/api/mobile/devices/${encodeURIComponent(device.serial)}/screencap.png?t=${screencapTick}`
+                      screenshotUrl={onlineSerials.has(device.serial) && activeCycleSerials.has(device.serial)
+                        ? `/api/mobile/devices/${encodeURIComponent(device.serial)}/screencap.png?t=${screencapTs}`
                         : undefined}
                     />
                   );
