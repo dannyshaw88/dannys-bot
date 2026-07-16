@@ -2319,18 +2319,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               onLog?.(`Reel ${i + 1}/${totalReels}: Share via DM icon not found — skipping`);
             } else {
               await android.tap(serial, icons.shareDm.x, icons.shareDm.y);
-              onLog?.(`Reel ${i + 1}/${totalReels}: tapped Send at (${icons.shareDm.x},${icons.shareDm.y}) — waiting for share sheet`);
-              await sleepOrAbort(serial, 400);
-              // One dump for both confirm + recipient scan — see
-              // confirmAndScanShareSheet's root-cause comment (two sequential
-              // dumps left enough idle time for the sheet to close underneath us).
+              onLog?.(`Reel ${i + 1}/${totalReels}: tapped DM icon at (${icons.shareDm.x},${icons.shareDm.y}) — waiting for share sheet`);
+              // 1500ms matches shareCurrentPostViaDm — gives the sheet time to
+              // fully animate in before dumping. 400ms was too short: the dump
+              // ran before the sheet appeared, falling through to feed-post
+              // nodes and in some cases finding a pre-populated Send button
+              // (group selection) that caused an extra recipient to be added.
+              await sleepOrAbort(serial, 1500);
+              onLog?.(`Reel ${i + 1}/${totalReels}: confirming share sheet opened and picking DM recipient…`);
               const reelShareScan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
-              const sheetSendBtn = reelShareScan?.sendBtn ?? null;
-              if (!sheetSendBtn) {
-                onLog?.(`Reel ${i + 1}/${totalReels}: share sheet not confirmed open — skipping recipient tap to avoid a blind tap on the reel underneath`);
-                logger.warn({ serial, reel: i + 1 }, "[view-reels] share sheet not confirmed open (no Send button found)");
+              if (!reelShareScan || !reelShareScan.sheetOpen) {
+                // Gate on sheetOpen, NOT on sendBtn — Send only appears after a
+                // recipient is selected, so gating on sendBtn caused the code to
+                // skip entirely on a clean (nothing pre-selected) share sheet.
+                onLog?.(`Reel ${i + 1}/${totalReels}: share sheet did not open — skipping DM`);
+                logger.warn({ serial, reel: i + 1 }, "[view-reels] share sheet not confirmed open");
+                await android.pressBack(serial);
+                await sleepOrAbort(serial, 200);
               } else {
-                const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog, reelShareScan?.recipients);
+                const sheetSendBtn = reelShareScan.sendBtn ?? null;
+                const recipientPicked = await tapRandomShareSheetRecipient(serial, onLog, reelShareScan.recipients);
                 if (!recipientPicked) {
                   await android.pressBack(serial);
                   onLog?.(`Reel ${i + 1}/${totalReels}: no recipient found — closed share sheet without sending`);
@@ -2339,7 +2347,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   const sent = await sendShareSheet(serial, w, h, sheetSendBtn);
                   if (sent === true || sent === null) {
                     sharesDm++;
-                    onLog?.(`Reel ${i + 1}/${totalReels}: shared via DM`);
+                    onLog?.(`Reel ${i + 1}/${totalReels}: ✓ shared via DM`);
                   } else {
                     await android.pressBack(serial);
                     onLog?.(`Reel ${i + 1}/${totalReels}: Send button not found — closed DM picker`);

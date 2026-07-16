@@ -4,6 +4,13 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.616] — 2026-07-16
+
+### Fixed
+- **View Reels — Share via DM**: replaced post-sheet-open logic with the same pattern used by the working feed share-to-DM. Key changes: wait 1500 ms (was 400 ms) before dumping so the sheet is fully open; gate on `sheetOpen` not `sendBtn` (Send only appears after a recipient is selected — gating on it caused the code to either skip entirely or find a pre-populated group selection and add a second recipient on top, creating a group chat).
+
+---
+
 ## [1.1.615] — 2026-07-16
 
 ### Fixed
