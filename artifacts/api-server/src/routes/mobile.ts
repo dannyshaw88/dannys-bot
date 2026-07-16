@@ -2468,6 +2468,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     injectBrowsingShareFeedPctMax: z.number().min(0).max(100).default(0),
     injectBrowsingShareDmPctMin: z.number().min(0).max(100).default(0),
     injectBrowsingShareDmPctMax: z.number().min(0).max(100).default(0),
+    // ── Filters — profile-quality gates applied before each follow action.
+    // followFiltersEnabled is the master gate; individual sub-flags control
+    // which specific checks are run.
+    followFiltersEnabled: z.boolean().default(false),
+    followFilterVerifiedUsers: z.boolean().default(false),
     // ── Random Jitter — human-like interstitial actions fired on each cycle
     // at a random percentage chance.  Master gate: randomJitterEnabled.
     randomJitterEnabled: z.boolean().default(false),
@@ -3452,9 +3457,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
        *  matching any entry are dropped before the follow loop begins, so no
        *  browsing time is wasted on a target that has already been followed. */
       skipFollowedUsernames?: Set<string>;
+      /** Profile-quality gates to apply after navigating to the target's
+       *  profile but before the Follow tap. */
+      filters?: { skipVerified?: boolean };
     },
   ): Promise<number> {
-    const { usersMin, usersMax, sources, onLog, recordFollow, browsing, skipFollowedUsernames } = params;
+    const { usersMin, usersMax, sources, onLog, recordFollow, browsing, skipFollowedUsernames, filters } = params;
 
     if (!sources.length) {
       onLog?.("Follow: no target sources configured — skipping");
@@ -3604,6 +3612,34 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
 
         await sleepOrAbort(serial, 1500);
+
+        // ── Verified-badge filter ───────────────────────────────────────────
+        // Dump the profile's accessibility tree and look for any indicator
+        // that this account is Meta-verified. If found, press Back and skip.
+        // Runs before Inject Browsing so no browsing time is wasted on a
+        // target that we would have skipped anyway.
+        if (filters?.skipVerified) {
+          try {
+            const profileXml = await android.dumpUi(serial).catch(() => "");
+            // Instagram's verified badge appears as a node whose content-desc
+            // contains "Verified" (exact wording varies by IG version/locale
+            // but the word "Verified" is consistent across all tested builds).
+            // We also check a selection of known resource-ids as a fallback.
+            const isVerified =
+              /content-desc="[^"]*[Vv]erified[^"]*"/.test(profileXml) ||
+              profileXml.includes(":id/is_verified") ||
+              profileXml.includes(":id/verified_badge") ||
+              profileXml.includes(":id/verified_checkmark");
+            if (isVerified) {
+              onLog?.(`Follow: @${username} is verified — skipping (Skip Verified filter)`);
+              await android.pressBack(serial);
+              await sleepOrAbort(serial, 500);
+              continue;
+            }
+          } catch (filterErr: any) {
+            onLog?.(`Follow: verified-badge check failed for @${username} (${filterErr?.message}) — proceeding`);
+          }
+        }
 
         // Inject Browsing — rolled fresh for this user. `willBrowse` decides
         // whether browsing happens at all; `browseBeforeFollow` (an
@@ -3761,6 +3797,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewReelsShareDmPercentMin, viewReelsShareDmPercentMax,
         viewReelsActivatePctMin, viewReelsActivatePctMax,
         followEnabled, followUsersMin, followUsersMax, followSkipFollowed, followSources,
+        followFiltersEnabled, followFilterVerifiedUsers,
         injectBrowsingEnabled,
         injectBrowsingActivatePctMin, injectBrowsingActivatePctMax,
         injectBrowsingBeforeFollowPctMin, injectBrowsingBeforeFollowPctMax,
@@ -3970,6 +4007,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               shareFeedPctMin: injectBrowsingShareFeedPctMin, shareFeedPctMax: injectBrowsingShareFeedPctMax,
               shareDmPctMin: injectBrowsingShareDmPctMin, shareDmPctMax: injectBrowsingShareDmPctMax,
             } : undefined,
+            filters: followFiltersEnabled
+              ? { skipVerified: followFilterVerifiedUsers }
+              : undefined,
           });
           followedCount = followCount;
           steps.push(`follow(${followCount} followed)`);

@@ -4,6 +4,18 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.644] — 2026-07-16
+
+### Added
+- **Phone Farm — live screenshot thumbnails**: Each device card in the Phone Farm grid now shows a live miniature screenshot of the phone's actual screen inside the phone silhouette. Online devices are polled every 4 s; the snapshot updates in place without disrupting the card layout or online/offline badge. Offline cards revert to the dark wallpaper.
+- **Follow Filters — Skip Verified checkbox**: A new "Skip Verified" checkbox appears in the Filters sub-panel alongside Private Users, English Speaking, and 250 Followers+. When ticked, the follow loop dumps the UIAutomator accessibility tree after navigating to each candidate's profile and skips any account whose tree contains a verified-badge indicator (`content-desc` matching "Verified" or known resource-id variants). The skip is logged with the username and reason. Runs before Inject Browsing so no browsing time is wasted on a skipped target.
+
+### Fixed
+- **Inspect mode — clicks no longer reach Instagram**: Previously a swipe gesture (or any pointer-down) initiated while Inspect mode was active could still be forwarded to the device because only `handlePointerUp` had the inspect-mode guard. Now `handlePointerDown` returns immediately when inspect mode is active, preventing any drag tracking from starting and making taps and swipes completely inert on the phone during inspection.
+- **Filters section spacing**: Added a `border-t` separator between Inject Browsing and the Filters row, matching the visual separation used before Random Jitter and other sections.
+
+---
+
 ## [1.1.643] — 2026-07-16
 
 ### Changed

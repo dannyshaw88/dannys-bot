@@ -683,6 +683,15 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       wake();
       return;
     }
+
+    // ── Inspect mode gate ───────────────────────────────────────────────────
+    // When inspect mode is active, mirror clicks must NEVER reach the phone.
+    // Block here (before drag tracking starts) so that neither taps nor
+    // swipes slip through, regardless of how the pointer-up path classifies
+    // the gesture.  Hover/element highlighting continues to work because that
+    // logic lives in handlePointerMove and does not depend on drag state.
+    if (inspectModeRef.current) return;
+
     const p = mapToPhone(e.clientX, e.clientY);
     if (!p) {
       addLog(`Pointer down ignored — outside displayed phone image`);
@@ -1948,6 +1957,7 @@ interface AutomationSettingsData {
   followFilterPrivateUsers: boolean;
   followFilterEnglishSpeaking: boolean;
   followFilterMinFollowers250: boolean;
+  followFilterVerifiedUsers: boolean;
   // Random Jitter — human-like interstitial actions fired probabilistically
   // on each cycle run. Master gate: randomJitterEnabled tickbox.
   randomJitterEnabled: boolean;
@@ -2027,6 +2037,7 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   followFilterPrivateUsers: false,
   followFilterEnglishSpeaking: false,
   followFilterMinFollowers250: false,
+  followFilterVerifiedUsers: false,
   randomJitterEnabled: false,
   checkNotificationsPctMin: 0, checkNotificationsPctMax: 0,
   checkNotificationsScrollsMin: 2, checkNotificationsScrollsMax: 5,
@@ -2253,6 +2264,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             followFilterPrivateUsers: s.followFilterPrivateUsers,
             followFilterEnglishSpeaking: s.followFilterEnglishSpeaking,
             followFilterMinFollowers250: s.followFilterMinFollowers250,
+            followFilterVerifiedUsers: s.followFilterVerifiedUsers,
             randomJitterEnabled: s.randomJitterEnabled,
             checkNotificationsPctMin: s.checkNotificationsPctMin,
             checkNotificationsPctMax: s.checkNotificationsPctMax,
@@ -3185,6 +3197,7 @@ function AutomationSettingsPanel({
           </>)}
 
           {/* ── Filters — profile-quality gates applied before each follow ── */}
+          <div className="border-t border-border" />
           <div className="flex items-center gap-3">
             <input
               type="checkbox"
@@ -3231,6 +3244,17 @@ function AutomationSettingsPanel({
                   className="w-4 h-4 accent-primary cursor-pointer"
                 />
                 <label htmlFor="filter-min-followers-250" className="text-xs text-muted-foreground cursor-pointer select-none">250 Followers+</label>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="filter-verified-users"
+                  checked={settings.followFilterVerifiedUsers}
+                  onChange={e => setSettings(s => ({ ...s, followFilterVerifiedUsers: e.target.checked }))}
+                  disabled={loading}
+                  className="w-4 h-4 accent-primary cursor-pointer"
+                />
+                <label htmlFor="filter-verified-users" className="text-xs text-muted-foreground cursor-pointer select-none">Skip Verified</label>
               </div>
             </div>
           )}

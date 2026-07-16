@@ -54,7 +54,12 @@ function PhoneFarmIcon({ className }: { className?: string }) {
 }
 
 /** Generic phone silhouette — brand-neutral */
-function PhoneShell({ className, online }: { className?: string; online?: boolean }) {
+function PhoneShell({ className, online, screenshotUrl }: { className?: string; online?: boolean; screenshotUrl?: string }) {
+  // Unique clip-path id per component instance (avoids DOM id collisions when
+  // multiple PhoneShell SVGs are rendered side-by-side in the farm grid).
+  const clipIdRef = React.useRef(`sc-${Math.random().toString(36).slice(2)}`);
+  const glowId    = online ? "glow-on" : "glow-off";
+  const clipId    = clipIdRef.current;
   return (
     <svg
       viewBox="0 0 220 440"
@@ -71,18 +76,33 @@ function PhoneShell({ className, online }: { className?: string; online?: boolea
           <stop offset="0%" stopColor="#ffffff"/>
           <stop offset="100%" stopColor="#ffffff" stopOpacity="0"/>
         </linearGradient>
-        <radialGradient id={online ? "glow-on" : "glow-off"} cx="50%" cy="50%" r="50%">
+        <radialGradient id={glowId} cx="50%" cy="50%" r="50%">
           <stop offset="0%" stopColor={online ? "#1AD2F2" : "#444"} stopOpacity={online ? "0.15" : "0.06"}/>
           <stop offset="100%" stopColor={online ? "#1AD2F2" : "#444"} stopOpacity="0"/>
         </radialGradient>
+        {/* Clip path that matches the inner screen rect so the screenshot stays
+            inside the rounded screen corners without any overflow. */}
+        <clipPath id={clipId}>
+          <rect x="12" y="14" width="196" height="412" rx="26"/>
+        </clipPath>
       </defs>
       {/* Body */}
       <rect x="2" y="2" width="216" height="436" rx="34" fill="#1c1c1e" stroke="#3a3a3c" strokeWidth="2"/>
       <rect x="8" y="8" width="204" height="424" rx="29" fill="#111113" stroke="#2c2c2e" strokeWidth="1"/>
+      {/* Wallpaper / screenshot — screenshot replaces the dark wallpaper when present */}
       <rect x="12" y="14" width="196" height="412" rx="26" fill="url(#wallpaper)"/>
-      <rect x="12" y="14" width="196" height="120" rx="26" fill="url(#sheen)" opacity="0.07"/>
+      {screenshotUrl && (
+        <image
+          href={screenshotUrl}
+          x="12" y="14" width="196" height="412"
+          clipPath={`url(#${clipId})`}
+          preserveAspectRatio="xMidYMid meet"
+        />
+      )}
+      {/* Sheen / glass reflection — on top of screenshot */}
+      <rect x="12" y="14" width="196" height="120" rx="26" fill="url(#sheen)" opacity={screenshotUrl ? "0.04" : "0.07"}/>
       {/* Glow */}
-      <ellipse cx="110" cy="220" rx="90" ry="130" fill={`url(#${online ? "glow-on" : "glow-off"})`}/>
+      <ellipse cx="110" cy="220" rx="90" ry="130" fill={`url(#${glowId})`}/>
       {/* Punch-hole camera */}
       <circle cx="110" cy="36" r="5.5" fill="#000005"/>
       <circle cx="110" cy="36" r="3.5" fill="#0d1117"/>
@@ -304,11 +324,13 @@ function DeviceCard({
   online,
   onClick,
   onRemove,
+  screenshotUrl,
 }: {
-  device:   FarmDevice;
-  online:   boolean;
-  onClick:  () => void;
-  onRemove: () => void;
+  device:         FarmDevice;
+  online:         boolean;
+  onClick:        () => void;
+  onRemove:       () => void;
+  screenshotUrl?: string;
 }) {
   return (
     <div className="group h-full relative flex flex-col">
@@ -319,6 +341,7 @@ function DeviceCard({
         <PhoneShell
           className="flex-1 min-h-0 w-auto max-w-[150px] drop-shadow-lg group-hover:scale-[1.03] transition-transform duration-200"
           online={online}
+          screenshotUrl={screenshotUrl}
         />
         <div className="shrink-0 text-center space-y-0.5">
           <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
@@ -381,9 +404,10 @@ function AddDeviceCard({ onClick }: { onClick: () => void }) {
 export function MobileDevicesPage() {
   const [, setLocation] = useLocation();
 
-  const [devices,    setDevices]    = useState<FarmDevice[]>([]);
-  const [loadingDb,  setLoadingDb]  = useState(true);
-  const [addingSlot, setAddingSlot] = useState<number | null>(null); // slot currently showing the add panel
+  const [devices,     setDevices]     = useState<FarmDevice[]>([]);
+  const [loadingDb,   setLoadingDb]   = useState(true);
+  const [addingSlot,  setAddingSlot]  = useState<number | null>(null); // slot currently showing the add panel
+  const [screenshots, setScreenshots] = useState<Record<string, string>>({});
 
   // Live USB status — polled only for "online" badge, not for the grid itself
   const [usbPhones, setUsbPhones] = useState<UsbPhone[]>([]);
@@ -411,6 +435,32 @@ export function MobileDevicesPage() {
   const onlineSerials = new Set(
     usbPhones.filter(p => p.state === "device").map(p => p.serial)
   );
+
+  // ── Screenshot thumbnail polling ──────────────────────────────────────────
+  // Keeps a current-screen snapshot for each online device, refreshing every
+  // 4 s.  Uses a ref so the interval doesn't restart when USB state refreshes.
+  const onlineSerialsRef = React.useRef<Set<string>>(new Set());
+  useEffect(() => { onlineSerialsRef.current = onlineSerials; });
+
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      if (cancelled) return;
+      for (const serial of onlineSerialsRef.current) {
+        if (cancelled) break;
+        try {
+          const r    = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/screencap-base64`);
+          const body = await r.json().catch(() => null);
+          if (!cancelled && body?.ok && body.image) {
+            setScreenshots(prev => ({ ...prev, [serial]: body.image }));
+          }
+        } catch { /* ignore — device offline or screencap failed */ }
+      }
+      if (!cancelled) setTimeout(poll, 4000);
+    };
+    poll();
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const registeredSerials = new Set(devices.map(d => d.serial));
 
@@ -483,6 +533,7 @@ export function MobileDevicesPage() {
                       online={onlineSerials.has(device.serial)}
                       onClick={() => setLocation(`/mobile/farm/${encodeURIComponent(device.serial)}`)}
                       onRemove={() => handleRemove(device.slotIndex)}
+                      screenshotUrl={screenshots[device.serial]}
                     />
                   );
                 }
