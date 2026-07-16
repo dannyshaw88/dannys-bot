@@ -1550,15 +1550,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     const _cfSb = _cfSendBtn0 ?? await android.findButtonByLabel(serial, "Send").catch(() => null);
                     if (_cfSb) {
                       await android.tap(serial, _cfSb.x, _cfSb.y);
-                      await sleepOrAbort(serial, 300);
+                      // 1500ms — sheet animates closed after Send; 300ms was too
+                      // short, sheet still visible at check time, code pressed Back
+                      // and cancelled the DM (confirmed from dump 16 Jul 2026).
+                      await sleepOrAbort(serial, 1500);
                       if (!(await _cfIsOpen())) {
                         _cfDmSent = true;
                         logger.info({ serial }, "[check-feed] shared post via DM — Send tapped");
                         onLog?.(`${_cfPfx}: ✓ shared via DM — Send tapped`);
                         await sleepOrAbort(serial, 300);
                       } else {
-                        logger.info({ serial }, "[check-feed] Send button not found after picking recipient — pressing Back");
-                        onLog?.(`${_cfPfx}: Send button not found after picking DM recipient — pressing Back`);
+                        logger.info({ serial }, "[check-feed] Send tapped but sheet still open — pressing Back to close");
+                        onLog?.(`${_cfPfx}: Send tapped but share sheet still open after wait — pressing Back`);
                         await android.pressBack(serial);
                         await sleepOrAbort(serial, 200);
                       }
@@ -1571,7 +1574,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                       const _cfFbX = Math.round(w * 0.50), _cfFbY = Math.round(h * 0.982);
                       onLog?.(`${_cfPfx}: Send button not found via a11y — tapping coordinate fallback (${_cfFbX},${_cfFbY})`);
                       await android.tap(serial, _cfFbX, _cfFbY);
-                      await sleepOrAbort(serial, 300);
+                      // Same 1500ms for the coordinate fallback path.
+                      await sleepOrAbort(serial, 1500);
                       if (!(await _cfIsOpen())) {
                         _cfDmSent = true;
                         onLog?.(`${_cfPfx}: ✓ shared via DM — sent via coordinate fallback`);

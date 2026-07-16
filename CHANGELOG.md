@@ -4,6 +4,19 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.627] — 2026-07-16
+
+### Fixed
+
+- **View Feed — Share via DM: Send button tapped but DM never sent (Back pressed immediately after)**
+  UIAutomator dump (16 Jul 2026) confirmed the share sheet layout is identical across all tools — Send button (`direct_send_button_multi_select`, `desc="Send"`, `text="Send"`) at center=(540,2187). After tapping Send, the code waited only 300 ms before calling `_cfIsOpen()`. Instagram's sheet-dismiss animation takes longer than 300 ms, so the check saw the sheet still open, logged "Send button not found after picking recipient — pressing Back", and pressed Back — cancelling the DM. The recipient was visibly selected but no message was sent.
+  - Post-Send sleep increased in the primary send path: **300 ms → 1500 ms**
+  - Post-Send sleep increased in the coordinate fallback path (`h * 0.982`): **300 ms → 1500 ms**
+  - Fixed misleading log: "Send button not found after picking recipient — pressing Back" → "Send tapped but share sheet still open after wait — pressing Back" (Send WAS tapped; the sheet just hadn't animated closed yet)
+  - No other tools touched — View Feed share-to-DM code is fully isolated per the project rule
+
+---
+
 ## [1.1.626] — 2026-07-16
 
 ### Changed
