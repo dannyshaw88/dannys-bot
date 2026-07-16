@@ -2685,11 +2685,8 @@ function AutomationSettingsPanel({
           )}
         </div>
 
-        {/* ── Inject Browsing ─────────────────────────────────
-             Sub-feature of Follow Users — disabled entirely when
-             Follow Users is not checked. injectBrowsingEnabled alone
-             gates the settings below. */}
-        <div className={`space-y-3 transition-opacity ${!settings.followEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+        {/* ── Inject Browsing — only visible when Follow Users is ticked ── */}
+        {settings.followEnabled && <div className="space-y-3">
           {/* Row 1: title + checkbox only */}
           <div className="flex items-center gap-3">
             <input
@@ -2772,7 +2769,7 @@ function AutomationSettingsPanel({
             </div>
           </div>
           </>)}
-        </div>
+        </div>}
 
         {/* ── Random Jitter — probabilistic human-like actions each cycle ─ */}
         <div className="border-t border-border" />
