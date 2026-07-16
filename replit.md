@@ -61,28 +61,22 @@ The code handles all coordinate differences in software — `rescaleForDevice()`
 
 This applies everywhere: share-to-DM, recipient selection, Send button, icon taps, sheet confirmation, follow taps — all of it. No exceptions.
 
-### Detection must use accessibility tree labels — never hardcoded coordinates
+### Use the UIAutomator dump to find and fix any element or coordinate
 
-All UI element detection reads the live UIAutomator accessibility tree (`uiautomator dump`) and finds elements by their attributes:
-- `content-desc="Like"`, `content-desc="Comment"`, `content-desc="Repost"`, `content-desc="Send"` etc.
-- `resource-id` matching (e.g. `:id/expand_photo_button`)
-- `text` attribute matching
+When automation clicks the wrong thing, misses a button, or picks the wrong element, the UIAutomator dump is the single source of truth for fixing it. Every real fix has come from reading the dump — never from guessing.
 
-Once an element is found via its label, its center coordinates are read from its `bounds` attribute in the tree and used for the tap. This is fundamentally different from hardcoding a pixel position — the coordinate comes from what Instagram actually rendered, not a pre-calculated guess.
+**What the dump gives you:**
+- The exact `resource-id` of every element on screen (e.g. `direct_send_button_multi_select`) — use this for the most reliable lookup; it never changes between IG versions the way labels do.
+- The `content-desc` on the element or its parent ViewGroup — this is how selection state is broadcast (e.g. `"sabrinacarpenter Verified Chat selected"` vs `"not selected"`), and how buttons label themselves (e.g. `content-desc="Send"`).
+- The `text` attribute — what the element visibly shows.
+- The exact `bounds="[x1,y1][x2,y2]"` — the pixel-precise bounding box. Centre = `((x1+x2)/2, (y1+y2)/2)`. Use these real numbers for any coordinate fallback, never a percentage guessed from memory. Example: `direct_send_button_multi_select` at `[44,2147][1036,2226]` gives centre=(540,2187) = 98.2% of a 2226px screen — the old 94% guess landed in the text box above it and never pressed Send.
+- Parent–child relationships — a clickable Button child may carry no label itself; look back up the XML to the parent ViewGroup for its `content-desc` (e.g. recipient selection state lives on the `direct_share_sheet_grid_view_pog` parent, not on the `grid_view_pog_avatar_view` Button child).
 
-**Forbidden:** any fixed pixel percentage (e.g. "tap at 48% of screen width") used to locate a UI element whose position can change between posts, accounts, or app versions.
-
-### How to diagnose "detection can't find this element" — the required approach
-
-When automation fails to find or correctly pick an element (a button, icon, or list item), do NOT guess at a fix from memory or general UI conventions. Every real fix so far has come from this exact loop — follow it in order:
-
-1. **Add a diagnostic dump, ship it alone, gather real data first.** Extend the relevant scan function to log every candidate node it sees in that screen region — at minimum `class`, `resource-id`, `content-desc`, `text`, `bounds`/position, and width. Ship this as its own version bump with nothing else changed. Do not touch the actual tap/detection logic yet — you don't know what's true on this device/build until you've seen it.
-2. **Get a screenshot AND the matching log from the same run, at the moment of failure.** The dump alone isn't enough — you need to see what's actually on screen (which icon/button is which, what's visible/highlighted) lined up against the raw attribute dump from that identical moment, not a different run. Ask for both together if the user only supplies one.
-3. **Cross-reference visible UI against the raw attributes to find the real distinguishing signal.** Match on-screen elements (by their visible position, count, or label) to specific dumped nodes to figure out what actually tells them apart in the tree — this might be `class` alternating in a pattern, a label that exists but wasn't in an exclusion list, adjacency between two nodes, or something else entirely. There have been two distinct failure shapes so far, and both required this same evidence-gathering step even though the fixes looked different:
-   - *No label exists at all* (content-desc/resource-id both empty on every candidate) → identify by structural signature instead (element type/class, position relative to siblings) — see the feed action-bar icon fix below.
-   - *A label exists but an unwanted element also matches* (e.g. a same-zone, similarly-sized button that isn't a real candidate) → the label-reading approach was already correct, it just didn't know that specific label needed excluding — add it explicitly once confirmed from the screenshot, don't broaden the filter blindly.
-4. **Only trust the new rule when it resolves unambiguously.** Whatever structural or label rule you land on, only act on it when it uniquely identifies the right element (e.g. "exactly N candidates found") — if the count or match is off, leave the result null/skip the action rather than guessing, exactly like the existing label-matching rule already does.
-5. **Ship the real fix as a separate version bump from the diagnostic-only one**, with a changelog entry describing the evidence that led to it (what the screenshot showed, what the dump showed, why this rule follows from that) — not just what the code now does.
+**How to use it when something breaks:**
+1. Get a dump from the device at the exact moment of failure (the user can run the Inspect tool or the bot can log its own `_uiDump` output). A screenshot at the same moment helps cross-reference which node is which visually.
+2. Find the element you care about in the dump by searching for a keyword from its visible label, its known resource-id fragment, or its rough screen position.
+3. Read its `bounds` for the real centre coordinates; read its `content-desc`/`text`/`resource-id` for the correct lookup key.
+4. Update the code to match what the dump shows — correct the resource-id, the attribute being read, or the fallback coordinate. Do not guess; the dump tells you exactly.
 
 ### Mirror tap rescaling — pinpoint-clicking fix
 
