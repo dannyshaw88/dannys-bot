@@ -107,7 +107,13 @@ function NavBtn({ icon, label, onClick }: { icon: ReactNode; label: string; onCl
 
 const WEBCODECS_SUPPORTED = typeof window !== "undefined" && "VideoDecoder" in window;
 
-type LiveCanvasHandle = { clearToBlack: () => void; getVideoSize: () => { w: number; h: number } | null };
+type LiveCanvasHandle = {
+  clearToBlack: () => void;
+  getVideoSize: () => { w: number; h: number } | null;
+  /** Panel-driven highlight: show the blue overlay at these phone-coord bounds.
+   *  Pass null to hand control back to the mirror-hover hit-test. */
+  setForcedHighlight: (bounds: [number,number,number,number] | null) => void;
+};
 
 /** A single marker placed on the mirror overlay during Log Record mode. */
 type LogMarker = {
@@ -179,9 +185,8 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   useEffect(() => {
     inspectModeRef.current = !!inspectMode;
     if (!inspectMode) {
-      // Hide the overlay immediately when leaving inspect mode — don't wait
-      // for the next pointermove to clear it.
       hoverNodeRef.current = null;
+      forcedHighlightActiveRef.current = false;
       const el = inspectOverlayRef.current;
       if (el) el.style.display = "none";
     }
@@ -203,6 +208,9 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   const inspectOverlayRef = useRef<HTMLDivElement>(null);
   const inspectLabelRef   = useRef<HTMLDivElement>(null);
   const inspectSizeRef    = useRef<HTMLDivElement>(null);
+  // When the tree panel is driving the highlight (user hovered a row), this
+  // flag prevents handlePointerMove from overwriting it with the mirror-hover node.
+  const forcedHighlightActiveRef = useRef(false);
 
   const [status, setStatus] = useState<"connecting" | "waiting" | "live" | "asleep" | "error">("connecting");
   const [fps,    setFps]    = useState(0);
@@ -243,12 +251,33 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     },
-    // Lets the page-level Log tab (Check Screen Info) show the mirror's
-    // actual decoded video frame size next to `wm size`'s device resolution
-    // — otherwise the only place that size is ever visible is a "Frame WxH"
-    // line that scrolls past in the log the moment the stream (re)connects.
     getVideoSize() {
       return phoneSizeRef.current;
+    },
+    // Called by the tree panel when the user hovers a node row — shows the
+    // highlight at those phone-coord bounds, overriding mirror-hover hit-test.
+    // Pass null to relinquish control back to the mirror-hover path.
+    setForcedHighlight(bounds) {
+      const el = inspectOverlayRef.current;
+      if (!el) return;
+      if (!bounds) {
+        forcedHighlightActiveRef.current = false;
+        // If nothing is hover-hit on the mirror either, hide the overlay.
+        if (!hoverNodeRef.current) el.style.display = "none";
+        return;
+      }
+      forcedHighlightActiveRef.current = true;
+      const dr = drawRectRef.current;
+      const ps = phoneSizeRef.current;
+      if (!dr || !ps) return;
+      const [x1, y1, x2, y2] = bounds;
+      el.style.display = "block";
+      el.style.left    = `${dr.dx + (x1 / ps.w) * dr.dw}px`;
+      el.style.top     = `${dr.dy + (y1 / ps.h) * dr.dh}px`;
+      el.style.width   = `${((x2 - x1) / ps.w) * dr.dw}px`;
+      el.style.height  = `${((y2 - y1) / ps.h) * dr.dh}px`;
+      if (inspectLabelRef.current) inspectLabelRef.current.textContent = "";
+      if (inspectSizeRef.current)  inspectSizeRef.current.textContent  = `${x2 - x1}×${y2 - y1}`;
     },
   }), []);
 
@@ -697,33 +726,34 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         const hit = hits[0] ?? null;
         if (hit !== hoverNodeRef.current) {
           hoverNodeRef.current = hit;
+          // Always notify the tree panel so it can scroll the row into view.
           onHoverNodeRef.current?.(hit);
-          const dr = drawRectRef.current;
-          const ps = phoneSizeRef.current;
-          const el = inspectOverlayRef.current;
-          if (hit && dr && ps && el) {
-            const [x1, y1, x2, y2] = hit.boundsRaw;
-            const left   = dr.dx + (x1 / ps.w) * dr.dw;
-            const top    = dr.dy + (y1 / ps.h) * dr.dh;
-            const width  = ((x2 - x1) / ps.w) * dr.dw;
-            const height = ((y2 - y1) / ps.h) * dr.dh;
-            // Direct DOM update — no React render cycle, instant like Chrome DevTools
-            el.style.display = "block";
-            el.style.left    = `${left}px`;
-            el.style.top     = `${top}px`;
-            el.style.width   = `${width}px`;
-            el.style.height  = `${height}px`;
-            const label = hit.resourceId || hit.contentDesc || hit.text || hit.cls || "";
-            if (inspectLabelRef.current) inspectLabelRef.current.textContent = label;
-            if (inspectSizeRef.current)  inspectSizeRef.current.textContent  = `${x2 - x1}×${y2 - y1}`;
-          } else if (el) {
-            el.style.display = "none";
+          // Only update the overlay when the panel isn't forcing its own highlight.
+          if (!forcedHighlightActiveRef.current) {
+            const dr = drawRectRef.current;
+            const ps = phoneSizeRef.current;
+            const el = inspectOverlayRef.current;
+            if (hit && dr && ps && el) {
+              const [x1, y1, x2, y2] = hit.boundsRaw;
+              el.style.display = "block";
+              el.style.left    = `${dr.dx + (x1 / ps.w) * dr.dw}px`;
+              el.style.top     = `${dr.dy + (y1 / ps.h) * dr.dh}px`;
+              el.style.width   = `${((x2 - x1) / ps.w) * dr.dw}px`;
+              el.style.height  = `${((y2 - y1) / ps.h) * dr.dh}px`;
+              const label = hit.resourceId || hit.contentDesc || hit.text || hit.cls || "";
+              if (inspectLabelRef.current) inspectLabelRef.current.textContent = label;
+              if (inspectSizeRef.current)  inspectSizeRef.current.textContent  = `${x2 - x1}×${y2 - y1}`;
+            } else if (el) {
+              el.style.display = "none";
+            }
           }
         }
       } else if (hoverNodeRef.current !== null) {
         hoverNodeRef.current = null;
-        const el = inspectOverlayRef.current;
-        if (el) el.style.display = "none";
+        if (!forcedHighlightActiveRef.current) {
+          const el = inspectOverlayRef.current;
+          if (el) el.style.display = "none";
+        }
         onHoverNodeRef.current?.(null);
       }
     } else if (hoverNodeRef.current !== null) {
@@ -764,29 +794,9 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       // ── Inspect mode — identify element at this point instead of tapping ──
       // Works exactly like Chrome DevTools F12: click anything on the mirror,
       // get back every accessibility node whose bounds contain that point.
-      if (inspectModeRef.current) {
-        // Inspect click — pin the result using cached nodes (no server call).
-        // All hit-testing is done client-side against the one dump fetched when
-        // inspect mode was entered — instant, no round-trip.
-        const ps  = phoneSizeRef.current;
-        const dr  = drawRectRef.current;
-        let _cssX: number | undefined, _cssY: number | undefined;
-        if (ps && dr) {
-          _cssX = dr.dx + (drag.startX / ps.w) * dr.dw;
-          _cssY = dr.dy + (drag.startY / ps.h) * dr.dh;
-        }
-        const nodes = inspectNodesRef.current ?? [];
-        const hits  = nodes
-          .filter(n => drag.startX >= n.boundsRaw[0] && drag.startX <= n.boundsRaw[2] && drag.startY >= n.boundsRaw[1] && drag.startY <= n.boundsRaw[3])
-          .sort((a, b) => a.area - b.area);
-        onInspectResultRef.current?.({
-          ok: true, nodes: hits,
-          screenW: ps?.w ?? 0, screenH: ps?.h ?? 0,
-          tappedAt: { x: drag.startX, y: drag.startY },
-          _cssX, _cssY,
-        });
-        return;
-      }
+      // Inspect mode — block taps from reaching the phone; the tree panel
+      // is the primary interaction surface in this mode.
+      if (inspectModeRef.current) return;
 
       // ── Log Record mode — place an "expected" marker instead of tapping ──
       // While Log Record is active the mirror is read-only for navigation:
@@ -1166,23 +1176,24 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
       return liveCanvasRef.current?.getVideoSize() ?? null;
     },
   }), []);
-  // inspectMode comes from the parent (MobilePage) so the LogPanel button
-  // can toggle it without lifting state further through a ref handle.
-  const [inspectResult, setInspectResult] = useState<InspectResult | null>(null);
-  const [inspectPinned, setInspectPinned] = useState(false);
-  const [inspectNodes,  setInspectNodes]  = useState<InspectNode[] | null>(null);
-  const [inspectLoading, setInspectLoading] = useState(false);
-  const [hoverNode,     setHoverNode]     = useState<InspectNode | null>(null);
   const [clickTestMode, setClickTestMode] = useState(false);
 
-  // Fetch all accessibility nodes once when entering inspect mode — one dump,
-  // all hover hit-testing is client-side after that (Chrome DevTools style).
+  // ── Element tree inspector ─────────────────────────────────────────────────
+  // Full UIAutomator node tree shown below the mirror when inspect mode is on.
+  // Any node can be hovered to highlight its bounds on the mirror; hovering
+  // the mirror scrolls the matching tree row into view.
+  const [inspectNodes,   setInspectNodes]   = useState<InspectNode[] | null>(null);
+  const [inspectLoading, setInspectLoading] = useState(false);
+  // Index of the tree node currently under the mirror cursor (for row highlighting).
+  const [mirrorHoveredIdx, setMirrorHoveredIdx] = useState<number | null>(null);
+  // Ref to the scrollable tree container so we can scroll-to-row on mirror hover.
+  const treeRef = useRef<HTMLDivElement>(null);
+
+  // Auto-fetch the full accessibility tree whenever inspect mode is entered.
   useEffect(() => {
     if (!inspectMode || !phone) {
       setInspectNodes(null);
-      setHoverNode(null);
-      setInspectResult(null);
-      setInspectPinned(false);
+      setMirrorHoveredIdx(null);
       return;
     }
     let cancelled = false;
@@ -1200,14 +1211,35 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
     if (!phone) return;
     setInspectLoading(true);
     setInspectNodes(null);
-    setHoverNode(null);
-    setInspectResult(null);
-    setInspectPinned(false);
+    setMirrorHoveredIdx(null);
     fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/inspect-all-nodes`)
       .then(r => r.json())
       .then(body => setInspectNodes(body.ok ? body.nodes : []))
       .catch(() => setInspectNodes([]))
       .finally(() => setInspectLoading(false));
+  };
+
+  // Called by LiveCanvas on every mirror pointermove — scroll the matching
+  // tree row into view so the tree stays in sync with the cursor.
+  const handleMirrorHoverNode = useCallback((n: InspectNode | null) => {
+    const idx = n?.index ?? null;
+    setMirrorHoveredIdx(idx);
+    if (idx !== null && treeRef.current) {
+      const row = treeRef.current.querySelector(`[data-node-idx="${idx}"]`);
+      row?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, []);
+
+  // Dump the entire tree as a copyable text block.
+  const dumpTree = async () => {
+    if (!inspectNodes?.length) return;
+    const lines = [
+      `── UIAutomator Tree — ${inspectNodes.length} nodes ──`,
+      ...inspectNodes.map(n =>
+        `[${n.index ?? "?"}] ${n.clickable ? "● TAP" : "○ view"} ${n.cls}${n.resourceId ? `  id="${n.resourceId}"` : ""}${n.contentDesc ? `  desc="${n.contentDesc}"` : ""}${n.text ? `  text="${n.text}"` : ""}  ${n.bounds}  center=(${n.center.x},${n.center.y})`
+      ),
+    ].join("\n");
+    try { await navigator.clipboard.writeText(lines); } catch { /* ignore */ }
   };
 
   // ── Exact shell sizing ──────────────────────────────────────────────────
@@ -1268,27 +1300,6 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
   const isOffline      = phone?.state === "offline";
   const isEmpty        = !phone;
 
-  // Click in inspect mode: pin (freeze) the panel at the clicked point.
-  const handleInspectResult = useCallback((r: InspectResult) => {
-    setInspectResult(r);
-    setInspectPinned(true);
-  }, []);
-
-  // Copy the pinned inspect result (or hovered node) to clipboard.
-  const copyInspectResult = async () => {
-    const nodes = inspectResult?.nodes ?? (hoverNode ? [hoverNode] : []);
-    const at    = inspectResult?.tappedAt ?? hoverNode?.center;
-    const sw    = inspectResult?.screenW ?? 0;
-    const sh    = inspectResult?.screenH ?? 0;
-    const text  = [
-      `── INSPECT @ (${at?.x ?? "?"}, ${at?.y ?? "?"}) — ${sw}×${sh} ──`,
-      ...nodes.map((n) =>
-        `[${n.index ?? "?"}] ${n.clickable ? "●" : "○"} ${n.cls}  bounds=${n.bounds}  center=(${n.center.x},${n.center.y})\n    id="${n.resourceId}"  desc="${n.contentDesc}"  text="${n.text}"`
-      ),
-    ].join("\n");
-    try { await navigator.clipboard.writeText(text); } catch { /* ignore */ }
-  };
-
   return (
     <div
       className={`flex flex-col bg-zinc-950 rounded-2xl border border-white/8 overflow-hidden shadow-xl ${shellClassExtra}`}
@@ -1305,7 +1316,6 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
           )}
         </div>
         <div className="flex items-center gap-2">
-
           {isReady        && <span className="flex items-center gap-1 text-[9px] font-bold text-green-400 shrink-0"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />Live</span>}
           {isUnauthorized && <span className="text-[9px] font-semibold text-yellow-500 shrink-0">Auth needed</span>}
           {isOffline      && <span className="text-[9px] font-semibold text-red-500 shrink-0">Offline</span>}
@@ -1313,8 +1323,9 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
         </div>
       </div>
 
-      {/* Screen area */}
-      <div className="relative bg-zinc-900 flex-1 min-h-0">
+      {/* Screen area — shrinks to 50 % of shell when inspect panel is open */}
+      <div className={`relative bg-zinc-900 min-h-0 ${inspectMode ? "flex-none" : "flex-1"}`}
+           style={inspectMode ? { flexBasis: "50%", flexShrink: 1 } : undefined}>
         {isEmpty && <EmptyShell idx={idx} />}
         {isUnauthorized && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center">
@@ -1339,8 +1350,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
             onDimensions={onDimensions}
             inspectMode={inspectMode}
             inspectNodes={inspectNodes}
-            onInspectResult={handleInspectResult}
-            onHoverNode={setHoverNode}
+            onHoverNode={handleMirrorHoverNode}
             clickTestMode={clickTestMode}
             logRecMode={logRecMode}
             logMarkers={logMarkers}
@@ -1353,125 +1363,104 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
             <p className="text-[10px] text-white/40 leading-relaxed">Press Power to view this phone's screen</p>
           </div>
         )}
-
-        {/* ── Inspect panel ──────────────────────────────────────────────────
-             Chrome DevTools F12 style.
-             • One dump is fetched when inspect mode is entered.
-             • Hover updates the live panel with the element under the cursor.
-             • Click "pins" (freezes) the panel — Unpin to resume hovering.
-             • Every node shows its dump index [N] for unambiguous references.  */}
-        {inspectMode && (() => {
-          // What to display: pinned click result OR live hover node.
-          const displayNodes = inspectPinned && inspectResult
-            ? inspectResult.nodes
-            : hoverNode ? [hoverNode] : [];
-          const isPinned = inspectPinned && !!inspectResult;
-
-          // Loading state (initial dump in progress)
-          if (inspectLoading) {
-            return (
-              <div className="absolute bottom-2 inset-x-2 flex items-center justify-center pointer-events-none z-20">
-                <span className="bg-yellow-400/90 text-black text-[9px] font-bold px-3 py-1 rounded-full shadow">
-                  ⏳ Scanning accessibility tree…
-                </span>
-              </div>
-            );
-          }
-
-          // No nodes loaded yet (and not loading — e.g. dump failed)
-          if (!inspectNodes) {
-            return (
-              <div className="absolute bottom-2 inset-x-2 flex items-center justify-center pointer-events-none z-20">
-                <span className="bg-red-500/90 text-white text-[9px] font-bold px-3 py-1 rounded-full shadow">
-                  ✕ Dump failed — make sure the phone is awake & unlocked
-                </span>
-              </div>
-            );
-          }
-
-          // Nothing under cursor yet
-          if (!isPinned && displayNodes.length === 0) {
-            return (
-              <div className="absolute bottom-2 inset-x-2 flex items-center justify-center pointer-events-none z-20">
-                <span className="bg-yellow-400/90 text-black text-[9px] font-bold px-3 py-1 rounded-full shadow">
-                  🔍 Hover the phone screen — click to pin
-                </span>
-              </div>
-            );
-          }
-
-          // Live hover or pinned — show full panel
-          const TOP_N = 5;
-          const shown  = displayNodes.slice(0, TOP_N);
-          const hidden = displayNodes.length - TOP_N;
-          const at     = inspectPinned ? inspectResult?.tappedAt : hoverNode?.center;
-          const sw     = inspectResult?.screenW ?? 0;
-          const sh     = inspectResult?.screenH ?? 0;
-          return (
-            <div className="absolute inset-x-1 bottom-1 z-40 bg-zinc-900/97 border border-yellow-400/30 rounded-xl shadow-2xl text-[9px] font-mono max-h-[65%] flex flex-col pointer-events-auto">
-              {/* Toolbar */}
-              <div className="flex items-center justify-between px-2 py-1.5 border-b border-white/8 shrink-0 gap-1">
-                <span className="text-yellow-300 font-bold text-[8px] shrink-0">
-                  {isPinned ? "📌" : "🔍"} ({at?.x ?? "?"},{at?.y ?? "?"})
-                  {sw > 0 && <span className="text-white/30 font-normal"> · {sw}×{sh}</span>}
-                </span>
-                <div className="flex gap-1 ml-auto shrink-0">
-                  {isPinned && (
-                    <button onClick={() => { setInspectPinned(false); setInspectResult(null); }}
-                      className="text-[8px] text-yellow-300 hover:text-white px-1.5 py-0.5 rounded bg-yellow-400/10 hover:bg-yellow-400/20 border border-yellow-400/30">
-                      Unpin
-                    </button>
-                  )}
-                  <button onClick={refreshInspectNodes}
-                    className="text-[8px] text-white/50 hover:text-white px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10">
-                    ↻ Refresh
-                  </button>
-                  <button onClick={copyInspectResult}
-                    className="text-[8px] text-white/50 hover:text-white px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10">
-                    📋 Copy
-                  </button>
-                </div>
-              </div>
-
-              {/* Node list */}
-              <div className="overflow-y-auto flex-1 p-1.5 space-y-1">
-                {shown.length === 0 && (
-                  <p className="text-white/30 text-center py-2 text-[8px]">No elements at this point</p>
-                )}
-                {shown.map((n, i) => (
-                  <div key={i} className={`rounded-lg p-1.5 border ${i === 0 ? "border-yellow-400/40 bg-yellow-400/5" : "border-white/6 bg-white/2"}`}>
-                    <div className="flex items-center gap-1 mb-0.5 flex-wrap">
-                      <span className="text-white/30 text-[7px] font-bold font-mono shrink-0">[{n.index ?? i}]</span>
-                      <span className={`text-[7px] font-bold shrink-0 ${n.clickable ? "text-green-400" : "text-white/30"}`}>
-                        {n.clickable ? "● TAP" : "○ VIEW"}
-                      </span>
-                      <span className="text-white/70 font-semibold truncate">{n.cls}</span>
-                      {i === 0 && <span className="text-[7px] text-yellow-300 ml-auto shrink-0">innermost</span>}
-                    </div>
-                    <div className="text-white/40 leading-relaxed space-y-0.5">
-                      <div>
-                        center=<span className="text-cyan-400">({n.center.x},{n.center.y})</span>
-                        {"  "}bounds=<span className="text-white/60">{n.bounds}</span>
-                      </div>
-                      {n.resourceId  && <div>id=<span className="text-orange-300">"{n.resourceId}"</span></div>}
-                      {n.contentDesc && <div>desc=<span className="text-lime-300">"{n.contentDesc}"</span></div>}
-                      {n.text        && <div>text=<span className="text-sky-300">"{n.text}"</span></div>}
-                    </div>
-                  </div>
-                ))}
-                {hidden > 0 && (
-                  <p className="text-[7px] text-white/20 text-center py-0.5">+{hidden} parent containers (📋 Copy to see all)</p>
-                )}
-              </div>
-              <div className="px-2 py-1 border-t border-white/6 shrink-0">
-                <span className="text-[7px] text-white/20">
-                  [N] = dump index · ● tappable · ○ view-only · innermost first · click mirror to pin
-                </span>
-              </div>
-            </div>
-          );
-        })()}
       </div>
+
+      {/* ── Element Tree Browser ────────────────────────────────────────────────
+           Full UIAutomator accessibility tree shown below the mirror when
+           inspect is active.
+           • Hover a row → its bounds are highlighted on the mirror instantly.
+           • Hover the mirror → matching row scrolls into view + is highlighted.
+           • Dump copies the complete indexed tree as text (paste to the dev).
+           ─────────────────────────────────────────────────────────────────── */}
+      {inspectMode && (
+        <div className="flex-1 min-h-0 flex flex-col border-t border-blue-400/20 bg-zinc-950 font-mono text-[9px]">
+
+          {/* Toolbar */}
+          <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900/80 border-b border-white/6 shrink-0">
+            <span className="text-blue-300 font-bold text-[8px] shrink-0">
+              🔍 Element Tree
+              {inspectNodes && <span className="text-white/30 font-normal ml-1">({inspectNodes.length} nodes)</span>}
+            </span>
+            <div className="flex gap-1 ml-auto shrink-0">
+              <button onClick={refreshInspectNodes}
+                className="text-[8px] text-white/50 hover:text-white px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 transition-colors">
+                ↻ Re-dump
+              </button>
+              <button onClick={dumpTree}
+                title="Copy the full tree index to clipboard — paste it to the developer"
+                className="text-[8px] text-blue-300 hover:text-white px-1.5 py-0.5 rounded bg-blue-500/15 hover:bg-blue-500/25 border border-blue-400/30 transition-colors">
+                📋 Dump All
+              </button>
+            </div>
+          </div>
+
+          {/* Tree body */}
+          {inspectLoading && (
+            <div className="flex-1 flex items-center justify-center">
+              <span className="text-white/40 text-[9px]">Scanning accessibility tree…</span>
+            </div>
+          )}
+          {!inspectLoading && !inspectNodes && (
+            <div className="flex-1 flex items-center justify-center">
+              <span className="text-red-400/70 text-[9px]">Dump failed — phone must be awake &amp; unlocked</span>
+            </div>
+          )}
+          {!inspectLoading && inspectNodes && inspectNodes.length === 0 && (
+            <div className="flex-1 flex items-center justify-center">
+              <span className="text-white/30 text-[9px]">No accessibility nodes returned</span>
+            </div>
+          )}
+          {!inspectLoading && inspectNodes && inspectNodes.length > 0 && (
+            <div ref={treeRef} className="flex-1 overflow-y-auto">
+              {inspectNodes.map(n => {
+                const isHovered = n.index === mirrorHoveredIdx;
+                return (
+                  <div
+                    key={n.index}
+                    data-node-idx={n.index}
+                    className={`px-2 py-1 border-b border-white/4 cursor-default select-none transition-colors ${
+                      isHovered
+                        ? "bg-blue-500/20 border-l-2 border-l-blue-400"
+                        : "hover:bg-white/5"
+                    }`}
+                    onMouseEnter={() => liveCanvasRef.current?.setForcedHighlight(n.boundsRaw)}
+                    onMouseLeave={() => liveCanvasRef.current?.setForcedHighlight(null)}
+                  >
+                    {/* Row: index · tap/view dot · class · id/desc/text */}
+                    <div className="flex items-baseline gap-1.5 min-w-0">
+                      <span className="text-white/25 text-[7px] shrink-0 w-6 text-right">[{n.index}]</span>
+                      <span className={`text-[7px] shrink-0 ${n.clickable ? "text-green-400" : "text-white/20"}`}>
+                        {n.clickable ? "●" : "○"}
+                      </span>
+                      <span className={`font-semibold truncate ${isHovered ? "text-blue-200" : "text-white/70"}`}>
+                        {n.cls}
+                      </span>
+                      {n.resourceId  && <span className="text-orange-300/80 truncate shrink-0 max-w-[45%]">id="{n.resourceId}"</span>}
+                      {!n.resourceId && n.contentDesc && <span className="text-lime-300/80 truncate shrink-0 max-w-[45%]">"{n.contentDesc}"</span>}
+                      {!n.resourceId && !n.contentDesc && n.text && <span className="text-sky-300/80 truncate shrink-0 max-w-[45%]">"{n.text}"</span>}
+                    </div>
+                    {/* Second line: bounds (only when hovered, to save space) */}
+                    {isHovered && (
+                      <div className="text-white/30 text-[7px] mt-0.5 pl-8">
+                        {n.bounds}
+                        {n.contentDesc && n.resourceId && <span className="ml-2 text-lime-300/60">desc="{n.contentDesc}"</span>}
+                        {n.text        && n.resourceId && <span className="ml-2 text-sky-300/60">text="{n.text}"</span>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Footer hint */}
+          <div className="px-2 py-0.5 border-t border-white/4 shrink-0">
+            <span className="text-[7px] text-white/15">
+              Hover row → highlight on mirror · Hover mirror → row scrolls here · ● tappable · ○ view-only
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Nav bar */}
       {isReady && phone && (
