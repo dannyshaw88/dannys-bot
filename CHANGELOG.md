@@ -4,6 +4,34 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.637] — 2026-07-16
+
+### Changed
+
+- **Fix AI Slop v4 — ChatGPT/DALL-E targeted, true pixel-space SynthID disruption**
+
+  Corrected the model assumption: the images being flagged are from **ChatGPT (DALL-E)**, not Gemini. ChatGPT embeds C2PA metadata and OpenAI's SynthID invisible watermark. It does **not** use a visible sparkle watermark, so the 4–7 % right/bottom crop introduced in v3 was irrelevant and has been removed.
+
+  The previous SynthID countermeasure (dual JPEG re-encode at quality 72–82) was insufficient. SynthID is a spread-spectrum signal designed to survive JPEG compression — the detector integrates a weak signal coherently across all pixels using a secret key. Compression alone does not change pixel values unpredictably enough to break that coherence.
+
+  Two new primary countermeasures replace and augment the old approach:
+
+  **Per-pixel random noise injection (primary):**
+  The image is decoded to a raw pixel buffer. Crypto-random noise (amplitude ±4–8 per channel, chosen fresh for each image) is added directly to each pixel's RGB values. At this amplitude the change is sub-threshold for human perception but large enough to drive the SynthID detector's signal-to-noise ratio below detection confidence. Independent random noise is mathematically incompatible with a spread-spectrum key correlation — the detector integrates noise rather than signal.
+
+  **Zoom-crop bilinear resampling (secondary):**
+  The noised image is resized to 102–106 % (random per image), then cropped back to the original canvas dimensions from a random sub-pixel offset. Every output pixel becomes a bilinear blend of neighbouring input pixels. This uniquely scrambles the spatial layout that the spread-spectrum detector expects, and is non-repeatable across posts.
+
+  Remaining pipeline (unchanged in function, parameters tightened):
+  - C2PA/metadata strip via PNG intermediate (unchanged — still Vector 1 fix)
+  - Sub-pixel Gaussian blur σ 0.3–0.8 (was 0.5–1.2; tightened since noise + zoom already handle high-frequency disruption)
+  - HSL micro-jitter hue ±2°, saturation ±3 %, brightness ±0.2 % (was ±3°/±4 %/±0.3 %)
+  - First JPEG encode quality 85–93 (was 88–95)
+  - Second JPEG encode quality 70–80 (was 72–82)
+  - Small symmetric 1–3 px edge crops per side (unchanged — breaks identical-frame fingerprinting)
+
+---
+
 ## [1.1.636] — 2026-07-16
 
 ### Changed
