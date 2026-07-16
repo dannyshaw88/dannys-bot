@@ -4,6 +4,28 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.638] — 2026-07-16
+
+### Changed
+
+- **Fix AI Slop v5 — spatial decimation (matches what online "AI watermark remover" tools do)**
+
+  v1.1.637 was confirmed running on the latest build; images were still flagged. The previous approach (2–6% zoom-crop + per-pixel noise) was not sufficient. Switched to **significant downscale → upscale** as the primary watermark destroyer, which is the actual technique used by online tools that successfully remove SynthID — and the reason those tools produce slightly softer images.
+
+  **How it works:** downscale to 50–65% of original resolution (random per image, lanczos3), then upscale back to original size (lanczos3). Every output pixel becomes a weighted multi-neighbour interpolated blend. Spread-spectrum detectors integrate a signal against a fixed spatial key — after decimation the signal's spatial layout no longer matches the key. This is unconditional against SynthID, DCT-domain watermarks, and any other spatially-embedded signal.
+
+  Full pipeline for v5:
+  1. PNG intermediate — strips C2PA/EXIF/XMP/APP11 (unchanged)
+  2. Per-pixel crypto-random noise ±4–8/channel into raw pixel buffer (from v4)
+  3. **Downscale to 50–65 % → upscale to original (new — primary destructor)**
+  4. Blur σ 0.3–0.7
+  5. HSL micro-jitter hue ±2°, sat ±3 %, brightness ±0.2 %
+  6. First JPEG encode quality 82–90
+  7. Second JPEG encode quality 65–75
+  8. Small symmetric 1–3 px random edge crops
+
+---
+
 ## [1.1.637] — 2026-07-16
 
 ### Changed

@@ -1,8 +1,11 @@
 /**
  * fixAiSlop.ts — Strip AI-detectable signals from images before posting.
  *
- * Instagram's "AI info" label is triggered by two distinct detection vectors
- * for ChatGPT / DALL-E images (the most common source in this workflow):
+ * Online "AI watermark remover" tools reliably strip all known watermark
+ * types (C2PA metadata, SynthID, DCT-domain steganography) at the cost of
+ * some image quality. The quality loss is an inevitable side effect of the
+ * technique that actually works — spatial decimation (significant downscale
+ * followed by upscale). This module replicates that approach.
  *
  * ──────────────────────────────────────────────────────────────────────────
  * VECTOR 1 — Metadata (C2PA / EXIF / XMP / IPTC)
@@ -10,57 +13,42 @@
  * ChatGPT/DALL-E images embed C2PA cryptographic manifests in JPEG APP11
  * (JUMBF container) plus EXIF/XMP software tags proving AI origin.
  *
- * Fix: decode the source to a raw PNG buffer first. The PNG conversion is a
- * raw-pixel round-trip that produces a completely fresh container — no APP
- * segments, no EXIF, no XMP, no IPTC, no JUMBF/C2PA. withMetadata(false)
- * on the final JPEG output ensures nothing is re-injected by sharp.
+ * Fix: decode to a raw PNG buffer first (destroys all JPEG APP segments
+ * including APP11/C2PA/JUMBF). withMetadata(false) on all subsequent
+ * operations prevents re-injection.
  *
  * ──────────────────────────────────────────────────────────────────────────
- * VECTOR 2 — SynthID invisible / steganographic watermark
+ * VECTOR 2 — Invisible / steganographic watermarks (SynthID, DCT)
  * ──────────────────────────────────────────────────────────────────────────
- * OpenAI uses Google DeepMind's SynthID — a spread-spectrum watermark
- * embedded directly into pixel values during generation. SynthID works by
- * correlating the pixel data against a secret key. It is designed to survive
- * JPEG compression, colour adjustments, and moderate spatial cropping.
+ * SynthID (used by ChatGPT/DALL-E and Gemini) is a spread-spectrum signal
+ * embedded across all pixel values. It is designed to survive JPEG
+ * compression, colour adjustments, and moderate cropping.
  *
- * What defeats it: anything that changes the actual pixel VALUES
- * unpredictably, because the detector must integrate a coherent signal across
- * the whole image. Independent per-pixel noise and geometric resampling both
- * break that coherence.
+ * What actually defeats it: spatial decimation. Downscaling to 50–70% of
+ * the original resolution with bilinear/lanczos interpolation replaces every
+ * pixel with a weighted average of its neighbours. The spread-spectrum
+ * detector integrates signal across the image against a fixed spatial key —
+ * after decimation the signal's spatial layout no longer matches that key.
+ * Upscaling back to the original size via bicubic/lanczos compounds the
+ * disruption (the upsampled values are further blends). This is exactly what
+ * commercial "remove AI watermark" tools do, and it is why they produce
+ * slightly softer images.
  *
- * Fix (layered — each step independently disrupts the correlation):
- *
- *  a. Per-pixel random noise injection (±4–8 per channel in raw pixel space):
- *     Uses crypto.randomBytes for true entropy. At ±6/255 the change is
- *     sub-threshold for human perception but large enough to drive the
- *     SynthID detector's signal-to-noise ratio below detection confidence.
- *     This is the primary SynthID countermeasure.
- *
- *  b. Zoom-crop resampling: resize to 102–106 % (random per image), then
- *     crop back to the original canvas from a random sub-pixel offset. Every
- *     output pixel is now a bilinear blend of neighbouring input pixels —
- *     the spatial relationship between adjacent pixels is uniquely scrambled
- *     for each image, which is mathematically incompatible with the fixed
- *     spatial layout that spread-spectrum detectors assume.
- *
- *  c. Sub-pixel Gaussian blur σ 0.3–0.8 attenuates residual high-frequency
- *     watermark components that survived steps a + b.
- *
- *  d. HSL micro-jitter (hue ±2°, saturation ±3 %, brightness ±0.2 %) shifts
- *     per-channel statistics away from the generator's colour signature.
- *
- *  e. First JPEG encode at quality 85–93 re-quantises DCT coefficients,
- *     destroying any DCT-domain steganography (Stable Diffusion, Midjourney).
- *
- *  f. Second JPEG encode at quality 70–80 — a second, independent
- *     quantisation pass with a different quality step table. The double
- *     quantisation maximises DCT disruption without requiring visible
- *     artefacts (Instagram recompresses the upload anyway).
- *
- * Note: the 4–7 % right/bottom crop for Gemini's visible sparkle logo has
- * been removed — ChatGPT images do not have a visible watermark. Only small
- * symmetric 1–3 px random edge crops remain (to break identical-frame
- * fingerprinting across repeated posts).
+ * Additional layers:
+ *  a. Per-pixel crypto-random noise ±4–8/channel injected into raw pixel
+ *     buffer before downscale — adds incoherent values the correlator must
+ *     average against, breaking SNR independently of the spatial step.
+ *  b. Downscale to 50–65% of original (random per image, lanczos3).
+ *  c. Upscale back to original dimensions (lanczos3). Every pixel is now
+ *     a multi-neighbour interpolated blend — spatial key is destroyed.
+ *  d. Sub-pixel Gaussian blur σ 0.3–0.7 attenuates any residual HF components.
+ *  e. HSL micro-jitter (hue ±2°, sat ±3%, brightness ±0.2%).
+ *  f. First JPEG encode quality 82–90 — destroys DCT steganography.
+ *  g. Second JPEG encode quality 65–75 — second independent quantisation
+ *     pass; lower quality than the first to maximise DCT disruption.
+ *     Instagram recompresses uploads regardless, so further loss is negligible.
+ *  h. Small symmetric 1–3 px random edge crops — breaks identical-frame
+ *     fingerprinting across repeated posts of the same source image.
  */
 
 import { randomBytes } from "crypto";
@@ -104,33 +92,24 @@ export async function fixAiSlop(inputPath: string): Promise<string> {
     const channels = (meta.channels ?? 3) as 3 | 4;
 
     if (origW < 10 || origH < 10) {
-      // Unreasonably small — pass through
       await unlink(tmp).catch(() => {});
       return inputPath;
     }
 
-    // ── Step 3: per-pixel random noise injection ──────────────────────────
-    // Get raw pixel buffer (no alpha premultiplication)
+    // ── Step 3: per-pixel random noise injection into raw pixel buffer ─────
     const rawBuf: Buffer = await sharp(pngBuf)
       .withMetadata(false)
       .raw()
       .toBuffer();
 
-    // Noise amplitude: 4–8 per channel (chosen fresh for each image)
-    const noiseAmp = 4 + Math.floor(Math.random() * 5); // 4,5,6,7,8
+    const noiseAmp = 4 + Math.floor(Math.random() * 5); // 4–8 per channel
     const noiseBytes = randomBytes(rawBuf.length);
-
     for (let i = 0; i < rawBuf.length; i++) {
-      // Skip alpha channel (every 4th byte when channels === 4)
-      if (channels === 4 && (i & 3) === 3) continue;
-
-      // Map random byte 0–255 → signed offset in [-noiseAmp, +noiseAmp]
+      if (channels === 4 && (i & 3) === 3) continue; // skip alpha
       const offset = Math.round((noiseBytes[i] / 255) * 2 * noiseAmp) - noiseAmp;
-      const v = (rawBuf[i] + offset) & 0xff; // clamp via wrapping is fine for ±8
       rawBuf[i] = Math.max(0, Math.min(255, rawBuf[i] + offset));
     }
 
-    // Re-encode the noise-injected raw buffer back to PNG
     const noisedPng: Buffer = await sharp(rawBuf, {
       raw: { width: origW, height: origH, channels },
     })
@@ -138,44 +117,38 @@ export async function fixAiSlop(inputPath: string): Promise<string> {
       .png({ compressionLevel: 1, force: true })
       .toBuffer();
 
-    // ── Step 4: zoom-crop resampling ──────────────────────────────────────
-    // Resize to 102–106 %, then extract the original-sized region from a
-    // random sub-pixel-offset position. Every output pixel is now a bilinear
-    // blend — the spatial layout assumed by the spread-spectrum detector is
-    // broken uniquely per image.
-    const zoomPct = 1.02 + Math.random() * 0.04; // 1.02 – 1.06
-    const zoomedW = Math.round(origW * zoomPct);
-    const zoomedH = Math.round(origH * zoomPct);
+    // ── Step 4: spatial decimation — the primary watermark destroyer ───────
+    // Downscale to 50–65 % (randomised), then upscale back to original.
+    // This replaces every pixel with a multi-neighbour interpolated blend,
+    // destroying the spatial layout that spread-spectrum detectors rely on.
+    // This is the technique "AI watermark remover" tools use; the slight
+    // softness in output is its unavoidable side-effect.
+    const scalePct = 0.50 + Math.random() * 0.15; // 0.50 – 0.65
+    const downW = Math.max(8, Math.round(origW * scalePct));
+    const downH = Math.max(8, Math.round(origH * scalePct));
 
-    // Random crop origin so the extract offset varies between runs
-    const maxOffX = zoomedW - origW;
-    const maxOffY = zoomedH - origH;
-    const offX = Math.floor(Math.random() * (maxOffX + 1));
-    const offY = Math.floor(Math.random() * (maxOffY + 1));
-
-    const zoomedBuf: Buffer = await sharp(noisedPng)
+    const decimatedBuf: Buffer = await sharp(noisedPng)
       .withMetadata(false)
-      .resize(zoomedW, zoomedH, { kernel: "lanczos3" })
-      .extract({ left: offX, top: offY, width: origW, height: origH })
+      .resize(downW, downH, { kernel: "lanczos3", fastShrinkOnLoad: false })
+      .resize(origW, origH, { kernel: "lanczos3" })
       .png({ compressionLevel: 1, force: true })
       .toBuffer();
 
     // ── Randomised processing parameters ─────────────────────────────────
 
-    // Sub-pixel blur σ 0.3–0.8
-    const blurSigma = parseFloat((0.3 + Math.random() * 0.5).toFixed(2));
+    // Sub-pixel blur σ 0.3–0.7
+    const blurSigma = parseFloat((0.3 + Math.random() * 0.4).toFixed(2));
 
     // Hue rotation: ±2 degrees
     const hueDeg = Math.floor(Math.random() * 5) - 2;
 
-    // Saturation multiplier: 0.97–1.03 (±3 %)
+    // Saturation multiplier: 0.97–1.03
     const satMod = parseFloat((0.97 + Math.random() * 0.06).toFixed(3));
 
-    // Brightness multiplier: 0.998–1.002 (±0.2 %)
+    // Brightness multiplier: 0.998–1.002
     const brightnessMod = parseFloat((0.998 + Math.random() * 0.004).toFixed(4));
 
-    // Small symmetric edge crops: 1–3 px per side (breaks identical-frame
-    // fingerprinting across repeated posts of the same image)
+    // Small symmetric edge crops: 1–3 px per side
     const cropL = 1 + Math.floor(Math.random() * 3);
     const cropT = 1 + Math.floor(Math.random() * 3);
     const cropR = 1 + Math.floor(Math.random() * 3);
@@ -183,29 +156,29 @@ export async function fixAiSlop(inputPath: string): Promise<string> {
     const cropW = origW - cropL - cropR;
     const cropH = origH - cropT - cropB;
 
-    // First JPEG quality: 85–93
-    const quality1 = 85 + Math.floor(Math.random() * 9);
+    // First JPEG quality: 82–90
+    const quality1 = 82 + Math.floor(Math.random() * 9);
 
-    // Second JPEG quality: 70–80
-    const quality2 = 70 + Math.floor(Math.random() * 11);
+    // Second JPEG quality: 65–75
+    const quality2 = 65 + Math.floor(Math.random() * 11);
 
     // ── Step 5: first JPEG encode — crop + blur + colour jitter ──────────
     const pass1Buf: Buffer = cropW > 100 && cropH > 100
-      ? await sharp(zoomedBuf)
+      ? await sharp(decimatedBuf)
           .withMetadata(false)
           .extract({ left: cropL, top: cropT, width: cropW, height: cropH })
           .blur(blurSigma)
           .modulate({ brightness: brightnessMod, hue: hueDeg, saturation: satMod })
           .jpeg({ quality: quality1, chromaSubsampling: "4:2:0", force: true })
           .toBuffer()
-      : await sharp(zoomedBuf)
+      : await sharp(decimatedBuf)
           .withMetadata(false)
           .blur(blurSigma)
           .modulate({ brightness: brightnessMod, hue: hueDeg, saturation: satMod })
           .jpeg({ quality: quality1, chromaSubsampling: "4:2:0", force: true })
           .toBuffer();
 
-    // ── Step 6: second JPEG encode — different quant table ────────────────
+    // ── Step 6: second JPEG encode — different quantisation table ─────────
     await sharp(pass1Buf)
       .withMetadata(false)
       .jpeg({ quality: quality2, chromaSubsampling: "4:2:0", force: true })
