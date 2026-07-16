@@ -1,8 +1,27 @@
 <svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect x="34" y="54" width="112" height="80" rx="14" fill="#1AD2F2"/>
-<rect x="54" y="34" width="24" height="24" rx="6" fill="#1AD2F2"/>
-<rect x="102" y="34" width="24" height="20" rx="6" fill="#1AD2F2"/>
-<circle cx="68" cy="100" r="10" fill="white"/>
-<circle cx="112" cy="100" r="10" fill="white"/>
-<rect x="72" y="118" width="36" height="8" rx="4" fill="white" fill-opacity="0.85"/>
+  <!-- Blue rounded background -->
+  <rect width="180" height="180" rx="38" fill="#2563EB"/>
+  <!-- Phone outline -->
+  <rect x="46" y="28" width="88" height="124" rx="14" fill="none" stroke="white" stroke-width="7"/>
+  <!-- Phone notch/speaker -->
+  <rect x="72" y="38" width="36" height="7" rx="3.5" fill="white"/>
+  <!-- Phone home button dot -->
+  <circle cx="90" cy="142" r="6" fill="white"/>
+  <!-- Cow head shape (rounded rect) -->
+  <rect x="42" y="70" width="96" height="74" rx="36" fill="none" stroke="white" stroke-width="7"/>
+  <!-- Left ear -->
+  <ellipse cx="50" cy="78" rx="14" ry="10" fill="none" stroke="white" stroke-width="7" transform="rotate(-20 50 78)"/>
+  <!-- Right ear -->
+  <ellipse cx="130" cy="78" rx="14" ry="10" fill="none" stroke="white" stroke-width="7" transform="rotate(20 130 78)"/>
+  <!-- Left eye -->
+  <circle cx="74" cy="94" r="7" fill="white"/>
+  <!-- Right eye -->
+  <circle cx="106" cy="94" r="7" fill="white"/>
+  <!-- Snout -->
+  <ellipse cx="90" cy="122" rx="22" ry="14" fill="none" stroke="white" stroke-width="6"/>
+  <!-- Nostrils -->
+  <circle cx="82" cy="122" r="4" fill="white"/>
+  <circle cx="98" cy="122" r="4" fill="white"/>
+  <!-- Smile -->
+  <path d="M78 132 Q90 140 102 132" stroke="white" stroke-width="5" stroke-linecap="round" fill="none"/>
 </svg>
