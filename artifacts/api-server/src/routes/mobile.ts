@@ -4851,6 +4851,35 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ ok: false, error: e?.message }); }
   });
 
+  // ── Screencap — raw PNG (for farm-grid thumbnails) ────────────────────────
+  // Returns the device screenshot as a raw image/png response so the frontend
+  // can use a plain <img> or SVG <image> with a URL instead of embedding a
+  // multi-MB base64 data URI in React state.  The ?t= query param is ignored
+  // server-side; the client appends a timestamp to bust the browser cache on
+  // each poll tick.
+  app.get("/api/mobile/devices/:serial/screencap.png", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const adbPath = (await android.getTools()).adb.path;
+      const chunks: Buffer[] = [];
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn(adbPath, ["-s", serial, "exec-out", "screencap", "-p"]);
+        child.stdout.on("data", (d: Buffer) => chunks.push(d));
+        child.on("error", reject);
+        child.on("close", () => resolve());
+      });
+      let frame = Buffer.concat(chunks);
+      if (frame.length > 8 && !isPng(frame)) frame = stripCrlf(frame);
+      if (!isPng(frame)) { res.status(502).end(); return; }
+      res.set({
+        "Content-Type": "image/png",
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        "Content-Length": String(frame.length),
+      });
+      res.end(frame);
+    } catch { res.status(500).end(); }
+  });
+
   // ── Element Inspector ─────────────────────────────────────────────────────
   // Like Chrome DevTools F12 — click a point on the phone mirror and get back
   // every accessibility node whose bounds contain that point, sorted from most

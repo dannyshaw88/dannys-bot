@@ -4,6 +4,19 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.647] — 2026-07-16
+
+### Fixed
+- **Follow Tool — spurious separator between Inject Browsing and Filters**: A `border-t` divider was sitting between the Inject Browsing section and the Filters checkbox. Filters is part of the Follow Tool, not a separate section, so the separator has been removed.
+- **Follow Tool — Filters sub-options left-aligned with parent checkbox**: The Private Users / English Speaking / 250 Followers+ / Skip Verified checkboxes were indented by 4px (`pl-1`) relative to the Filters toggle above them. They are now flush-left, aligning the sub-option checkboxes directly under the Filters checkbox.
+- **Phone Farm — live screen thumbnails not appearing inside phone silhouette**: The farm grid was fetching phone screenshots as base64-encoded PNG data URIs stored in React state (`screencap-base64` endpoint) and embedding them via SVG `<image href="data:image/png;base64,...">`. This approach can fail silently in the Electron WebView due to content-security-policy restrictions on inline data URIs and the sheer size of a raw PNG encoded as base64 in JS memory. Replaced with a direct image URL approach:
+  - New API endpoint `/api/mobile/devices/:serial/screencap.png` returns the raw PNG bytes with `Content-Type: image/png` and `Cache-Control: no-store` — the browser fetches and decodes it natively, no base64 involved.
+  - The farm grid no longer stores screenshots in React state. Instead a `screencapTick` counter increments every 4 s; online device cards pass `/api/mobile/devices/:serial/screencap.png?t={tick}` as the image URL, letting the browser's image loading pipeline handle the fetch and decode.
+  - `preserveAspectRatio` changed from `xMidYMid meet` (fit, may leave gaps) to `xMidYMid slice` (fill, crops edges) so the screenshot fills the rounded screen area edge-to-edge.
+- **Phone automation cycle aborted when navigating away from the phone screen**: The cycle run-loop's React `useEffect` cleanup was unconditionally calling `ctrl.abort()` and sending a server-side abort POST whenever it ran — which happens both when the user flips the master toggle off AND when the component unmounts (user navigates to a different page). This meant leaving the phone screen mid-cycle always killed the running cycle. Fixed by tracking explicit toggle-off vs navigation: a new `explicitToggleOffRef` is only set when the user deliberately disables the master switch via `setEnabledByUser(false)`. The cleanup now only fires `ctrl.abort()` and the server abort POST when that flag is set. Navigation away lets the current cycle complete normally on the server; `cancelled = true` prevents the client from scheduling further cycles.
+
+---
+
 ## [1.1.646] — 2026-07-16
 
 ### Fixed

@@ -96,7 +96,7 @@ function PhoneShell({ className, online, screenshotUrl }: { className?: string; 
           href={screenshotUrl}
           x="12" y="14" width="196" height="412"
           clipPath={`url(#${clipId})`}
-          preserveAspectRatio="xMidYMid meet"
+          preserveAspectRatio="xMidYMid slice"
         />
       )}
       {/* Sheen / glass reflection — on top of screenshot */}
@@ -404,10 +404,12 @@ function AddDeviceCard({ onClick }: { onClick: () => void }) {
 export function MobileDevicesPage() {
   const [, setLocation] = useLocation();
 
-  const [devices,     setDevices]     = useState<FarmDevice[]>([]);
-  const [loadingDb,   setLoadingDb]   = useState(true);
-  const [addingSlot,  setAddingSlot]  = useState<number | null>(null); // slot currently showing the add panel
-  const [screenshots, setScreenshots] = useState<Record<string, string>>({});
+  const [devices,    setDevices]    = useState<FarmDevice[]>([]);
+  const [loadingDb,  setLoadingDb]  = useState(true);
+  const [addingSlot, setAddingSlot] = useState<number | null>(null); // slot currently showing the add panel
+  // Tick counter incremented every 4 s — appended as ?t=N to the screencap URL
+  // so the browser fetches a fresh frame without needing React state per device.
+  const [screencapTick, setScreencapTick] = useState(0);
 
   // Live USB status — polled only for "online" badge, not for the grid itself
   const [usbPhones, setUsbPhones] = useState<UsbPhone[]>([]);
@@ -428,39 +430,14 @@ export function MobileDevicesPage() {
   useEffect(() => {
     refreshDevices();
     refreshUsb();
-    const id = setInterval(refreshUsb, 4_000);
-    return () => clearInterval(id);
+    const usbId  = setInterval(refreshUsb,          4_000);
+    const tickId = setInterval(() => setScreencapTick(t => t + 1), 4_000);
+    return () => { clearInterval(usbId); clearInterval(tickId); };
   }, [refreshDevices, refreshUsb]);
 
   const onlineSerials = new Set(
     usbPhones.filter(p => p.state === "device").map(p => p.serial)
   );
-
-  // ── Screenshot thumbnail polling ──────────────────────────────────────────
-  // Keeps a current-screen snapshot for each online device, refreshing every
-  // 4 s.  Uses a ref so the interval doesn't restart when USB state refreshes.
-  const onlineSerialsRef = useRef<Set<string>>(new Set());
-  useEffect(() => { onlineSerialsRef.current = onlineSerials; });
-
-  useEffect(() => {
-    let cancelled = false;
-    const poll = async () => {
-      if (cancelled) return;
-      for (const serial of onlineSerialsRef.current) {
-        if (cancelled) break;
-        try {
-          const r    = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/screencap-base64`);
-          const body = await r.json().catch(() => null);
-          if (!cancelled && body?.ok && body.image) {
-            setScreenshots(prev => ({ ...prev, [serial]: body.image }));
-          }
-        } catch { /* ignore — device offline or screencap failed */ }
-      }
-      if (!cancelled) setTimeout(poll, 4000);
-    };
-    poll();
-    return () => { cancelled = true; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const registeredSerials = new Set(devices.map(d => d.serial));
 
@@ -533,7 +510,9 @@ export function MobileDevicesPage() {
                       online={onlineSerials.has(device.serial)}
                       onClick={() => setLocation(`/mobile/farm/${encodeURIComponent(device.serial)}`)}
                       onRemove={() => handleRemove(device.slotIndex)}
-                      screenshotUrl={screenshots[device.serial]}
+                      screenshotUrl={onlineSerials.has(device.serial)
+                        ? `/api/mobile/devices/${encodeURIComponent(device.serial)}/screencap.png?t=${screencapTick}`
+                        : undefined}
                     />
                   );
                 }

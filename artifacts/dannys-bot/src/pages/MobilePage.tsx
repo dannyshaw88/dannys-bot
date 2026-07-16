@@ -2119,9 +2119,18 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // Run-every interval, same as every cycle after it. Set by
   // `setEnabledByUser` below, consumed once by the run-loop effect.
   const manualToggleOnRef = useRef(false);
+  // Tracks whether the NEXT cleanup should abort the server-side cycle.
+  // Only set when the user explicitly toggles the master switch off — NOT on
+  // component unmount (user navigating to another page).  This prevents the
+  // running cycle from being killed just because the user switched tabs.
+  const explicitToggleOffRef = useRef(false);
 
   const setEnabledByUser = useCallback((enabled: boolean) => {
-    if (enabled) manualToggleOnRef.current = true;
+    if (enabled) {
+      manualToggleOnRef.current = true;
+    } else {
+      explicitToggleOffRef.current = true; // explicit user action — cleanup should abort
+    }
     setSettings(s => ({ ...s, enabled }));
   }, []);
 
@@ -2349,21 +2358,26 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       if (timer) clearTimeout(timer);
       setRunning(false);
       setNextRunAt(null);
-      // Immediately abort any in-flight cycle fetch and tell the server to stop.
-      // Pass the cycleId so the server only aborts the specific cycle that was
-      // running when the toggle was flipped — stale abort POSTs that arrive
-      // after the next cycle has already started will be ignored.
       const ctrl = cycleAbortRef.current;
       if (ctrl) {
         const abortingId = cycleIdRef.current;
-        ctrl.abort();
+        // Only abort the server-side cycle when the user explicitly turned the
+        // toggle off.  If the cleanup fires because the component unmounted
+        // (user navigated away) or the serial changed, leave the current cycle
+        // running on the server — `cancelled = true` already prevents the
+        // client from scheduling the next cycle.
+        const shouldAbortServer = explicitToggleOffRef.current;
+        explicitToggleOffRef.current = false; // reset for next toggle
         cycleAbortRef.current = null;
         cycleIdRef.current = null;
-        fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle/abort`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cycleId: abortingId }),
-        }).catch(() => {});
+        if (shouldAbortServer) {
+          ctrl.abort();
+          fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle/abort`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ cycleId: abortingId }),
+          }).catch(() => {});
+        }
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3197,7 +3211,6 @@ function AutomationSettingsPanel({
           </>)}
 
           {/* ── Filters — profile-quality gates applied before each follow ── */}
-          <div className="border-t border-border" />
           <div className="flex items-center gap-3">
             <input
               type="checkbox"
@@ -3211,7 +3224,7 @@ function AutomationSettingsPanel({
           </div>
 
           {settings.followFiltersEnabled && (
-            <div className="flex items-center gap-6 flex-wrap pl-1">
+            <div className="flex items-center gap-6 flex-wrap">
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
