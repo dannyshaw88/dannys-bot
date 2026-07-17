@@ -4117,7 +4117,7 @@ type AccountSlot = { username: string; password: string; totpSecret: string; ema
 // Always mounted so the automation hook's run-loop persists even when the
 // user is viewing the slot list or a different tab.
 function SlotHumanSessionView({
-  phone, slotIdx, slotUsername, slotUsernames, addLog, onBack, requestSlot, releaseSlot, refreshKey, onCopied,
+  phone, slotIdx, slotUsername, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, refreshKey, onCopied,
 }: {
   phone: UsbPhone | null;
   slotIdx: number;
@@ -4125,12 +4125,17 @@ function SlotHumanSessionView({
   slotUsernames?: string[];
   addLog: (msg: string) => void;
   onBack: () => void;
+  onPrevSlot?: () => void;
+  onNextSlot?: () => void;
+  slotCount?: number;
   requestSlot?: (idx: number, readyAt: number) => Promise<void>;
   releaseSlot?: (idx: number) => void;
   refreshKey?: number;
   onCopied?: (targetSlotIdxs: number[]) => void;
 }) {
   const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername, requestSlot, releaseSlot, refreshKey);
+  const isFirst = slotIdx === 0;
+  const isLast = slotIdx === (slotCount ?? 1) - 1;
   return (
     <div className="h-full flex flex-col">
       <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
@@ -4138,10 +4143,18 @@ function SlotHumanSessionView({
           <ArrowLeft className="w-3.5 h-3.5" />
           Back
         </Button>
-        <span className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+        <span className="text-sm font-semibold text-foreground flex items-center gap-1.5 flex-1">
           <Fingerprint className="w-3.5 h-3.5 text-primary" />
           Human Session Tool {slotUsername ? `for @${slotUsername}` : `Slot ${slotIdx + 1}`}
         </span>
+        <Button variant="ghost" size="sm" onClick={onPrevSlot} disabled={isFirst} className="gap-1 h-7 px-2">
+          <ChevronLeft className="w-3.5 h-3.5" />
+          Slot
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onNextSlot} disabled={isLast} className="gap-1 h-7 px-2 flex-row-reverse">
+          <ChevronLeft className="w-3.5 h-3.5 rotate-180" />
+          Slot
+        </Button>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
         <AutomationSettingsPanel phone={phone} {...automation} slotIdx={slotIdx} slotUsernames={slotUsernames} onCopied={onCopied} />
@@ -4330,6 +4343,9 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
             slotUsernames={slots.map(s => s.username)}
             addLog={addLog}
             onBack={() => setOpenSlotTool(null)}
+            onPrevSlot={i > 0 ? () => setOpenSlotTool(i - 1) : undefined}
+            onNextSlot={i < slots.length - 1 ? () => setOpenSlotTool(i + 1) : undefined}
+            slotCount={slots.length}
             requestSlot={requestSlot}
             releaseSlot={releaseSlot}
             refreshKey={slotRefreshKeys[i] ?? 0}
