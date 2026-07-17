@@ -3985,12 +3985,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           });
         }
 
-        // Go back to search only when there are more users to follow.
-        // After the last user the pressBack would land on the search/explore
-        // page unnecessarily — the cycle closes Instagram itself right after.
+        // Return to the clean Explore page for the next user.
+        // One pressBack leaves the profile and lands on the SEARCH RESULTS
+        // page, which still has the previous @username in the bar.  A second
+        // pressBack exits those results and returns to the blank Explore page
+        // — the same state as after the initial Search-tab tap — so the next
+        // iteration's findInstagramSearchBar always gets a fresh, empty bar
+        // instead of a bar pre-filled with the previous search term.
+        // (The not-found path already presses Back from results→Explore once
+        // and then continues; this makes the success path match that behaviour.)
         if (!isLastUser) {
-          await android.pressBack(serial);
-          await sleepOrAbort(serial, 600);
+          await android.pressBack(serial);     // profile → search results
+          await sleepOrAbort(serial, 500);
+          await android.pressBack(serial);     // search results → clean Explore
+          await sleepOrAbort(serial, 800);
         }
       } catch (e: any) {
         if (e?.message === "cycle-aborted") throw e;
