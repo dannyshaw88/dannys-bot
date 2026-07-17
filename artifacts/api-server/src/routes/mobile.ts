@@ -3521,11 +3521,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // repost instantly on a single tap with no sheet at all).
           await sleepOrAbort(serial, 1000);
           const repostBtn = await android.findButtonByLabel(serial, "Repost").catch(() => null);
-          // Same 60 px tolerance fix as the View Feed path above.
-          const _ibDx = repostBtn ? Math.abs(repostBtn.x - repostIcon.x) : 0;
-          const _ibDy = repostBtn ? Math.abs(repostBtn.y - repostIcon.y) : 0;
-          const sameCoords = !!repostBtn && _ibDx < 60 && _ibDy < 60;
-          if (sameCoords) logger.info({ serial, repostBtn, repostIcon, dx: _ibDx, dy: _ibDy }, "[inject-browsing] 'Repost' node within 60 px of icon — treated as same icon (single-tap path)");
+          const sameCoords = !!repostBtn &&
+            Math.abs(repostBtn.x - repostIcon.x) < 15 && Math.abs(repostBtn.y - repostIcon.y) < 15;
           if (repostBtn && !sameCoords) {
             // A separate "Repost" confirm button appeared at a different
             // position — a real sheet is open. Tap it to confirm.
