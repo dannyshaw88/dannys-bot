@@ -4,6 +4,39 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.665] — 2026-07-17
+
+### View Feed — Like button: fixed timing miss ("no Like button visible")
+
+- **Root cause**: the a11y tree dump was taken 250–500 ms after the scroll — too early for the new post's action bar to finish rendering. The dump ran while the feed was still animating, returned no Like/Unlike node, and the like was skipped entirely.
+- **Fix**: replaced the random 250–500 ms delay with a flat **900 ms settle wait** before calling `findFeedActionIcons`. This gives the post's action bar consistent time to appear in the accessibility tree before the scan runs.
+- **No retry logic**: a single scan is taken after the settle. If it still returns null (genuine Reel, ad, or non-post card) the like is skipped and the cycle moves on — consistent with the project's no-retry rule.
+- Change is **View Feed only** — Stories, Reels, and Inject Browsing were not touched.
+
+### View Feed — Share-to-feed: removed "pressing Back" on failed repost check
+
+- **Root cause**: after tapping the share-to-feed icon, the code re-dumped the a11y tree to confirm whether the repost registered (icon label changed, or a "Repost" sheet button appeared). When neither was confirmed, the code pressed Back — which navigated away from the post and refreshed the feed mid-scroll.
+- **What was wrong**: the tap *did* register (visible on the phone screen). The dump was the unreliable part. Pressing Back based on a bad dump caused the feed to jump to a different post and broke the rest of the scroll sequence.
+- **Fix**: both failure branches (icon label unchanged AND no Repost button in dump) now **accept the tap and continue** — no Back press. The tap fired; the cycle moves on. The dump result is still logged for diagnostics but no longer gates what action is taken next.
+- Change is **View Feed only** — Inject Browsing, Reels, and other share flows are untouched.
+
+### Human Session Tool — Fixed: toggle does nothing after the first run ("dead toggle" bug)
+
+- **Root cause**: a race condition between the client-side abort POST and the server-side new-cycle registration.
+  - When the user toggled off while **no cycle was in-flight** (e.g. while the between-runs timer was counting down), `cycleIdRef.current` was `null`, so the abort POST sent `{ cycleId: null }` to the server.
+  - The server's abort endpoint had a guard `if (!cycleId || matches current)` — the `!cycleId` branch fired unconditionally for a null ID, setting the abort flag to whatever cycle ID was registered at that moment.
+  - If the user toggled back on and the new cycle registered its ID **before** the stale abort POST arrived, the abort matched the new cycle's ID and killed it immediately. Result: toggle on → nothing happened, no log output, no timer shown, no next run. Required a full software restart to clear.
+- **Fix (server)**: changed the guard to `if (cycleId && matches current)` — a null or missing cycleId is now rejected outright. Only a real, non-empty cycleId that matches the currently running cycle is accepted.
+- **Fix (client)**: the abort POST is now only sent when `abortingId` is non-null (a cycle was actually in-flight). If the user toggles off between runs, no abort POST is sent — there is nothing on the server to abort.
+- Both fixes are defence-in-depth; either one alone prevents the bug, together they eliminate the race entirely.
+
+### Phone Farm — "NOT ACTIVE" overlay: display fixed
+
+- The "NOT ACTIVE" status text on the phone mirror shell was rendering as two separate lines ("NOT" / "ACTIVE") with a cyan dot above it, making it hard to read.
+- Fixed to a **single line** (`NOT ACTIVE`), **bright cyan** (`#00CFFF`), dot removed.
+
+---
+
 ## [1.1.655] — 2026-07-17
 
 ### Copy Settings — Fixed (was non-functional)
