@@ -4,6 +4,25 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.654] — 2026-07-17
+
+### Human Session Tool — Run immediately on restart
+
+- When the app restarts with the Human Session Tool toggle already on, the first cycle now **fires immediately** (as if the user had just enabled it), instead of waiting the full Run-every interval first. The next-run gap is scheduled after each cycle completes as normal.
+
+### Human Session Tool — Breadcrumb shows Instagram username
+
+- The breadcrumb at the top of the Human Session Tool panel now reads **`@username`** (the Instagram username for that slot) instead of "Slot N". Falls back to "Slot N" when the slot has no username configured.
+
+### Action Log — Clean output, cycle outcomes only
+
+- The Action Log now shows **only cycle-level outcome lines** — no debug noise (taps, swipes, WS events, key sends, etc.). Those continue to appear in the Debugging Log tab.
+- Each completed cycle logs a clean summary, e.g.: `Cycle complete — 3 liked  ·  5 stories  ·  2 followed  ·  1 reels`
+- Failed and aborted cycles continue to appear in the Action Log as before.
+- Cycle complete summary now includes all available action counts: liked, stories watched, followed, DM'd, feed-shared, reels viewed.
+
+---
+
 ## [1.1.653] — 2026-07-17
 
 ### Human Session Tool — Copy Settings button

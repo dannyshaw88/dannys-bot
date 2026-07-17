@@ -2365,7 +2365,18 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             onLog?.(`Cycle failed — ${body?.error ?? r.status}${body?.steps?.length ? ` (reached: ${body.steps.join(", ")})` : ""}`);
           }
         } else {
-          onLog?.(`Cycle complete — ${body.likes} likes${body.storiesWatched ? `, ${body.storiesWatched} stories` : ""}, closed Instagram, airplane-mode recycled, phone locked`);
+          {
+            const parts: string[] = [];
+            if (body.likes)          parts.push(`${body.likes} liked`);
+            if (body.storiesWatched) parts.push(`${body.storiesWatched} stories`);
+            if (body.followedCount)  parts.push(`${body.followedCount} followed`);
+            if (body.sharesDm)       parts.push(`${body.sharesDm} DM'd`);
+            if (body.sharesFeed)     parts.push(`${body.sharesFeed} feed-shared`);
+            const reelsStep = (body.steps as string[] | undefined)?.find((s: string) => s.startsWith("reels("));
+            const reelsViewed = reelsStep ? parseInt(reelsStep.match(/(\d+)\s+viewed/)?.[1] ?? "0", 10) : 0;
+            if (reelsViewed)         parts.push(`${reelsViewed} reels`);
+            onLog?.(`Cycle complete — ${parts.length ? parts.join("  ·  ") : "no actions taken"}`);
+          }
         }
       } catch (e: any) {
         if ((e as any)?.name === "AbortError") {
@@ -2389,25 +2400,11 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       timer = setTimeout(runCycle, Math.round(gapMs));
     };
 
-    // Deliberately turning the toggle on should run the first cycle right
-    // away — that's the whole point of flipping it on. But this effect also
-    // re-fires when settings load with `enabled` already true (e.g. the app
-    // restarting with a phone left on from before), and that case must NOT
-    // fire instantly — it should wait the configured Run-every interval like
-    // every other cycle. `manualToggleOnRef` (set by `setEnabledByUser`)
-    // tells us which situation this is; it's consumed once and reset so a
-    // later re-render of this same "on" session doesn't re-trigger it.
-    if (manualToggleOnRef.current) {
-      manualToggleOnRef.current = false;
-      runCycle();
-    } else {
-      const s0 = settingsRef.current;
-      const initMin = Math.max(1, Math.min(s0.cycleIntervalMin, s0.cycleIntervalMax));
-      const initMax = Math.max(1, Math.max(s0.cycleIntervalMin, s0.cycleIntervalMax));
-      const initGapMs = (initMin + Math.random() * (initMax - initMin)) * 60_000;
-      setNextRunAt(Date.now() + Math.round(initGapMs));
-      timer = setTimeout(runCycle, Math.round(initGapMs));
-    }
+    // Always run the first cycle immediately — whether the user just toggled
+    // on or the app restarted with the toggle already on. The next-run gap
+    // is scheduled after each cycle completes (see setNextRunAt below).
+    manualToggleOnRef.current = false;
+    runCycle();
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
@@ -4061,7 +4058,7 @@ function SlotHumanSessionView({
         </Button>
         <span className="text-sm font-semibold text-foreground flex items-center gap-1.5">
           <Fingerprint className="w-3.5 h-3.5 text-primary" />
-          Human Session Tool — Slot {slotIdx + 1}
+          Human Session Tool — {slotUsername ? `@${slotUsername}` : `Slot ${slotIdx + 1}`}
         </span>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
@@ -5086,7 +5083,8 @@ const BOT_TAP_RE = /tapp(?:ing|ed)[^\n(]*\((\d+),\s*(\d+)\)/i;
 
 // Regex for filtering action-only lines into the Action Log tab.
 // Matches automation action keywords emitted by the engine.
-const ACTION_LOG_RE = /\b(like[ds]?|follow(?:ed|ing|ers?)?|unfollow(?:ed|ing)?|scroll(?:ed|ing)?|swipe[ds]?|share[ds]?|comment(?:ed|ing|s)?|reel[s]?|stor(?:y|ies)|post(?:ed|ing|s)?|watch(?:ed|ing)?|view(?:ed|ing)?|dm(?:['']?d|ing)?|sent?\s+dm|message[ds]?)\b/i;
+// Only cycle-level outcome lines go to the Action Log — no debug noise.
+const ACTION_LOG_RE = /^Cycle\s+(complete|failed|aborted)/i;
 
 export function MobilePage() {
   // When navigated from the Phone Farm grid (/mobile/farm/:serial), only this
