@@ -2093,6 +2093,9 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   const [saveError, setSaveError] = useState<string | null>(null);
   const [running,  setRunning]  = useState(false);
   const [nextRunAt, setNextRunAt] = useState<number | null>(null);
+  // Reflects server-side cycle state independently of the client fetch.
+  // Keeps running=true even right after remount, before runCycle() fires.
+  const [serverCycleRunning, setServerCycleRunning] = useState(false);
 
   // Loaded settings (including `enabled`) come from the server per phone —
   // used to detect real user edits vs. the initial load, so autosave never
@@ -2146,11 +2149,39 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         const merged = { ...AUTOMATION_DEFAULTS, ...d };
         lastSavedRef.current = JSON.stringify(merged);
         setSettings(merged);
+        // On remount with the toggle already on, resume immediately instead
+        // of waiting the full configured interval.  This ensures the tool
+        // stays active across in-app navigation (switching pages and back).
+        if (merged.enabled) {
+          manualToggleOnRef.current = true;
+        }
       })
       .catch(() => { /* keep defaults */ })
       .finally(() => { if (active) { setLoading(false); hydratedRef.current = true; } });
     return () => { active = false; };
   }, [phone?.serial]);
+
+  // Poll /api/mobile/cycle-active every 2 s while the toggle is on.
+  // This keeps `serverCycleRunning` accurate so:
+  //   • the mirror stays live even right after remount (before runCycle fires)
+  //   • a 409-deferred cycle is still visible as "running" in the UI
+  useEffect(() => {
+    if (!phone || !settings.enabled) { setServerCycleRunning(false); return; }
+    const serial = phone.serial;
+    let active = true;
+    const poll = async () => {
+      if (!active) return;
+      try {
+        const r = await fetch('/api/mobile/cycle-active');
+        if (!active) return;
+        const body: { serials: string[] } = await r.json().catch(() => ({ serials: [] }));
+        setServerCycleRunning(body.serials.includes(serial));
+      } catch { /* ignore transient errors */ }
+      if (active) setTimeout(poll, 2_000);
+    };
+    poll();
+    return () => { active = false; setServerCycleRunning(false); };
+  }, [phone?.serial, settings.enabled]);
 
   // Save on the fly: every settings change (including the master toggle)
   // is persisted automatically, debounced so rapid typing doesn't fire a
@@ -2310,7 +2341,14 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         });
         const body = await r.json().catch(() => null);
         if (!r.ok || !body?.ok) {
-          onLog?.(`Cycle failed — ${body?.error ?? r.status}${body?.steps?.length ? ` (reached: ${body.steps.join(", ")})` : ""}`);
+          if (r.status === 409) {
+            // Server already has a cycle running (e.g. we just remounted while
+            // one was in progress). Not an error — just wait the interval and
+            // retry; serverCycleRunning polling will keep the mirror live.
+            onLog?.("Cycle deferred — server cycle already in progress, will retry after interval");
+          } else {
+            onLog?.(`Cycle failed — ${body?.error ?? r.status}${body?.steps?.length ? ` (reached: ${body.steps.join(", ")})` : ""}`);
+          }
         } else {
           onLog?.(`Cycle complete — ${body.likes} likes${body.storiesWatched ? `, ${body.storiesWatched} stories` : ""}, closed Instagram, airplane-mode recycled, phone locked`);
         }
@@ -2383,7 +2421,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phone?.serial, settings.enabled]);
 
-  return { settings, setSettings, setEnabledByUser, loading, saveError, running, nextRunAt };
+  // Expose the union: client fetch in-flight OR server confirmed active.
+  // This keeps the mirror live immediately on remount without waiting for
+  // runCycle() to start its own fetch.
+  return { settings, setSettings, setEnabledByUser, loading, saveError, running: running || serverCycleRunning, nextRunAt };
 }
 
 function AutomationSettingsPanel({
