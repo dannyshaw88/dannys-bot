@@ -280,7 +280,8 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
     <div ref={ref} className="relative inline-block shrink-0" onMouseDown={e => e.stopPropagation()}>
       <button
         onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
-        className="flex h-5 items-center gap-1 rounded-full px-2 transition-opacity hover:opacity-75"
+        onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
+        className="flex h-6 items-center justify-center gap-1 rounded-md px-2 transition-opacity hover:opacity-75"
         style={{
           background: current ? current.bg : "transparent",
           border: current ? `1px solid ${current.border}` : "1px dashed #94a3b8",
@@ -295,10 +296,10 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
       >
         {current ? (
           <>
-            <current.icon size={10} color={current.text} fill={current.text} strokeWidth={2} style={{ flexShrink: 0 }} />
-            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: current.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "clip", flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: current.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "clip", flex: 1, minWidth: 0, textAlign: "center" }}>
               {current.label}
             </span>
+            <current.icon size={10} color={current.text} fill={current.text} strokeWidth={2} style={{ flexShrink: 0 }} />
           </>
         ) : (
           <span style={{ fontSize: 9, fontWeight: 500, color: "#94a3b8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "clip", letterSpacing: "0.04em", flex: 1, minWidth: 0, textAlign: "center" }}>Score</span>

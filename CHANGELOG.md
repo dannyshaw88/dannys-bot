@@ -4,6 +4,34 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.1.668] — 2026-07-17
+
+### TrustScore Badge — screen shake fixed; icon now appears after the name, centred
+Clicking an empty TrustScore badge in the accounts table no longer scrolls or shakes the screen. The assigned trust-level icon is now placed to the right of the level name, and both are centred inside the button. The same fix applies to the Mobile Farm slot trust-score badge.
+
+### TrustScore Badge & Human Session Tool button — unified style
+The Human Session Tool button in each Mobile Farm account slot now has a cyan background with white text and a white Fingerprint icon, matching the cyan style of the TrustScore filled badge.
+
+### Mobile Farm — slot navigation buttons upgraded
+The "Slot ←" and "Slot →" navigation buttons are now labelled in uppercase ("SLOT") and rendered with a proper outlined border so they read as distinct buttons.
+
+### Phone Settings — Collision Scheduler saves automatically
+The Save button has been removed from the Collision Scheduler section. Changes to the toggle, minimum rest, and maximum rest save automatically as you adjust them (600 ms debounce). The explanatory paragraph has been reworded to a single plain-English sentence with no double-hyphens.
+
+### Phone Settings — Stop Charging description reworded
+The "Stop Charging for X minutes every Y hours" description is now a single clear sentence with no double-hyphens.
+
+### Mobile Farm — Debugging Log tab separated and right-aligned
+The Debugging Log tab is now separated from the Accounts / Phone Settings / Action Log / Metrics tabs and pinned to the far-right edge of the tab bar, making it visually distinct from the operational tabs.
+
+### Human Session Tool — Follow Users Filters checkbox persists across restarts
+Settings in the embedded Follow Tool (and the Human Session panel itself) are now flushed immediately to the server when the panel closes rather than waiting for the 600 ms debounce to fire. This prevents the "Filters" checkbox and any other last-second change from being silently lost when the software restarts.
+
+### Phone Farm icon updated across the whole app
+The Phone Farm icon in the sidebar, the Phone Farm grid page header, and the per-device Mobile Farm header has been updated to a rounded-square app-icon shape with a clean phone silhouette inside (cyan fill, white phone).
+
+---
+
 ## [1.1.667] — 2026-07-17
 
 ### Accounts Page — Slot ← / → navigation buttons in Human Session Tool header

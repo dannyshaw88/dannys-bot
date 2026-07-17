@@ -427,6 +427,24 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
 
   const isMounted = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestSettings = useRef(settings);
+  useEffect(() => { latestSettings.current = settings; });
+
+  // Flush any pending debounced save immediately on unmount so settings are
+  // never lost when the panel is hidden (e.g. Follow Tool disabled) or the
+  // app is closed shortly after a change.
+  const toolIdRef = useRef(tool.id);
+  const profileIdRef = useRef(tool.profileId);
+  useEffect(() => { toolIdRef.current = tool.id; profileIdRef.current = tool.profileId; }, [tool.id, tool.profileId]);
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+        updateToolMutation.mutate({ id: toolIdRef.current, profileId: profileIdRef.current, settings: latestSettings.current });
+      }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!isMounted.current) { isMounted.current = true; return; }
@@ -434,7 +452,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
     saveTimer.current = setTimeout(() => {
       updateToolMutation.mutate({ id: tool.id, profileId: tool.profileId, settings });
     }, 600);
-    return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
+    // Don't cancel on unmount — the flush effect above handles that
   }, [settings]);
 
   const handleAddSource = (e: React.FormEvent) => {

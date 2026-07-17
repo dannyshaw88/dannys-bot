@@ -42,13 +42,14 @@ interface UsbPhone {
 function PhoneFarmIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
-      <rect x="0.5" y="8.5" width="4" height="1.6" rx="0.8"/>
-      <rect x="0.5" y="11.5" width="3" height="1.6" rx="0.8"/>
-      <rect x="5" y="1" width="11" height="19" rx="2"/>
-      <rect x="6.5" y="3" width="8" height="13" rx="1" fill="var(--background,#0f172a)"/>
-      <circle cx="10.5" cy="18" r="1" fill="var(--background,#0f172a)"/>
-      <path d="M17,10.5 L17.8,11.61 L19.17,11.75 L18.6,13 L19.17,14.25 L17.8,14.39 L17,15.5 L16.2,14.39 L14.84,14.25 L15.4,13 L14.84,11.75 L16.2,11.61Z"/>
-      <circle cx="17" cy="13" r="1.1" fill="var(--background,#0f172a)"/>
+      {/* Rounded square background */}
+      <rect x="1" y="1" width="22" height="22" rx="5"/>
+      {/* Phone body — white */}
+      <rect x="7.5" y="3.5" width="9" height="17" rx="2" fill="white"/>
+      {/* Screen — currentColor (matches icon background colour) */}
+      <rect x="9" y="5" width="6" height="12" rx="0.8"/>
+      {/* Home button — white */}
+      <rect x="10.5" y="18" width="3" height="1.2" rx="0.6" fill="white"/>
     </svg>
   );
 }

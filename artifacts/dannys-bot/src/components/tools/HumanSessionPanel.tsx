@@ -726,13 +726,28 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
     setSettings(prev => ({ ...def, ...(tool.settings as Record<string, any> || {}), ...prev }));
   }, [tool.id]);
 
+  const latestHsSettings = useRef(settings);
+  useEffect(() => { latestHsSettings.current = settings; });
+  const hsToolIdRef = useRef(tool.id);
+  const hsProfileIdRef = useRef(tool.profileId);
+  useEffect(() => { hsToolIdRef.current = tool.id; hsProfileIdRef.current = tool.profileId; }, [tool.id, tool.profileId]);
+  // Flush pending save immediately on unmount so settings survive panel close / app restart
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+        updateToolMutation.mutate({ id: hsToolIdRef.current, profileId: hsProfileIdRef.current, settings: latestHsSettings.current });
+      }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!isMounted.current) { isMounted.current = true; return; }
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       updateToolMutation.mutate({ id: tool.id, profileId: tool.profileId, settings });
     }, 600);
-    return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
   }, [settings]);
 
   const DEFAULT_IMG_SETTINGS = {

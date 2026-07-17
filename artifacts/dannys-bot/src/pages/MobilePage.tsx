@@ -4304,7 +4304,8 @@ function SlotTrustScoreBadge({ serial, slotIdx }: { serial: string; slotIdx: num
         ref={btnRef}
         type="button"
         onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
-        className="inline-flex h-6 items-center gap-1.5 rounded-md border px-2 text-[11px] font-semibold transition-colors hover:bg-muted/40"
+        onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
+        className="inline-flex h-6 items-center justify-center gap-1.5 rounded-md border px-2 text-[11px] font-semibold transition-colors hover:bg-muted/40"
         style={current
           ? { background: current.bg, borderColor: current.border, color: current.text }
           : { background: "transparent", borderStyle: "dashed", borderColor: "#94a3b8", color: "#94a3b8" }
@@ -4313,8 +4314,8 @@ function SlotTrustScoreBadge({ serial, slotIdx }: { serial: string; slotIdx: num
       >
         {current ? (
           <>
-            <current.icon size={10} color={current.text} fill={current.text} strokeWidth={2} style={{ flexShrink: 0 }} />
             <span className="truncate" style={{ maxWidth: 70 }}>{current.label}</span>
+            <current.icon size={10} color={current.text} fill={current.text} strokeWidth={2} style={{ flexShrink: 0 }} />
           </>
         ) : (
           <span>Score</span>
@@ -4405,13 +4406,13 @@ function SlotHumanSessionView({
           Human Session Tool {slotUsername ? `for @${slotUsername}` : `Slot ${slotIdx + 1}`}
           <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={slotIdx} />
         </span>
-        <Button variant="ghost" size="sm" onClick={onPrevSlot} disabled={isFirst} className="gap-1 h-7 px-2">
+        <Button variant="outline" size="sm" onClick={onPrevSlot} disabled={isFirst} className="gap-1 h-7 px-2">
           <ChevronLeft className="w-3.5 h-3.5" />
-          Slot
+          SLOT
         </Button>
-        <Button variant="ghost" size="sm" onClick={onNextSlot} disabled={isLast} className="gap-1 h-7 px-2 flex-row-reverse">
+        <Button variant="outline" size="sm" onClick={onNextSlot} disabled={isLast} className="gap-1 h-7 px-2 flex-row-reverse">
           <ChevronLeft className="w-3.5 h-3.5 rotate-180" />
-          Slot
+          SLOT
         </Button>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
@@ -4629,13 +4630,13 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
                   <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={i} />
                   <Button
                     type="button"
-                    variant="outline"
                     size="sm"
-                    className="h-6 px-2 text-[11px] gap-1.5 text-primary border-primary/30 hover:bg-primary/10"
+                    className="h-6 px-2 text-[11px] gap-1.5 text-white hover:opacity-90"
+                    style={{ background: "#1AD2F2", border: "none" }}
                     onClick={() => setOpenSlotTool(i)}
                   >
                     Human Session Tool
-                    <Fingerprint className="w-3 h-3" />
+                    <Fingerprint className="w-3 h-3 text-white" />
                   </Button>
                 </div>
                 <Button
@@ -4836,8 +4837,8 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const [csEnabled,    setCsEnabled]    = React.useState(false);
   const [csMinMin,     setCsMinMin]     = React.useState(1);
   const [csMinMax,     setCsMinMax]     = React.useState(3);
-  const [csSaving,     setCsSaving]     = React.useState(false);
-  const [csSaveMsg,    setCsSaveMsg]    = React.useState<string | null>(null);
+  const csSaveRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const csInitRef = React.useRef(false);
 
   const applyConfig = React.useCallback((cfg: BatteryScheduleConfig) => {
     setEnabled(cfg.enabled);
@@ -4934,20 +4935,19 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     } finally { setResuming(false); }
   };
 
-  const handleCsSave = async () => {
+  // Auto-save collision scheduler whenever any value changes (debounced 600 ms)
+  React.useEffect(() => {
     if (!serial) return;
-    setCsSaving(true); setCsSaveMsg(null);
-    try {
-      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/collision-scheduler`, {
+    if (!csInitRef.current) { csInitRef.current = true; return; }
+    if (csSaveRef.current) clearTimeout(csSaveRef.current);
+    csSaveRef.current = setTimeout(() => {
+      fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/collision-scheduler`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: csEnabled, restMinMin: csMinMin, restMinMax: csMinMax }),
-      });
-      if (!r.ok) throw new Error((await r.json())?.error ?? r.status);
-      setCsSaveMsg("Saved");
-      setTimeout(() => setCsSaveMsg(null), 2000);
-    } catch (e: any) { setCsSaveMsg(`Error: ${e?.message}`); }
-    finally { setCsSaving(false); }
-  };
+      }).catch(() => {});
+    }, 600);
+    return () => { if (csSaveRef.current) clearTimeout(csSaveRef.current); };
+  }, [serial, csEnabled, csMinMin, csMinMax]);
 
   const ctrl     = battInfo?.chargingControl;
   const sched    = battInfo?.schedule;
@@ -4978,7 +4978,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
         {csEnabled && (
           <>
             <p className="text-xs text-muted-foreground">
-              When multiple slots are ready to run at the same time, they queue up — one runs at a time. After each slot finishes, the device rests for the time below before the next slot starts. Slots are prioritised by which one has been waiting the longest.
+              Slots queue up and run one at a time, with a configurable rest between each, prioritising whichever has been waiting longest.
             </p>
             <div className="flex items-center gap-4 flex-wrap">
               <div className="space-y-1.5">
@@ -4995,12 +4995,6 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button onClick={handleCsSave} disabled={csSaving || !serial}>
-                {csSaving ? "Saving…" : "Save"}
-              </Button>
-              {csSaveMsg && <span className="text-xs text-muted-foreground">{csSaveMsg}</span>}
-            </div>
           </>
         )}
       </div>
@@ -5013,7 +5007,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
             <p className="text-sm font-semibold text-foreground">Stop Charging for X minutes every Y hours</p>
             {!enabled && (
               <p className="text-xs text-muted-foreground mt-1">
-                USB stays connected for ADB data. Aura Farming stops the physical charging current on a repeating schedule — good for battery health and electricity. Enable to configure.
+                Aura Farming pauses the physical charging current on a repeating schedule to protect battery health, while keeping USB connected for ADB. Enable to configure.
               </p>
             )}
           </div>
@@ -5798,7 +5792,7 @@ export function MobilePage() {
             </div>
             <div className="w-1/2 h-full min-h-0 flex flex-col border-l border-border">
               <div className="shrink-0 flex items-center border-b border-border px-4">
-                {MOBILE_TABS.map(t => (
+                {MOBILE_TABS.filter(t => t.id !== "log").map(t => (
                   <button
                     key={t.id}
                     type="button"
@@ -5812,6 +5806,18 @@ export function MobilePage() {
                     {t.label}
                   </button>
                 ))}
+                <button
+                  key="log"
+                  type="button"
+                  onClick={() => setActiveTab("log")}
+                  className={`ml-auto px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                    activeTab === "log"
+                      ? "border-primary text-foreground"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Debugging Log
+                </button>
               </div>
               <div className="flex-1 min-h-0 relative">
                 {/* Accounts panel: always mounted so each slot's automation
