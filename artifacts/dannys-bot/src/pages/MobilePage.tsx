@@ -2752,13 +2752,13 @@ function CopySettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v && !copying) onClose(); }}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-3xl max-h-[45vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Copy Settings to Other Slots</DialogTitle>
         </DialogHeader>
         <div className="flex gap-8 mt-2 flex-1 min-h-0">
           {/* Left: target slots */}
-          <div className="w-44 shrink-0 flex flex-col gap-1">
+          <div className="w-[22rem] shrink-0 flex flex-col gap-1">
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Copy to</span>
               <div className="flex gap-1">
@@ -2780,7 +2780,7 @@ function CopySettingsDialog({
                 <span className="text-sm truncate min-w-0">
                   {s.username ? `@${s.username}` : `Slot ${s.idx + 1}`}
                 </span>
-                <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={s.idx} />
+                <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={s.idx} width={120} />
               </label>
             ))}
           </div>
@@ -4253,7 +4253,7 @@ function AutomationSettingsPanel({
 const ROW_H = 30; // px per dropdown row
 const MAX_VISIBLE_ROWS = 5;
 
-function SlotTrustScoreBadge({ serial, slotIdx }: { serial: string; slotIdx: number }) {
+function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 160 }: { serial: string; slotIdx: number; width?: number }) {
   const lsKey = `mobile_ts_${serial}_${slotIdx}`;
   const [scoreId, setScoreId] = useState<string | null>(() => {
     try { return localStorage.getItem(lsKey) ?? null; } catch { return null; }
@@ -4324,8 +4324,8 @@ function SlotTrustScoreBadge({ serial, slotIdx }: { serial: string; slotIdx: num
         onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
         className="inline-flex items-center justify-center gap-1.5 rounded-md border px-2 text-[11px] font-semibold transition-all hover:brightness-125"
         style={current
-          ? { background: current.bg, borderColor: current.border, color: current.text, width: 160, height: 28 }
-          : { background: "transparent", borderStyle: "dashed", borderColor: "#94a3b8", color: "#94a3b8", width: 160, height: 28 }
+          ? { background: current.bg, borderColor: current.border, color: current.text, width: badgeWidth, height: 28 }
+          : { background: "transparent", borderStyle: "dashed", borderColor: "#94a3b8", color: "#94a3b8", width: badgeWidth, height: 28 }
         }
         title={current ? current.label : "Click to set Trust Score"}
       >
