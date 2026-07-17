@@ -5977,7 +5977,7 @@ export function MobilePage() {
             </div>
             <div className="w-1/2 h-full min-h-0 flex flex-col border-l border-border">
               <div className="shrink-0 flex items-center border-b border-border px-4">
-                {MOBILE_TABS.filter(t => t.id !== "log").map(t => (
+                {MOBILE_TABS.map(t => (
                   <button
                     key={t.id}
                     type="button"
@@ -5991,18 +5991,6 @@ export function MobilePage() {
                     {t.label}
                   </button>
                 ))}
-                <button
-                  key="log"
-                  type="button"
-                  onClick={() => setActiveTab("log")}
-                  className={`ml-auto px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                    activeTab === "log"
-                      ? "border-primary text-foreground"
-                      : "border-transparent text-foreground hover:text-foreground"
-                  }`}
-                >
-                  Debugging Log
-                </button>
               </div>
               <div className="flex-1 min-h-0 relative">
                 {/* Accounts panel: always mounted so each slot's automation
