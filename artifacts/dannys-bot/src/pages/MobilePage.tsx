@@ -16,7 +16,7 @@ import {
   Smartphone, RefreshCw, CheckCircle2, AlertTriangle,
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
   ChevronLeft, Home, LayoutGrid, Power, Volume2, VolumeX, Trash2,
-  FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy,
+  FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim,
 } from "lucide-react";
 
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
@@ -4856,6 +4856,9 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const csSaveRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const csInitRef = React.useRef(false);
 
+  // SIM phone number manual inputs (keyed by slot index)
+  const [simPhoneInputs, setSimPhoneInputs] = React.useState<Record<number, string>>({});
+
   // Google Play settings
   const [gpEmail,      setGpEmail]      = React.useState("");
   const [gpPassword,   setGpPassword]   = React.useState("");
@@ -5040,7 +5043,15 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
 
       {/* ── Google Play Account ─────────────────────────────────────── */}
       <div className="bg-card border border-border rounded-xl p-5 space-y-4">
-        <p className="text-sm font-semibold text-foreground">Google Play Account</p>
+        <div className="flex items-center gap-2">
+          <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M3.18 23.76c.37.21.79.24 1.18.1l12.29-7.1-2.76-2.76-10.71 9.76z" fill="#EA4335"/>
+            <path d="M22.47 10.22 18.9 8.15 15.77 11l3.13 3.13 3.6-2.08a1.55 1.55 0 0 0 0-2.69-.24-.14z" fill="#FBBC04"/>
+            <path d="M2.36.24A1.55 1.55 0 0 0 2 1.22v21.56a1.55 1.55 0 0 0 .36.98l.12.11L14.89 11v-.29L2.48.13z" fill="#4285F4"/>
+            <path d="M16.65 14.85 4.36 21.96c-.36.22-.77.23-1.14.06l-.12.11.12.11c.37.17.78.16 1.14-.06l12.29-7.1z" fill="#34A853"/>
+          </svg>
+          <p className="text-sm font-semibold text-foreground">Google Play Account</p>
+        </div>
         <div className="flex items-end gap-3 flex-wrap">
           <div className="space-y-1.5 flex-1 min-w-[180px]">
             <Label className="text-xs text-muted-foreground">Email Address</Label>
@@ -5073,15 +5084,18 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
           <div className="space-y-2">
             {deviceSpec.sims.map(sim => (
               <div key={sim.slot} className="flex items-center gap-3 rounded-lg bg-muted/30 px-3 py-2.5">
-                <Smartphone className="w-4 h-4 text-primary shrink-0" />
+                <CardSim className="w-8 h-8 text-primary shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold text-foreground">
-                    SIM {sim.slot + 1}{sim.carrier ? ` — ${sim.carrier}` : ""}
+                    SIM {sim.slot + 1}{sim.carrier ? ` · ${sim.carrier}` : ""}
                   </p>
-                  {sim.phoneNumber
-                    ? <p className="text-xs text-muted-foreground font-mono mt-0.5">{sim.phoneNumber}</p>
-                    : <p className="text-xs text-muted-foreground italic mt-0.5">Phone number unavailable</p>
-                  }
+                  <input
+                    type="tel"
+                    className="mt-1 w-full text-xs rounded border border-border bg-background px-2 py-1 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    placeholder="Enter phone number"
+                    value={simPhoneInputs[sim.slot] ?? ""}
+                    onChange={e => setSimPhoneInputs(prev => ({ ...prev, [sim.slot]: e.target.value }))}
+                  />
                 </div>
               </div>
             ))}
@@ -5118,15 +5132,15 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
               <div className="grid grid-cols-2 gap-x-8 gap-y-3">
                 {rows.map(([label, value]) => (
                   <div key={label}>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
-                    <p className="text-xs text-foreground font-mono mt-0.5 break-all">{value}</p>
+                    <p className="text-[10px] font-bold text-foreground uppercase tracking-wider">{label}</p>
+                    <p className="text-xs text-foreground font-normal mt-0.5 break-all">{value}</p>
                   </div>
                 ))}
               </div>
               {deviceSpec.buildFingerprint && (
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Build Fingerprint</p>
-                  <p className="text-xs text-foreground font-mono mt-0.5 break-all">{deviceSpec.buildFingerprint}</p>
+                  <p className="text-[10px] font-bold text-foreground uppercase tracking-wider">Build Fingerprint</p>
+                  <p className="text-xs text-foreground font-normal mt-0.5 break-all">{deviceSpec.buildFingerprint}</p>
                 </div>
               )}
             </div>
