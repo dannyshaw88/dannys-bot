@@ -1021,7 +1021,7 @@ async function createWindow() {
 
   // Wire crash capture to the log file so main-process errors appear in logs.log
   _mainLogPath = logPath;
-  _serverDebugLogPath = path.join(getUserDataPath(), "equinox-debug.log");
+  _serverDebugLogPath = path.join(getUserDataPath(), "aura-farming-debug.log");
   setEbLogPath(logPath);
   appendToMainLog(`app ready — v${app.getVersion()} pid=${process.pid}`);
 
@@ -1303,14 +1303,14 @@ async function createWindow() {
 }
 
 // Pin a stable App User Model ID so all Electron windows (main + EB) are
-// grouped under the same Equinox taskbar entry and the main window — created
-// first — always appears to the LEFT of any EB windows on the Windows taskbar.
+// grouped under the same Aura Farming taskbar entry and the main window —
+// created first — always appears to the LEFT of any EB windows on the taskbar.
 if (process.platform === "win32") {
   app.setAppUserModelId("AuraFarming");
 }
 
 // ── Single-instance lock ──────────────────────────────────────────────────────
-// Only one copy of Equinox may run per user account at a time. If a second
+// Only one copy of Aura Farming may run per user account at a time. If a second
 // launch is attempted, the existing window is focused and the new process exits.
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
@@ -1436,7 +1436,37 @@ app.commandLine.appendSwitch("disable-blink-features", "AutomationControlled");
 // per-session setProxy() takes effect.
 app.commandLine.appendSwitch("proxy-bypass-list", "127.0.0.1;[::1];localhost");
 
+// ── One-time data migration from old "Equinox" userData folder ────────────────
+// When upgrading from the Equinox install to Aura Farming the userData path
+// changes from  %APPDATA%\Equinox  →  %APPDATA%\Aura Farming.
+// On first launch this function detects the old folder and copies everything
+// (database.db, browser-data, mobile-instances.json, ui-settings.json, etc.)
+// into the new location automatically — no manual steps required.
+function migrateFromEquinoxUserData(): void {
+  try {
+    const newData = app.getPath("userData"); // e.g. %APPDATA%\Aura Farming
+    const oldData = path.join(path.dirname(newData), "Equinox");
+    if (!fs.existsSync(oldData)) return; // nothing to migrate
+    const dbAlreadyExists = fs.existsSync(path.join(newData, "database.db"));
+    if (dbAlreadyExists) return; // already migrated or fresh install
+    fs.mkdirSync(newData, { recursive: true });
+    const entries = fs.readdirSync(oldData);
+    for (const entry of entries) {
+      try {
+        fs.cpSync(path.join(oldData, entry), path.join(newData, entry), { recursive: true });
+      } catch {
+        // skip any single file that can't be copied (e.g. locked WAL file) —
+        // the important file is database.db which SQLite can always read-copy.
+      }
+    }
+    appendToMainLog(`[migration] Copied userData from ${oldData} → ${newData}`);
+  } catch (err) {
+    appendToMainLog(`[migration] Data migration failed (non-fatal): ${err}`);
+  }
+}
+
 app.whenReady().then(() => {
+  migrateFromEquinoxUserData();
   createSplash("Starting…");
   createWindow();
 });

@@ -5519,9 +5519,9 @@ export function startEbIpcServer(
               ctx.fillStyle = '#f60';
               ctx.fillRect(0, 0, 300, 60);
               ctx.fillStyle = '#069';
-              ctx.fillText('EquinoxNoise-\u2665', 2, 2);
+              ctx.fillText('AuraFarmingNoise-\u2665', 2, 2);
               ctx.fillStyle = 'rgba(102,204,0,0.8)';
-              ctx.fillText('EquinoxNoise', 4, 4);
+              ctx.fillText('AuraFarmingNoise', 4, 4);
               R.canvasSnip = c.toDataURL('image/png').substring(22, 120);
             } catch (e) { R.canvasError = String(e); }
             // ── Network info hint ─────────────────────────────────────────────
