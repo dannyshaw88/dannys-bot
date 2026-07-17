@@ -4,6 +4,23 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.651] — 2026-07-17
+
+### Phone Farm — Accounts tab overhaul
+
+- **Landing page now opens Accounts** instead of Human Session Tool when you click a device from Phone Farm
+- **"Account Settings" renamed to "Accounts"** everywhere (tab label and panel heading)
+- **Device name shown top-right** of the Accounts panel (e.g. "Xiaomi 23076RN8DY") on the same row as the heading
+- **Per-slot Human Session Tool** — each Instagram Account Slot now has its own independent Human Session Tool configuration, isolated per slot and per device. Clicking the **Human Session Tool 🔏** button next to a slot title opens a full settings view for that slot only. Settings are saved separately to the database per slot and never shared between slots or devices
+- **New account fields per slot**:
+  - **Email Address** — shown below Username, same width
+  - **Email Password** — shown to the right of Email Address (Show/Hide toggle)
+  - **Phone Number** — shown below 2FA OTP Secret
+- **Human Session Tool stays active** when navigating away from the device screen — the automation cycle continues across in-app navigation and resumes immediately on return (no more waiting the full interval)
+- **Mirror stays live** during automation — mirror auto-connects whenever a cycle is running, even right after remounting the page
+
+---
+
 ## [1.1.650] — 2026-07-16
 
 ### Removed

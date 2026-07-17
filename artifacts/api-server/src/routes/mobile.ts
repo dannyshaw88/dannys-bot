@@ -193,9 +193,9 @@ type AutomationSettings = {
     pixelate: { enabled: boolean; min: number; max: number };
   };
 };
-type DeviceSlot = { username: string; password: string; totpSecret?: string };
+type DeviceSlot = { username: string; password: string; totpSecret?: string; emailAddress?: string; emailPassword?: string; phoneNumber?: string };
 type DeviceAccount = { slots: DeviceSlot[] };
-type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings; account?: DeviceAccount };
+type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings; account?: DeviceAccount; slotAutomation?: Record<string, AutomationSettings> };
 type InstanceConfigMap = Record<string, InstanceConfig>;
 
 function configFilePath(): string {
@@ -1113,12 +1113,102 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to save automation settings" }); }
   });
 
+  // ── Per-slot Human Session Tool automation settings ─────────────────────────
+  // Each Instagram account slot stores its own independent copy of all
+  // automation settings. Settings are keyed by slot index in slotAutomation.
+  app.get("/api/mobile/devices/:serial/slots/:slotIdx/automation-settings", (req: Request, res: Response) => {
+    try {
+      const slotIdx = parseInt(req.params.slotIdx, 10);
+      if (isNaN(slotIdx) || slotIdx < 0) { res.status(400).json({ error: "Invalid slot index" }); return; }
+      const cfg = loadInstanceConfigs();
+      const serial = p(req, "serial");
+      const defaults: AutomationSettings = {
+        enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
+        feedEnabled: true, storiesEnabled: true,
+        actionDelayMin: 5, actionDelayMax: 10,
+        likePercentMin: 3, likePercentMax: 5,
+        shareFeedPercentMin: 0, shareFeedPercentMax: 0,
+        shareDmPercentMin: 0, shareDmPercentMax: 0,
+        feedScrollMin: 5, feedScrollMax: 10,
+        viewStoriesSlidesMin: 0, viewStoriesSlidesMax: 0,
+        viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
+        viewStoriesLikePercentMin: 0, viewStoriesLikePercentMax: 0,
+        viewStoriesShareDmPercentMin: 0, viewStoriesShareDmPercentMax: 0,
+        viewReelsEnabled: false, viewReelsScrollMin: 0, viewReelsScrollMax: 0,
+        viewReelsLikePercentMin: 0, viewReelsLikePercentMax: 0,
+        viewReelsShareFeedPercentMin: 0, viewReelsShareFeedPercentMax: 0,
+        viewReelsShareDmPercentMin: 0, viewReelsShareDmPercentMax: 0,
+        viewReelsActivatePctMin: 100, viewReelsActivatePctMax: 100,
+        viewReelsWatchPctMin: 30, viewReelsWatchPctMax: 70,
+        followEnabled: false, followUsersMin: 1, followUsersMax: 3, followSources: [],
+        followSkipFollowed: true,
+        injectBrowsingEnabled: false,
+        injectBrowsingActivatePctMin: 0, injectBrowsingActivatePctMax: 0,
+        injectBrowsingBeforeFollowPctMin: 0, injectBrowsingBeforeFollowPctMax: 0,
+        injectBrowsingFeedChanceMin: 100, injectBrowsingFeedChanceMax: 100,
+        injectBrowsingFeedMin: 3, injectBrowsingFeedMax: 6,
+        injectBrowsingClickPostPctMin: 0, injectBrowsingClickPostPctMax: 0,
+        injectBrowsingLikePctMin: 0, injectBrowsingLikePctMax: 0,
+        injectBrowsingShareFeedPctMin: 0, injectBrowsingShareFeedPctMax: 0,
+        injectBrowsingShareDmPctMin: 0, injectBrowsingShareDmPctMax: 0,
+        randomJitterEnabled: false,
+        checkNotificationsPctMin: 0, checkNotificationsPctMax: 0,
+        checkNotificationsScrollsMin: 2, checkNotificationsScrollsMax: 5,
+        checkNotificationsClickPctMin: 0, checkNotificationsClickPctMax: 0,
+        visitProfilePctMin: 0, visitProfilePctMax: 0,
+        feedActivatePctMin: 100, feedActivatePctMax: 100,
+        viewStoriesActivatePctMin: 100, viewStoriesActivatePctMax: 100,
+        followActivatePctMin: 100, followActivatePctMax: 100,
+        randomJitterActivatePctMin: 100, randomJitterActivatePctMax: 100,
+        makePostEnabled: false,
+        makePostActivatePctMin: 100, makePostActivatePctMax: 100,
+        makePostPerSessionMin: 1, makePostPerSessionMax: 1,
+        makePostSourceUsername: "", makePostDisableUsernameSource: false,
+        makePostAlterationEnabled: true, makePostAlterationLevel: "small",
+        makePostImageSettingsEnabled: true, makePostUseHikerApi: false,
+        makePostDisableAtPostCount: 0, makePostDisableWhenExhausted: true,
+        makePostLocalFolderEnabled: false, makePostLocalFolderPath: "",
+        makePostLocalFolderNoRepeat: false, makePostLocalFolderRandom: false,
+        makePostLocalFolderDeleteAfterUpload: true,
+        makePostUseChatGpt: false, makePostFixAiSlop: false, makePostMakeUnique: false,
+        makePostCaptionText: "",
+        makePostImageSettings: {
+          contrast: { enabled: true, min: 5, max: 250 },
+          brightness: { enabled: true, min: 5, max: 250 },
+          noise: { enabled: true, min: 5, max: 15 },
+          sharpen: { enabled: true, min: 1.0, max: 2.0 },
+          pixelate: { enabled: true, min: 0.9, max: 2.1 },
+        },
+      };
+      const saved = cfg[serial]?.slotAutomation?.[String(slotIdx)];
+      res.json({ ...defaults, ...saved });
+    } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to load slot automation settings" }); }
+  });
+  app.post("/api/mobile/devices/:serial/slots/:slotIdx/automation-settings", (req: Request, res: Response) => {
+    try {
+      const slotIdx = parseInt(req.params.slotIdx, 10);
+      if (isNaN(slotIdx) || slotIdx < 0) { res.status(400).json({ error: "Invalid slot index" }); return; }
+      const input = automationSchema.parse(req.body);
+      const serial = p(req, "serial");
+      const cfg = loadInstanceConfigs();
+      cfg[serial] = {
+        ...cfg[serial],
+        slotAutomation: { ...cfg[serial]?.slotAutomation, [String(slotIdx)]: input },
+      };
+      saveInstanceConfigs(cfg);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to save slot automation settings" }); }
+  });
+
   // ── Per-device linked Instagram account (Account Settings tab) ──────────────
   const SLOT_COUNT = 5;
   const deviceSlotSchema = z.object({
     username: z.string(),
     password: z.string(),
     totpSecret: z.string().optional(),
+    emailAddress: z.string().optional(),
+    emailPassword: z.string().optional(),
+    phoneNumber: z.string().optional(),
   });
   const deviceAccountSchema = z.object({
     // No upper-bound cap — users can add as many slots as they need via the UI

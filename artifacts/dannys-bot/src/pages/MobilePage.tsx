@@ -13,7 +13,7 @@ import {
   Smartphone, RefreshCw, CheckCircle2, AlertTriangle,
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
   ChevronLeft, Home, LayoutGrid, Power, Volume2, VolumeX, Trash2,
-  FolderOpen, Upload, Download,
+  FolderOpen, Upload, Download, Fingerprint, ArrowLeft,
 } from "lucide-react";
 
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
@@ -2087,7 +2087,7 @@ const clamp4 = (n: number) => Math.min(9999, Math.max(0, Math.trunc(Number.isFin
 // the Human Session Tool tab never unmounts this and interrupts an
 // in-progress automation cycle — the loop must keep running in the
 // background regardless of which tab is currently visible.
-function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void) {
+function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void, slotIdx?: number) {
   const [settings, setSettings] = useState<AutomationSettingsData>(AUTOMATION_DEFAULTS);
   const [loading,  setLoading]  = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -2142,7 +2142,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     if (!phone) { setSettings(AUTOMATION_DEFAULTS); return; }
     let active = true;
     setLoading(true);
-    fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/automation-settings`)
+    const settingsUrl = slotIdx !== undefined
+      ? `/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/automation-settings`
+      : `/api/mobile/devices/${encodeURIComponent(phone.serial)}/automation-settings`;
+    fetch(settingsUrl)
       .then(r => r.json())
       .then(d => {
         if (!active) return;
@@ -2159,7 +2162,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       .catch(() => { /* keep defaults */ })
       .finally(() => { if (active) { setLoading(false); hydratedRef.current = true; } });
     return () => { active = false; };
-  }, [phone?.serial]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phone?.serial, slotIdx]);
 
   // Poll /api/mobile/cycle-active every 2 s while the toggle is on.
   // This keeps `serverCycleRunning` accurate so:
@@ -2193,7 +2197,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     const toSaveStr = JSON.stringify(toSave);
     if (toSaveStr === lastSavedRef.current) return; // nothing actually changed
     const t = setTimeout(() => {
-      fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings`, {
+      const saveUrl = slotIdx !== undefined
+        ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings`
+        : `/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings`;
+      fetch(saveUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: toSaveStr,
@@ -3785,10 +3792,41 @@ function AutomationSettingsPanel({
 }
 
 const ACCT_SLOT_COUNT = 5;
-const emptySlot = () => ({ username: "", password: "", totpSecret: "" });
-type AccountSlot = { username: string; password: string; totpSecret: string };
+const emptySlot = () => ({ username: "", password: "", totpSecret: "", emailAddress: "", emailPassword: "", phoneNumber: "" });
+type AccountSlot = { username: string; password: string; totpSecret: string; emailAddress: string; emailPassword: string; phoneNumber: string };
 
-function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
+// ── Per-slot Human Session Tool view ─────────────────────────────────────────
+// Always mounted so the automation hook's run-loop persists even when the
+// user is viewing the slot list or a different tab.
+function SlotHumanSessionView({
+  phone, slotIdx, addLog, onBack,
+}: {
+  phone: UsbPhone | null;
+  slotIdx: number;
+  addLog: (msg: string) => void;
+  onBack: () => void;
+}) {
+  const automation = useAutomationSettings(phone, addLog, slotIdx);
+  return (
+    <div className="h-full flex flex-col">
+      <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
+        <Button variant="ghost" size="sm" onClick={onBack} className="gap-1.5 h-7 px-2">
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Back
+        </Button>
+        <span className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+          <Fingerprint className="w-3.5 h-3.5 text-primary" />
+          Human Session Tool — Slot {slotIdx + 1}
+        </span>
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <AutomationSettingsPanel phone={phone} {...automation} />
+      </div>
+    </div>
+  );
+}
+
+function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLog: (msg: string) => void }) {
   const [slots, setSlots] = useState<AccountSlot[]>(
     Array.from({ length: ACCT_SLOT_COUNT }, emptySlot)
   );
@@ -3798,6 +3836,9 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
   const [showPassword, setShowPassword] = useState<boolean[]>(Array(ACCT_SLOT_COUNT).fill(false));
   const [totpCode, setTotpCode] = useState<(string | null)[]>(Array(ACCT_SLOT_COUNT).fill(null));
   const [totpError, setTotpError] = useState<(string | null)[]>(Array(ACCT_SLOT_COUNT).fill(null));
+  const [showEmailPassword, setShowEmailPassword] = useState<boolean[]>(Array(ACCT_SLOT_COUNT).fill(false));
+  // null = show slot list; number = show Human Session Tool for that slot index
+  const [openSlotTool, setOpenSlotTool] = useState<number | null>(null);
   const hydratedRef = useRef(false);
   const lastSavedRef = useRef<string>(JSON.stringify(Array.from({ length: ACCT_SLOT_COUNT }, emptySlot)));
   // Kept outside the effect so clearTimeout on new keystrokes works without
@@ -3822,15 +3863,19 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
             username: s?.username ?? "",
             password: s?.password ?? "",
             totpSecret: s?.totpSecret ?? "",
+            emailAddress: s?.emailAddress ?? "",
+            emailPassword: s?.emailPassword ?? "",
+            phoneNumber: s?.phoneNumber ?? "",
           }));
         } else if (d && d.username) {
-          loaded = [{ username: d.username, password: d.password ?? "", totpSecret: "" }];
+          loaded = [{ username: d.username, password: d.password ?? "", totpSecret: "", emailAddress: "", emailPassword: "", phoneNumber: "" }];
         } else {
           loaded = Array.from({ length: ACCT_SLOT_COUNT }, emptySlot);
         }
         lastSavedRef.current = JSON.stringify(loaded);
         setSlots(loaded);
         setShowPassword(Array(loaded.length).fill(false));
+        setShowEmailPassword(Array(loaded.length).fill(false));
         setTotpCode(Array(loaded.length).fill(null));
         setTotpError(Array(loaded.length).fill(null));
       })
@@ -3877,6 +3922,7 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
   const addSlot = () => {
     setSlots(s => [...s, emptySlot()]);
     setShowPassword(s => [...s, false]);
+    setShowEmailPassword(s => [...s, false]);
     setTotpCode(c => [...c, null]);
     setTotpError(e => [...e, null]);
   };
@@ -3884,8 +3930,11 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
   const removeSlot = (i: number) => {
     setSlots(s => s.filter((_, idx) => idx !== i));
     setShowPassword(s => s.filter((_, idx) => idx !== i));
+    setShowEmailPassword(s => s.filter((_, idx) => idx !== i));
     setTotpCode(c => c.filter((_, idx) => idx !== i));
     setTotpError(e => e.filter((_, idx) => idx !== i));
+    // If the tool view for this slot was open, close it
+    setOpenSlotTool(prev => prev === i ? null : prev);
   };
 
   const generateTotp = async (slotIdx: number, secret: string) => {
@@ -3930,22 +3979,52 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
     );
   }
 
+  const deviceName = phone.manufacturer
+    ? `${phone.manufacturer} ${phone.model ?? phone.serial}`
+    : (phone.model ?? phone.serial);
+
   return (
-    <div className="h-full overflow-y-auto p-6 space-y-6">
-      <div>
-        <h2 className="text-lg font-bold text-foreground">Account Settings</h2>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          {phone.manufacturer ? `${phone.manufacturer} ` : ""}{phone.model ?? phone.serial}
-        </p>
-      </div>
+    <div className="h-full flex flex-col">
+      {/* Always-mounted slot Human Session Tool views — hidden when not active
+          so each slot's automation hook keeps running in the background. */}
+      {slots.map((_, i) => (
+        <div key={`hst-${i}`} className={openSlotTool === i ? "h-full" : "hidden"}>
+          <SlotHumanSessionView
+            phone={phone}
+            slotIdx={i}
+            addLog={addLog}
+            onBack={() => setOpenSlotTool(null)}
+          />
+        </div>
+      ))}
 
-      <div className="space-y-4">
-        {slots.map((slot, i) => (
-          <div key={i} className="bg-card border border-border rounded-xl p-5 space-y-3">
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Instagram Account Slot {i + 1}</p>
+      {/* Slot list — hidden when a slot tool view is open */}
+      <div className={openSlotTool === null ? "h-full overflow-y-auto p-6 space-y-6" : "hidden"}>
+        <div className="flex items-start justify-between gap-4">
+          <h2 className="text-lg font-bold text-foreground">Accounts</h2>
+          <span className="text-xs text-muted-foreground text-right shrink-0 pt-1">{deviceName}</span>
+        </div>
 
-            {/* All three fields on one row */}
-            <div className="flex items-end gap-3 flex-wrap">
+        <div className="space-y-4">
+          {slots.map((slot, i) => (
+            <div key={i} className="bg-card border border-border rounded-xl p-5 space-y-3">
+              {/* Slot header: title + Human Session Tool button */}
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Instagram Account Slot {i + 1}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-6 px-2 text-[11px] gap-1.5 text-primary border-primary/30 hover:bg-primary/10"
+                  onClick={() => setOpenSlotTool(i)}
+                >
+                  Human Session Tool
+                  <Fingerprint className="w-3 h-3" />
+                </Button>
+              </div>
+
+              {/* Row 1: Username + Password */}
+              <div className="flex items-end gap-3 flex-wrap">
               {/* Username */}
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Username</Label>
@@ -3979,6 +4058,46 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
                 </div>
               </div>
 
+            </div>
+
+            {/* Row 2: Email Address + Email Password */}
+            <div className="flex items-end gap-3 flex-wrap">
+              {/* Email Address */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Email Address</Label>
+                <Input
+                  value={slot.emailAddress}
+                  onChange={e => updateSlot(i, { emailAddress: e.target.value })}
+                  placeholder="email@example.com"
+                  disabled={loading}
+                  autoComplete="off"
+                  className="w-[20ch]"
+                />
+              </div>
+
+              {/* Email Password */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Email Password</Label>
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    type={showEmailPassword[i] ? "text" : "password"}
+                    value={slot.emailPassword}
+                    onChange={e => updateSlot(i, { emailPassword: e.target.value })}
+                    placeholder="email password"
+                    disabled={loading}
+                    autoComplete="off"
+                    className="w-[20ch]"
+                  />
+                  <Button type="button" variant="secondary" size="sm"
+                    onClick={() => setShowEmailPassword(s => s.map((v, idx) => idx === i ? !v : v))}>
+                    {showEmailPassword[i] ? "Hide" : "Show"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Row 3: 2FA OTP Secret + Phone Number + Delete */}
+            <div className="flex items-end gap-3 flex-wrap">
               {/* 2FA OTP Secret */}
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">2FA OTP Secret</Label>
@@ -4009,6 +4128,19 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
                 </div>
               </div>
 
+              {/* Phone Number */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Phone Number</Label>
+                <Input
+                  value={slot.phoneNumber}
+                  onChange={e => updateSlot(i, { phoneNumber: e.target.value })}
+                  placeholder="+1 555 000 0000"
+                  disabled={loading}
+                  autoComplete="off"
+                  className="w-[20ch]"
+                />
+              </div>
+
               {/* Delete slot */}
               <Button
                 type="button"
@@ -4016,7 +4148,7 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
                 size="sm"
                 disabled={loading}
                 onClick={() => removeSlot(i)}
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive self-end"
                 aria-label={`Delete Instagram Account Slot ${i + 1}`}
               >
                 <Trash2 className="w-4 h-4" />
@@ -4025,22 +4157,23 @@ function AccountSettingsPanel({ phone }: { phone: UsbPhone | null }) {
           </div>
         ))}
 
-        {/* Add slot button */}
-        <div className="flex justify-start">
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={addSlot}
-            disabled={loading}
-            className="w-fit"
-          >
-            + Add Instagram Account Slot
-          </Button>
+          {/* Add slot button */}
+          <div className="flex justify-start">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={addSlot}
+              disabled={loading}
+              className="w-fit"
+            >
+              + Add Instagram Account Slot
+            </Button>
+          </div>
         </div>
-      </div>
 
-      {saved && <p className="text-xs text-green-500">Saved</p>}
-      {saveError && <p className="text-xs text-destructive">{saveError}</p>}
+        {saved && <p className="text-xs text-green-500">Saved</p>}
+        {saveError && <p className="text-xs text-destructive">{saveError}</p>}
+      </div>
     </div>
   );
 }
@@ -4257,10 +4390,9 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
 
 const TOTAL_SLOTS = 1;
 
-type MobileTab = "account" | "tool" | "log";
+type MobileTab = "account" | "log";
 const MOBILE_TABS: { id: MobileTab; label: string }[] = [
-  { id: "account", label: "Account Settings" },
-  { id: "tool",    label: "Human Session Tool" },
+  { id: "account", label: "Accounts" },
   { id: "log",     label: "Log" },
 ];
 const LOG_MAX_LINES = 500;
@@ -4307,7 +4439,7 @@ export function MobilePage() {
     ro.observe(paneEl);
     return () => ro.disconnect();
   }, [paneEl]);
-  const [activeTab, setActiveTab] = useState<MobileTab>("tool");
+  const [activeTab, setActiveTab] = useState<MobileTab>("account");
   // Per-serial "user explicitly turned the live view on" flag. Visiting the
   // Mobile tab, or a phone simply being connected, must never by itself
   // start streaming/waking the device — only pressing Power (below) or the
@@ -4379,9 +4511,28 @@ export function MobilePage() {
   // decoded video frame size for Check Screen Info.
   const activeSlotRef = useRef<PhoneSlotHandle>(null);
 
-  // Owned here (not inside the tab-conditional panel) so the run-loop keeps
-  // going in the background no matter which right-panel tab is active.
-  const automation = useAutomationSettings(slots[0], addLog);
+  // Poll /api/mobile/cycle-active every 2 s so the mirror auto-connects
+  // whenever any slot's automation is running, without needing a device-level
+  // useAutomationSettings hook here. Per-slot hooks live inside each slot's
+  // SlotHumanSessionView (always mounted in AccountSettingsPanel).
+  const [anyCycleRunning, setAnyCycleRunning] = useState(false);
+  useEffect(() => {
+    const serial = activeSerial;
+    if (!serial) { setAnyCycleRunning(false); return; }
+    let active = true;
+    const poll = async () => {
+      if (!active) return;
+      try {
+        const r = await fetch('/api/mobile/cycle-active');
+        const b: { serials: string[] } = await r.json().catch(() => ({ serials: [] }));
+        if (!active) return;
+        setAnyCycleRunning(b.serials.includes(serial));
+      } catch { /* ignore */ }
+      if (active) setTimeout(poll, 2_000);
+    };
+    poll();
+    return () => { active = false; setAnyCycleRunning(false); };
+  }, [activeSerial]);
 
   // Drop any previously-learned aspect ratio when the connected device
   // changes (or disconnects) — otherwise a stale ratio from the last phone
@@ -4497,7 +4648,7 @@ export function MobilePage() {
                   // scheduled run — an unnecessary connection. Clicking
                   // Power (liveOn) is still a deliberate manual-view
                   // action and always connects regardless of execution.
-                  live={!!(phone && (liveOn[phone.serial] || automation.running))}
+                  live={!!(phone && (liveOn[phone.serial] || anyCycleRunning))}
                   onPower={() => { if (phone) setLiveOn(s => ({ ...s, [phone.serial]: true })); }}
                   ref={phone?.serial === activeSerial ? activeSlotRef : undefined}
                   inspectMode={inspectMode}
@@ -4524,20 +4675,12 @@ export function MobilePage() {
                   </button>
                 ))}
               </div>
-              <div className="flex-1 min-h-0">
-                {activeTab === "account" && <AccountSettingsPanel phone={slots[0]} />}
-                {activeTab === "tool"    && (
-                  <AutomationSettingsPanel
-                    phone={slots[0]}
-                    settings={automation.settings}
-                    setSettings={automation.setSettings}
-                    setEnabledByUser={automation.setEnabledByUser}
-                    loading={automation.loading}
-                    saveError={automation.saveError}
-                    running={automation.running}
-                    nextRunAt={automation.nextRunAt}
-                  />
-                )}
+              <div className="flex-1 min-h-0 relative">
+                {/* Accounts panel: always mounted so each slot's automation
+                    hook persists across tab switches and navigation. */}
+                <div className={activeTab === "account" ? "h-full" : "hidden"}>
+                  <AccountSettingsPanel phone={slots[0]} addLog={addLog} />
+                </div>
                 {activeTab === "log"     && (
                   <LogPanel
                     lines={logLines}
