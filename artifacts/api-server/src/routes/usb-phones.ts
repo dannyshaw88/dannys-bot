@@ -123,6 +123,7 @@ export interface UsbPhone {
   /** "device" = fully authorised and ready, "unauthorized" = needs dialog on phone, "offline" = cable issue */
   state:          "device" | "unauthorized" | "offline" | string;
   model?:         string;
+  marketName?:    string;
   manufacturer?:  string;
   androidVersion?: string;
   product?:       string;
@@ -143,7 +144,7 @@ export interface UsbPhone {
 // means these three calls now only ever run ONCE per phone per server
 // process lifetime (or once per reconnect, if the phone was unplugged and
 // the cache entry was cleared), not 20+ times a minute.
-const devicePropsCache = new Map<string, { manufacturer?: string; androidVersion?: string; model?: string }>();
+const devicePropsCache = new Map<string, { manufacturer?: string; androidVersion?: string; model?: string; marketName?: string }>();
 const seenSerials = new Set<string>();
 
 function listUsbPhones(adbPath: string, diag?: { rawOutput: string }): UsbPhone[] {
@@ -214,11 +215,22 @@ function listUsbPhones(adbPath: string, diag?: { rawOutput: string }): UsbPhone[
           const mdl = runAdb(adbPath, ["-s", serial, "shell", "getprop", "ro.product.model"]);
           if (mdl) cached.model = mdl;
         }
+
+        // Marketing/human-readable name (e.g. "Redmi Note 12" vs raw "23076RN8DY")
+        const mkt = runAdb(adbPath, ["-s", serial, "shell", "getprop", "ro.product.marketname"]);
+        if (mkt && mkt.trim()) {
+          cached.marketName = mkt.trim();
+        } else {
+          const mkt2 = runAdb(adbPath, ["-s", serial, "shell", "getprop", "ro.product.vendor.marketname"]);
+          if (mkt2 && mkt2.trim()) cached.marketName = mkt2.trim();
+        }
+
         devicePropsCache.set(serial, cached);
       }
       if (cached.manufacturer) phone.manufacturer = cached.manufacturer;
       if (cached.androidVersion) phone.androidVersion = cached.androidVersion;
       if (!phone.model && cached.model) phone.model = cached.model;
+      if (cached.marketName) phone.marketName = cached.marketName;
     }
 
     phones.push(phone);

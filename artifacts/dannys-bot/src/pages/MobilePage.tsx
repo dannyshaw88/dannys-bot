@@ -4862,8 +4862,6 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   // Google Play settings
   const [gpEmail,      setGpEmail]      = React.useState("");
   const [gpPassword,   setGpPassword]   = React.useState("");
-  const [savingGp,     setSavingGp]     = React.useState(false);
-  const [gpSaved,      setGpSaved]      = React.useState(false);
 
   // Device spec
   interface SimInfo { slot: number; carrier: string | null; phoneNumber: string | null }
@@ -4995,20 +4993,6 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     } finally { setResuming(false); }
   };
 
-  const handleSaveGp = async () => {
-    if (!serial) return;
-    setSavingGp(true);
-    try {
-      await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-settings`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ googlePlayEmail: gpEmail, googlePlayPassword: gpPassword }),
-      });
-      setGpSaved(true);
-      setTimeout(() => setGpSaved(false), 2000);
-    } catch { /* ignore */ }
-    finally { setSavingGp(false); }
-  };
-
   // Auto-save collision scheduler whenever any value changes (debounced 600 ms)
   React.useEffect(() => {
     if (!serial) return;
@@ -5022,6 +5006,21 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     }, 600);
     return () => { if (csSaveRef.current) clearTimeout(csSaveRef.current); };
   }, [serial, csEnabled, csMinMin, csMinMax]);
+  // Auto-save Google Play credentials (debounced 800 ms)
+  const gpSaveRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gpInitRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!serial) return;
+    if (!gpInitRef.current) { gpInitRef.current = true; return; }
+    if (gpSaveRef.current) clearTimeout(gpSaveRef.current);
+    gpSaveRef.current = setTimeout(() => {
+      fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-settings`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ googlePlayEmail: gpEmail, googlePlayPassword: gpPassword }),
+      }).catch(() => {});
+    }, 800);
+    return () => { if (gpSaveRef.current) clearTimeout(gpSaveRef.current); };
+  }, [serial, gpEmail, gpPassword]);
 
   const ctrl     = battInfo?.chargingControl;
   const sched    = battInfo?.schedule;
@@ -5063,10 +5062,6 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
             <Input type="password" value={gpPassword} onChange={e => setGpPassword(e.target.value)}
               placeholder="••••••••" autoComplete="new-password" />
           </div>
-          <Button onClick={handleSaveGp} disabled={savingGp || !serial}
-            style={gpSaved ? { background: "#16a34a", borderColor: "#16a34a" } : undefined}>
-            {gpSaved ? <CheckCircle2 className="w-4 h-4 text-white" /> : savingGp ? "Saving…" : "Save"}
-          </Button>
         </div>
       </div>
 

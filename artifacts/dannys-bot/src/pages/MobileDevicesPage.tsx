@@ -33,8 +33,46 @@ interface UsbPhone {
   serial:          string;
   state:           "device" | "unauthorized" | "offline" | string;
   model?:          string;
+  marketName?:     string;
   manufacturer?:   string;
   androidVersion?: string;
+}
+
+
+// ─── Model code → friendly name lookup ───────────────────────────────────────
+// Maps raw Android model codes (ro.product.model) to human-readable names.
+// Used to display "Xiaomi Redmi Note 12" instead of "Xiaomi 23076RN8DY" for
+// devices that were registered before marketname detection was added.
+const MODEL_FRIENDLY_NAME: Record<string, string> = {
+  // Redmi Note series
+  "23076RN8DY": "Redmi Note 12", "23076RN8DC": "Redmi Note 12",
+  "23046RP50C": "Redmi Note 12 Pro+", "23076RA4BC": "Redmi Note 12 Pro",
+  "25028RN03Y": "Redmi Note 14", "25028RN03C": "Redmi Note 14",
+  "22111317I":  "Redmi Note 11",  "22111317G":  "Redmi Note 11",
+  "2201116SY":  "Redmi Note 11 Pro+",
+  "21091116AG": "Redmi Note 10S", "21061119AG": "Redmi Note 10 Pro",
+  "2107113SG":  "Redmi Note 10 5G", "M2103K19G": "Redmi Note 10",
+  "M2003J15SC": "Redmi Note 9 Pro",
+  // Xiaomi main series
+  "23129RAA4G": "Xiaomi 14",    "2312DRAAEE": "Xiaomi 13",
+  "23013RK75C": "Xiaomi 13T",   "23049PCD8G": "Xiaomi 13T Pro",
+  "2211133G":   "Xiaomi 12T",   "22071212AG": "Xiaomi 12 Lite",
+  "2201123G":   "Xiaomi 12",    "21122221G":  "Xiaomi 11T",
+  // POCO
+  "22081212UG": "POCO X5 Pro",  "22111317PG": "POCO X5",
+  "22101320G":  "POCO M5",      "21121210G":  "POCO M4 Pro",
+  "22041219PG": "POCO C40",
+  // Redmi main series
+  "220333QAG":  "Redmi 10C",    "21121119SR": "Redmi 10",
+};
+
+function resolveDisplayName(device: FarmDevice): string {
+  const code = device.model?.trim();
+  if (code && MODEL_FRIENDLY_NAME[code]) {
+    const mfr = device.manufacturer?.trim();
+    return mfr ? `${mfr} ${MODEL_FRIENDLY_NAME[code]}` : MODEL_FRIENDLY_NAME[code];
+  }
+  return device.displayName || device.serial;
 }
 
 // ─── SVG icons ───────────────────────────────────────────────────────────────
@@ -131,7 +169,7 @@ async function fetchUsbPhones(): Promise<UsbPhone[]> {
 }
 
 async function registerDevice(phone: UsbPhone): Promise<FarmDevice> {
-  const displayName = [phone.manufacturer, phone.model].filter(Boolean).join(" ") || phone.serial;
+  const displayName = [phone.manufacturer, phone.marketName || MODEL_FRIENDLY_NAME[phone.model ?? ""] || phone.model].filter(Boolean).join(" ") || phone.serial;
   const r = await fetch("/api/mobile/farm-devices", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -338,11 +376,8 @@ function DeviceCard({
         />
         <div className="shrink-0 text-center space-y-0.5">
           <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
-            {device.displayName || device.serial}
+            {resolveDisplayName(device)}
           </p>
-          {device.model && device.displayName !== device.model && (
-            <p className="text-xs text-muted-foreground">{device.model}</p>
-          )}
           <div className="flex items-center justify-center gap-1.5 mt-1">
             {online ? (
               <>

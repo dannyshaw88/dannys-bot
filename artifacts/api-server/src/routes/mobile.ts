@@ -1316,7 +1316,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   });
 
   // ── Per-device linked Instagram account (Account Settings tab) ──────────────
-  const SLOT_COUNT = 5;
+  const SLOT_COUNT = 1;
   const deviceSlotSchema = z.object({
     username: z.string(),
     password: z.string(),
