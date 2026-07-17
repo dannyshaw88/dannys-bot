@@ -4319,6 +4319,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         reelsLikes = reelsResult.likes;
         steps.push(`reels(${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes, ${reelsResult.sharesFeed} feed-shares, ${reelsResult.sharesDm} dm-shares)`);
         tLog(`▶ View Reels done — ${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes`);
+        // Return to the Instagram Home tab so any tool running after Reels
+        // (especially Follow Users) always starts from the standard Home Feed.
+        // Without this, the device stays in the Reels viewer; tapping the
+        // Search tab from there navigates to the Reels-specific Explore page
+        // (different a11y layout) instead of the main Instagram Explore page
+        // where the text search bar lives, causing Follow to fail every time.
+        try {
+          const homeTab = await android.findHomeTab(serial).catch(() => null);
+          if (homeTab) {
+            await android.tap(serial, homeTab.x, homeTab.y);
+            await sleepOrAbort(serial, 800);
+            tLog("▶ View Reels — tapped Home tab to restore feed state");
+          }
+        } catch { /* non-fatal; Follow will attempt its own navigation */ }
       } else if (!viewReelsEnabled) {
         steps.push("reels(skipped — View Reels disabled)");
         tLog("▶ View Reels disabled — skipping reels");
