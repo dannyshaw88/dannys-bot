@@ -2580,19 +2580,92 @@ function useCollisionScheduler(serial: string | null) {
 // Lets the user duplicate the current slot's Human Session Tool settings to one
 // or more other account slots on the same device. Both sides (target slots and
 // setting sections) support Select All / Select None.
-const COPY_SECTIONS: { key: string; label: string; fields: string[] }[] = [
-  { key: 'toolToggle',     label: 'Tool Toggle (enabled/disabled)', fields: ['enabled'] },
-  { key: 'runInterval',    label: 'Run Interval',     fields: ['cycleIntervalMin','cycleIntervalMax'] },
-  { key: 'actionDelay',   label: 'Action Delay',      fields: ['actionDelayMin','actionDelayMax'] },
-  { key: 'feed',          label: 'View Feed',         fields: ['feedEnabled','feedActivatePctMin','feedActivatePctMax','feedScrollMin','feedScrollMax','likePercentMin','likePercentMax','shareFeedPercentMin','shareFeedPercentMax','shareDmPercentMin','shareDmPercentMax'] },
-  { key: 'stories',       label: 'View Stories',      fields: ['storiesEnabled','viewStoriesActivatePctMin','viewStoriesActivatePctMax','viewStoriesSlidesMin','viewStoriesSlidesMax','viewStoriesSlideWatchPctMin','viewStoriesSlideWatchPctMax','viewStoriesLikePercentMin','viewStoriesLikePercentMax','viewStoriesShareDmPercentMin','viewStoriesShareDmPercentMax'] },
-  { key: 'reels',         label: 'View Reels',        fields: ['viewReelsEnabled','viewReelsActivatePctMin','viewReelsActivatePctMax','viewReelsScrollMin','viewReelsScrollMax','viewReelsWatchPctMin','viewReelsWatchPctMax','viewReelsLikePercentMin','viewReelsLikePercentMax','viewReelsShareFeedPercentMin','viewReelsShareFeedPercentMax','viewReelsShareDmPercentMin','viewReelsShareDmPercentMax'] },
-  { key: 'follow',        label: 'Follow Users',      fields: ['followEnabled','followActivatePctMin','followActivatePctMax','followUsersMin','followUsersMax','followSkipFollowed','followSources'] },
-  { key: 'injectBrowsing',label: 'Inject Browsing',   fields: ['injectBrowsingEnabled','injectBrowsingActivatePctMin','injectBrowsingActivatePctMax','injectBrowsingBeforeFollowPctMin','injectBrowsingBeforeFollowPctMax','injectBrowsingFeedChanceMin','injectBrowsingFeedChanceMax','injectBrowsingFeedMin','injectBrowsingFeedMax','injectBrowsingClickPostPctMin','injectBrowsingClickPostPctMax','injectBrowsingLikePctMin','injectBrowsingLikePctMax','injectBrowsingShareFeedPctMin','injectBrowsingShareFeedPctMax','injectBrowsingShareDmPctMin','injectBrowsingShareDmPctMax'] },
-  { key: 'followFilters', label: 'Follow Filters',    fields: ['followFiltersEnabled','followFilterPrivateUsers','followFilterEnglishSpeaking','followFilterMinFollowers250','followFilterVerifiedUsers'] },
-  { key: 'randomJitter',  label: 'Random Jitter',     fields: ['randomJitterEnabled','randomJitterActivatePctMin','randomJitterActivatePctMax','checkNotificationsPctMin','checkNotificationsPctMax','checkNotificationsScrollsMin','checkNotificationsScrollsMax','checkNotificationsClickPctMin','checkNotificationsClickPctMax','visitProfilePctMin','visitProfilePctMax'] },
-  { key: 'makePost',      label: 'Make a Post',       fields: ['makePostEnabled','makePostActivatePctMin','makePostActivatePctMax','makePostPerSessionMin','makePostPerSessionMax','makePostSourceUsername','makePostDisableUsernameSource','makePostAlterationEnabled','makePostAlterationLevel','makePostImageSettingsEnabled','makePostUseHikerApi','makePostDisableAtPostCount','makePostDisableWhenExhausted','makePostLocalFolderEnabled','makePostLocalFolderPath','makePostLocalFolderNoRepeat','makePostLocalFolderRandom','makePostLocalFolderDeleteAfterUpload','makePostUseChatGpt','makePostFixAiSlop','makePostMakeUnique','makePostCaptionText','makePostImageSettings'] },
+type CopySubSetting = { key: string; label: string; fields: string[] };
+type CopySection    = { key: string; label: string; sub: CopySubSetting[] };
+
+const COPY_SECTIONS: CopySection[] = [
+  { key: 'toolToggle',    label: 'Tool Toggle', sub: [
+    { key: 'enabled',           label: 'Enabled / Disabled',          fields: ['enabled'] },
+  ]},
+  { key: 'runInterval',   label: 'Run Interval', sub: [
+    { key: 'cycleInterval',     label: 'Run every X – Y minutes',      fields: ['cycleIntervalMin','cycleIntervalMax'] },
+  ]},
+  { key: 'actionDelay',   label: 'Action Delay', sub: [
+    { key: 'actionDelay',       label: 'Delay between actions (s)',     fields: ['actionDelayMin','actionDelayMax'] },
+  ]},
+  { key: 'feed',          label: 'View Feed', sub: [
+    { key: 'feedEnabled',       label: 'Enabled',                       fields: ['feedEnabled'] },
+    { key: 'feedActivatePct',   label: 'Activate Percentage',           fields: ['feedActivatePctMin','feedActivatePctMax'] },
+    { key: 'feedScroll',        label: 'Scroll amount',                 fields: ['feedScrollMin','feedScrollMax'] },
+    { key: 'feedLike',          label: 'Like %',                        fields: ['likePercentMin','likePercentMax'] },
+    { key: 'feedShareFeed',     label: 'Share to Feed %',               fields: ['shareFeedPercentMin','shareFeedPercentMax'] },
+    { key: 'feedShareDm',       label: 'Share via DM %',                fields: ['shareDmPercentMin','shareDmPercentMax'] },
+  ]},
+  { key: 'stories',       label: 'View Stories', sub: [
+    { key: 'storiesEnabled',    label: 'Enabled',                       fields: ['storiesEnabled'] },
+    { key: 'storiesActivate',   label: 'Activate Percentage',           fields: ['viewStoriesActivatePctMin','viewStoriesActivatePctMax'] },
+    { key: 'storiesSlides',     label: 'Stories to watch',              fields: ['viewStoriesSlidesMin','viewStoriesSlidesMax'] },
+    { key: 'storiesWatchPct',   label: '% to watch',                    fields: ['viewStoriesSlideWatchPctMin','viewStoriesSlideWatchPctMax'] },
+    { key: 'storiesLike',       label: 'Like %',                        fields: ['viewStoriesLikePercentMin','viewStoriesLikePercentMax'] },
+    { key: 'storiesShareDm',    label: 'Share DM %',                    fields: ['viewStoriesShareDmPercentMin','viewStoriesShareDmPercentMax'] },
+  ]},
+  { key: 'reels',         label: 'View Reels', sub: [
+    { key: 'reelsEnabled',      label: 'Enabled',                       fields: ['viewReelsEnabled'] },
+    { key: 'reelsActivate',     label: 'Activate Percentage',           fields: ['viewReelsActivatePctMin','viewReelsActivatePctMax'] },
+    { key: 'reelsScroll',       label: 'Scroll amount',                 fields: ['viewReelsScrollMin','viewReelsScrollMax'] },
+    { key: 'reelsWatchPct',     label: 'Watch %',                       fields: ['viewReelsWatchPctMin','viewReelsWatchPctMax'] },
+    { key: 'reelsLike',         label: 'Like %',                        fields: ['viewReelsLikePercentMin','viewReelsLikePercentMax'] },
+    { key: 'reelsShareFeed',    label: 'Share to Feed %',               fields: ['viewReelsShareFeedPercentMin','viewReelsShareFeedPercentMax'] },
+    { key: 'reelsShareDm',      label: 'Share via DM %',                fields: ['viewReelsShareDmPercentMin','viewReelsShareDmPercentMax'] },
+  ]},
+  { key: 'follow',        label: 'Follow Users', sub: [
+    { key: 'followEnabled',     label: 'Enabled',                       fields: ['followEnabled'] },
+    { key: 'followActivate',    label: 'Activate Percentage',           fields: ['followActivatePctMin','followActivatePctMax'] },
+    { key: 'followCount',       label: 'Follow count per session',      fields: ['followUsersMin','followUsersMax'] },
+    { key: 'followSkip',        label: 'Skip already followed',         fields: ['followSkipFollowed'] },
+    { key: 'followSources',     label: 'Follow sources list',           fields: ['followSources'] },
+  ]},
+  { key: 'injectBrowsing',label: 'Inject Browsing', sub: [
+    { key: 'injectEnabled',     label: 'Enabled',                       fields: ['injectBrowsingEnabled'] },
+    { key: 'injectActivate',    label: 'Activate Percentage',           fields: ['injectBrowsingActivatePctMin','injectBrowsingActivatePctMax'] },
+    { key: 'injectBefore',      label: 'Before Follow %',               fields: ['injectBrowsingBeforeFollowPctMin','injectBrowsingBeforeFollowPctMax'] },
+    { key: 'injectFeedChance',  label: 'Feed browse chance %',          fields: ['injectBrowsingFeedChanceMin','injectBrowsingFeedChanceMax'] },
+    { key: 'injectFeedCount',   label: 'Feed posts to view',            fields: ['injectBrowsingFeedMin','injectBrowsingFeedMax'] },
+    { key: 'injectClickPost',   label: 'Click post %',                  fields: ['injectBrowsingClickPostPctMin','injectBrowsingClickPostPctMax'] },
+    { key: 'injectLike',        label: 'Like %',                        fields: ['injectBrowsingLikePctMin','injectBrowsingLikePctMax'] },
+    { key: 'injectShareFeed',   label: 'Share to Feed %',               fields: ['injectBrowsingShareFeedPctMin','injectBrowsingShareFeedPctMax'] },
+    { key: 'injectShareDm',     label: 'Share DM %',                    fields: ['injectBrowsingShareDmPctMin','injectBrowsingShareDmPctMax'] },
+  ]},
+  { key: 'followFilters', label: 'Follow Filters', sub: [
+    { key: 'filtersEnabled',    label: 'Enabled',                       fields: ['followFiltersEnabled'] },
+    { key: 'filterPrivate',     label: 'Skip Private users',            fields: ['followFilterPrivateUsers'] },
+    { key: 'filterEnglish',     label: 'English Speaking only',         fields: ['followFilterEnglishSpeaking'] },
+    { key: 'filterMin250',      label: '250+ Followers minimum',        fields: ['followFilterMinFollowers250'] },
+    { key: 'filterVerified',    label: 'Skip Verified users',           fields: ['followFilterVerifiedUsers'] },
+  ]},
+  { key: 'randomJitter',  label: 'Random Jitter', sub: [
+    { key: 'jitterEnabled',     label: 'Enabled',                       fields: ['randomJitterEnabled'] },
+    { key: 'jitterActivate',    label: 'Activate Percentage',           fields: ['randomJitterActivatePctMin','randomJitterActivatePctMax'] },
+    { key: 'jitterNotifPct',    label: 'Check Notifications %',         fields: ['checkNotificationsPctMin','checkNotificationsPctMax'] },
+    { key: 'jitterNotifScroll', label: 'Notification scrolls',          fields: ['checkNotificationsScrollsMin','checkNotificationsScrollsMax'] },
+    { key: 'jitterNotifClick',  label: 'Notification click %',          fields: ['checkNotificationsClickPctMin','checkNotificationsClickPctMax'] },
+    { key: 'jitterVisitPct',    label: 'Visit Profile %',               fields: ['visitProfilePctMin','visitProfilePctMax'] },
+  ]},
+  { key: 'makePost',      label: 'Make a Post', sub: [
+    { key: 'postEnabled',       label: 'Enabled',                       fields: ['makePostEnabled'] },
+    { key: 'postActivate',      label: 'Activate Percentage',           fields: ['makePostActivatePctMin','makePostActivatePctMax'] },
+    { key: 'postPerSession',    label: 'Posts per session',             fields: ['makePostPerSessionMin','makePostPerSessionMax'] },
+    { key: 'postSource',        label: 'Source Username',               fields: ['makePostSourceUsername','makePostDisableUsernameSource'] },
+    { key: 'postAlteration',    label: 'Image Alteration',              fields: ['makePostAlterationEnabled','makePostAlterationLevel'] },
+    { key: 'postImgSettings',   label: 'Image Settings',                fields: ['makePostImageSettingsEnabled','makePostImageSettings'] },
+    { key: 'postHikerApi',      label: 'Use Hiker API',                 fields: ['makePostUseHikerApi'] },
+    { key: 'postDisableAt',     label: 'Disable at post count',         fields: ['makePostDisableAtPostCount','makePostDisableWhenExhausted'] },
+    { key: 'postLocalFolder',   label: 'Local Folder source',           fields: ['makePostLocalFolderEnabled','makePostLocalFolderPath','makePostLocalFolderNoRepeat','makePostLocalFolderRandom','makePostLocalFolderDeleteAfterUpload'] },
+    { key: 'postCaption',       label: 'ChatGPT / caption settings',    fields: ['makePostUseChatGpt','makePostFixAiSlop','makePostMakeUnique','makePostCaptionText'] },
+  ]},
 ];
+
+const ALL_SUB_KEYS = COPY_SECTIONS.flatMap(s => s.sub.map(sub => sub.key));
 
 function CopySettingsDialog({
   open, onClose, currentSlotIdx, slotUsernames, settings, phone, onCopied,
@@ -2605,16 +2678,15 @@ function CopySettingsDialog({
   phone: UsbPhone | null;
   onCopied?: (targetSlotIdxs: number[]) => void;
 }) {
-  const allKeys = COPY_SECTIONS.map(s => s.key);
   const [selectedSlots, setSelectedSlots] = useState<number[]>([]);
-  const [selectedSections, setSelectedSections] = useState<string[]>(allKeys);
+  const [selectedSubKeys, setSelectedSubKeys] = useState<Set<string>>(new Set(ALL_SUB_KEYS));
   const [copying, setCopying] = useState(false);
   const [result, setResult] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
       setSelectedSlots(slotUsernames.map((_, i) => i).filter(i => i !== currentSlotIdx));
-      setSelectedSections(allKeys);
+      setSelectedSubKeys(new Set(ALL_SUB_KEYS));
       setResult(null);
       setCopying(false);
     }
@@ -2625,15 +2697,34 @@ function CopySettingsDialog({
     .map((username, i) => ({ username, idx: i }))
     .filter(s => s.idx !== currentSlotIdx);
 
+  const toggleSub = (subKey: string, checked: boolean) =>
+    setSelectedSubKeys(prev => { const n = new Set(prev); checked ? n.add(subKey) : n.delete(subKey); return n; });
+
+  const toggleSection = (section: CopySection, checked: boolean) =>
+    setSelectedSubKeys(prev => {
+      const n = new Set(prev);
+      section.sub.forEach(sub => checked ? n.add(sub.key) : n.delete(sub.key));
+      return n;
+    });
+
+  const sectionState = (section: CopySection): "all" | "some" | "none" => {
+    const selected = section.sub.filter(sub => selectedSubKeys.has(sub.key)).length;
+    if (selected === 0) return "none";
+    if (selected === section.sub.length) return "all";
+    return "some";
+  };
+
   const handleCopy = async () => {
     if (!phone?.serial || selectedSlots.length === 0) return;
     setCopying(true);
     setResult(null);
     const partial: Record<string, unknown> = {};
     for (const section of COPY_SECTIONS) {
-      if (selectedSections.includes(section.key)) {
-        for (const field of section.fields) {
-          partial[field] = (settings as Record<string, unknown>)[field];
+      for (const sub of section.sub) {
+        if (selectedSubKeys.has(sub.key)) {
+          for (const field of sub.fields) {
+            partial[field] = (settings as Record<string, unknown>)[field];
+          }
         }
       }
     }
@@ -2659,32 +2750,32 @@ function CopySettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v && !copying) onClose(); }}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Copy Settings to Other Slots</DialogTitle>
         </DialogHeader>
-        <div className="flex gap-8 mt-2">
+        <div className="flex gap-8 mt-2 flex-1 min-h-0">
           {/* Left: target slots */}
-          <div className="flex-1 min-w-0 space-y-2">
+          <div className="w-44 shrink-0 flex flex-col gap-1">
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Copy to</span>
-              <div className="flex gap-1.5">
-                <Button size="sm" variant="ghost" className="h-6 text-xs px-2"
+              <div className="flex gap-1">
+                <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5"
                   onClick={() => setSelectedSlots(otherSlots.map(s => s.idx))}>All</Button>
-                <Button size="sm" variant="ghost" className="h-6 text-xs px-2"
+                <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5"
                   onClick={() => setSelectedSlots([])}>None</Button>
               </div>
             </div>
             {otherSlots.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic">No other slots to copy to.</p>
+              <p className="text-xs text-muted-foreground italic">No other slots.</p>
             ) : otherSlots.map(s => (
-              <label key={s.idx} className="flex items-center gap-2 cursor-pointer select-none">
-                <input type="checkbox" className="w-3.5 h-3.5 accent-primary"
+              <label key={s.idx} className="flex items-center gap-2 cursor-pointer select-none py-0.5">
+                <input type="checkbox" className="w-3.5 h-3.5 accent-primary shrink-0"
                   checked={selectedSlots.includes(s.idx)}
                   onChange={e => setSelectedSlots(prev =>
                     e.target.checked ? [...prev, s.idx] : prev.filter(i => i !== s.idx)
                   )} />
-                <span className="text-sm truncate">
+                <span className="text-sm truncate min-w-0">
                   {s.username ? `@${s.username}` : `Slot ${s.idx + 1}`}
                 </span>
                 <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={s.idx} />
@@ -2692,31 +2783,58 @@ function CopySettingsDialog({
             ))}
           </div>
 
-          {/* Right: setting sections */}
-          <div className="flex-1 min-w-0 space-y-2">
-            <div className="flex items-center justify-between mb-1">
+          {/* Right: settings with sub-items */}
+          <div className="flex-1 min-w-0 flex flex-col min-h-0">
+            <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Settings</span>
-              <div className="flex gap-1.5">
-                <Button size="sm" variant="ghost" className="h-6 text-xs px-2"
-                  onClick={() => setSelectedSections(allKeys)}>All</Button>
-                <Button size="sm" variant="ghost" className="h-6 text-xs px-2"
-                  onClick={() => setSelectedSections([])}>None</Button>
+              <div className="flex gap-1">
+                <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5"
+                  onClick={() => setSelectedSubKeys(new Set(ALL_SUB_KEYS))}>All</Button>
+                <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5"
+                  onClick={() => setSelectedSubKeys(new Set())}>None</Button>
               </div>
             </div>
-            {COPY_SECTIONS.map(s => (
-              <label key={s.key} className="flex items-center gap-2 cursor-pointer select-none">
-                <input type="checkbox" className="w-3.5 h-3.5 accent-primary"
-                  checked={selectedSections.includes(s.key)}
-                  onChange={e => setSelectedSections(prev =>
-                    e.target.checked ? [...prev, s.key] : prev.filter(k => k !== s.key)
-                  )} />
-                <span className="text-sm">{s.label}</span>
-              </label>
-            ))}
+            <div className="overflow-y-auto flex-1 space-y-1 pr-1">
+              {COPY_SECTIONS.map(section => {
+                const state = sectionState(section);
+                const allSubs = section.sub;
+                return (
+                  <div key={section.key} className="rounded-md border border-border/50 overflow-hidden">
+                    {/* Section header row */}
+                    <label className="flex items-center gap-2 px-2.5 py-1.5 bg-muted/40 cursor-pointer select-none hover:bg-muted/60 transition-colors">
+                      <input
+                        type="checkbox"
+                        className="w-3.5 h-3.5 accent-primary shrink-0"
+                        checked={state === "all"}
+                        ref={el => { if (el) el.indeterminate = state === "some"; }}
+                        onChange={e => toggleSection(section, e.target.checked)}
+                      />
+                      <span className="text-xs font-bold text-foreground">{section.label}</span>
+                    </label>
+                    {/* Sub-settings */}
+                    {allSubs.length > 1 && (
+                      <div className="divide-y divide-border/30">
+                        {allSubs.map(sub => (
+                          <label key={sub.key} className="flex items-center gap-2 px-3 pl-6 py-1 cursor-pointer select-none hover:bg-muted/20 transition-colors">
+                            <input
+                              type="checkbox"
+                              className="w-3 h-3 accent-primary shrink-0"
+                              checked={selectedSubKeys.has(sub.key)}
+                              onChange={e => toggleSub(sub.key, e.target.checked)}
+                            />
+                            <span className="text-xs text-muted-foreground">{sub.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 mt-4 pt-4 border-t border-border">
+        <div className="flex items-center justify-end gap-3 mt-4 pt-4 border-t border-border shrink-0">
           {result && (
             <span className={`text-xs mr-auto ${result.includes('failed') ? 'text-destructive' : 'text-green-500'}`}>
               {result}
@@ -2724,7 +2842,7 @@ function CopySettingsDialog({
           )}
           <Button variant="secondary" onClick={onClose} disabled={copying}>Cancel</Button>
           <Button onClick={handleCopy}
-            disabled={copying || selectedSlots.length === 0 || selectedSections.length === 0}>
+            disabled={copying || selectedSlots.length === 0 || selectedSubKeys.size === 0}>
             {copying ? "Copying…" : "Copy Settings"}
           </Button>
         </div>
