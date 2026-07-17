@@ -2500,6 +2500,7 @@ function useCollisionScheduler(serial: string | null) {
 // or more other account slots on the same device. Both sides (target slots and
 // setting sections) support Select All / Select None.
 const COPY_SECTIONS: { key: string; label: string; fields: string[] }[] = [
+  { key: 'toolToggle',     label: 'Tool Toggle (enabled/disabled)', fields: ['enabled'] },
   { key: 'runInterval',    label: 'Run Interval',     fields: ['cycleIntervalMin','cycleIntervalMax'] },
   { key: 'actionDelay',   label: 'Action Delay',      fields: ['actionDelayMin','actionDelayMax'] },
   { key: 'feed',          label: 'View Feed',         fields: ['feedEnabled','feedActivatePctMin','feedActivatePctMax','feedScrollMin','feedScrollMax','likePercentMin','likePercentMax','shareFeedPercentMin','shareFeedPercentMax','shareDmPercentMin','shareDmPercentMax'] },

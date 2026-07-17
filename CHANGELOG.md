@@ -4,6 +4,16 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.655] — 2026-07-17
+
+### Copy Settings — Fixed (was non-functional)
+
+- **Root cause**: the server's slot `POST automation-settings` endpoint called `automationSchema.parse(req.body)` directly on the incoming partial payload. Fields not included in the selected sections (e.g. `actionDelayMin`, `feedScrollMin`, `likePercentMin`) have no Zod `.default()`, so validation threw and nothing was ever written — silently returning a failure the dialog didn't surface.
+- **Fix**: the endpoint now loads the slot's existing saved values first, merges the partial payload on top (only overwriting the selected fields), then validates the full merged object. A brand-new slot that has never been saved gets safe hardcoded fallbacks for the handful of fields without Zod defaults.
+- **Tool Toggle section added**: "Tool Toggle (enabled/disabled)" is now the first section in the Copy Settings dialog. It copies the master `enabled` state (whether the Human Session Tool is on or off) to the target slots. Pre-selected by default along with all other sections.
+
+---
+
 ## [1.1.654] — 2026-07-17
 
 ### Human Session Tool — Run immediately on restart

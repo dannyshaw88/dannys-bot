@@ -1267,9 +1267,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       const slotIdx = parseInt(req.params.slotIdx, 10);
       if (isNaN(slotIdx) || slotIdx < 0) { res.status(400).json({ error: "Invalid slot index" }); return; }
-      const input = automationSchema.parse(req.body);
       const serial = p(req, "serial");
       const cfg = loadInstanceConfigs();
+      // Load whatever is already saved for this slot.  For Copy Settings the
+      // client only sends the selected fields, so we must merge the partial
+      // payload on top of the existing values — not replace everything.
+      // Also provide hard-coded fallbacks for the few schema fields that have
+      // no zod .default() so a brand-new slot never fails validation.
+      const existing = cfg[serial]?.slotAutomation?.[String(slotIdx)] ?? {};
+      const base = {
+        actionDelayMin: 5, actionDelayMax: 10,
+        likePercentMin: 3, likePercentMax: 5,
+        feedScrollMin:  5, feedScrollMax:  10,
+        ...existing,
+      };
+      const input = automationSchema.parse({ ...base, ...req.body });
       cfg[serial] = {
         ...cfg[serial],
         slotAutomation: { ...cfg[serial]?.slotAutomation, [String(slotIdx)]: input },
