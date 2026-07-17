@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import {
   Smartphone, RefreshCw, CheckCircle2, AlertTriangle,
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
@@ -3836,6 +3837,7 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [showPassword, setShowPassword] = useState<boolean[]>(Array(ACCT_SLOT_COUNT).fill(false));
+  const [confirmDeleteSlot, setConfirmDeleteSlot] = useState<number | null>(null);
   const [totpCode, setTotpCode] = useState<(string | null)[]>(Array(ACCT_SLOT_COUNT).fill(null));
   const [totpError, setTotpError] = useState<(string | null)[]>(Array(ACCT_SLOT_COUNT).fill(null));
   const [showEmailPassword, setShowEmailPassword] = useState<boolean[]>(Array(ACCT_SLOT_COUNT).fill(false));
@@ -4011,9 +4013,22 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
         <div className="space-y-4">
           {slots.map((slot, i) => (
             <div key={i} className="bg-card border border-border rounded-xl p-5 space-y-3">
-              {/* Slot header: title + Human Session Tool button */}
+              {/* Slot header: title + Delete + Human Session Tool button */}
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Instagram Account Slot {i + 1}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Instagram Account Slot {i + 1}</p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={loading}
+                    onClick={() => setConfirmDeleteSlot(i)}
+                    className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    aria-label={`Delete Instagram Account Slot ${i + 1}`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
                 <Button
                   type="button"
                   variant="outline"
@@ -4026,7 +4041,7 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
                 </Button>
               </div>
 
-              {/* Row 1: Username + 2FA OTP Secret */}
+              {/* Row 1: Username + Password + 2FA OTP Secret */}
               <div className="flex items-end gap-3 flex-wrap">
                 {/* Username */}
                 <div className="space-y-1.5">
@@ -4039,6 +4054,26 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
                     autoComplete="off"
                     className="w-[20ch]"
                   />
+                </div>
+
+                {/* Password */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Password</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      type={showPassword[i] ? "text" : "password"}
+                      value={slot.password}
+                      onChange={e => updateSlot(i, { password: e.target.value })}
+                      placeholder="password"
+                      disabled={loading}
+                      autoComplete="off"
+                      className="w-[20ch]"
+                    />
+                    <Button type="button" variant="secondary" size="sm"
+                      onClick={() => setShowPassword(s => s.map((v, idx) => idx === i ? !v : v))}>
+                      {showPassword[i] ? "Hide" : "Show"}
+                    </Button>
+                  </div>
                 </div>
 
                 {/* 2FA OTP Secret */}
@@ -4072,29 +4107,7 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
                 </div>
               </div>
 
-              {/* Row 2: Password */}
-              <div className="flex items-end gap-3 flex-wrap">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Password</Label>
-                  <div className="flex items-center gap-1.5">
-                    <Input
-                      type={showPassword[i] ? "text" : "password"}
-                      value={slot.password}
-                      onChange={e => updateSlot(i, { password: e.target.value })}
-                      placeholder="password"
-                      disabled={loading}
-                      autoComplete="off"
-                      className="w-[20ch]"
-                    />
-                    <Button type="button" variant="secondary" size="sm"
-                      onClick={() => setShowPassword(s => s.map((v, idx) => idx === i ? !v : v))}>
-                      {showPassword[i] ? "Hide" : "Show"}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Row 3: Email Address + Phone Number */}
+              {/* Row 2: Email Address + Email Password + Phone Number */}
               <div className="flex items-end gap-3 flex-wrap">
                 {/* Email Address */}
                 <div className="space-y-1.5">
@@ -4109,22 +4122,7 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
                   />
                 </div>
 
-                {/* Phone Number */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Phone Number</Label>
-                  <Input
-                    value={slot.phoneNumber}
-                    onChange={e => updateSlot(i, { phoneNumber: e.target.value })}
-                    placeholder="+1 555 000 0000"
-                    disabled={loading}
-                    autoComplete="off"
-                    className="w-[20ch]"
-                  />
-                </div>
-              </div>
-
-              {/* Row 4: Email Password + Delete */}
-              <div className="flex items-end gap-3 flex-wrap">
+                {/* Email Password */}
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Email Password</Label>
                   <div className="flex items-center gap-1.5">
@@ -4144,18 +4142,18 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
                   </div>
                 </div>
 
-                {/* Delete slot */}
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  disabled={loading}
-                  onClick={() => removeSlot(i)}
-                  className="text-destructive hover:bg-destructive/10 hover:text-destructive self-end"
-                  aria-label={`Delete Instagram Account Slot ${i + 1}`}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
+                {/* Phone Number */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Phone Number</Label>
+                  <Input
+                    value={slot.phoneNumber}
+                    onChange={e => updateSlot(i, { phoneNumber: e.target.value })}
+                    placeholder="+1 555 000 0000"
+                    disabled={loading}
+                    autoComplete="off"
+                    className="w-[20ch]"
+                  />
+                </div>
               </div>
           </div>
         ))}
@@ -4172,6 +4170,27 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
               + Add Instagram Account Slot
             </Button>
           </div>
+
+          {/* Delete slot confirmation dialog */}
+          <AlertDialog open={confirmDeleteSlot !== null} onOpenChange={open => { if (!open) setConfirmDeleteSlot(null); }}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete this slot?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete Instagram Account Slot {confirmDeleteSlot !== null ? confirmDeleteSlot + 1 : ""}? This will remove all credentials stored in this slot.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={() => { if (confirmDeleteSlot !== null) { removeSlot(confirmDeleteSlot); setConfirmDeleteSlot(null); } }}
+                >
+                  Delete Slot
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
 
         {saved && <p className="text-xs text-green-500">Saved</p>}
