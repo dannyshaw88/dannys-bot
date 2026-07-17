@@ -1628,8 +1628,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 await sleepOrAbort(serial, 400); // wait for repost sheet
 
                 const repostBtn = await android.findButtonByLabel(serial, "Repost").catch(() => null);
-                const sameCoords = !!repostBtn &&
-                  Math.abs(repostBtn.x - shareFeedIconX) < 15 && Math.abs(repostBtn.y - rowY) < 15;
+                // Use a 60 px tolerance (not 15). The action-bar icon's a11y
+                // bounds-centre can shift by ~30 px between measurements due
+                // to layout timing, so 15 px was too tight and caused a
+                // second tap on the original icon (unsharing what was just
+                // shared). A genuine sheet "Repost" button always appears at
+                // screen centre (x ≈ 540+), well beyond 60 px from the icon.
+                const _rDx = repostBtn ? Math.abs(repostBtn.x - shareFeedIconX) : 0;
+                const _rDy = repostBtn ? Math.abs(repostBtn.y - rowY) : 0;
+                const sameCoords = !!repostBtn && _rDx < 60 && _rDy < 60;
+                if (sameCoords) logger.info({ serial, repostBtn, shareFeedIconX, rowY, dx: _rDx, dy: _rDy }, "[check-feed] 'Repost' node within 60 px of icon — treated as same icon (single-tap path)");
                 if (repostBtn && !sameCoords) {
                   onLog?.(`Scroll ${i + 1}/${count}: Repost sheet opened — tapping Repost at (${repostBtn.x},${repostBtn.y})…`);
                   await android.tap(serial, repostBtn.x, repostBtn.y);
@@ -3513,8 +3521,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // repost instantly on a single tap with no sheet at all).
           await sleepOrAbort(serial, 1000);
           const repostBtn = await android.findButtonByLabel(serial, "Repost").catch(() => null);
-          const sameCoords = !!repostBtn &&
-            Math.abs(repostBtn.x - repostIcon.x) < 15 && Math.abs(repostBtn.y - repostIcon.y) < 15;
+          // Same 60 px tolerance fix as the View Feed path above.
+          const _ibDx = repostBtn ? Math.abs(repostBtn.x - repostIcon.x) : 0;
+          const _ibDy = repostBtn ? Math.abs(repostBtn.y - repostIcon.y) : 0;
+          const sameCoords = !!repostBtn && _ibDx < 60 && _ibDy < 60;
+          if (sameCoords) logger.info({ serial, repostBtn, repostIcon, dx: _ibDx, dy: _ibDy }, "[inject-browsing] 'Repost' node within 60 px of icon — treated as same icon (single-tap path)");
           if (repostBtn && !sameCoords) {
             // A separate "Repost" confirm button appeared at a different
             // position — a real sheet is open. Tap it to confirm.
