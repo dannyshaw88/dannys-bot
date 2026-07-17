@@ -4644,7 +4644,6 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Instagram Account Slot {i + 1}</p>
-                  <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={i} width={openSlotTool === i ? 120 : 160} />
                   <Button
                     type="button"
                     size="sm"
@@ -5895,12 +5894,7 @@ export function MobilePage() {
         <div className="shrink-0 z-10 bg-background/95 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <FilledFarmIcon className="w-5 h-5" style={{ color: "#1AD2F2" }} />
-            <h1 className="text-lg font-bold text-foreground">Mobile Farm</h1>
-            {data && (
-              <span className="text-xs text-muted-foreground">
-                {phones.length === 0 ? "No phones connected" : `${phones.length} / ${TOTAL_SLOTS} connected`}
-              </span>
-            )}
+            <h1 className="text-lg font-bold text-foreground">Phone Farm</h1>
           </div>
           <div className="flex items-center gap-3">
             <button onClick={() => refresh(true)} disabled={loading}
