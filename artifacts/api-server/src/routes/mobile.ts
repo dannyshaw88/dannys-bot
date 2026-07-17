@@ -1360,6 +1360,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // after the next cycle has already started cannot kill the new cycle.
   const automationCycleCurrentId  = new Map<string, string>(); // serial → running cycle ID
   const automationCycleAbortedId  = new Map<string, string>(); // serial → ID that was aborted
+  // Tracks which Instagram account (username) was last successfully active on
+  // each device. Used to skip the account-switcher tap sequence when the same
+  // slot runs back-to-back — avoids a visually-identical long-press every cycle.
+  const automationLastActiveUsername = new Map<string, string>(); // serial → last active username
 
   const isCycleAborted = (serial: string) =>
     automationCycleAbortedId.get(serial) !== undefined &&
@@ -4133,22 +4137,34 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // correct account is active regardless of which one was last open.
       // This is a no-op when slotUsername is empty (device-level cycle or
       // slot with no username entered yet).
+      //
+      // Skip the switcher entirely when the same account was already active at
+      // the end of the previous cycle on this device — avoids a visually
+      // identical long-press on every back-to-back run of the same slot.
       if (slotUsername) {
-        tLog(`▶ Switching to Instagram account: @${slotUsername}…`);
-        const switched = await android.switchToInstagramAccount(serial, slotUsername, tLog);
-        if (switched) {
-          steps.push(`account-switch(@${slotUsername})`);
-          // Brief extra settle after switching — Instagram reloads the new
-          // account's home feed, and ads-choice / interstitial dialogs can
-          // reappear for accounts that haven't accepted them yet.
-          await sleepOrAbort(serial, 1500);
-          const postSwitchPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
-          if (postSwitchPopup) {
-            tLog(`▶ Dismissed post-switch popup (${postSwitchPopup})`);
-            await sleepOrAbort(serial, 500);
-          }
+        const lastUsername = automationLastActiveUsername.get(serial);
+        if (lastUsername === slotUsername) {
+          tLog(`▶ Already on @${slotUsername} from last cycle — skipping account switch`);
+          steps.push(`account-switch(skipped — already @${slotUsername})`);
         } else {
-          steps.push("account-switch(not-found — proceeding with current account)");
+          tLog(`▶ Switching to Instagram account: @${slotUsername}…`);
+          const switched = await android.switchToInstagramAccount(serial, slotUsername, tLog);
+          if (switched) {
+            steps.push(`account-switch(@${slotUsername})`);
+            automationLastActiveUsername.set(serial, slotUsername);
+            // Brief extra settle after switching — Instagram reloads the new
+            // account's home feed, and ads-choice / interstitial dialogs can
+            // reappear for accounts that haven't accepted them yet.
+            await sleepOrAbort(serial, 1500);
+            const postSwitchPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
+            if (postSwitchPopup) {
+              tLog(`▶ Dismissed post-switch popup (${postSwitchPopup})`);
+              await sleepOrAbort(serial, 500);
+            }
+          } else {
+            steps.push("account-switch(not-found — proceeding with current account)");
+            // Don't update lastUsername — we don't know which account is active.
+          }
         }
       }
 

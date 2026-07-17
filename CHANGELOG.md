@@ -4,6 +4,20 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.666] — 2026-07-17
+
+### Human Session Tool — Breadcrumb: "for @username"
+
+- The breadcrumb title now reads **"Human Session Tool for @username"** instead of "Human Session Tool @username".
+
+### Human Session Tool — Skip account switcher when same slot runs back-to-back
+
+- The long-press on the profile picture to open Instagram's account switcher is now **skipped entirely** when the same Instagram account was already active at the end of the previous cycle on that device.
+- The server tracks the last successfully active username per device in memory. On the next cycle, if the slot's username matches the remembered one, the switch is skipped and a log line confirms it (`skipped — already @username`). If a different slot runs in between, the switch happens as normal.
+- This prevents every back-to-back session of the same slot from opening with an identical long-press gesture, which was a visible repeated behaviour pattern.
+
+---
+
 ## [1.1.665] — 2026-07-17
 
 ### View Feed — Like button: fixed timing miss ("no Like button visible")

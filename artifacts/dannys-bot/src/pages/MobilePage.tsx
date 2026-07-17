@@ -4140,7 +4140,7 @@ function SlotHumanSessionView({
         </Button>
         <span className="text-sm font-semibold text-foreground flex items-center gap-1.5">
           <Fingerprint className="w-3.5 h-3.5 text-primary" />
-          Human Session Tool {slotUsername ? `@${slotUsername}` : `Slot ${slotIdx + 1}`}
+          Human Session Tool {slotUsername ? `for @${slotUsername}` : `Slot ${slotIdx + 1}`}
         </span>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
