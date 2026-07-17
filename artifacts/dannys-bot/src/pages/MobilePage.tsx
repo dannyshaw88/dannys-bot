@@ -2499,16 +2499,20 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       if (shouldAbortServer) {
         // Abort the in-flight client-side fetch if one is running.
         ctrl?.abort();
-        // Always send the server-side abort POST — even when the client has
-        // not yet started a fetch (e.g. the slot is waiting in the collision
-        // scheduler queue), the server may still have a cycle running from a
-        // prior tick.  This ensures the phone stops instantly regardless of
-        // where in the cycle the abort fires.
-        fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle/abort`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cycleId: abortingId }),
-        }).catch(() => {});
+        // Only send the server-side abort POST when we have a real cycleId.
+        // If abortingId is null the client had no cycle in-flight, so there
+        // is nothing on the server to abort.  Sending a null cycleId was the
+        // root cause of the "toggle dead after first run" bug: the abort POST
+        // could arrive after a new cycle had already registered its ID on the
+        // server, causing the server to match the null guard and kill the new
+        // cycle immediately (fixed server-side too, but defence-in-depth here).
+        if (abortingId) {
+          fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle/abort`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ cycleId: abortingId }),
+          }).catch(() => {});
+        }
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

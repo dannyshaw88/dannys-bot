@@ -1548,7 +1548,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           onLog?.(`Scroll ${i + 1}/${count}: feedback/survey card on screen — skipping like/share`);
           if (wantLike) likeFailures++;
         } else {
-          await sleepOrAbort(serial, 250 + Math.round(Math.random() * 250));
+          // Settle wait: give the feed post's action bar time to fully render
+          // after the scroll animation completes before dumping the a11y tree.
+          // Increased from 250-500 ms to a flat 900 ms — a dump taken too
+          // early was the main cause of "no Like button visible" misses.
+          await sleepOrAbort(serial, 900);
           // Look up the real action-bar icons for whatever's on screen right
           // now. The Like button's presence confirms this is a normal post
           // with a normal action bar; each icon's actual position (or
@@ -1556,20 +1560,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // shares per post) is resolved fresh per post instead of assuming
           // a fixed layout. See findFeedActionIcons()'s doc comment.
           onLog?.(`Scroll ${i + 1}/${count}: scanning action bar…`);
-          let icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
-          // Like-only retry: if the full icon scan returned null but we want to
-          // like, the dump may have been taken before the post's action bar
-          // finished rendering after the scroll (timing). Wait 600 ms and
-          // re-run findFeedActionIcons once. Share-to-feed / share-via-DM do
-          // NOT retry — their icon positions are needed for a multi-step flow
-          // that must not proceed without confirmed coordinates.
-          if (!icons && wantLike) {
-            await sleepOrAbort(serial, 600);
-            icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
-            if (icons) {
-              onLog?.(`Scroll ${i + 1}/${count}: like-retry found the action bar`);
-            }
-          }
+          const icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
           if (!icons) {
             // No Like button found — this isn't a normal in-feed post right
             // now (Reel suggestion, ad, still animating in from the scroll,
@@ -1669,22 +1660,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   sharesFeed++;
                   onLog?.(`Scroll ${i + 1}/${count}: ✓ reposted to feed (total reposts: ${sharesFeed})`);
                 } else if (sameCoords) {
-                  const afterCd = await android.getContentDescNear(serial, shareFeedIconX, rowY).catch(() => null);
-                  if (afterCd && afterCd !== beforeCd) {
-                    logger.info({ serial, beforeCd, afterCd }, "[check-feed] repost icon label changed in place — single-tap repost succeeded, no sheet on this account");
-                    onLog?.(`Scroll ${i + 1}/${count}: ✓ reposted (single-tap, no sheet) — icon changed: "${beforeCd}" → "${afterCd}"`);
-                    sharesFeed++;
-                  } else {
-                    logger.info({ serial, beforeCd, afterCd }, "[check-feed] repost icon unchanged after tap — genuinely did not complete — pressing Back");
-                    onLog?.(`Scroll ${i + 1}/${count}: repost icon unchanged after tap — pressing Back`);
-                    await android.pressBack(serial);
-                    await sleepOrAbort(serial, 500);
-                  }
+                  // The a11y tree returned a "Repost"-labelled node at the same
+                  // position as the icon we just tapped (single-tap repost path
+                  // — no confirmation sheet). Don't re-check whether the label
+                  // changed: the tree dump is unreliable (~90% false-negatives
+                  // reported), so we accept the tap as-is regardless of what the
+                  // dump says happened afterward. Do NOT press Back — that
+                  // navigates away from the feed.
+                  logger.info({ serial, beforeCd }, "[check-feed] sameCoords repost tap accepted without label re-check");
+                  onLog?.(`Scroll ${i + 1}/${count}: repost tapped (single-tap path, no sheet check)`);
+                  sharesFeed++;
                 } else {
-                  logger.info({ serial }, "[check-feed] no Repost-labelled node found after tap — pressing Back");
-                  onLog?.(`Scroll ${i + 1}/${count}: no Repost option appeared after tap — pressing Back`);
-                  await android.pressBack(serial);
-                  await sleepOrAbort(serial, 500);
+                  // No Repost button found in the dump after the tap. The dump is
+                  // unreliable; the repost sheet may have opened and been dismissed
+                  // before the dump ran, or the button may be outside the capture
+                  // window. Accept the tap and continue — do NOT press Back.
+                  logger.info({ serial }, "[check-feed] no Repost-labelled node found after tap — accepting tap, not pressing Back");
+                  onLog?.(`Scroll ${i + 1}/${count}: repost tap sent (sheet not confirmed in dump — continuing)`);
                 }
                 await verifyStillInInstagram();
               } catch (e: any) { if (e?.message === "cycle-aborted") throw e; /* else non-fatal */ }
@@ -3983,11 +3975,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.post("/api/mobile/devices/:serial/automation-cycle/abort", (req: Request, res: Response) => {
     const serial = p(req, "serial");
     const cycleId: string | undefined = req.body?.cycleId;
-    // Only set the abort flag if the supplied ID matches the cycle that is
-    // actually running right now.  If cycleId is absent (older clients) fall
-    // back to the unconditional set for backwards compatibility.
-    if (!cycleId || automationCycleCurrentId.get(serial) === cycleId) {
-      automationCycleAbortedId.set(serial, automationCycleCurrentId.get(serial) ?? cycleId ?? "");
+    // Only set the abort flag if a real cycleId was supplied AND it matches
+    // the cycle currently registered on this device.  A null/empty cycleId
+    // (sent when the client toggle was turned off while no cycle was in-flight)
+    // must NOT set the abort — otherwise the abort POST can arrive after a new
+    // cycle has already started and kill it via the automationCycleAbortedId
+    // race condition (toggle-dead-after-first-run bug).
+    if (cycleId && automationCycleCurrentId.get(serial) === cycleId) {
+      automationCycleAbortedId.set(serial, cycleId);
     }
     res.json({ ok: true });
   });
