@@ -2741,13 +2741,15 @@ function CopySettingsDialog({
         if (r.ok) { ok++; succeededSlots.push(slotIdx); } else fail++;
       } catch { fail++; }
     }
-    const msg = fail
-      ? `Copied to ${ok}; ${fail} failed`
-      : `Copied to ${ok} slot${ok !== 1 ? "s" : ""}`;
-    setResult(msg);
-    setCopying(false);
     if (succeededSlots.length > 0) onCopied?.(succeededSlots);
-    setTimeout(() => { onClose(); }, 1600);
+    if (fail === 0) {
+      setResult("ok");
+      setTimeout(() => { onClose(); }, 500);
+    } else {
+      setResult(`${fail} slot${fail !== 1 ? "s" : ""} failed`);
+      setCopying(false);
+      setTimeout(() => { onClose(); }, 1200);
+    }
   };
 
   return (
@@ -2837,15 +2839,16 @@ function CopySettingsDialog({
         </div>
 
         <div className="flex items-center justify-end gap-3 mt-4 pt-4 border-t border-border shrink-0">
-          {result && (
-            <span className={`text-xs mr-auto ${result.includes('failed') ? 'text-destructive' : 'text-green-500'}`}>
-              {result}
-            </span>
+          {result && result !== "ok" && (
+            <span className="text-xs mr-auto text-destructive">{result}</span>
           )}
           <Button variant="secondary" onClick={onClose} disabled={copying}>Cancel</Button>
           <Button onClick={handleCopy}
-            disabled={copying || selectedSlots.length === 0 || selectedSubKeys.size === 0}>
-            {copying ? "Copying…" : "Copy Settings"}
+            disabled={copying || selectedSlots.length === 0 || selectedSubKeys.size === 0}
+            style={result === "ok" ? { background: "#16a34a", borderColor: "#16a34a" } : undefined}>
+            {result === "ok"
+              ? <CheckCircle2 className="w-4 h-4 text-white" />
+              : copying ? "Copying…" : "Copy Settings"}
           </Button>
         </div>
       </DialogContent>
