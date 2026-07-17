@@ -2687,6 +2687,7 @@ function CopySettingsDialog({
                 <span className="text-sm truncate">
                   {s.username ? `@${s.username}` : `Slot ${s.idx + 1}`}
                 </span>
+                <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={s.idx} />
               </label>
             ))}
           </div>
