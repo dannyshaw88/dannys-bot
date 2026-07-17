@@ -2855,7 +2855,7 @@ function CopySettingsDialog({
 
 function AutomationSettingsPanel({
   phone, settings, setSettings, setEnabledByUser, loading, saveError, running, nextRunAt,
-  slotIdx, slotUsernames, onCopied,
+  slotIdx, slotUsername, slotUsernames, onCopied,
 }: {
   phone: UsbPhone | null;
   settings: AutomationSettingsData;
@@ -2866,6 +2866,7 @@ function AutomationSettingsPanel({
   running: boolean;
   nextRunAt: number | null;
   slotIdx?: number;
+  slotUsername?: string;
   slotUsernames?: string[];
   onCopied?: (targetSlotIdxs: number[]) => void;
 }) {
@@ -2970,9 +2971,15 @@ function AutomationSettingsPanel({
 
   return (
     <div className="h-full overflow-y-auto p-6 space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <h2 className="text-lg font-bold text-foreground">Human Session Tool</h2>
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Fingerprint className="w-4 h-4 shrink-0" style={{ color: "#1AD2F2" }} />
+          <h2 className="text-lg font-bold text-foreground whitespace-nowrap">
+            Human Session Tool{slotUsername ? ` for @${slotUsername}` : ""}
+          </h2>
+          {slotIdx !== undefined && (
+            <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={slotIdx} />
+          )}
           {slotIdx !== undefined && slotUsernames && slotUsernames.length > 1 && (
             <Button type="button" variant="secondary" size="sm" className="h-7 text-xs gap-1.5"
               onClick={() => setShowCopyDialog(true)}>
@@ -2981,7 +2988,7 @@ function AutomationSettingsPanel({
             </Button>
           )}
         </div>
-        <span className="text-sm text-muted-foreground whitespace-nowrap">
+        <span className="text-sm text-muted-foreground whitespace-nowrap ml-auto">
           {phone.manufacturer ? `${phone.manufacturer} ` : ""}{phone.model ?? phone.serial}
         </span>
       </div>
@@ -4414,11 +4421,7 @@ function SlotHumanSessionView({
           <ArrowLeft className="w-3.5 h-3.5" />
           Back
         </Button>
-        <span className="text-sm font-semibold text-foreground flex items-center gap-1.5 flex-1">
-          <Fingerprint className="w-3.5 h-3.5 text-primary" />
-          Human Session Tool {slotUsername ? `for @${slotUsername}` : `Slot ${slotIdx + 1}`}
-          <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={slotIdx} />
-        </span>
+        <div className="flex-1" />
         <Button variant="outline" size="sm" onClick={onPrevSlot} disabled={isFirst} className="gap-1 h-7 px-2">
           <ChevronLeft className="w-3.5 h-3.5" />
           SLOT
@@ -4429,7 +4432,7 @@ function SlotHumanSessionView({
         </Button>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <AutomationSettingsPanel phone={phone} {...automation} slotIdx={slotIdx} slotUsernames={slotUsernames} onCopied={onCopied} />
+        <AutomationSettingsPanel phone={phone} {...automation} slotIdx={slotIdx} slotUsername={slotUsername} slotUsernames={slotUsernames} onCopied={onCopied} />
       </div>
     </div>
   );
