@@ -88,17 +88,12 @@ function PhoneShell({ className, online, active }: { className?: string; online?
       {/* Glow */}
       <ellipse cx="110" cy="220" rx="90" ry="130" fill={`url(#${glowId})`}/>
       {/* Status text overlay */}
-      <circle cx="110" cy="195" r="4" fill={statusColor} opacity="0.9"/>
       {active ? (
         <text x="110" y="222" textAnchor="middle" fontSize="18" fontWeight="700"
           fontFamily="monospace" fill={statusColor} letterSpacing="3">ACTIVE</text>
       ) : (
-        <>
-          <text x="110" y="215" textAnchor="middle" fontSize="14" fontWeight="700"
-            fontFamily="monospace" fill={statusColor} letterSpacing="2">NOT</text>
-          <text x="110" y="234" textAnchor="middle" fontSize="14" fontWeight="700"
-            fontFamily="monospace" fill={statusColor} letterSpacing="2">ACTIVE</text>
-        </>
+        <text x="110" y="222" textAnchor="middle" fontSize="14" fontWeight="700"
+          fontFamily="monospace" fill="#00CFFF" letterSpacing="2">NOT ACTIVE</text>
       )}
       {/* Punch-hole camera */}
       <circle cx="110" cy="36" r="5.5" fill="#000005"/>
