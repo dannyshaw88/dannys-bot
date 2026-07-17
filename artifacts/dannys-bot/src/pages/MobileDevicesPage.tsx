@@ -39,9 +39,9 @@ interface UsbPhone {
 
 // ─── SVG icons ───────────────────────────────────────────────────────────────
 
-function PhoneFarmIcon({ className }: { className?: string }) {
+function PhoneFarmIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
       <rect x="0.5" y="8.5" width="4" height="1.6" rx="0.8"/>
       <rect x="0.5" y="11.5" width="3" height="1.6" rx="0.8"/>
       <rect x="5" y="1" width="11" height="19" rx="2"/>
@@ -54,12 +54,9 @@ function PhoneFarmIcon({ className }: { className?: string }) {
 }
 
 /** Generic phone silhouette — brand-neutral */
-function PhoneShell({ className, online, screenshotUrl }: { className?: string; online?: boolean; screenshotUrl?: string }) {
-  // Unique clip-path id per component instance (avoids DOM id collisions when
-  // multiple PhoneShell SVGs are rendered side-by-side in the farm grid).
-  const clipIdRef = useRef(`sc-${Math.random().toString(36).slice(2)}`);
-  const glowId    = online ? "glow-on" : "glow-off";
-  const clipId    = clipIdRef.current;
+function PhoneShell({ className, online, active }: { className?: string; online?: boolean; active?: boolean }) {
+  const glowId = online ? "glow-on" : "glow-off";
+  const statusColor = active ? "#22c55e" : "#60a5fa";
   return (
     <svg
       viewBox="0 0 220 440"
@@ -80,30 +77,29 @@ function PhoneShell({ className, online, screenshotUrl }: { className?: string; 
           <stop offset="0%" stopColor={online ? "#1AD2F2" : "#444"} stopOpacity={online ? "0.15" : "0.06"}/>
           <stop offset="100%" stopColor={online ? "#1AD2F2" : "#444"} stopOpacity="0"/>
         </radialGradient>
-        {/* Clip path that matches the inner screen rect so the screenshot stays
-            inside the rounded screen corners without any overflow. */}
-        <clipPath id={clipId}>
-          <rect x="12" y="14" width="196" height="412" rx="26"/>
-        </clipPath>
       </defs>
       {/* Body */}
       <rect x="2" y="2" width="216" height="436" rx="34" fill="#1c1c1e" stroke="#3a3a3c" strokeWidth="2"/>
       <rect x="8" y="8" width="204" height="424" rx="29" fill="#111113" stroke="#2c2c2e" strokeWidth="1"/>
-      {/* Wallpaper / screenshot — screenshot replaces the dark wallpaper when present */}
-      <rect x="12" y="14" width="196" height="412" rx="26" fill="url(#wallpaper)"/>
-      {screenshotUrl && (
-        <image
-          key={screenshotUrl}
-          href={screenshotUrl}
-          x="12" y="14" width="196" height="412"
-          clipPath={`url(#${clipId})`}
-          preserveAspectRatio="xMidYMid slice"
-        />
-      )}
-      {/* Sheen / glass reflection — on top of screenshot */}
-      <rect x="12" y="14" width="196" height="120" rx="26" fill="url(#sheen)" opacity={screenshotUrl ? "0.04" : "0.07"}/>
+      {/* Screen — always black */}
+      <rect x="12" y="14" width="196" height="412" rx="26" fill="#050508"/>
+      {/* Sheen / glass reflection */}
+      <rect x="12" y="14" width="196" height="120" rx="26" fill="url(#sheen)" opacity="0.05"/>
       {/* Glow */}
       <ellipse cx="110" cy="220" rx="90" ry="130" fill={`url(#${glowId})`}/>
+      {/* Status text overlay */}
+      <circle cx="110" cy="195" r="4" fill={statusColor} opacity="0.9"/>
+      {active ? (
+        <text x="110" y="222" textAnchor="middle" fontSize="18" fontWeight="700"
+          fontFamily="monospace" fill={statusColor} letterSpacing="3">ACTIVE</text>
+      ) : (
+        <>
+          <text x="110" y="215" textAnchor="middle" fontSize="14" fontWeight="700"
+            fontFamily="monospace" fill={statusColor} letterSpacing="2">NOT</text>
+          <text x="110" y="234" textAnchor="middle" fontSize="14" fontWeight="700"
+            fontFamily="monospace" fill={statusColor} letterSpacing="2">ACTIVE</text>
+        </>
+      )}
       {/* Punch-hole camera */}
       <circle cx="110" cy="36" r="5.5" fill="#000005"/>
       <circle cx="110" cy="36" r="3.5" fill="#0d1117"/>
@@ -323,15 +319,15 @@ function AddDevicePanel({
 function DeviceCard({
   device,
   online,
+  active,
   onClick,
   onRemove,
-  screenshotUrl,
 }: {
-  device:         FarmDevice;
-  online:         boolean;
-  onClick:        () => void;
-  onRemove:       () => void;
-  screenshotUrl?: string;
+  device:   FarmDevice;
+  online:   boolean;
+  active:   boolean;
+  onClick:  () => void;
+  onRemove: () => void;
 }) {
   return (
     <div className="group h-full relative flex flex-col">
@@ -342,7 +338,7 @@ function DeviceCard({
         <PhoneShell
           className="flex-1 min-h-0 w-auto max-w-[150px] drop-shadow-lg group-hover:scale-[1.03] transition-transform duration-200"
           online={online}
-          screenshotUrl={screenshotUrl}
+          active={active}
         />
         <div className="shrink-0 text-center space-y-0.5">
           <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
@@ -413,14 +409,7 @@ export function MobileDevicesPage() {
   const [usbPhones, setUsbPhones] = useState<UsbPhone[]>([]);
 
   // Serials with an active automation cycle — polled every 2 s.
-  // Screenshot URL is only set when the cycle is running, so the phone silhouette
-  // shows black when idle and live updates when the Human Session Tool is working.
   const [activeCycleSerials, setActiveCycleSerials] = useState<Set<string>>(new Set());
-
-  // Timestamp cache-buster updated every 2 s.  Using Date.now() (not a counter)
-  // means the URL is always fresh after a navigate-away / remount, so the browser
-  // never serves a stale frame when you return to this page.
-  const [screencapTs, setScreencapTs] = useState(() => Date.now());
 
   const refreshDevices = useCallback(async () => {
     try {
@@ -449,10 +438,9 @@ export function MobileDevicesPage() {
     refreshDevices();
     refreshUsb();
     refreshCycleActive();
-    const usbId    = setInterval(refreshUsb,         2_000);
-    const cycleId  = setInterval(refreshCycleActive, 2_000);
-    const tsId     = setInterval(() => setScreencapTs(Date.now()), 2_000);
-    return () => { clearInterval(usbId); clearInterval(cycleId); clearInterval(tsId); };
+    const usbId   = setInterval(refreshUsb,         2_000);
+    const cycleId = setInterval(refreshCycleActive, 2_000);
+    return () => { clearInterval(usbId); clearInterval(cycleId); };
   }, [refreshDevices, refreshUsb, refreshCycleActive]);
 
   const onlineSerials = new Set(
@@ -528,11 +516,9 @@ export function MobileDevicesPage() {
                       key={device.serial}
                       device={device}
                       online={onlineSerials.has(device.serial)}
+                      active={activeCycleSerials.has(device.serial)}
                       onClick={() => setLocation(`/mobile/farm/${encodeURIComponent(device.serial)}`)}
                       onRemove={() => handleRemove(device.slotIndex)}
-                      screenshotUrl={onlineSerials.has(device.serial) && activeCycleSerials.has(device.serial)
-                        ? `/api/mobile/devices/${encodeURIComponent(device.serial)}/screencap.png?t=${screencapTs}`
-                        : undefined}
                     />
                   );
                 }
