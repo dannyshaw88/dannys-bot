@@ -1,6 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { BanAnalyticsPage } from "@/pages/BanAnalyticsPage";
-import { GhostBrowserTabContent } from "@/pages/CreateGhostPage";
 import { useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -9,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Loader2, CheckCircle2, AlertCircle, Trash2, Instagram, Eye, EyeOff,
-  ClipboardPaste, Upload, GripVertical, Pencil, X, Plus, RotateCcw,
+  ClipboardPaste, Upload, GripVertical, Pencil, X, Plus, RotateCcw, Smartphone,
 } from "lucide-react";
 import { useCreateProfile } from "@/hooks/use-profiles";
 import { userAgents } from "@/shared/userAgents";
@@ -421,8 +420,16 @@ function BulkImportTabContent() {
   const [rows, setRows] = useState<ImportParsedRow[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
+  const [selectedSerial, setSelectedSerial] = useState<string>("");
   const createProfileMutation = useCreateProfile();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const { data: phonesData } = useQuery<{ phones: Array<{ serial: string; manufacturer?: string; model?: string }> }>({
+    queryKey: ["/api/mobile/usb-phones"],
+    queryFn: () => fetch("/api/mobile/usb-phones").then(r => r.json()),
+    refetchInterval: 10_000,
+  });
+  const phones = phonesData?.phones ?? [];
 
   const handleParse = useCallback(() => {
     if (!rawText.trim()) { toast({ title: "Nothing to parse", description: "Paste account data first.", variant: "destructive" }); return; }
@@ -430,7 +437,7 @@ function BulkImportTabContent() {
     if (parsed.length === 0) { toast({ title: "No accounts found", description: "Check format: username:password:2fasecret", variant: "destructive" }); return; }
     setRows(parsed);
     setSelectedIds(new Set(parsed.map(r => r.id)));
-    toast({ title: `Parsed ${parsed.length} account${parsed.length !== 1 ? "s" : ""}`, description: "Review and add to Accounts." });
+    toast({ title: `Parsed ${parsed.length} account${parsed.length !== 1 ? "s" : ""}`, description: "Review and add to slots." });
   }, [rawText, toast]);
 
   const pendingRows = rows.filter(r => r.status === "pending");
@@ -441,8 +448,75 @@ function BulkImportTabContent() {
   };
   const toggleRow = (id: string) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
+  const addRowsToDevice = useCallback(async (idsToAdd: string[], serial: string) => {
+    // Load current slots, merge new ones in (skip duplicates by username), save back
+    let existingSlots: Array<{ username: string; password: string; totpSecret?: string; emailAddress?: string; emailPassword?: string; phoneNumber?: string }> = [];
+    try {
+      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/account`);
+      if (r.ok) {
+        const d = await r.json();
+        existingSlots = Array.isArray(d?.slots) ? d.slots : [];
+      }
+    } catch { /* start fresh if fetch fails */ }
+
+    const existingUsernames = new Set(existingSlots.map(s => s.username.toLowerCase()));
+    const toAdd = idsToAdd.map(id => rows.find(r => r.id === id)).filter(Boolean) as ImportParsedRow[];
+
+    // Mark all as "adding" first
+    setRows(prev => prev.map(r => idsToAdd.includes(r.id) && r.status === "pending" ? { ...r, status: "adding" } : r));
+
+    const newSlots = toAdd
+      .filter(row => row.status === "pending" || row.status === "adding")
+      .filter(row => !existingUsernames.has(row.username.toLowerCase()))
+      .map(row => ({
+        username: row.username,
+        password: row.password,
+        totpSecret: row.twoFASecret || "",
+        emailAddress: row.email || "",
+        emailPassword: row.emailPassword || "",
+        phoneNumber: "",
+      }));
+
+    const merged = [...existingSlots, ...newSlots];
+
+    try {
+      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/account`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slots: merged }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      // Mark added/error based on whether each username made it in
+      const savedUsernames = new Set(newSlots.map(s => s.username.toLowerCase()));
+      const duplicates = new Set(toAdd.filter(row => existingUsernames.has(row.username.toLowerCase())).map(r => r.id));
+      setRows(prev => prev.map(r => {
+        if (!idsToAdd.includes(r.id)) return r;
+        if (duplicates.has(r.id)) return { ...r, status: "error", errorMsg: "Already exists on this device" };
+        if (savedUsernames.has(r.username.toLowerCase())) return { ...r, status: "added" };
+        return r;
+      }));
+      setSelectedIds(prev => { const n = new Set(prev); idsToAdd.forEach(id => n.delete(id)); return n; });
+      const ok = newSlots.length;
+      const dup = duplicates.size;
+      if (ok > 0 && dup === 0) toast({ title: `${ok} account${ok !== 1 ? "s" : ""} added to device slots` });
+      else if (ok > 0) toast({ title: `${ok} added, ${dup} skipped (duplicate)`, variant: "destructive" });
+      else toast({ title: "All duplicates — nothing added", description: "These usernames already exist on this device.", variant: "destructive" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Save failed";
+      setRows(prev => prev.map(r => idsToAdd.includes(r.id) ? { ...r, status: "error", errorMsg: msg } : r));
+      toast({ title: "Failed to save to device", description: msg, variant: "destructive" });
+    }
+  }, [rows, toast]);
+
   const addRows = useCallback(async (idsToAdd: string[]) => {
     if (idsToAdd.length === 0) return;
+    if (selectedSerial) {
+      setAdding(true);
+      await addRowsToDevice(idsToAdd, selectedSerial);
+      setAdding(false);
+      return;
+    }
+    // No device selected — fall back to profile creation
     setAdding(true);
     let ok = 0, fail = 0;
     for (const id of idsToAdd) {
@@ -472,7 +546,7 @@ function BulkImportTabContent() {
     if (ok > 0 && fail === 0) toast({ title: `${ok} account${ok !== 1 ? "s" : ""} added`, description: "Now visible on the Accounts page." });
     else if (ok > 0) toast({ title: `${ok} added, ${fail} failed`, variant: "destructive" });
     else toast({ title: "All failed", description: "Check error rows for details.", variant: "destructive" });
-  }, [rows, createProfileMutation, toast]);
+  }, [rows, selectedSerial, addRowsToDevice, createProfileMutation, toast]);
 
   const handleAddSelected = () => {
     const pending = [...selectedIds].filter(id => rows.find(r => r.id === id)?.status === "pending");
@@ -483,14 +557,44 @@ function BulkImportTabContent() {
   const handleClear = () => { setRawText(""); setRows([]); setSelectedIds(new Set()); };
   const selectedPendingCount = [...selectedIds].filter(id => rows.find(r => r.id === id)?.status === "pending").length;
 
+  const selectedPhone = phones.find(p => p.serial === selectedSerial);
+  const deviceLabel = selectedPhone
+    ? (selectedPhone.manufacturer ? `${selectedPhone.manufacturer} ${selectedPhone.model ?? selectedPhone.serial}` : selectedPhone.serial)
+    : null;
+
   return (
     <div className="w-full pb-8">
       <div className="flex items-center justify-between mb-5">
         <div>
           <h2 className="text-lg font-bold">Bulk Account Import</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">Paste credentials to parse and add accounts in bulk. No proxies are assigned automatically.</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Paste credentials, select a device, and add accounts as slots.</p>
         </div>
         {rows.length > 0 && <Button variant="ghost" size="sm" onClick={handleClear} className="text-muted-foreground">Clear all</Button>}
+      </div>
+
+      {/* Device selector */}
+      <div className="rounded-lg border border-border bg-card p-4 mb-4 flex items-center gap-3">
+        <Smartphone className="w-4 h-4 text-muted-foreground shrink-0" />
+        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground whitespace-nowrap">Target Device</span>
+        {phones.length === 0 ? (
+          <span className="text-xs text-muted-foreground italic">No devices connected — accounts will be added to Profiles instead</span>
+        ) : (
+          <select
+            value={selectedSerial}
+            onChange={e => setSelectedSerial(e.target.value)}
+            className="flex-1 text-sm bg-background border border-border rounded-md px-3 py-1.5 outline-none focus:ring-1 focus:ring-primary"
+          >
+            <option value="">— No device (add to Profiles) —</option>
+            {phones.map(p => (
+              <option key={p.serial} value={p.serial}>
+                {p.manufacturer ? `${p.manufacturer} ${p.model ?? p.serial}` : p.serial}
+              </option>
+            ))}
+          </select>
+        )}
+        {selectedSerial && (
+          <span className="text-xs text-primary font-semibold whitespace-nowrap">→ Account Slots</span>
+        )}
       </div>
 
       <div className="rounded-lg border border-border bg-card p-4 mb-4">
@@ -539,7 +643,7 @@ function BulkImportTabContent() {
             </div>
             <Button size="sm" className="h-7 text-xs gap-1.5" disabled={selectedPendingCount === 0 || adding} onClick={handleAddSelected}>
               {adding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-              Add {selectedPendingCount > 0 ? `${selectedPendingCount} ` : ""}to Accounts
+              Add {selectedPendingCount > 0 ? `${selectedPendingCount} ` : ""}{selectedSerial ? "to Device Slots" : "to Accounts"}
             </Button>
           </div>
           <div className="grid grid-cols-[20px_180px_140px_180px_200px_130px_90px_60px] gap-x-3 px-4 py-2 border-b border-border bg-muted/20 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
@@ -585,7 +689,7 @@ function BulkImportTabContent() {
 
 // ─── Tools Page ───────────────────────────────────────────────────────────────
 
-const TOOLS_TABS = ["Evasion Stats", "Ghost Browser", "Trust Scores", "Import"] as const;
+const TOOLS_TABS = ["Evasion Stats", "Trust Scores", "Import"] as const;
 type ToolsTab = typeof TOOLS_TABS[number];
 
 export function ToolsPage() {
@@ -595,7 +699,7 @@ export function ToolsPage() {
     <AppLayout>
       <div className="mb-6">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Tools</h1>
-        <p className="text-muted-foreground mt-1">Evasion analytics, ghost browser, bulk import, and trust score configuration.</p>
+        <p className="text-muted-foreground mt-1">Evasion analytics, bulk import, and trust score configuration.</p>
       </div>
 
       <div className="flex items-center gap-0 mb-6 border-b border-border/60">
@@ -615,8 +719,6 @@ export function ToolsPage() {
       </div>
 
       {activeTab === "Evasion Stats" && <BanAnalyticsPage />}
-
-      {activeTab === "Ghost Browser" && <GhostBrowserTabContent />}
 
       {activeTab === "Trust Scores" && (
         <div className="desktop-card p-6">

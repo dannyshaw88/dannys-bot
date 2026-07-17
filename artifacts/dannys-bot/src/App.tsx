@@ -7,7 +7,6 @@ import { useState, useEffect, Component, type ReactNode, type ErrorInfo } from "
 import { Dashboard } from "@/pages/Dashboard";
 import { StatsPage } from "@/pages/StatsPage";
 import { ProfilesPage } from "@/pages/ProfilesPage";
-import { CreateGhostPage } from "@/pages/CreateGhostPage";
 import { ProfileDetailsPage } from "@/pages/ProfileDetailsPage";
 import { ProxiesPage } from "@/pages/ProxiesPage";
 import { SettingsPage } from "@/pages/SettingsPage";
@@ -108,7 +107,6 @@ function Router() {
       </Route>
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/profiles" component={ProfilesPage} />
-      <Route path="/create-ghost" component={CreateGhostPage} />
       <Route path="/stats" component={StatsPage} />
       <Route path="/profiles/:id" component={ProfileDetailsPage} />
       <Route path="/proxies" component={ProxiesPage} />
