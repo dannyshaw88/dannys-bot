@@ -3811,11 +3811,6 @@ function AutomationSettingsPanel({
                       >
                         {settings.makePostLocalFolderPath ? "Assigned Directory" : "Browse"}
                       </button>
-                      {settings.makePostLocalFolderPath && (
-                        <span className="text-[10px] font-mono text-muted-foreground max-w-[240px] truncate" title={settings.makePostLocalFolderPath}>
-                          {settings.makePostLocalFolderPath}
-                        </span>
-                      )}
                       <div className="flex items-center gap-2">
                         <input type="checkbox" id="make-a-post-local-no-repeat"
                           checked={settings.makePostLocalFolderNoRepeat}
