@@ -2154,12 +2154,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         const merged = { ...AUTOMATION_DEFAULTS, ...d };
         lastSavedRef.current = JSON.stringify(merged);
         setSettings(merged);
-        // On remount with the toggle already on, resume immediately instead
-        // of waiting the full configured interval.  This ensures the tool
-        // stays active across in-app navigation (switching pages and back).
-        if (merged.enabled) {
-          manualToggleOnRef.current = true;
-        }
+        // Do NOT set manualToggleOnRef here. On restart the toggle is already
+        // on, but accounts must NOT fire immediately — each slot schedules its
+        // own random first-run delay within the configured interval instead.
+        // manualToggleOnRef is only set by explicit user action (setEnabledByUser).
       })
       .catch(() => { /* keep defaults */ })
       .finally(() => { if (active) { setLoading(false); hydratedRef.current = true; } });
@@ -2400,11 +2398,22 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       timer = setTimeout(runCycle, Math.round(gapMs));
     };
 
-    // Always run the first cycle immediately — whether the user just toggled
-    // on or the app restarted with the toggle already on. The next-run gap
-    // is scheduled after each cycle completes (see setNextRunAt below).
+    // Manual toggle-on → fire immediately (user asked for it right now).
+    // App restart with toggle already on → spread the first run across a
+    // random delay within the configured Run-every interval so all accounts
+    // don't fire simultaneously the moment the software restarts.
+    const wasManualToggleOn = manualToggleOnRef.current;
     manualToggleOnRef.current = false;
-    runCycle();
+    if (wasManualToggleOn) {
+      runCycle();
+    } else {
+      const s0 = settingsRef.current;
+      const safeMin = Math.max(1, Math.min(s0.cycleIntervalMin, s0.cycleIntervalMax));
+      const safeMax = Math.max(1, Math.max(s0.cycleIntervalMin, s0.cycleIntervalMax));
+      const startDelayMs = (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
+      setNextRunAt(Date.now() + Math.round(startDelayMs));
+      timer = setTimeout(runCycle, Math.round(startDelayMs));
+    }
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
