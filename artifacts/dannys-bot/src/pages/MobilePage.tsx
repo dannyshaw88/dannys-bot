@@ -4023,137 +4023,137 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
                 </Button>
               </div>
 
-              {/* Row 1: Username + Password */}
+              {/* Row 1: Username + 2FA OTP Secret */}
               <div className="flex items-end gap-3 flex-wrap">
-              {/* Username */}
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Username</Label>
-                <Input
-                  value={slot.username}
-                  onChange={e => updateSlot(i, { username: e.target.value })}
-                  placeholder="username"
-                  disabled={loading}
-                  autoComplete="off"
-                  className="w-[20ch]"
-                />
-              </div>
-
-              {/* Password */}
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Password</Label>
-                <div className="flex items-center gap-1.5">
+                {/* Username */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Username</Label>
                   <Input
-                    type={showPassword[i] ? "text" : "password"}
-                    value={slot.password}
-                    onChange={e => updateSlot(i, { password: e.target.value })}
-                    placeholder="password"
+                    value={slot.username}
+                    onChange={e => updateSlot(i, { username: e.target.value })}
+                    placeholder="username"
                     disabled={loading}
                     autoComplete="off"
                     className="w-[20ch]"
                   />
-                  <Button type="button" variant="secondary" size="sm"
-                    onClick={() => setShowPassword(s => s.map((v, idx) => idx === i ? !v : v))}>
-                    {showPassword[i] ? "Hide" : "Show"}
-                  </Button>
+                </div>
+
+                {/* 2FA OTP Secret */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">2FA OTP Secret</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      value={slot.totpSecret}
+                      onChange={e => {
+                        updateSlot(i, { totpSecret: e.target.value });
+                        setTotpCode(c => c.map((v, idx) => idx === i ? null : v));
+                        setTotpError(er => er.map((v, idx) => idx === i ? null : v));
+                      }}
+                      placeholder="JBSWY3DPEHPK3PXP"
+                      disabled={loading}
+                      autoComplete="off"
+                      className="w-[22ch] font-mono text-xs"
+                    />
+                    <Button type="button" variant="secondary" size="sm"
+                      disabled={!slot.totpSecret.trim()}
+                      onClick={() => generateTotp(i, slot.totpSecret)}>
+                      Generate
+                    </Button>
+                    {totpCode[i] && (
+                      <span className="font-mono text-sm font-bold text-green-500 tracking-widest">{totpCode[i]}</span>
+                    )}
+                    {totpError[i] && (
+                      <span className="text-xs text-destructive">{totpError[i]}</span>
+                    )}
+                  </div>
                 </div>
               </div>
 
-            </div>
-
-            {/* Row 2: Email Address + Email Password */}
-            <div className="flex items-end gap-3 flex-wrap">
-              {/* Email Address */}
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Email Address</Label>
-                <Input
-                  value={slot.emailAddress}
-                  onChange={e => updateSlot(i, { emailAddress: e.target.value })}
-                  placeholder="email@example.com"
-                  disabled={loading}
-                  autoComplete="off"
-                  className="w-[20ch]"
-                />
+              {/* Row 2: Password */}
+              <div className="flex items-end gap-3 flex-wrap">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Password</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      type={showPassword[i] ? "text" : "password"}
+                      value={slot.password}
+                      onChange={e => updateSlot(i, { password: e.target.value })}
+                      placeholder="password"
+                      disabled={loading}
+                      autoComplete="off"
+                      className="w-[20ch]"
+                    />
+                    <Button type="button" variant="secondary" size="sm"
+                      onClick={() => setShowPassword(s => s.map((v, idx) => idx === i ? !v : v))}>
+                      {showPassword[i] ? "Hide" : "Show"}
+                    </Button>
+                  </div>
+                </div>
               </div>
 
-              {/* Email Password */}
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Email Password</Label>
-                <div className="flex items-center gap-1.5">
+              {/* Row 3: Email Address + Phone Number */}
+              <div className="flex items-end gap-3 flex-wrap">
+                {/* Email Address */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Email Address</Label>
                   <Input
-                    type={showEmailPassword[i] ? "text" : "password"}
-                    value={slot.emailPassword}
-                    onChange={e => updateSlot(i, { emailPassword: e.target.value })}
-                    placeholder="email password"
+                    value={slot.emailAddress}
+                    onChange={e => updateSlot(i, { emailAddress: e.target.value })}
+                    placeholder="email@example.com"
                     disabled={loading}
                     autoComplete="off"
                     className="w-[20ch]"
                   />
-                  <Button type="button" variant="secondary" size="sm"
-                    onClick={() => setShowEmailPassword(s => s.map((v, idx) => idx === i ? !v : v))}>
-                    {showEmailPassword[i] ? "Hide" : "Show"}
-                  </Button>
                 </div>
-              </div>
-            </div>
 
-            {/* Row 3: 2FA OTP Secret + Phone Number + Delete */}
-            <div className="flex items-end gap-3 flex-wrap">
-              {/* 2FA OTP Secret */}
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">2FA OTP Secret</Label>
-                <div className="flex items-center gap-1.5">
+                {/* Phone Number */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Phone Number</Label>
                   <Input
-                    value={slot.totpSecret}
-                    onChange={e => {
-                      updateSlot(i, { totpSecret: e.target.value });
-                      setTotpCode(c => c.map((v, idx) => idx === i ? null : v));
-                      setTotpError(er => er.map((v, idx) => idx === i ? null : v));
-                    }}
-                    placeholder="JBSWY3DPEHPK3PXP"
+                    value={slot.phoneNumber}
+                    onChange={e => updateSlot(i, { phoneNumber: e.target.value })}
+                    placeholder="+1 555 000 0000"
                     disabled={loading}
                     autoComplete="off"
-                    className="w-[22ch] font-mono text-xs"
+                    className="w-[20ch]"
                   />
-                  <Button type="button" variant="secondary" size="sm"
-                    disabled={!slot.totpSecret.trim()}
-                    onClick={() => generateTotp(i, slot.totpSecret)}>
-                    Generate
-                  </Button>
-                  {totpCode[i] && (
-                    <span className="font-mono text-sm font-bold text-green-500 tracking-widest">{totpCode[i]}</span>
-                  )}
-                  {totpError[i] && (
-                    <span className="text-xs text-destructive">{totpError[i]}</span>
-                  )}
                 </div>
               </div>
 
-              {/* Phone Number */}
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Phone Number</Label>
-                <Input
-                  value={slot.phoneNumber}
-                  onChange={e => updateSlot(i, { phoneNumber: e.target.value })}
-                  placeholder="+1 555 000 0000"
-                  disabled={loading}
-                  autoComplete="off"
-                  className="w-[20ch]"
-                />
-              </div>
+              {/* Row 4: Email Password + Delete */}
+              <div className="flex items-end gap-3 flex-wrap">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Email Password</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      type={showEmailPassword[i] ? "text" : "password"}
+                      value={slot.emailPassword}
+                      onChange={e => updateSlot(i, { emailPassword: e.target.value })}
+                      placeholder="email password"
+                      disabled={loading}
+                      autoComplete="off"
+                      className="w-[20ch]"
+                    />
+                    <Button type="button" variant="secondary" size="sm"
+                      onClick={() => setShowEmailPassword(s => s.map((v, idx) => idx === i ? !v : v))}>
+                      {showEmailPassword[i] ? "Hide" : "Show"}
+                    </Button>
+                  </div>
+                </div>
 
-              {/* Delete slot */}
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                disabled={loading}
-                onClick={() => removeSlot(i)}
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive self-end"
-                aria-label={`Delete Instagram Account Slot ${i + 1}`}
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            </div>
+                {/* Delete slot */}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={loading}
+                  onClick={() => removeSlot(i)}
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive self-end"
+                  aria-label={`Delete Instagram Account Slot ${i + 1}`}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
           </div>
         ))}
 
