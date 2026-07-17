@@ -88,7 +88,7 @@ function FilledHammerIcon({ className, style }: { className?: string; style?: Re
   );
 }
 
-function FilledFarmIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+export function FilledFarmIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   // Phone + gear badge + speed lines — matches the Phone Farm icon
   return (
     <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
