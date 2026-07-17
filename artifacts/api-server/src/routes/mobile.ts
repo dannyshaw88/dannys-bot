@@ -282,7 +282,8 @@ type AutomationSettings = {
 };
 type DeviceSlot = { username: string; password: string; totpSecret?: string; emailAddress?: string; emailPassword?: string; phoneNumber?: string };
 type DeviceAccount = { slots: DeviceSlot[] };
-type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings; account?: DeviceAccount; slotAutomation?: Record<string, AutomationSettings> };
+type DeviceSettings = { googlePlayEmail?: string; googlePlayPassword?: string; selectedSimSlot?: number };
+type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings; account?: DeviceAccount; slotAutomation?: Record<string, AutomationSettings>; deviceSettings?: DeviceSettings };
 type InstanceConfigMap = Record<string, InstanceConfig>;
 
 function configFilePath(): string {
@@ -1358,6 +1359,114 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       saveInstanceConfigs(cfg);
       res.json({ ok: true, account: input });
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to save the account" }); }
+  });
+
+  // ── Device settings (Google Play credentials + SIM selection) ──────────────
+  app.get("/api/mobile/devices/:serial/device-settings", (req: Request, res: Response) => {
+    const cfg = loadInstanceConfigs();
+    res.json(cfg[p(req, "serial")]?.deviceSettings ?? {});
+  });
+  app.post("/api/mobile/devices/:serial/device-settings", (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const { googlePlayEmail, googlePlayPassword, selectedSimSlot } = req.body as DeviceSettings;
+      const cfg = loadInstanceConfigs();
+      cfg[serial] = { ...cfg[serial], deviceSettings: { googlePlayEmail, googlePlayPassword, selectedSimSlot } };
+      saveInstanceConfigs(cfg);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
+
+  // ── Device spec — auto-detect hardware & software via adb getprop ──────────
+  app.get("/api/mobile/devices/:serial/device-spec", async (req: Request, res: Response) => {
+    try {
+      const tools = android.detectToolset();
+      const adbPath = tools.adb.path;
+      if (!adbPath) { res.status(503).json({ error: "ADB not found" }); return; }
+      const serial = p(req, "serial");
+
+      const prop = async (key: string): Promise<string> => {
+        try {
+          const r = await execFileP(adbPath, ["-s", serial, "shell", "getprop", key], { timeout: 4000 } as any);
+          return String(r.stdout || "").trim();
+        } catch { return ""; }
+      };
+      const shell = async (cmd: string): Promise<string> => {
+        try {
+          const r = await execFileP(adbPath, ["-s", serial, "shell", cmd], { timeout: 5000 } as any);
+          return String(r.stdout || "").trim();
+        } catch { return ""; }
+      };
+
+      const [
+        manufacturer, model, brand, androidVersion, sdkInt, cpuAbi,
+        densityPrimary, densityFallback, hardware, buildFingerprint, buildDate,
+        carrier1, carrier2, wmSizeRaw, meminfoRaw, kernelRaw, dfRaw,
+      ] = await Promise.all([
+        prop("ro.product.manufacturer"), prop("ro.product.model"), prop("ro.product.brand"),
+        prop("ro.build.version.release"), prop("ro.build.version.sdk"), prop("ro.product.cpu.abi"),
+        prop("ro.sf.lcd_density"), prop("ro.screen.density"),
+        prop("ro.hardware"), prop("ro.build.fingerprint"), prop("ro.build.date"),
+        prop("gsm.operator.alpha"), prop("gsm.operator.alpha.2"),
+        shell("wm size"), shell("cat /proc/meminfo | head -1"), shell("uname -r"), shell("df /data | tail -1"),
+      ]);
+
+      const density = densityPrimary || densityFallback;
+      const sizeM = wmSizeRaw.match(/Physical size:\s*(\d+)x(\d+)/);
+      const resolution = sizeM ? { w: parseInt(sizeM[1]), h: parseInt(sizeM[2]) } : null;
+      const memM = meminfoRaw.match(/MemTotal:\s+(\d+)\s+kB/i);
+      const ramMb = memM ? Math.round(parseInt(memM[1]) / 1024) : null;
+      const dfParts = dfRaw.trim().split(/\s+/);
+      let storageTotalMb: number | null = null;
+      if (dfParts.length >= 2) {
+        const total = parseInt(dfParts[1]);
+        if (!isNaN(total) && total > 1000) storageTotalMb = Math.round(total / 1024);
+      }
+
+      // Phone number via iphonesubinfo service (best-effort, varies by Android version)
+      const parseSubinfo = (raw: string): string | null => {
+        const parts: string[] = [];
+        const re = /'([^']*)'/g;
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(raw)) !== null) {
+          for (const ch of m[1]) { if (ch !== "." && /[\d+]/.test(ch)) parts.push(ch); }
+        }
+        const num = parts.join("").replace(/[^0-9+]/g, "");
+        return num.length >= 7 ? num : null;
+      };
+
+      let phoneNumber: string | null = null;
+      let phoneNumber2: string | null = null;
+      const sdk = parseInt(sdkInt) || 0;
+      if (sdk >= 33) {
+        const [r1, r2] = await Promise.all([
+          shell("service call iphonesubinfo 17 i32 1 i32 0"),
+          shell("service call iphonesubinfo 18 i32 1 i32 0"),
+        ]);
+        phoneNumber = parseSubinfo(r1); phoneNumber2 = parseSubinfo(r2);
+      } else if (sdk >= 29) {
+        const [r1, r2] = await Promise.all([
+          shell("service call iphonesubinfo 15 i32 1"),
+          shell("service call iphonesubinfo 16 i32 1"),
+        ]);
+        phoneNumber = parseSubinfo(r1); phoneNumber2 = parseSubinfo(r2);
+      } else {
+        phoneNumber = parseSubinfo(await shell("service call iphonesubinfo 7"));
+      }
+
+      const sims: Array<{ slot: number; carrier: string | null; phoneNumber: string | null }> = [];
+      if (carrier1 || phoneNumber) sims.push({ slot: 0, carrier: carrier1 || null, phoneNumber: phoneNumber || null });
+      if (carrier2 || phoneNumber2) sims.push({ slot: 1, carrier: carrier2 || null, phoneNumber: phoneNumber2 || null });
+
+      res.json({
+        manufacturer: manufacturer || null, model: model || null, brand: brand || null,
+        androidVersion: androidVersion || null, sdkInt: sdkInt || null, cpuAbi: cpuAbi || null,
+        density: density || null, hardware: hardware || null,
+        buildFingerprint: buildFingerprint ? buildFingerprint.substring(0, 100) : null,
+        buildDate: buildDate || null, resolution, ramMb, storageTotalMb,
+        kernel: kernelRaw || null, sims,
+      });
+    } catch (e: any) { res.status(500).json({ error: e?.message }); }
   });
 
   // ── Check Feed — N downward scrolls over the Instagram feed currently on

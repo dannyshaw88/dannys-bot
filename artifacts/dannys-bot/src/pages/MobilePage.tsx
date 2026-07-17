@@ -4856,12 +4856,53 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const csSaveRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const csInitRef = React.useRef(false);
 
+  // Google Play settings
+  const [gpEmail,      setGpEmail]      = React.useState("");
+  const [gpPassword,   setGpPassword]   = React.useState("");
+  const [savingGp,     setSavingGp]     = React.useState(false);
+  const [gpSaved,      setGpSaved]      = React.useState(false);
+
+  // Device spec
+  interface SimInfo { slot: number; carrier: string | null; phoneNumber: string | null }
+  interface DeviceSpec {
+    manufacturer: string | null; model: string | null; brand: string | null;
+    androidVersion: string | null; sdkInt: string | null; cpuAbi: string | null;
+    density: string | null; hardware: string | null; buildFingerprint: string | null;
+    buildDate: string | null; resolution: { w: number; h: number } | null;
+    ramMb: number | null; storageTotalMb: number | null; kernel: string | null;
+    sims: SimInfo[];
+  }
+  const [deviceSpec,   setDeviceSpec]   = React.useState<DeviceSpec | null>(null);
+  const [specLoading,  setSpecLoading]  = React.useState(false);
+
   const applyConfig = React.useCallback((cfg: BatteryScheduleConfig) => {
     setEnabled(cfg.enabled);
     setUnplugMinutes(cfg.unplugMinutes);
     setCycleHours(cfg.cycleHours);
     setSpoofLevel(cfg.spoofLevel);
   }, []);
+
+  // Load Google Play settings
+  React.useEffect(() => {
+    if (!serial) return;
+    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-settings`)
+      .then(r => r.json()).then(d => {
+        setGpEmail(d.googlePlayEmail ?? "");
+        setGpPassword(d.googlePlayPassword ?? "");
+      }).catch(() => {});
+  }, [serial]);
+
+  // Load device spec
+  const loadDeviceSpec = React.useCallback(() => {
+    if (!serial) return;
+    setSpecLoading(true);
+    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-spec`)
+      .then(r => r.json()).then(d => setDeviceSpec(d))
+      .catch(() => {})
+      .finally(() => setSpecLoading(false));
+  }, [serial]);
+
+  React.useEffect(() => { loadDeviceSpec(); }, [loadDeviceSpec]);
 
   // Load saved schedule + probe cache on mount
   React.useEffect(() => {
@@ -4951,6 +4992,20 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     } finally { setResuming(false); }
   };
 
+  const handleSaveGp = async () => {
+    if (!serial) return;
+    setSavingGp(true);
+    try {
+      await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-settings`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ googlePlayEmail: gpEmail, googlePlayPassword: gpPassword }),
+      });
+      setGpSaved(true);
+      setTimeout(() => setGpSaved(false), 2000);
+    } catch { /* ignore */ }
+    finally { setSavingGp(false); }
+  };
+
   // Auto-save collision scheduler whenever any value changes (debounced 600 ms)
   React.useEffect(() => {
     if (!serial) return;
@@ -4971,8 +5026,118 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const notReal  = ctrl?.probed && ctrl?.supported === false;
   const isActive = sched?.running ?? false;
 
+  const fmtStorage = (mb: number | null) => {
+    if (!mb) return null;
+    return mb >= 1024 ? `${(mb / 1024).toFixed(0)} GB` : `${mb} MB`;
+  };
+  const fmtRam = (mb: number | null) => {
+    if (!mb) return null;
+    return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} MB`;
+  };
+
   return (
     <div className="h-full overflow-y-auto p-6 space-y-6">
+
+      {/* ── Google Play Account ─────────────────────────────────────── */}
+      <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+        <p className="text-sm font-semibold text-foreground">Google Play Account</p>
+        <div className="flex items-end gap-3 flex-wrap">
+          <div className="space-y-1.5 flex-1 min-w-[180px]">
+            <Label className="text-xs text-muted-foreground">Email Address</Label>
+            <Input value={gpEmail} onChange={e => setGpEmail(e.target.value)}
+              placeholder="example@gmail.com" autoComplete="off" />
+          </div>
+          <div className="space-y-1.5 flex-1 min-w-[180px]">
+            <Label className="text-xs text-muted-foreground">Password</Label>
+            <Input type="password" value={gpPassword} onChange={e => setGpPassword(e.target.value)}
+              placeholder="••••••••" autoComplete="new-password" />
+          </div>
+          <Button onClick={handleSaveGp} disabled={savingGp || !serial}
+            style={gpSaved ? { background: "#16a34a", borderColor: "#16a34a" } : undefined}>
+            {gpSaved ? <CheckCircle2 className="w-4 h-4 text-white" /> : savingGp ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </div>
+
+      {/* ── SIM Card ────────────────────────────────────────────────── */}
+      <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-foreground">SIM Card</p>
+          <Button type="button" size="sm" variant="ghost" onClick={loadDeviceSpec} disabled={specLoading}
+            className="h-7 text-xs gap-1.5">
+            <RefreshCw className={`w-3 h-3 ${specLoading ? "animate-spin" : ""}`} />
+            {specLoading ? "Detecting…" : "Refresh"}
+          </Button>
+        </div>
+        {deviceSpec && deviceSpec.sims.length > 0 ? (
+          <div className="space-y-2">
+            {deviceSpec.sims.map(sim => (
+              <div key={sim.slot} className="flex items-center gap-3 rounded-lg bg-muted/30 px-3 py-2.5">
+                <Smartphone className="w-4 h-4 text-primary shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-foreground">
+                    SIM {sim.slot + 1}{sim.carrier ? ` — ${sim.carrier}` : ""}
+                  </p>
+                  {sim.phoneNumber
+                    ? <p className="text-xs text-muted-foreground font-mono mt-0.5">{sim.phoneNumber}</p>
+                    : <p className="text-xs text-muted-foreground italic mt-0.5">Phone number unavailable</p>
+                  }
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground italic">
+            {specLoading ? "Detecting SIM cards…" : serial ? "No SIM detected — tap Refresh to try again." : "No device connected."}
+          </p>
+        )}
+      </div>
+
+      {/* ── My Device Spec ──────────────────────────────────────────── */}
+      <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-foreground">My Device Spec</p>
+          {specLoading && <span className="text-xs text-muted-foreground animate-pulse">Auto-detecting…</span>}
+        </div>
+        {deviceSpec ? (() => {
+          const rows: [string, string | null][] = [
+            ["Manufacturer", deviceSpec.manufacturer],
+            ["Model",        deviceSpec.model],
+            ["Brand",        deviceSpec.brand],
+            ["Android",      deviceSpec.androidVersion ? `Android ${deviceSpec.androidVersion} (SDK ${deviceSpec.sdkInt})` : null],
+            ["CPU / ABI",    deviceSpec.cpuAbi],
+            ["Hardware",     deviceSpec.hardware],
+            ["Screen",       deviceSpec.resolution ? `${deviceSpec.resolution.w}×${deviceSpec.resolution.h} @ ${deviceSpec.density}dpi` : null],
+            ["RAM",          fmtRam(deviceSpec.ramMb)],
+            ["Storage",      fmtStorage(deviceSpec.storageTotalMb)],
+            ["Kernel",       deviceSpec.kernel],
+            ["Build Date",   deviceSpec.buildDate],
+          ].filter(([, v]) => v) as [string, string][];
+          return (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-x-8 gap-y-3">
+                {rows.map(([label, value]) => (
+                  <div key={label}>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+                    <p className="text-xs text-foreground font-mono mt-0.5 break-all">{value}</p>
+                  </div>
+                ))}
+              </div>
+              {deviceSpec.buildFingerprint && (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Build Fingerprint</p>
+                  <p className="text-xs text-foreground font-mono mt-0.5 break-all">{deviceSpec.buildFingerprint}</p>
+                </div>
+              )}
+            </div>
+          );
+        })() : (
+          <p className="text-xs text-muted-foreground italic">
+            {specLoading ? "Auto-detecting hardware…" : serial ? "Tap Refresh on the SIM Card section to detect specs." : "No device connected."}
+          </p>
+        )}
+      </div>
+
       <h2 className="text-lg font-bold text-foreground">Phone Settings</h2>
 
       {/* ── Collision Scheduler ────────────────────────────────────────── */}
@@ -5529,7 +5694,7 @@ const TOTAL_SLOTS = 1;
 type MobileTab = "account" | "phonesettings" | "actionlog" | "metrics" | "log";
 const MOBILE_TABS: { id: MobileTab; label: string }[] = [
   { id: "account",      label: "Accounts"       },
-  { id: "phonesettings",label: "Phone Settings" },
+  { id: "phonesettings",label: "My Device" },
   { id: "metrics",      label: "Metrics"        },
   { id: "actionlog",    label: "Action Log"     },
   { id: "log",          label: "Debugging Log"  },

@@ -4,6 +4,49 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.1.670] — 2026-07-17
+
+### Mobile Farm — Tab renamed: "Phone Settings" → "My Device"
+The right-panel tab previously labelled "Phone Settings" is now labelled "My Device" to better reflect that it covers the whole device, not just settings. The sub-section heading inside the panel remains "Phone Settings" as it accurately describes the collision-scheduler and battery-management controls below it.
+
+### Mobile Farm — My Device: Google Play Account card
+A new card appears at the top of the My Device panel. It stores the Google Play email address and password for the connected device. Credentials are persisted per-device in `mobile-instances.json` via the new `GET/POST /api/mobile/devices/:serial/device-settings` endpoints. Saving shows a green tick and auto-clears after 2 seconds.
+
+### Mobile Farm — My Device: SIM Card auto-detection
+Below the Google Play card, a SIM Card section auto-detects SIM slot(s) on the connected device at panel load via `adb getprop gsm.operator.alpha` (SIM 1) and `gsm.operator.alpha.2` (SIM 2 on dual-SIM phones). Where the Android permissions model allows, the phone number is also retrieved via `service call iphonesubinfo` (index varies by SDK level: 7 for Android < 10, 15/16 for Android 10–12, 17/18 for Android 13+). A Refresh button re-runs detection on demand. If the phone number cannot be extracted the field shows "Phone number unavailable" rather than an error.
+
+### Mobile Farm — My Device: Device Spec auto-detection
+A "My Device Spec" section reads hardware and software properties from the connected device via parallel `adb getprop` calls and displays them in a two-column grid:
+- Manufacturer, Model, Brand
+- Android version + SDK level
+- CPU ABI, Hardware chipset
+- Screen resolution + DPI
+- RAM (from `/proc/meminfo`)
+- Storage total (from `df /data`)
+- Kernel version (`uname -r`)
+- Build date, Build fingerprint (truncated to 100 chars)
+
+All three new sections (Google Play, SIM, Device Spec) are device-isolated — each serial stores its own saved data independently.
+
+### Mobile Farm — Tab order: Metrics now before Action Log
+The Metrics tab is now positioned immediately after Accounts, before the Action Log tab.
+
+### Mobile Farm — Tab labels now always black
+All five tab labels (Accounts, My Device, Metrics, Action Log, Debugging Log) now use `text-foreground` (black) in both active and inactive states instead of the grey `text-muted-foreground` used previously for inactive tabs.
+
+### Mobile Farm — TrustScore badge and Human Session Tool button: exact shared width
+Both the TrustScore badge and the Human Session Tool button now share an explicit `width: 160px` (up from `minWidth: 140px` on the badge only), so they are always identical in width regardless of label content. The badge in the Copy Settings dialog uses a reduced `width: 120px` (25% narrower) to fit the wider accounts column.
+
+### Mobile Farm — Human Session Tool panel: Copy Settings moved to top-right
+The device name (e.g. "Xiaomi 23076RN8DY") has been removed from the top-right of the Human Session Tool panel header. The Copy Settings button now occupies that position (right-aligned via `ml-auto`).
+
+### Mobile Farm — Copy Settings dialog: layout and UX improvements
+- Dialog height halved (`max-h-[45vh]`) for a more compact presentation.
+- Left accounts column doubled in width (`w-[22rem]`) to give usernames and badges more room.
+- On successful copy: the Copy Settings button immediately turns green with a ✓ tick icon and the dialog closes after 500 ms. If any slots fail, a brief error is shown and the dialog closes after 1.2 s. The dialog no longer hangs open waiting for a second press.
+
+---
+
 ## [1.1.669] — 2026-07-17
 
 ### Branding — renamed from "Equinox" to "Aura Farming"
