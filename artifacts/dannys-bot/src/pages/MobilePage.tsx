@@ -4200,6 +4200,94 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
   );
 }
 
+// ─── Action Log Panel ─────────────────────────────────────────────────────────
+
+function ActionLogPanel({ lines, onClear }: { lines: string[]; onClear: () => void }) {
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const [copied, setCopied] = React.useState(false);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ block: "end" }); }, [lines.length]);
+
+  const handleCopy = async () => {
+    try { await navigator.clipboard.writeText(lines.join("\n")); }
+    catch {
+      const ta = document.createElement("textarea");
+      ta.value = lines.join("\n");
+      ta.style.cssText = "position:fixed;opacity:0";
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); } catch { /* ignore */ }
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  const handleExport = () => {
+    const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `equinox-action-log-${new Date().toISOString().replace(/[:.]/g, "-")}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="h-full flex flex-col p-6">
+      <div className="flex items-center justify-between mb-3 shrink-0">
+        <h2 className="text-lg font-bold text-foreground">Action Log</h2>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="secondary" onClick={handleCopy} disabled={lines.length === 0}>
+            {copied ? "Copied!" : "📄 Copy"}
+          </Button>
+          <Button type="button" variant="secondary" onClick={handleExport} disabled={lines.length === 0}>
+            💾 Export
+          </Button>
+          <Button type="button" variant="secondary" onClick={onClear} disabled={lines.length === 0}>
+            Clear
+          </Button>
+        </div>
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto bg-white border border-border rounded-xl p-3 text-[12px] leading-relaxed text-gray-900">
+        {lines.length === 0
+          ? <p className="text-gray-400">No actions recorded yet — likes, follows, scrolls, shares and other automation actions will appear here.</p>
+          : lines.map((l, i) => <div key={i} className="whitespace-pre-wrap break-all py-0.5 border-b border-gray-100 last:border-0">{l}</div>)
+        }
+        <div ref={bottomRef} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Metrics Panel ────────────────────────────────────────────────────────────
+
+function MetricsPanel({ slotCount }: { slotCount: number }) {
+  const slots = Array.from({ length: Math.max(slotCount, 1) }, (_, i) => i);
+  return (
+    <div className="h-full overflow-y-auto p-6 space-y-4">
+      <h2 className="text-lg font-bold text-foreground">Metrics</h2>
+      <p className="text-xs text-muted-foreground">Per-account statistics — coming soon.</p>
+      {slots.map(i => (
+        <div key={i} className="bg-card border border-border rounded-xl p-5 space-y-3">
+          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Instagram Account Slot {i + 1}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {["Likes", "Follows", "Unfollows", "Scrolls", "Story Views", "DMs Sent"].map(label => (
+              <div key={label} className="bg-background border border-border rounded-lg p-3 flex flex-col gap-1">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</span>
+                <span className="text-2xl font-bold text-foreground">—</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Debugging Log Panel ───────────────────────────────────────────────────────
+
 function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, logRecMode, onToggleLogRec, logMarkers, phoneDims, inspectMode, onToggleInspect }: {
   lines: string[];
   onClear: () => void;
@@ -4370,7 +4458,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
     <div className="h-full flex flex-col p-6">
       <div className="flex flex-col gap-2 mb-3 shrink-0">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-foreground">Log</h2>
+          <h2 className="text-lg font-bold text-foreground">Debugging Log</h2>
           <div className="flex items-center gap-2">
 
             <Button
@@ -4412,10 +4500,12 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
 
 const TOTAL_SLOTS = 1;
 
-type MobileTab = "account" | "log";
+type MobileTab = "account" | "actionlog" | "metrics" | "log";
 const MOBILE_TABS: { id: MobileTab; label: string }[] = [
-  { id: "account", label: "Accounts" },
-  { id: "log",     label: "Log" },
+  { id: "account",   label: "Accounts"       },
+  { id: "actionlog", label: "Action Log"     },
+  { id: "metrics",   label: "Metrics"        },
+  { id: "log",       label: "Debugging Log"  },
 ];
 const LOG_MAX_LINES = 500;
 
@@ -4424,6 +4514,10 @@ const LOG_MAX_LINES = 500;
 // automation engine.  Plain manual "Tap → (X,Y)" lines are deliberately
 // excluded so user taps aren't double-counted as bot markers.
 const BOT_TAP_RE = /tapp(?:ing|ed)[^\n(]*\((\d+),\s*(\d+)\)/i;
+
+// Regex for filtering action-only lines into the Action Log tab.
+// Matches automation action keywords emitted by the engine.
+const ACTION_LOG_RE = /\b(like[ds]?|follow(?:ed|ing|ers?)?|unfollow(?:ed|ing)?|scroll(?:ed|ing)?|swipe[ds]?|share[ds]?|comment(?:ed|ing|s)?|reel[s]?|stor(?:y|ies)|post(?:ed|ing|s)?|watch(?:ed|ing)?|view(?:ed|ing)?|dm(?:['']?d|ing)?|sent?\s+dm|message[ds]?)\b/i;
 
 export function MobilePage() {
   // When navigated from the Phone Farm grid (/mobile/farm/:serial), only this
@@ -4467,7 +4561,8 @@ export function MobilePage() {
   // start streaming/waking the device — only pressing Power (below) or the
   // automation toggle being enabled does.
   const [liveOn, setLiveOn] = useState<Record<string, boolean>>({});
-  const [logLines, setLogLines] = useState<string[]>([]);
+  const [logLines,       setLogLines]       = useState<string[]>([]);
+  const [actionLogLines, setActionLogLines] = useState<string[]>([]);
 
   // ── Inspect state ───────────────────────────────────────────────────────────
   // Lifted here so the LogPanel button (sibling of PhoneSlot) can toggle it.
@@ -4486,11 +4581,20 @@ export function MobilePage() {
   }, []);
 
   const addLog = useCallback((msg: string) => {
-    const stamp = new Date().toLocaleTimeString();
+    const now  = new Date();
+    const stamp = now.toLocaleTimeString();
     setLogLines(prev => {
       const next = [...prev, `[${stamp}] ${msg}`];
       return next.length > LOG_MAX_LINES ? next.slice(next.length - LOG_MAX_LINES) : next;
     });
+    // Mirror matching lines into the Action Log with a full date+time stamp.
+    if (ACTION_LOG_RE.test(msg)) {
+      const dateStamp = now.toLocaleString(undefined, { dateStyle: "short", timeStyle: "medium" });
+      setActionLogLines(prev => {
+        const next = [...prev, `[${dateStamp}]  ${msg}`];
+        return next.length > LOG_MAX_LINES ? next.slice(next.length - LOG_MAX_LINES) : next;
+      });
+    }
     // When Log Record is active, parse automation taps and add orange bot markers.
     if (logRecModeRef.current) {
       const m = BOT_TAP_RE.exec(msg);
@@ -4697,6 +4801,15 @@ export function MobilePage() {
                 <div className={activeTab === "account" ? "h-full" : "hidden"}>
                   <AccountSettingsPanel phone={slots[0]} addLog={addLog} />
                 </div>
+                {activeTab === "actionlog" && (
+                  <ActionLogPanel
+                    lines={actionLogLines}
+                    onClear={() => setActionLogLines([])}
+                  />
+                )}
+                {activeTab === "metrics" && (
+                  <MetricsPanel slotCount={slots.filter(Boolean).length} />
+                )}
                 {activeTab === "log"     && (
                   <LogPanel
                     lines={logLines}

@@ -4,6 +4,26 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.652] — 2026-07-17
+
+### Phone Farm — Device panel UI overhaul
+
+#### Tab bar restructured
+- **"Log" renamed to "Debugging Log"** — same terminal-style black/green log, clearer label
+- **"Debugging Log" moved to the far right** of the tab bar, separated from the account tabs
+- **New "Action Log" tab** — white background, dark text; records only automation actions (likes, follows, unfollows, scrolls, swipes, shares, story views, DMs, posts, comments, reels) with a full date + time stamp per entry. Filtered automatically from the same log stream — no separate server wiring needed. Copy and Export buttons included
+- **New "Metrics" tab** — per-slot statistics dashboard placeholder (Likes / Follows / Unfollows / Scrolls / Story Views / DMs Sent counters per Instagram Account Slot). UI exists and is ready for future wiring
+
+#### Other UI fixes
+- **ADB path removed from device header** — the `E:\Equinox\platform-tools\adb.exe` path string no longer appears in the top-right corner of the device panel
+- **Header icon unified** — the "Mobile Farm" header now uses the same custom Phone+Gear icon (`FilledFarmIcon`) as the sidebar, rendered in the brand cyan, instead of the generic Lucide `<Smartphone>` icon
+- **Account slot layout condensed to 2 rows**:
+  - Row 1: Username · Password (Show/Hide) · 2FA OTP Secret + Generate
+  - Row 2: Email Address · Email Password (Show/Hide) · Phone Number
+- **Delete button moved to slot title** — the red trash icon now sits next to "Instagram Account Slot N" in the card header. Clicking it shows a confirmation dialog ("Are you sure you want to delete this slot?") before removing anything
+
+---
+
 ## [1.1.651] — 2026-07-17
 
 ### Phone Farm — Accounts tab overhaul
