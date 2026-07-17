@@ -4,6 +4,34 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.1.669] — 2026-07-17
+
+### Branding — renamed from "Equinox" to "Aura Farming"
+The sidebar wordmark has been updated from "Equi**nox**" to "**Aura** Farming". "Aura" is rendered in cyan (`#1AD2F2`) and "Farming" in the standard foreground colour.
+
+### Mobile Farm — Phone Farm icon now matches the Devices page
+The header icon in the Mobile Farm page now uses the explicit cyan colour (`#1AD2F2`) consistent with the `PhoneFarmIcon` on the Mobile Devices page.
+
+### Mobile Farm — TrustScore badge width matched to Human Session Tool button
+The TrustScore badge button in each account slot now has a `minWidth: 140` so it renders at the same visual width as the Human Session Tool button beside it.
+
+### Mobile Farm — "HUMAN SESSION TOOL" now uppercase
+The Human Session Tool button label has been changed to uppercase ("HUMAN SESSION TOOL") for visual consistency with the SLOT navigation buttons.
+
+### Mobile Farm — Phone Settings charging description simplified
+The charging-scheduler description has been shortened to a single sentence: "Pause the physical charging current on a repeating schedule to protect battery health, while keeping USB connected for ADB." The preamble mentioning "Aura Farming" by name has been removed.
+
+### Mobile Farm — Copy Settings: Follow Filters bundled with Follow Users
+The separate "Follow Filters" section in the Copy Settings dialog has been removed. All filter sub-items (master toggle, Skip Private, English Speaking only, 250+ min, Skip Verified, Skip 25K+) are now listed as child entries under the "Follow Users" section so they copy together as a unit.
+
+### Mobile Farm — Copy Settings: Follow Filter fields now persist correctly
+Follow filter fields (`followFiltersEnabled`, `followFilterPrivateUsers`, `followFilterEnglishSpeaking`, `followFilterMinFollowers250`, `followFilterVerifiedUsers`, `followFilterMaxFollowers25k`) were missing from the server-side persistence schema (`automationSchema`). Zod was silently stripping them on every POST, so they were never written to disk and Copy Settings had no effect on them. All six fields have been added to the schema with `default(false)`.
+
+### Mobile Farm — New Follow Filter: Skip 25K+ Followers (-25K)
+A new "–25K Followers" filter has been added to the Follow Filters panel. When enabled, the automation cycle reads the follower count from the target's Instagram profile accessibility tree after navigating to their profile. If the count is ≥ 25,000, the user is skipped and added to the global skipped-users list. Handles K/M suffixes (e.g. "12K followers", "1.5M followers").
+
+---
+
 ## [1.1.668] — 2026-07-17
 
 ### TrustScore Badge — screen shake fixed; icon now appears after the name, centred

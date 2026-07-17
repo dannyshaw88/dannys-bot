@@ -185,6 +185,14 @@ type AutomationSettings = {
   viewReelsActivatePctMax?: number;
   viewReelsWatchPctMin?: number;
   viewReelsWatchPctMax?: number;
+  // Follow Filters — profile-quality gates. Persisted so Copy Settings
+  // can apply them to other slots without the fields being stripped.
+  followFiltersEnabled?: boolean;
+  followFilterPrivateUsers?: boolean;
+  followFilterEnglishSpeaking?: boolean;
+  followFilterMinFollowers250?: boolean;
+  followFilterVerifiedUsers?: boolean;
+  followFilterMaxFollowers25k?: boolean;
   // Follow Users — HikerAPI-driven follow flow (persisted here too; this
   // schema previously only covered the feed/stories fields, so these were
   // silently stripped by automationSchema.parse() on every autosave and
@@ -1056,6 +1064,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     injectBrowsingShareFeedPctMax: z.number().min(0).max(100).default(0),
     injectBrowsingShareDmPctMin: z.number().min(0).max(100).default(0),
     injectBrowsingShareDmPctMax: z.number().min(0).max(100).default(0),
+    // ── Follow Filters — profile-quality gates. Were missing from the
+    //    persistence schema, causing zod to strip them on every POST so
+    //    Copy Settings never actually applied them to target slots.
+    followFiltersEnabled: z.boolean().default(false),
+    followFilterPrivateUsers: z.boolean().default(false),
+    followFilterEnglishSpeaking: z.boolean().default(false),
+    followFilterMinFollowers250: z.boolean().default(false),
+    followFilterVerifiedUsers: z.boolean().default(false),
+    followFilterMaxFollowers25k: z.boolean().default(false),
     // ── Random Jitter fields — were missing from this persistence schema,
     //    causing zod to silently strip them on every POST so they never reached
     //    disk and reset to defaults on every restart.
@@ -1230,6 +1247,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         injectBrowsingLikePctMin: 0, injectBrowsingLikePctMax: 0,
         injectBrowsingShareFeedPctMin: 0, injectBrowsingShareFeedPctMax: 0,
         injectBrowsingShareDmPctMin: 0, injectBrowsingShareDmPctMax: 0,
+        followFiltersEnabled: false,
+        followFilterPrivateUsers: false,
+        followFilterEnglishSpeaking: false,
+        followFilterMinFollowers250: false,
+        followFilterVerifiedUsers: false,
+        followFilterMaxFollowers25k: false,
         randomJitterEnabled: false,
         checkNotificationsPctMin: 0, checkNotificationsPctMax: 0,
         checkNotificationsScrollsMin: 2, checkNotificationsScrollsMax: 5,
@@ -2671,6 +2694,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // which specific checks are run.
     followFiltersEnabled: z.boolean().default(false),
     followFilterVerifiedUsers: z.boolean().default(false),
+    followFilterMaxFollowers25k: z.boolean().default(false),
     // ── Random Jitter — human-like interstitial actions fired on each cycle
     // at a random percentage chance.  Master gate: randomJitterEnabled.
     randomJitterEnabled: z.boolean().default(false),
@@ -3682,7 +3706,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       skipSkippedUsernames?: Set<string>;
       /** Profile-quality gates to apply after navigating to the target's
        *  profile but before the Follow tap. */
-      filters?: { skipVerified?: boolean };
+      filters?: { skipVerified?: boolean; maxFollowers?: number };
     },
   ): Promise<number> {
     const { usersMin, usersMax, sources, onLog, recordFollow, browsing, skipFollowedUsernames, skipSkippedUsernames, filters } = params;
@@ -3873,6 +3897,38 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           }
         }
 
+        // ── Max-followers filter (–25K) ────────────────────────────────────
+        // Reads the follower count from the profile page accessibility tree
+        // and skips this user if they have 25,000 or more followers.
+        if (filters?.maxFollowers !== undefined) {
+          try {
+            const profileXml = await android.dumpUi(serial).catch(() => "");
+            // Follower count appears in an accessibility node whose
+            // content-desc contains a number followed by "followers".
+            // Format varies by locale: "1,234 followers", "12K followers",
+            // "1.5M followers", etc.
+            const followerMatch = profileXml.match(
+              /content-desc="([0-9][0-9,.]*)([KkMm]?)\s*[Ff]ollowers/
+            );
+            if (followerMatch) {
+              const digits = parseFloat(followerMatch[1].replace(/,/g, ""));
+              const suffix = followerMatch[2].toLowerCase();
+              const count = suffix === "k" ? digits * 1_000
+                          : suffix === "m" ? digits * 1_000_000
+                          : digits;
+              if (!isNaN(count) && count >= filters.maxFollowers) {
+                onLog?.(`Follow: @${username} has ${count.toLocaleString()} followers (≥25K) — skipping (-25K filter)`);
+                storage.addSkippedUser(username, "too-many-followers").catch(() => {});
+                await android.pressBack(serial);
+                await sleepOrAbort(serial, 500);
+                continue;
+              }
+            }
+          } catch (filterErr: any) {
+            onLog?.(`Follow: follower-count check failed for @${username} (${filterErr?.message}) — proceeding`);
+          }
+        }
+
         // Inject Browsing — rolled fresh for this user. `willBrowse` decides
         // whether browsing happens at all; `browseBeforeFollow` (an
         // independent roll, only consulted when willBrowse is true) decides
@@ -4036,7 +4092,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewReelsShareDmPercentMin, viewReelsShareDmPercentMax,
         viewReelsActivatePctMin, viewReelsActivatePctMax,
         followEnabled, followUsersMin, followUsersMax, followSkipFollowed, followSources,
-        followFiltersEnabled, followFilterVerifiedUsers,
+        followFiltersEnabled, followFilterVerifiedUsers, followFilterMaxFollowers25k,
         injectBrowsingEnabled,
         injectBrowsingActivatePctMin, injectBrowsingActivatePctMax,
         injectBrowsingBeforeFollowPctMin, injectBrowsingBeforeFollowPctMax,
@@ -4311,7 +4367,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               shareDmPctMin: injectBrowsingShareDmPctMin, shareDmPctMax: injectBrowsingShareDmPctMax,
             } : undefined,
             filters: followFiltersEnabled
-              ? { skipVerified: followFilterVerifiedUsers }
+              ? { skipVerified: followFilterVerifiedUsers, maxFollowers: followFilterMaxFollowers25k ? 25_000 : undefined }
               : undefined,
           });
           followedCount = followCount;

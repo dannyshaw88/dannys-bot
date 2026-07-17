@@ -2024,6 +2024,7 @@ interface AutomationSettingsData {
   followFilterEnglishSpeaking: boolean;
   followFilterMinFollowers250: boolean;
   followFilterVerifiedUsers: boolean;
+  followFilterMaxFollowers25k: boolean;
   // Random Jitter — human-like interstitial actions fired probabilistically
   // on each cycle run. Master gate: randomJitterEnabled tickbox.
   randomJitterEnabled: boolean;
@@ -2104,6 +2105,7 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   followFilterEnglishSpeaking: false,
   followFilterMinFollowers250: false,
   followFilterVerifiedUsers: false,
+  followFilterMaxFollowers25k: false,
   randomJitterEnabled: false,
   checkNotificationsPctMin: 0, checkNotificationsPctMax: 0,
   checkNotificationsScrollsMin: 2, checkNotificationsScrollsMax: 5,
@@ -2381,6 +2383,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             followFilterEnglishSpeaking: s.followFilterEnglishSpeaking,
             followFilterMinFollowers250: s.followFilterMinFollowers250,
             followFilterVerifiedUsers: s.followFilterVerifiedUsers,
+            followFilterMaxFollowers25k: s.followFilterMaxFollowers25k,
             randomJitterEnabled: s.randomJitterEnabled,
             checkNotificationsPctMin: s.checkNotificationsPctMin,
             checkNotificationsPctMax: s.checkNotificationsPctMax,
@@ -2624,6 +2627,12 @@ const COPY_SECTIONS: CopySection[] = [
     { key: 'followCount',       label: 'Follow count per session',      fields: ['followUsersMin','followUsersMax'] },
     { key: 'followSkip',        label: 'Skip already followed',         fields: ['followSkipFollowed'] },
     { key: 'followSources',     label: 'Follow sources list',           fields: ['followSources'] },
+    { key: 'filtersEnabled',    label: 'Filters — Master toggle',       fields: ['followFiltersEnabled'] },
+    { key: 'filterPrivate',     label: 'Filters — Skip Private users',  fields: ['followFilterPrivateUsers'] },
+    { key: 'filterEnglish',     label: 'Filters — English Speaking only', fields: ['followFilterEnglishSpeaking'] },
+    { key: 'filterMin250',      label: 'Filters — 250+ Followers min',  fields: ['followFilterMinFollowers250'] },
+    { key: 'filterVerified',    label: 'Filters — Skip Verified users', fields: ['followFilterVerifiedUsers'] },
+    { key: 'filterMax25k',      label: 'Filters — Skip 25K+ Followers', fields: ['followFilterMaxFollowers25k'] },
   ]},
   { key: 'injectBrowsing',label: 'Inject Browsing', sub: [
     { key: 'injectEnabled',     label: 'Enabled',                       fields: ['injectBrowsingEnabled'] },
@@ -2635,13 +2644,6 @@ const COPY_SECTIONS: CopySection[] = [
     { key: 'injectLike',        label: 'Like %',                        fields: ['injectBrowsingLikePctMin','injectBrowsingLikePctMax'] },
     { key: 'injectShareFeed',   label: 'Share to Feed %',               fields: ['injectBrowsingShareFeedPctMin','injectBrowsingShareFeedPctMax'] },
     { key: 'injectShareDm',     label: 'Share DM %',                    fields: ['injectBrowsingShareDmPctMin','injectBrowsingShareDmPctMax'] },
-  ]},
-  { key: 'followFilters', label: 'Follow Filters', sub: [
-    { key: 'filtersEnabled',    label: 'Enabled',                       fields: ['followFiltersEnabled'] },
-    { key: 'filterPrivate',     label: 'Skip Private users',            fields: ['followFilterPrivateUsers'] },
-    { key: 'filterEnglish',     label: 'English Speaking only',         fields: ['followFilterEnglishSpeaking'] },
-    { key: 'filterMin250',      label: '250+ Followers minimum',        fields: ['followFilterMinFollowers250'] },
-    { key: 'filterVerified',    label: 'Skip Verified users',           fields: ['followFilterVerifiedUsers'] },
   ]},
   { key: 'randomJitter',  label: 'Random Jitter', sub: [
     { key: 'jitterEnabled',     label: 'Enabled',                       fields: ['randomJitterEnabled'] },
@@ -3748,6 +3750,17 @@ function AutomationSettingsPanel({
                 />
                 <label htmlFor="filter-verified-users" className="text-xs text-muted-foreground cursor-pointer select-none">Skip Verified</label>
               </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="filter-max-followers-25k"
+                  checked={settings.followFilterMaxFollowers25k}
+                  onChange={e => setSettings(s => ({ ...s, followFilterMaxFollowers25k: e.target.checked }))}
+                  disabled={loading}
+                  className="w-4 h-4 accent-primary cursor-pointer"
+                />
+                <label htmlFor="filter-max-followers-25k" className="text-xs text-muted-foreground cursor-pointer select-none">-25K Followers</label>
+              </div>
             </div>
           )}
         </div>}
@@ -4307,8 +4320,8 @@ function SlotTrustScoreBadge({ serial, slotIdx }: { serial: string; slotIdx: num
         onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
         className="inline-flex h-6 items-center justify-center gap-1.5 rounded-md border px-2 text-[11px] font-semibold transition-colors hover:bg-muted/40"
         style={current
-          ? { background: current.bg, borderColor: current.border, color: current.text }
-          : { background: "transparent", borderStyle: "dashed", borderColor: "#94a3b8", color: "#94a3b8" }
+          ? { background: current.bg, borderColor: current.border, color: current.text, minWidth: 140 }
+          : { background: "transparent", borderStyle: "dashed", borderColor: "#94a3b8", color: "#94a3b8", minWidth: 140 }
         }
         title={current ? current.label : "Click to set Trust Score"}
       >
@@ -4635,7 +4648,7 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
                     style={{ background: "#1AD2F2", border: "none" }}
                     onClick={() => setOpenSlotTool(i)}
                   >
-                    Human Session Tool
+                    HUMAN SESSION TOOL
                     <Fingerprint className="w-3 h-3 text-white" />
                   </Button>
                 </div>
@@ -5007,7 +5020,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
             <p className="text-sm font-semibold text-foreground">Stop Charging for X minutes every Y hours</p>
             {!enabled && (
               <p className="text-xs text-muted-foreground mt-1">
-                Aura Farming pauses the physical charging current on a repeating schedule to protect battery health, while keeping USB connected for ADB. Enable to configure.
+                Pause the physical charging current on a repeating schedule to protect battery health, while keeping USB connected for ADB.
               </p>
             )}
           </div>
@@ -5712,7 +5725,7 @@ export function MobilePage() {
         {/* Header */}
         <div className="shrink-0 z-10 bg-background/95 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <FilledFarmIcon className="w-5 h-5 text-primary" />
+            <FilledFarmIcon className="w-5 h-5" style={{ color: "#1AD2F2" }} />
             <h1 className="text-lg font-bold text-foreground">Mobile Farm</h1>
             {data && (
               <span className="text-xs text-muted-foreground">
