@@ -3830,6 +3830,70 @@ export async function dumpUi(serial: string): Promise<string> {
 }
 
 /**
+ * Switches the active Instagram account to the one matching `username` by
+ * triggering Instagram's built-in account switcher:
+ *   1. Long-press the profile tab (bottom-right nav) for 2 s → switcher opens
+ *   2. UIAutomator dump the switcher XML
+ *   3. Find the node whose text matches the username
+ *   4. Tap it and wait for the account to load
+ *
+ * Returns true if the switch was performed, false if the username wasn't found
+ * in the switcher (e.g. the account isn't logged in on this device).
+ *
+ * Safe to call even when already on the correct account — Instagram just
+ * refreshes to the same account and the extra 2–3 s cost is acceptable.
+ */
+export async function switchToInstagramAccount(
+  serial: string,
+  username: string,
+  onLog?: (msg: string) => void,
+): Promise<boolean> {
+  if (!username.trim()) return false;
+  const adbPath = findAdbPath();
+  if (!adbPath) { onLog?.("  ⚠ ADB not found — cannot switch account"); return false; }
+
+  // 1. Find the profile tab.
+  const profileTab = await findInstagramProfileTab(serial).catch(() => null);
+  if (!profileTab) {
+    onLog?.("  ⚠ Profile tab not found — cannot switch account");
+    return false;
+  }
+
+  // 2. Long-press the profile tab (a zero-distance swipe with a 2 s duration
+  //    is the standard ADB idiom for a long-press gesture).
+  onLog?.(`  ↳ Long-pressing profile tab to open account switcher…`);
+  await runAdb(adbPath, [
+    "-s", serial, "shell", "input", "swipe",
+    String(profileTab.x), String(profileTab.y),
+    String(profileTab.x), String(profileTab.y),
+    "2000",
+  ], 6000);
+  await _sleep(1500); // wait for the switcher sheet to settle
+
+  // 3. Dump the accessibility tree and look for the target username.
+  //    Instagram displays each account row as a node with text="username"
+  //    (no @ prefix) or content-desc="username". Try both the bare username
+  //    and the @-prefixed variant since different IG versions use different
+  //    attributes.
+  const xml = await _uiDump(adbPath, serial).catch(() => "");
+  const clean = username.replace(/^@/, "").trim();
+  const coords = _findElem(xml, clean, `@${clean}`);
+
+  if (!coords) {
+    onLog?.(`  ⚠ "@${clean}" not found in switcher — is the account logged in on this device?`);
+    // Dismiss the switcher so the cycle can continue with whatever account is active.
+    await runAdb(adbPath, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], 4000).catch(() => {});
+    return false;
+  }
+
+  // 4. Tap the username row to switch accounts.
+  onLog?.(`  ✓ Found @${clean} in switcher — switching…`);
+  _adbTap(adbPath, serial, coords.x, coords.y);
+  await _sleep(2500); // give Instagram time to reload the new account's feed
+  return true;
+}
+
+/**
  * Dumps once and pulls the accessibility tree XML. Not exported — always go
  * through `_uiDump`, which validates the result and retries on truncation
  * (see below). A raw single-shot dump on a busy screen (deep scrollable

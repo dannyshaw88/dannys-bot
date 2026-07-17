@@ -2087,7 +2087,7 @@ const clamp4 = (n: number) => Math.min(9999, Math.max(0, Math.trunc(Number.isFin
 // the Human Session Tool tab never unmounts this and interrupts an
 // in-progress automation cycle — the loop must keep running in the
 // background regardless of which tab is currently visible.
-function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void, slotIdx?: number) {
+function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void, slotIdx?: number, slotUsername?: string) {
   const [settings, setSettings] = useState<AutomationSettingsData>(AUTOMATION_DEFAULTS);
   const [loading,  setLoading]  = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -2344,6 +2344,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             makePostMakeUnique: s.makePostMakeUnique,
             makePostCaptionText: s.makePostCaptionText,
             makePostImageSettings: s.makePostImageSettings,
+            slotUsername: slotUsername ?? "",
           }),
         });
         const body = await r.json().catch(() => null);
@@ -3799,14 +3800,15 @@ type AccountSlot = { username: string; password: string; totpSecret: string; ema
 // Always mounted so the automation hook's run-loop persists even when the
 // user is viewing the slot list or a different tab.
 function SlotHumanSessionView({
-  phone, slotIdx, addLog, onBack,
+  phone, slotIdx, slotUsername, addLog, onBack,
 }: {
   phone: UsbPhone | null;
   slotIdx: number;
+  slotUsername: string;
   addLog: (msg: string) => void;
   onBack: () => void;
 }) {
-  const automation = useAutomationSettings(phone, addLog, slotIdx);
+  const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername);
   return (
     <div className="h-full flex flex-col">
       <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
@@ -3992,6 +3994,7 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
           <SlotHumanSessionView
             phone={phone}
             slotIdx={i}
+            slotUsername={slots[i]?.username ?? ""}
             addLog={addLog}
             onBack={() => setOpenSlotTool(null)}
           />

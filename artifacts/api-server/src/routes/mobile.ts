@@ -2604,6 +2604,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostLocalFolderRandom: z.boolean().default(false),
     makePostLocalFolderDeleteAfterUpload: z.boolean().default(true),
     makePostCaptionText: z.string().default(""),
+    // Which Instagram account slot is driving this cycle. When set the cycle
+    // switches to that account via the built-in Instagram switcher before
+    // running any tools, so each slot's settings are always applied to the
+    // correct account even when multiple accounts share the same device.
+    slotUsername: z.string().optional().default(""),
   });
   const automationCycleInProgress = new Set<string>();
 
@@ -3942,6 +3947,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostLocalFolderEnabled, makePostLocalFolderPath,
         makePostLocalFolderNoRepeat, makePostLocalFolderRandom, makePostLocalFolderDeleteAfterUpload,
         makePostFixAiSlop, makePostCaptionText,
+        slotUsername,
       } = automationCycleSchema.parse(req.body);
 
       // ── Global followed / skipped settings ─────────────────────────────────
@@ -4012,6 +4018,32 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         tLog("▶ No launch popup — feed ready");
       }
       tLog("  ✓ Instagram open");
+
+      // 2d. Switch to the correct Instagram account for this slot.
+      // Each slot stores the username of the Instagram account it represents.
+      // Before any tools run we open Instagram's built-in account switcher
+      // (long-press the profile tab → pick the matching username) so the
+      // correct account is active regardless of which one was last open.
+      // This is a no-op when slotUsername is empty (device-level cycle or
+      // slot with no username entered yet).
+      if (slotUsername) {
+        tLog(`▶ Switching to Instagram account: @${slotUsername}…`);
+        const switched = await android.switchToInstagramAccount(serial, slotUsername, tLog);
+        if (switched) {
+          steps.push(`account-switch(@${slotUsername})`);
+          // Brief extra settle after switching — Instagram reloads the new
+          // account's home feed, and ads-choice / interstitial dialogs can
+          // reappear for accounts that haven't accepted them yet.
+          await sleepOrAbort(serial, 1500);
+          const postSwitchPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
+          if (postSwitchPopup) {
+            tLog(`▶ Dismissed post-switch popup (${postSwitchPopup})`);
+            await sleepOrAbort(serial, 500);
+          }
+        } else {
+          steps.push("account-switch(not-found — proceeding with current account)");
+        }
+      }
 
       // 3. Scroll the feed (Step 2 in the UI) — skipped entirely when the
       // "View Feed" checkbox is unticked, per-slide enable/disable (12 Jul 2026).
