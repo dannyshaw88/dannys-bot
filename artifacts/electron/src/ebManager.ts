@@ -3225,7 +3225,7 @@ export async function openEbWindow(opts: {
     height:          (isGhostBrowser || verifyMode) ? 700 : 820,
     x:               _initX,
     y:               _initY,
-    title:           `@${username} — Equinox Browser`,
+    title:           `@${username} — Aura Farming Browser`,
     icon:            _iconPath || undefined,
     autoHideMenuBar: true,
     show:            false,
@@ -3739,7 +3739,7 @@ export async function openEbWindow(opts: {
             d.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999999;font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:32px;text-align:center;box-sizing:border-box;';
             d.innerHTML = '<div style="font-size:40px;margin-bottom:12px">⚠️</div>'
               + '<div style="font-size:18px;font-weight:700;color:#111;margin-bottom:8px">Automated Behaviour Detected</div>'
-              + '<div style="font-size:13px;color:#555;max-width:380px;line-height:1.5">Instagram has flagged this account. You may need to log in manually, solve any challenge shown, and then re-verify the account in Equinox once the session is restored.</div>'
+              + '<div style="font-size:13px;color:#555;max-width:380px;line-height:1.5">Instagram has flagged this account. You may need to log in manually, solve any challenge shown, and then re-verify the account in Aura Farming once the session is restored.</div>'
               + '<div style="margin-top:18px;font-size:11px;color:#999">Account: ' + ${JSON.stringify(username)} + '</div>';
             (document.body || document.documentElement).appendChild(d);
           })()
@@ -4324,7 +4324,7 @@ export async function openEbWindow(opts: {
   // Without this, Electron replaces "@username — Equinox Browser" with "Instagram".
   win.webContents.on("page-title-updated", (e) => {
     e.preventDefault();
-    win.setTitle(`@${username} — Equinox Browser`);
+    win.setTitle(`@${username} — Aura Farming Browser`);
     const ts = tabsStateMap.get(profileId);
     if (ts && ts.tabs[0]) { ts.tabs[0].title = `@${username}`; pushTabUpdate(profileId); }
   });
@@ -8387,7 +8387,7 @@ export function startEbIpcServer(
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  msg: "✅ Signup flow complete! Click 'Add to Equinox' to save the account.",
+                  msg: "✅ Signup flow complete! Click 'Add to Aura Farming' to save the account.",
                   done: true,
                   slot,
                   cookies: harvestedCookies,

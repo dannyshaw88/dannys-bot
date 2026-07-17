@@ -214,7 +214,7 @@ export function exportHtml(serial: string): string | null {
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Equinox Session Recording — ${esc(serial)}</title>
+<title>Aura Farming Session Recording — ${esc(serial)}</title>
 <style>
   body { background:#0d0d0d; color:#e5e7eb; font-family:monospace; margin:0; padding:24px; }
   h1   { font-size:18px; margin-bottom:4px; }
@@ -226,7 +226,7 @@ export function exportHtml(serial: string): string | null {
 </style>
 </head>
 <body>
-<h1>🎬 Equinox Session Recording</h1>
+<h1>🎬 Aura Farming Session Recording</h1>
 <p class="meta">Device: <b>${esc(serial)}</b> &nbsp;|&nbsp; Started: ${new Date(s.startedAt).toISOString()} &nbsp;|&nbsp; Duration: ${(durationMs / 1000).toFixed(1)}s &nbsp;|&nbsp; Events: ${s.events.length}</p>
 <table>
 <thead><tr><th>#</th><th>time</th><th></th><th>event</th></tr></thead>

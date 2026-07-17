@@ -26,7 +26,7 @@ import { NavigationHistoryProvider } from "@/contexts/NavigationHistoryContext";
 import { SelectedProfilesProvider } from "@/contexts/SelectedProfilesContext";
 import { BrowserWindow } from "@/components/BrowserWindow";
 import { BrowserTaskbar } from "@/components/BrowserTaskbar";
-import { EquinoxBot } from "@/components/EquinoxBot";
+import { AuraFarmingBot } from "@/components/EquinoxBot";
 import { queryClient } from "@/lib/queryClient";
 import { useStatusEvents } from "@/hooks/use-profiles";
 import { Loader2 } from "lucide-react";
@@ -60,7 +60,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error
           display: "flex", flexDirection: "column", gap: "16px",
         }}>
           <div style={{ fontSize: "20px", fontWeight: 700, color: "#f87171" }}>
-            ⚠ Equinox failed to start
+            ⚠ Aura Farming failed to start
           </div>
           <div style={{ fontSize: "13px", color: "#94a3b8" }}>
             A component crashed on startup. Please copy this error and report it.
@@ -212,11 +212,11 @@ function LoginSplash() {
         <div className="flex flex-col items-center mb-7">
           <img
             src="/bot-logo.png"
-            alt="Equinox"
+            alt="Aura Farming"
             className="w-16 h-16 mb-2 object-contain"
           />
           <h1 className="text-2xl font-bold tracking-tight">
-            <span style={{ color: "#111827" }}>Equi</span><span style={{ color: "#1AD2F2" }}>nox</span>
+            <span style={{ color: "#111827" }}>Aura </span><span style={{ color: "#1AD2F2" }}>Farming</span>
           </h1>
           <p className="text-sm mt-1" style={{ color: "#6b7280" }}>Sign in to your account</p>
         </div>
@@ -304,7 +304,7 @@ function LicenseGate({ children }: { children: React.ReactNode }) {
         <div className="flex flex-col items-center gap-3">
           <img
             src="/bot-logo.png"
-            alt="Equinox"
+            alt="Aura Farming"
             className="w-12 h-12 object-contain"
           />
           <Loader2 className="w-5 h-5 animate-spin" style={{ color: "#6b7280" }} />
@@ -317,7 +317,7 @@ function LicenseGate({ children }: { children: React.ReactNode }) {
     return <LoginSplash />;
   }
 
-  return <>{children}<EquinoxBot /></>;
+  return <>{children}<AuraFarmingBot /></>;
 }
 
 function App() {

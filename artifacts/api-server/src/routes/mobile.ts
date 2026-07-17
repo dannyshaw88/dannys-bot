@@ -4009,6 +4009,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const steps: string[] = [];
     let storiesWatched = 0;
     let followedCount = 0;
+    let reelsViewed = 0;
+    let reelsLikes = 0;
     const cycleStart = Date.now();
     // tLog prefixes every log line with elapsed seconds so the user can see
     // exactly where each chunk of time is going in the Log tab.
@@ -4257,6 +4259,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           shareDmPercentMin: viewReelsShareDmPercentMin, shareDmPercentMax: viewReelsShareDmPercentMax,
           onLog: (msg) => tLog(`  ${msg}`),
         });
+        reelsViewed = reelsResult.reelsViewed;
+        reelsLikes = reelsResult.likes;
         steps.push(`reels(${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes, ${reelsResult.sharesFeed} feed-shares, ${reelsResult.sharesDm} dm-shares)`);
         tLog(`▶ View Reels done — ${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes`);
       } else if (!viewReelsEnabled) {
@@ -4437,6 +4441,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await android.sleepScreen(serial);
       steps.push("power-off");
 
+      // Persist cycle stats to DB so the Metrics tab survives software restarts.
+      if (slotUsername) {
+        storage.incrementMobileStats(slotUsername, {
+          likes: likes + reelsLikes,
+          follows: followedCount,
+          stories: storiesWatched,
+          reels: reelsViewed,
+          dms: sharesDm,
+          feedShares: sharesFeed,
+          cycles: 1,
+        }).catch((e: any) => logger.warn({ err: e }, "[mobile-cycle] stat persist error"));
+      }
       res.json({ ok: true, count, likes, likeFailures, sharesFeed, sharesDm, storiesWatched, followedCount, strayNavRecoveries, steps });
     } catch (e: any) {
       const aborted = (e?.message === "cycle-aborted");
@@ -4451,6 +4467,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       checkFeedInProgress.delete(serial);
       automationCycleCurrentId.delete(serial);
       automationCycleAbortedId.delete(serial);
+    }
+  });
+
+  // ── Per-slot metrics (daily + lifetime, persisted across restarts) ───────────
+  app.get("/api/mobile/slot-stats", async (req: Request, res: Response) => {
+    try {
+      const username = String(req.query.username ?? "").trim();
+      if (!username) return res.status(400).json({ ok: false, error: "username required" });
+      const result = await storage.getMobileSlotStats(username);
+      res.json({ ok: true, ...result });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e?.message ?? "Failed to load slot stats" });
     }
   });
 

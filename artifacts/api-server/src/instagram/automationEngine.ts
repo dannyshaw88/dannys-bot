@@ -2304,7 +2304,7 @@ class AutomationEngine {
           source: state.client!.apiCallSource,
           durationMs,
           isError: isError ?? false,
-          transport: isTransportCall ? "ja3" : "Equinox",
+          transport: isTransportCall ? "ja3" : "Aura Farming",
         }).catch(() => {});
       });
     }

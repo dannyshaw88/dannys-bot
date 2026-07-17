@@ -53,6 +53,8 @@ export interface IStorage {
   getStatsByProfile(profileId: number): Promise<any[]>;
   getLifetimeStatsByProfile(): Promise<Record<number, number>>;
   incrementStat(profileId: number, toolType: string): Promise<void>;
+  incrementMobileStats(username: string, metrics: { likes: number; follows: number; stories: number; reels: number; dms: number; feedShares: number; cycles: number }): Promise<void>;
+  getMobileSlotStats(username: string): Promise<{ daily: Record<string, number>; lifetime: Record<string, number> }>;
   getDailyAbdStats(): Promise<Record<number, number>>;
 
   // Sources
@@ -676,6 +678,52 @@ export class DatabaseStorage implements IStorage {
     } else {
       await db.insert(stats).values({ profileId, toolType, count: 1, date: 'lifetime' });
     }
+  }
+
+  async incrementMobileStats(username: string, metrics: { likes: number; follows: number; stories: number; reels: number; dms: number; feedShares: number; cycles: number }): Promise<void> {
+    const today = new Date().toISOString().split('T')[0];
+    const entries: Array<[string, number]> = ([
+      [`mob:${username}:likes`,       metrics.likes],
+      [`mob:${username}:follows`,     metrics.follows],
+      [`mob:${username}:stories`,     metrics.stories],
+      [`mob:${username}:reels`,       metrics.reels],
+      [`mob:${username}:dms`,         metrics.dms],
+      [`mob:${username}:feed_shares`, metrics.feedShares],
+      [`mob:${username}:cycles`,      metrics.cycles],
+    ] as Array<[string, number]>).filter(([, count]) => count > 0);
+
+    for (const [toolType, count] of entries) {
+      // Daily
+      const [daily] = await db.select().from(stats).where(and(eq(stats.profileId, 0), eq(stats.toolType, toolType), eq(stats.date, today)));
+      if (daily) {
+        await db.update(stats).set({ count: daily.count + count }).where(eq(stats.id, daily.id));
+      } else {
+        await db.insert(stats).values({ profileId: 0, toolType, count, date: today });
+      }
+      // Lifetime
+      const [lifetime] = await db.select().from(stats).where(and(eq(stats.profileId, 0), eq(stats.toolType, toolType), eq(stats.date, 'lifetime')));
+      if (lifetime) {
+        await db.update(stats).set({ count: lifetime.count + count }).where(eq(stats.id, lifetime.id));
+      } else {
+        await db.insert(stats).values({ profileId: 0, toolType, count, date: 'lifetime' });
+      }
+    }
+  }
+
+  async getMobileSlotStats(username: string): Promise<{ daily: Record<string, number>; lifetime: Record<string, number> }> {
+    const today = new Date().toISOString().split('T')[0];
+    const prefix = `mob:${username}:`;
+    // profileId = 0 is the mobile sentinel; filter by username prefix in JS
+    const rows = await db.select().from(stats).where(eq(stats.profileId, 0));
+    const daily: Record<string, number> = {};
+    const lifetime: Record<string, number> = {};
+    for (const row of rows) {
+      if (!row.toolType.startsWith(prefix)) continue;
+      const key = row.toolType.slice(prefix.length);
+      if (row.date === today) daily[key] = (daily[key] ?? 0) + row.count;
+      else if (row.date === 'lifetime') lifetime[key] = (lifetime[key] ?? 0) + row.count;
+    }
+    return { daily, lifetime };
   }
 
   async getDailyAbdStats(): Promise<Record<number, number>> {

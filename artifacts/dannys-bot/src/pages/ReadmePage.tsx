@@ -10,8 +10,8 @@ const FAQ_SECTIONS = [
     bg: "bg-blue-500/10",
     items: [
       {
-        q: "What is Equinox?",
-        a: "Equinox is a Windows desktop Instagram automation dashboard. It manages multiple Instagram accounts at once and automates follows, unfollows, DMs, likes, story views, and human browsing sessions — all through Instagram's own Private Mobile API (the same API the official Instagram app uses). Every request looks exactly like it came from a real phone. No browser scraping, no external automation frameworks.",
+        q: "What is Aura Farming?",
+        a: "Aura Farming is a Windows desktop Instagram automation dashboard. It manages multiple Instagram accounts at once and automates follows, unfollows, DMs, likes, story views, and human browsing sessions — all through Instagram's own Private Mobile API (the same API the official Instagram app uses). Every request looks exactly like it came from a real phone. No browser scraping, no external automation frameworks.",
       },
       {
         q: "How do I add my first account?",
@@ -19,19 +19,19 @@ const FAQ_SECTIONS = [
       },
       {
         q: "How do I import accounts from Jarvee?",
-        a: "Go to the Accounts page and click the Import button in the top-right toolbar. Drag and drop your Jarvee .txt export file (UTF-16 LE tab-separated). Equinox reads all columns including Username, Password, Proxy, API User Agent, Device ID, UUID, Phone ID, ADID, 2FA Secret Key, and ApiCookies. A preview table shows what was found before you confirm. Click Import to create or update all profiles in one go.",
+        a: "Go to the Accounts page and click the Import button in the top-right toolbar. Drag and drop your Jarvee .txt export file (UTF-16 LE tab-separated). Aura Farming reads all columns including Username, Password, Proxy, API User Agent, Device ID, UUID, Phone ID, ADID, 2FA Secret Key, and ApiCookies. A preview table shows what was found before you confirm. Click Import to create or update all profiles in one go.",
       },
       {
         q: "How does the Verify flow work?",
-        a: "Verify is a two-stage process that mirrors the Jarvee model. Stage 1 — Embedded Browser Login: a hidden Chrome window opens and logs into Instagram using the account's username, password, and 2FA code. Chrome establishes the session exactly as a real phone would. Stage 2 — Mobile API Bootstrap: Equinox extracts the session cookies from Chrome and hands them to the mobile API client, which then runs the same startup sequence (LauncherSync, UserInfo) that the real Instagram app runs after login. Only if the mobile API confirms the session does the account move to Valid status. This two-stage approach means no automation call is ever made without a browser-originated cookie — the same protection Jarvee uses.",
+        a: "Verify is a two-stage process that mirrors the Jarvee model. Stage 1 — Embedded Browser Login: a hidden Chrome window opens and logs into Instagram using the account's username, password, and 2FA code. Chrome establishes the session exactly as a real phone would. Stage 2 — Mobile API Bootstrap: Aura Farming extracts the session cookies from Chrome and hands them to the mobile API client, which then runs the same startup sequence (LauncherSync, UserInfo) that the real Instagram app runs after login. Only if the mobile API confirms the session does the account move to Valid status. This two-stage approach means no automation call is ever made without a browser-originated cookie — the same protection Jarvee uses.",
       },
       {
-        q: "How do I update Equinox?",
-        a: "Equinox checks for updates automatically each time it launches. When a new version is available it downloads silently in the background and installs on next restart. You can also download the latest installer from the GitHub Actions page for the repository — look for the Equinox-Windows-Installer artifact in the latest successful build run.",
+        q: "How do I update Aura Farming?",
+        a: "Aura Farming checks for updates automatically each time it launches. When a new version is available it downloads silently in the background and installs on next restart. You can also download the latest installer from the GitHub Actions page for the repository — look for the Aura Farming-Windows-Installer artifact in the latest successful build run.",
       },
       {
         q: "Where is my data stored?",
-        a: "All data — accounts, settings, stats, logs, device fingerprints, session cookies — is stored locally in a SQLite database at C:\\Users\\YourName\\AppData\\Roaming\\Equinox\\database.db. Browser session data (Chrome profiles) is stored alongside it. Nothing is ever uploaded anywhere. Everything persists across installs and updates.",
+        a: "All data — accounts, settings, stats, logs, device fingerprints, session cookies — is stored locally in a SQLite database at C:\\Users\\YourName\\AppData\\Roaming\\Aura Farming\\database.db. Browser session data (Chrome profiles) is stored alongside it. Nothing is ever uploaded anywhere. Everything persists across installs and updates.",
       },
     ],
   },
@@ -43,7 +43,7 @@ const FAQ_SECTIONS = [
     items: [
       {
         q: "What does Verify Account do?",
-        a: "Verify runs the two-stage Jarvee handshake. First the embedded browser (Chrome) logs in on instagram.com exactly as a real user would — including handling 2FA automatically. Then Equinox extracts the session cookies from Chrome and uses them to bootstrap the mobile API client (running the same LauncherSync / UserInfo startup the real app runs). No API call is ever made before this browser login. The account is only marked Valid after the mobile API confirms the session. If a CAPTCHA or checkpoint appears, complete it manually in the Open EB tab and click Verify again.",
+        a: "Verify runs the two-stage Jarvee handshake. First the embedded browser (Chrome) logs in on instagram.com exactly as a real user would — including handling 2FA automatically. Then Aura Farming extracts the session cookies from Chrome and uses them to bootstrap the mobile API client (running the same LauncherSync / UserInfo startup the real app runs). No API call is ever made before this browser login. The account is only marked Valid after the mobile API confirms the session. If a CAPTCHA or checkpoint appears, complete it manually in the Open EB tab and click Verify again.",
       },
       {
         q: "Why is my account showing Invalid Session?",
@@ -95,7 +95,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: "How do I use Spintax in messages?",
-        a: "Spintax lets you write one template that produces different outputs each time. Use curly braces with pipe separators: {Hello|Hi|Hey} {there|friend|!}. Equinox picks one option from each group at random, so recipients see a different variation. This reduces the chance of Instagram flagging repeated identical messages.",
+        a: "Spintax lets you write one template that produces different outputs each time. Use curly braces with pipe separators: {Hello|Hi|Hey} {there|friend|!}. Aura Farming picks one option from each group at random, so recipients see a different variation. This reduces the chance of Instagram flagging repeated identical messages.",
       },
     ],
   },
@@ -139,7 +139,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: "How do I export accounts?",
-        a: "On the Accounts page, select the accounts you want to export (or select all), then click Actions → Export Selected. This downloads a CSV file you can open in Excel or re-import into another Equinox installation.",
+        a: "On the Accounts page, select the accounts you want to export (or select all), then click Actions → Export Selected. This downloads a CSV file you can open in Excel or re-import into another Aura Farming installation.",
       },
     ],
   },
@@ -159,11 +159,11 @@ const FAQ_SECTIONS = [
       },
       {
         q: "Will Instagram ban my account?",
-        a: "Any automation carries some risk. Equinox is designed to minimise that risk by using the mobile API (same as the real app), running Human Sessions to simulate natural behaviour, randomising delays, and enforcing configurable limits. Accounts on quality mobile proxies with conservative limits and active Human Sessions have the lowest ban risk. Never use datacenter proxies or very high daily limits on new accounts.",
+        a: "Any automation carries some risk. Aura Farming is designed to minimise that risk by using the mobile API (same as the real app), running Human Sessions to simulate natural behaviour, randomising delays, and enforcing configurable limits. Accounts on quality mobile proxies with conservative limits and active Human Sessions have the lowest ban risk. Never use datacenter proxies or very high daily limits on new accounts.",
       },
       {
-        q: "Is Equinox detectable by Instagram?",
-        a: "Equinox uses Instagram's Private Mobile API the exact same endpoints as the official Instagram app. Each account sends requests with its own device fingerprint (User Agent, Device ID, UUID, Phone ID, ADID) so traffic looks like a real phone. Human Sessions further normalise behaviour. The main detection risk comes from unnatural patterns (too many actions, no browsing, proxy quality) rather than the API calls themselves.",
+        q: "Is Aura Farming detectable by Instagram?",
+        a: "Aura Farming uses Instagram's Private Mobile API the exact same endpoints as the official Instagram app. Each account sends requests with its own device fingerprint (User Agent, Device ID, UUID, Phone ID, ADID) so traffic looks like a real phone. Human Sessions further normalise behaviour. The main detection risk comes from unnatural patterns (too many actions, no browsing, proxy quality) rather than the API calls themselves.",
       },
     ],
   },
@@ -204,27 +204,27 @@ export function ReadmePage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-foreground">README &amp; FAQ</h1>
-              <p className="text-sm text-muted-foreground">Everything you need to know to get started and get the most out of Equinox.</p>
+              <p className="text-sm text-muted-foreground">Everything you need to know to get started and get the most out of Aura Farming.</p>
             </div>
           </div>
         </div>
 
-        {/* What is Equinox */}
+        {/* What is Aura Farming */}
         <div className="desktop-card p-6 mb-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 rounded-lg bg-primary/10 text-primary">
               <Zap className="w-4 h-4" />
             </div>
-            <h2 className="text-base font-semibold">About Equinox</h2>
+            <h2 className="text-base font-semibold">About Aura Farming</h2>
           </div>
           <p className="text-sm text-muted-foreground leading-relaxed mb-3">
-            <strong className="text-foreground">Equinox</strong> is a Windows desktop Instagram automation dashboard built for professionals managing multiple accounts. It handles follows, unfollows, direct messages, likes, story views, and human browsing sessions all through Instagram's own Private Mobile API. This means every request looks exactly like it came from a real phone running the Instagram app.
+            <strong className="text-foreground">Aura Farming</strong> is a Windows desktop Instagram automation dashboard built for professionals managing multiple accounts. It handles follows, unfollows, direct messages, likes, story views, and human browsing sessions all through Instagram's own Private Mobile API. This means every request looks exactly like it came from a real phone running the Instagram app.
           </p>
           <p className="text-sm text-muted-foreground leading-relaxed mb-3">
             The embedded browser (which you see when fixing challenges) is <strong className="text-foreground">never used for automation</strong>. It exists solely so you can manually complete verification challenges (CAPTCHA, email/SMS codes) when Instagram requires them. All actual bot work goes through the mobile API.
           </p>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Equinox stores everything locally on your machine no cloud, no subscriptions, no data sent anywhere. Your accounts, sessions, stats, and logs live in a single SQLite database on your PC that you fully own and control.
+            Aura Farming stores everything locally on your machine no cloud, no subscriptions, no data sent anywhere. Your accounts, sessions, stats, and logs live in a single SQLite database on your PC that you fully own and control.
           </p>
 
           <div className="grid grid-cols-3 gap-3 mt-5">
@@ -270,7 +270,7 @@ export function ReadmePage() {
               },
               {
                 title: "Turn On the Follow Tool",
-                detail: "Flip the Follow Tool toggle to ON. The first run starts immediately. Equinox handles the schedule from here.",
+                detail: "Flip the Follow Tool toggle to ON. The first run starts immediately. Aura Farming handles the schedule from here.",
               },
               {
                 title: "Turn On Human Sessions",

@@ -1883,7 +1883,7 @@ function NoAdbPanel({ onSaved }: { onSaved: () => void }) {
       </div>
       <div>
         <h2 className="text-lg font-bold text-foreground">ADB not found</h2>
-        <p className="text-sm text-muted-foreground mt-1">Equinox can download and set it up for you — no manual install needed.</p>
+        <p className="text-sm text-muted-foreground mt-1">Aura Farming can download and set it up for you — no manual install needed.</p>
       </div>
       <div className="text-left bg-card border border-primary/30 rounded-xl p-5 space-y-3">
         <button onClick={autoInstall} disabled={autoInstalling}
@@ -4738,7 +4738,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
             <p className="text-sm font-semibold text-foreground">Stop Charging for X minutes every Y hours</p>
             {!enabled && (
               <p className="text-xs text-muted-foreground mt-1">
-                USB stays connected for ADB data. Equinox stops the physical charging current on a repeating schedule — good for battery health and electricity. Enable to configure.
+                USB stays connected for ADB data. Aura Farming stops the physical charging current on a repeating schedule — good for battery health and electricity. Enable to configure.
               </p>
             )}
           </div>
@@ -4920,65 +4920,73 @@ function ActionLogPanel({ lines, onClear }: { lines: string[]; onClear: () => vo
 
 // ─── Metrics Panel ────────────────────────────────────────────────────────────
 
-interface SlotStats {
-  cycles: number; likes: number; follows: number;
-  stories: number; reels: number; dms: number; feedShares: number;
+interface DbSlotStats {
+  daily: Record<string, number>;
+  lifetime: Record<string, number>;
 }
-const EMPTY_STATS = (): SlotStats => ({ cycles: 0, likes: 0, follows: 0, stories: 0, reels: 0, dms: 0, feedShares: 0 });
 
 function MetricsPanel({ serial, actionLogLines }: { serial: string | null; actionLogLines: string[] }) {
   const [slotUsernames, setSlotUsernames] = useState<string[]>([]);
+  const [dbStats, setDbStats] = useState<Record<string, DbSlotStats>>({});
 
   // Load configured slot usernames from the server whenever the phone changes.
   useEffect(() => {
     if (!serial) { setSlotUsernames([]); return; }
     fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/account`)
       .then(r => r.json())
-      .then(d => {
-        const names: string[] = (d?.slots ?? []).map((s: any) => s?.username ?? "").filter(Boolean);
-        setSlotUsernames(names);
-      })
+      .then(d => setSlotUsernames((d?.slots ?? []).map((s: any) => s?.username ?? "").filter(Boolean)))
       .catch(() => {});
   }, [serial]);
 
-  // Aggregate per-account stats from Action Log lines.
-  // Line format: [date]  @username — Cycle complete — X liked  ·  Y stories  ·  Z followed …
-  const statsByUsername = useMemo(() => {
-    const acc: Record<string, SlotStats> = {};
-    const num = (text: string, re: RegExp) => { const m = text.match(re); return m ? parseInt(m[1], 10) : 0; };
+  // Poll DB stats for all configured slot usernames — refreshes every 60 s.
+  // Stats are persisted after every cycle so they survive software restarts.
+  useEffect(() => {
+    if (slotUsernames.length === 0) { setDbStats({}); return; }
+    let cancelled = false;
+    const load = () => {
+      Promise.all(
+        slotUsernames.map(u =>
+          fetch(`/api/mobile/slot-stats?username=${encodeURIComponent(u)}`)
+            .then(r => r.json())
+            .then(d => [u, d.ok ? { daily: d.daily ?? {}, lifetime: d.lifetime ?? {} } : null] as const)
+            .catch(() => [u, null] as const)
+        )
+      ).then(results => {
+        if (cancelled) return;
+        const next: Record<string, DbSlotStats> = {};
+        for (const [u, d] of results) { if (d) next[u] = d; }
+        setDbStats(next);
+      });
+    };
+    load();
+    const t = setInterval(load, 60_000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [slotUsernames]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Also surface usernames seen in the action log but not yet in the slot config.
+  const extraUsernames = useMemo(() => {
+    const configured = new Set(slotUsernames);
+    const seen = new Set<string>();
+    const extra: string[] = [];
     for (const line of actionLogLines) {
       const m = line.match(/@(\S+)\s*—\s*Cycle complete/);
       if (!m) continue;
       const u = m[1];
-      if (!acc[u]) acc[u] = EMPTY_STATS();
-      acc[u].cycles++;
-      acc[u].likes      += num(line, /(\d+)\s+liked/);
-      acc[u].follows    += num(line, /(\d+)\s+followed/);
-      acc[u].stories    += num(line, /(\d+)\s+stories/);
-      acc[u].reels      += num(line, /(\d+)\s+reels/);
-      acc[u].dms        += num(line, /(\d+)\s+DM'd/);
-      acc[u].feedShares += num(line, /(\d+)\s+feed-shared/);
+      if (!configured.has(u) && !seen.has(u)) { seen.add(u); extra.push(u); }
     }
-    return acc;
-  }, [actionLogLines]);
+    return extra;
+  }, [actionLogLines, slotUsernames]);
 
-  // Show every configured slot username; append any extra usernames seen in the log.
-  const allUsernames = useMemo(() => {
-    const seen = new Set<string>();
-    const names: string[] = [];
-    for (const u of slotUsernames) { if (u && !seen.has(u)) { seen.add(u); names.push(u); } }
-    for (const u of Object.keys(statsByUsername)) { if (!seen.has(u)) { seen.add(u); names.push(u); } }
-    return names;
-  }, [slotUsernames, statsByUsername]);
+  const allUsernames = useMemo(() => [...slotUsernames, ...extraUsernames], [slotUsernames, extraUsernames]);
 
-  const METRIC_DEFS: { label: string; key: keyof SlotStats }[] = [
-    { label: "Cycles",       key: "cycles"     },
-    { label: "Likes",        key: "likes"       },
-    { label: "Follows",      key: "follows"     },
-    { label: "Story Views",  key: "stories"     },
-    { label: "Reels Viewed", key: "reels"       },
-    { label: "DMs Sent",     key: "dms"         },
-    { label: "Feed Shares",  key: "feedShares"  },
+  const METRIC_DEFS: { label: string; dbKey: string }[] = [
+    { label: "Cycles",       dbKey: "cycles"      },
+    { label: "Likes",        dbKey: "likes"       },
+    { label: "Follows",      dbKey: "follows"     },
+    { label: "Story Views",  dbKey: "stories"     },
+    { label: "Reels Viewed", dbKey: "reels"       },
+    { label: "DMs Sent",     dbKey: "dms"         },
+    { label: "Feed Shares",  dbKey: "feed_shares" },
   ];
 
   return (
@@ -4987,17 +4995,30 @@ function MetricsPanel({ serial, actionLogLines }: { serial: string | null; actio
       {allUsernames.length === 0 ? (
         <p className="text-sm text-muted-foreground">No accounts configured yet.</p>
       ) : allUsernames.map(username => {
-        const s = statsByUsername[username] ?? EMPTY_STATS();
+        const db = dbStats[username];
         return (
           <div key={username} className="bg-card border border-border rounded-xl p-5 space-y-3">
             <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">@{username}</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {METRIC_DEFS.map(({ label, key }) => (
-                <div key={label} className="bg-background border border-border rounded-lg p-3 flex flex-col gap-1">
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</span>
-                  <span className="text-2xl font-bold text-foreground">{s[key] || "—"}</span>
-                </div>
-              ))}
+              {METRIC_DEFS.map(({ label, dbKey }) => {
+                const today   = db?.daily?.[dbKey]    ?? 0;
+                const allTime = db?.lifetime?.[dbKey] ?? 0;
+                return (
+                  <div key={label} className="bg-background border border-border rounded-lg p-3 flex flex-col gap-1.5">
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</span>
+                    <div className="space-y-1 mt-0.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-muted-foreground/60">Today</span>
+                        <span className="text-base font-bold text-foreground tabular-nums">{today > 0 ? today : "—"}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-muted-foreground/60">All Time</span>
+                        <span className="text-base font-bold text-primary/80 tabular-nums">{allTime > 0 ? allTime : "—"}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         );

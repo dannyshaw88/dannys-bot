@@ -2379,7 +2379,7 @@ export function ProfilesPage() {
                   }
                   setActionsOpen(false);
                   const confirmed = window.confirm(
-                    `Flag ${selectedProfileIds.length} account${selectedProfileIds.length !== 1 ? "s" : ""} as Banned?\n\nThis will:\n• Snapshot their API call history for Evasion Stats\n• Set their status to Banned\n• Keep the accounts in Equinox (not deleted)\n\nYou can still access and recover these accounts.`
+                    `Flag ${selectedProfileIds.length} account${selectedProfileIds.length !== 1 ? "s" : ""} as Banned?\n\nThis will:\n• Snapshot their API call history for Evasion Stats\n• Set their status to Banned\n• Keep the accounts in Aura Farming (not deleted)\n\nYou can still access and recover these accounts.`
                   );
                   if (!confirmed) return;
                   let successCount = 0;
@@ -2406,7 +2406,7 @@ export function ProfilesPage() {
                   }
                   setActionsOpen(false);
                   const confirmed = window.confirm(
-                    `Flag ${selectedProfileIds.length} account${selectedProfileIds.length !== 1 ? "s" : ""} as Automated Behaviour Detected?\n\nThis will:\n• Snapshot their API call history for Evasion Stats\n• Set their status to Automated Behaviour Detected\n• Keep the accounts in Equinox (not deleted)\n\nYou can still verify and recover these accounts.`
+                    `Flag ${selectedProfileIds.length} account${selectedProfileIds.length !== 1 ? "s" : ""} as Automated Behaviour Detected?\n\nThis will:\n• Snapshot their API call history for Evasion Stats\n• Set their status to Automated Behaviour Detected\n• Keep the accounts in Aura Farming (not deleted)\n\nYou can still verify and recover these accounts.`
                   );
                   if (!confirmed) return;
                   let successCount = 0;
@@ -2433,7 +2433,7 @@ export function ProfilesPage() {
                   }
                   setActionsOpen(false);
                   const confirmed = window.confirm(
-                    `Flag ${selectedProfileIds.length} account${selectedProfileIds.length !== 1 ? "s" : ""} as Captcha Error?\n\nThis will:\n• Snapshot their API call history for Evasion Stats\n• Set their status to Captcha\n• Keep the accounts in Equinox (not deleted)\n\nYou can still verify and recover these accounts.`
+                    `Flag ${selectedProfileIds.length} account${selectedProfileIds.length !== 1 ? "s" : ""} as Captcha Error?\n\nThis will:\n• Snapshot their API call history for Evasion Stats\n• Set their status to Captcha\n• Keep the accounts in Aura Farming (not deleted)\n\nYou can still verify and recover these accounts.`
                   );
                   if (!confirmed) return;
                   let successCount = 0;
@@ -2460,7 +2460,7 @@ export function ProfilesPage() {
                   }
                   setActionsOpen(false);
                   const confirmed = window.confirm(
-                    `Flag ${selectedProfileIds.length} account${selectedProfileIds.length !== 1 ? "s" : ""} as Locked Account?\n\nThis will:\n• Snapshot their API call history for Evasion Stats\n• Set their status to Locked\n• Keep the accounts in Equinox (not deleted)\n\nYou can still verify and recover these accounts.`
+                    `Flag ${selectedProfileIds.length} account${selectedProfileIds.length !== 1 ? "s" : ""} as Locked Account?\n\nThis will:\n• Snapshot their API call history for Evasion Stats\n• Set their status to Locked\n• Keep the accounts in Aura Farming (not deleted)\n\nYou can still verify and recover these accounts.`
                   );
                   if (!confirmed) return;
                   let successCount = 0;

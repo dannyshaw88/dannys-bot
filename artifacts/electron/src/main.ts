@@ -156,7 +156,7 @@ img{width:88px;height:88px;margin-bottom:28px;border-radius:16px;}
 </style></head>
 <body>
   <img src="${iconDataUrl}" />
-  <div class="title">Equinox</div>
+  <div class="title">Aura Farming</div>
   <div class="label">${label}</div>
   <div class="bar-track"><div class="bar-fill"></div></div>
 </body></html>`;
@@ -370,11 +370,11 @@ body{
 .sep{height:1px;background:#e0e0e0;margin:3px 0}
 </style></head>
 <body>
-<div class="item" onclick="window.trayMenuAPI.openApp()">Open Equinox</div>
+<div class="item" onclick="window.trayMenuAPI.openApp()">Open Aura Farming</div>
 <div class="sep"></div>
-<div class="item" onclick="window.trayMenuAPI.restartApp()">Restart Equinox</div>
+<div class="item" onclick="window.trayMenuAPI.restartApp()">Restart Aura Farming</div>
 <div class="sep"></div>
-<div class="item" onclick="window.trayMenuAPI.closeApp()">Close Equinox</div>
+<div class="item" onclick="window.trayMenuAPI.closeApp()">Close Aura Farming</div>
 </body></html>`;
 
 // Dimensions must match the HTML content exactly
@@ -398,7 +398,7 @@ function createTray(): void {
   }
 
   tray = new Tray(icon);
-  tray.setToolTip(`Equinox v${app.getVersion()}`);
+  tray.setToolTip(`Aura Farming v${app.getVersion()}`);
 
   // Create the custom square popup window (hidden until right-click)
   trayPopup = new BrowserWindow({
@@ -509,7 +509,7 @@ function setupAutoUpdater(): void {
     dialog.showMessageBox(win, {
       type: "info",
       title: "Update Ready",
-      message: "Equinox has been updated. Restart now to apply?",
+      message: "Aura Farming has been updated. Restart now to apply?",
       buttons: ["Restart Now", "Later"],
       defaultId: 0,
     }).then(({ response }) => {
@@ -524,7 +524,7 @@ function setupAutoUpdater(): void {
     dialog.showMessageBox(win, {
       type: "info",
       title: "Up to Date",
-      message: "You are up to date — Equinox is running the latest version.",
+      message: "You are up to date — Aura Farming is running the latest version.",
       buttons: ["OK"],
     });
   });
@@ -989,7 +989,7 @@ async function createWindow() {
     height: 900,
     minWidth: 960,
     minHeight: 600,
-    title: `Equinox v${app.getVersion()}`,
+    title: `Aura Farming v${app.getVersion()}`,
     icon: getIconPath(),
     autoHideMenuBar: true,
     show: false,
@@ -1068,7 +1068,7 @@ async function createWindow() {
   // would otherwise override the BrowserWindow title property.
   win.webContents.on("did-finish-load", () => {
     win?.webContents.executeJavaScript(
-      `document.title = "Equinox v${app.getVersion()}";`
+      `document.title = "Aura Farming v${app.getVersion()}";`
     ).catch(() => {});
   });
 
@@ -1306,7 +1306,7 @@ async function createWindow() {
 // grouped under the same Equinox taskbar entry and the main window — created
 // first — always appears to the LEFT of any EB windows on the Windows taskbar.
 if (process.platform === "win32") {
-  app.setAppUserModelId("Equinox");
+  app.setAppUserModelId("AuraFarming");
 }
 
 // ── Single-instance lock ──────────────────────────────────────────────────────

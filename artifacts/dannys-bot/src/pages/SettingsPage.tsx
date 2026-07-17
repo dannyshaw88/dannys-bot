@@ -86,7 +86,7 @@ function AutostartCard() {
     try {
       const result: boolean = await eAPI().setAutostart(v);
       setEnabled(result);
-      toast({ title: result ? "Equinox will start with Windows" : "Autostart disabled" });
+      toast({ title: result ? "Aura Farming will start with Windows" : "Autostart disabled" });
     } catch {
       toast({ title: "Failed to update autostart", variant: "destructive" });
     } finally {
@@ -104,7 +104,7 @@ function AutostartCard() {
           <div>
             <p className="text-sm font-semibold text-foreground">Start with Windows</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Equinox will launch automatically when Windows starts. The app opens minimised to the tray.
+              Aura Farming will launch automatically when Windows starts. The app opens minimised to the tray.
             </p>
           </div>
         </div>
@@ -277,7 +277,7 @@ export function SettingsPage() {
 
         {/* Talk to Equinox Bot shortcut */}
         <button
-          onClick={() => window.dispatchEvent(new CustomEvent("equinox-bot-open", { detail: "open" }))}
+          onClick={() => window.dispatchEvent(new CustomEvent("aura-farming-bot-open", { detail: "open" }))}
           className="block w-full text-left"
           style={{ display: settingsTab !== "general" ? "none" : undefined }}
         >
@@ -287,7 +287,7 @@ export function SettingsPage() {
                 <img src="/bot-logo.png" alt="" className="w-4 h-4 object-contain" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-foreground">Talk to Equinox Bot</p>
+                <p className="text-sm font-semibold text-foreground">Talk to Aura Farming Bot</p>
                 <p className="text-xs text-muted-foreground">Ask the AI assistant how to use any feature</p>
               </div>
             </div>
@@ -519,7 +519,7 @@ export function SettingsPage() {
             <h3 className="text-base font-semibold">Gemini API Key (AI Bot)</h3>
           </div>
           <p className="text-sm text-muted-foreground mb-5">
-            Powers the Equinox Bot chat and the Scan with AI feature in Evasion Stats. Gemini has a generous free tier —
+            Powers the Aura Farming Bot chat and the Scan with AI feature in Evasion Stats. Gemini has a generous free tier —
             get your key at <span className="font-medium">aistudio.google.com</span> → Get API Key. If both Gemini and OpenAI keys are set, Gemini is used.
           </p>
           <div className="space-y-3">
@@ -702,7 +702,7 @@ export function SettingsPage() {
             <h3 className="text-base font-semibold">App Updates</h3>
           </div>
           <p className="text-sm text-muted-foreground mb-5">
-            Equinox checks for updates automatically on startup. Click below to check right now.
+            Aura Farming checks for updates automatically on startup. Click below to check right now.
           </p>
           <div className="flex gap-3 flex-wrap">
             <Button
@@ -1275,7 +1275,7 @@ function MyAccountTabContent() {
           </div>
         </>
       ) : (
-        <div className="text-sm text-muted-foreground">Not signed in. Please restart Equinox.</div>
+        <div className="text-sm text-muted-foreground">Not signed in. Please restart Aura Farming.</div>
       )}
 
       {/* Subscription plan tiers — always visible regardless of login/admin status */}

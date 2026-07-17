@@ -728,7 +728,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     items: [
       {
         category: "Added",
-        text: "Mobile Farm now has a screen mirror button and a 'Link Instagram account' form on each connected phone card. Click 'Open screen mirror' to pop up a live view/control window for that phone (uses scrcpy — no extra setup beyond the ADB folder you already configured). Linking an account saves it into Equinox's Accounts list tied to that phone; logging it into the Instagram app itself is still a manual step for this first version.",
+        text: "Mobile Farm now has a screen mirror button and a 'Link Instagram account' form on each connected phone card. Click 'Open screen mirror' to pop up a live view/control window for that phone (uses scrcpy — no extra setup beyond the ADB folder you already configured). Linking an account saves it into Aura Farming's Accounts list tied to that phone; logging it into the Instagram app itself is still a manual step for this first version.",
         technical: [
           "MobilePage.tsx: new MirrorButton (POST /api/mobile/devices/:serial/scrcpy/start|stop) and BindAccountForm (POST /api/mobile/accounts) components added to PhoneCard for state==='device'",
           "androidManager.ts findAdbPath() now also checks the same adb-path-override.json used by usb-phones.ts, so scrcpy/Instagram automation resolve the same adb binary as device detection",
@@ -763,7 +763,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       },
       {
         category: "Added",
-        text: "The Mobile tab now shows exactly what Equinox sees from ADB directly in the app when no phone is detected — no need to open a command prompt to diagnose a connection problem.",
+        text: "The Mobile tab now shows exactly what Aura Farming sees from ADB directly in the app when no phone is detected — no need to open a command prompt to diagnose a connection problem.",
         technical: [
           "GET /api/mobile/usb-phones now returns rawOutput (the raw `adb devices -l` text); MobilePage's NoPhonesPanel renders it live",
         ],
@@ -776,7 +776,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     items: [
       {
         category: "Added",
-        text: "The Mobile tab's USB phone setup screen now lets you paste the folder containing adb.exe directly into a box in the app, instead of editing Windows' PATH setting. Click \"Use this folder\" and Equinox finds it immediately — no restart needed. The old PATH method is still available under a \"prefer the traditional way\" option for anyone who wants it.",
+        text: "The Mobile tab's USB phone setup screen now lets you paste the folder containing adb.exe directly into a box in the app, instead of editing Windows' PATH setting. Click \"Use this folder\" and Aura Farming finds it immediately — no restart needed. The old PATH method is still available under a \"prefer the traditional way\" option for anyone who wants it.",
         technical: [
           "POST /api/mobile/adb-path — validates the folder exists, contains adb(.exe), and persists the override to adb-path-override.json (survives restarts)",
           "usb-phones.ts findAdb() checks the saved override before falling back to PATH scan and known install locations",
@@ -2886,7 +2886,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "UI", text: "Ghost Browser: Device Identity dropdown now matches the full width of the Proxy dropdown." },
       { category: "UI", text: "Ghost Browser: scheduler min/max input fields are slightly narrower." },
       { category: "UI", text: "Ghost Browser: Username, Password, DOB, Bio, and all email/IMAP fields are more compact." },
-      { category: "UI", text: "Ghost Browser: action buttons reduced in width and Nuke Environment moved before Add to Equinox." },
+      { category: "UI", text: "Ghost Browser: action buttons reduced in width and Nuke Environment moved before Add to Aura Farming." },
     ],
   },
   {
@@ -2900,9 +2900,9 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.1.216",
     date: "28 Jun 2026",
     items: [
-      { category: "Fix", text: "Ghost Browser: when you click 'Add to Equinox', it now sends the exact username that was used during the actual signup — not a freshly re-rolled random version of the spintax template. Previously every click re-resolved the template, often producing a different username than the one Instagram registered." },
-      { category: "Fix", text: "Ghost Browser: the account name in Account Manager now defaults to the username — previously it was blank when added via 'Add to Equinox'." },
-      { category: "Fix", text: "Ghost Browser: session cookies captured at signup are now properly written to the account's browser profile on 'Add to Equinox'. When you open the embedded browser for that account from Account Manager, it will already be logged in." },
+      { category: "Fix", text: "Ghost Browser: when you click 'Add to Aura Farming', it now sends the exact username that was used during the actual signup — not a freshly re-rolled random version of the spintax template. Previously every click re-resolved the template, often producing a different username than the one Instagram registered." },
+      { category: "Fix", text: "Ghost Browser: the account name in Account Manager now defaults to the username — previously it was blank when added via 'Add to Aura Farming'." },
+      { category: "Fix", text: "Ghost Browser: session cookies captured at signup are now properly written to the account's browser profile on 'Add to Aura Farming'. When you open the embedded browser for that account from Account Manager, it will already be logged in." },
       { category: "Fix", text: "Ghost Browser: the right-hand 'Browser not started' placeholder panel has been removed. The tool now fills the full screen width as a single panel." },
     ],
   },
@@ -3226,7 +3226,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     date: "26 Jun 2026",
     items: [
       { category: "Fix", text: "Make-a-Post / Repost: when the image upload is rejected by Instagram (session expired), the error message now correctly says 'session expired or auth failure' — previously it was showing an unrelated error from an earlier step." },
-      { category: "Fix", text: "Contact Tool: the Equinox User DM feature no longer picks TrustScore skeleton accounts as recipients — only real accounts are included in the pool." },
+      { category: "Fix", text: "Contact Tool: the Aura Farming User DM feature no longer picks TrustScore skeleton accounts as recipients — only real accounts are included in the pool." },
       { category: "Fix", text: "Account Manager: TrustScore skeleton accounts are now completely hidden from the accounts list — they only appear in the TrustScore section where they belong." },
     ],
   },
@@ -3242,7 +3242,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.1.173",
     date: "26 Jun 2026",
     items: [
-      { category: "Feature", text: "Contact Tool → Message an Equinox User: new 'Don't message the same account twice' checkbox — when enabled, previously-messaged Equinox accounts (pending and sent) are skipped and a fresh one is picked each session." },
+      { category: "Feature", text: "Contact Tool → Message an Aura Farming User: new 'Don't message the same account twice' checkbox — when enabled, previously-messaged Aura Farming accounts (pending and sent) are skipped and a fresh one is picked each session." },
       { category: "Fix", text: "Verify Credentials: FetchConfig (qe/sync) is now called only once during verify bootstrap and never during the DM warm-up — the duplicate qe/sync call has been removed entirely from the session bootstrap." },
     ],
   },
@@ -3250,7 +3250,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.1.171",
     date: "26 Jun 2026",
     items: [
-      { category: "Feature", text: "Contact Tool → Contact Users Sending: new 'Message an Equinox User' option — each session, a DM is automatically queued to a randomly picked account in the software. Includes a full SpinTax message template." },
+      { category: "Feature", text: "Contact Tool → Contact Users Sending: new 'Message an Aura Farming User' option — each session, a DM is automatically queued to a randomly picked account in the software. Includes a full SpinTax message template." },
       { category: "Improvement", text: "Contact Tool → Contact Users Sending: 'Pick a random message' and 'Unsend message after a delay' are now on the same row with Unsend After (min) inline." },
       { category: "Improvement", text: "Contact Tool → Contact Users Sending: removed standalone 'Wait Between Batches' setting — timing is controlled by the Human Session's Execute Every interval instead." },
     ],
@@ -3487,7 +3487,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.1.137",
     date: "23 Jun 2026",
     items: [
-      { category: "Feature", text: "If Equinox is restarted while an account is mid-verify (during the API bootstrap calls), it now automatically completes the verify on the next startup — no need to press Verify again. Only applies when the embedded browser login had already finished before the restart (cookies were already saved). Accounts restarted before that point are reset to Pending as before." },
+      { category: "Feature", text: "If Aura Farming is restarted while an account is mid-verify (during the API bootstrap calls), it now automatically completes the verify on the next startup — no need to press Verify again. Only applies when the embedded browser login had already finished before the restart (cookies were already saved). Accounts restarted before that point are reset to Pending as before." },
     ],
   },
   {
@@ -3802,7 +3802,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.1.101",
     date: "21 Jun 2026",
     items: [
-      { category: "Fix", text: "Top activity bar now shows the actual startup timestamp (e.g. 'Equinox started: 21 Jun 2026, 12:14:45') instead of the generic 'no recent activity' placeholder." },
+      { category: "Fix", text: "Top activity bar now shows the actual startup timestamp (e.g. 'Aura Farming started: 21 Jun 2026, 12:14:45') instead of the generic 'no recent activity' placeholder." },
       { category: "New", text: "Statistics page — Account Health & System: added a Locked counter showing how many accounts are currently in a locked state." },
       { category: "Fix", text: "Account Settings: Label input field is 15% narrower so it no longer stretches too wide." },
     ],
@@ -4248,7 +4248,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "New", text: "Emulation Local PC Folder: added Pick at random checkbox — randomly picks a media file from the folder each session." },
       { category: "Tweak", text: "Nav buttons (Account Settings, Human Session Tool, Session Log, Dash, Browser, Metrics, Copy Settings) are now darker blue." },
       { category: "Fix", text: "Ghost Browser: Username / Password / DOB / Bio and Email / IMAP fields no longer overlap — layout changed to 2-column grid." },
-      { category: "Tweak", text: "Equinox Bot: simplified welcome message." },
+      { category: "Tweak", text: "Aura Farming Bot: simplified welcome message." },
       { category: "New", text: "Settings: Evasion Stats is now its own tab in Settings." },
       { category: "New", text: "Settings: new Tools tab (wrench icon) contains Import and TrustScores as sub-tabs, with Import as the landing tab." },
     ],
@@ -4631,7 +4631,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "Improved", text: "Statistics page Proxy IP column header is now clickable to sort accounts by proxy host, the same as other columns." },
       { category: "Fix", text: "Add Account input box now has a white background and black text so it is clearly readable." },
       { category: "Fix", text: "Export Profiles CSV now correctly includes the proxy address for accounts linked via the Proxy Manager." },
-      { category: "Fix", text: "Top activity bar no longer collapses or disappears on startup — it is always visible and shows 'Equinox started — no recent activity' until the first automation event arrives." },
+      { category: "Fix", text: "Top activity bar no longer collapses or disappears on startup — it is always visible and shows 'Aura Farming started — no recent activity' until the first automation event arrives." },
     ],
   },
   {
@@ -5074,7 +5074,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     date: "16 Jun 2026",
     items: [
       { category: "Fix", text: "Statistics page: fixed crash caused by missing Globe icon import — page now loads correctly." },
-      { category: "Fix", text: "Single instance: opening Equinox a second time now focuses the existing window instead of launching a second copy." },
+      { category: "Fix", text: "Single instance: opening Aura Farming a second time now focuses the existing window instead of launching a second copy." },
       { category: "Fix", text: "Account Settings: 'endpoints after login' label renamed to 'Fire Unique Endpoints on Login'." },
       { category: "Fix", text: "Account Settings: 'Chance of Making a Post' is now on the same row as 'Fire Unique Endpoints on Login' — nothing stacked below." },
     ],
@@ -5136,7 +5136,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "Fix", text: "Accounts: Sync and Last API Call column text is now full black instead of grey — easier to read at a glance." },
       { category: "Improvement", text: "Evasion Stats: Verify-only ban detection now also catches accounts where the EB login (browser phase) was the only activity — not just API Verify calls." },
       { category: "New", text: "Evasion Stats: Verify Cluster Fingerprint added as a hardcoded theory — detects when multiple accounts were verified on the same proxy within 30 minutes of each other, which is a high-signal bot cluster pattern." },
-      { category: "New", text: "Evasion Stats: Scan with AI button on the Theories tab sends your ban data summary to Equinox AI to find patterns beyond the 6 built-in theories (requires OpenAI key in Settings)." },
+      { category: "New", text: "Evasion Stats: Scan with AI button on the Theories tab sends your ban data summary to Aura Farming AI to find patterns beyond the 6 built-in theories (requires OpenAI key in Settings)." },
       { category: "Fix", text: "Proxy Manager: IP:port, username, and password input text is now full black instead of grey." },
     ],
   },
@@ -5210,7 +5210,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.930",
     date: "14 Jun 2026",
     items: [
-      { category: "New", text: "AI Studio tab added — connect to a locally running Stable Diffusion (Forge/A1111) instance and generate images directly inside Equinox with no content restrictions." },
+      { category: "New", text: "AI Studio tab added — connect to a locally running Stable Diffusion (Forge/A1111) instance and generate images directly inside Aura Farming with no content restrictions." },
       { category: "New", text: "AI Studio: type a prompt, pick a size, adjust steps and CFG scale, then generate and save images to your PC in one click." },
       { category: "New", text: "AI Studio: built-in 3-step setup guide for installing Stable Diffusion Forge on Windows with the right models for your hardware." },
       { category: "Improvement", text: "Auto-ban detection now fires the full ban pipeline (API call snapshot, ban analytics, proxy taint pause) automatically when an account is detected as banned during Verify or a running automation — no manual flagging needed." },
@@ -5370,7 +5370,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.914",
     date: "12 Jun 2026",
     items: [
-      { category: "Fix", text: "Flag as Banned no longer deletes the account — it now sets the status to Banned and keeps the account in Equinox so you can still access and recover it, matching the behaviour of all other flag actions." },
+      { category: "Fix", text: "Flag as Banned no longer deletes the account — it now sets the status to Banned and keeps the account in Aura Farming so you can still access and recover it, matching the behaviour of all other flag actions." },
       { category: "Fix", text: "Proxy shown as 'no proxy' in Evasion Stats is fixed — all four flag actions now correctly resolve the proxy host from the Proxy Manager when the account uses a linked proxy rather than manual host settings." },
       { category: "Improved", text: "Evasion Stats completely overhauled: each flagged account now shows a smart diagnosis explaining why it was flagged — follow/DM/like call counts, API call rate, high-risk endpoint identification, and plain-English findings instead of raw endpoint lists." },
       { category: "Improved", text: "Evasion Stats: cross-account pattern analysis now highlights endpoints that appear in 50%+ of all flagged accounts, making it easy to spot which tool or behaviour is consistently triggering flags." },
@@ -5421,7 +5421,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "Feature", text: "Evasion Stats now has three tabs: Ban Events, Automated Behaviour, and Captcha Errors — each showing which API endpoints were called before the event, and the average call rate." },
       { category: "Feature", text: "Evasion Stats now shows a Proxy Risk Ranking table listing which proxy IPs appear most often across all three event types, so you can see which proxies are causing the most problems." },
       { category: "Feature", text: "Evasion Stats now shows Concurrent Usage Alerts when multiple accounts on the same proxy were flagged within 30 minutes of each other — a strong signal of suspicious pattern detection by Instagram." },
-      { category: "Feature", text: "Accounts page now has two new flag options: Flag as Automated Behaviour and Flag as Captcha Error. Both snapshot the account's API call history into Evasion Stats but keep the account in Equinox so you can still verify and recover it." },
+      { category: "Feature", text: "Accounts page now has two new flag options: Flag as Automated Behaviour and Flag as Captcha Error. Both snapshot the account's API call history into Evasion Stats but keep the account in Aura Farming so you can still verify and recover it." },
     ],
   },
   {
@@ -5614,7 +5614,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.883",
     date: "11 Jun 2026",
     items: [
-      { category: "Fix", text: "Activity ticker: system startup events no longer show as '@#0 Equinox started' in the top bar — startup events are now hidden from the ticker." },
+      { category: "Fix", text: "Activity ticker: system startup events no longer show as '@#0 Aura Farming started' in the top bar — startup events are now hidden from the ticker." },
       { category: "Fix", text: "Trust Score badge: the score list no longer appears transparent when the account row is greyed out (stopped) — it now renders on top with the correct solid background." },
       { category: "Fix", text: "Copy Settings dialog: trust score badges in the account list now display at a consistent fixed width, matching the badges on the Accounts page." },
       { category: "Fix", text: "Ghost Browser: IMAP fetch status message now appears inline to the right of the Fetch IMAP button instead of below it." },
@@ -5627,7 +5627,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.882",
     date: "11 Jun 2026",
     items: [
-      { category: "New", text: "Equinox Bot: AI assistant available from the bottom-right corner — ask it anything about how to use the software. Click the robot icon to open, minimise back to the bubble, or close it entirely and re-open from Settings → General → Talk to Equinox Bot." },
+      { category: "New", text: "Aura Farming Bot: AI assistant available from the bottom-right corner — ask it anything about how to use the software. Click the robot icon to open, minimise back to the bubble, or close it entirely and re-open from Settings → General → Talk to Aura Farming Bot." },
       { category: "Fix", text: "Dashboard: importing an account via .eqx no longer shows the account username as a 'target' in the activity log — it is now shown only in the detail text." },
       { category: "Improvement", text: "Dashboard: exporting accounts as .eqx now logs each export with a position counter (e.g. '@username exported as .eqx 1/3')." },
     ],
@@ -5686,10 +5686,10 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     date: "10 Jun 2026",
     items: [
       { category: "Feature", text: "Ghost Browser now has Tab 1 through Tab 5 at the top — each tab runs its own independent browser session so you can create multiple accounts simultaneously." },
-      { category: "Fix", text: "Add to Equinox now correctly saves the device UA, proxy settings, date of birth, fingerprint, IMAP email details, and session cookies — previously most of these fields were silently dropped." },
-      { category: "Feature", text: "When Add to Equinox is clicked for a username that already exists, the account's Notes field now logs a 'Re-added' timestamp instead of creating a duplicate." },
+      { category: "Fix", text: "Add to Aura Farming now correctly saves the device UA, proxy settings, date of birth, fingerprint, IMAP email details, and session cookies — previously most of these fields were silently dropped." },
+      { category: "Feature", text: "When Add to Aura Farming is clicked for a username that already exists, the account's Notes field now logs a 'Re-added' timestamp instead of creating a duplicate." },
       { category: "Improvement", text: "Account Details section in Account Settings is now expanded by default so device, proxy, and fingerprint info is visible immediately without extra clicks." },
-      { category: "Feature", text: "Ghost Browser cookies are now automatically captured at signup completion and attached to the account when you click Add to Equinox." },
+      { category: "Feature", text: "Ghost Browser cookies are now automatically captured at signup completion and attached to the account when you click Add to Aura Farming." },
     ],
   },
   {
@@ -5883,7 +5883,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.855",
     date: "9 Jun 2026",
     items: [
-      { category: "Fix", text: "Mirror: Apple DLLs are now copied into Equinox's own bin folder at startup — this is the real fix for idevice_id.exe crashing (PATH injection fails because Windows loads static DLL imports before the process runs, so PATH is never consulted)." },
+      { category: "Fix", text: "Mirror: Apple DLLs are now copied into Aura Farming's own bin folder at startup — this is the real fix for idevice_id.exe crashing (PATH injection fails because Windows loads static DLL imports before the process runs, so PATH is never consulted)." },
       { category: "Fix", text: "Mirror: The installer now bundles a real WebDriverAgent.ipa when the CI build can find one, and skips gracefully when it can't — no more dead download URL errors." },
     ],
   },
@@ -5923,14 +5923,14 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.850",
     date: "8 Jun 2026",
     items: [
-      { category: "New", text: "Added Equinox-Standalone artifact to every build — download the ZIP, double-click start.bat, and the full app runs in your browser instantly with no installer needed. Fast 2-3 min build instead of waiting for the full installer." },
+      { category: "New", text: "Added Aura Farming-Standalone artifact to every build — download the ZIP, double-click start.bat, and the full app runs in your browser instantly with no installer needed. Fast 2-3 min build instead of waiting for the full installer." },
     ],
   },
   {
     version: "1.0.849",
     date: "8 Jun 2026",
     items: [
-      { category: "Fix", text: "Mirror: when your iPhone is plugged in but Equinox still can't see it (Trust dialog, charge-only cable, locked screen), the setup screen now shows clear step-by-step instructions instead of a misleading green 'ready' banner." },
+      { category: "Fix", text: "Mirror: when your iPhone is plugged in but Aura Farming still can't see it (Trust dialog, charge-only cable, locked screen), the setup screen now shows clear step-by-step instructions instead of a misleading green 'ready' banner." },
       { category: "New", text: "Mirror: added a 'Restart Apple Service' button — fixes cases where Apple's USB service is running but stuck seeing zero devices, without needing to open Windows Services manually." },
     ],
   },
@@ -5959,7 +5959,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.845",
     date: "8 Jun 2026",
     items: [
-      { category: "Fix", text: "Mirror: after installing the control agent, the app was stuck showing just a spinning 'Connecting...' with no guidance. It now shows clear step-by-step instructions: open Settings → General → VPN & Device Management, trust the developer certificate, and Equinox will connect automatically." },
+      { category: "Fix", text: "Mirror: after installing the control agent, the app was stuck showing just a spinning 'Connecting...' with no guidance. It now shows clear step-by-step instructions: open Settings → General → VPN & Device Management, trust the developer certificate, and Aura Farming will connect automatically." },
     ],
   },
   {
@@ -5989,8 +5989,8 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.841",
     date: "8 Jun 2026",
     items: [
-      { category: "New", text: "Wireless Mirror — your iPhone can now mirror its screen to Equinox over WiFi with no USB cable, no iTunes drivers, and no app to install. Open the iPhone Mirror tool, go to the Wireless Mirror tab, click Start, then on your iPhone open Control Center → Screen Mirroring → Equinox Mirror." },
-      { category: "New", text: "AirPlay receiver built into Equinox — it advertises itself on your local network using the same mDNS protocol Apple TV uses, so it appears instantly in your iPhone's Screen Mirroring list." },
+      { category: "New", text: "Wireless Mirror — your iPhone can now mirror its screen to Aura Farming over WiFi with no USB cable, no iTunes drivers, and no app to install. Open the iPhone Mirror tool, go to the Wireless Mirror tab, click Start, then on your iPhone open Control Center → Screen Mirroring → Aura Farming Mirror." },
+      { category: "New", text: "AirPlay receiver built into Aura Farming — it advertises itself on your local network using the same mDNS protocol Apple TV uses, so it appears instantly in your iPhone's Screen Mirroring list." },
       { category: "New", text: "H.264 video stream is decoded in hardware using the browser's built-in WebCodecs API — no extra software needed, works on any modern PC." },
     ],
   },
@@ -6066,8 +6066,8 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.832",
     date: "8 Jun 2026",
     items: [
-      { category: "Fix", text: "iPhone still not detected after iTunes already installed: Equinox now injects Apple's USB driver path directly when talking to your iPhone, fixing a silent failure when iTunes is installed from the Microsoft Store." },
-      { category: "Fix", text: "If your iPhone is plugged in but screen is locked, Equinox now tells you clearly: 'Unlock your iPhone then check again'." },
+      { category: "Fix", text: "iPhone still not detected after iTunes already installed: Aura Farming now injects Apple's USB driver path directly when talking to your iPhone, fixing a silent failure when iTunes is installed from the Microsoft Store." },
+      { category: "Fix", text: "If your iPhone is plugged in but screen is locked, Aura Farming now tells you clearly: 'Unlock your iPhone then check again'." },
       { category: "Fix", text: "If detection fails with a real error, the exact error message now shows so you know exactly what's wrong." },
     ],
   },
@@ -6075,7 +6075,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.831",
     date: "8 Jun 2026",
     items: [
-      { category: "Fix", text: "iPhone not detected: Equinox now diagnoses why and tells you exactly what to fix — most commonly iTunes needs to be installed for Windows to see your iPhone." },
+      { category: "Fix", text: "iPhone not detected: Aura Farming now diagnoses why and tells you exactly what to fix — most commonly iTunes needs to be installed for Windows to see your iPhone." },
       { category: "Fix", text: "Added a 'Download iTunes' button inside the app when the Apple USB driver is missing — one click takes you straight to Apple's download page." },
       { category: "Fix", text: "'Check again' button now re-runs detection after you've made a change, without needing to restart the app." },
     ],
@@ -6084,10 +6084,10 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.830",
     date: "8 Jun 2026",
     items: [
-      { category: "Improvement", text: "iPhone Control is now fully built-in — no CMD prompts, no Sideloadly, no Python. Plug in your iPhone and Equinox handles everything automatically." },
+      { category: "Improvement", text: "iPhone Control is now fully built-in — no CMD prompts, no Sideloadly, no Python. Plug in your iPhone and Aura Farming handles everything automatically." },
       { category: "Improvement", text: "libimobiledevice binaries (idevice_id, iproxy, ideviceinstaller) are now bundled inside the app — device detection and port forwarding happen internally with no external tools needed." },
-      { category: "Improvement", text: "iproxy now auto-starts inside Equinox when your iPhone is detected — you no longer need to run any background command." },
-      { category: "Improvement", text: "One-click 'Install Control Agent' button in Equinox downloads and installs the control bridge directly onto your iPhone — no Apple ID or Sideloadly required." },
+      { category: "Improvement", text: "iproxy now auto-starts inside Aura Farming when your iPhone is detected — you no longer need to run any background command." },
+      { category: "Improvement", text: "One-click 'Install Control Agent' button in Aura Farming downloads and installs the control bridge directly onto your iPhone — no Apple ID or Sideloadly required." },
       { category: "Improvement", text: "Control tab now shows a clear step-by-step progress indicator (Plug in → Trust → Install → Connect) so you always know exactly where you are." },
     ],
   },
@@ -6102,7 +6102,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.828",
     date: "8 Jun 2026",
     items: [
-      { category: "New", text: "Mirror tool added — connect your iPhone via USB and mirror its screen directly inside Equinox. Click anywhere on the preview to tap, or drag to swipe." },
+      { category: "New", text: "Mirror tool added — connect your iPhone via USB and mirror its screen directly inside Aura Farming. Click anywhere on the preview to tap, or drag to swipe." },
       { category: "New", text: "Mirror tool: iPhone Signup tab imports the Ghost Browser signup flow so you can auto-fill Instagram registration forms directly on your real iPhone using WebDriverAgent." },
       { category: "New", text: "Mirror tool: built-in control pad with hardware button shortcuts (Home, Power, Volume), swipe D-pad, and a text input field for typing on the iPhone keyboard." },
     ],
@@ -6323,7 +6323,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     date: "6 Jun 2026",
     items: [
       { category: "Fix", text: "Ghost Browser signup: password page now detected and filled immediately after the email verification code step — Instagram's current flow shows password before date of birth, not after name/username. Previously the automation skipped the password entirely and failed silently." },
-      { category: "UI", text: "Ghost Browser: Create Account, Nuke Environment, and Close Browser buttons moved to just above the Add to Equinox button. Fields are now at the top, actions at the bottom." },
+      { category: "UI", text: "Ghost Browser: Create Account, Nuke Environment, and Close Browser buttons moved to just above the Add to Aura Farming button. Fields are now at the top, actions at the bottom." },
       { category: "UI", text: "Ghost Browser: code-wait panel now shows a live elapsed timer (MM:SS) alongside the 5-minute timeout, so you can see how long you have left to enter the verification code." },
     ],
   },
@@ -6406,7 +6406,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     items: [
       { category: "Fix", text: "Copy Settings: Inject Profile Browsing now includes all settings — Like %, Save Media %, Watch Stories %, View Highlights %, Comment %, and Comment Text are included when copying Follow tool and Human Session injection settings." },
       { category: "Fix", text: "Inject Browsing: Feed Posts min/max fields now accept 0, so you can set a chance of zero posts being viewed during a browsing injection." },
-      { category: "Feature", text: "Account Notes: automatically stamped with the exact date and time an account was first added to Equinox. Preserved across EQX export and re-import — never overwritten." },
+      { category: "Feature", text: "Account Notes: automatically stamped with the exact date and time an account was first added to Aura Farming. Preserved across EQX export and re-import — never overwritten." },
       { category: "Feature", text: "Statistics page: new Status column shows the account status pill alongside tool performance data." },
       { category: "Feature", text: "Metrics page: new Raw API Endpoint Count block shows every API endpoint hit with today's count and all-time total." },
     ],
@@ -6445,7 +6445,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     items: [
       { category: "Feature", text: "Ghost Browser: 5sim SMS integration added — enter your API token, pick a country, get a phone number, and receive the Instagram verification code directly in the panel." },
       { category: "Feature", text: "Ghost Browser: Bio Spin field added — write a spintax bio template and paste it directly into the browser." },
-      { category: "Feature", text: "Ghost Browser: Add to Equinox button — after creating an account in the Ghost Browser, save the username and password to Equinox in one click." },
+      { category: "Feature", text: "Ghost Browser: Add to Aura Farming button — after creating an account in the Ghost Browser, save the username and password to Aura Farming in one click." },
       { category: "UI", text: "Ghost Browser: Start button renamed to Open Browser." },
       { category: "UI", text: "Ghost Browser: Fingerprint section is now collapsed by default; click + to expand it." },
       { category: "UI", text: "Ghost Browser: Proxy dropdown no longer repeats the host:port when a proxy name is already shown." },
@@ -6539,7 +6539,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "Improvement", text: "Statistics page: Open EB and TrustScore columns are now draggable and reorderable just like all other columns. Use the Columns panel to move them anywhere in the table." },
       { category: "Improvement", text: "Statistics page: TrustScore column width is now adjustable in the Columns panel alongside all other columns." },
       { category: "Fix", text: "Export Profiles: accounts whose proxy is assigned via the Proxy Manager (using a proxyId link) now correctly export the proxy IP and port instead of leaving that field blank." },
-      { category: "Fix", text: "Dashboard startup log now reads 'Equinox started: 05 Jun 2026, 08:43:09' with a colon separator instead of a dash." },
+      { category: "Fix", text: "Dashboard startup log now reads 'Aura Farming started: 05 Jun 2026, 08:43:09' with a colon separator instead of a dash." },
       { category: "Improvement", text: "README & FAQ updated to reflect the current two-stage Jarvee verify flow, Human Session Tool description, data storage details, and correct update instructions." },
     ],
   },
@@ -6551,7 +6551,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "UI", text: "Follow Tool injection settings (Inject Search, Inject Suggested Users, Inject Profile Browsing) are now all on a single row instead of being stacked across two rows." },
       { category: "Fix", text: "Embedded browser windows now open maximised. Showing the window before maximising prevents the known Windows bug where the Chromium window covers the taskbar." },
       { category: "Fix", text: "Export API Calls: Human Session operations (GetReelsTray, NotificationsBadge, ViewTimelineFeed, LauncherSync, etc.) now correctly show 'Human Session Tool' in the Operation Name column instead of 'Emulation'." },
-      { category: "Fix", text: "Export API Calls: Source column now shows 'Equinox' for all engine-generated calls and 'HikerAPI' for HikerAPI-sourced data, replacing the previous verbose internal source names." },
+      { category: "Fix", text: "Export API Calls: Source column now shows 'Aura Farming' for all engine-generated calls and 'HikerAPI' for HikerAPI-sourced data, replacing the previous verbose internal source names." },
       { category: "Fix", text: "Statistics page: Human Session Tool column now shows only the on/off toggle — no counts. Column renamed from 'Human Sessions' to 'Human Session Tool'." },
       { category: "Fix", text: "Statistics page: adjusting a column width in the Columns panel no longer causes other columns to expand or shift. Each column width is now independent." },
     ],
@@ -6750,7 +6750,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     date: "3 Jun 2026",
     items: [
       { category: "Fix", text: "CAPTCHA images on the suspended/challenge page now load correctly in the embedded browser — Instagram's CSP header was blocking them." },
-      { category: "Fix", text: "Login screen 'Equinox' title now matches the sidebar style with the cyan 'nox' ending." },
+      { category: "Fix", text: "Login screen 'Aura Farming' title now matches the sidebar style with the cyan 'nox' ending." },
       { category: "Fix", text: "Logo and title on the login screen are now closer together." },
       { category: "Fix", text: "Save login checkbox label shortened." },
     ],
@@ -6761,15 +6761,15 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     items: [
       { category: "Fix", text: "White screen on startup fixed — a missing import caused the app to crash before showing anything." },
       { category: "Fix", text: "Login screen now shows a white background with black text and borders regardless of theme setting." },
-      { category: "Fix", text: "Login screen now uses the correct Equinox logo (same as the top-left of the sidebar)." },
+      { category: "Fix", text: "Login screen now uses the correct Aura Farming logo (same as the top-left of the sidebar)." },
     ],
   },
   {
     version: "1.0.754",
     date: "3 Jun 2026",
     items: [
-      { category: "New", text: "Splash screen now shows the Equinox logo and blocks access until you sign in — no part of the software is reachable without valid credentials." },
-      { category: "New", text: "Save Login checkbox on the sign-in screen — tick it once and Equinox will sign you in automatically every time it restarts." },
+      { category: "New", text: "Splash screen now shows the Aura Farming logo and blocks access until you sign in — no part of the software is reachable without valid credentials." },
+      { category: "New", text: "Save Login checkbox on the sign-in screen — tick it once and Aura Farming will sign you in automatically every time it restarts." },
       { category: "New", text: "My Account now shows all subscription plans as radio buttons with your current plan highlighted; non-current plans show their monthly price and a 'coming soon' upgrade note." },
       { category: "New", text: "Subscription expiry date now shown in My Account — turns amber when within 7 days and red when expired." },
       { category: "New", text: "Admin owners can now manage all users directly from Settings → My Account: create accounts, set plan tiers, account slot limits, expiry dates, passwords, and toggle active status." },
@@ -6807,7 +6807,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.750",
     date: "3 Jun 2026",
     items: [
-      { category: "New", text: "My Account tab in Settings: sign in with your Equinox license credentials to view your plan tier and account slot limit." },
+      { category: "New", text: "My Account tab in Settings: sign in with your Aura Farming license credentials to view your plan tier and account slot limit." },
       { category: "New", text: "Account limits: attempting to add accounts beyond your plan limit now shows an upgrade prompt instead of silently failing." },
       { category: "New", text: "Force Emulation: added BatchFetchWeb and AttributionLaunch to the startup call sequence — two API calls that real Instagram sends on every app open." },
       { category: "Fix", text: "Session Actions export: human session calls (feed view, DM check, story check) now correctly show 'Human Session Emulation' as their source instead of 'Follow Tool'." },
@@ -6922,7 +6922,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "Change", text: "Proxy Manager: all column headers are now uppercase. The proxy ping column is now called PROXY STATUS; the account status column is now called STATUS." },
       { category: "Fix", text: "Ping All now tests proxies against instagram.com directly — fixes false Dead results caused by the previous test target (httpbin.org) being unreachable through some proxies." },
       { category: "Fix", text: "Dashboard activity log export now shows 'Account @username exported' instead of including the filename." },
-      { category: "Change", text: "Dashboard header now reads 'Equinox started at:' instead of 'Equinox started —'." },
+      { category: "Change", text: "Dashboard header now reads 'Aura Farming started at:' instead of 'Aura Farming started —'." },
       { category: "Fix", text: "Embedded browser: scraping_warning redirect loop that caused a blank page for imported accounts — the interceptor now correctly passes the challenge-completion flag so Instagram loads the home feed instead of looping." },
     ],
   },
@@ -7225,7 +7225,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.942",
     date: "14 Jun 2026",
     items: [
-      { category: "New", text: "Equinox Bot and Scan with AI now support Google Gemini — add your free Gemini API key in Settings → Security. Gemini is used automatically if set, with OpenAI as a fallback." },
+      { category: "New", text: "Aura Farming Bot and Scan with AI now support Google Gemini — add your free Gemini API key in Settings → Security. Gemini is used automatically if set, with OpenAI as a fallback." },
       { category: "Fix", text: "Scan with AI no longer fails with a quota error for users who have a free or expired OpenAI account." },
     ],
   },
@@ -7370,7 +7370,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "UI", text: "Profile Sync controls (Auto Sync, interval, HikerAPI, Sync Now) now sit to the left of the Followers/Following/Posts stats in the Profile Sync card." },
       { category: "UI", text: "Group label and dropdown are now on the same row; group name text is bold." },
       { category: "UI", text: "Test Timing button added next to Max (ms) field — shows the expected per-call delay in seconds based on your current settings." },
-      { category: "UI", text: "Equinox logo in the sidebar is 15% larger." },
+      { category: "UI", text: "Aura Farming logo in the sidebar is 15% larger." },
     ],
   },
   {
@@ -7386,7 +7386,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     items: [
       { category: "UI", text: "Accounts page: the Import Profiles icon is now cyan so it's easier to spot in the Actions menu." },
       { category: "UI", text: "Accounts page: clicking the Sync column header now sorts by newest first; clicking again switches to oldest first. Same for the Last API Call column." },
-      { category: "UI", text: "Equinox logo in the sidebar is now 15% larger." },
+      { category: "UI", text: "Aura Farming logo in the sidebar is now 15% larger." },
       { category: "Fix", text: "Login macro (Login button in the EB toolbar): after filling your username and password it now waits for the blue Login button to become active before clicking it, so the form actually submits instead of silently doing nothing." },
       { category: "Fix", text: "Verify no longer times out with a slow proxy — the internal timeout has been raised from 2 minutes to 4 minutes, giving the hidden browser enough time to load Instagram and complete the login even on a sluggish connection." },
     ],
@@ -7457,7 +7457,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     date: "31 May 2026",
     items: [
       { category: "Improvement", text: "Dashboard and Bulk Import sidebar icons replaced with chunkier filled designs that match the rest of the nav icons." },
-      { category: "Improvement", text: "Sidebar header simplified — back/forward buttons removed, logo centred at nav-icon size, Equinox wordmark placed neatly below it." },
+      { category: "Improvement", text: "Sidebar header simplified — back/forward buttons removed, logo centred at nav-icon size, Aura Farming wordmark placed neatly below it." },
       { category: "Improvement", text: "TrustScore icon picker Animals category expanded with Rabbit, Squirrel, Shrimp, Paw Print and Feather icons." },
     ],
   },
@@ -7598,7 +7598,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.668",
     date: "30 May 2026",
     items: [
-      { category: "Dashboard", text: "Activity log now shows an 'Equinox Started' entry every time the software starts or restarts — account is labelled 'Equinox' with a cyan Started badge and the exact date and time." },
+      { category: "Dashboard", text: "Activity log now shows an 'Aura Farming Started' entry every time the software starts or restarts — account is labelled 'Aura Farming' with a cyan Started badge and the exact date and time." },
       { category: "Fix", text: "Ghost Browser pre-signup warm-up now actually navigates and scrolls on Windows — a navigation race between the browser opening and warm-up starting caused all actions to run on a blank page; the warm-up now waits for the browser to finish its initial load before navigating." },
     ],
   },
@@ -8337,9 +8337,9 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     date: "27 May 2026",
     items: [
       { category: "Fix", text: "Leak test: all checks now run and return results correctly — they were silently broken and every field was stuck spinning." },
-      { category: "Feature", text: "Leak test title now shows the account's Instagram username (e.g. @myaccount LEAK TEST) instead of the generic Equinox heading." },
+      { category: "Feature", text: "Leak test title now shows the account's Instagram username (e.g. @myaccount LEAK TEST) instead of the generic Aura Farming heading." },
       { category: "Fix", text: "Ghost Browser leak check receives the same username-in-title fix." },
-      { category: "Feature", text: "System tray icon tooltip now shows the app version alongside the name (e.g. Equinox v1.0.592)." },
+      { category: "Feature", text: "System tray icon tooltip now shows the app version alongside the name (e.g. Aura Farming v1.0.592)." },
       { category: "Fix", text: "Column arrangements on all pages — Accounts, Dashboard, Proxies, Stats, Bulk Import — are now fully remembered across app restarts and software updates." },
     ],
   },
@@ -8668,7 +8668,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.548",
     date: "25 May 2026",
     items: [
-      { category: "Fix", text: "Import Binary File: the account label (Name field from Jarvee) is now imported and shown as the account label in Equinox instead of being silently dropped." },
+      { category: "Fix", text: "Import Binary File: the account label (Name field from Jarvee) is now imported and shown as the account label in Aura Farming instead of being silently dropped." },
       { category: "Fix", text: "Import Binary File: the recovery email address and its password are now correctly imported into the Email Validation fields." },
       { category: "Fix", text: "Import Binary File: the 2FA secret key is now extracted from the binary and saved to the account's 2FA Secret Key field." },
     ],
@@ -8789,8 +8789,8 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     items: [
       { category: "Fix", text: "Jarvee import now correctly assigns the Chrome user agent to the embedded browser instead of the API client." },
       { category: "New", text: "Jarvee import now restores the follow tool source list — all target accounts whose followers you were following are imported automatically." },
-      { category: "New", text: "Jarvee import now restores the followed users dedup list so Equinox won't re-follow anyone already followed in Jarvee." },
-      { category: "New", text: "Jarvee import now restores the DM recipients list so Equinox won't re-DM anyone already messaged in Jarvee." },
+      { category: "New", text: "Jarvee import now restores the followed users dedup list so Aura Farming won't re-follow anyone already followed in Jarvee." },
+      { category: "New", text: "Jarvee import now restores the DM recipients list so Aura Farming won't re-DM anyone already messaged in Jarvee." },
     ],
   },
     {
@@ -8835,7 +8835,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.531",
     date: "25 May 2026",
     items: [
-      { category: "New", text: "Import Binary File — you can now import Jarvee account export files directly from the Actions menu. Equinox reads the username, password, proxy, and device info from the file and creates the account as Pending ready to verify." },
+      { category: "New", text: "Import Binary File — you can now import Jarvee account export files directly from the Actions menu. Aura Farming reads the username, password, proxy, and device info from the file and creates the account as Pending ready to verify." },
     ],
   },
   {
@@ -9179,7 +9179,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.484",
     date: "23 May 2026",
     items: [
-      { category: "Fix", text: "Plugging in a USB-tethered phone no longer reroutes your entire computer's internet through it — Equinox now automatically sets a high routing metric on the phone adapter the moment the relay starts, so Windows keeps using your main connection for everything else." },
+      { category: "Fix", text: "Plugging in a USB-tethered phone no longer reroutes your entire computer's internet through it — Aura Farming now automatically sets a high routing metric on the phone adapter the moment the relay starts, so Windows keeps using your main connection for everything else." },
       { category: "New", text: "A warning banner now appears in the USB Hotspot panel whenever a phone adapter is detected, with a 'Fix routing' button in case the automatic fix needs a retry or admin rights." },
     ],
   },
@@ -9361,7 +9361,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "Fixed", text: "BlueStacks now reliably comes to the front when Apply proxy via Drony is clicked — improved the window focus command so it works consistently." },
       { category: "New", text: "Device panel now opens automatically after Drony proxy is successfully applied — no need to click the device card manually." },
       { category: "New", text: "Open Instagram & Sign Up button added — opens Instagram in BlueStacks, taps Get Started, selects email signup, and pre-fills the email from your credentials form automatically." },
-      { category: "Improved", text: "Reset for next account now does a full cleanup: deactivates Drony, disconnects the device from Equinox, and closes BlueStacks — ready to start fresh with the next account." },
+      { category: "Improved", text: "Reset for next account now does a full cleanup: deactivates Drony, disconnects the device from Aura Farming, and closes BlueStacks — ready to start fresh with the next account." },
     ],
   },
   {
@@ -9377,7 +9377,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     date: "22 May 2026",
     items: [
       { category: "Improved", text: "BlueStacks now comes to the front automatically when Apply proxy via Drony is clicked — you can watch the automation happen in real time." },
-      { category: "Fixed", text: "After Drony's VPN activates, Equinox now immediately reconnects ADB — device reconnects in seconds instead of waiting up to 2 minutes for BlueStacks to auto-recover." },
+      { category: "Fixed", text: "After Drony's VPN activates, Aura Farming now immediately reconnects ADB — device reconnects in seconds instead of waiting up to 2 minutes for BlueStacks to auto-recover." },
       { category: "Improved", text: "A note is shown while the automation runs explaining that a brief disconnection is normal and will self-recover." },
     ],
   },
@@ -9405,7 +9405,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.454",
     date: "22 May 2026",
     items: [
-      { category: "New", text: "Drony VPN proxy automation added to Create & Spoof — install Drony once, then clicking Apply Proxy via Drony makes Equinox open Drony in BlueStacks, fill in the proxy host, port, and credentials automatically, and activate the VPN. All BlueStacks traffic including Instagram HTTPS is routed through the proxy without any manual steps." },
+      { category: "New", text: "Drony VPN proxy automation added to Create & Spoof — install Drony once, then clicking Apply Proxy via Drony makes Aura Farming open Drony in BlueStacks, fill in the proxy host, port, and credentials automatically, and activate the VPN. All BlueStacks traffic including Instagram HTTPS is routed through the proxy without any manual steps." },
       { category: "New", text: "Add another emulator button now opens a connection form inline — you can auto-detect or type an address to connect a second BlueStacks or LDPlayer instance without leaving the page." },
       { category: "New", text: "BlueStacks device profile panel added inside every device card — shows manufacturer, model, Android version, and resolution read live from the device. A Refresh button re-reads the values after you change the profile in BlueStacks Settings." },
       { category: "Improved", text: "Proxy selector simplified — the global Android proxy and relay buttons have been replaced by the Drony VPN approach which actually works for Instagram HTTPS traffic." },
@@ -9418,7 +9418,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "Fixed", text: "Verify now correctly detects when Instagram flags an account as needing a security challenge — those accounts now show the Captcha status instead of being incorrectly marked as Valid." },
       { category: "Fixed", text: "Automated Behaviour Detected is now correctly identified during verification and sets the account to the ABD status." },
       { category: "New", text: "Reset for next account button added to the Create & Spoof device panel. One click uninstalls Instagram, generates a fresh device ID, and clears the proxy — the device is ready for the next signup." },
-      { category: "New", text: "Device fingerprint is now captured and saved when you save an account from Create & Spoof — the device hardware profile and User Agent are stored so Equinox can identify as that exact device during verification." },
+      { category: "New", text: "Device fingerprint is now captured and saved when you save an account from Create & Spoof — the device hardware profile and User Agent are stored so Aura Farming can identify as that exact device during verification." },
       { category: "New", text: "Copy buttons added to every credential field on Create & Spoof — click to copy Username, Password, Email, or Date of Birth directly to your clipboard for easy pasting into BlueStacks." },
       { category: "New", text: "Device Proxy button added to the Create & Spoof proxy selector — it reads back the actual proxy configured on the device via ADB so you can confirm BlueStacks is routing through the right proxy." },
       { category: "Improved", text: "The Disconnect button on device cards now shows a spinner while disconnecting and is disabled until complete." },
@@ -9444,7 +9444,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.451",
     date: "22 May 2026",
     items: [
-      { category: "New", text: "Settings page now has a Start with Windows toggle. When enabled, Equinox launches automatically when Windows starts, minimised to the tray." },
+      { category: "New", text: "Settings page now has a Start with Windows toggle. When enabled, Aura Farming launches automatically when Windows starts, minimised to the tray." },
       { category: "Improved", text: "The Create an Account tab has been removed from the sidebar — account creation is handled through the Create & Spoof page." },
       { category: "Improved", text: "Bulk Import renamed to Bulk Import Accounts, and Mobile renamed to Create & Spoof in the sidebar." },
     ],
@@ -9469,7 +9469,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.448",
     date: "21 May 2026",
     items: [
-      { category: "New", text: "The proxy selector on the Mobile page now actually routes BlueStacks traffic through your chosen proxy. Equinox starts a silent local relay in the background — no manual configuration needed. Just pick a proxy and click Apply." },
+      { category: "New", text: "The proxy selector on the Mobile page now actually routes BlueStacks traffic through your chosen proxy. Aura Farming starts a silent local relay in the background — no manual configuration needed. Just pick a proxy and click Apply." },
     ],
   },
   {
@@ -9619,7 +9619,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "New", text: "Auto-detect button scans all known emulator ports and connects whatever is running." },
       { category: "New", text: "Each connected device gets its own spoofed Device ID (android_id) — editable, copyable, and randomisable per device." },
       { category: "New", text: "Per-device proxy assignment pulls from your existing Proxy Manager list and can be applied to a running emulator instantly." },
-      { category: "New", text: "Device panel: install Instagram from APK, launch, clear app data, mirror screen, and save account credentials — all from Equinox." },
+      { category: "New", text: "Device panel: install Instagram from APK, launch, clear app data, mirror screen, and save account credentials — all from Aura Farming." },
       { category: "Fix", text: "Embedded browser windows no longer open multiple times when clicking Browser repeatedly." },
       { category: "Fix", text: "Minimising the embedded browser no longer opens a new window — it brings the existing one back." },
       { category: "Fix", text: "Browser control panel (URL bar, login, 2FA, clear session) is now embedded directly in the Human Session tab." },
@@ -10080,7 +10080,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "Fix", text: "Accounts that hit an Instagram security check during verify no longer falsely show as valid — the account card now correctly stays on the challenge status so you know it needs attention, even when the underlying API session is working." },
       { category: "Fix", text: "Verifying an account without the browser panel open no longer forces a fresh login — the app now navigates to Instagram first with your saved session before deciding if a re-login is needed, preventing unnecessary challenge triggers." },
       { category: "Fix", text: "Exporting accounts now includes the account status column so status (valid, stopped, captcha, etc.) is preserved exactly when you re-import the file." },
-      { category: "Fix", text: "Importing accounts from an Equinox export now correctly restores each account's status instead of always resetting everything to pending." },
+      { category: "Fix", text: "Importing accounts from an Aura Farming export now correctly restores each account's status instead of always resetting everything to pending." },
     ],
   },
   {
@@ -10138,7 +10138,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.368",
     date: "18 May 2026",
     items: [
-      { category: "Fix", text: "Equinox now always appears first on the Windows taskbar — before any open browser windows. The main window minimises to the taskbar when closed instead of hiding, so its position never moves." },
+      { category: "Fix", text: "Aura Farming now always appears first on the Windows taskbar — before any open browser windows. The main window minimises to the taskbar when closed instead of hiding, so its position never moves." },
       { category: "Fix", text: "Clicking the column headers on the Accounts page no longer crashes the app." },
     ],
   },
@@ -10837,7 +10837,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "Human Sessions", text: "Fixed: View Timeline Feed was returning 0 posts. The mobile session check incorrectly required a session cookie that the proxy always strips — it now correctly uses the saved Bearer token instead." },
       { category: "Human Sessions", text: "Fixed: Like Timeline Posts was returning 0 likes. The like client was not restoring the Bearer token from saved device state, so every like request was sent without credentials and rejected." },
       { category: "Login", text: "Fixed: Re-verifying an account that had already been verified once would always fail with no valid session. The verify flow now correctly detects the saved Bearer token as an active session and validates it directly instead of requiring a session cookie that the proxy strips." },
-      { category: "Sidebar", text: "All five navigation icons (Dashboard, Accounts, Create an Account, Statistics, Proxy Manager) now use the same cyan-blue as the Equinox logo." },
+      { category: "Sidebar", text: "All five navigation icons (Dashboard, Accounts, Create an Account, Statistics, Proxy Manager) now use the same cyan-blue as the Aura Farming logo." },
       { category: "Sidebar", text: "Create an Account icon changed from a magic wand to a circle-plus, which more clearly conveys creating a new item." },
     ],
   },
@@ -11151,7 +11151,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "Cookie Baker", text: "When the Embedded Browser is already open for a profile, Cookie Baker reuses it (new background tab) instead of launching a second Chrome eliminates silent launch failures on Windows." },
       { category: "Cookie Baker", text: "All numeric settings (interval, sites, scroll times, internal links) compacted onto a single row for a cleaner layout." },
       { category: "Cookie Baker", text: "Removed the toggle button from the Activity view header navigate back via the '← Settings' link inside the activity panel." },
-      { category: "App", text: "Added electron-builder icon config so Equinox.exe and taskbar/window toolbar now show the new cyan robot logo on Windows." },
+      { category: "App", text: "Added electron-builder icon config so Aura Farming.exe and taskbar/window toolbar now show the new cyan robot logo on Windows." },
     ],
   },
   {
@@ -11230,7 +11230,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.0",
     date: "2 March 2026, 09:00",
     items: [
-      { category: "Core", text: "Initial release of Equinox automation dashboard." },
+      { category: "Core", text: "Initial release of Aura Farming automation dashboard." },
       { category: "Core", text: "Multi-account management with status tracking, proxy assignment, and 2FA support." },
       { category: "Follow Tool", text: "Follow users from a source account's followers/followings list with configurable daily limits and delays." },
       { category: "Unfollow Tool", text: "Unfollow non-followers and ghost followers with configurable schedules." },
@@ -11577,7 +11577,7 @@ export function Dashboard() {
         {serverInfo?.startedAt && (
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground/70 border border-border/40 rounded px-2 py-0.5 bg-muted/20">
             <RefreshCw className="w-3 h-3" />
-            Equinox started at: {format(new Date(serverInfo.startedAt), "MMM d yyyy HH:mm:ss")}
+            Aura Farming started at: {format(new Date(serverInfo.startedAt), "MMM d yyyy HH:mm:ss")}
           </span>
         )}
       </div>

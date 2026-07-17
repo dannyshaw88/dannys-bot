@@ -78,7 +78,7 @@ export function ContactUsersPanel({ tool, profile, embedded }: Props) {
   const sent = [...(allMessages?.filter(m => m.status !== "pending") ?? [])]
     .sort((a, b) => new Date(b.sentAt ?? b.queuedAt).getTime() - new Date(a.sentAt ?? a.queuedAt).getTime());
 
-  const [equinoxPreview, setEquinoxPreview] = useState("");
+  const [auraFarmingPreview, setAuraFarmingPreview] = useState("");
 
   function applySpintax(text: string): string {
     return text.replace(/\{([^}]+)\}/g, (_, group) => {
@@ -271,7 +271,7 @@ export function ContactUsersPanel({ tool, profile, embedded }: Props) {
           />
           <div>
             <label htmlFor="contactEquinoxUserEnabled" className="text-sm font-medium cursor-pointer select-none">
-              Message an Equinox User
+              Message an Aura Farming User
             </label>
             <p className="text-[11px] text-muted-foreground mt-0.5">
               Each session, queue a DM to a randomly picked account from this software's Accounts page.
@@ -284,7 +284,7 @@ export function ContactUsersPanel({ tool, profile, embedded }: Props) {
             <div className="flex items-center justify-between">
               <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Message</Label>
               <button
-                onClick={() => setEquinoxPreview(applySpintax(settings.contactEquinoxMessage ?? ""))}
+                onClick={() => setAuraFarmingPreview(applySpintax(settings.contactEquinoxMessage ?? ""))}
                 className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 font-medium transition-colors"
               >
                 <Shuffle className="w-3 h-3" />
@@ -298,16 +298,16 @@ export function ContactUsersPanel({ tool, profile, embedded }: Props) {
               value={settings.contactEquinoxMessage ?? ""}
               onChange={(e) => {
                 setSettings({ ...settings, contactEquinoxMessage: e.target.value });
-                setEquinoxPreview("");
+                setAuraFarmingPreview("");
               }}
             />
             <p className="text-[11px] text-muted-foreground">
               Use <code className="bg-muted px-1 rounded">{"{Hi|Hello|Hey}"}</code> syntax to randomly pick one option per send.
             </p>
-            {equinoxPreview && (
+            {auraFarmingPreview && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-sm text-blue-800">
                 <span className="font-semibold text-[11px] text-blue-500 uppercase tracking-wider block mb-0.5">Preview</span>
-                {equinoxPreview}
+                {auraFarmingPreview}
               </div>
             )}
             <div className="flex items-center gap-2 pt-1">

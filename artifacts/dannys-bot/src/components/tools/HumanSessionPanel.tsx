@@ -249,7 +249,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         { key: "ct_h_usersDelay",      label: "Delay between messages",    settingKeys: ["contact:contactUsersDelayBetweenMin","contact:contactUsersDelayBetweenMax"] },
         { key: "ct_h_usersPickRandom", label: "Pick users randomly",                        settingKeys: ["contact:contactUsersPickRandom"] },
         { key: "ct_h_usersUnsend",     label: "Unsend settings",                            settingKeys: ["contact:contactUsersUnsendEnabled","contact:contactUsersUnsendMin","contact:contactUsersUnsendMax"] },
-        { key: "ct_h_usersEquinox",    label: "Message an Equinox User",                    settingKeys: ["contact:contactEquinoxUserEnabled","contact:contactEquinoxMessage","contact:contactEquinoxNoRepeat"] },
+        { key: "ct_h_usersEquinox",    label: "Message an Aura Farming User",                    settingKeys: ["contact:contactEquinoxUserEnabled","contact:contactEquinoxMessage","contact:contactEquinoxNoRepeat"] },
       ]},
       { key: "hs_contactStopBlock", label: "Stop if Blocked", description: "Pause contact tool for a set time when Instagram blocks a contact action", subOptions: [
         { key: "ct_h_stopEnabled", label: "Enabled",              settingKeys: ["contact:stopOnBlockEnabled"] },

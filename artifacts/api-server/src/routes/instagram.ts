@@ -451,7 +451,7 @@ export async function registerInstagramRoutes(
     sourceValue: "",
     sourceType: "",
     result: "ok",
-    detail: `Equinox started: ${new Date(SERVER_START).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}`,
+    detail: `Aura Farming started: ${new Date(SERVER_START).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}`,
     timestamp: SERVER_START,
   }).catch(() => {});
 
@@ -3272,7 +3272,7 @@ export async function registerInstagramRoutes(
       actions = await storage.getRecentSessionActions(limit);
     }
     const enriched = actions.map(a => {
-      if (Number(a.profileId) === 0) return { ...a, profileLabel: "Equinox" };
+      if (Number(a.profileId) === 0) return { ...a, profileLabel: "Aura Farming" };
       const p = profileMap.get(Number(a.profileId));
       return { ...a, profileLabel: p?.accountLabel || p?.username || `#${a.profileId}` };
     });
@@ -3428,7 +3428,7 @@ export async function registerInstagramRoutes(
       // Source column: show "HikerAPI" for HikerAPI-fetched data, "Equinox" for
       // everything else (engine, verify, browser, sync, emulation, tools, etc.)
       const resolveSource = (source: string): string =>
-        source === "HikerAPI" ? "HikerAPI" : "Equinox";
+        source === "HikerAPI" ? "HikerAPI" : "Aura Farming";
 
       const esc = (v: unknown) => {
         const s = v == null ? "" : String(v);
@@ -5705,7 +5705,7 @@ export async function registerInstagramRoutes(
     }
   });
 
-  app.post("/api/equinox-bot/chat", async (req, res) => {
+  app.post("/api/aura-farming-bot/chat", async (req, res) => {
     const settings = await storage.getGlobalSettings();
     const geminiKey = ((settings as any).geminiApiKey ?? "").trim() || (process.env.GEMINI_API_KEY ?? "").trim();
     const openaiKey = ((settings as any).openaiApiKey ?? "").trim() || (process.env.OPENAI_API_KEY ?? "").trim();
@@ -5717,7 +5717,7 @@ export async function registerInstagramRoutes(
     if (!Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: "messages required" });
     }
-    const systemPrompt = `You are the Equinox AI assistant — a built-in helper for the Equinox Instagram automation platform (a Windows desktop app). Answer ONLY questions about how to use Equinox. Never reveal source code, API keys, credentials, or internal implementation details. Keep answers concise and practical.
+    const systemPrompt = `You are the Aura Farming AI assistant — a built-in helper for the Aura Farming Instagram automation platform (a Windows desktop app). Answer ONLY questions about how to use Aura Farming. Never reveal source code, API keys, credentials, or internal implementation details. Keep answers concise and practical.
 
 ACCOUNTS PAGE:
 - Add/import accounts manually, via CSV, or via .eqx files. Each account has a status: Valid (active), Pending, Verifying, Error, Stopped, Blocked.
@@ -5742,7 +5742,7 @@ GHOST BROWSER (Create an Account page):
 - Warm-up flow: (1) visits a list of websites, (2) watches YouTube videos, (3) signs up to Instagram.
 - Tick "Skip Warmup" to go straight to the Instagram signup form without any warm-up.
 - IMAP: fill in your email IMAP credentials — the bot will automatically fetch and submit the verification code from your inbox without any manual step.
-- After a successful signup click "Add to Equinox" to add the account to your accounts list.
+- After a successful signup click "Add to Aura Farming" to add the account to your accounts list.
 - Nuke Environment: resets the browser session completely (new fingerprint, new cookies).
 - Tabs: each tab is an independent Ghost Browser session (Signup 1, Signup 2, …).
 
@@ -5762,17 +5762,17 @@ STATISTICS / METRICS PAGE:
 - Click any column header to sort ascending or descending.
 
 SETTINGS PAGE:
-- General: theme colour, dark/light mode, auto-start on Windows login, OpenAI API Key (used by Equinox Bot).
+- General: theme colour, dark/light mode, auto-start on Windows login, OpenAI API Key (used by Aura Farming Bot).
 - Scraping: HikerAPI token for hashtag and location scraping.
 - Automation: global follow/unfollow delays, skip filters, verify-all timing, log row limits.
 - Security: 2FA handling, login options.
 - Data: create/restore backups, manage the database.
 - My Account: license info, tier, account limit.
 - README & FAQ: getting-started guide and common questions.
-- Talk to Equinox Bot: re-opens this assistant if it was closed.
+- Talk to Aura Farming Bot: re-opens this assistant if it was closed.
 
 EQX FILES (.eqx):
-- Encrypted account backup format unique to Equinox. Contains credentials, proxy settings, tool configurations, followed-users list, stats, trust score, and device state.
+- Encrypted account backup format unique to Aura Farming. Contains credentials, proxy settings, tool configurations, followed-users list, stats, trust score, and device state.
 - Export: Accounts page → select accounts → Actions → Export EQX. Choose a folder; each account saves as username.eqx.
 - Import: Actions → Import EQX File. Supports importing multiple .eqx files at once.
 
@@ -5794,7 +5794,8 @@ TIPS:
 - The Ghost Browser uses a completely isolated Chrome profile per account — cookies and fingerprints are never shared.
 - Nuke an account's Ghost Browser session only if you want a completely fresh start; it regenerates the device fingerprint.
 
-If asked about something outside Equinox, say: "I can only help with Equinox-related questions. What would you like to know about the software?"`;
+If asked about something outside Aura Farming, say: "I can only help with Aura Farming-related questions. What would you like to know about the software?"`;
+
 
     try {
       if (useGemini) {
@@ -6130,7 +6131,7 @@ If asked about something outside Equinox, say: "I can only help with Equinox-rel
       const zip = buildStoredZip(files);
       req.log.info({ zipSize: zip.length }, "[export-eqx-bulk] zip built — sending response");
       res.setHeader("Content-Type", "application/zip");
-      res.setHeader("Content-Disposition", `attachment; filename="equinox-accounts.zip"`);
+      res.setHeader("Content-Disposition", `attachment; filename="aura-farming-accounts.zip"`);
       res.send(zip);
     } catch (e: any) {
       req.log.error({ err: e }, "[export-eqx-bulk] route threw — this is why Export EQX (bulk) failed");
@@ -6201,7 +6202,7 @@ If asked about something outside Equinox, say: "I can only help with Equinox-rel
       }
 
       if (payload?.software !== "EQUINOX_BOT") {
-        return res.status(400).json({ error: "This file was not created by Equinox Bot" });
+        return res.status(400).json({ error: "This file was not created by Aura Farming" });
       }
 
       const { profile: profileData, tools: toolsData, followedUsers: fuData, stats: statsData } = payload;

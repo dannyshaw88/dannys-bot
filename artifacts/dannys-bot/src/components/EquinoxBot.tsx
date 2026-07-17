@@ -2,16 +2,16 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, X, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const LS_KEY = "equinox-bot-state";
+const LS_KEY = "aura-farming-bot-state";
 type BotState = "bubble" | "open" | "hidden";
 type Message = { role: "user" | "assistant"; content: string };
 
 const WELCOME: Message = {
   role: "assistant",
-  content: "Hi! I'm the Equinox Bot 👋\n\nAsk me anything about using the software",
+  content: "Hi! I'm the Aura Farming Bot 👋\n\nAsk me anything about using the software",
 };
 
-export function EquinoxBot() {
+export function AuraFarmingBot() {
   const [botState, setBotState] = useState<BotState>(() => {
     try {
       const s = localStorage.getItem(LS_KEY);
@@ -38,8 +38,8 @@ export function EquinoxBot() {
       const detail = (e as CustomEvent<string>).detail;
       if (detail === "open") applyState("open");
     };
-    window.addEventListener("equinox-bot-open", handler);
-    return () => window.removeEventListener("equinox-bot-open", handler);
+    window.addEventListener("aura-farming-bot-open", handler);
+    return () => window.removeEventListener("aura-farming-bot-open", handler);
   }, [applyState]);
 
   useEffect(() => {
@@ -65,7 +65,7 @@ export function EquinoxBot() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/equinox-bot/chat", {
+      const res = await fetch("/api/aura-farming-bot/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: updated }),
@@ -91,11 +91,11 @@ export function EquinoxBot() {
       {botState === "bubble" && (
         <button
           onClick={() => applyState("open")}
-          title="Talk to Equinox Bot"
+          title="Talk to Aura Farming Bot"
           className="fixed bottom-5 right-5 z-50 w-14 h-14 rounded-full shadow-2xl bg-background border border-border/60 flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
           style={{ animation: "eqbot-pulse 3s ease-in-out infinite" }}
         >
-          <img src="/bot-logo.png" alt="Equinox Bot" className="w-9 h-9 object-contain" />
+          <img src="/bot-logo.png" alt="Aura Farming Bot" className="w-9 h-9 object-contain" />
         </button>
       )}
 
@@ -108,7 +108,7 @@ export function EquinoxBot() {
             <div className="flex items-center gap-2">
               <img src="/bot-logo.png" alt="" className="w-7 h-7 object-contain" style={{ animation: "eqbot-spin-idle 8s linear infinite" }} />
               <div>
-                <p className="text-sm font-semibold text-foreground leading-tight">Equinox Bot</p>
+                <p className="text-sm font-semibold text-foreground leading-tight">Aura Farming Bot</p>
                 <p className="text-[10px] text-muted-foreground leading-tight">Software questions only</p>
               </div>
             </div>

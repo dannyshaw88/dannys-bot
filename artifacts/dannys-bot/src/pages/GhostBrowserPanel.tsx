@@ -504,11 +504,11 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
   const userScrolledUpRef = useRef(false);
   const imapAutoPollRef  = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Add to Equinox
-  const [addedToEquinox, setAddedToEquinox]     = useState(false);
-  const [addingToEquinox, setAddingToEquinox]   = useState(false);
+  // Add to Aura Farming
+  const [addedToAuraFarming, setAddedToAuraFarming]     = useState(false);
+  const [addingToAuraFarming, setAddingToAuraFarming]   = useState(false);
   // The username actually submitted to Instagram during the last Create Account run.
-  // Stored so "Add to Equinox" sends the same username instead of re-resolving the
+  // Stored so "Add to Aura Farming" sends the same username instead of re-resolving the
   // spintax template (which would produce a different random value each render).
   const [resolvedSignupUsername, setResolvedSignupUsername] = useState("");
 
@@ -825,7 +825,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
   // Create Account — visits websites first, then runs signup
   const handleCreateAccount = async () => {
     const uname = (generatedUsername || usernameSpin).trim();
-    // Save for "Add to Equinox" so it sends the exact same username we submitted,
+    // Save for "Add to Aura Farming" so it sends the exact same username we submitted,
     // not a freshly-re-resolved spintax value.
     setResolvedSignupUsername(uname);
     if (!uname || !password.trim() || !emailAddr.trim() || !dob.trim()) {
@@ -926,13 +926,13 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
     }
   };
 
-  // Add to Equinox — sends all session data (cookies, proxy, UA, DOB, fingerprint)
-  const handleAddToEquinox = async () => {
+  // Add to Aura Farming — sends all session data (cookies, proxy, UA, DOB, fingerprint)
+  const handleAddToAuraFarming = async () => {
     // Prefer the username that was actually submitted to Instagram during signup.
     // Fall back to fresh spintax resolution only if no signup has run yet.
     const uname = (resolvedSignupUsername || generatedUsername || usernameSpin).trim();
     if (!uname || !password.trim()) return;
-    setAddingToEquinox(true);
+    setAddingToAuraFarming(true);
     try {
       // Fetch cookies harvested from the ghost browser session at signup completion
       let igApiCookies: string | undefined;
@@ -980,11 +980,11 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
         }),
       });
       if (r.ok || r.status === 201 || r.status === 200) {
-        setAddedToEquinox(true);
-        setTimeout(() => setAddedToEquinox(false), 3000);
+        setAddedToAuraFarming(true);
+        setTimeout(() => setAddedToAuraFarming(false), 3000);
       }
     } catch {}
-    setAddingToEquinox(false);
+    setAddingToAuraFarming(false);
   };
 
   const activeDeviceLabel = parseDeviceLabel(activeUA.api);
@@ -1307,18 +1307,18 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                 variant="outline"
                 className={cn(
                   "gap-2 text-xs font-semibold tracking-wide uppercase w-[170px]",
-                  addedToEquinox
+                  addedToAuraFarming
                     ? "border-green-400 text-green-700 bg-green-50 hover:bg-green-50"
                     : "border-cyan-300 text-cyan-700 hover:bg-cyan-50 hover:border-cyan-400 dark:text-cyan-400"
                 )}
-                onClick={handleAddToEquinox}
-                disabled={addingToEquinox || !usernameSpin.trim() || !password.trim()}
+                onClick={handleAddToAuraFarming}
+                disabled={addingToAuraFarming || !usernameSpin.trim() || !password.trim()}
               >
-                {addingToEquinox
+                {addingToAuraFarming
                   ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Adding…</>
-                  : addedToEquinox
-                  ? <><CheckCircle2 className="w-3.5 h-3.5" />Added to Equinox!</>
-                  : <><UserPlus className="w-3.5 h-3.5" />Add to Equinox</>}
+                  : addedToAuraFarming
+                  ? <><CheckCircle2 className="w-3.5 h-3.5" />Added to Aura Farming!</>
+                  : <><UserPlus className="w-3.5 h-3.5" />Add to Aura Farming</>}
               </Button>
             </div>
           </div>

@@ -3,7 +3,7 @@ export const LEAKS_PAGE_HTML = String.raw`<!DOCTYPE html>
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Equinox — Leak Test</title>
+<title>Aura Farming — Leak Test</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -1240,7 +1240,7 @@ function testCanvas() {
     ctx.fillRect(0, 0, 220, 50);
     ctx.fillStyle = '#069';
     ctx.font = 'bold 14px Arial';
-    ctx.fillText('Equinox Leak Test 🔍', 4, 18);
+    ctx.fillText('Aura Farming Leak Test 🔍', 4, 18);
     ctx.fillStyle = 'rgba(102,204,0,0.7)';
     ctx.font = '11px sans-serif';
     ctx.fillText('Canvas fingerprint check', 4, 36);

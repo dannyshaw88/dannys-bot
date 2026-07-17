@@ -40,7 +40,7 @@ const CONTACT_COPY_GROUPS: CopyOptionGroup[] = [
       { key: "ct_usersDelay",          label: "Delay between messages",   settingKeys: ["contactUsersDelayBetweenMin","contactUsersDelayBetweenMax"] },
       { key: "ct_usersPickRandom",     label: "Pick users randomly",                       settingKeys: ["contactUsersPickRandom"] },
       { key: "ct_usersUnsend",         label: "Unsend settings",                           settingKeys: ["contactUsersUnsendEnabled","contactUsersUnsendMin","contactUsersUnsendMax"] },
-      { key: "ct_usersEquinox",        label: "Message an Equinox User",                   settingKeys: ["contactEquinoxUserEnabled","contactEquinoxMessage","contactEquinoxNoRepeat"] },
+      { key: "ct_usersEquinox",        label: "Message an Aura Farming User",                   settingKeys: ["contactEquinoxUserEnabled","contactEquinoxMessage","contactEquinoxNoRepeat"] },
     ]},
   ]},
   { label: "Auto Reply", options: [
