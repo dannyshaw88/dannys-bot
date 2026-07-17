@@ -3861,11 +3861,16 @@ export async function dumpUi(serial: string): Promise<string> {
  *   3. Find the node whose text matches the username
  *   4. Tap it and wait for the account to load
  *
- * Returns true if the switch was performed, false if the username wasn't found
- * in the switcher (e.g. the account isn't logged in on this device).
+ * Returns true if the switch was performed (or the account was already active),
+ * false if the username wasn't found in the switcher.
  *
- * Safe to call even when already on the correct account — Instagram just
- * refreshes to the same account and the extra 2–3 s cost is acceptable.
+ * Pre-check: before opening the switcher, a UI dump is taken and the current
+ * screen is scanned for the target username. Instagram's profile tab icon
+ * almost always has content-desc="Profile picture for [username]" or
+ * "[username]'s profile" when that account is active. If the username is
+ * already there, the entire switcher flow (long-press → tap → BACK) is
+ * skipped — avoiding the native Instagram feed reload that always accompanies
+ * an account switch, even when switching to the same account.
  */
 export async function switchToInstagramAccount(
   serial: string,
@@ -3875,6 +3880,35 @@ export async function switchToInstagramAccount(
   if (!username.trim()) return false;
   const adbPath = findAdbPath();
   if (!adbPath) { onLog?.("  ⚠ ADB not found — cannot switch account"); return false; }
+
+  const clean = username.replace(/^@/, "").trim();
+
+  // 0. Pre-check: look for the target account in the CURRENT UI without
+  //    opening the switcher. Instagram's profile-tab icon (bottom-right nav)
+  //    carries content-desc values such as:
+  //      "Profile picture for lineaberry2001"
+  //      "lineaberry2001's profile"
+  //      "@lineaberry2001"
+  //    Any of these reliably identifies the currently active account. If we
+  //    find it here, we return immediately — no long-press, no switcher, no
+  //    feed reload.
+  try {
+    const preXml = await _uiDump(adbPath, serial).catch(() => "");
+    const lc = preXml.toLowerCase();
+    const cleanLc = clean.toLowerCase();
+    const alreadyActive =
+      lc.includes(`"profile picture for ${cleanLc}"`) ||
+      lc.includes(`"${cleanLc}'s profile"`) ||
+      lc.includes(`"@${cleanLc}"`) ||
+      // Some builds put the username in a generic nav-tab content-desc without
+      // the surrounding phrase — only match if surrounded by word boundaries
+      // (quotes) so a substring of another username doesn't false-positive.
+      lc.includes(`"${cleanLc}"`);
+    if (alreadyActive) {
+      onLog?.(`  ✓ @${clean} already active (detected in current UI — skipping switcher)`);
+      return true;
+    }
+  } catch { /* if the pre-check dump fails, fall through to the normal flow */ }
 
   // 1. Find the profile tab.
   const profileTab = await findInstagramProfileTab(serial).catch(() => null);
@@ -3900,7 +3934,6 @@ export async function switchToInstagramAccount(
   //    and the @-prefixed variant since different IG versions use different
   //    attributes.
   const xml = await _uiDump(adbPath, serial).catch(() => "");
-  const clean = username.replace(/^@/, "").trim();
   const coords = _findElem(xml, clean, `@${clean}`);
 
   if (!coords) {

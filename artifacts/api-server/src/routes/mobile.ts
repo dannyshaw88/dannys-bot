@@ -4436,26 +4436,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         reelsLikes = reelsResult.likes;
         steps.push(`reels(${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes, ${reelsResult.sharesFeed} feed-shares, ${reelsResult.sharesDm} dm-shares)`);
         tLog(`▶ View Reels done — ${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes`);
-        // Return to the Instagram Home tab so any tool running after Reels
-        // (especially Follow Users) always starts from the standard Home Feed.
-        // Strategy: press Back first to exit the full-screen Reels viewer
-        // (from there findHomeTab is unreliable — the Reels a11y tree strips
-        // content-desc/resource-ids from the nav bar and the positional
-        // fallback can hit video controls instead). After Back the standard IG
-        // UI is restored; findHomeTab then works normally.
+        // Press Back once to exit the full-screen Reels viewer and return to
+        // the standard Instagram home feed. A single Back from the Reels tab
+        // always lands back on the feed; no additional Home-tab tap needed.
         try {
-          tLog("▶ View Reels — pressing Back to exit Reels viewer…");
           await android.pressBack(serial);
           await sleepOrAbort(serial, 1200);
-          const homeTab = await android.findHomeTab(serial).catch(() => null);
-          if (homeTab) {
-            await android.tap(serial, homeTab.x, homeTab.y);
-            await sleepOrAbort(serial, 800);
-            tLog("▶ View Reels — tapped Home tab to restore feed state");
-          } else {
-            tLog("▶ View Reels — Back pressed; Home tab not found in a11y tree (non-fatal)");
-          }
-        } catch { /* non-fatal; Follow will attempt its own navigation */ }
+          tLog("▶ View Reels — pressed Back to exit Reels viewer");
+        } catch { /* non-fatal */ }
       } else if (!viewReelsEnabled) {
         steps.push("reels(skipped — View Reels disabled)");
         tLog("▶ View Reels disabled — skipping reels");
