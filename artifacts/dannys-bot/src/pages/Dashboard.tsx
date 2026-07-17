@@ -78,6 +78,40 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.2.0",
+    date: "17 Jul 2026",
+    items: [
+      {
+        category: "Rebrand",
+        text: "The software has been fully rebranded from Equinox to Aura Farming. Every user-visible string, title, tooltip, tray menu item, dialog, system prompt, download filename, and activity-log message now reads 'Aura Farming'. Database schema field names (contactEquinoxUserEnabled, contactEquinoxMessage, contactEquinoxNoRepeat, equinox_user message type) are intentionally unchanged to preserve existing stored data without any migration.",
+        technical: [
+          "Login page, browser tab title, manifest name/short_name, Electron tray tooltip, tray menu items (Open / Restart / Close), window title, app AUMID (AuraFarming), EB window title, signup success message, and session-restore message all updated.",
+          "AuraFarmingBot component (formerly EquinoxBot): function rename, LS_KEY, custom DOM event name (aura-farming-bot-open), fetch endpoint (/api/aura-farming-bot/chat), and all visible chat strings.",
+          "API: /api/equinox-bot/chat → /api/aura-farming-bot/chat; system prompt updated throughout; profile label 'Equinox' → 'Aura Farming'; source column label; EQX download filename; startup activity log detail; flag-dialog 'keep in Equinox' text.",
+          "AutomationEngine transport label updated (non-schema field only).",
+        ],
+      },
+      {
+        category: "Mobile Metrics — Persist Across Restarts",
+        text: "Phone farm per-account metrics (likes, follows, story views, reels viewed, DMs sent, feed shares, cycles) are now written to the database after every automation cycle and survive software restarts. Previously the Metrics tab accumulated counts only from in-memory action log lines and reset to zero on every launch.",
+        technical: [
+          "New DB methods: incrementMobileStats (writes daily + lifetime rows keyed mob:<username>:<metric> with profileId=0 as mobile sentinel) and getMobileSlotStats (reads both rows back).",
+          "mobile.ts: captures reelsViewed and reelsLikes from the reels block, then calls incrementMobileStats fire-and-forget before res.json at the end of each cycle.",
+          "New GET /api/mobile/slot-stats?username=xxx endpoint — returns { daily: Record<string,number>, lifetime: Record<string,number> }.",
+          "MetricsPanel fully rewritten: polls /api/mobile/slot-stats per slot every 60 s (DB-sourced, not action-log accumulation). Each metric card now shows two rows: Today and All Time.",
+        ],
+      },
+      {
+        category: "App Icon",
+        text: "All application icons replaced with the new Aura Farming logo across every surface: Electron app icon (256×256 PNG + multi-res ICO with 16/32/48/64/128/256px layers), tray icon (16/32/48px ICO), web bot logo (256×256 PNG shown in login screen, chat widget, and sidebar), and browser favicon (64×64 PNG).",
+      },
+      {
+        category: "GitHub Actions",
+        text: "Windows installer artifact name updated from Equinox-Windows-Installer to AuraFarming-Windows-Installer in the build-windows-installer.yml workflow.",
+      },
+    ],
+  },
+  {
     version: "1.1.556",
     date: "14 Jul 2026",
     items: [
