@@ -2088,7 +2088,7 @@ const clamp4 = (n: number) => Math.min(9999, Math.max(0, Math.trunc(Number.isFin
 // the Human Session Tool tab never unmounts this and interrupts an
 // in-progress automation cycle — the loop must keep running in the
 // background regardless of which tab is currently visible.
-function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void, slotIdx?: number, slotUsername?: string) {
+function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void, slotIdx?: number, slotUsername?: string, requestSlot?: (idx: number, readyAt: number) => Promise<void>, releaseSlot?: (idx: number) => void) {
   const [settings, setSettings] = useState<AutomationSettingsData>(AUTOMATION_DEFAULTS);
   const [loading,  setLoading]  = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -2230,6 +2230,11 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     const runCycle = async () => {
       if (cancelled) return;
       setNextRunAt(null);
+      // Collision scheduler: wait for device to be free before running.
+      if (requestSlot && slotIdx !== undefined) {
+        await requestSlot(slotIdx, Date.now());
+        if (cancelled) { releaseSlot?.(slotIdx); return; }
+      }
       const s = settingsRef.current;
       const min = Math.max(1, Math.min(s.feedScrollMin, s.feedScrollMax));
       const max = Math.max(s.feedScrollMin, s.feedScrollMax);
@@ -2370,6 +2375,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       } finally {
         cycleAbortRef.current = null;
         cycleIdRef.current = null;
+        // Release the collision scheduler slot regardless of outcome (success / error / abort).
+        if (releaseSlot && slotIdx !== undefined) releaseSlot(slotIdx);
       }
       if (cancelled) return;
       setRunning(false);
@@ -2434,6 +2441,56 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // This keeps the mirror live immediately on remount without waiting for
   // runCycle() to start its own fetch.
   return { settings, setSettings, setEnabledByUser, loading, saveError, running: running || serverCycleRunning, nextRunAt };
+}
+
+// ── Per-device collision scheduler ───────────────────────────────────────────
+// Ensures only one account slot on a device runs at a time. When a second slot
+// becomes ready while one is running, it queues itself (sorted by readyAt so
+// the slot that has been waiting longest goes next). After each slot finishes,
+// the device rests for restMinMin–restMinMax minutes before the next slot runs.
+interface CollisionSchedulerConfig { enabled: boolean; restMinMin: number; restMinMax: number; }
+
+function useCollisionScheduler(serial: string | null) {
+  const [config, setConfig] = useState<CollisionSchedulerConfig>({ enabled: false, restMinMin: 1, restMinMax: 3 });
+  const configRef = useRef(config);
+  useEffect(() => { configRef.current = config; }, [config]);
+
+  // Queue entries: slotIdx, the timestamp the slot first became ready, and the
+  // resolve callback that grants permission to run.
+  const queueRef = useRef<{ slotIdx: number; readyAt: number; resolve: () => void }[]>([]);
+  const busyRef  = useRef(false); // true = a slot is currently running
+
+  // Load saved config on mount / serial change.
+  useEffect(() => {
+    if (!serial) return;
+    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/collision-scheduler`)
+      .then(r => r.json()).then(d => { if (d.config) setConfig(d.config); }).catch(() => {});
+  }, [serial]);
+
+  const processNext = useCallback(() => {
+    if (queueRef.current.length === 0) { busyRef.current = false; return; }
+    queueRef.current.sort((a, b) => a.readyAt - b.readyAt);
+    const next = queueRef.current.shift()!;
+    busyRef.current = true;
+    next.resolve();
+  }, []);
+
+  const requestSlot = useCallback((slotIdx: number, readyAt: number): Promise<void> => {
+    if (!configRef.current.enabled) return Promise.resolve();
+    return new Promise<void>(resolve => {
+      if (!busyRef.current) { busyRef.current = true; resolve(); }
+      else queueRef.current.push({ slotIdx, readyAt, resolve });
+    });
+  }, []);
+
+  const releaseSlot = useCallback((_slotIdx: number) => {
+    if (!configRef.current.enabled) return;
+    const cfg = configRef.current;
+    const restMs = (cfg.restMinMin + Math.random() * Math.max(0, cfg.restMinMax - cfg.restMinMin)) * 60_000;
+    setTimeout(processNext, Math.round(restMs));
+  }, [processNext]);
+
+  return { config, setConfig, requestSlot, releaseSlot };
 }
 
 function AutomationSettingsPanel({
@@ -3801,15 +3858,17 @@ type AccountSlot = { username: string; password: string; totpSecret: string; ema
 // Always mounted so the automation hook's run-loop persists even when the
 // user is viewing the slot list or a different tab.
 function SlotHumanSessionView({
-  phone, slotIdx, slotUsername, addLog, onBack,
+  phone, slotIdx, slotUsername, addLog, onBack, requestSlot, releaseSlot,
 }: {
   phone: UsbPhone | null;
   slotIdx: number;
   slotUsername: string;
   addLog: (msg: string) => void;
   onBack: () => void;
+  requestSlot?: (idx: number, readyAt: number) => Promise<void>;
+  releaseSlot?: (idx: number) => void;
 }) {
-  const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername);
+  const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername, requestSlot, releaseSlot);
   return (
     <div className="h-full flex flex-col">
       <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
@@ -3843,6 +3902,7 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
   const [showEmailPassword, setShowEmailPassword] = useState<boolean[]>(Array(ACCT_SLOT_COUNT).fill(false));
   // null = show slot list; number = show Human Session Tool for that slot index
   const [openSlotTool, setOpenSlotTool] = useState<number | null>(null);
+  const { requestSlot, releaseSlot } = useCollisionScheduler(phone?.serial ?? null);
   const hydratedRef = useRef(false);
   const lastSavedRef = useRef<string>(JSON.stringify(Array.from({ length: ACCT_SLOT_COUNT }, emptySlot)));
   // Kept outside the effect so clearTimeout on new keystrokes works without
@@ -3999,6 +4059,8 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
             slotUsername={slots[i]?.username ?? ""}
             addLog={addLog}
             onBack={() => setOpenSlotTool(null)}
+            requestSlot={requestSlot}
+            releaseSlot={releaseSlot}
           />
         </div>
       ))}
@@ -4218,7 +4280,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const [probing,       setProbing]       = React.useState(false);
   const [probeMsg,      setProbeMsg]      = React.useState<string | null>(null);
 
-  // Schedule form
+  // Stop Charging schedule form
   const [enabled,       setEnabled]       = React.useState(false);
   const [unplugMinutes, setUnplugMinutes] = React.useState(30);
   const [cycleHours,    setCycleHours]    = React.useState(4);
@@ -4227,6 +4289,13 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const [saveMsg,       setSaveMsg]       = React.useState<string | null>(null);
   const [stopping,      setStopping]      = React.useState(false);
   const [resuming,      setResuming]      = React.useState(false);
+
+  // Collision Scheduler form
+  const [csEnabled,    setCsEnabled]    = React.useState(false);
+  const [csMinMin,     setCsMinMin]     = React.useState(1);
+  const [csMinMax,     setCsMinMax]     = React.useState(3);
+  const [csSaving,     setCsSaving]     = React.useState(false);
+  const [csSaveMsg,    setCsSaveMsg]    = React.useState<string | null>(null);
 
   const applyConfig = React.useCallback((cfg: BatteryScheduleConfig) => {
     setEnabled(cfg.enabled);
@@ -4242,6 +4311,15 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
       .then(r => r.json()).then(d => { if (d.config) applyConfig(d.config); })
       .catch(() => {});
   }, [serial, applyConfig]);
+
+  // Load collision scheduler settings
+  React.useEffect(() => {
+    if (!serial) return;
+    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/collision-scheduler`)
+      .then(r => r.json()).then(d => {
+        if (d.config) { setCsEnabled(d.config.enabled); setCsMinMin(d.config.restMinMin); setCsMinMax(d.config.restMinMax); }
+      }).catch(() => {});
+  }, [serial]);
 
   // Poll live battery info every 10 s
   React.useEffect(() => {
@@ -4270,7 +4348,6 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
       } else {
         setProbeMsg(`❌ Not supported on this device — ${data.reason}`);
       }
-      // Refresh battery info to pick up probe result
       const r2 = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/battery`);
       if (r2.ok) setBattInfo(await r2.json());
     } catch (e: any) { setProbeMsg(`Error: ${e?.message}`); }
@@ -4315,6 +4392,21 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     } finally { setResuming(false); }
   };
 
+  const handleCsSave = async () => {
+    if (!serial) return;
+    setCsSaving(true); setCsSaveMsg(null);
+    try {
+      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/collision-scheduler`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: csEnabled, restMinMin: csMinMin, restMinMax: csMinMax }),
+      });
+      if (!r.ok) throw new Error((await r.json())?.error ?? r.status);
+      setCsSaveMsg("Saved");
+      setTimeout(() => setCsSaveMsg(null), 2000);
+    } catch (e: any) { setCsSaveMsg(`Error: ${e?.message}`); }
+    finally { setCsSaving(false); }
+  };
+
   const ctrl     = battInfo?.chargingControl;
   const sched    = battInfo?.schedule;
   const isReal   = ctrl?.supported === true;
@@ -4325,120 +4417,174 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     <div className="h-full overflow-y-auto p-6 space-y-6">
       <h2 className="text-lg font-bold text-foreground">Phone Settings</h2>
 
+      {/* ── Collision Scheduler ────────────────────────────────────────── */}
+      <div className="bg-card border border-border rounded-xl p-5 space-y-5">
+        {/* Title row — always visible */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Collision Scheduler</p>
+            {!csEnabled && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Prevents two account slots from running at the same time on this device. Enable to configure.
+              </p>
+            )}
+          </div>
+          <Switch checked={csEnabled} onCheckedChange={setCsEnabled} />
+        </div>
+
+        {/* Collapsed when off — only title + toggle shown above */}
+        {csEnabled && (
+          <>
+            <p className="text-xs text-muted-foreground">
+              When multiple slots are ready to run at the same time, they queue up — one runs at a time. After each slot finishes, the device rests for the time below before the next slot starts. Slots are prioritised by which one has been waiting the longest.
+            </p>
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Rest between slots (min)</Label>
+                <div className="flex items-center gap-2">
+                  <Input type="number" min={0} max={60} value={csMinMin}
+                    onChange={e => setCsMinMin(Math.max(0, Math.min(60, parseInt(e.target.value) || 0)))}
+                    className="w-20 text-center" />
+                  <span className="text-muted-foreground text-sm">to</span>
+                  <Input type="number" min={0} max={60} value={csMinMax}
+                    onChange={e => setCsMinMax(Math.max(0, Math.min(60, parseInt(e.target.value) || 0)))}
+                    className="w-20 text-center" />
+                  <span className="text-muted-foreground text-sm">minutes</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button onClick={handleCsSave} disabled={csSaving || !serial}>
+                {csSaving ? "Saving…" : "Save"}
+              </Button>
+              {csSaveMsg && <span className="text-xs text-muted-foreground">{csSaveMsg}</span>}
+            </div>
+          </>
+        )}
+      </div>
+
       {/* ── Battery Charging Control ───────────────────────────────────── */}
       <div className="bg-card border border-border rounded-xl p-5 space-y-5">
+        {/* Title row — always visible */}
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-foreground">Stop Charging for X minutes every Y hours</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              USB stays connected for ADB data. Equinox stops the physical charging current on a repeating schedule — good for battery health and electricity. Probe the device first to see what it supports.
-            </p>
+            {!enabled && (
+              <p className="text-xs text-muted-foreground mt-1">
+                USB stays connected for ADB data. Equinox stops the physical charging current on a repeating schedule — good for battery health and electricity. Enable to configure.
+              </p>
+            )}
           </div>
           <Switch checked={enabled} onCheckedChange={setEnabled} />
         </div>
 
-        {/* ── Device support status ─────────────────────────────────── */}
-        <div className="rounded-lg border border-border bg-background p-4 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs font-semibold text-foreground uppercase tracking-wider">Device Support</p>
-            <Button type="button" variant="secondary" size="sm" onClick={handleProbe}
-              disabled={probing || !serial} className="h-7 text-xs px-3">
-              {probing ? "Probing…" : "Check Device"}
-            </Button>
-          </div>
-
-          {!ctrl?.probed ? (
-            <p className="text-xs text-muted-foreground">Click "Check Device" to test what this phone supports.</p>
-          ) : isReal ? (
-            <div className="space-y-1">
-              <p className="text-xs font-semibold text-green-500">✅ Real charging control — physically stops charging</p>
-              <p className="text-[11px] text-muted-foreground font-mono">{ctrl.path}{ctrl.needsRoot ? " · root required" : " · no root needed"}</p>
-              <p className="text-[11px] text-muted-foreground">Writing <code className="font-mono">0</code> to this sysfs node cuts current to the charging IC. USB data stays active. This is the real thing — battery level actually drops while stopped.</p>
-            </div>
-          ) : notReal ? (
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-amber-500">⚠️ Real charging control not available on this device</p>
-              <p className="text-[11px] text-muted-foreground">{ctrl.failReason}</p>
-              <div className="rounded-md bg-muted/50 p-3 space-y-1.5 text-[11px] text-muted-foreground">
-                <p className="font-semibold text-foreground text-xs">Hardware option (universal):</p>
-                <p>A smart USB hub with per-port power switching (e.g. <strong>Plugable USB3-HUB7C</strong>, <strong>Acroname USBHub3+</strong>) cuts the 5V VBUS pin on command while keeping D+/D− data lines live. Software on the Windows side sends a USB host-controller request — completely device-agnostic, no root. This is the only guaranteed solution when the kernel doesn't expose a charging sysfs node.</p>
+        {/* Collapsed when off — only title + toggle shown above */}
+        {enabled && (
+          <>
+            {/* ── Device support status ─────────────────────────────── */}
+            <div className="rounded-lg border border-border bg-background p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold text-foreground uppercase tracking-wider">Device Support</p>
+                <Button type="button" variant="secondary" size="sm" onClick={handleProbe}
+                  disabled={probing || !serial} className="h-7 text-xs px-3">
+                  {probing ? "Probing…" : "Check Device"}
+                </Button>
               </div>
-              <p className="text-[11px] text-muted-foreground">The schedule below will fall back to <strong>app-level spoof only</strong> (Instagram sees "not charging" but physical charging continues).</p>
+
+              {!ctrl?.probed ? (
+                <p className="text-xs text-muted-foreground">Click "Check Device" to test what this phone supports.</p>
+              ) : isReal ? (
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-green-500">✅ Real charging control — physically stops charging</p>
+                  <p className="text-[11px] text-muted-foreground font-mono">{ctrl.path}{ctrl.needsRoot ? " · root required" : " · no root needed"}</p>
+                  <p className="text-[11px] text-muted-foreground">Writing <code className="font-mono">0</code> to this sysfs node cuts current to the charging IC. USB data stays active. This is the real thing — battery level actually drops while stopped.</p>
+                </div>
+              ) : notReal ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-amber-500">⚠️ Real charging control not available on this device</p>
+                  <p className="text-[11px] text-muted-foreground">{ctrl.failReason}</p>
+                  <div className="rounded-md bg-muted/50 p-3 space-y-1.5 text-[11px] text-muted-foreground">
+                    <p className="font-semibold text-foreground text-xs">Hardware option (universal):</p>
+                    <p>A smart USB hub with per-port power switching (e.g. <strong>Plugable USB3-HUB7C</strong>, <strong>Acroname USBHub3+</strong>) cuts the 5V VBUS pin on command while keeping D+/D− data lines live. Software on the Windows side sends a USB host-controller request — completely device-agnostic, no root. This is the only guaranteed solution when the kernel doesn't expose a charging sysfs node.</p>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">The schedule below will fall back to <strong>app-level spoof only</strong> (Instagram sees "not charging" but physical charging continues).</p>
+                </div>
+              ) : null}
+
+              {probeMsg && <p className="text-xs text-muted-foreground">{probeMsg}</p>}
             </div>
-          ) : null}
 
-          {probeMsg && <p className="text-xs text-muted-foreground">{probeMsg}</p>}
-        </div>
-
-        {/* ── Live battery status ───────────────────────────────────── */}
-        {!serial ? (
-          <p className="text-xs text-muted-foreground">No device connected.</p>
-        ) : battError ? (
-          <p className="text-xs text-destructive">{battError}</p>
-        ) : battInfo ? (
-          <div className="flex items-center gap-4 text-xs flex-wrap">
-            <span className="text-muted-foreground">
-              Battery: <span className="font-mono font-semibold text-foreground">{battInfo.level}%</span>
-            </span>
-            <span className="text-muted-foreground">
-              Status: <span className="font-mono text-foreground">{battInfo.status}</span>
-            </span>
-            <span className="text-muted-foreground">
-              Plugged: <span className="font-mono text-foreground">{battInfo.plugged}</span>
-            </span>
-            <span className="text-muted-foreground">
-              Temp: <span className="font-mono text-foreground">{battInfo.temperatureC}°C</span>
-            </span>
-            {isActive && (
-              <span className="px-2 py-0.5 rounded-full bg-green-500/15 text-green-500 font-semibold">
-                {isReal ? "⚡ Charging stopped" : "👁 App spoof active"}
-              </span>
+            {/* ── Live battery status ───────────────────────────────── */}
+            {!serial ? (
+              <p className="text-xs text-muted-foreground">No device connected.</p>
+            ) : battError ? (
+              <p className="text-xs text-destructive">{battError}</p>
+            ) : battInfo ? (
+              <div className="flex items-center gap-4 text-xs flex-wrap">
+                <span className="text-muted-foreground">
+                  Battery: <span className="font-mono font-semibold text-foreground">{battInfo.level}%</span>
+                </span>
+                <span className="text-muted-foreground">
+                  Status: <span className="font-mono text-foreground">{battInfo.status}</span>
+                </span>
+                <span className="text-muted-foreground">
+                  Plugged: <span className="font-mono text-foreground">{battInfo.plugged}</span>
+                </span>
+                <span className="text-muted-foreground">
+                  Temp: <span className="font-mono text-foreground">{battInfo.temperatureC}°C</span>
+                </span>
+                {isActive && (
+                  <span className="px-2 py-0.5 rounded-full bg-green-500/15 text-green-500 font-semibold">
+                    {isReal ? "⚡ Charging stopped" : "👁 App spoof active"}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">Loading battery info…</p>
             )}
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground">Loading battery info…</p>
+
+            {/* ── Schedule controls ─────────────────────────────────── */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Stop charging for (minutes)</Label>
+                <Input type="number" min={1} max={1440} value={unplugMinutes}
+                  onChange={e => setUnplugMinutes(Math.max(1, parseInt(e.target.value) || 1))} className="w-full" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Every (hours)</Label>
+                <Input type="number" min={0.5} max={24} step={0.5} value={cycleHours}
+                  onChange={e => setCycleHours(Math.max(0.5, parseFloat(e.target.value) || 0.5))} className="w-full" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">
+                  {isReal ? "App-visible level (%) — cosmetic only" : "Show battery level (%) while stopped"}
+                </Label>
+                <Input type="number" min={1} max={100} value={spoofLevel}
+                  onChange={e => setSpoofLevel(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))} className="w-full" />
+              </div>
+            </div>
+
+            {sched?.nextAt && enabled && (
+              <p className="text-xs text-muted-foreground">
+                Next stop window: {new Date(sched.nextAt).toLocaleTimeString()}
+              </p>
+            )}
+
+            {/* Action buttons */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button onClick={handleSave} disabled={saving || !serial}>
+                {saving ? "Saving…" : "Save Schedule"}
+              </Button>
+              <Button type="button" variant="secondary" onClick={handleStopNow} disabled={stopping || !serial}>
+                {stopping ? "Stopping…" : isReal ? "Stop Now" : "Spoof Now"}
+              </Button>
+              <Button type="button" variant="secondary" onClick={handleResumeNow} disabled={resuming || !serial}>
+                {resuming ? "Resuming…" : "Resume Now"}
+              </Button>
+              {saveMsg && <span className="text-xs text-muted-foreground">{saveMsg}</span>}
+            </div>
+          </>
         )}
-
-        {/* ── Schedule controls ─────────────────────────────────────── */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Stop charging for (minutes)</Label>
-            <Input type="number" min={1} max={1440} value={unplugMinutes}
-              onChange={e => setUnplugMinutes(Math.max(1, parseInt(e.target.value) || 1))} className="w-full" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Every (hours)</Label>
-            <Input type="number" min={0.5} max={24} step={0.5} value={cycleHours}
-              onChange={e => setCycleHours(Math.max(0.5, parseFloat(e.target.value) || 0.5))} className="w-full" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">
-              {isReal ? "App-visible level (%) — cosmetic only" : "Show battery level (%) while stopped"}
-            </Label>
-            <Input type="number" min={1} max={100} value={spoofLevel}
-              onChange={e => setSpoofLevel(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))} className="w-full" />
-          </div>
-        </div>
-
-        {sched?.nextAt && enabled && (
-          <p className="text-xs text-muted-foreground">
-            Next stop window: {new Date(sched.nextAt).toLocaleTimeString()}
-          </p>
-        )}
-
-        {/* Action buttons */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button onClick={handleSave} disabled={saving || !serial}>
-            {saving ? "Saving…" : "Save Schedule"}
-          </Button>
-          <Button type="button" variant="secondary" onClick={handleStopNow} disabled={stopping || !serial}>
-            {stopping ? "Stopping…" : isReal ? "Stop Now" : "Spoof Now"}
-          </Button>
-          <Button type="button" variant="secondary" onClick={handleResumeNow} disabled={resuming || !serial}>
-            {resuming ? "Resuming…" : "Resume Now"}
-          </Button>
-          {saveMsg && <span className="text-xs text-muted-foreground">{saveMsg}</span>}
-        </div>
       </div>
     </div>
   );

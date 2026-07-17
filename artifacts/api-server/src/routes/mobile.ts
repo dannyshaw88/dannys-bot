@@ -5587,4 +5587,31 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       res.json({ ok: true });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
+
+  // ── Collision Scheduler settings ──────────────────────────────────────────
+  // Stored as a global setting keyed by serial. Purely advisory (client-side
+  // queue logic uses the values); server just persists and returns them.
+
+  app.get("/api/mobile/devices/:serial/collision-scheduler", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const all    = await storage.getGlobalSettings();
+      const raw    = all[`collision_scheduler_${serial}`];
+      const config = raw ? JSON.parse(raw) : null;
+      res.json({ config });
+    } catch (e: any) { res.status(500).json({ error: e?.message }); }
+  });
+
+  app.post("/api/mobile/devices/:serial/collision-scheduler", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const cfg    = z.object({
+        enabled:     z.boolean(),
+        restMinMin:  z.number().min(0).max(60),
+        restMinMax:  z.number().min(0).max(60),
+      }).parse(req.body);
+      await storage.setGlobalSetting(`collision_scheduler_${serial}`, JSON.stringify(cfg));
+      res.json({ ok: true });
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
 }
