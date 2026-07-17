@@ -3880,6 +3880,18 @@ export async function switchToInstagramAccount(
   const coords = _findElem(xml, clean, `@${clean}`);
 
   if (!coords) {
+    // Primary search (exact text/content-desc) found nothing.  The currently-
+    // active account is often rendered differently in the switcher — it may
+    // lack a text/content-desc label and show only an avatar — so _findElem
+    // misses it even though the username still appears somewhere in the XML.
+    // Check if the username appears ANYWHERE in the dump (any attribute).
+    // Using simple includes() avoids regex escaping edge-cases entirely.
+    const activeInXml = xml.includes(`"@${clean}"`) || xml.includes(`"${clean}"`);
+    if (activeInXml) {
+      onLog?.(`  ↳ @${clean} is the currently active account — dismissing switcher`);
+      await runAdb(adbPath, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], 4000).catch(() => {});
+      return true;
+    }
     onLog?.(`  ⚠ "@${clean}" not found in switcher — is the account logged in on this device?`);
     // Dismiss the switcher so the cycle can continue with whatever account is active.
     await runAdb(adbPath, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], 4000).catch(() => {});
@@ -3889,7 +3901,20 @@ export async function switchToInstagramAccount(
   // 4. Tap the username row to switch accounts.
   onLog?.(`  ✓ Found @${clean} in switcher — switching…`);
   _adbTap(adbPath, serial, coords.x, coords.y);
-  await _sleep(2500); // give Instagram time to reload the new account's feed
+  await _sleep(600); // short wait before verifying the switcher closed
+
+  // 5. Confirm the switcher actually closed.  If the target account was
+  //    already the active one, Instagram ignores the tap and the switcher
+  //    stays open — the same username is still visible in the XML dump.
+  //    In that case, dismiss with BACK (we are already on the right account).
+  const postTapXml = await _uiDump(adbPath, serial).catch(() => "");
+  if (_findElem(postTapXml, clean, `@${clean}`)) {
+    onLog?.(`  ↳ Already on @${clean} — dismissing switcher`);
+    await runAdb(adbPath, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], 4000).catch(() => {});
+    await _sleep(400);
+  } else {
+    await _sleep(2000); // give Instagram time to reload the new account's feed
+  }
   return true;
 }
 

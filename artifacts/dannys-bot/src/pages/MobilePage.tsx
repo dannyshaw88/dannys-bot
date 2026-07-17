@@ -10,11 +10,12 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Smartphone, RefreshCw, CheckCircle2, AlertTriangle,
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
   ChevronLeft, Home, LayoutGrid, Power, Volume2, VolumeX, Trash2,
-  FolderOpen, Upload, Download, Fingerprint, ArrowLeft,
+  FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy,
 } from "lucide-react";
 
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
@@ -2412,26 +2413,30 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       if (timer) clearTimeout(timer);
       setRunning(false);
       setNextRunAt(null);
+      // Only abort the server-side cycle when the user explicitly turned the
+      // toggle off.  If the cleanup fires because the component unmounted
+      // (user navigated away) or the serial changed, leave the current cycle
+      // running on the server — `cancelled = true` already prevents the
+      // client from scheduling the next cycle.
+      const shouldAbortServer = explicitToggleOffRef.current;
+      explicitToggleOffRef.current = false; // reset for next toggle
       const ctrl = cycleAbortRef.current;
-      if (ctrl) {
-        const abortingId = cycleIdRef.current;
-        // Only abort the server-side cycle when the user explicitly turned the
-        // toggle off.  If the cleanup fires because the component unmounted
-        // (user navigated away) or the serial changed, leave the current cycle
-        // running on the server — `cancelled = true` already prevents the
-        // client from scheduling the next cycle.
-        const shouldAbortServer = explicitToggleOffRef.current;
-        explicitToggleOffRef.current = false; // reset for next toggle
-        cycleAbortRef.current = null;
-        cycleIdRef.current = null;
-        if (shouldAbortServer) {
-          ctrl.abort();
-          fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle/abort`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ cycleId: abortingId }),
-          }).catch(() => {});
-        }
+      const abortingId = cycleIdRef.current;
+      cycleAbortRef.current = null;
+      cycleIdRef.current = null;
+      if (shouldAbortServer) {
+        // Abort the in-flight client-side fetch if one is running.
+        ctrl?.abort();
+        // Always send the server-side abort POST — even when the client has
+        // not yet started a fetch (e.g. the slot is waiting in the collision
+        // scheduler queue), the server may still have a cycle running from a
+        // prior tick.  This ensures the phone stops instantly regardless of
+        // where in the cycle the abort fires.
+        fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle/abort`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cycleId: abortingId }),
+        }).catch(() => {});
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2493,8 +2498,161 @@ function useCollisionScheduler(serial: string | null) {
   return { config, setConfig, requestSlot, releaseSlot };
 }
 
+// ── Copy Settings dialog ──────────────────────────────────────────────────────
+// Lets the user duplicate the current slot's Human Session Tool settings to one
+// or more other account slots on the same device. Both sides (target slots and
+// setting sections) support Select All / Select None.
+const COPY_SECTIONS: { key: string; label: string; fields: string[] }[] = [
+  { key: 'runInterval',    label: 'Run Interval',     fields: ['cycleIntervalMin','cycleIntervalMax'] },
+  { key: 'actionDelay',   label: 'Action Delay',      fields: ['actionDelayMin','actionDelayMax'] },
+  { key: 'feed',          label: 'View Feed',         fields: ['feedEnabled','feedActivatePctMin','feedActivatePctMax','feedScrollMin','feedScrollMax','likePercentMin','likePercentMax','shareFeedPercentMin','shareFeedPercentMax','shareDmPercentMin','shareDmPercentMax'] },
+  { key: 'stories',       label: 'View Stories',      fields: ['storiesEnabled','viewStoriesActivatePctMin','viewStoriesActivatePctMax','viewStoriesSlidesMin','viewStoriesSlidesMax','viewStoriesSlideWatchPctMin','viewStoriesSlideWatchPctMax','viewStoriesLikePercentMin','viewStoriesLikePercentMax','viewStoriesShareDmPercentMin','viewStoriesShareDmPercentMax'] },
+  { key: 'reels',         label: 'View Reels',        fields: ['viewReelsEnabled','viewReelsActivatePctMin','viewReelsActivatePctMax','viewReelsScrollMin','viewReelsScrollMax','viewReelsWatchPctMin','viewReelsWatchPctMax','viewReelsLikePercentMin','viewReelsLikePercentMax','viewReelsShareFeedPercentMin','viewReelsShareFeedPercentMax','viewReelsShareDmPercentMin','viewReelsShareDmPercentMax'] },
+  { key: 'follow',        label: 'Follow Users',      fields: ['followEnabled','followActivatePctMin','followActivatePctMax','followUsersMin','followUsersMax','followSkipFollowed','followSources'] },
+  { key: 'injectBrowsing',label: 'Inject Browsing',   fields: ['injectBrowsingEnabled','injectBrowsingActivatePctMin','injectBrowsingActivatePctMax','injectBrowsingBeforeFollowPctMin','injectBrowsingBeforeFollowPctMax','injectBrowsingFeedChanceMin','injectBrowsingFeedChanceMax','injectBrowsingFeedMin','injectBrowsingFeedMax','injectBrowsingClickPostPctMin','injectBrowsingClickPostPctMax','injectBrowsingLikePctMin','injectBrowsingLikePctMax','injectBrowsingShareFeedPctMin','injectBrowsingShareFeedPctMax','injectBrowsingShareDmPctMin','injectBrowsingShareDmPctMax'] },
+  { key: 'followFilters', label: 'Follow Filters',    fields: ['followFiltersEnabled','followFilterPrivateUsers','followFilterEnglishSpeaking','followFilterMinFollowers250','followFilterVerifiedUsers'] },
+  { key: 'randomJitter',  label: 'Random Jitter',     fields: ['randomJitterEnabled','randomJitterActivatePctMin','randomJitterActivatePctMax','checkNotificationsPctMin','checkNotificationsPctMax','checkNotificationsScrollsMin','checkNotificationsScrollsMax','checkNotificationsClickPctMin','checkNotificationsClickPctMax','visitProfilePctMin','visitProfilePctMax'] },
+  { key: 'makePost',      label: 'Make a Post',       fields: ['makePostEnabled','makePostActivatePctMin','makePostActivatePctMax','makePostPerSessionMin','makePostPerSessionMax','makePostSourceUsername','makePostDisableUsernameSource','makePostAlterationEnabled','makePostAlterationLevel','makePostImageSettingsEnabled','makePostUseHikerApi','makePostDisableAtPostCount','makePostDisableWhenExhausted','makePostLocalFolderEnabled','makePostLocalFolderPath','makePostLocalFolderNoRepeat','makePostLocalFolderRandom','makePostLocalFolderDeleteAfterUpload','makePostUseChatGpt','makePostFixAiSlop','makePostMakeUnique','makePostCaptionText','makePostImageSettings'] },
+];
+
+function CopySettingsDialog({
+  open, onClose, currentSlotIdx, slotUsernames, settings, phone,
+}: {
+  open: boolean;
+  onClose: () => void;
+  currentSlotIdx: number;
+  slotUsernames: string[];
+  settings: AutomationSettingsData;
+  phone: UsbPhone | null;
+}) {
+  const allKeys = COPY_SECTIONS.map(s => s.key);
+  const [selectedSlots, setSelectedSlots] = useState<number[]>([]);
+  const [selectedSections, setSelectedSections] = useState<string[]>(allKeys);
+  const [copying, setCopying] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setSelectedSlots(slotUsernames.map((_, i) => i).filter(i => i !== currentSlotIdx));
+      setSelectedSections(allKeys);
+      setResult(null);
+      setCopying(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const otherSlots = slotUsernames
+    .map((username, i) => ({ username, idx: i }))
+    .filter(s => s.idx !== currentSlotIdx);
+
+  const handleCopy = async () => {
+    if (!phone?.serial || selectedSlots.length === 0) return;
+    setCopying(true);
+    setResult(null);
+    const partial: Record<string, unknown> = {};
+    for (const section of COPY_SECTIONS) {
+      if (selectedSections.includes(section.key)) {
+        for (const field of section.fields) {
+          partial[field] = (settings as Record<string, unknown>)[field];
+        }
+      }
+    }
+    let ok = 0, fail = 0;
+    for (const slotIdx of selectedSlots) {
+      try {
+        const r = await fetch(
+          `/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/automation-settings`,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(partial) },
+        );
+        if (r.ok) ok++; else fail++;
+      } catch { fail++; }
+    }
+    const msg = fail
+      ? `Copied to ${ok}; ${fail} failed`
+      : `Copied to ${ok} slot${ok !== 1 ? "s" : ""}`;
+    setResult(msg);
+    setCopying(false);
+    setTimeout(() => { onClose(); }, 1600);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v && !copying) onClose(); }}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Copy Settings to Other Slots</DialogTitle>
+        </DialogHeader>
+        <div className="flex gap-8 mt-2">
+          {/* Left: target slots */}
+          <div className="flex-1 min-w-0 space-y-2">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Copy to</span>
+              <div className="flex gap-1.5">
+                <Button size="sm" variant="ghost" className="h-6 text-xs px-2"
+                  onClick={() => setSelectedSlots(otherSlots.map(s => s.idx))}>All</Button>
+                <Button size="sm" variant="ghost" className="h-6 text-xs px-2"
+                  onClick={() => setSelectedSlots([])}>None</Button>
+              </div>
+            </div>
+            {otherSlots.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">No other slots to copy to.</p>
+            ) : otherSlots.map(s => (
+              <label key={s.idx} className="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" className="w-3.5 h-3.5 accent-primary"
+                  checked={selectedSlots.includes(s.idx)}
+                  onChange={e => setSelectedSlots(prev =>
+                    e.target.checked ? [...prev, s.idx] : prev.filter(i => i !== s.idx)
+                  )} />
+                <span className="text-sm truncate">
+                  {s.username ? `@${s.username}` : `Slot ${s.idx + 1}`}
+                </span>
+              </label>
+            ))}
+          </div>
+
+          {/* Right: setting sections */}
+          <div className="flex-1 min-w-0 space-y-2">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Settings</span>
+              <div className="flex gap-1.5">
+                <Button size="sm" variant="ghost" className="h-6 text-xs px-2"
+                  onClick={() => setSelectedSections(allKeys)}>All</Button>
+                <Button size="sm" variant="ghost" className="h-6 text-xs px-2"
+                  onClick={() => setSelectedSections([])}>None</Button>
+              </div>
+            </div>
+            {COPY_SECTIONS.map(s => (
+              <label key={s.key} className="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" className="w-3.5 h-3.5 accent-primary"
+                  checked={selectedSections.includes(s.key)}
+                  onChange={e => setSelectedSections(prev =>
+                    e.target.checked ? [...prev, s.key] : prev.filter(k => k !== s.key)
+                  )} />
+                <span className="text-sm">{s.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-3 mt-4 pt-4 border-t border-border">
+          {result && (
+            <span className={`text-xs mr-auto ${result.includes('failed') ? 'text-destructive' : 'text-green-500'}`}>
+              {result}
+            </span>
+          )}
+          <Button variant="secondary" onClick={onClose} disabled={copying}>Cancel</Button>
+          <Button onClick={handleCopy}
+            disabled={copying || selectedSlots.length === 0 || selectedSections.length === 0}>
+            {copying ? "Copying…" : "Copy Settings"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function AutomationSettingsPanel({
   phone, settings, setSettings, setEnabledByUser, loading, saveError, running, nextRunAt,
+  slotIdx, slotUsernames,
 }: {
   phone: UsbPhone | null;
   settings: AutomationSettingsData;
@@ -2504,8 +2662,11 @@ function AutomationSettingsPanel({
   saveError: string | null;
   running: boolean;
   nextRunAt: number | null;
+  slotIdx?: number;
+  slotUsernames?: string[];
 }) {
   // Follow Users UI local state — hooks must come before any conditional return.
+  const [showCopyDialog, setShowCopyDialog] = useState(false);
   const [showFollowedUsers, setShowFollowedUsers] = useState(false);
   const [showSources, setShowSources] = useState(false);
   const [newFollowSourceType, setNewFollowSourceType] = useState<'hashtag' | 'target_followers'>('hashtag');
@@ -2606,7 +2767,16 @@ function AutomationSettingsPanel({
   return (
     <div className="h-full overflow-y-auto p-6 space-y-6">
       <div className="flex items-center justify-between gap-4">
-        <h2 className="text-lg font-bold text-foreground">Human Session Tool</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-lg font-bold text-foreground">Human Session Tool</h2>
+          {slotIdx !== undefined && slotUsernames && slotUsernames.length > 1 && (
+            <Button type="button" variant="secondary" size="sm" className="h-7 text-xs gap-1.5"
+              onClick={() => setShowCopyDialog(true)}>
+              <Copy className="w-3 h-3" />
+              Copy Settings
+            </Button>
+          )}
+        </div>
         <span className="text-sm text-muted-foreground whitespace-nowrap">
           {phone.manufacturer ? `${phone.manufacturer} ` : ""}{phone.model ?? phone.serial}
         </span>
@@ -3846,6 +4016,18 @@ function AutomationSettingsPanel({
           Close the Instagram app and Airplane Mode will be activated for 15–20 seconds, then Airplane Mode will be turned off.
         </p>
       </div>
+
+      {/* Copy Settings dialog — Dialog renders as a portal outside the scroll div */}
+      {slotIdx !== undefined && slotUsernames && (
+        <CopySettingsDialog
+          open={showCopyDialog}
+          onClose={() => setShowCopyDialog(false)}
+          currentSlotIdx={slotIdx}
+          slotUsernames={slotUsernames}
+          settings={settings}
+          phone={phone}
+        />
+      )}
     </div>
   );
 }
@@ -3858,11 +4040,12 @@ type AccountSlot = { username: string; password: string; totpSecret: string; ema
 // Always mounted so the automation hook's run-loop persists even when the
 // user is viewing the slot list or a different tab.
 function SlotHumanSessionView({
-  phone, slotIdx, slotUsername, addLog, onBack, requestSlot, releaseSlot,
+  phone, slotIdx, slotUsername, slotUsernames, addLog, onBack, requestSlot, releaseSlot,
 }: {
   phone: UsbPhone | null;
   slotIdx: number;
   slotUsername: string;
+  slotUsernames?: string[];
   addLog: (msg: string) => void;
   onBack: () => void;
   requestSlot?: (idx: number, readyAt: number) => Promise<void>;
@@ -3882,7 +4065,7 @@ function SlotHumanSessionView({
         </span>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <AutomationSettingsPanel phone={phone} {...automation} />
+        <AutomationSettingsPanel phone={phone} {...automation} slotIdx={slotIdx} slotUsernames={slotUsernames} />
       </div>
     </div>
   );
@@ -4057,6 +4240,7 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
             phone={phone}
             slotIdx={i}
             slotUsername={slots[i]?.username ?? ""}
+            slotUsernames={slots.map(s => s.username)}
             addLog={addLog}
             onBack={() => setOpenSlotTool(null)}
             requestSlot={requestSlot}
@@ -4111,7 +4295,6 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
                   <Input
                     value={slot.username}
                     onChange={e => updateSlot(i, { username: e.target.value })}
-                    placeholder="username"
                     disabled={loading}
                     autoComplete="off"
                     className="w-[20ch]"
@@ -4126,7 +4309,6 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
                       type={showPassword[i] ? "text" : "password"}
                       value={slot.password}
                       onChange={e => updateSlot(i, { password: e.target.value })}
-                      placeholder="password"
                       disabled={loading}
                       autoComplete="off"
                       className="w-[20ch]"
@@ -4149,7 +4331,6 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
                         setTotpCode(c => c.map((v, idx) => idx === i ? null : v));
                         setTotpError(er => er.map((v, idx) => idx === i ? null : v));
                       }}
-                      placeholder="JBSWY3DPEHPK3PXP"
                       disabled={loading}
                       autoComplete="off"
                       className="w-[22ch] font-mono text-xs"
@@ -4177,7 +4358,6 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
                   <Input
                     value={slot.emailAddress}
                     onChange={e => updateSlot(i, { emailAddress: e.target.value })}
-                    placeholder="email@example.com"
                     disabled={loading}
                     autoComplete="off"
                     className="w-[20ch]"
@@ -4192,7 +4372,6 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
                       type={showEmailPassword[i] ? "text" : "password"}
                       value={slot.emailPassword}
                       onChange={e => updateSlot(i, { emailPassword: e.target.value })}
-                      placeholder="email password"
                       disabled={loading}
                       autoComplete="off"
                       className="w-[20ch]"
@@ -4210,7 +4389,6 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
                   <Input
                     value={slot.phoneNumber}
                     onChange={e => updateSlot(i, { phoneNumber: e.target.value })}
-                    placeholder="+1 555 000 0000"
                     disabled={loading}
                     autoComplete="off"
                     className="w-[20ch]"

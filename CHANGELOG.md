@@ -4,6 +4,33 @@ All notable changes to Equinox are documented here.
 
 ---
 
+## [1.1.653] — 2026-07-17
+
+### Human Session Tool — Copy Settings button
+
+- **Copy Settings button** added to the Human Session Tool header, right of the title. It appears only when the device has more than one account slot.
+- Opens a two-panel dialog:
+  - **Left — Copy to**: one checkbox per other account slot, labelled `@username` or "Slot N" when no username is set. Select All / Select None buttons.
+  - **Right — Settings to copy**: one checkbox per setting group (Run Interval, Action Delay, View Feed, View Stories, View Reels, Follow Users, Inject Browsing, Follow Filters, Random Jitter, Make a Post). Select All / Select None buttons.
+  - All slots and all sections are pre-selected by default each time the dialog opens.
+- **Copy Settings** button POSTs only the selected fields to each selected slot's `automation-settings` endpoint. A brief success/failure message appears, then the dialog auto-closes.
+
+### Human Session Tool — Instant stop on toggle-off
+
+- The abort POST to the server is now **sent unconditionally** when the user explicitly turns the toggle off, regardless of whether a client-side fetch is in-flight. Previously the POST was gated behind `if (ctrl)`, so if the slot was queued in the collision scheduler (no fetch started yet), the server was never notified and the running cycle on the phone continued. The fix sends the abort POST in all explicit toggle-off paths; `ctrl?.abort()` still fires first to cancel any in-flight request.
+
+### Phone Farm — Account selector: already-logged-in account
+
+- Fixed `switchToInstagramAccount` not handling the case where the target account is **already the active account** on the device.
+  - **XML fallback**: if `_findElem` returns null but the username appears anywhere in the switcher XML (Instagram renders the active account without a text/content-desc label), the function now dismisses the switcher with BACK and returns `true` — the cycle continues correctly.
+  - **Post-tap verification**: if `_findElem` does find coords and taps them, a short dump (600 ms later) checks whether the switcher closed. If the same username is still visible (Instagram cannot re-select the already-active account), the switcher is dismissed with BACK and the function returns `true`. Previously the switcher stayed open and blocked all subsequent automation taps until the user manually tapped outside it.
+
+### Accounts — Placeholder text removed
+
+- Removed default placeholder text from all six account credential fields per slot: Username, Password, 2FA OTP Secret, Email Address, Email Password, Phone Number. Fields are now blank when empty.
+
+---
+
 ## [1.1.652] — 2026-07-17
 
 ### Phone Farm — Device panel UI overhaul
