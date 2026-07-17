@@ -2980,17 +2980,14 @@ function AutomationSettingsPanel({
           {slotIdx !== undefined && (
             <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={slotIdx} />
           )}
-          {slotIdx !== undefined && slotUsernames && slotUsernames.length > 1 && (
-            <Button type="button" variant="secondary" size="sm" className="h-7 text-xs gap-1.5"
-              onClick={() => setShowCopyDialog(true)}>
-              <Copy className="w-3 h-3" />
-              Copy Settings
-            </Button>
-          )}
         </div>
-        <span className="text-sm text-muted-foreground whitespace-nowrap ml-auto">
-          {phone.manufacturer ? `${phone.manufacturer} ` : ""}{phone.model ?? phone.serial}
-        </span>
+        {slotIdx !== undefined && slotUsernames && slotUsernames.length > 1 && (
+          <Button type="button" variant="secondary" size="sm" className="h-7 text-xs gap-1.5 ml-auto"
+            onClick={() => setShowCopyDialog(true)}>
+            <Copy className="w-3 h-3" />
+            Copy Settings
+          </Button>
+        )}
       </div>
 
       {/* Master toggle — turns the whole tool on/off. */}
