@@ -942,6 +942,36 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
 
   const clickable = status === "live" || status === "asleep" || status === "error";
 
+  // ── Clipboard context menu ───────────────────────────────────────────────
+  const [clipMenu, setClipMenu] = useState<{ x: number; y: number } | null>(null);
+  const clipMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!clipMenu) return;
+    const dismiss = (e: Event) => {
+      if (e instanceof KeyboardEvent) { if (e.key === "Escape") setClipMenu(null); return; }
+      if (clipMenuRef.current && !clipMenuRef.current.contains(e.target as Node)) setClipMenu(null);
+    };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", dismiss);
+    return () => { document.removeEventListener("pointerdown", dismiss); document.removeEventListener("keydown", dismiss); };
+  }, [clipMenu]);
+
+  const doClipAction = useCallback(async (action: "selectAll" | "copy" | "paste") => {
+    setClipMenu(null);
+    const base = `/api/mobile/devices/${encodeURIComponent(serial)}`;
+    try {
+      if (action === "selectAll") {
+        await fetch(`${base}/input/key`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: "KEYCODE_SELECT_ALL" }) });
+      } else if (action === "copy") {
+        await fetch(`${base}/input/key`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: "KEYCODE_COPY" }) });
+      } else if (action === "paste") {
+        const text = await navigator.clipboard.readText().catch(() => "");
+        if (text) await fetch(`${base}/input/text`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+      }
+    } catch { /* silently ignore */ }
+  }, [serial]);
+
   return (
     <div className="absolute inset-0 bg-black">
       {status === "connecting" && (
@@ -980,11 +1010,13 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
         onContextMenu={(e) => {
-          if (!logRecModeRef2.current) return;
           e.preventDefault();
-          const p = mapToPhone(e.clientX, e.clientY);
-          if (!p) return;
-          onExpectedTapRef.current?.(p.x, p.y, "vicinity");
+          if (logRecModeRef2.current) {
+            const p = mapToPhone(e.clientX, e.clientY);
+            if (p) onExpectedTapRef.current?.(p.x, p.y, "vicinity");
+            return;
+          }
+          if (clickable) setClipMenu({ x: e.clientX, y: e.clientY });
         }}
         style={{
           display:       status === "connecting" ? "none" : "block",
@@ -1166,6 +1198,36 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         <span className="absolute top-1 right-1.5 text-[8px] font-mono text-white/30 select-none z-10">
           {fps} fps
         </span>
+      )}
+
+      {/* ── Clipboard context menu ─────────────────────────────────────── */}
+      {clipMenu && (
+        <div
+          ref={clipMenuRef}
+          onPointerDown={e => e.stopPropagation()}
+          style={{
+            position: "fixed", left: clipMenu.x, top: clipMenu.y, zIndex: 200,
+            background: "#1e1e1e", border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 6, boxShadow: "0 4px 16px rgba(0,0,0,0.6)",
+            padding: "4px 0", minWidth: 140, userSelect: "none",
+          }}
+        >
+          {([ ["Select All", "selectAll"], ["Copy", "copy"], ["Paste", "paste"] ] as const).map(([label, action]) => (
+            <button
+              key={action}
+              onPointerDown={e => { e.stopPropagation(); doClipAction(action); }}
+              style={{
+                display: "block", width: "100%", textAlign: "left",
+                background: "none", border: "none", color: "#e0e0e0",
+                fontSize: 12, padding: "6px 14px", cursor: "pointer",
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.08)"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "none"; }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );
