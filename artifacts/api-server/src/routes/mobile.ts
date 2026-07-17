@@ -25,23 +25,29 @@ import { HikerApiClient } from "../instagram/hikerApiClient";
 
 const execFileP = promisify(execFile);
 
-// ── Battery-spoof scheduler ────────────────────────────────────────────────
-// Per-serial in-memory state.  Config is also persisted to global_settings
-// so the schedule survives a server restart (re-loaded on first GET).
+// ── Battery charging-control scheduler ────────────────────────────────────
+// Supports two modes depending on what the device allows:
+//   "real"  — physically stops charging via sysfs (probeChargingControl found a
+//             writable path); best for battery health + electricity saving.
+//   "spoof" — only hides charging state from apps via dumpsys; physical charging
+//             continues (fallback when sysfs is unavailable).
+// Config is persisted to global_settings so schedules survive server restarts.
 interface BatterySpoofConfig {
   enabled: boolean;
-  unplugMinutes: number;  // how long each spoof window lasts
+  unplugMinutes: number;  // how long each stop window lasts
   cycleHours: number;     // repeat interval
-  spoofLevel: number;     // battery % shown to apps while spoofed
+  spoofLevel: number;     // battery % reported to apps while stopped
 }
 interface BatterySpoofEntry {
   interval:     ReturnType<typeof setInterval> | null;
   resetTimeout: ReturnType<typeof setTimeout>  | null;
   spoofActive:  boolean;
-  nextAt:       number | null; // epoch ms of next unplug
+  nextAt:       number | null; // epoch ms of next stop window
 }
 const batterySpoofTimers  = new Map<string, BatterySpoofEntry>();
 const batterySpoofConfigs = new Map<string, BatterySpoofConfig>();
+// Cache probe results so we never re-probe mid-cycle.
+const chargingControlCache = new Map<string, android.ChargingControlSupport>();
 
 function _stopBatterySpoofCycle(serial: string) {
   const e = batterySpoofTimers.get(serial);
@@ -53,34 +59,48 @@ function _stopBatterySpoofCycle(serial: string) {
 
 function _startBatterySpoofCycle(serial: string, cfg: BatterySpoofConfig) {
   _stopBatterySpoofCycle(serial);
-  const cycleMs  = cfg.cycleHours     * 3_600_000;
-  const unplugMs = cfg.unplugMinutes  *    60_000;
+  const cycleMs  = cfg.cycleHours    * 3_600_000;
+  const unplugMs = cfg.unplugMinutes *    60_000;
 
-  const runUnplug = async () => {
+  const runStop = async () => {
+    const probe = chargingControlCache.get(serial);
+    const useReal = probe?.supported === true;
     try {
-      await android.setBatterySpoof(serial, cfg.spoofLevel);
+      if (useReal) {
+        await android.stopPhysicalCharging(serial, probe as Extract<android.ChargingControlSupport, { supported: true }>);
+        logger.info(`[battery] ${serial}: physical charging STOPPED via ${(probe as any).path}`);
+      } else {
+        await android.setBatterySpoof(serial, cfg.spoofLevel);
+        logger.info(`[battery] ${serial}: app-level spoof active — reporting ${cfg.spoofLevel}% unplugged`);
+      }
       const e = batterySpoofTimers.get(serial);
       if (e) e.spoofActive = true;
-      logger.info(`[battery-spoof] ${serial}: active — reporting ${cfg.spoofLevel}% unplugged`);
+
       const rt = setTimeout(async () => {
         try {
-          await android.clearBatterySpoof(serial);
+          if (useReal) {
+            await android.resumePhysicalCharging(serial, probe as Extract<android.ChargingControlSupport, { supported: true }>);
+            logger.info(`[battery] ${serial}: physical charging RESUMED`);
+          } else {
+            await android.clearBatterySpoof(serial);
+            logger.info(`[battery] ${serial}: app-level spoof cleared`);
+          }
           const e2 = batterySpoofTimers.get(serial);
           if (e2) { e2.spoofActive = false; e2.resetTimeout = null; }
-          logger.info(`[battery-spoof] ${serial}: cleared — real state restored`);
         } catch (err: any) {
-          logger.error(`[battery-spoof] ${serial}: clear error: ${err?.message}`);
+          logger.error(`[battery] ${serial}: resume error: ${err?.message}`);
         }
       }, unplugMs);
+
       const e2 = batterySpoofTimers.get(serial);
       if (e2) { e2.resetTimeout = rt; e2.nextAt = Date.now() + cycleMs; }
     } catch (err: any) {
-      logger.error(`[battery-spoof] ${serial}: spoof error: ${err?.message}`);
+      logger.error(`[battery] ${serial}: stop error: ${err?.message}`);
     }
   };
 
-  runUnplug();
-  const iv = setInterval(runUnplug, cycleMs);
+  runStop();
+  const iv = setInterval(runStop, cycleMs);
   batterySpoofTimers.set(serial, { interval: iv, resetTimeout: null, spoofActive: false, nextAt: Date.now() + cycleMs });
 }
 
@@ -5446,41 +5466,72 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
   });
 
-  // ── Battery spoof ──────────────────────────────────────────────────────────
+  // ── Battery charging control ───────────────────────────────────────────────
 
-  /** GET current battery info + active spoof state. */
+  /** GET current battery info + active stop-state. */
   app.get("/api/mobile/devices/:serial/battery", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
       const info   = await android.getBatteryInfo(serial);
       const timer  = batterySpoofTimers.get(serial) ?? null;
       const cfg    = batterySpoofConfigs.get(serial) ?? null;
+      const probe  = chargingControlCache.get(serial) ?? null;
       res.json({
         ...info,
-        spoof: {
-          active:  timer?.spoofActive  ?? false,
-          nextAt:  timer?.nextAt       ?? null,
+        chargingControl: {
+          probed:      probe !== null,
+          supported:   probe?.supported ?? null,
+          path:        probe?.supported ? (probe as any).path : null,
+          needsRoot:   probe?.supported ? (probe as any).needsRoot : null,
+          failReason:  probe && !probe.supported ? (probe as any).reason : null,
+        },
+        schedule: {
+          active:  !!timer,
+          running: timer?.spoofActive ?? false,
+          nextAt:  timer?.nextAt ?? null,
           config:  cfg,
         },
       });
     } catch (e: any) { res.status(500).json({ error: e?.message }); }
   });
 
-  /** POST manually apply the spoof right now (one-shot, no schedule). */
-  app.post("/api/mobile/devices/:serial/battery/spoof", async (req: Request, res: Response) => {
+  /** POST probe — detect whether this device supports physical charging control.
+   *  Takes 2–5 s; result cached in-memory for the lifetime of the server. */
+  app.post("/api/mobile/devices/:serial/battery/probe", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
-      const { level } = z.object({ level: z.number().int().min(1).max(100) }).parse(req.body);
-      await android.setBatterySpoof(serial, level);
-      res.json({ ok: true });
+      const result = await android.probeChargingControl(serial);
+      chargingControlCache.set(serial, result);
+      res.json(result);
+    } catch (e: any) { res.status(500).json({ error: e?.message }); }
+  });
+
+  /** POST manually stop charging right now (one-shot). */
+  app.post("/api/mobile/devices/:serial/battery/stop", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const probe  = chargingControlCache.get(serial);
+      if (probe?.supported) {
+        await android.stopPhysicalCharging(serial, probe as Extract<android.ChargingControlSupport, { supported: true }>);
+        res.json({ ok: true, mode: "real" });
+      } else {
+        const { level } = z.object({ level: z.number().int().min(1).max(100).default(75) }).parse(req.body);
+        await android.setBatterySpoof(serial, level);
+        res.json({ ok: true, mode: "spoof" });
+      }
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
-  /** DELETE clear the spoof and restore real battery state. */
-  app.delete("/api/mobile/devices/:serial/battery/spoof", async (req: Request, res: Response) => {
+  /** POST resume charging right now. */
+  app.post("/api/mobile/devices/:serial/battery/resume", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
-      await android.clearBatterySpoof(serial);
+      const probe  = chargingControlCache.get(serial);
+      if (probe?.supported) {
+        await android.resumePhysicalCharging(serial, probe as Extract<android.ChargingControlSupport, { supported: true }>);
+      } else {
+        await android.clearBatterySpoof(serial);
+      }
       const e = batterySpoofTimers.get(serial);
       if (e) e.spoofActive = false;
       res.json({ ok: true });
@@ -5526,7 +5577,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         _startBatterySpoofCycle(serial, cfg);
       } else {
         _stopBatterySpoofCycle(serial);
-        await android.clearBatterySpoof(serial).catch(() => {/* device may be offline */});
+        const probe = chargingControlCache.get(serial);
+        if (probe?.supported) {
+          await android.resumePhysicalCharging(serial, probe as Extract<android.ChargingControlSupport, { supported: true }>).catch(() => {});
+        } else {
+          await android.clearBatterySpoof(serial).catch(() => {});
+        }
       }
       res.json({ ok: true });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }

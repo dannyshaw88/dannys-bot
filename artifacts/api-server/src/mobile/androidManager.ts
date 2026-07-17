@@ -4971,9 +4971,63 @@ export async function getBatteryInfo(serial: string): Promise<{
   };
 }
 
-/** Spoof the device battery to appear unplugged at `level`%.
- *  Works on all stock Android — apps read via BatteryManager API which
- *  returns the OS-reported state.  Physical charging is unaffected. */
+// Sysfs paths that gate physical charging on common chipsets / OEMs.
+// Ordered by likelihood — Xiaomi/Qualcomm first, then MTK, then generic.
+const CHARGING_SYSFS_PATHS = [
+  "/sys/class/power_supply/battery/charging_enabled",
+  "/sys/class/power_supply/battery/battery_charging_enabled",
+  "/sys/class/power_supply/bq2589x-charger/charging_enabled",
+  "/sys/class/power_supply/mtk-master-charger/charging_enabled",
+  "/sys/class/power_supply/wireless/charging_enabled",
+];
+
+export type ChargingControlSupport =
+  | { supported: true;  path: string; needsRoot: boolean }
+  | { supported: false; reason: string };
+
+/**
+ * Probe whether this device supports real hardware charging control via sysfs.
+ * Tries each known path with and without root.  Returns the first that works.
+ * Takes 2–5 s — run once and cache the result.
+ */
+export async function probeChargingControl(serial: string): Promise<ChargingControlSupport> {
+  const tools = detectToolset();
+  const adb   = requireTool(tools.adb, "adb");
+
+  for (const syspath of CHARGING_SYSFS_PATHS) {
+    // ── without root ────────────────────────────────────────────────────────
+    const readOut = await runAdb(adb, ["-s", serial, "shell", `cat ${syspath} 2>&1`]);
+    if (/^[01]\s*$/.test(readOut.trim())) {
+      // Path is readable — try writing
+      const writeOut = await runAdb(adb, ["-s", serial, "shell",
+        `echo 1 > ${syspath} 2>&1 && echo OK || echo FAIL`]);
+      if (writeOut.includes("OK")) {
+        return { supported: true, path: syspath, needsRoot: false };
+      }
+    }
+
+    // ── with root (su -c) ────────────────────────────────────────────────────
+    const rootRead = await runAdb(adb, ["-s", serial, "shell",
+      `su -c "cat ${syspath}" 2>&1`]);
+    if (/^[01]\s*$/.test(rootRead.trim())) {
+      const rootWrite = await runAdb(adb, ["-s", serial, "shell",
+        `su -c "echo 1 > ${syspath}" 2>&1 && echo OK || echo FAIL`]);
+      if (rootWrite.includes("OK")) {
+        return { supported: true, path: syspath, needsRoot: true };
+      }
+    }
+  }
+
+  return {
+    supported: false,
+    reason: "No writable sysfs charging path found on this device. " +
+      "Physical charging control requires either a rooted device or a smart " +
+      "USB hub with per-port power switching (hardware solution).",
+  };
+}
+
+/** App-level spoof: makes all apps see the battery as unplugged at `level`%.
+ *  Physical charging continues — fallback when sysfs is unavailable. */
 export async function setBatterySpoof(serial: string, level: number): Promise<void> {
   const tools = detectToolset();
   const adb   = requireTool(tools.adb, "adb");
@@ -4982,11 +5036,40 @@ export async function setBatterySpoof(serial: string, level: number): Promise<vo
     String(Math.min(100, Math.max(1, Math.round(level))))]);
 }
 
-/** Restore real battery state — clears the unplug / level override. */
+/** Clear the app-level spoof and restore real battery state. */
 export async function clearBatterySpoof(serial: string): Promise<void> {
   const tools = detectToolset();
   const adb   = requireTool(tools.adb, "adb");
   await runAdb(adb, ["-s", serial, "shell", "dumpsys", "battery", "reset"]);
+}
+
+/**
+ * Actually stop physical charging by writing 0 to the sysfs charging node.
+ * `support` must come from a successful `probeChargingControl()` call.
+ */
+export async function stopPhysicalCharging(
+  serial: string, support: Extract<ChargingControlSupport, { supported: true }>
+): Promise<void> {
+  const tools = detectToolset();
+  const adb   = requireTool(tools.adb, "adb");
+  const cmd = support.needsRoot
+    ? `su -c "echo 0 > ${support.path}"`
+    : `echo 0 > ${support.path}`;
+  await runAdb(adb, ["-s", serial, "shell", cmd]);
+}
+
+/**
+ * Resume physical charging by writing 1 to the sysfs charging node.
+ */
+export async function resumePhysicalCharging(
+  serial: string, support: Extract<ChargingControlSupport, { supported: true }>
+): Promise<void> {
+  const tools = detectToolset();
+  const adb   = requireTool(tools.adb, "adb");
+  const cmd = support.needsRoot
+    ? `su -c "echo 1 > ${support.path}"`
+    : `echo 1 > ${support.path}`;
+  await runAdb(adb, ["-s", serial, "shell", cmd]);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
