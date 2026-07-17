@@ -5530,8 +5530,8 @@ type MobileTab = "account" | "phonesettings" | "actionlog" | "metrics" | "log";
 const MOBILE_TABS: { id: MobileTab; label: string }[] = [
   { id: "account",      label: "Accounts"       },
   { id: "phonesettings",label: "Phone Settings" },
-  { id: "actionlog",    label: "Action Log"     },
   { id: "metrics",      label: "Metrics"        },
+  { id: "actionlog",    label: "Action Log"     },
   { id: "log",          label: "Debugging Log"  },
 ];
 const LOG_MAX_LINES = 500;
