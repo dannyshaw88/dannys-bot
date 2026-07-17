@@ -4438,16 +4438,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         tLog(`▶ View Reels done — ${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes`);
         // Return to the Instagram Home tab so any tool running after Reels
         // (especially Follow Users) always starts from the standard Home Feed.
-        // Without this, the device stays in the Reels viewer; tapping the
-        // Search tab from there navigates to the Reels-specific Explore page
-        // (different a11y layout) instead of the main Instagram Explore page
-        // where the text search bar lives, causing Follow to fail every time.
+        // Strategy: press Back first to exit the full-screen Reels viewer
+        // (from there findHomeTab is unreliable — the Reels a11y tree strips
+        // content-desc/resource-ids from the nav bar and the positional
+        // fallback can hit video controls instead). After Back the standard IG
+        // UI is restored; findHomeTab then works normally.
         try {
+          tLog("▶ View Reels — pressing Back to exit Reels viewer…");
+          await android.pressBack(serial);
+          await sleepOrAbort(serial, 1200);
           const homeTab = await android.findHomeTab(serial).catch(() => null);
           if (homeTab) {
             await android.tap(serial, homeTab.x, homeTab.y);
             await sleepOrAbort(serial, 800);
             tLog("▶ View Reels — tapped Home tab to restore feed state");
+          } else {
+            tLog("▶ View Reels — Back pressed; Home tab not found in a11y tree (non-fatal)");
           }
         } catch { /* non-fatal; Follow will attempt its own navigation */ }
       } else if (!viewReelsEnabled) {
