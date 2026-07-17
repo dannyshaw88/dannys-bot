@@ -1556,7 +1556,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // shares per post) is resolved fresh per post instead of assuming
           // a fixed layout. See findFeedActionIcons()'s doc comment.
           onLog?.(`Scroll ${i + 1}/${count}: scanning action bar…`);
-          const icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
+          let icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
+          // Like-only retry: if the full icon scan returned null but we want to
+          // like, the dump may have been taken before the post's action bar
+          // finished rendering after the scroll (timing). Wait 600 ms and
+          // re-run findFeedActionIcons once. Share-to-feed / share-via-DM do
+          // NOT retry — their icon positions are needed for a multi-step flow
+          // that must not proceed without confirmed coordinates.
+          if (!icons && wantLike) {
+            await sleepOrAbort(serial, 600);
+            icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
+            if (icons) {
+              onLog?.(`Scroll ${i + 1}/${count}: like-retry found the action bar`);
+            }
+          }
           if (!icons) {
             // No Like button found — this isn't a normal in-feed post right
             // now (Reel suggestion, ad, still animating in from the scroll,
