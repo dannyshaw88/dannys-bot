@@ -4648,7 +4648,7 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
                   <Button
                     type="button"
                     size="sm"
-                    className="px-2 text-[11px] gap-1.5 text-white hover:brightness-125 transition-all"
+                    className="px-2 text-[11px] gap-1.5 text-white hover:brightness-95 transition-all"
                     style={{ background: "#1AD2F2", border: "none", height: 28, width: 160 }}
                     onClick={() => setOpenSlotTool(i)}
                   >

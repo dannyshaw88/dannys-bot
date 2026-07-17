@@ -281,7 +281,7 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
       <button
         onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
         onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
-        className="flex items-center justify-center gap-1 rounded-md px-2 transition-opacity hover:opacity-75"
+        className="flex items-center justify-center gap-1 rounded-md px-2 transition-all hover:brightness-95"
         style={{
           background: current ? current.bg : "transparent",
           border: current ? `1px solid ${current.border}` : "1px dashed #94a3b8",
