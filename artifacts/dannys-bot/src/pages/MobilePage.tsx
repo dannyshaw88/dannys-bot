@@ -2,7 +2,7 @@
  * Mobile Farm — USB Phone Management (4-slot single row, Electron-safe WS)
  */
 
-import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, type ReactNode } from "react";
+import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, useMemo, type ReactNode } from "react";
 import { useParams } from "wouter";
 import { Sidebar, FilledFarmIcon } from "@/components/layout/Sidebar";
 import { Label } from "@/components/ui/label";
@@ -4854,25 +4854,88 @@ function ActionLogPanel({ lines, onClear }: { lines: string[]; onClear: () => vo
 
 // ─── Metrics Panel ────────────────────────────────────────────────────────────
 
-function MetricsPanel({ slotCount }: { slotCount: number }) {
-  const slots = Array.from({ length: Math.max(slotCount, 1) }, (_, i) => i);
+interface SlotStats {
+  cycles: number; likes: number; follows: number;
+  stories: number; reels: number; dms: number; feedShares: number;
+}
+const EMPTY_STATS = (): SlotStats => ({ cycles: 0, likes: 0, follows: 0, stories: 0, reels: 0, dms: 0, feedShares: 0 });
+
+function MetricsPanel({ serial, actionLogLines }: { serial: string | null; actionLogLines: string[] }) {
+  const [slotUsernames, setSlotUsernames] = useState<string[]>([]);
+
+  // Load configured slot usernames from the server whenever the phone changes.
+  useEffect(() => {
+    if (!serial) { setSlotUsernames([]); return; }
+    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/account`)
+      .then(r => r.json())
+      .then(d => {
+        const names: string[] = (d?.slots ?? []).map((s: any) => s?.username ?? "").filter(Boolean);
+        setSlotUsernames(names);
+      })
+      .catch(() => {});
+  }, [serial]);
+
+  // Aggregate per-account stats from Action Log lines.
+  // Line format: [date]  @username — Cycle complete — X liked  ·  Y stories  ·  Z followed …
+  const statsByUsername = useMemo(() => {
+    const acc: Record<string, SlotStats> = {};
+    const num = (text: string, re: RegExp) => { const m = text.match(re); return m ? parseInt(m[1], 10) : 0; };
+    for (const line of actionLogLines) {
+      const m = line.match(/@(\S+)\s*—\s*Cycle complete/);
+      if (!m) continue;
+      const u = m[1];
+      if (!acc[u]) acc[u] = EMPTY_STATS();
+      acc[u].cycles++;
+      acc[u].likes      += num(line, /(\d+)\s+liked/);
+      acc[u].follows    += num(line, /(\d+)\s+followed/);
+      acc[u].stories    += num(line, /(\d+)\s+stories/);
+      acc[u].reels      += num(line, /(\d+)\s+reels/);
+      acc[u].dms        += num(line, /(\d+)\s+DM'd/);
+      acc[u].feedShares += num(line, /(\d+)\s+feed-shared/);
+    }
+    return acc;
+  }, [actionLogLines]);
+
+  // Show every configured slot username; append any extra usernames seen in the log.
+  const allUsernames = useMemo(() => {
+    const seen = new Set<string>();
+    const names: string[] = [];
+    for (const u of slotUsernames) { if (u && !seen.has(u)) { seen.add(u); names.push(u); } }
+    for (const u of Object.keys(statsByUsername)) { if (!seen.has(u)) { seen.add(u); names.push(u); } }
+    return names;
+  }, [slotUsernames, statsByUsername]);
+
+  const METRIC_DEFS: { label: string; key: keyof SlotStats }[] = [
+    { label: "Cycles",       key: "cycles"     },
+    { label: "Likes",        key: "likes"       },
+    { label: "Follows",      key: "follows"     },
+    { label: "Story Views",  key: "stories"     },
+    { label: "Reels Viewed", key: "reels"       },
+    { label: "DMs Sent",     key: "dms"         },
+    { label: "Feed Shares",  key: "feedShares"  },
+  ];
+
   return (
     <div className="h-full overflow-y-auto p-6 space-y-4">
       <h2 className="text-lg font-bold text-foreground">Metrics</h2>
-      <p className="text-xs text-muted-foreground">Per-account statistics — coming soon.</p>
-      {slots.map(i => (
-        <div key={i} className="bg-card border border-border rounded-xl p-5 space-y-3">
-          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Instagram Account Slot {i + 1}</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {["Likes", "Follows", "Unfollows", "Scrolls", "Story Views", "DMs Sent"].map(label => (
-              <div key={label} className="bg-background border border-border rounded-lg p-3 flex flex-col gap-1">
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</span>
-                <span className="text-2xl font-bold text-foreground">—</span>
-              </div>
-            ))}
+      {allUsernames.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No accounts configured yet.</p>
+      ) : allUsernames.map(username => {
+        const s = statsByUsername[username] ?? EMPTY_STATS();
+        return (
+          <div key={username} className="bg-card border border-border rounded-xl p-5 space-y-3">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">@{username}</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {METRIC_DEFS.map(({ label, key }) => (
+                <div key={label} className="bg-background border border-border rounded-lg p-3 flex flex-col gap-1">
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</span>
+                  <span className="text-2xl font-bold text-foreground">{s[key] || "—"}</span>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -5404,7 +5467,7 @@ export function MobilePage() {
                   />
                 )}
                 {activeTab === "metrics" && (
-                  <MetricsPanel slotCount={slots.filter(Boolean).length} />
+                  <MetricsPanel serial={activeSerial ?? null} actionLogLines={actionLogLines} />
                 )}
                 {activeTab === "log"     && (
                   <LogPanel
