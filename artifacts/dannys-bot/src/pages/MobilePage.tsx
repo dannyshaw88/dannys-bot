@@ -2360,10 +2360,12 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             // retry; serverCycleRunning polling will keep the mirror live.
             onLog?.("Cycle deferred — server cycle already in progress, will retry after interval");
           } else {
-            onLog?.(`Cycle failed — ${body?.error ?? r.status}${body?.steps?.length ? ` (reached: ${body.steps.join(", ")})` : ""}`);
+            const acctTag = slotUsername ? `@${slotUsername} — ` : "";
+            onLog?.(`${acctTag}Cycle failed — ${body?.error ?? r.status}${body?.steps?.length ? ` (reached: ${body.steps.join(", ")})` : ""}`);
           }
         } else {
           {
+            const acctTag = slotUsername ? `@${slotUsername} — ` : "";
             const parts: string[] = [];
             if (body.likes)          parts.push(`${body.likes} liked`);
             if (body.storiesWatched) parts.push(`${body.storiesWatched} stories`);
@@ -2373,15 +2375,17 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             const reelsStep = (body.steps as string[] | undefined)?.find((s: string) => s.startsWith("reels("));
             const reelsViewed = reelsStep ? parseInt(reelsStep.match(/(\d+)\s+viewed/)?.[1] ?? "0", 10) : 0;
             if (reelsViewed)         parts.push(`${reelsViewed} reels`);
-            onLog?.(`Cycle complete — ${parts.length ? parts.join("  ·  ") : "no actions taken"}`);
+            onLog?.(`${acctTag}Cycle complete — ${parts.length ? parts.join("  ·  ") : "no actions taken"}`);
           }
         }
       } catch (e: any) {
         if ((e as any)?.name === "AbortError") {
-          onLog?.("Cycle aborted — toggle turned off");
+          const acctTag = slotUsername ? `@${slotUsername} — ` : "";
+          onLog?.(`${acctTag}Cycle aborted — toggle turned off`);
           return;
         }
-        onLog?.(`Cycle failed — ${e?.message ?? "network error"}`);
+        const acctTag = slotUsername ? `@${slotUsername} — ` : "";
+        onLog?.(`${acctTag}Cycle failed — ${e?.message ?? "network error"}`);
       } finally {
         cycleAbortRef.current = null;
         cycleIdRef.current = null;
@@ -5106,7 +5110,7 @@ const BOT_TAP_RE = /tapp(?:ing|ed)[^\n(]*\((\d+),\s*(\d+)\)/i;
 // Regex for filtering action-only lines into the Action Log tab.
 // Matches automation action keywords emitted by the engine.
 // Only cycle-level outcome lines go to the Action Log — no debug noise.
-const ACTION_LOG_RE = /^Cycle\s+(complete|failed|aborted)/i;
+const ACTION_LOG_RE = /Cycle\s+(complete|failed|aborted)/i;
 
 export function MobilePage() {
   // When navigated from the Phone Farm grid (/mobile/farm/:serial), only this
