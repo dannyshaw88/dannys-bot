@@ -1,6 +1,69 @@
 # Changelog
 
-All notable changes to Equinox are documented here.
+All notable changes to Aura Farming are documented here.
+
+---
+
+## [1.1.667] — 2026-07-17
+
+### Accounts Page — Slot ← / → navigation buttons in Human Session Tool header
+
+- Added **Slot ←** and **Slot →** buttons to the right side of the Human Session Tool header bar (the breadcrumb row that shows "Human Session Tool for @username").
+- Clicking **Slot ←** opens the previous slot's Human Session Tool directly, without going back to the Accounts list first.
+- Clicking **Slot →** opens the next slot's Human Session Tool directly.
+- Both buttons are disabled at the boundaries (← disabled on slot 1, → disabled on the last slot).
+- To jump from slot 1 to slot 4, click → three times — no need to return to the accounts list between slots.
+
+### Accounts Page — Recycle bin and Human Session Tool button positions swapped
+
+- The **recycle bin** (delete slot) icon has moved to the **right side** of the slot header row.
+- The **Human Session Tool** button has moved to the **left side**, immediately after the slot title.
+- This makes the destructive action (delete) harder to accidentally hit and gives the most-used action (open Human Session Tool) the most prominent position.
+
+### Accounts Page — Trust Score badge on every slot
+
+- Each account slot header now shows a **Trust Score pill badge** between the slot title and the Human Session Tool button.
+- The pill matches the exact same height, border radius, and padding as the Human Session Tool button.
+- When a score is set it shows the trust level's icon and label in the level's own colour.
+- When no score is set it shows a dashed "Score" placeholder in grey.
+- Clicking the pill opens a **scrollable dropdown** (capped at 5 visible rows, scrolls for the rest) listing every trust level from the Trust Scores configuration.
+- Selecting a level saves it instantly. A "Clear score" option appears at the bottom of the dropdown when a score is already set.
+- Trust scores for mobile slots are stored in `localStorage` under the key `mobile_ts_{serial}_{slotIdx}` — completely independent of the browser-profile trust score system and persistent across restarts.
+
+### Human Session Tool header — Trust Score badge after @username
+
+- The same Trust Score badge now appears in the **Human Session Tool header breadcrumb**, directly after the account's @username (e.g. "Human Session Tool for @lisaberry2001 [WARMUP pill]").
+- Since both the slot card and the HST header use the same component and the same localStorage key, changing the score in either place is immediately reflected in the other.
+
+### Tools — Ghost Browser tab removed
+
+- The **Ghost Browser** tab has been removed from the Tools page entirely.
+- The `/create-ghost` route has been removed from the app router.
+- All imports and references to `GhostBrowserTabContent` and `CreateGhostPage` have been cleaned up.
+
+### Tools → Import — Device selector: import accounts directly as phone slots
+
+- The **Import** tab (Bulk Account Import) now includes a **Target Device** selector at the top of the form, populated from the live list of USB-connected phones.
+- When a device is selected, clicking **Add to Device Slots** loads the device's existing account slots, merges the imported accounts in (skipping any username that already exists on that device), and saves the merged list back via `POST /api/mobile/devices/:serial/account`.
+- The button label changes to "Add to Device Slots" when a device is selected and "Add to Accounts" when no device is selected (preserving the original profile-creation behaviour as the fallback).
+- Duplicate usernames (already present on the selected device) are marked as "Already exists on this device" errors rather than silently overwriting.
+- If no phone is connected the selector is hidden and import continues to work as before (creates browser profiles).
+
+### Copy Settings dialog — Trust Score badge next to each target slot
+
+- The **Copy to** list in the Copy Settings dialog now shows each slot's Trust Score badge next to its @username.
+- The badge is fully interactive — you can change a slot's score directly from inside the Copy Settings dialog before copying.
+
+### Copy Settings dialog — Individual sub-settings for every section
+
+- The **Settings** panel in Copy Settings has been completely redesigned. Each main section (View Feed, View Stories, View Reels, Follow Users, Inject Browsing, Follow Filters, Random Jitter, Make a Post, etc.) now shows as a **collapsible group** with a parent checkbox and individually selectable sub-settings beneath it.
+- Sub-settings example for **View Feed**: Enabled, Activate Percentage, Scroll amount, Like %, Share to Feed %, Share via DM % — each independently checkable.
+- Sub-settings example for **Follow Filters**: Enabled, Skip Private users, English Speaking only, 250+ Followers minimum, Skip Verified users — each independently checkable.
+- Sub-settings example for **Inject Browsing**: Enabled, Activate Percentage, Before Follow %, Feed browse chance %, Feed posts to view, Click post %, Like %, Share to Feed %, Share DM %.
+- The parent section checkbox is **tri-state**: checked (all sub-settings selected), indeterminate (some selected), or unchecked (none selected). Clicking the parent toggles all its children at once.
+- **All** / **None** buttons at the top of the Settings panel now control every sub-setting across all sections simultaneously.
+- **Follow Filters** was previously absent from the visible settings list due to overflow — it is now always visible as its own group with all five filter sub-settings individually selectable.
+- The dialog is now taller (`max-w-3xl`, `max-h-[90vh]`) with a scrollable settings panel so all sections are accessible regardless of screen height.
 
 ---
 
