@@ -4325,10 +4325,10 @@ function SlotTrustScoreBadge({ serial, slotIdx }: { serial: string; slotIdx: num
         type="button"
         onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
         onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
-        className="inline-flex h-6 items-center justify-center gap-1.5 rounded-md border px-2 text-[11px] font-semibold transition-colors hover:bg-muted/40"
+        className="inline-flex items-center justify-center gap-1.5 rounded-md border px-2 text-[11px] font-semibold transition-all hover:brightness-125"
         style={current
-          ? { background: current.bg, borderColor: current.border, color: current.text, minWidth: 140 }
-          : { background: "transparent", borderStyle: "dashed", borderColor: "#94a3b8", color: "#94a3b8", minWidth: 140 }
+          ? { background: current.bg, borderColor: current.border, color: current.text, minWidth: 140, height: 28 }
+          : { background: "transparent", borderStyle: "dashed", borderColor: "#94a3b8", color: "#94a3b8", minWidth: 140, height: 28 }
         }
         title={current ? current.label : "Click to set Trust Score"}
       >
@@ -4647,8 +4647,8 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
                   <Button
                     type="button"
                     size="sm"
-                    className="h-6 px-2 text-[11px] gap-1.5 text-white hover:opacity-90"
-                    style={{ background: "#1AD2F2", border: "none" }}
+                    className="px-2 text-[11px] gap-1.5 text-white hover:brightness-125 transition-all"
+                    style={{ background: "#1AD2F2", border: "none", height: 28 }}
                     onClick={() => setOpenSlotTool(i)}
                   >
                     HUMAN SESSION TOOL
