@@ -25,6 +25,65 @@ import { HikerApiClient } from "../instagram/hikerApiClient";
 
 const execFileP = promisify(execFile);
 
+// ── Battery-spoof scheduler ────────────────────────────────────────────────
+// Per-serial in-memory state.  Config is also persisted to global_settings
+// so the schedule survives a server restart (re-loaded on first GET).
+interface BatterySpoofConfig {
+  enabled: boolean;
+  unplugMinutes: number;  // how long each spoof window lasts
+  cycleHours: number;     // repeat interval
+  spoofLevel: number;     // battery % shown to apps while spoofed
+}
+interface BatterySpoofEntry {
+  interval:     ReturnType<typeof setInterval> | null;
+  resetTimeout: ReturnType<typeof setTimeout>  | null;
+  spoofActive:  boolean;
+  nextAt:       number | null; // epoch ms of next unplug
+}
+const batterySpoofTimers  = new Map<string, BatterySpoofEntry>();
+const batterySpoofConfigs = new Map<string, BatterySpoofConfig>();
+
+function _stopBatterySpoofCycle(serial: string) {
+  const e = batterySpoofTimers.get(serial);
+  if (!e) return;
+  if (e.interval)     clearInterval(e.interval);
+  if (e.resetTimeout) clearTimeout(e.resetTimeout);
+  batterySpoofTimers.delete(serial);
+}
+
+function _startBatterySpoofCycle(serial: string, cfg: BatterySpoofConfig) {
+  _stopBatterySpoofCycle(serial);
+  const cycleMs  = cfg.cycleHours     * 3_600_000;
+  const unplugMs = cfg.unplugMinutes  *    60_000;
+
+  const runUnplug = async () => {
+    try {
+      await android.setBatterySpoof(serial, cfg.spoofLevel);
+      const e = batterySpoofTimers.get(serial);
+      if (e) e.spoofActive = true;
+      logger.info(`[battery-spoof] ${serial}: active — reporting ${cfg.spoofLevel}% unplugged`);
+      const rt = setTimeout(async () => {
+        try {
+          await android.clearBatterySpoof(serial);
+          const e2 = batterySpoofTimers.get(serial);
+          if (e2) { e2.spoofActive = false; e2.resetTimeout = null; }
+          logger.info(`[battery-spoof] ${serial}: cleared — real state restored`);
+        } catch (err: any) {
+          logger.error(`[battery-spoof] ${serial}: clear error: ${err?.message}`);
+        }
+      }, unplugMs);
+      const e2 = batterySpoofTimers.get(serial);
+      if (e2) { e2.resetTimeout = rt; e2.nextAt = Date.now() + cycleMs; }
+    } catch (err: any) {
+      logger.error(`[battery-spoof] ${serial}: spoof error: ${err?.message}`);
+    }
+  };
+
+  runUnplug();
+  const iv = setInterval(runUnplug, cycleMs);
+  batterySpoofTimers.set(serial, { interval: iv, resetTimeout: null, spoofActive: false, nextAt: Date.now() + cycleMs });
+}
+
 // In-memory cache for android IDs — avoids repeated slow ADB reads after a
 // successful write. Keyed by device serial. Cleared only on server restart or
 // explicit reset; the value on-device is the source of truth for first-read.
@@ -5385,5 +5444,91 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) {
       res.status(500).json({ error: e?.message ?? "Deactivate failed" });
     }
+  });
+
+  // ── Battery spoof ──────────────────────────────────────────────────────────
+
+  /** GET current battery info + active spoof state. */
+  app.get("/api/mobile/devices/:serial/battery", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const info   = await android.getBatteryInfo(serial);
+      const timer  = batterySpoofTimers.get(serial) ?? null;
+      const cfg    = batterySpoofConfigs.get(serial) ?? null;
+      res.json({
+        ...info,
+        spoof: {
+          active:  timer?.spoofActive  ?? false,
+          nextAt:  timer?.nextAt       ?? null,
+          config:  cfg,
+        },
+      });
+    } catch (e: any) { res.status(500).json({ error: e?.message }); }
+  });
+
+  /** POST manually apply the spoof right now (one-shot, no schedule). */
+  app.post("/api/mobile/devices/:serial/battery/spoof", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const { level } = z.object({ level: z.number().int().min(1).max(100) }).parse(req.body);
+      await android.setBatterySpoof(serial, level);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
+
+  /** DELETE clear the spoof and restore real battery state. */
+  app.delete("/api/mobile/devices/:serial/battery/spoof", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      await android.clearBatterySpoof(serial);
+      const e = batterySpoofTimers.get(serial);
+      if (e) e.spoofActive = false;
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ error: e?.message }); }
+  });
+
+  /** GET current schedule config for a serial (loads from DB on first call). */
+  app.get("/api/mobile/devices/:serial/battery/schedule", async (req: Request, res: Response) => {
+    try {
+      const serial  = p(req, "serial");
+      // Lazy-load from DB if not already in memory (e.g. after server restart).
+      if (!batterySpoofConfigs.has(serial)) {
+        const all = await storage.getGlobalSettings();
+        const raw = all[`battery_schedule_${serial}`];
+        if (raw) {
+          const cfg: BatterySpoofConfig = JSON.parse(raw);
+          batterySpoofConfigs.set(serial, cfg);
+          // Re-arm the scheduler if it was enabled when the server restarted.
+          if (cfg.enabled && !batterySpoofTimers.has(serial)) {
+            _startBatterySpoofCycle(serial, cfg);
+          }
+        }
+      }
+      const cfg   = batterySpoofConfigs.get(serial) ?? null;
+      const timer = batterySpoofTimers.get(serial) ?? null;
+      res.json({ config: cfg, active: !!timer, spoofActive: timer?.spoofActive ?? false, nextAt: timer?.nextAt ?? null });
+    } catch (e: any) { res.status(500).json({ error: e?.message }); }
+  });
+
+  /** POST save schedule config and start/stop the cycle. */
+  app.post("/api/mobile/devices/:serial/battery/schedule", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const cfg    = z.object({
+        enabled:       z.boolean(),
+        unplugMinutes: z.number().int().min(1).max(1440),
+        cycleHours:    z.number().min(0.5).max(24),
+        spoofLevel:    z.number().int().min(1).max(100),
+      }).parse(req.body) as BatterySpoofConfig;
+      batterySpoofConfigs.set(serial, cfg);
+      await storage.setGlobalSetting(`battery_schedule_${serial}`, JSON.stringify(cfg));
+      if (cfg.enabled) {
+        _startBatterySpoofCycle(serial, cfg);
+      } else {
+        _stopBatterySpoofCycle(serial);
+        await android.clearBatterySpoof(serial).catch(() => {/* device may be offline */});
+      }
+      res.json({ ok: true });
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 }

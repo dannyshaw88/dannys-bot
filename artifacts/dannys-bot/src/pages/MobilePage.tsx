@@ -4200,6 +4200,206 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
   );
 }
 
+// ─── Phone Settings Panel ──────────────────────────────────────────────────────
+
+function PhoneSettingsPanel({ serial }: { serial: string | null }) {
+  // ── Battery info (live poll) ─────────────────────────────────────────────
+  const [battInfo, setBattInfo] = React.useState<{
+    level: number; status: string; plugged: string; temperatureC: number;
+    spoof: { active: boolean; nextAt: number | null; config: BatterySpoofSchedule | null };
+  } | null>(null);
+  const [battError, setBattError] = React.useState<string | null>(null);
+
+  interface BatterySpoofSchedule {
+    enabled: boolean; unplugMinutes: number; cycleHours: number; spoofLevel: number;
+  }
+
+  // ── Form state ───────────────────────────────────────────────────────────
+  const [enabled,       setEnabled]       = React.useState(false);
+  const [unplugMinutes, setUnplugMinutes] = React.useState(30);
+  const [cycleHours,    setCycleHours]    = React.useState(4);
+  const [spoofLevel,    setSpoofLevel]    = React.useState(72);
+  const [saving,        setSaving]        = React.useState(false);
+  const [saveMsg,       setSaveMsg]       = React.useState<string | null>(null);
+  const [spoofing,      setSpoofing]      = React.useState(false);
+  const [resetting,     setResetting]     = React.useState(false);
+
+  const applyScheduleToForm = React.useCallback((cfg: BatterySpoofSchedule) => {
+    setEnabled(cfg.enabled);
+    setUnplugMinutes(cfg.unplugMinutes);
+    setCycleHours(cfg.cycleHours);
+    setSpoofLevel(cfg.spoofLevel);
+  }, []);
+
+  // Load schedule config once on mount / serial change
+  React.useEffect(() => {
+    if (!serial) return;
+    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/battery/schedule`)
+      .then(r => r.json()).then(data => { if (data.config) applyScheduleToForm(data.config); })
+      .catch(() => {});
+  }, [serial, applyScheduleToForm]);
+
+  // Poll live battery info every 10 s
+  React.useEffect(() => {
+    if (!serial) return;
+    const poll = async () => {
+      try {
+        const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/battery`);
+        if (!r.ok) throw new Error(await r.text());
+        setBattInfo(await r.json());
+        setBattError(null);
+      } catch (e: any) { setBattError(e?.message ?? "fetch error"); }
+    };
+    poll();
+    const id = setInterval(poll, 10_000);
+    return () => clearInterval(id);
+  }, [serial]);
+
+  const handleSave = async () => {
+    if (!serial) return;
+    setSaving(true); setSaveMsg(null);
+    try {
+      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/battery/schedule`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled, unplugMinutes, cycleHours, spoofLevel }),
+      });
+      if (!r.ok) throw new Error((await r.json())?.error ?? r.status);
+      setSaveMsg(enabled ? "Schedule saved & started" : "Schedule saved & stopped");
+      setTimeout(() => setSaveMsg(null), 2500);
+    } catch (e: any) { setSaveMsg(`Error: ${e?.message}`); }
+    finally { setSaving(false); }
+  };
+
+  const handleSpoofNow = async () => {
+    if (!serial) return;
+    setSpoofing(true);
+    try {
+      await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/battery/spoof`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ level: spoofLevel }),
+      });
+    } finally { setSpoofing(false); }
+  };
+
+  const handleResetNow = async () => {
+    if (!serial) return;
+    setResetting(true);
+    try {
+      await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/battery/spoof`, { method: "DELETE" });
+    } finally { setResetting(false); }
+  };
+
+  const spoofActive = battInfo?.spoof?.active ?? false;
+
+  return (
+    <div className="h-full overflow-y-auto p-6 space-y-6">
+      <h2 className="text-lg font-bold text-foreground">Phone Settings</h2>
+
+      {/* ── Battery Charging Spoof ─────────────────────────────────────── */}
+      <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Battery Charging Spoof</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Makes Instagram see the device as unplugged and at a set battery level — the USB cable stays connected and the phone keeps physically charging. Runs on a repeating schedule.
+            </p>
+          </div>
+          <Switch checked={enabled} onCheckedChange={setEnabled} />
+        </div>
+
+        {/* Live battery status */}
+        {!serial ? (
+          <p className="text-xs text-muted-foreground">No device connected.</p>
+        ) : battError ? (
+          <p className="text-xs text-destructive">{battError}</p>
+        ) : battInfo ? (
+          <div className="flex items-center gap-4 text-xs flex-wrap">
+            <span className="text-muted-foreground">
+              Real battery: <span className="font-mono font-semibold text-foreground">{battInfo.level}%</span>
+            </span>
+            <span className="text-muted-foreground">
+              Status: <span className="font-mono text-foreground">{battInfo.status}</span>
+            </span>
+            <span className="text-muted-foreground">
+              Plugged: <span className="font-mono text-foreground">{battInfo.plugged}</span>
+            </span>
+            <span className="text-muted-foreground">
+              Temp: <span className="font-mono text-foreground">{battInfo.temperatureC}°C</span>
+            </span>
+            {spoofActive && (
+              <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 font-semibold">
+                Spoof active — apps see {battInfo.spoof?.config?.spoofLevel ?? spoofLevel}% unplugged
+              </span>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">Loading battery info…</p>
+        )}
+
+        {/* Schedule controls */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Appear unplugged for (minutes)</Label>
+            <Input
+              type="number"
+              min={1} max={1440}
+              value={unplugMinutes}
+              onChange={e => setUnplugMinutes(Math.max(1, parseInt(e.target.value) || 1))}
+              className="w-full"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Repeat every (hours)</Label>
+            <Input
+              type="number"
+              min={0.5} max={24} step={0.5}
+              value={cycleHours}
+              onChange={e => setCycleHours(Math.max(0.5, parseFloat(e.target.value) || 0.5))}
+              className="w-full"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Show battery level (%) while spoofed</Label>
+            <Input
+              type="number"
+              min={1} max={100}
+              value={spoofLevel}
+              onChange={e => setSpoofLevel(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+              className="w-full"
+            />
+          </div>
+        </div>
+
+        {battInfo?.spoof?.nextAt && enabled && (
+          <p className="text-xs text-muted-foreground">
+            Next spoof cycle: {new Date(battInfo.spoof.nextAt).toLocaleTimeString()}
+          </p>
+        )}
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button onClick={handleSave} disabled={saving || !serial}>
+            {saving ? "Saving…" : "Save Schedule"}
+          </Button>
+          <Button type="button" variant="secondary" onClick={handleSpoofNow} disabled={spoofing || !serial}>
+            {spoofing ? "Spoofing…" : "Spoof Now"}
+          </Button>
+          <Button type="button" variant="secondary" onClick={handleResetNow} disabled={resetting || !serial}>
+            {resetting ? "Resetting…" : "Reset Now"}
+          </Button>
+          {saveMsg && <span className="text-xs text-muted-foreground">{saveMsg}</span>}
+        </div>
+
+        <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+          Note: this spoofs the battery state at the Android OS level. All apps (including Instagram) read battery via the system BatteryManager API, which returns the spoofed values. Physical charging through USB is unaffected. <code className="font-mono">dumpsys battery reset</code> restores real values.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Action Log Panel ─────────────────────────────────────────────────────────
 
 function ActionLogPanel({ lines, onClear }: { lines: string[]; onClear: () => void }) {
@@ -4500,12 +4700,13 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
 
 const TOTAL_SLOTS = 1;
 
-type MobileTab = "account" | "actionlog" | "metrics" | "log";
+type MobileTab = "account" | "phonesettings" | "actionlog" | "metrics" | "log";
 const MOBILE_TABS: { id: MobileTab; label: string }[] = [
-  { id: "account",   label: "Accounts"       },
-  { id: "actionlog", label: "Action Log"     },
-  { id: "metrics",   label: "Metrics"        },
-  { id: "log",       label: "Debugging Log"  },
+  { id: "account",      label: "Accounts"       },
+  { id: "phonesettings",label: "Phone Settings" },
+  { id: "actionlog",    label: "Action Log"     },
+  { id: "metrics",      label: "Metrics"        },
+  { id: "log",          label: "Debugging Log"  },
 ];
 const LOG_MAX_LINES = 500;
 
@@ -4801,6 +5002,9 @@ export function MobilePage() {
                 <div className={activeTab === "account" ? "h-full" : "hidden"}>
                   <AccountSettingsPanel phone={slots[0]} addLog={addLog} />
                 </div>
+                {activeTab === "phonesettings" && (
+                  <PhoneSettingsPanel serial={activeSerial} />
+                )}
                 {activeTab === "actionlog" && (
                   <ActionLogPanel
                     lines={actionLogLines}

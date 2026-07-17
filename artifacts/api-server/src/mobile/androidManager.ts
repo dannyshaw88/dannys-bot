@@ -4944,6 +4944,53 @@ export async function tapFollowButtonOnProfilePage(serial: string): Promise<bool
   return confirmed;
 }
 
+// ─── Battery spoof ────────────────────────────────────────────────────────────
+
+/** Read the current battery status from dumpsys battery. */
+export async function getBatteryInfo(serial: string): Promise<{
+  level: number;
+  status: string;
+  plugged: string;
+  present: boolean;
+  temperatureC: number;
+  raw: string;
+}> {
+  const tools = detectToolset();
+  const adb   = requireTool(tools.adb, "adb");
+  const raw   = await runAdb(adb, ["-s", serial, "shell", "dumpsys", "battery"]);
+  const get   = (key: string) => { const m = raw.match(new RegExp(`${key}:\\s*(.+)`)); return m ? m[1].trim() : ""; };
+  const statusMap: Record<string, string> = { "1": "Unknown", "2": "Charging", "3": "Discharging", "4": "Not Charging", "5": "Full" };
+  const pluggedMap: Record<string, string> = { "0": "Unplugged", "1": "AC", "2": "USB", "4": "Wireless" };
+  return {
+    level:        parseInt(get("level") || "0", 10),
+    status:       statusMap[get("status")] ?? get("status"),
+    plugged:      pluggedMap[get("plugged")] ?? get("plugged"),
+    present:      get("present") === "true",
+    temperatureC: parseInt(get("temperature") || "0", 10) / 10,
+    raw,
+  };
+}
+
+/** Spoof the device battery to appear unplugged at `level`%.
+ *  Works on all stock Android — apps read via BatteryManager API which
+ *  returns the OS-reported state.  Physical charging is unaffected. */
+export async function setBatterySpoof(serial: string, level: number): Promise<void> {
+  const tools = detectToolset();
+  const adb   = requireTool(tools.adb, "adb");
+  await runAdb(adb, ["-s", serial, "shell", "dumpsys", "battery", "unplug"]);
+  await runAdb(adb, ["-s", serial, "shell", "dumpsys", "battery", "set", "level",
+    String(Math.min(100, Math.max(1, Math.round(level))))]);
+}
+
+/** Restore real battery state — clears the unplug / level override. */
+export async function clearBatterySpoof(serial: string): Promise<void> {
+  const tools = detectToolset();
+  const adb   = requireTool(tools.adb, "adb");
+  await runAdb(adb, ["-s", serial, "shell", "dumpsys", "battery", "reset"]);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 /** Deactivate Drony: open it and tap the ON/active toggle. */
 export async function deactivateDrony(serial: string): Promise<{ ok: boolean; steps: string[] }> {
   const tools = detectToolset();
