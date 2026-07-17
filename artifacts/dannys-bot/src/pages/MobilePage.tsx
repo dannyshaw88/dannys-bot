@@ -3508,6 +3508,40 @@ function AutomationSettingsPanel({
           </div>
         </div>}
 
+        {/* ── Followed Users panel (toggled via the Followed button above) */}
+        <div className="space-y-2">
+          {showFollowedUsers && (
+            <div className="border border-border rounded-lg overflow-hidden">
+              {loadingFollowed ? (
+                <p className="text-xs text-muted-foreground p-3">Loading…</p>
+              ) : mobileFollowedList.length === 0 ? (
+                <p className="text-xs text-muted-foreground p-3">No users followed in this server session yet.</p>
+              ) : (
+                <div className="max-h-40 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-muted">
+                      <tr>
+                        <th className="text-left px-3 py-1.5 text-muted-foreground font-medium">Username</th>
+                        <th className="text-left px-3 py-1.5 text-muted-foreground font-medium">Source</th>
+                        <th className="text-left px-3 py-1.5 text-muted-foreground font-medium">Followed at</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mobileFollowedList.map((u, i) => (
+                        <tr key={i} className="border-t border-border">
+                          <td className="px-3 py-1.5 text-foreground">@{u.username}</td>
+                          <td className="px-3 py-1.5 text-muted-foreground">{u.source ?? '—'}</td>
+                          <td className="px-3 py-1.5 text-muted-foreground">{new Date(u.followedAt).toLocaleTimeString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* ── Target Sources panel (toggled via the Sources button above) ─ */}
         <div className="space-y-2">
           {showSources && (
@@ -4191,39 +4225,6 @@ function AutomationSettingsPanel({
           onSave={saved => setSettings(s => ({ ...s, makePostImageSettings: saved }))}
         />
 
-        {/* ── Followed Users panel (toggled via the Followed button above) */}
-        <div className="space-y-2">
-          {showFollowedUsers && (
-            <div className="border border-border rounded-lg overflow-hidden">
-              {loadingFollowed ? (
-                <p className="text-xs text-muted-foreground p-3">Loading…</p>
-              ) : mobileFollowedList.length === 0 ? (
-                <p className="text-xs text-muted-foreground p-3">No users followed in this server session yet.</p>
-              ) : (
-                <div className="max-h-40 overflow-y-auto">
-                  <table className="w-full text-xs">
-                    <thead className="sticky top-0 bg-muted">
-                      <tr>
-                        <th className="text-left px-3 py-1.5 text-muted-foreground font-medium">Username</th>
-                        <th className="text-left px-3 py-1.5 text-muted-foreground font-medium">Source</th>
-                        <th className="text-left px-3 py-1.5 text-muted-foreground font-medium">Followed at</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {mobileFollowedList.map((u, i) => (
-                        <tr key={i} className="border-t border-border">
-                          <td className="px-3 py-1.5 text-foreground">@{u.username}</td>
-                          <td className="px-3 py-1.5 text-muted-foreground">{u.source ?? '—'}</td>
-                          <td className="px-3 py-1.5 text-muted-foreground">{new Date(u.followedAt).toLocaleTimeString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Final Step */}
@@ -4643,7 +4644,7 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Instagram Account Slot {i + 1}</p>
-                  <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={i} />
+                  <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={i} width={openSlotTool === i ? 120 : 160} />
                   <Button
                     type="button"
                     size="sm"

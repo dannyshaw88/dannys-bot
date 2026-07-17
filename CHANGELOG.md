@@ -4,6 +4,19 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.1.671] — 2026-07-17
+
+### Accounts — TrustScore badge height increased by 5%
+The TrustScore badge on every account row is now 25px tall (up from 24px). The change is subtle but gives the badge slightly more breathing room and visual weight alongside the account controls.
+
+### Mobile Farm — TrustScore badge narrows when Human Session Tool is open
+When you click the "HUMAN SESSION TOOL" button for a slot, that slot's TrustScore badge automatically shrinks from 160px wide to 120px wide (a 25% reduction) to make room for the tool panel. The badge returns to full width when the tool panel is closed.
+
+### Mobile Farm — Follow Users: "Followed" panel moved to correct position
+The "Followed Users" table (shown by clicking the **Followed** button in the Follow Users section) was incorrectly appearing below the Make a Post section instead of inside the Follow Users section. It now expands directly below the Sources panel — right where it belongs, alongside the rest of the Follow Users controls.
+
+---
+
 ## [1.1.670] — 2026-07-17
 
 ### Mobile Farm — Tab renamed: "Phone Settings" → "My Device"
