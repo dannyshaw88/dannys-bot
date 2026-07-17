@@ -4284,6 +4284,7 @@ function SlotHumanSessionView({
         <span className="text-sm font-semibold text-foreground flex items-center gap-1.5 flex-1">
           <Fingerprint className="w-3.5 h-3.5 text-primary" />
           Human Session Tool {slotUsername ? `for @${slotUsername}` : `Slot ${slotIdx + 1}`}
+          <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={slotIdx} />
         </span>
         <Button variant="ghost" size="sm" onClick={onPrevSlot} disabled={isFirst} className="gap-1 h-7 px-2">
           <ChevronLeft className="w-3.5 h-3.5" />
