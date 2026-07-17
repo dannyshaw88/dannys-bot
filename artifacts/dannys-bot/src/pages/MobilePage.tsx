@@ -3,6 +3,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, useMemo, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useParams } from "wouter";
 import { Sidebar, FilledFarmIcon } from "@/components/layout/Sidebar";
 import { Label } from "@/components/ui/label";
@@ -20,6 +21,7 @@ import {
 
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
 import { ImageSettingsDialog, type ImageFilterSettings } from "@/components/tools/ImageSettingsDialog";
+import { getTrustLevels, type TrustLevelEntry } from "@/components/TrustScoreBadge";
 
 declare const __API_PORT__: string;
 
@@ -4109,6 +4111,142 @@ function AutomationSettingsPanel({
   );
 }
 
+// ── Slot-level Trust Score badge ─────────────────────────────────────────────
+// Stored in localStorage under key mobile_ts_{serial}_{slotIdx}, completely
+// independent of the Profiles trust score system.
+const ROW_H = 30; // px per dropdown row
+const MAX_VISIBLE_ROWS = 5;
+
+function SlotTrustScoreBadge({ serial, slotIdx }: { serial: string; slotIdx: number }) {
+  const lsKey = `mobile_ts_${serial}_${slotIdx}`;
+  const [scoreId, setScoreId] = useState<string | null>(() => {
+    try { return localStorage.getItem(lsKey) ?? null; } catch { return null; }
+  });
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
+
+  const levels: TrustLevelEntry[] = getTrustLevels();
+  const current = levels.find(l => l.id === scoreId) ?? null;
+
+  const save = (id: string | null) => {
+    try {
+      if (id) localStorage.setItem(lsKey, id);
+      else localStorage.removeItem(lsKey);
+    } catch {}
+    setScoreId(id);
+    setOpen(false);
+  };
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        btnRef.current && !btnRef.current.contains(e.target as Node) &&
+        dropRef.current && !dropRef.current.contains(e.target as Node)
+      ) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  // Dropdown position
+  const [dropStyle, setDropStyle] = useState<React.CSSProperties>({});
+  useEffect(() => {
+    if (!open || !btnRef.current) return;
+    const rect = btnRef.current.getBoundingClientRect();
+    const rowCount = levels.length + (scoreId ? 1 : 0); // +1 for clear row
+    const maxH = Math.min(rowCount, MAX_VISIBLE_ROWS) * ROW_H + 8;
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    const spaceAbove = rect.top - 8;
+    const top = spaceBelow >= maxH || spaceBelow >= spaceAbove
+      ? rect.bottom + 4
+      : rect.top - maxH - 4;
+    setDropStyle({
+      position: "fixed",
+      zIndex: 99999,
+      top,
+      left: rect.left,
+      width: 200,
+      maxHeight: maxH,
+      overflowY: "auto",
+      background: "hsl(var(--background, 0 0% 100%))",
+      border: "1px solid var(--border, #e5e7eb)",
+      borderRadius: 8,
+      boxShadow: "0 8px 32px rgba(0,0,0,0.24)",
+      padding: "4px 0",
+    });
+  }, [open, levels.length, scoreId]);
+
+  return (
+    <div className="relative inline-block shrink-0">
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+        className="inline-flex h-6 items-center gap-1.5 rounded-md border px-2 text-[11px] font-semibold transition-colors hover:bg-muted/40"
+        style={current
+          ? { background: current.bg, borderColor: current.border, color: current.text }
+          : { background: "transparent", borderStyle: "dashed", borderColor: "#94a3b8", color: "#94a3b8" }
+        }
+        title={current ? current.label : "Click to set Trust Score"}
+      >
+        {current ? (
+          <>
+            <current.icon size={10} color={current.text} fill={current.text} strokeWidth={2} style={{ flexShrink: 0 }} />
+            <span className="truncate" style={{ maxWidth: 70 }}>{current.label}</span>
+          </>
+        ) : (
+          <span>Score</span>
+        )}
+      </button>
+
+      {open && createPortal(
+        <div ref={dropRef} style={dropStyle}>
+          {levels.map(lvl => {
+            const Icon = lvl.icon;
+            const isActive = scoreId === lvl.id;
+            return (
+              <button
+                key={lvl.id}
+                type="button"
+                onClick={e => { e.stopPropagation(); save(lvl.id); }}
+                style={{
+                  width: "100%", display: "flex", alignItems: "center", gap: 8,
+                  padding: "5px 12px", height: ROW_H,
+                  background: isActive ? lvl.bg : "transparent",
+                  border: "none", borderLeft: isActive ? `3px solid ${lvl.border}` : "3px solid transparent",
+                  cursor: "pointer", textAlign: "left", outline: "none",
+                }}
+              >
+                <Icon size={12} color={isActive ? lvl.text : "#111827"} fill={isActive ? lvl.text : "none"} strokeWidth={2} />
+                <span style={{ fontSize: 11, fontWeight: 600, color: isActive ? lvl.text : "#111827", letterSpacing: "0.05em" }}>{lvl.label}</span>
+              </button>
+            );
+          })}
+          {scoreId && (
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); save(null); }}
+              style={{
+                width: "100%", display: "flex", alignItems: "center",
+                padding: "5px 12px", height: ROW_H,
+                background: "transparent", border: "none",
+                borderTop: "1px solid #e5e7eb", borderLeft: "3px solid transparent",
+                cursor: "pointer", textAlign: "left", outline: "none", marginTop: 2,
+              }}
+            >
+              <span style={{ fontSize: 11, fontWeight: 500, color: "#6b7280", letterSpacing: "0.05em" }}>Clear score</span>
+            </button>
+          )}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
 const ACCT_SLOT_COUNT = 5;
 const emptySlot = () => ({ username: "", password: "", totpSecret: "", emailAddress: "", emailPassword: "", phoneNumber: "" });
 type AccountSlot = { username: string; password: string; totpSecret: string; emailAddress: string; emailPassword: string; phoneNumber: string };
@@ -4364,10 +4502,11 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
         <div className="space-y-4">
           {slots.map((slot, i) => (
             <div key={i} className="bg-card border border-border rounded-xl p-5 space-y-3">
-              {/* Slot header: title + Human Session Tool button + Delete */}
+              {/* Slot header: title + Trust Score + Human Session Tool button + Delete */}
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Instagram Account Slot {i + 1}</p>
+                  <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={i} />
                   <Button
                     type="button"
                     variant="outline"
