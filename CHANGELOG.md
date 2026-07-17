@@ -4,6 +4,37 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.1.672] — 2026-07-17
+
+### Phone Farm — Real device names instead of model codes
+Phones on the Phone Farm grid now show their marketing name (e.g. "Xiaomi Redmi Note 12") instead of the raw Android model code (e.g. "Xiaomi 23076RN8DY"). New registrations fetch `ro.product.marketname` directly from the device via ADB. Existing registered devices are resolved against a built-in lookup table covering ~25 common Xiaomi, Redmi, and POCO models.
+
+### Phone Farm — Grey duplicate model code removed
+The secondary grey line that repeated the raw model code below the device name on each phone card has been removed. The card now shows only the single resolved name.
+
+### Phone Farm — Default account slots reduced from 5 to 1
+When a new device is added to the farm, it now starts with 1 Instagram account slot instead of 5. Extra slots can still be added manually as needed.
+
+### My Device — Google Play Account: icon added, saves automatically
+A coloured Google Play logo now appears next to the "Google Play Account" heading. The Save button has been removed — credentials now save automatically 800 ms after you stop typing, the same debounce pattern used by the Collision Scheduler.
+
+### My Device — SIM Card: real SIM icon, doubled in size, manual phone number entry
+The phone icon next to each SIM slot has been replaced with a proper SIM card icon at double the previous size. The separator between SIM number and carrier has changed from a double-hyphen ( — ) to a middle dot ( · ). Auto-detection of the phone number (which was failing) has been replaced with a plain text input so you can type the number manually.
+
+### My Device — Device Spec: bold black labels, plain black values
+Each specification label (Manufacturer, Model, Android, etc.) is now bold and uses the foreground colour instead of the previous muted/grey uppercase style. Each corresponding value is the same colour but not bold, and the monospace font has been removed so both use the standard typeface.
+
+### UI — Hover brightness reduced on TrustScore badge and Human Session Tool button
+Both controls previously brightened noticeably on hover. They now dim slightly to 95% brightness instead, giving a subtler, less harsh interaction feedback.
+
+### Phone Farm page header — renamed and cleaned up
+The page header now reads "Phone Farm" (was "Mobile Farm") and the "N / N connected" device count that appeared beside the title has been removed.
+
+### Accounts — TrustScore badge removed from slot header
+The TrustScore badge that appeared in each Instagram Account Slot header row on the Phone Farm per-device page has been removed from that location.
+
+---
+
 ## [1.1.671] — 2026-07-17
 
 ### Accounts — TrustScore badge height increased by 5%
