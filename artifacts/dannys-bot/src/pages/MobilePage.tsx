@@ -2089,7 +2089,7 @@ const clamp4 = (n: number) => Math.min(9999, Math.max(0, Math.trunc(Number.isFin
 // the Human Session Tool tab never unmounts this and interrupts an
 // in-progress automation cycle — the loop must keep running in the
 // background regardless of which tab is currently visible.
-function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void, slotIdx?: number, slotUsername?: string, requestSlot?: (idx: number, readyAt: number) => Promise<void>, releaseSlot?: (idx: number) => void) {
+function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void, slotIdx?: number, slotUsername?: string, requestSlot?: (idx: number, readyAt: number) => Promise<void>, releaseSlot?: (idx: number) => void, refreshKey?: number) {
   const [settings, setSettings] = useState<AutomationSettingsData>(AUTOMATION_DEFAULTS);
   const [loading,  setLoading]  = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -2165,7 +2165,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       .finally(() => { if (active) { setLoading(false); hydratedRef.current = true; } });
     return () => { active = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phone?.serial, slotIdx]);
+  }, [phone?.serial, slotIdx, refreshKey]);
 
   // Poll /api/mobile/cycle-active every 2 s while the toggle is on.
   // This keeps `serverCycleRunning` accurate so:
@@ -2514,7 +2514,7 @@ const COPY_SECTIONS: { key: string; label: string; fields: string[] }[] = [
 ];
 
 function CopySettingsDialog({
-  open, onClose, currentSlotIdx, slotUsernames, settings, phone,
+  open, onClose, currentSlotIdx, slotUsernames, settings, phone, onCopied,
 }: {
   open: boolean;
   onClose: () => void;
@@ -2522,6 +2522,7 @@ function CopySettingsDialog({
   slotUsernames: string[];
   settings: AutomationSettingsData;
   phone: UsbPhone | null;
+  onCopied?: (targetSlotIdxs: number[]) => void;
 }) {
   const allKeys = COPY_SECTIONS.map(s => s.key);
   const [selectedSlots, setSelectedSlots] = useState<number[]>([]);
@@ -2556,13 +2557,14 @@ function CopySettingsDialog({
       }
     }
     let ok = 0, fail = 0;
+    const succeededSlots: number[] = [];
     for (const slotIdx of selectedSlots) {
       try {
         const r = await fetch(
           `/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/automation-settings`,
           { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(partial) },
         );
-        if (r.ok) ok++; else fail++;
+        if (r.ok) { ok++; succeededSlots.push(slotIdx); } else fail++;
       } catch { fail++; }
     }
     const msg = fail
@@ -2570,6 +2572,7 @@ function CopySettingsDialog({
       : `Copied to ${ok} slot${ok !== 1 ? "s" : ""}`;
     setResult(msg);
     setCopying(false);
+    if (succeededSlots.length > 0) onCopied?.(succeededSlots);
     setTimeout(() => { onClose(); }, 1600);
   };
 
@@ -2650,7 +2653,7 @@ function CopySettingsDialog({
 
 function AutomationSettingsPanel({
   phone, settings, setSettings, setEnabledByUser, loading, saveError, running, nextRunAt,
-  slotIdx, slotUsernames,
+  slotIdx, slotUsernames, onCopied,
 }: {
   phone: UsbPhone | null;
   settings: AutomationSettingsData;
@@ -2662,6 +2665,7 @@ function AutomationSettingsPanel({
   nextRunAt: number | null;
   slotIdx?: number;
   slotUsernames?: string[];
+  onCopied?: (targetSlotIdxs: number[]) => void;
 }) {
   // Follow Users UI local state — hooks must come before any conditional return.
   const [showCopyDialog, setShowCopyDialog] = useState(false);
@@ -4024,6 +4028,7 @@ function AutomationSettingsPanel({
           slotUsernames={slotUsernames}
           settings={settings}
           phone={phone}
+          onCopied={onCopied}
         />
       )}
     </div>
@@ -4038,7 +4043,7 @@ type AccountSlot = { username: string; password: string; totpSecret: string; ema
 // Always mounted so the automation hook's run-loop persists even when the
 // user is viewing the slot list or a different tab.
 function SlotHumanSessionView({
-  phone, slotIdx, slotUsername, slotUsernames, addLog, onBack, requestSlot, releaseSlot,
+  phone, slotIdx, slotUsername, slotUsernames, addLog, onBack, requestSlot, releaseSlot, refreshKey, onCopied,
 }: {
   phone: UsbPhone | null;
   slotIdx: number;
@@ -4048,8 +4053,10 @@ function SlotHumanSessionView({
   onBack: () => void;
   requestSlot?: (idx: number, readyAt: number) => Promise<void>;
   releaseSlot?: (idx: number) => void;
+  refreshKey?: number;
+  onCopied?: (targetSlotIdxs: number[]) => void;
 }) {
-  const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername, requestSlot, releaseSlot);
+  const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername, requestSlot, releaseSlot, refreshKey);
   return (
     <div className="h-full flex flex-col">
       <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
@@ -4059,17 +4066,25 @@ function SlotHumanSessionView({
         </Button>
         <span className="text-sm font-semibold text-foreground flex items-center gap-1.5">
           <Fingerprint className="w-3.5 h-3.5 text-primary" />
-          Human Session Tool — {slotUsername ? `@${slotUsername}` : `Slot ${slotIdx + 1}`}
+          Human Session Tool {slotUsername ? `@${slotUsername}` : `Slot ${slotIdx + 1}`}
         </span>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <AutomationSettingsPanel phone={phone} {...automation} slotIdx={slotIdx} slotUsernames={slotUsernames} />
+        <AutomationSettingsPanel phone={phone} {...automation} slotIdx={slotIdx} slotUsernames={slotUsernames} onCopied={onCopied} />
       </div>
     </div>
   );
 }
 
 function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLog: (msg: string) => void }) {
+  const [slotRefreshKeys, setSlotRefreshKeys] = useState<Record<number, number>>({});
+  const handleCopied = useCallback((targetSlotIdxs: number[]) => {
+    setSlotRefreshKeys(prev => {
+      const next = { ...prev };
+      for (const idx of targetSlotIdxs) next[idx] = (next[idx] ?? 0) + 1;
+      return next;
+    });
+  }, []);
   const [slots, setSlots] = useState<AccountSlot[]>(
     Array.from({ length: ACCT_SLOT_COUNT }, emptySlot)
   );
@@ -4243,6 +4258,8 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
             onBack={() => setOpenSlotTool(null)}
             requestSlot={requestSlot}
             releaseSlot={releaseSlot}
+            refreshKey={slotRefreshKeys[i] ?? 0}
+            onCopied={handleCopied}
           />
         </div>
       ))}
