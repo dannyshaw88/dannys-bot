@@ -4364,31 +4364,31 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
         <div className="space-y-4">
           {slots.map((slot, i) => (
             <div key={i} className="bg-card border border-border rounded-xl p-5 space-y-3">
-              {/* Slot header: title + Delete + Human Session Tool button */}
+              {/* Slot header: title + Human Session Tool button + Delete */}
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Instagram Account Slot {i + 1}</p>
                   <Button
                     type="button"
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    disabled={loading}
-                    onClick={() => setConfirmDeleteSlot(i)}
-                    className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    aria-label={`Delete Instagram Account Slot ${i + 1}`}
+                    className="h-6 px-2 text-[11px] gap-1.5 text-primary border-primary/30 hover:bg-primary/10"
+                    onClick={() => setOpenSlotTool(i)}
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    Human Session Tool
+                    <Fingerprint className="w-3 h-3" />
                   </Button>
                 </div>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  className="h-6 px-2 text-[11px] gap-1.5 text-primary border-primary/30 hover:bg-primary/10"
-                  onClick={() => setOpenSlotTool(i)}
+                  disabled={loading}
+                  onClick={() => setConfirmDeleteSlot(i)}
+                  className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  aria-label={`Delete Instagram Account Slot ${i + 1}`}
                 >
-                  Human Session Tool
-                  <Fingerprint className="w-3 h-3" />
+                  <Trash2 className="w-3.5 h-3.5" />
                 </Button>
               </div>
 
