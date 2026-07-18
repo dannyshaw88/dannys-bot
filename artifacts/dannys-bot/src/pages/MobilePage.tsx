@@ -4518,14 +4518,13 @@ type SlotAutomationState = {
   nextRunAt: number | null;
 };
 
-// A toggle command sent DOWN from AccountSettingsPanel to a specific slot.
-// Using an incrementing id ensures the effect fires even if the value is the
-// same as before (e.g. the user clicks ON when already ON after a remount).
-type EnableCommand = { enabled: boolean; id: number };
+// Imperative handle exposed by each SlotHumanSessionView so the parent can
+// toggle a specific slot directly without any state plumbing.
+type SlotHumanSessionHandle = {
+  setEnabled: (v: boolean) => void;
+};
 
-function SlotHumanSessionView({
-  phone, slotIdx, slotUsername, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, refreshKey, onCopied, onAutomationState, enableCommand,
-}: {
+const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   phone: UsbPhone | null;
   slotIdx: number;
   slotUsername: string;
@@ -4540,29 +4539,24 @@ function SlotHumanSessionView({
   refreshKey?: number;
   onCopied?: (targetSlotIdxs: number[]) => void;
   onAutomationState?: (slotIdx: number, state: SlotAutomationState) => void;
-  // Toggle command sent DOWN from the parent list so we never pass callbacks UP
-  // through a shared ref (which caused all slots to fire at once). Using an
-  // incrementing `id` means the effect fires even if the `enabled` value is
-  // unchanged (e.g. a second ON click after a remount resets the value to ON).
-  enableCommand?: EnableCommand;
-}) {
+}>(function SlotHumanSessionView(
+  { phone, slotIdx, slotUsername, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, refreshKey, onCopied, onAutomationState },
+  ref,
+) {
   const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername, requestSlot, releaseSlot, refreshKey);
   const isFirst = slotIdx === 0;
   const isLast = slotIdx === (slotCount ?? 1) - 1;
 
-  // Apply a toggle command received from the parent.  The effect depends only
-  // on enableCommand.id so it fires exactly once per command regardless of the
-  // current enabled value, and is completely isolated to THIS slot instance —
-  // automation.setEnabledByUser is the useState-setter captured by THIS hook.
-  useEffect(() => {
-    if (enableCommand === undefined) return;
-    automation.setEnabledByUser(enableCommand.enabled);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enableCommand?.id]);
+  // Expose setEnabled so the parent can toggle THIS slot directly by calling
+  // slotHandleRefs.current[i]?.setEnabled(v).  Because the ref is bound to
+  // this specific component instance there is zero possibility of calling the
+  // wrong slot's setter — no state updates, no effects, no shared refs needed.
+  useImperativeHandle(ref, () => ({
+    setEnabled: (v: boolean) => automation.setEnabledByUser(v),
+  }), [automation.setEnabledByUser]);
 
-  // Lift status (enabled / running / nextRunAt) to the parent for the mirror
-  // toggle display.  setEnabledByUser is intentionally NOT lifted — the parent
-  // sends commands down via enableCommand instead of calling callbacks up.
+  // Report live status (enabled / running / nextRunAt) to the parent so the
+  // slot-list card can show the current state next to the toggle.
   const onAutomationStateRef = useRef(onAutomationState);
   onAutomationStateRef.current = onAutomationState;
   useEffect(() => {
@@ -4595,7 +4589,7 @@ function SlotHumanSessionView({
       </div>
     </div>
   );
-}
+});
 
 function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLog: (msg: string) => void }) {
   const [slotRefreshKeys, setSlotRefreshKeys] = useState<Record<number, number>>({});
@@ -4614,12 +4608,10 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
     setSlotAutomationStates(prev => ({ ...prev, [slotIdx]: state }));
   }, []);
 
-  // Toggle commands sent DOWN to each slot. Key = slotIdx, value = the command
-  // to apply. Using an incrementing `id` per command (not reusing the boolean
-  // value) guarantees the slot's useEffect fires exactly once per click even
-  // when the target enabled value happens to be the same as before.
-  const [enableCommands, setEnableCommands] = useState<Record<number, EnableCommand>>({});
-  const enableCommandSeqRef = useRef(0);
+  // One ref per slot — each points to that slot's SlotHumanSessionView handle.
+  // The mirror toggle calls slotHandleRefs.current[i]?.setEnabled(v) directly,
+  // hitting exactly that slot's setEnabledByUser with no indirection.
+  const slotHandleRefs = useRef<Record<number, SlotHumanSessionHandle | null>>({});
   const [slots, setSlots] = useState<AccountSlot[]>(
     Array.from({ length: ACCT_SLOT_COUNT }, emptySlot)
   );
@@ -4786,6 +4778,7 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
       {slots.map((_, i) => (
         <div key={`hst-${i}`} className={openSlotTool === i ? "h-full" : "hidden"}>
           <SlotHumanSessionView
+            ref={el => { slotHandleRefs.current[i] = el; }}
             phone={phone}
             slotIdx={i}
             slotUsername={slots[i]?.username ?? ""}
@@ -4800,7 +4793,6 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
             refreshKey={slotRefreshKeys[i] ?? 0}
             onCopied={handleCopied}
             onAutomationState={handleSlotAutomationState}
-            enableCommand={enableCommands[i]}
           />
         </div>
       ))}
@@ -4830,19 +4822,17 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
                     <Fingerprint className="w-3 h-3 text-white" />
                   </Button>
 
-                  {/* Mirror of the master toggle inside the Human Session Tool.
-                      Sends an EnableCommand DOWN to the specific slot component —
-                      no shared callback refs, no closure-capture ambiguity. */}
+                  {/* Toggle for this slot's Human Session Tool. Calls setEnabled
+                      directly on the slot's imperative handle — only slot i's
+                      handle is stored at slotHandleRefs.current[i], so it is
+                      physically impossible for this to affect any other slot. */}
                   {slotAutomationStates[i] && (() => {
                     const as = slotAutomationStates[i];
                     return (
                       <div className="flex items-center gap-2 pl-2 border-l border-border">
                         <Switch
                           checked={as.enabled}
-                          onCheckedChange={v => {
-                            const id = ++enableCommandSeqRef.current;
-                            setEnableCommands(prev => ({ ...prev, [i]: { enabled: v, id } }));
-                          }}
+                          onCheckedChange={v => slotHandleRefs.current[i]?.setEnabled(v)}
                         />
                         <div className="flex flex-col min-w-0">
                           <span className={`text-[11px] font-semibold leading-tight whitespace-nowrap ${

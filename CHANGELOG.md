@@ -4,6 +4,30 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.1.680] — 2026-07-18
+
+### Bug Fix — Slot Toggle ON Firing All Slots (Final Fix: forwardRef / useImperativeHandle)
+
+**What was broken:** Toggling one slot's Human Session Tool toggle ON in the Accounts list activated all slots simultaneously.
+
+**Previous attempts (all failed):**
+- v1.1.677 — passed `slotIdx` explicitly in the callback; introduced `setEnabledCallbacksRef` map.
+- v1.1.678 — scoped all `id`/`htmlFor` DOM attributes per slot (kept, correct, not the root cause).
+- v1.1.679 — replaced the callback-ref map with an "EnableCommand" prop flowing down; still failed.
+
+**Root cause of all failures:** Every approach still had the parent holding a reference to a setter function that originated in a child, either via a shared ref map or a prop+effect chain. Any timing or re-render edge case could route the action incorrectly.
+
+**Fix — `forwardRef` + `useImperativeHandle`:**
+- `SlotHumanSessionView` is converted to `React.forwardRef`. It exposes a `SlotHumanSessionHandle` with a single method: `setEnabled(v: boolean)`, implemented as a direct call to `automation.setEnabledByUser(v)` — that slot's own hook, captured inside that specific component instance.
+- `AccountSettingsPanel` keeps `slotHandleRefs: useRef<Record<number, SlotHumanSessionHandle | null>>({})`. Each slot's view is rendered with `ref={el => { slotHandleRefs.current[i] = el; }}`.
+- The mirror toggle click: `onCheckedChange={v => slotHandleRefs.current[i]?.setEnabled(v)}` — one line, calls exactly one slot's handle, no state updates, no effects, no re-renders triggered.
+- `enableCommands` state, `enableCommandSeqRef`, and `EnableCommand` type all removed.
+- `onAutomationState` still reports `enabled`/`running`/`nextRunAt` upward for display only — no `setEnabledByUser` in that path.
+
+**Affected file:** `artifacts/dannys-bot/src/pages/MobilePage.tsx`
+
+---
+
 ## [1.1.679] — 2026-07-18
 
 ### Bug Fix — Slot Toggle ON Firing All Slots (Root Cause Fix: Command-Down Architecture)
