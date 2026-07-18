@@ -4803,11 +4803,10 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange }: { phone: UsbPhone
                     type="button"
                     size="sm"
                     className="px-2 text-[11px] gap-1.5 text-white hover:brightness-95 transition-all"
-                    style={{ background: "#1AD2F2", border: "none", height: 28, width: 160 }}
+                    style={{ background: "#1AD2F2", border: "none", height: 28, width: 28, padding: 0 }}
                     onClick={() => setOpenSlotTool(i)}
                   >
-                    HUMAN SESSION TOOL
-                    <Fingerprint className="w-3 h-3 text-white" />
+                    <Fingerprint className="w-3.5 h-3.5 text-white" />
                   </Button>
 
                   {/* Toggle for this slot's Human Session Tool. Calls setEnabled
