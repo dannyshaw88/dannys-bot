@@ -3179,13 +3179,13 @@ function AutomationSettingsPanel({
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
-              id="feed-enabled"
+              id={`feed-enabled-${slotIdx ?? 0}`}
               checked={settings.feedEnabled}
               onChange={e => setSettings(s => ({ ...s, feedEnabled: e.target.checked }))}
               disabled={loading}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
-            <label htmlFor="feed-enabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">View Feed</label>
+            <label htmlFor={`feed-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">View Feed</label>
           </div>
         </div>
         {settings.feedEnabled && <div className="flex items-start gap-6 flex-wrap">
@@ -3352,13 +3352,13 @@ function AutomationSettingsPanel({
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
-              id="stories-enabled"
+              id={`stories-enabled-${slotIdx ?? 0}`}
               checked={settings.storiesEnabled}
               onChange={e => setSettings(s => ({ ...s, storiesEnabled: e.target.checked }))}
               disabled={loading}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
-            <label htmlFor="stories-enabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">View Stories from Feed</label>
+            <label htmlFor={`stories-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">View Stories from Feed</label>
           </div>
         </div>
 
@@ -3452,13 +3452,13 @@ function AutomationSettingsPanel({
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
-              id="reels-enabled"
+              id={`reels-enabled-${slotIdx ?? 0}`}
               checked={settings.viewReelsEnabled}
               onChange={e => setSettings(s => ({ ...s, viewReelsEnabled: e.target.checked }))}
               disabled={loading}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
-            <label htmlFor="reels-enabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">View Reels</label>
+            <label htmlFor={`reels-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">View Reels</label>
           </div>
         </div>
 
@@ -3569,13 +3569,13 @@ function AutomationSettingsPanel({
         <div className="flex items-center gap-2">
           <input
             type="checkbox"
-            id="follow-enabled"
+            id={`follow-enabled-${slotIdx ?? 0}`}
             checked={settings.followEnabled}
             onChange={e => setSettings(s => ({ ...s, followEnabled: e.target.checked }))}
             disabled={loading}
             className="w-4 h-4 accent-primary cursor-pointer"
           />
-          <label htmlFor="follow-enabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">Follow Users</label>
+          <label htmlFor={`follow-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">Follow Users</label>
           <Button
             variant="outline" size="sm"
             className="h-7 text-xs px-3 ml-auto"
@@ -3625,14 +3625,14 @@ function AutomationSettingsPanel({
           <div className="flex items-center gap-2 self-center mt-4">
             <input
               type="checkbox"
-              id="follow-skip-followed"
+              id={`follow-skip-followed-${slotIdx ?? 0}`}
               checked={settings.followSkipFollowed}
               onChange={e => setSettings(s => ({ ...s, followSkipFollowed: e.target.checked }))}
               disabled={loading}
               className="w-4 h-4 accent-primary cursor-pointer shrink-0"
             />
             <label
-              htmlFor="follow-skip-followed"
+              htmlFor={`follow-skip-followed-${slotIdx ?? 0}`}
               className="text-sm font-medium text-foreground cursor-pointer select-none whitespace-nowrap"
             >
               Skip Followed Users
@@ -3785,13 +3785,13 @@ function AutomationSettingsPanel({
           <div className="flex items-center gap-3">
             <input
               type="checkbox"
-              id="inject-browsing-enabled"
+              id={`inject-browsing-enabled-${slotIdx ?? 0}`}
               checked={settings.injectBrowsingEnabled}
               onChange={e => setSettings(s => ({ ...s, injectBrowsingEnabled: e.target.checked }))}
               disabled={loading || !settings.followEnabled}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
-            <label htmlFor="inject-browsing-enabled" className={`text-sm font-semibold cursor-pointer select-none ${settings.followEnabled ? 'text-foreground' : 'text-muted-foreground'}`}>Inject Browsing</label>
+            <label htmlFor={`inject-browsing-enabled-${slotIdx ?? 0}`} className={`text-sm font-semibold cursor-pointer select-none ${settings.followEnabled ? 'text-foreground' : 'text-muted-foreground'}`}>Inject Browsing</label>
           </div>
 
           {settings.injectBrowsingEnabled && (<>
@@ -3868,13 +3868,13 @@ function AutomationSettingsPanel({
           <div className="flex items-center gap-3">
             <input
               type="checkbox"
-              id="follow-filters-enabled"
+              id={`follow-filters-enabled-${slotIdx ?? 0}`}
               checked={settings.followFiltersEnabled}
               onChange={e => setSettings(s => ({ ...s, followFiltersEnabled: e.target.checked }))}
               disabled={loading || !settings.followEnabled}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
-            <label htmlFor="follow-filters-enabled" className={`text-sm font-semibold cursor-pointer select-none ${settings.followEnabled ? 'text-foreground' : 'text-muted-foreground'}`}>Filters</label>
+            <label htmlFor={`follow-filters-enabled-${slotIdx ?? 0}`} className={`text-sm font-semibold cursor-pointer select-none ${settings.followEnabled ? 'text-foreground' : 'text-muted-foreground'}`}>Filters</label>
           </div>
 
           {settings.followFiltersEnabled && (
@@ -3882,57 +3882,57 @@ function AutomationSettingsPanel({
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  id="filter-private-users"
+                  id={`filter-private-users-${slotIdx ?? 0}`}
                   checked={settings.followFilterPrivateUsers}
                   onChange={e => setSettings(s => ({ ...s, followFilterPrivateUsers: e.target.checked }))}
                   disabled={loading}
                   className="w-4 h-4 accent-primary cursor-pointer"
                 />
-                <label htmlFor="filter-private-users" className="text-xs text-muted-foreground cursor-pointer select-none">Private Users</label>
+                <label htmlFor={`filter-private-users-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Private Users</label>
               </div>
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  id="filter-english-speaking"
+                  id={`filter-english-speaking-${slotIdx ?? 0}`}
                   checked={settings.followFilterEnglishSpeaking}
                   onChange={e => setSettings(s => ({ ...s, followFilterEnglishSpeaking: e.target.checked }))}
                   disabled={loading}
                   className="w-4 h-4 accent-primary cursor-pointer"
                 />
-                <label htmlFor="filter-english-speaking" className="text-xs text-muted-foreground cursor-pointer select-none">English Speaking</label>
+                <label htmlFor={`filter-english-speaking-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">English Speaking</label>
               </div>
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  id="filter-min-followers-250"
+                  id={`filter-min-followers-250-${slotIdx ?? 0}`}
                   checked={settings.followFilterMinFollowers250}
                   onChange={e => setSettings(s => ({ ...s, followFilterMinFollowers250: e.target.checked }))}
                   disabled={loading}
                   className="w-4 h-4 accent-primary cursor-pointer"
                 />
-                <label htmlFor="filter-min-followers-250" className="text-xs text-muted-foreground cursor-pointer select-none">250 Followers+</label>
+                <label htmlFor={`filter-min-followers-250-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">250 Followers+</label>
               </div>
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  id="filter-verified-users"
+                  id={`filter-verified-users-${slotIdx ?? 0}`}
                   checked={settings.followFilterVerifiedUsers}
                   onChange={e => setSettings(s => ({ ...s, followFilterVerifiedUsers: e.target.checked }))}
                   disabled={loading}
                   className="w-4 h-4 accent-primary cursor-pointer"
                 />
-                <label htmlFor="filter-verified-users" className="text-xs text-muted-foreground cursor-pointer select-none">Skip Verified</label>
+                <label htmlFor={`filter-verified-users-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Skip Verified</label>
               </div>
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  id="filter-max-followers-25k"
+                  id={`filter-max-followers-25k-${slotIdx ?? 0}`}
                   checked={settings.followFilterMaxFollowers25k}
                   onChange={e => setSettings(s => ({ ...s, followFilterMaxFollowers25k: e.target.checked }))}
                   disabled={loading}
                   className="w-4 h-4 accent-primary cursor-pointer"
                 />
-                <label htmlFor="filter-max-followers-25k" className="text-xs text-muted-foreground cursor-pointer select-none">-25K Followers</label>
+                <label htmlFor={`filter-max-followers-25k-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">-25K Followers</label>
               </div>
             </div>
           )}
@@ -3945,13 +3945,13 @@ function AutomationSettingsPanel({
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
-              id="random-jitter-enabled"
+              id={`random-jitter-enabled-${slotIdx ?? 0}`}
               checked={settings.randomJitterEnabled}
               onChange={e => setSettings(s => ({ ...s, randomJitterEnabled: e.target.checked }))}
               disabled={loading}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
-            <label htmlFor="random-jitter-enabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">Random Jitter</label>
+            <label htmlFor={`random-jitter-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">Random Jitter</label>
           </div>
 
           {settings.randomJitterEnabled && (
@@ -4036,13 +4036,13 @@ function AutomationSettingsPanel({
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
-              id="make-a-post-enabled"
+              id={`make-a-post-enabled-${slotIdx ?? 0}`}
               checked={settings.makePostEnabled}
               onChange={e => setSettings(s => ({ ...s, makePostEnabled: e.target.checked }))}
               disabled={loading}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
-            <label htmlFor="make-a-post-enabled" className="text-sm font-semibold text-foreground cursor-pointer select-none">Make a Post</label>
+            <label htmlFor={`make-a-post-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">Make a Post</label>
             <Button
               variant="outline" size="sm"
               className="h-7 text-xs px-3 ml-auto"
@@ -4090,13 +4090,13 @@ function AutomationSettingsPanel({
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
-                    id="make-a-post-username-source-enabled"
+                    id={`make-a-post-username-source-enabled-${slotIdx ?? 0}`}
                     checked={!settings.makePostDisableUsernameSource}
                     onChange={e => setSettings(s => ({ ...s, makePostDisableUsernameSource: !e.target.checked }))}
                     disabled={loading}
                     className="w-3.5 h-3.5 accent-primary cursor-pointer"
                   />
-                  <label htmlFor="make-a-post-username-source-enabled" className="text-xs font-semibold text-foreground cursor-pointer select-none tracking-wide">
+                  <label htmlFor={`make-a-post-username-source-enabled-${slotIdx ?? 0}`} className="text-xs font-semibold text-foreground cursor-pointer select-none tracking-wide">
                     SOURCE: INSTAGRAM ACCOUNT
                   </label>
                 </div>
@@ -4117,20 +4117,20 @@ function AutomationSettingsPanel({
                         disabled={loading} />
                     </div>
                     <div className="flex items-center gap-2">
-                      <input type="checkbox" id="make-a-post-hiker-api"
+                      <input type="checkbox" id={`make-a-post-hiker-api-${slotIdx ?? 0}`}
                         checked={settings.makePostUseHikerApi}
                         onChange={e => setSettings(s => ({ ...s, makePostUseHikerApi: e.target.checked }))}
                         disabled={loading}
                         className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                      <label htmlFor="make-a-post-hiker-api" className="text-xs text-muted-foreground cursor-pointer select-none">Use HikerAPI for scraping</label>
+                      <label htmlFor={`make-a-post-hiker-api-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Use HikerAPI for scraping</label>
                     </div>
                     <div className="flex items-center gap-2">
-                      <input type="checkbox" id="make-a-post-disable-exhausted"
+                      <input type="checkbox" id={`make-a-post-disable-exhausted-${slotIdx ?? 0}`}
                         checked={settings.makePostDisableWhenExhausted}
                         onChange={e => setSettings(s => ({ ...s, makePostDisableWhenExhausted: e.target.checked }))}
                         disabled={loading}
                         className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                      <label htmlFor="make-a-post-disable-exhausted" className="text-xs text-muted-foreground cursor-pointer select-none">Disable when no more posts are found</label>
+                      <label htmlFor={`make-a-post-disable-exhausted-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Disable when no more posts are found</label>
                     </div>
                   </div>
                 )}
@@ -4139,12 +4139,12 @@ function AutomationSettingsPanel({
               {/* Source: Local Folder */}
               <div className="border border-border/60 rounded-lg p-3 space-y-2">
                 <div className="flex items-center gap-2">
-                  <input type="checkbox" id="make-a-post-local-folder-enabled"
+                  <input type="checkbox" id={`make-a-post-local-folder-enabled-${slotIdx ?? 0}`}
                     checked={settings.makePostLocalFolderEnabled}
                     onChange={e => setSettings(s => ({ ...s, makePostLocalFolderEnabled: e.target.checked }))}
                     disabled={loading}
                     className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                  <label htmlFor="make-a-post-local-folder-enabled" className="text-xs font-semibold text-foreground cursor-pointer select-none tracking-wide">SOURCE: MY COMPUTER</label>
+                  <label htmlFor={`make-a-post-local-folder-enabled-${slotIdx ?? 0}`} className="text-xs font-semibold text-foreground cursor-pointer select-none tracking-wide">SOURCE: MY COMPUTER</label>
                 </div>
                 {settings.makePostLocalFolderEnabled && (
                   <div className="space-y-1.5">
@@ -4164,20 +4164,20 @@ function AutomationSettingsPanel({
                         {settings.makePostLocalFolderPath ? "Assigned Directory" : "Browse"}
                       </button>
                       <div className="flex items-center gap-2">
-                        <input type="checkbox" id="make-a-post-local-no-repeat"
+                        <input type="checkbox" id={`make-a-post-local-no-repeat-${slotIdx ?? 0}`}
                           checked={settings.makePostLocalFolderNoRepeat}
                           onChange={e => setSettings(s => ({ ...s, makePostLocalFolderNoRepeat: e.target.checked }))}
                           disabled={loading}
                           className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                        <label htmlFor="make-a-post-local-no-repeat" className="text-xs text-muted-foreground cursor-pointer select-none">Do not repost the same image</label>
+                        <label htmlFor={`make-a-post-local-no-repeat-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Do not repost the same image</label>
                       </div>
                       <div className="flex items-center gap-2">
-                        <input type="checkbox" id="make-a-post-local-random"
+                        <input type="checkbox" id={`make-a-post-local-random-${slotIdx ?? 0}`}
                           checked={settings.makePostLocalFolderRandom}
                           onChange={e => setSettings(s => ({ ...s, makePostLocalFolderRandom: e.target.checked }))}
                           disabled={loading}
                           className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                        <label htmlFor="make-a-post-local-random" className="text-xs text-muted-foreground cursor-pointer select-none">Pick at random</label>
+                        <label htmlFor={`make-a-post-local-random-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Pick at random</label>
                       </div>
                     </div>
 
@@ -4238,12 +4238,12 @@ function AutomationSettingsPanel({
                 <div className="flex items-center gap-3">
                   <Label className="text-xs text-muted-foreground font-semibold">Post Caption Text</Label>
                   <div className="flex items-center gap-1.5">
-                    <input type="checkbox" id="make-a-post-use-chatgpt"
+                    <input type="checkbox" id={`make-a-post-use-chatgpt-${slotIdx ?? 0}`}
                       checked={settings.makePostUseChatGpt}
                       onChange={e => setSettings(s => ({ ...s, makePostUseChatGpt: e.target.checked }))}
                       disabled={loading}
                       className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                    <label htmlFor="make-a-post-use-chatgpt" className="text-xs text-muted-foreground cursor-pointer select-none">Use ChatGPT</label>
+                    <label htmlFor={`make-a-post-use-chatgpt-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Use ChatGPT</label>
                   </div>
                 </div>
                 <p className="text-[10px] text-muted-foreground/70">
@@ -4262,12 +4262,12 @@ function AutomationSettingsPanel({
                 <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
                   {/* Alteration level — checkbox left of Small/Medium/High */}
                   <div className="flex items-center gap-2">
-                    <input type="checkbox" id="make-a-post-alteration-enabled"
+                    <input type="checkbox" id={`make-a-post-alteration-enabled-${slotIdx ?? 0}`}
                       checked={settings.makePostAlterationEnabled}
                       onChange={e => setSettings(s => ({ ...s, makePostAlterationEnabled: e.target.checked }))}
                       disabled={loading}
                       className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0" />
-                    <label htmlFor="make-a-post-alteration-enabled" className="text-xs text-muted-foreground cursor-pointer select-none shrink-0">Alteration level</label>
+                    <label htmlFor={`make-a-post-alteration-enabled-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none shrink-0">Alteration level</label>
                     <div className="flex gap-1">
                       {(["small", "medium", "high"] as const).map(lvl => (
                         <button key={lvl} type="button" disabled={loading || !settings.makePostAlterationEnabled}
@@ -4285,12 +4285,12 @@ function AutomationSettingsPanel({
                   </div>
                   {/* Image settings — checkbox left of Configure button */}
                   <div className="flex items-center gap-2">
-                    <input type="checkbox" id="make-a-post-image-settings-enabled"
+                    <input type="checkbox" id={`make-a-post-image-settings-enabled-${slotIdx ?? 0}`}
                       checked={settings.makePostImageSettingsEnabled}
                       onChange={e => setSettings(s => ({ ...s, makePostImageSettingsEnabled: e.target.checked }))}
                       disabled={loading}
                       className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0" />
-                    <label htmlFor="make-a-post-image-settings-enabled" className="text-xs text-muted-foreground cursor-pointer select-none shrink-0">Image settings</label>
+                    <label htmlFor={`make-a-post-image-settings-enabled-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none shrink-0">Image settings</label>
                     <button type="button" disabled={loading || !settings.makePostImageSettingsEnabled}
                       onClick={() => setMakePostImageSettingsOpen(true)}
                       className={`h-8 px-3 text-xs rounded border transition-colors ${
@@ -4302,21 +4302,21 @@ function AutomationSettingsPanel({
                   </div>
                   {/* Fix AI Slop */}
                   <div className="flex items-center gap-1.5">
-                    <input type="checkbox" id="make-a-post-fix-ai-slop"
+                    <input type="checkbox" id={`make-a-post-fix-ai-slop-${slotIdx ?? 0}`}
                       checked={settings.makePostFixAiSlop}
                       onChange={e => setSettings(s => ({ ...s, makePostFixAiSlop: e.target.checked }))}
                       disabled={loading}
                       className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                    <label htmlFor="make-a-post-fix-ai-slop" className="text-xs text-muted-foreground cursor-pointer select-none">Fix AI Slop</label>
+                    <label htmlFor={`make-a-post-fix-ai-slop-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Fix AI Slop</label>
                   </div>
                   {/* Make it unique */}
                   <div className="flex items-center gap-1.5">
-                    <input type="checkbox" id="make-a-post-make-unique"
+                    <input type="checkbox" id={`make-a-post-make-unique-${slotIdx ?? 0}`}
                       checked={settings.makePostMakeUnique}
                       onChange={e => setSettings(s => ({ ...s, makePostMakeUnique: e.target.checked }))}
                       disabled={loading}
                       className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                    <label htmlFor="make-a-post-make-unique" className="text-xs text-muted-foreground cursor-pointer select-none">Make it unique</label>
+                    <label htmlFor={`make-a-post-make-unique-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Make it unique</label>
                   </div>
                 </div>
               </div>

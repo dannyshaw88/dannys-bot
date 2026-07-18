@@ -4,6 +4,20 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.1.678] — 2026-07-18
+
+### Bug Fix — Per-Slot Toggles on Devices/Accounts Page Now Truly Independent
+
+**What was broken:** Every toggle on the Accounts tab (View Feed, View Stories, View Reels, Follow Users, Random Jitter, Make a Post, Inject Browsing, all filter checkboxes, etc.) was silently shared across all account slots. Clicking any toggle on one slot fired the exact same click on every other slot simultaneously — turning one account's automation off would turn them all off.
+
+**Root cause:** The `AutomationSettingsPanel` component rendered once per slot, but every `<Switch>` and `<input type="checkbox">` inside it carried a hardcoded `id` (e.g. `id="feed-enabled"`, `id="follow-enabled"`, `id="random-jitter-enabled"`). Every `<label htmlFor="...">` pointed to that same hardcoded string. The HTML/DOM spec says a label click targets the **first** element in the document with that `id` — but with duplicate IDs across slots, browsers also fire the event on multiple elements, making all slots respond to a single click.
+
+**Fix:** All 50 `id` and `htmlFor` attributes inside `AutomationSettingsPanel` are now slot-scoped using template literals: `id="feed-enabled"` → `` id={`feed-enabled-${slotIdx ?? 0}`} ``, matching its `htmlFor` partner. Every slot renders a fully independent set of IDs (e.g. `feed-enabled-0`, `feed-enabled-1`, `feed-enabled-2`), so a click on Slot 1's label exclusively activates Slot 1's switch and nothing else. This covers every control in the panel: Feed, Stories, Reels, Follow Users (including skip-followed and all filters), Inject Browsing, Random Jitter, Make a Post (all sub-options including source toggles, HikerAPI, no-repeat, ChatGPT, alteration, image settings, Fix AI Slop, Make Unique), and all filter checkboxes.
+
+**Affected file:** `artifacts/dannys-bot/src/pages/MobilePage.tsx` — `AutomationSettingsPanel` function (lines 2991–4363).
+
+---
+
 ## [1.1.677] — 2026-07-18
 
 ### Bug Fix — Account Slot Mirror Toggles Were All Linked Together (Now Fully Independent)
