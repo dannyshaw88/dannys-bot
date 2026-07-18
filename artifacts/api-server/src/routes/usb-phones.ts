@@ -313,7 +313,9 @@ router.get("/mobile/usb-phones", (_req, res) => {
   }
 
   res.json({
-    adbFound:  adbPath !== null,
+    // Treat fake phones as "adb found" so the UI doesn't block behind the
+    // "ADB not found" gate when testing without real hardware.
+    adbFound:  adbPath !== null || phones.length > 0,
     adbPath:   adbPath,
     phones,
     rawOutput: adbPath ? diag.rawOutput : null,
