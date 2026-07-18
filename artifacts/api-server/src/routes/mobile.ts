@@ -1457,9 +1457,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         phoneNumber = parseSubinfo(await shell("service call iphonesubinfo 7"));
       }
 
+      // gsm.operator.alpha can return comma-separated values (e.g. "EE,EE" or
+      // "O2,Three") — take the first non-empty segment so the SIM title never
+      // contains commas.
+      const cleanCarrier = (s: string): string | null => {
+        const first = s.split(",")[0].trim();
+        return first || null;
+      };
       const sims: Array<{ slot: number; carrier: string | null; phoneNumber: string | null }> = [];
-      if (carrier1 || phoneNumber) sims.push({ slot: 0, carrier: carrier1 || null, phoneNumber: phoneNumber || null });
-      if (carrier2 || phoneNumber2) sims.push({ slot: 1, carrier: carrier2 || null, phoneNumber: phoneNumber2 || null });
+      if (carrier1 || phoneNumber) sims.push({ slot: 0, carrier: cleanCarrier(carrier1), phoneNumber: phoneNumber || null });
+      if (carrier2 || phoneNumber2) sims.push({ slot: 1, carrier: cleanCarrier(carrier2), phoneNumber: phoneNumber2 || null });
 
       res.json({
         manufacturer: manufacturer || null, model: model || null, brand: brand || null,
