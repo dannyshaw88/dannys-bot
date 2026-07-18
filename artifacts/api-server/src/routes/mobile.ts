@@ -2462,19 +2462,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
       storiesWatched++;
 
-      // Advance to the next story by tapping the right ~75% of the screen —
-      // but ONLY when there are more slides left to watch.  Previously this
-      // tap fired unconditionally at the end of every iteration, including
-      // the last one.  On 3-second stories that means: open tray → watch
-      // slide 1 (1800ms open + 250ms action wait + share sequence) → the
-      // tray has auto-advanced through slides 2 and 3 while we ran the
-      // sequence → unnecessary advance tap pushes us to slide 4 → exit via
-      // swipe-down — the user sees 4-5 slides fly by when they set
-      // "1 story to watch".  Skipping the advance on the last iteration
-      // lets the loop finish on whatever slide the tray is currently on,
-      // then exits cleanly via the swipe-down below.
+      // Advance to the next story by tapping the far-right edge (~92%) of the
+      // screen at ~25% height — but ONLY when there are more slides left to
+      // watch.  Previously this used (w*0.75, h*0.50) which is dead centre
+      // vertically — prime territory for collaboration stickers, hashtag
+      // stickers, and mention stickers that story authors embed at mid-screen.
+      // Tapping one of those navigates to the tagged profile, closing the
+      // story viewer instantly and producing the "story viewer already closed"
+      // log.  The safe zone is the far right edge (92%) at upper-quarter
+      // height (25%): story creators never place stickers there because it's
+      // too close to the muted/close controls and gets cropped on many
+      // devices.  The tap is still well inside the "right half = advance"
+      // region that Instagram uses.
+      //
+      // Previously this tap also fired unconditionally at the end of every
+      // iteration, including the last one.  On 3-second stories that means:
+      // open tray → watch slide 1 → tray auto-advances through slides 2 and 3
+      // → unnecessary advance tap pushes us to slide 4 → the user sees 4-5
+      // slides fly by when they set "1 story to watch".  Skipping the advance
+      // on the last iteration lets the loop finish on whatever slide the tray
+      // is currently on, then exits cleanly via the swipe-down below.
       if (s < totalStories - 1) {
-        await android.tap(serial, Math.round(w * 0.75), Math.round(h * 0.50));
+        await android.tap(serial, Math.round(w * 0.92), Math.round(h * 0.25));
         await sleepOrAbort(serial, 500 + Math.round(Math.random() * 400));
       }
     }
