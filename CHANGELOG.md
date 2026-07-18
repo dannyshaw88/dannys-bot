@@ -4,6 +4,34 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.18] — 2026-07-18
+
+### Feature — Shuffle Tool Order (Human Session Step 2)
+
+**What's new:** A new **"Shuffle tool order"** checkbox sits next to the **(STEP2)** heading in the Human Session settings. When ticked, the six Step-2 tools are Fisher-Yates shuffled into a random order at the start of every automation cycle. When unticked the original fixed sequence is preserved.
+
+**Why:** Every cycle running the same sequence (Feed → Stories → Reels → Follow → Post → Jitter) creates a predictable interaction fingerprint that Instagram can detect. Randomising the order means each cycle looks like a different person with different habits, reducing pattern-based detection risk.
+
+**Tools in the shuffle pool:** View Feed, View Stories, View Reels, Follow Users, Make a Post, Random Jitter — all six participate. The shuffled order is logged in the Debugging Log so you can see exactly what sequence ran each cycle (e.g. `▶ Tool order shuffled: stories → follow → feed → jitter → reels → post`).
+
+**Exit safety — Reels and Stories can no longer break the flow:**
+
+A key concern when running tools in arbitrary order is full-screen viewers leaving the phone stranded mid-cycle. Two specific hardening changes were made:
+
+- **Stories** (`runViewStoriesFromFeedLoop`): already exits the story viewer internally via swipe-down + ad-deviation recovery. The caller now uses `_isFirst` (is this the first tool in this cycle?) instead of `feedActuallyRan` to decide whether to tap Home before waiting for the story tray. This means Stories correctly taps Home whenever *any* tool preceded it — not just when Feed specifically did — so it's safe regardless of what ran before it.
+
+- **Reels** (exit guard upgraded): the previous exit was a single `pressBack` + 1200ms wait. Replaced with a loop that presses Back up to 3 times and polls `findHomeTab` after each press. The cycle only moves to the next tool once the home tab is confirmed visible (or after 3 attempts with a logged warning). This ensures the full-screen Reels viewer is definitively closed before whatever tool comes next.
+
+- **Feed** (navigation preamble added): when Feed is not the first tool in the sequence, it now taps the Home tab before starting the scroll. Previously Feed assumed it was always starting from the home feed (because it was always first). With shuffle it can follow any tool, so the guard ensures it's on the right screen.
+
+**No change to default behaviour:** when "Shuffle tool order" is off the existing fixed sequence runs exactly as before — no regressions.
+
+**Affected files:**
+- `artifacts/api-server/src/routes/mobile.ts` — `automationCycleSchema` extended with `shuffleToolOrder`; fixed sequential if-chain replaced with a shuffleable `for...of` loop dispatcher; Reels exit upgraded; Stories/Feed navigation guards added
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — `AutomationSettingsData` type, `AUTOMATION_DEFAULTS`, fetch body payload, `COPY_SECTIONS`, and the checkbox UI next to `(STEP2)` all updated
+
+---
+
 ## [1.2.17] — 2026-07-18
 
 ### Fix — Story loop: "story viewer already closed" false negative while still inside a story

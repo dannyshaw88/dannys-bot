@@ -2901,6 +2901,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // correct account even when multiple accounts share the same device.
     slotUsername: z.string().optional().default(""),
     slotIdx: z.number().int().min(0).default(0),
+    // Shuffle tool order — when true, the six Step-2 tools (Feed, Stories,
+    // Reels, Follow, Post, Jitter) are Fisher-Yates shuffled into a random
+    // order before each cycle runs.  When false the default fixed sequence
+    // is preserved.  Enables Instagram to see varied interaction patterns
+    // across cycles rather than an identical ordered fingerprint every time.
+    shuffleToolOrder: z.boolean().default(false),
   });
   const automationCycleInProgress = new Set<string>();
   // Tracks WHICH slot index is actively running on each device.
@@ -4298,6 +4304,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostLocalFolderNoRepeat, makePostLocalFolderRandom, makePostLocalFolderDeleteAfterUpload,
         makePostFixAiSlop, makePostCaptionText,
         slotUsername, slotIdx,
+        shuffleToolOrder,
       } = automationCycleSchema.parse(req.body);
 
       // ── Global followed / skipped settings ─────────────────────────────────
@@ -4434,246 +4441,285 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
       }
 
-      // 3. Scroll the feed (Step 2 in the UI) — skipped entirely when the
-      // "View Feed" checkbox is unticked, per-slide enable/disable (12 Jul 2026).
+      // ── Step 2: Shuffleable tool dispatcher ──────────────────────────────
+      // When shuffleToolOrder is on the six tools are Fisher-Yates shuffled
+      // into a random order before each cycle. When off they run in the
+      // default sequence: Feed → Stories → Reels → Follow → Post → Jitter.
+      //
+      // Exit safety guarantee:
+      //   • Stories: runViewStoriesFromFeedLoop already swipe-exits the
+      //     viewer internally (ad-deviation recovery + swipe-down). The
+      //     caller receives control only after the phone is back on the feed.
+      //   • Reels: after runViewReelsLoop returns we press Back up to 3
+      //     times polling findHomeTab, so the full-screen viewer is confirmed
+      //     closed before the next tool starts.
+      //   • All other tools self-navigate to their own starting position
+      //     (Search tab, Home tab, compose "+") so they work from any screen.
       let likes = 0, likeFailures = 0, sharesFeed = 0, sharesDm = 0, strayNavRecoveries = 0;
-      let feedActuallyRan = false;
-      if (feedEnabled && rollActivate(feedActivatePctMin, feedActivatePctMax)) {
-        feedActuallyRan = true;
-        tLog(`▶ Starting feed scroll — ${count} posts`);
-        ({ likes, likeFailures, sharesFeed, sharesDm, strayNavRecoveries } = await runCheckFeedLoop(serial, {
-          count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
-          shareFeedPercentMin, shareFeedPercentMax,
-          shareDmPercentMin, shareDmPercentMax,
-          onLog: (msg) => sendVideoLog(serial, `  ${msg}`),
-        }));
-        steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
-        tLog(`▶ Feed done — ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} DM-shares`);
-      } else if (!feedEnabled) {
-        steps.push("feed(skipped — View Feed disabled)");
-        tLog("▶ View Feed disabled — skipping feed scroll");
-      } else {
-        steps.push("feed(skipped — Activate Percentage roll missed this execution)");
-        tLog("▶ View Feed Activate Percentage roll missed — skipping feed scroll this execution");
-      }
 
-      // 4. View stories (Step 3 in the UI) — runs AFTER the feed scroll,
-      // skipped entirely when the "View Stories from Feed" checkbox is
-      // unticked.
-      if (storiesEnabled && viewStoriesSlidesMax > 0 && rollActivate(viewStoriesActivatePctMin, viewStoriesActivatePctMax)) {
-        if (!feedActuallyRan) {
-          // Story is the first or only active tool — Instagram just opened and
-          // is already showing the home feed with the stories tray loaded at
-          // the top. Tapping Home tab again would trigger a feed refresh and
-          // force a 5 s wait for the tray to repopulate. Skip it entirely.
-          tLog("▶ Stories: feed step skipped — already on home feed, story tray already loaded");
-          await sleepOrAbort(serial, 800); // brief settle before tapping a bubble
-        } else {
-          // Feed scroll ran before stories — we may have scrolled well down
-          // the feed. Tap Home to return to the top and reload the story tray.
-          tLog("▶ Tapping Home tab for stories…");
-          const homeTab = await android.findHomeTab(serial).catch(() => null);
-          if (homeTab) {
-            await android.tap(serial, homeTab.x, homeTab.y);
-          } else {
-            const { w: sw, h: sh } = getScreenSize(serial);
-            await android.tap(serial, Math.round(sw * 0.10), Math.round(sh * 0.975));
-          }
-          // Dismiss any popup that appeared after tapping Home (notifications
-          // prompt often fires here since the feed just refreshed).
-          const preStoriesPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
-          if (preStoriesPopup) {
-            steps.push(`pre-stories-popup-dismissed(${preStoriesPopup})`);
-            await sleepOrAbort(serial, 600);
-          }
-          // The Home tap forces Instagram to refresh back to the top — the
-          // story tray needs up to ~5 s to repopulate after the refresh.
-          tLog("▶ Waiting for story tray to load…");
-          await sleepOrAbort(serial, 5000);
+      const _toolSeq = ['feed', 'stories', 'reels', 'follow', 'post', 'jitter'];
+      if (shuffleToolOrder) {
+        for (let _si = _toolSeq.length - 1; _si > 0; _si--) {
+          const _sj = Math.floor(Math.random() * (_si + 1));
+          [_toolSeq[_si], _toolSeq[_sj]] = [_toolSeq[_sj], _toolSeq[_si]];
         }
-        tLog(`▶ Starting stories (up to ${viewStoriesSlidesMax})`);
-        const result = await runViewStoriesFromFeedLoop(serial, {
-          slidesMin: viewStoriesSlidesMin, slidesMax: viewStoriesSlidesMax,
-          slideWatchPctMin: viewStoriesSlideWatchPctMin, slideWatchPctMax: viewStoriesSlideWatchPctMax,
-          likePercentMin: viewStoriesLikePercentMin, likePercentMax: viewStoriesLikePercentMax,
-          shareDmPercentMin: viewStoriesShareDmPercentMin, shareDmPercentMax: viewStoriesShareDmPercentMax,
-          onLog: (msg) => tLog(`  ${msg}`),
-        });
-        storiesWatched = result.storiesWatched;
-        steps.push(`stories(${result.storiesWatched} watched)`);
-        tLog(`▶ Stories done — ${result.storiesWatched} watched`);
-      } else if (!storiesEnabled) {
-        steps.push("stories(skipped — View Stories from Feed disabled)");
-        tLog("▶ View Stories from Feed disabled — skipping stories");
-      } else if (storiesEnabled && viewStoriesSlidesMax > 0) {
-        steps.push("stories(skipped — Activate Percentage roll missed this execution)");
-        tLog("▶ View Stories from Feed Activate Percentage roll missed — skipping stories this execution");
+        tLog(`▶ Tool order shuffled: ${_toolSeq.join(' → ')}`);
       }
 
-      // 4a. View Reels — runs after stories, before Follow Users. Taps the
-      // Reels tab and snap-swipes through N reels, liking/sharing via the
-      // right-side vertical icon column.
-      if (viewReelsEnabled && viewReelsScrollMax > 0 && rollActivate(viewReelsActivatePctMin, viewReelsActivatePctMax)) {
-        tLog(`▶ Starting View Reels (up to ${viewReelsScrollMax})`);
-        const reelsResult = await runViewReelsLoop(serial, {
-          scrollMin: viewReelsScrollMin, scrollMax: viewReelsScrollMax,
-          watchPctMin: viewReelsWatchPctMin, watchPctMax: viewReelsWatchPctMax,
-          likePercentMin: viewReelsLikePercentMin, likePercentMax: viewReelsLikePercentMax,
-          shareFeedPercentMin: viewReelsShareFeedPercentMin, shareFeedPercentMax: viewReelsShareFeedPercentMax,
-          shareDmPercentMin: viewReelsShareDmPercentMin, shareDmPercentMax: viewReelsShareDmPercentMax,
-          onLog: (msg) => tLog(`  ${msg}`),
-        });
-        reelsViewed = reelsResult.reelsViewed;
-        reelsLikes = reelsResult.likes;
-        steps.push(`reels(${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes, ${reelsResult.sharesFeed} feed-shares, ${reelsResult.sharesDm} dm-shares)`);
-        tLog(`▶ View Reels done — ${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes`);
-        // Press Back once to exit the full-screen Reels viewer and return to
-        // the standard Instagram home feed. A single Back from the Reels tab
-        // always lands back on the feed; no additional Home-tab tap needed.
-        try {
-          await android.pressBack(serial);
-          await sleepOrAbort(serial, 1200);
-          tLog("▶ View Reels — pressed Back to exit Reels viewer");
-        } catch { /* non-fatal */ }
-      } else if (!viewReelsEnabled) {
-        steps.push("reels(skipped — View Reels disabled)");
-        tLog("▶ View Reels disabled — skipping reels");
-      } else if (viewReelsEnabled && viewReelsScrollMax > 0) {
-        steps.push("reels(skipped — Activate Percentage roll missed this execution)");
-        tLog("▶ View Reels Activate Percentage roll missed — skipping reels this execution");
-      }
+      let _toolsRan = 0; // how many tools have executed before the current one
 
-      // 4b. Follow Users — HikerAPI-driven follow step. Runs after stories/feed
-      // so the phone is already on Instagram; navigates to Search, types each
-      // @username character by character on the on-screen keyboard, and taps Follow.
-      if (followEnabled && rollActivate(followActivatePctMin, followActivatePctMax)) {
-        tLog("▶ Follow Users — fetching targets via HikerAPI…");
-        try {
-          const followCount = await runFollowUsersStep(serial, {
-            usersMin: followUsersMin,
-            usersMax: followUsersMax,
-            sources: followSources,
-            onLog: (msg) => tLog(`  ${msg}`),
-            recordFollow: (username, source) => recordMobileFollow(serial, username, source),
-            skipFollowedUsernames: await (async () => {
-              if (!followSkipFollowed && !globalSkipFollowed) return undefined;
-              // Start with the per-device JSON log (always available, fast).
-              const local = new Set(getMobileFollowedList(serial).map(e => e.username.toLowerCase()));
-              // Merge the global DB list when the setting is on — covers every
-              // username ever followed by any phone or browser-bot account.
-              if (globalSkipFollowed) {
-                const globalSet = await storage.getAllFollowedUsernames();
-                for (const u of globalSet) local.add(u);
+      for (const _tool of _toolSeq) {
+        if (isCycleAborted(serial)) break;
+        const _isFirst = _toolsRan === 0;
+
+        // ── Feed ────────────────────────────────────────────────────────
+        if (_tool === 'feed') {
+          if (feedEnabled && rollActivate(feedActivatePctMin, feedActivatePctMax)) {
+            // When this is not the first tool the previous one may have left
+            // the phone anywhere — navigate back to the home feed before
+            // starting the scroll sequence.
+            if (!_isFirst) {
+              tLog("▶ View Feed: navigating to home feed…");
+              const _fHome = await android.findHomeTab(serial).catch(() => null);
+              if (_fHome) {
+                await android.tap(serial, _fHome.x, _fHome.y);
+                await sleepOrAbort(serial, 2000);
               }
-              return local;
-            })(),
-            skipSkippedUsernames: await (async () => {
-              if (!globalSkipSkipped) return undefined;
-              const rows = await storage.getSkippedUsers(100_000);
-              return new Set(rows.map(s => s.instagramUsername.toLowerCase()));
-            })(),
-            browsing: injectBrowsingEnabled ? {
-              activatePctMin: injectBrowsingActivatePctMin, activatePctMax: injectBrowsingActivatePctMax,
-              beforeFollowPctMin: injectBrowsingBeforeFollowPctMin, beforeFollowPctMax: injectBrowsingBeforeFollowPctMax,
-              feedChanceMin: injectBrowsingFeedChanceMin, feedChanceMax: injectBrowsingFeedChanceMax,
-              feedMin: injectBrowsingFeedMin, feedMax: injectBrowsingFeedMax,
-              clickPostPctMin: injectBrowsingClickPostPctMin, clickPostPctMax: injectBrowsingClickPostPctMax,
-              likePctMin: injectBrowsingLikePctMin, likePctMax: injectBrowsingLikePctMax,
-              shareFeedPctMin: injectBrowsingShareFeedPctMin, shareFeedPctMax: injectBrowsingShareFeedPctMax,
-              shareDmPctMin: injectBrowsingShareDmPctMin, shareDmPctMax: injectBrowsingShareDmPctMax,
-            } : undefined,
-            filters: followFiltersEnabled
-              ? { skipVerified: followFilterVerifiedUsers, maxFollowers: followFilterMaxFollowers25k ? 25_000 : undefined }
-              : undefined,
-          });
-          followedCount = followCount;
-          steps.push(`follow(${followCount} followed)`);
-          tLog(`▶ Follow done — ${followCount} users followed`);
-        } catch (e: any) {
-          if (e?.message === "cycle-aborted") throw e;
-          tLog(`▶ Follow step error — ${e?.message}`);
-          steps.push("follow(error)");
-        }
-      } else if (!followEnabled) {
-        // no-op log line intentionally omitted — Follow Users disabled is
-        // the common/default state and would spam the log every cycle.
-      } else {
-        steps.push("follow(skipped — Activate Percentage roll missed this execution)");
-        tLog("▶ Follow Users Activate Percentage roll missed — skipping follow step this execution");
-      }
+            }
+            tLog(`▶ Starting feed scroll — ${count} posts`);
+            ({ likes, likeFailures, sharesFeed, sharesDm, strayNavRecoveries } = await runCheckFeedLoop(serial, {
+              count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
+              shareFeedPercentMin, shareFeedPercentMax,
+              shareDmPercentMin, shareDmPercentMax,
+              onLog: (msg) => sendVideoLog(serial, `  ${msg}`),
+            }));
+            steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
+            tLog(`▶ Feed done — ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} DM-shares`);
+          } else if (!feedEnabled) {
+            steps.push("feed(skipped — View Feed disabled)");
+            tLog("▶ View Feed disabled — skipping feed scroll");
+          } else {
+            steps.push("feed(skipped — Activate Percentage roll missed this execution)");
+            tLog("▶ View Feed Activate Percentage roll missed — skipping feed scroll this execution");
+          }
 
-      // 4b-ii. Make a Post — pushes a local-folder image to the device, taps
-      // Instagram's "+" compose icon, and walks the create-post flow. Runs
-      // after Follow, before Random Jitter. Only the local-folder image
-      // source is wired up on-device (per user preference over the
-      // HikerAPI-scrape-from-another-user alternative already used by
-      // Follow Users above).
-      if (makePostEnabled && rollActivate(makePostActivatePctMin, makePostActivatePctMax)) {
-        if (!makePostLocalFolderEnabled || !makePostLocalFolderPath) {
-          steps.push("make-a-post(skipped — Local Folder source not configured)");
-          tLog("▶ Make a Post enabled but no Local Folder path configured — skipping");
-        } else {
-          const postCount = rollRange(makePostPerSessionMin, makePostPerSessionMax);
-          tLog(`▶ Make a Post — attempting ${postCount} post(s) from local folder…`);
-          let posted = 0;
-          for (let i = 0; i < postCount; i++) {
+        // ── Stories ─────────────────────────────────────────────────────
+        } else if (_tool === 'stories') {
+          if (storiesEnabled && viewStoriesSlidesMax > 0 && rollActivate(viewStoriesActivatePctMin, viewStoriesActivatePctMax)) {
+            if (_isFirst) {
+              // First tool — Instagram just opened, already on the home feed
+              // with the story tray loaded. Tapping Home again would trigger
+              // a feed refresh and force a 5 s tray-repopulate wait.
+              tLog("▶ Stories: already on home feed — story tray ready");
+              await sleepOrAbort(serial, 800);
+            } else {
+              // Another tool ran before Stories and may have left the phone
+              // anywhere (Reels full-screen, Search, profile, etc.). Always
+              // tap Home so the story tray is at the top and freshly loaded,
+              // regardless of which tool preceded this one.
+              tLog("▶ Tapping Home tab for stories…");
+              const homeTab = await android.findHomeTab(serial).catch(() => null);
+              if (homeTab) {
+                await android.tap(serial, homeTab.x, homeTab.y);
+              } else {
+                const { w: sw, h: sh } = getScreenSize(serial);
+                await android.tap(serial, Math.round(sw * 0.10), Math.round(sh * 0.975));
+              }
+              // Dismiss any popup that appeared after tapping Home.
+              const preStoriesPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
+              if (preStoriesPopup) {
+                steps.push(`pre-stories-popup-dismissed(${preStoriesPopup})`);
+                await sleepOrAbort(serial, 600);
+              }
+              tLog("▶ Waiting for story tray to load…");
+              await sleepOrAbort(serial, 5000);
+            }
+            tLog(`▶ Starting stories (up to ${viewStoriesSlidesMax})`);
+            const result = await runViewStoriesFromFeedLoop(serial, {
+              slidesMin: viewStoriesSlidesMin, slidesMax: viewStoriesSlidesMax,
+              slideWatchPctMin: viewStoriesSlideWatchPctMin, slideWatchPctMax: viewStoriesSlideWatchPctMax,
+              likePercentMin: viewStoriesLikePercentMin, likePercentMax: viewStoriesLikePercentMax,
+              shareDmPercentMin: viewStoriesShareDmPercentMin, shareDmPercentMax: viewStoriesShareDmPercentMax,
+              onLog: (msg) => tLog(`  ${msg}`),
+            });
+            // runViewStoriesFromFeedLoop exits the viewer internally (ad-
+            // deviation recovery + swipe-down). Control returns here only
+            // once the phone is back on the home feed — no extra exit step.
+            storiesWatched = result.storiesWatched;
+            steps.push(`stories(${result.storiesWatched} watched)`);
+            tLog(`▶ Stories done — ${result.storiesWatched} watched`);
+          } else if (!storiesEnabled) {
+            steps.push("stories(skipped — View Stories from Feed disabled)");
+            tLog("▶ View Stories from Feed disabled — skipping stories");
+          } else if (storiesEnabled && viewStoriesSlidesMax > 0) {
+            steps.push("stories(skipped — Activate Percentage roll missed this execution)");
+            tLog("▶ View Stories from Feed Activate Percentage roll missed — skipping stories this execution");
+          }
+
+        // ── Reels ───────────────────────────────────────────────────────
+        } else if (_tool === 'reels') {
+          if (viewReelsEnabled && viewReelsScrollMax > 0 && rollActivate(viewReelsActivatePctMin, viewReelsActivatePctMax)) {
+            tLog(`▶ Starting View Reels (up to ${viewReelsScrollMax})`);
+            const reelsResult = await runViewReelsLoop(serial, {
+              scrollMin: viewReelsScrollMin, scrollMax: viewReelsScrollMax,
+              watchPctMin: viewReelsWatchPctMin, watchPctMax: viewReelsWatchPctMax,
+              likePercentMin: viewReelsLikePercentMin, likePercentMax: viewReelsLikePercentMax,
+              shareFeedPercentMin: viewReelsShareFeedPercentMin, shareFeedPercentMax: viewReelsShareFeedPercentMax,
+              shareDmPercentMin: viewReelsShareDmPercentMin, shareDmPercentMax: viewReelsShareDmPercentMax,
+              onLog: (msg) => tLog(`  ${msg}`),
+            });
+            reelsViewed = reelsResult.reelsViewed;
+            reelsLikes = reelsResult.likes;
+            steps.push(`reels(${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes, ${reelsResult.sharesFeed} feed-shares, ${reelsResult.sharesDm} dm-shares)`);
+            tLog(`▶ View Reels done — ${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes`);
+            // Robust Reels exit — press Back up to 3 times, polling for the
+            // home tab each attempt. The previous single Back+1200ms was
+            // sufficient when Reels always preceded Follow (which navigates
+            // to Search itself). With shuffle any tool may come next, so we
+            // must confirm the full-screen viewer is fully closed first.
+            tLog("▶ View Reels — exiting full-screen viewer…");
+            let _reelsExited = false;
+            for (let _re = 0; _re < 3; _re++) {
+              try { await android.pressBack(serial); } catch { /* best effort */ }
+              await sleepOrAbort(serial, 1200);
+              const _reHome = await android.findHomeTab(serial).catch(() => null);
+              if (_reHome) {
+                _reelsExited = true;
+                tLog("▶ View Reels — confirmed back on home feed");
+                break;
+              }
+            }
+            if (!_reelsExited) {
+              tLog("▶ View Reels — exit uncertain after 3 Back presses — proceeding anyway");
+            }
+          } else if (!viewReelsEnabled) {
+            steps.push("reels(skipped — View Reels disabled)");
+            tLog("▶ View Reels disabled — skipping reels");
+          } else if (viewReelsEnabled && viewReelsScrollMax > 0) {
+            steps.push("reels(skipped — Activate Percentage roll missed this execution)");
+            tLog("▶ View Reels Activate Percentage roll missed — skipping reels this execution");
+          }
+
+        // ── Follow Users ────────────────────────────────────────────────
+        } else if (_tool === 'follow') {
+          if (followEnabled && rollActivate(followActivatePctMin, followActivatePctMax)) {
+            tLog("▶ Follow Users — fetching targets via HikerAPI…");
             try {
-              const result = await runMakePostStep(serial, {
-                localFolderPath: makePostLocalFolderPath,
-                localFolderRandom: makePostLocalFolderRandom,
-                localFolderNoRepeat: makePostLocalFolderNoRepeat,
-                deleteAfterUpload: makePostLocalFolderDeleteAfterUpload,
-                doFixAiSlop: makePostFixAiSlop,
-                captionText: makePostCaptionText,
+              const followCount = await runFollowUsersStep(serial, {
+                usersMin: followUsersMin,
+                usersMax: followUsersMax,
+                sources: followSources,
                 onLog: (msg) => tLog(`  ${msg}`),
+                recordFollow: (username, source) => recordMobileFollow(serial, username, source),
+                skipFollowedUsernames: await (async () => {
+                  if (!followSkipFollowed && !globalSkipFollowed) return undefined;
+                  const local = new Set(getMobileFollowedList(serial).map(e => e.username.toLowerCase()));
+                  if (globalSkipFollowed) {
+                    const globalSet = await storage.getAllFollowedUsernames();
+                    for (const u of globalSet) local.add(u);
+                  }
+                  return local;
+                })(),
+                skipSkippedUsernames: await (async () => {
+                  if (!globalSkipSkipped) return undefined;
+                  const rows = await storage.getSkippedUsers(100_000);
+                  return new Set(rows.map(s => s.instagramUsername.toLowerCase()));
+                })(),
+                browsing: injectBrowsingEnabled ? {
+                  activatePctMin: injectBrowsingActivatePctMin, activatePctMax: injectBrowsingActivatePctMax,
+                  beforeFollowPctMin: injectBrowsingBeforeFollowPctMin, beforeFollowPctMax: injectBrowsingBeforeFollowPctMax,
+                  feedChanceMin: injectBrowsingFeedChanceMin, feedChanceMax: injectBrowsingFeedChanceMax,
+                  feedMin: injectBrowsingFeedMin, feedMax: injectBrowsingFeedMax,
+                  clickPostPctMin: injectBrowsingClickPostPctMin, clickPostPctMax: injectBrowsingClickPostPctMax,
+                  likePctMin: injectBrowsingLikePctMin, likePctMax: injectBrowsingLikePctMax,
+                  shareFeedPctMin: injectBrowsingShareFeedPctMin, shareFeedPctMax: injectBrowsingShareFeedPctMax,
+                  shareDmPctMin: injectBrowsingShareDmPctMin, shareDmPctMax: injectBrowsingShareDmPctMax,
+                } : undefined,
+                filters: followFiltersEnabled
+                  ? { skipVerified: followFilterVerifiedUsers, maxFollowers: followFilterMaxFollowers25k ? 25_000 : undefined }
+                  : undefined,
               });
-              if (result.posted) posted++;
-              else break; // no image available / a UI step aborted — don't keep retrying blind
+              followedCount = followCount;
+              steps.push(`follow(${followCount} followed)`);
+              tLog(`▶ Follow done — ${followCount} users followed`);
             } catch (e: any) {
               if (e?.message === "cycle-aborted") throw e;
-              tLog(`▶ Make a Post attempt error — ${e?.message}`);
-              break;
+              tLog(`▶ Follow step error — ${e?.message}`);
+              steps.push("follow(error)");
             }
+          } else if (!followEnabled) {
+            // no-op — Follow Users disabled is the common/default state
+          } else {
+            steps.push("follow(skipped — Activate Percentage roll missed this execution)");
+            tLog("▶ Follow Users Activate Percentage roll missed — skipping follow step this execution");
           }
-          steps.push(`make-a-post(${posted}/${postCount} posted)`);
-          tLog(`▶ Make a Post done — ${posted}/${postCount} posted`);
-        }
-      } else if (makePostEnabled) {
-        steps.push("make-a-post(skipped — Activate Percentage roll missed this execution)");
-        tLog("▶ Make a Post Activate Percentage roll missed — skipping this execution");
-      }
 
-      // 4c. Random Jitter — human-like interstitial actions run after the main
-      // tools but before closing Instagram.  Each one rolls its own chance
-      // independently so they can all fire, none fire, or any subset fires.
-      // The Activate Percentage below is an outer gate for the whole Random
-      // Jitter tool this execution, on top of (not instead of) each
-      // sub-action's own independent chance.
-      if (randomJitterEnabled && rollActivate(randomJitterActivatePctMin, randomJitterActivatePctMax)) {
-        // Check Notifications
-        const notifChance = rollRange(checkNotificationsPctMin, checkNotificationsPctMax) / 100;
-        if (notifChance > 0 && Math.random() < notifChance) {
-          tLog("▶ Random Jitter: checking notifications…");
-          await runCheckNotifications(serial, {
-            scrollsMin: checkNotificationsScrollsMin,
-            scrollsMax: checkNotificationsScrollsMax,
-            clickPctMin: checkNotificationsClickPctMin,
-            clickPctMax: checkNotificationsClickPctMax,
-            onLog: (msg) => tLog(`  ${msg}`),
-          });
-          steps.push("jitter-check-notifications");
+        // ── Make a Post ─────────────────────────────────────────────────
+        } else if (_tool === 'post') {
+          if (makePostEnabled && rollActivate(makePostActivatePctMin, makePostActivatePctMax)) {
+            if (!makePostLocalFolderEnabled || !makePostLocalFolderPath) {
+              steps.push("make-a-post(skipped — Local Folder source not configured)");
+              tLog("▶ Make a Post enabled but no Local Folder path configured — skipping");
+            } else {
+              const postCount = rollRange(makePostPerSessionMin, makePostPerSessionMax);
+              tLog(`▶ Make a Post — attempting ${postCount} post(s) from local folder…`);
+              let posted = 0;
+              for (let i = 0; i < postCount; i++) {
+                try {
+                  const result = await runMakePostStep(serial, {
+                    localFolderPath: makePostLocalFolderPath,
+                    localFolderRandom: makePostLocalFolderRandom,
+                    localFolderNoRepeat: makePostLocalFolderNoRepeat,
+                    deleteAfterUpload: makePostLocalFolderDeleteAfterUpload,
+                    doFixAiSlop: makePostFixAiSlop,
+                    captionText: makePostCaptionText,
+                    onLog: (msg) => tLog(`  ${msg}`),
+                  });
+                  if (result.posted) posted++;
+                  else break;
+                } catch (e: any) {
+                  if (e?.message === "cycle-aborted") throw e;
+                  tLog(`▶ Make a Post attempt error — ${e?.message}`);
+                  break;
+                }
+              }
+              steps.push(`make-a-post(${posted}/${postCount} posted)`);
+              tLog(`▶ Make a Post done — ${posted}/${postCount} posted`);
+            }
+          } else if (makePostEnabled) {
+            steps.push("make-a-post(skipped — Activate Percentage roll missed this execution)");
+            tLog("▶ Make a Post Activate Percentage roll missed — skipping this execution");
+          }
+
+        // ── Random Jitter ───────────────────────────────────────────────
+        } else if (_tool === 'jitter') {
+          if (randomJitterEnabled && rollActivate(randomJitterActivatePctMin, randomJitterActivatePctMax)) {
+            const notifChance = rollRange(checkNotificationsPctMin, checkNotificationsPctMax) / 100;
+            if (notifChance > 0 && Math.random() < notifChance) {
+              tLog("▶ Random Jitter: checking notifications…");
+              await runCheckNotifications(serial, {
+                scrollsMin: checkNotificationsScrollsMin,
+                scrollsMax: checkNotificationsScrollsMax,
+                clickPctMin: checkNotificationsClickPctMin,
+                clickPctMax: checkNotificationsClickPctMax,
+                onLog: (msg) => tLog(`  ${msg}`),
+              });
+              steps.push("jitter-check-notifications");
+            }
+            const profileChance = rollRange(visitProfilePctMin, visitProfilePctMax) / 100;
+            if (profileChance > 0 && Math.random() < profileChance) {
+              tLog("▶ Random Jitter: visiting own profile…");
+              await runVisitOwnProfile(serial, (msg) => tLog(`  ${msg}`));
+              steps.push("jitter-visit-profile");
+            }
+          } else if (randomJitterEnabled) {
+            steps.push("jitter(skipped — Activate Percentage roll missed this execution)");
+            tLog("▶ Random Jitter Activate Percentage roll missed — skipping jitter this execution");
+          }
         }
-        // Visit My Profile
-        const profileChance = rollRange(visitProfilePctMin, visitProfilePctMax) / 100;
-        if (profileChance > 0 && Math.random() < profileChance) {
-          tLog("▶ Random Jitter: visiting own profile…");
-          await runVisitOwnProfile(serial, (msg) => tLog(`  ${msg}`));
-          steps.push("jitter-visit-profile");
-        }
-      } else if (randomJitterEnabled) {
-        steps.push("jitter(skipped — Activate Percentage roll missed this execution)");
-        tLog("▶ Random Jitter Activate Percentage roll missed — skipping jitter this execution");
-      }
+
+        _toolsRan++;
+      } // end tool dispatch loop
 
       // 5. Close Instagram completely — recents switcher + swipe away, not a
       // force-stop, so the device behaves like a person put it down.

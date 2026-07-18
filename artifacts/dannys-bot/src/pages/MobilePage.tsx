@@ -1959,6 +1959,7 @@ interface AutomationSettingsData {
   // fields below, which only take effect once a slide is enabled.
   feedEnabled: boolean;
   storiesEnabled: boolean;
+  shuffleToolOrder: boolean;
   actionDelayMin: number;
   actionDelayMax: number;
   likePercentMin: number;
@@ -2071,7 +2072,7 @@ interface AutomationSettingsData {
 
 const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
-  feedEnabled: true, storiesEnabled: true,
+  feedEnabled: true, storiesEnabled: true, shuffleToolOrder: false,
   actionDelayMin: 5, actionDelayMax: 10,
   likePercentMin: 3, likePercentMax: 5,
   shareFeedPercentMin: 0, shareFeedPercentMax: 0,
@@ -2430,6 +2431,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             makePostMakeUnique: s.makePostMakeUnique,
             makePostCaptionText: s.makePostCaptionText,
             makePostImageSettings: s.makePostImageSettings,
+            shuffleToolOrder: s.shuffleToolOrder,
             slotUsername: slotUsername ?? "",
             slotIdx: slotIdx ?? 0,
           }),
@@ -2605,6 +2607,7 @@ type CopySection    = { key: string; label: string; sub: CopySubSetting[] };
 const COPY_SECTIONS: CopySection[] = [
   { key: 'runInterval',   label: 'Run Interval', sub: [
     { key: 'cycleInterval',     label: 'Run every X - Y minutes',      fields: ['cycleIntervalMin','cycleIntervalMax'] },
+    { key: 'shuffleToolOrder',  label: 'Shuffle tool order',           fields: ['shuffleToolOrder'] },
   ]},
   { key: 'feed',          label: 'View Feed', sub: [
     { key: 'feedEnabled',       label: 'Enabled',                       fields: ['feedEnabled'] },
@@ -3181,7 +3184,20 @@ function AutomationSettingsPanel({
 
       <div className="bg-card border border-border rounded-xl p-5 space-y-5">
         <div className="space-y-2">
-          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(STEP2)</p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(STEP2)</p>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                id={`shuffle-tool-order-${slotIdx ?? 0}`}
+                checked={settings.shuffleToolOrder}
+                onChange={e => setSettings(s => ({ ...s, shuffleToolOrder: e.target.checked }))}
+                disabled={loading}
+                className="w-3.5 h-3.5 accent-primary cursor-pointer"
+              />
+              <span className="text-xs text-muted-foreground">Shuffle tool order</span>
+            </label>
+          </div>
           <br />
           <div className="flex items-center gap-2">
             <input
