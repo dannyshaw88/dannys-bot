@@ -4,6 +4,41 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.16] — 2026-07-18
+
+### Fix — Story loop: "story viewer already closed" after collaboration-tagged stories
+
+**What was broken:** When watching stories from accounts with collaboration posts (e.g. "billieshepherdofficial + 2 others"), the story loop would open story 1, then immediately log "Story 2: story viewer already closed — stopping story loop." Only one story was watched per tray open, and the viewer shut itself mid-cycle even though no navigation was intentionally triggered.
+
+**Root cause — advance tap landing on a collaboration sticker:**
+
+The "advance to next story" tap used coordinates `(w*0.75, h*0.50)` — 75% across and dead-centre vertically. This is prime territory for the interactive stickers that Instagram embeds directly inside story content:
+
+- **Collaboration stickers** (the "@user + N others" badge visible across the story face)
+- **Mention stickers** (`@username` overlays)
+- **Hashtag stickers** (`#topic` overlays)
+- **Link stickers** / **Product stickers**
+
+Story creators almost never place stickers near the extreme right edge or upper third of the screen — those areas are too close to the mute button and close ("X") controls and get partially cropped on many devices. Instagram's "advance to next story" tap zone is simply "right half of screen" — there is no special hit-target; any tap in the right 50% advances the slide, so there is no need to tap near the centre.
+
+When the advance tap landed on a collaboration sticker, Instagram immediately navigated to that collaborator's profile page, closing the story viewer. The next iteration's `stillInStoryViewer()` check found the viewer gone and logged the misleading "already closed" message.
+
+**Fix — move the advance tap to the sticker-free zone:**
+
+Changed `(w*0.75, h*0.50)` → `(w*0.92, h*0.25)`:
+
+| Axis | Old | New | Why |
+|------|-----|-----|-----|
+| X (horizontal) | 75% | 92% | Far right edge — safely inside the advance zone and away from any centre/left content |
+| Y (vertical) | 50% | 25% | Upper quarter — above the main story content area where stickers are placed, below the muted/close button row |
+
+The tap is still firmly inside Instagram's right-half advance zone and will reliably move to the next story without risk of hitting any sticker type.
+
+**Affected file:**
+- `artifacts/api-server/src/routes/mobile.ts` — advance tap coordinates updated at the end of the per-story loop iteration (the `if (s < totalStories - 1)` block)
+
+---
+
 ## [1.2.15] — 2026-07-18
 
 ### Performance — Instagram launch-to-account-switch time reduced ~55–65%
