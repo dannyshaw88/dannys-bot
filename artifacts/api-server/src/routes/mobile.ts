@@ -4520,8 +4520,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               const _fHome = await android.findHomeTab(serial).catch(() => null);
               if (_fHome) {
                 await android.tap(serial, _fHome.x, _fHome.y);
-                await sleepOrAbort(serial, 2000);
+              } else {
+                // Coordinate fallback — same as Stories uses — taps the leftmost
+                // bottom-nav icon (Home) when uiautomator can't find it by node.
+                const { w: sw, h: sh } = getScreenSize(serial);
+                await android.tap(serial, Math.round(sw * 0.10), Math.round(sh * 0.975));
               }
+              await sleepOrAbort(serial, 2000);
             }
             tLog(`▶ Starting feed scroll — ${count} posts`);
             ({ likes, likeFailures, sharesFeed, sharesDm, strayNavRecoveries } = await runCheckFeedLoop(serial, {
