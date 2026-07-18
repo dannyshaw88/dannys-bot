@@ -2593,7 +2593,7 @@ const COPY_SECTIONS: CopySection[] = [
     { key: 'enabled',           label: 'Enabled / Disabled',          fields: ['enabled'] },
   ]},
   { key: 'runInterval',   label: 'Run Interval', sub: [
-    { key: 'cycleInterval',     label: 'Run every X – Y minutes',      fields: ['cycleIntervalMin','cycleIntervalMax'] },
+    { key: 'cycleInterval',     label: 'Run every X - Y minutes',      fields: ['cycleIntervalMin','cycleIntervalMax'] },
   ]},
   { key: 'feed',          label: 'View Feed', sub: [
     { key: 'feedEnabled',       label: 'Enabled',                       fields: ['feedEnabled'] },
@@ -2627,12 +2627,17 @@ const COPY_SECTIONS: CopySection[] = [
     { key: 'followCount',       label: 'Follow count per session',      fields: ['followUsersMin','followUsersMax'] },
     { key: 'followSkip',        label: 'Skip already followed',         fields: ['followSkipFollowed'] },
     { key: 'followSources',     label: 'Follow sources list',           fields: ['followSources'] },
-    { key: 'filtersEnabled',    label: 'Filters — Master toggle',       fields: ['followFiltersEnabled'] },
-    { key: 'filterPrivate',     label: 'Filters — Skip Private users',  fields: ['followFilterPrivateUsers'] },
-    { key: 'filterEnglish',     label: 'Filters — English Speaking only', fields: ['followFilterEnglishSpeaking'] },
-    { key: 'filterMin250',      label: 'Filters — 250+ Followers min',  fields: ['followFilterMinFollowers250'] },
-    { key: 'filterVerified',    label: 'Filters — Skip Verified users', fields: ['followFilterVerifiedUsers'] },
-    { key: 'filterMax25k',      label: 'Filters — Skip 25K+ Followers', fields: ['followFilterMaxFollowers25k'] },
+  ]},
+  // Follow Filters is its own top-level section so it can be selected/deselected
+  // independently from Follow Users. Previously it was nested inside Follow Users,
+  // which meant deselecting that section header silently removed all filter items too.
+  { key: 'followFilters', label: 'Follow Filters', sub: [
+    { key: 'filtersEnabled',    label: 'Master toggle',                 fields: ['followFiltersEnabled'] },
+    { key: 'filterPrivate',     label: 'Skip Private users',            fields: ['followFilterPrivateUsers'] },
+    { key: 'filterEnglish',     label: 'English Speaking only',         fields: ['followFilterEnglishSpeaking'] },
+    { key: 'filterMin250',      label: '250+ Followers min',            fields: ['followFilterMinFollowers250'] },
+    { key: 'filterVerified',    label: 'Skip Verified users',           fields: ['followFilterVerifiedUsers'] },
+    { key: 'filterMax25k',      label: 'Skip 25K+ Followers',           fields: ['followFilterMaxFollowers25k'] },
   ]},
   { key: 'injectBrowsing',label: 'Inject Browsing', sub: [
     { key: 'injectEnabled',     label: 'Enabled',                       fields: ['injectBrowsingEnabled'] },
