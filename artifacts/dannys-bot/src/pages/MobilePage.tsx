@@ -4578,7 +4578,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   );
 });
 
-function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLog: (msg: string) => void }) {
+function AccountSettingsPanel({ phone, addLog, onSlotChange }: { phone: UsbPhone | null; addLog: (msg: string) => void; onSlotChange?: (slotIdx: number | null) => void }) {
   const [slotRefreshKeys, setSlotRefreshKeys] = useState<Record<number, number>>({});
   const handleCopied = useCallback((targetSlotIdxs: number[]) => {
     setSlotRefreshKeys(prev => {
@@ -4612,6 +4612,7 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
   const [showEmailPassword, setShowEmailPassword] = useState<boolean[]>(Array(ACCT_SLOT_COUNT).fill(false));
   // null = show slot list; number = show Human Session Tool for that slot index
   const [openSlotTool, setOpenSlotTool] = useState<number | null>(null);
+  useEffect(() => { onSlotChange?.(openSlotTool); }, [openSlotTool]);
   const { requestSlot, releaseSlot } = useCollisionScheduler(phone?.serial ?? null);
   const hydratedRef = useRef(false);
   const lastSavedRef = useRef<string>(JSON.stringify(Array.from({ length: ACCT_SLOT_COUNT }, emptySlot)));
@@ -6054,6 +6055,9 @@ export function MobilePage() {
   // can briefly letterbox the next one before its first frame arrives.
   useEffect(() => { setPhoneDims(null); }, [activeSerial]);
 
+  // Tracks which account slot is open in the Human Session Tool, so the header title updates.
+  const [openAccountSlot, setOpenAccountSlot] = useState<number | null>(null);
+
   // Fetch the farm slot index for the targeted serial so the header can
   // show "Phone Farm - Slot X - Device Name" instead of just "Phone Farm".
   const [farmSlotIndex, setFarmSlotIndex] = useState<number | null>(null);
@@ -6115,7 +6119,7 @@ export function MobilePage() {
             <FilledFarmIcon className="w-5 h-5" style={{ color: "#1AD2F2" }} />
             <h1 className="text-lg font-bold text-foreground">
               {targetSerial && slotNum !== null
-                ? `Phone Farm - Slot ${slotNum} - ${deviceFriendlyName ?? targetSerial}`
+                ? `Phone Farm - Slot ${slotNum} - ${deviceFriendlyName ?? targetSerial}${openAccountSlot !== null ? ` - Account ${openAccountSlot + 1}` : ""}`
                 : "Phone Farm"}
             </h1>
           </div>
@@ -6210,7 +6214,7 @@ export function MobilePage() {
                 {/* Accounts panel: always mounted so each slot's automation
                     hook persists across tab switches and navigation. */}
                 <div className={activeTab === "account" ? "h-full" : "hidden"}>
-                  <AccountSettingsPanel phone={slots[0]} addLog={addLog} />
+                  <AccountSettingsPanel phone={slots[0]} addLog={addLog} onSlotChange={setOpenAccountSlot} />
                 </div>
                 {activeTab === "phonesettings" && (
                   <PhoneSettingsPanel serial={activeSerial} />
