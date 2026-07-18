@@ -4175,6 +4175,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           onLog?.("Inject Browsing: rolled to browse this profile after following");
         }
 
+        // Dismiss any interstitial/upsell popup that appeared during navigation
+        // to this profile or during pre-follow browsing (e.g. "Instagram Plus
+        // — Choose custom fonts for your profile bio" with "Not now" dismiss).
+        // Must run before the Follow tap so the popup isn't blocking the button.
+        const preFollowPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
+        if (preFollowPopup) {
+          onLog?.(`Follow: dismissed popup before follow tap ("${preFollowPopup}")`);
+          await sleepOrAbort(serial, 400);
+        }
+
         // Tap Follow on the profile page. Only logs success when the button
         // is confirmed to have changed to "Following" or "Requested".
         const didFollow = await android.tapFollowButtonOnProfilePage(serial).catch(() => false);
@@ -4212,6 +4222,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           await sleepOrAbort(serial, 500);
           await android.pressBack(serial);     // search results → clean Explore
           await sleepOrAbort(serial, 800);
+          // Dismiss any popup that appeared after pressing back (e.g. IG Plus
+          // upsell, notification prompts) before the next search-bar lookup.
+          const interUserPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
+          if (interUserPopup) {
+            onLog?.(`Follow: dismissed popup between users ("${interUserPopup}")`);
+            await sleepOrAbort(serial, 400);
+          }
         }
       } catch (e: any) {
         if (e?.message === "cycle-aborted") throw e;
