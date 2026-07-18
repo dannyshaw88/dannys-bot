@@ -3982,7 +3982,13 @@ function AutomationSettingsPanel({
                     value={settings.checkNotificationsPctMax}
                     onChange={e => setSettings(s => ({ ...s, checkNotificationsPctMax: clamp4(Number(e.target.value)) }))}
                     disabled={loading} />
-                  <Label className="text-xs text-muted-foreground whitespace-nowrap shrink-0 ml-1">Scrolls</Label>
+                </div>
+              </div>
+
+              {/* ── Scrolls ── */}
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs font-semibold text-foreground whitespace-nowrap">Scrolls</Label>
+                <div className="flex items-center gap-1">
                   <Input type="number" min={0} maxLength={4} className="w-12 text-center"
                     value={settings.checkNotificationsScrollsMin}
                     onChange={e => setSettings(s => ({ ...s, checkNotificationsScrollsMin: clamp4(Number(e.target.value)) }))}
@@ -3992,7 +3998,13 @@ function AutomationSettingsPanel({
                     value={settings.checkNotificationsScrollsMax}
                     onChange={e => setSettings(s => ({ ...s, checkNotificationsScrollsMax: clamp4(Number(e.target.value)) }))}
                     disabled={loading} />
-                  <Label className="text-xs text-muted-foreground whitespace-nowrap shrink-0 ml-1">Click %</Label>
+                </div>
+              </div>
+
+              {/* ── Click % ── */}
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs font-semibold text-foreground whitespace-nowrap">Click %</Label>
+                <div className="flex items-center gap-1">
                   <Input type="number" min={0} max={100} maxLength={4} className="w-12 text-center"
                     value={settings.checkNotificationsClickPctMin}
                     onChange={e => setSettings(s => ({ ...s, checkNotificationsClickPctMin: clamp4(Number(e.target.value)) }))}
