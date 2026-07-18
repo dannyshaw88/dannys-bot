@@ -4,6 +4,120 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.12] — 2026-07-18
+
+### UI — Slot Navigation Buttons Show Destination Slot
+
+The `< SLOT` / `SLOT >` buttons in the top-right of the Human Session Tool panel previously had no number — they just said "SLOT". They now display the slot number they will navigate **to**, not the current slot. For example, when viewing Slot 2, the buttons show **← SLOT 1** and **SLOT 3 →**, making it immediately clear where each button leads without needing to mentally compute it.
+
+**Affected file:** `artifacts/dannys-bot/src/pages/MobilePage.tsx` — `SlotHumanSessionView` render.
+
+---
+
+### UI — Page Title Reflects Open Account Slot
+
+The top-of-page header previously always showed **"Phone Farm - Slot 1 - [Device Name]"** regardless of which account slot was open inside the Human Session Tool, because the slot number was derived from the device's farm position (always 1 for the first device).
+
+**Changes:**
+- **Accounts overview (no slot open):** Title now shows **"Phone Farm - [Device Name]"** with no slot number. There is no "selected slot" at this level, so showing one was misleading.
+- **Slot tool open (e.g. Account Slot 2):** Title updates to **"Phone Farm - Slot 2 - [Device Name]"**, where the slot number reflects the account slot currently being viewed. Navigating to Slot 3 updates it to Slot 3, and so on.
+
+**Implementation:** `openAccountSlot` state lifted to `MobileDevicesPage` via an `onSlotChange` callback on `AccountSettingsPanel`. The `useEffect` inside `AccountSettingsPanel` fires `onSlotChange(openSlotTool)` whenever the open slot changes, and the header reads from that state directly.
+
+**Affected file:** `artifacts/dannys-bot/src/pages/MobilePage.tsx` — `AccountSettingsPanel` props, `MobileDevicesPage` header title.
+
+---
+
+### UI — Human Session Tool Button on Accounts List: Icon Only
+
+The **Human Session Tool** button shown next to each account slot on the Accounts overview panel previously displayed the full text label **"HUMAN SESSION TOOL"** alongside the fingerprint icon. The label has been removed — the button is now an icon-only 28×28 px square showing just the fingerprint icon.
+
+This reduces visual clutter on the accounts list where the button appears once per slot (up to 5 times), and the fingerprint icon alone is sufficient to identify the action.
+
+**Affected file:** `artifacts/dannys-bot/src/pages/MobilePage.tsx` — `AccountSettingsPanel` slot header button (~line 4802).
+
+---
+
+### UI — TrustScore Badge Further Reduced (−7.5%)
+
+The TrustScore badge in the Human Session Tool slot row has been reduced by a further 7.5%:
+
+- Previous: **154 px**
+- New: **142 px**
+
+This follows an earlier series of reductions in the prior session (200 → 190 → 171 → 162 → 154) and brings the badge to a tighter fit within the slot row without clipping the badge content.
+
+**Affected file:** `artifacts/dannys-bot/src/pages/MobilePage.tsx` — `SlotTrustScoreBadge` default `width` prop.
+
+---
+
+### UI — Filters Checkbox and Sub-Settings Vertical Spacing
+
+Two small vertical spacing adjustments were made to the **Filters** section inside the Follow Users block of the Human Session Tool:
+
+- **Filters checkbox row:** `paddingTop: 5px` added to the row container, pushing the checkbox and label slightly lower relative to the Inject Browsing section above it.
+- **Filters sub-settings row** (Private Users, English Speaking, 250 Followers+, Skip Verified, −25K Followers): `paddingTop: 4px` added to the sub-settings container, adding a small gap between the Filters label/checkbox and its child options when expanded.
+
+These are pixel-level alignment tweaks with no functional change.
+
+**Affected file:** `artifacts/dannys-bot/src/pages/MobilePage.tsx` — Follow Filters section (~line 3862).
+
+---
+
+### UI — Random Jitter Settings Condensed to One Row
+
+The **Random Jitter** expanded settings previously rendered across multiple wrapped rows. All settings are now laid out on a **single horizontal row** with the label for each group sitting **above** its inputs.
+
+**Before:** Three separate flex rows — "Activate Percentage Chance % [x] to [y]" / "Check Notifications Chance % [x] to [y] Scrolls [x] to [y] Click % [x] to [y]" / "Visit My Profile Chance % [x] to [y]".
+
+**After:** Five labelled columns side-by-side on one row:
+
+| Activate % | Notifications | Scrolls | Click % | Visit Profile |
+|---|---|---|---|---|
+| [x] to [y] | [x] to [y] | [x] to [y] | [x] to [y] | [x] to [y] |
+
+**Specific changes:**
+- Container changed from `flex items-center gap-6 flex-wrap` to `flex items-start gap-2 flex-nowrap`.
+- "Scrolls" and "Click %" promoted from inline sub-labels inside the Notifications row to their own labelled columns.
+- "Check Notifications", "Visit My Profile", and "Activate Percentage" label text shortened to "Notifications", "Visit Profile", "Activate %" respectively.
+- Redundant "Chance %" sub-labels removed (the column header conveys the same information).
+- Vertical dividers between groups removed.
+- Bold (`font-semibold`) removed from all group labels — all labels now use `text-xs text-muted-foreground`.
+- Input width reduced from `w-12` (48 px) to `w-10` (40 px) to fit the row without overflow.
+- Inner gap (between inputs and "to" span) reduced from `gap-1` to `gap-0.5`.
+
+**Affected file:** `artifacts/dannys-bot/src/pages/MobilePage.tsx` — Random Jitter expanded block (~line 3951).
+
+---
+
+### UI — Settings Page: Inject Fake Phones Reworked and Moved
+
+The **Inject Fake Phones** card on the Settings page has been reworked and relocated:
+
+- **Moved** from the **General** tab to the **Automation** tab, where it logically belongs alongside other automation-related configuration.
+- **Number input removed.** The previous design had a number input where you typed how many devices to inject. It now works as a one-at-a-time control: each click of **Inject** adds exactly one fake device entry (up to a maximum of 10).
+- **Remove All button added.** A single **Remove All** button clears all injected fake devices at once.
+
+**Affected file:** `artifacts/dannys-bot/src/pages/SettingsPage.tsx` — `FakePhoneCard` component and tab placement.
+
+---
+
+### UI — Sidebar: Settings Nav Item Integrated into Main List
+
+The **Settings** navigation item in the left sidebar was previously rendered as a hardcoded block pinned to the bottom of the sidebar, separate from the main `navItems` array. It has been moved into the `navItems` array (positioned below Statistics), making the nav list self-contained and consistent.
+
+**Affected file:** `artifacts/dannys-bot/src/components/layout/Sidebar.tsx`.
+
+---
+
+### UI — Human Session Tool: STEP 1 Run Interval on Same Row as Toggle
+
+The "Run every X to Y minutes" interval controls in the Human Session Tool were previously displayed on a separate second row below the STEP 1 enable/disable toggle. They have been merged onto the **same row** as the toggle, separated from it by a vertical divider (`div.w-px`). The container changed from `flex-col gap-4` to a single `flex items-center` row.
+
+**Affected file:** `artifacts/dannys-bot/src/pages/MobilePage.tsx` — STEP 1 section (~line 3125).
+
+---
+
 ## [1.2.11] — 2026-07-18
 
 ### Bug Fix — Copy Settings Was Silently Enabling All Slots
