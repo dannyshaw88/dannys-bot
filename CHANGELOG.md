@@ -4,6 +4,20 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.13] — 2026-07-18
+
+### Fix — Human Session Copy Settings: "Start / Stop" removed from copyable sections (regression fix)
+
+**What was broken:** The `"startStop"` entry (labelled "Start / Stop — Copy the enabled/disabled state of this tool") had been re-added to `HUMAN_COPY_GROUPS` in `HumanSessionPanel.tsx`. This caused the Copy Settings dialog to include the HS tool's `enabled` flag as a copyable option. Because the dialog restores previously-selected options from `sessionStorage` on open, any session where "Start / Stop" had been checked would silently re-select it on the next open — and clicking Copy would stamp `enabled=true` onto every targeted account's `human_sessions` tool in the database. The result: all targeted accounts' HS toggles appeared ON in the UI, even though the automation did not run (interface bug, not an execution bug).
+
+**Root cause:** `startStop` re-added to `HUMAN_COPY_GROUPS` during a previous edit — exact same regression as a prior fix that intentionally removed it.
+
+**Fix:** Removed `{ key: "startStop", ... }` from `HUMAN_COPY_GROUPS` again and added a prominent `// NOTE` comment explaining why it must never be re-added. The on/off state of each account slot is per-slot only and must never propagate via Copy Settings.
+
+**Affected file:** `artifacts/dannys-bot/src/components/tools/HumanSessionPanel.tsx` — `HUMAN_COPY_GROUPS` constant.
+
+---
+
 ## [1.2.12] — 2026-07-18
 
 ### UI — Slot Navigation Buttons Show Destination Slot

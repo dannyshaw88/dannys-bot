@@ -58,7 +58,10 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
 
   const HUMAN_COPY_GROUPS: CopyOptionGroup[] = [
     { label: "General", options: [
-      { key: "startStop", label: "Start / Stop", description: "Copy the enabled/disabled state of this tool" },
+      // NOTE: "startStop" (Tool Toggle enabled/disabled) is intentionally excluded here.
+      // The on/off state of each slot is independently owned — propagating it via
+      // Copy Settings stamps enabled=true onto every target account, causing all
+      // of their HS toggles to show as running in the UI.  Do NOT re-add it.
       { key: "randomiseTiming", label: "Randomise timing", description: "Stagger each account's start across the delay window" },
       { key: "humanToolsDelay", label: "Human Tools Delay", description: "Interval between human session runs", subOptions: [
         { key: "hs_delayRange", label: "Session delay range", settingKeys: ["delayMin","delayMax"] },
