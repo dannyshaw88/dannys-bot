@@ -4503,8 +4503,18 @@ type AccountSlot = { username: string; password: string; totpSecret: string; ema
 // ── Per-slot Human Session Tool view ─────────────────────────────────────────
 // Always mounted so the automation hook's run-loop persists even when the
 // user is viewing the slot list or a different tab.
+
+/** Snapshot of a slot's live automation state, lifted up to AccountSettingsPanel
+ *  so the slot-list card can show a mirror toggle without opening the HST. */
+type SlotAutomationState = {
+  enabled: boolean;
+  running: boolean;
+  nextRunAt: number | null;
+  setEnabledByUser: (v: boolean) => void;
+};
+
 function SlotHumanSessionView({
-  phone, slotIdx, slotUsername, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, refreshKey, onCopied,
+  phone, slotIdx, slotUsername, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, refreshKey, onCopied, onAutomationState,
 }: {
   phone: UsbPhone | null;
   slotIdx: number;
@@ -4519,10 +4529,26 @@ function SlotHumanSessionView({
   releaseSlot?: (idx: number) => void;
   refreshKey?: number;
   onCopied?: (targetSlotIdxs: number[]) => void;
+  onAutomationState?: (state: SlotAutomationState) => void;
 }) {
   const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername, requestSlot, releaseSlot, refreshKey);
   const isFirst = slotIdx === 0;
   const isLast = slotIdx === (slotCount ?? 1) - 1;
+
+  // Lift automation state to parent whenever it changes so the slot-list card
+  // can show a mirror toggle. Use a ref for the callback to avoid the effect
+  // depending on a potentially-new function reference on every parent render.
+  const onAutomationStateRef = useRef(onAutomationState);
+  onAutomationStateRef.current = onAutomationState;
+  useEffect(() => {
+    onAutomationStateRef.current?.({
+      enabled: automation.settings.enabled,
+      running: automation.running,
+      nextRunAt: automation.nextRunAt,
+      setEnabledByUser: automation.setEnabledByUser,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [automation.settings.enabled, automation.running, automation.nextRunAt, automation.setEnabledByUser]);
   return (
     <div className="h-full flex flex-col">
       <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
@@ -4555,6 +4581,13 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
       for (const idx of targetSlotIdxs) next[idx] = (next[idx] ?? 0) + 1;
       return next;
     });
+  }, []);
+
+  // Mirror of each slot's live automation state — populated by SlotHumanSessionView
+  // via onAutomationState so the slot-list card can render a toggle without opening HST.
+  const [slotAutomationStates, setSlotAutomationStates] = useState<Record<number, SlotAutomationState>>({});
+  const handleSlotAutomationState = useCallback((slotIdx: number, state: SlotAutomationState) => {
+    setSlotAutomationStates(prev => ({ ...prev, [slotIdx]: state }));
   }, []);
   const [slots, setSlots] = useState<AccountSlot[]>(
     Array.from({ length: ACCT_SLOT_COUNT }, emptySlot)
@@ -4735,6 +4768,7 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
             releaseSlot={releaseSlot}
             refreshKey={slotRefreshKeys[i] ?? 0}
             onCopied={handleCopied}
+            onAutomationState={state => handleSlotAutomationState(i, state)}
           />
         </div>
       ))}
@@ -4749,9 +4783,9 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
         <div className="space-y-4">
           {slots.map((slot, i) => (
             <div key={i} className="bg-card border border-border rounded-xl p-5 space-y-3">
-              {/* Slot header: title + Trust Score + Human Session Tool button + Delete */}
+              {/* Slot header: title + Human Session Tool button + mirror toggle + Delete */}
               <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Instagram Account Slot {i + 1}</p>
                   <Button
                     type="button"
@@ -4763,6 +4797,37 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
                     HUMAN SESSION TOOL
                     <Fingerprint className="w-3 h-3 text-white" />
                   </Button>
+
+                  {/* Mirror of the master toggle inside the Human Session Tool.
+                      Shares the same enabled state — toggling here is identical
+                      to toggling inside the HST panel. */}
+                  {slotAutomationStates[i] && (() => {
+                    const as = slotAutomationStates[i];
+                    return (
+                      <div className="flex items-center gap-2 pl-2 border-l border-border">
+                        <Switch
+                          checked={as.enabled}
+                          onCheckedChange={as.setEnabledByUser}
+                        />
+                        <div className="flex flex-col min-w-0">
+                          <span className={`text-[11px] font-semibold leading-tight whitespace-nowrap ${
+                            as.running
+                              ? "text-blue-500"
+                              : as.enabled
+                                ? "text-green-600 dark:text-green-400"
+                                : "text-muted-foreground"
+                          }`}>
+                            {as.running ? "Running" : as.enabled ? "Active" : "Disabled"}
+                          </span>
+                          {as.enabled && !as.running && as.nextRunAt && (
+                            <span className="text-[10px] text-muted-foreground whitespace-nowrap leading-tight">
+                              Next run {new Date(as.nextRunAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {new Date(as.nextRunAt).toLocaleDateString([], { day: "2-digit", month: "2-digit", year: "numeric" })}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
                 <Button
                   type="button"
