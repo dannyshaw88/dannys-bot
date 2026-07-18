@@ -4361,7 +4361,7 @@ function AutomationSettingsPanel({
 const ROW_H = 30; // px per dropdown row
 const MAX_VISIBLE_ROWS = 5;
 
-function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth }: { serial: string; slotIdx: number; width?: number }) {
+function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 200 }: { serial: string; slotIdx: number; width?: number }) {
   const lsKey = `mobile_ts_${serial}_${slotIdx}`;
   const [scoreId, setScoreId] = useState<string | null>(() => {
     try { return localStorage.getItem(lsKey) ?? null; } catch { return null; }
@@ -4430,24 +4430,17 @@ function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth }: { serial: s
         type="button"
         onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
         onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
-        className="inline-flex items-center justify-center gap-1 rounded-md border px-1.5 font-semibold transition-all hover:brightness-125"
+        className="inline-flex items-center justify-center gap-1.5 rounded-md border px-2 text-[11px] font-semibold transition-all hover:brightness-125"
         style={current
-          ? { background: current.bg, borderColor: current.border, color: current.text, width: badgeWidth ?? "max-content", height: badgeWidth !== undefined ? 28 : 21, fontSize: badgeWidth !== undefined ? 11 : 8, whiteSpace: "nowrap" }
-          : { background: "transparent", borderStyle: "dashed", borderColor: "#94a3b8", color: "#94a3b8", width: badgeWidth ?? "max-content", height: badgeWidth !== undefined ? 28 : 21, fontSize: badgeWidth !== undefined ? 11 : 8, whiteSpace: "nowrap" }
+          ? { background: current.bg, borderColor: current.border, color: current.text, width: badgeWidth, alignSelf: "stretch", height: "100%" }
+          : { background: "transparent", borderStyle: "dashed", borderColor: "#94a3b8", color: "#94a3b8", width: badgeWidth, alignSelf: "stretch", height: "100%" }
         }
         title={current ? current.label : "Click to set Trust Score"}
       >
         {current ? (
           <>
-            <span style={badgeWidth !== undefined ? {
-              maxWidth: Math.max(20, badgeWidth - 42),
-              overflow: "hidden",
-              whiteSpace: "nowrap",
-              flexShrink: 1,
-              WebkitMaskImage: "linear-gradient(to right, black 55%, transparent 100%)",
-              maskImage: "linear-gradient(to right, black 55%, transparent 100%)",
-            } : { whiteSpace: "nowrap" }}>{current.label}</span>
-            <current.icon size={badgeWidth !== undefined ? 10 : 8} color={current.text} fill={current.text} strokeWidth={2} style={{ flexShrink: 0 }} />
+            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flexShrink: 1 }}>{current.label}</span>
+            <current.icon size={10} color={current.text} fill={current.text} strokeWidth={2} style={{ flexShrink: 0 }} />
           </>
         ) : (
           <span>Score</span>
