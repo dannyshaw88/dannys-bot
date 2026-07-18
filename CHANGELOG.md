@@ -4,6 +4,64 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.11] — 2026-07-18
+
+### Bug Fix — Copy Settings Was Silently Enabling All Slots
+
+**What was broken:** Opening the Copy Settings dialog inside the Human Session Tool and clicking Copy (even without changing any defaults) would stamp `enabled=true` onto every other account slot on the device. This caused all 5 slots to start running the automation tool on the next app launch, regardless of whether the user had individually enabled them.
+
+**Root cause:** The Copy Settings dialog included a top-level section called **"Tool Toggle → Enabled / Disabled"** which mapped directly to the `enabled` field in each slot's automation settings. On dialog open, two things happen automatically:
+1. All setting sections are pre-selected (`selectedSubKeys` initialises to `ALL_SUB_KEYS`, which includes `enabled`).
+2. All target slots are pre-selected (every slot except the source is auto-ticked).
+
+This meant a single click of Copy — with no deliberate selection — silently wrote the source slot's `enabled` value (which could be `true` if the user had it running) to every other slot. The symptom appeared as: all slots showing "Running" in the Accounts panel on next startup, and toggling one off not affecting the others visually because they had all genuinely been saved as enabled.
+
+**Fix:** The "Tool Toggle" section (`enabled` field) has been removed from `COPY_SECTIONS` entirely. The on/off state of each slot is intentionally independent per-slot and must never be propagated by Copy Settings. All other sections (Run Interval, View Feed, View Stories, View Reels, Follow Users, Follow Filters, Inject Browsing, Random Jitter, Make a Post) are unaffected and continue to copy as before.
+
+**Affected file:** `artifacts/dannys-bot/src/pages/MobilePage.tsx` — `COPY_SECTIONS` constant.
+
+---
+
+### Fix — Server-Side Toggle Debug Logs Now Visible in Log File
+
+**What was broken:** The `[TOGGLE-DBG]` diagnostic lines added to the slot automation-settings GET and POST route handlers were written using `console.log`. In the Electron app, `console.log` from Express route handlers goes to raw stdout, which is captured separately from pino's JSON log stream. The result was that `[TOGGLE-DBG]` lines never appeared in `aura-farming-debug.log` even when the toggle was being used — the HTTP request lines appeared normally but the diagnostic lines were silently dropped.
+
+**Fix:** Both `console.log` calls in the automation-settings routes switched to `logger.info()` (pino), which routes through the same transport as the HTTP request logger and writes to the same log file. The `[TOGGLE-DBG]` prefix is preserved for easy grepping.
+
+**Affected file:** `artifacts/api-server/src/routes/mobile.ts` — GET and POST handlers for `/api/mobile/devices/:serial/slots/:slotIdx/automation-settings`.
+
+---
+
+### Cleanup — Old Debug Logging Removed
+
+All step-by-step diagnostic logging added during earlier browser/API development phases has been stripped. The log file is now back to bare essentials: HTTP request/response lines, genuine warnings, and real errors only.
+
+**Removed from `artifacts/electron/src/main.ts`:**
+- All `[EB-DEBUG][findChromiumPath]` lines — logged platform, every candidate browser path, and the result on every app launch. Redundant once the browser detection was confirmed working.
+- `[EB-DEBUG][startServer]` lines — logged the log file path and Chromium path being passed to the server on every start.
+
+**Removed from `artifacts/electron/src/ebManager.ts`:**
+- `[doAutoLogin:N]` step traces — logged every sub-step of the auto-login sequence (navigating to login page, login page loaded, cookie banner found/not found, login form found, credentials filled, form submitted, waiting for navigation, post-submit URL, 2FA page detected, TOTP typed, final URL, login success). These were critical for diagnosing the original login flow but are no longer needed. Genuine failure paths (`console.error`, `console.warn`) are kept.
+- `[chromeVersion]` table update logs — logged when a new Chrome major version was added to the build table or when `CURRENT_CHROME_MAJOR` advanced. Silent background bookkeeping; no value to the log.
+- Cookie load/save count logs — logged the number of cookies loaded from file and saved to file on every session. High-frequency, low-value noise.
+
+**Removed from `artifacts/dannys-bot/src/pages/MobilePage.tsx`:**
+- All `[toggle]` prefixed `console.log` lines — added during slot toggle debugging to trace `setEnabledByUser`, `setSettings`, the imperative handle's `setEnabled`, `onAutomationState` firing, `handleSlotAutomationState`, and the Switch `onCheckedChange`. These confirmed the toggle chain works correctly and are no longer needed.
+
+**Kept (not removed):**
+- All `console.error` and `console.warn` calls in `doAutoLogin` (failed page loads, submit button not found fallback, 2FA key missing, challenge/suspended/disabled page detection, no session cookie after login).
+- All HTTP request/response pino lines.
+- `[TOGGLE-DBG]` server-side lines (converted to `logger.info`, kept for ongoing diagnostics until toggle bug is fully closed).
+- Mirror WebSocket / frame status `addLog` calls in `MobilePage.tsx` (user-visible connection feedback in the phone mirror panel).
+
+---
+
+### Fix — Stale "equinox-debug.log" Comment References Updated
+
+Several comments in `artifacts/electron/src/ebManager.ts` still referred to the log file by its old name `equinox-debug.log`. The actual file has been named `aura-farming-debug.log` since the rename. All three stale references updated to `aura-farming-debug.log`.
+
+---
+
 ## [1.1.680] — 2026-07-18
 
 ### Bug Fix — Slot Toggle ON Firing All Slots (Final Fix: forwardRef / useImperativeHandle)
