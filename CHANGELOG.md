@@ -4,6 +4,61 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.15] — 2026-07-18
+
+### Performance — Instagram launch-to-account-switch time reduced ~55–65%
+
+**What was slow:** From the moment Instagram opened to the moment the correct account slot was active took 40–60 seconds per cycle. The Debugging Log showed a 42-second gap between "Switching to Instagram account: @..." and "Long-pressing profile tab to open account switcher..." — the two log lines that should be milliseconds apart.
+
+**Root cause — 4 sequential UIAutomator dumps before the feed even starts scrolling:**
+
+The launch sequence did one UIAutomator dump for every check, serially:
+
+| Step | Dump # | Typical cost |
+|------|--------|-------------|
+| `dismissAdsChoiceDialog` initial check | 1 | 5–9 s |
+| `dismissInstagramInterstitials` initial check | 2 | 5–9 s |
+| `switchToInstagramAccount` step 0 pre-check | 3 | 5–15 s |
+| `findInstagramProfileTab` called from step 1 | 4 | 5–15 s |
+| Post-long-press switcher scan (unavoidable) | 5 | 5–15 s |
+
+Each `uiautomator dump` command waits for the device's accessibility service to serialize the full on-screen accessibility tree, pull it over USB, then read it on the host — 5 to 15 seconds per call depending on screen complexity. Five calls in series = 25–75 s of pure wait, most of it before any actual Instagram interaction.
+
+**Fix — One shared dump replaces four:**
+
+1. **`getUiDump(serial)`** — new exported function in `androidManager.ts` that runs the shared dump once.
+
+2. **`dismissAdsChoiceDialog(serial, preloadedXml?)`** — new optional second parameter. When provided, the initial check uses the passed XML instead of running its own dump. If the dialog IS present and gets dismissed, subsequent calls get `undefined` (screen changed — they re-dump correctly).
+
+3. **`dismissInstagramInterstitials(serial, preloadedXml?)`** — same pattern. Reuses the shared XML if no ads-choice was dismissed; otherwise re-dumps.
+
+4. **`switchToInstagramAccount(serial, username, onLog?, preloadedXml?)`** — new fourth parameter. When provided:
+   - Step 0 (pre-check) uses it instead of dumping — saves one dump.
+   - Step 1 (find profile tab) searches the preloaded XML using inline `_findByResId` / `_findElem` before falling back to `findInstagramProfileTab` (which does a fresh dump) — saves another dump in the common case.
+   - Only passed when neither `adsChoice.dismissed` nor `launchPopup` was truthy (i.e., screen hasn't changed since the dump was taken).
+
+5. **Pre-dump sleep reduced 1200 ms → 400 ms** in `mobile.ts`. The `uiautomator dump` command already waits for UI idle, so the long fixed sleep before it was redundant. 400 ms is enough for the Instagram process to appear before the dump starts.
+
+6. **Post-long-press sleep reduced 1500 ms → 700 ms** in `switchToInstagramAccount`. The subsequent `_uiDump` call also waits for UI idle, making the fixed pre-dump sleep doubly redundant.
+
+**Timing before vs after (no dialogs — the common case):**
+
+| Phase | Before | After |
+|-------|--------|-------|
+| IG launch sleep | 1200 ms | 400 ms |
+| Shared dump (covers checks 1–4) | 4 × 5–15 s = 20–60 s | 1 × 5–9 s = 5–9 s |
+| Long-press post-sleep | 1500 ms | 700 ms |
+| Post-long-press dump | 5–15 s | 5–15 s |
+| **Total launch → feed** | **~30–75 s** | **~12–27 s** |
+
+Reduction: approximately **55–65%** in the no-dialogs case. When a dialog is present the shared dump can't be reused for subsequent steps, so the saving is smaller — but the dialog path was already less common.
+
+**Affected files:**
+- `artifacts/api-server/src/mobile/androidManager.ts` — `getUiDump` (new export), `dismissAdsChoiceDialog` (`preloadedXml?`), `dismissInstagramInterstitials` (`preloadedXml?`), `switchToInstagramAccount` (`preloadedXml?`, post-long-press sleep 1500→700 ms)
+- `artifacts/api-server/src/routes/mobile.ts` — launch sleep 1200→400 ms, shared `launchXml` dump, passed through `dismissAdsChoiceDialog` → `dismissInstagramInterstitials` → `switchToInstagramAccount`
+
+---
+
 ## [1.2.14] — 2026-07-18
 
 ### Fix — Phone Farm: All account slots showed "Running" when any one slot was toggled on (root cause, second pass)

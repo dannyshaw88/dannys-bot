@@ -4339,24 +4339,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       tLog("▶ Opening Instagram…");
       await android.launchInstagram(serial);
       steps.push("launch-instagram");
-      // Reduced from 2000 → 1200 ms. The dismissAdsChoiceDialog and
-      // dismissInstagramInterstitials calls below each do a UIAutomator
-      // accessibility dump which takes ~1-2 s on a loaded device, so the
-      // total time before scrolling starts is covered by those dumps — we
-      // don't need a long fixed wait on top of them.
-      await sleepOrAbort(serial, 1200);
+      // Reduced from 1200 → 400 ms: the UIAutomator dump below (~5-15 s) waits
+      // for UI idle itself, so a long fixed sleep before it is redundant.
+      // 400 ms is enough for the IG process to appear before the dump starts.
+      await sleepOrAbort(serial, 400);
 
-      // 2b. Meta occasionally shows a full-screen "ads choice" consent modal
-      // on launch (Get started → Use for free with ads → Continue → Agree).
-      // It blocks the whole screen, so every scripted tap after it would
-      // silently land on the modal instead of the feed. Walk through it if
-      // present; this is a no-op if the dialog isn't showing.
-      // Each dismissal call runs a UIAutomator accessibility dump which can
-      // take 5–15 s on the Instagram splash screen. Log before AND after every
-      // call so the user can see exactly what is eating time in the Log tab —
-      // previously the whole 20 s was a single silent gap between two lines.
+      // 2b–2c. SINGLE shared UIAutomator dump covers: ads-choice dialog check,
+      // interstitials check, AND the account-switcher pre-check + profile-tab
+      // lookup.  Previously these were 4 sequential dumps × 5-15 s each = up
+      // to 60 s overhead.  One shared dump collapses them to ~1 dump.
+      // If any dialog IS dismissed the screen changes — we pass `undefined` so
+      // the next check does its own fresh dump instead of using stale XML.
       tLog("▶ UIAutomator: scanning for ads-choice dialog…");
-      const adsChoice = await android.dismissAdsChoiceDialog(serial).catch(() => ({ dismissed: false, steps: [] as string[] }));
+      const launchXml = await android.getUiDump(serial).catch(() => "");
+      const adsChoice = await android.dismissAdsChoiceDialog(serial, launchXml).catch(() => ({ dismissed: false, steps: [] as string[] }));
       if (adsChoice.dismissed) {
         steps.push(`ads-choice-dialog(${adsChoice.steps.length} steps)`);
         tLog(`▶ Dismissed ads-choice dialog (${adsChoice.steps.length} taps)`);
@@ -4366,8 +4362,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
 
       // 2c. Dismiss any other interstitial (notifications, save-login, etc.)
+      // Reuse launchXml when no ads-choice was dismissed (screen unchanged).
       tLog("▶ UIAutomator: scanning for other launch popups…");
-      const launchPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
+      const interstitialsXml = adsChoice.dismissed ? undefined : launchXml;
+      const launchPopup = await android.dismissInstagramInterstitials(serial, interstitialsXml).catch(() => null);
       if (launchPopup) {
         steps.push(`launch-popup-dismissed(${launchPopup})`);
         tLog(`▶ Dismissed launch popup (${launchPopup})`);
@@ -4388,6 +4386,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Skip the switcher entirely when the same account was already active at
       // the end of the previous cycle on this device — avoids a visually
       // identical long-press on every back-to-back run of the same slot.
+      //
+      // Pass launchXml only when neither ads-choice nor a popup was dismissed
+      // (screen unchanged) so the switcher can reuse the dump for its pre-check
+      // and profile-tab lookup without doing two more sequential dumps.
+      const switchPreloadXml = (!adsChoice.dismissed && !launchPopup) ? launchXml : undefined;
       if (slotUsername) {
         const lastUsername = automationLastActiveUsername.get(serial);
         if (lastUsername === slotUsername) {
@@ -4395,7 +4398,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           steps.push(`account-switch(skipped — already @${slotUsername})`);
         } else {
           tLog(`▶ Switching to Instagram account: @${slotUsername}…`);
-          const switched = await android.switchToInstagramAccount(serial, slotUsername, tLog);
+          const switched = await android.switchToInstagramAccount(serial, slotUsername, tLog, switchPreloadXml);
           if (switched) {
             steps.push(`account-switch(@${slotUsername})`);
             automationLastActiveUsername.set(serial, slotUsername);

@@ -609,11 +609,26 @@ export async function launchInstagram(serial: string): Promise<void> {
  * cycle silently does nothing. This walks through it end-to-end if present,
  * and is a no-op (single UI dump, no taps) if the dialog isn't showing.
  */
-export async function dismissAdsChoiceDialog(serial: string): Promise<{ dismissed: boolean; steps: string[] }> {
+/**
+ * Expose a single UIAutomator dump to callers that want to share one dump
+ * across multiple checks (ads-choice → interstitials → account-switch pre-check
+ * → profile-tab lookup) instead of doing 4 sequential dumps.  Each dump costs
+ * 5–15 s on a loaded device; sharing one saves up to 30 s per cycle.
+ */
+export async function getUiDump(serial: string): Promise<string> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  return _uiDump(adb, serial);
+}
+
+export async function dismissAdsChoiceDialog(
+  serial: string,
+  preloadedXml?: string, // reuse a dump taken moments earlier — skips an extra 5-15 s dump
+): Promise<{ dismissed: boolean; steps: string[] }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const steps: string[] = [];
-  let xml = await _uiDump(adb, serial);
+  let xml = preloadedXml ?? await _uiDump(adb, serial);
 
   // Only proceed if this actually looks like the ads-choice screen — avoid
   // tapping "Get started" blind on some unrelated dialog that happens to
@@ -673,10 +688,13 @@ export async function dismissAdsChoiceDialog(serial: string): Promise<{ dismisse
  *
  * Returns the label that was tapped, or null if nothing needed dismissing.
  */
-export async function dismissInstagramInterstitials(serial: string): Promise<string | null> {
+export async function dismissInstagramInterstitials(
+  serial: string,
+  preloadedXml?: string, // reuse a dump taken moments earlier — skips an extra 5-15 s dump
+): Promise<string | null> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  const xml = await _uiDump(adb, serial).catch(() => "");
+  const xml = preloadedXml ?? await _uiDump(adb, serial).catch(() => "");
   if (!xml) return null;
 
   // Ordered by specificity — more specific labels first so we don't
@@ -3876,6 +3894,7 @@ export async function switchToInstagramAccount(
   serial: string,
   username: string,
   onLog?: (msg: string) => void,
+  preloadedXml?: string, // XML from a dump taken moments earlier; skips two redundant dumps
 ): Promise<boolean> {
   if (!username.trim()) return false;
   const adbPath = findAdbPath();
@@ -3892,8 +3911,11 @@ export async function switchToInstagramAccount(
   //    Any of these reliably identifies the currently active account. If we
   //    find it here, we return immediately — no long-press, no switcher, no
   //    feed reload.
+  //
+  //    When preloadedXml is provided (shared from the launch-sequence dump) we
+  //    skip a redundant dump here — same screen state, saves 5-15 s.
   try {
-    const preXml = await _uiDump(adbPath, serial).catch(() => "");
+    const preXml = preloadedXml ?? await _uiDump(adbPath, serial).catch(() => "");
     const lc = preXml.toLowerCase();
     const cleanLc = clean.toLowerCase();
     const alreadyActive =
@@ -3908,10 +3930,21 @@ export async function switchToInstagramAccount(
       onLog?.(`  ✓ @${clean} already active (detected in current UI — skipping switcher)`);
       return true;
     }
-  } catch { /* if the pre-check dump fails, fall through to the normal flow */ }
+  } catch { /* pre-check dump failed — continue to full switcher flow */ }
 
   // 1. Find the profile tab.
-  const profileTab = await findInstagramProfileTab(serial).catch(() => null);
+  //    Try the preloaded XML first (same screen state, no extra dump needed).
+  //    Fall back to a fresh dump only if the tab isn't found there.
+  let profileTab: { x: number; y: number } | null = null;
+  if (preloadedXml) {
+    profileTab =
+      _findByResId(preloadedXml, ":id/profile", ":id/tab_profile", ":id/nav_profile",
+        ":id/bottom_tab_profile", ":id/avatar_tab")
+      ?? _findElem(preloadedXml, "Profile");
+  }
+  if (!profileTab) {
+    profileTab = await findInstagramProfileTab(serial).catch(() => null);
+  }
   if (!profileTab) {
     onLog?.("  ⚠ Profile tab not found — cannot switch account");
     return false;
@@ -3926,7 +3959,9 @@ export async function switchToInstagramAccount(
     String(profileTab.x), String(profileTab.y),
     "2000",
   ], 6000);
-  await _sleep(1500); // wait for the switcher sheet to settle
+  // Reduced 1500 → 700 ms: the subsequent _uiDump waits for UI idle (~5-9 s),
+  // so a long fixed pre-dump sleep is redundant on top of that.
+  await _sleep(700);
 
   // 3. Dump the accessibility tree and look for the target username.
   //    Instagram displays each account row as a node with text="username"
