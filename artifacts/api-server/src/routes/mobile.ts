@@ -3588,12 +3588,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   ): Promise<number> {
     const { w, h } = getScreenSize(serial);
 
-    const feedChance = rollRange(browsing.feedChanceMin, browsing.feedChanceMax) / 100;
-    if (!(feedChance > 0 && Math.random() < feedChance)) {
-      onLog?.("Inject Browsing: feed-scroll roll missed — skipping grid scroll");
-      return 0;
-    }
-
+    // Activation already decided by rollInjectBrowsingDecision — no second
+    // gate here. If we were called, the grid scroll is guaranteed to run;
+    // only the number of rows is random.
     const rows = Math.max(0, Math.round(rollRange(browsing.feedMin, browsing.feedMax)));
     if (rows === 0) {
       onLog?.("Inject Browsing: feed posts rolled to 0 — skipping grid scroll");
