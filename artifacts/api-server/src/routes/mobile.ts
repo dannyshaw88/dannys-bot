@@ -4208,27 +4208,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           });
         }
 
-        // Return to the clean Explore page for the next user.
-        // One pressBack leaves the profile and lands on the SEARCH RESULTS
-        // page, which still has the previous @username in the bar.  A second
-        // pressBack exits those results and returns to the blank Explore page
-        // — the same state as after the initial Search-tab tap — so the next
-        // iteration's findInstagramSearchBar always gets a fresh, empty bar
-        // instead of a bar pre-filled with the previous search term.
-        // (The not-found path already presses Back from results→Explore once
-        // and then continues; this makes the success path match that behaviour.)
-        if (!isLastUser) {
-          await android.pressBack(serial);     // profile → search results
-          await sleepOrAbort(serial, 500);
-          await android.pressBack(serial);     // search results → clean Explore
-          await sleepOrAbort(serial, 800);
-          // Dismiss any popup that appeared after pressing back (e.g. IG Plus
-          // upsell, notification prompts) before the next search-bar lookup.
-          const interUserPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
-          if (interUserPopup) {
-            onLog?.(`Follow: dismissed popup between users ("${interUserPopup}")`);
-            await sleepOrAbort(serial, 400);
-          }
+        // Always navigate back to a clean Explore page after each user —
+        // including the last one. Skipping Back for the last user left the
+        // phone on a profile grid, which broke any tool that ran next
+        // (e.g. View Feed: findHomeTab gets null from a profile page, the
+        // coordinate fallback then hits the system nav bar instead of IG's
+        // Home icon, and the scroll loop runs on the profile grid instead
+        // of the home feed).
+        // One pressBack: profile → search results (still has @username in bar)
+        // Second pressBack: search results → clean Explore
+        await android.pressBack(serial);
+        await sleepOrAbort(serial, 500);
+        await android.pressBack(serial);
+        await sleepOrAbort(serial, 800);
+        // Dismiss any popup that appeared after pressing back (e.g. IG Plus
+        // upsell, notification prompts) before the next operation.
+        const interUserPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
+        if (interUserPopup) {
+          onLog?.(`Follow: dismissed popup between users ("${interUserPopup}")`);
+          await sleepOrAbort(serial, 400);
         }
       } catch (e: any) {
         if (e?.message === "cycle-aborted") throw e;
@@ -4797,10 +4795,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         : (devicePrefsForDismiss.dismissDirection && devicePrefsForDismiss.dismissDirection !== "auto")
           ? devicePrefsForDismiss.dismissDirection
           : "auto";
+      const _rawModel = android.getDeviceModel(serial);
       const resolvedDismissDir: "left" | "up" = effectiveDismiss !== "auto"
         ? effectiveDismiss
-        : android.getModelDismissDirection(android.getDeviceModel(serial));
-      tLog(`  dismiss direction: ${resolvedDismissDir} (slot: ${dismissDirection}, device-pref: ${devicePrefsForDismiss.dismissDirection ?? "none"})`);
+        : android.getModelDismissDirection(_rawModel);
+      tLog(`  dismiss direction: ${resolvedDismissDir} (slot: ${dismissDirection}, device-pref: ${devicePrefsForDismiss.dismissDirection ?? "none"}, model: "${_rawModel}"`);
       await android.closeInstagramViaRecents(serial, resolvedDismissDir, (msg) => tLog(`  ${msg}`));
       steps.push("closed-instagram");
       tLog("  ✓ Instagram closed");

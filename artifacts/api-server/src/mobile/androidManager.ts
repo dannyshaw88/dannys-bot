@@ -978,11 +978,22 @@ const DEVICE_PROFILES: Record<string, { dismissDirection: "left" | "up" }> = {
 
 /**
  * Returns the dismiss direction for a given model string.
- * Falls back to 'left' (MIUI floating-window carousel behaviour) for any
- * model not yet in the lookup table — matches the existing codebase default.
+ * First tries an exact key match against DEVICE_PROFILES, then falls back to
+ * case-insensitive partial matching so that OEM firmware variants that report
+ * a hardware code (e.g. "23097RA8S") instead of a marketing name still resolve
+ * correctly. Falls back to 'left' (MIUI floating-window carousel behaviour)
+ * for any model not matched — preserves existing behaviour for unknown devices.
  */
 export function getModelDismissDirection(model: string): "left" | "up" {
-  return DEVICE_PROFILES[model]?.dismissDirection ?? "left";
+  // Exact match first — fastest path for confirmed model strings.
+  if (DEVICE_PROFILES[model]) return DEVICE_PROFILES[model].dismissDirection;
+  // Case-insensitive partial match for known device families whose
+  // ro.product.model may differ from the marketing name on some firmware.
+  const m = model.toLowerCase();
+  if (m.includes("redmi a5")) return "up";
+  // Redmi A5 hardware model codes (23097RA8S = international, 23116PN5BI = India)
+  if (/^2309[0-9]ra/i.test(model) || /^2311[0-9]pn/i.test(model)) return "up";
+  return "left";
 }
 
 /**
