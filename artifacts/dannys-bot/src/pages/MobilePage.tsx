@@ -4564,11 +4564,11 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
         <div className="flex-1" />
         <Button variant="outline" size="sm" onClick={onPrevSlot} disabled={isFirst} className="gap-1 h-7 px-2">
           <ChevronLeft className="w-3.5 h-3.5" />
-          SLOT
+          SLOT {slotIdx}
         </Button>
         <Button variant="outline" size="sm" onClick={onNextSlot} disabled={isLast} className="gap-1 h-7 px-2 flex-row-reverse">
           <ChevronLeft className="w-3.5 h-3.5 rotate-180" />
-          SLOT
+          SLOT {slotIdx + 2}
         </Button>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
