@@ -568,15 +568,11 @@ function refreshChromeVersion(): Promise<void> {
             // Extend the lookup table if this is a version we don't know yet.
             if (!CHROME_BUILD_INFO[major]) {
               CHROME_BUILD_INFO[major] = { full: ver, ..._inferGrease(majorN) };
-              console.log(`[chromeVersion] Added Chrome ${major} (${ver}) to build table`);
             }
 
             // Update the fallback only if the fetched major is ≥ current.
             if (majorN >= parseInt(CURRENT_CHROME_MAJOR, 10)) {
-              if (CURRENT_CHROME_MAJOR !== major) {
-                console.log(`[chromeVersion] Updated CURRENT_CHROME_MAJOR: ${CURRENT_CHROME_MAJOR} → ${major}`);
-                CURRENT_CHROME_MAJOR = major;
-              }
+              CURRENT_CHROME_MAJOR = major;
             }
 
             // Mark attempt regardless of whether major advanced — prevents
@@ -2027,7 +2023,6 @@ async function loadCookiesFromFile(profileId: number, ses: Electron.Session): Pr
         sameSite:       "no_restriction",
       }).catch(() => {});
     }
-    console.log(`[ebManager:${profileId}] Loaded cookies from file (${raw.length})`);
   } catch (e) {
     console.warn(`[ebManager:${profileId}] loadCookiesFromFile failed:`, e);
   }
@@ -2057,7 +2052,6 @@ async function saveCookiesToFile(profileId: number, ses: Electron.Session): Prom
     }));
     fs.mkdirSync(_cookiesDir, { recursive: true });
     fs.writeFileSync(cookieFilePath(profileId), JSON.stringify(asFile, null, 2));
-    console.log(`[ebManager:${profileId}] Saved ${asFile.length} cookies to file`);
   } catch (e) {
     console.warn(`[ebManager:${profileId}] saveCookiesToFile failed:`, e);
   }
@@ -2193,7 +2187,6 @@ async function doAutoLogin(
 ): Promise<{ ok: boolean; message: string }> {
   const _t0 = Date.now();
   const _ts = () => `+${((Date.now() - _t0) / 1000).toFixed(1)}s`;
-  console.log(`[doAutoLogin:${profileId}] @${username} — starting`);
   const wc  = win.webContents;
   const ses = electronSession.fromPartition(ebPartition(profileId));
   const delay = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
@@ -2243,7 +2236,6 @@ async function doAutoLogin(
   }
 
   // Navigate to login page
-  console.log(`[doAutoLogin:${profileId}] ${_ts()} navigating to login page`);
   try {
     await new Promise<void>((resolve, reject) => {
       const t = setTimeout(() => reject(new Error("Login page load timeout")), 30000);
@@ -2254,7 +2246,6 @@ async function doAutoLogin(
     console.error(`[doAutoLogin:${profileId}] ${_ts()} login page load FAILED: ${(e as any)?.message}`);
     return { ok: false, message: `Failed to load login page: ${e?.message}` };
   }
-  console.log(`[doAutoLogin:${profileId}] ${_ts()} login page loaded`);
   await delay(2000);
 
   // ── Dismiss cookie banner before filling credentials (poll up to 6 s) ─────
@@ -2290,14 +2281,11 @@ async function doAutoLogin(
       await delay(500);
     }
     if (ckPos) {
-      console.log(`[doAutoLogin:${profileId}] ${_ts()} cookie banner at (${ckPos.x},${ckPos.y}), dismissing`);
       try {
         try { wc.debugger.attach("1.3"); } catch {}
         await cdpTapGesture(wc.debugger, ckPos.x, ckPos.y);
         await delay(2000);
       } catch {}
-    } else {
-      console.log(`[doAutoLogin:${profileId}] ${_ts()} no cookie banner found`);
     }
   }
 
@@ -2354,8 +2342,6 @@ async function doAutoLogin(
     console.error(`[doAutoLogin:${profileId}] ${_ts()} login form fields NOT FOUND — bailing`);
     return { ok: false, message: "Could not find login form on Instagram login page" };
   }
-  console.log(`[doAutoLogin:${profileId}] ${_ts()} login form found, filling credentials`);
-
   // Step 2: tap username field (touch event) + type via CDP
   // WHY cdpTapGesture instead of dispatchMouseEvent:
   //   synthesizeTapGesture fires touchstart→touchend→click with pointerType="touch".
@@ -2423,8 +2409,6 @@ async function doAutoLogin(
     console.error(`[doAutoLogin:${profileId}] ${_ts()} CDP form fill FAILED: ${cdpErr?.message}`);
     return { ok: false, message: `CDP form fill error: ${cdpErr?.message}` };
   }
-  console.log(`[doAutoLogin:${profileId}] ${_ts()} credentials filled, submitting via Tab Tab Enter`);
-
   // Step 4: submit the login form.
   // Primary path: JS .click() on the submit button — unaffected by focus position
   // or Tab-order ambiguity (e.g. the eye/password-toggle icon sits between the
@@ -2458,13 +2442,10 @@ async function doAutoLogin(
     await delay(60);
     await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
   }
-  console.log(`[doAutoLogin:${profileId}] ${_ts()} form submitted (via ${submitted ? 'JS click' : 'Tab Tab Enter'})`)
-
   // Wait up to 30s for navigation away from the bare login page.
   // The 2FA page URL is "accounts/login/two_factor?..." — it still contains
   // "accounts/login", so the predicate must explicitly accept it, otherwise
   // the code waits the full 30 s before detecting 2FA (looks like it does nothing).
-  console.log(`[doAutoLogin:${profileId}] ${_ts()} waiting for post-submit navigation (30s timeout)`);
   const postLoginUrl = await waitForNav(
     wc,
     url =>
@@ -2472,7 +2453,6 @@ async function doAutoLogin(
       (!url.includes("accounts/login/") || url.includes("two_factor") || /#/.test(url)),
     30000,
   );
-  console.log(`[doAutoLogin:${profileId}] ${_ts()} post-submit URL: ${postLoginUrl ?? "(timeout/unchanged)"}`);
   await delay(1000);
 
   // ── Handle 2FA if required ─────────────────────────────────────────────────
@@ -2506,7 +2486,6 @@ async function doAutoLogin(
       return { ok: false, message: "2FA required but no 2FA key configured for this account" };
     }
     const code = generateTotp(twoFAKey);
-    console.log(`[doAutoLogin:${profileId}] ${_ts()} 2FA page detected, TOTP code generated, filling via CDP`);
 
     // Focus the code input via JS (reliable regardless of tap coordinates),
     // clear any pre-filled content, then type the 6-digit TOTP code.
@@ -2524,7 +2503,6 @@ async function doAutoLogin(
     await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp",   key: "Delete", code: "Delete", windowsVirtualKeyCode: 46 });
     await delay(80);
     await typeTextCDP(wc.debugger, code, { minDelay: 40, maxDelay: 100 });
-    console.log(`[doAutoLogin:${profileId}] ${_ts()} TOTP code typed, submitting 2FA form`);
 
     // Submit: JS click on the Continue / submit button — same approach as the
     // main login button. The 2FA page uses "Continue" text, not type="submit".
@@ -2572,7 +2550,6 @@ async function doAutoLogin(
   }
 
   const finalUrl = wc.getURL();
-  console.log(`[doAutoLogin:${profileId}] ${_ts()} final URL: ${finalUrl.slice(0, 120)}`);
 
   // Check for challenge redirect
   if (finalUrl.includes("update_risky_contactpoint") || finalUrl.includes("/challenge/")) {
@@ -2608,7 +2585,6 @@ async function doAutoLogin(
   }
 
   await syncCookies(profileId, ses);
-  console.log(`[doAutoLogin:${profileId}] ${_ts()} LOGIN SUCCESS — session cookie confirmed`);
   return { ok: true, message: "Login successful" };
 }
 

@@ -2198,16 +2198,12 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   const explicitToggleOffRef = useRef(false);
 
   const setEnabledByUser = useCallback((enabled: boolean) => {
-    console.log(`[toggle][useAutomationSettings] setEnabledByUser called — serial=${phone?.serial ?? "none"} slotIdx=${slotIdx ?? "n/a"} enabled=${enabled}`);
     if (enabled) {
       manualToggleOnRef.current = true;
     } else {
       explicitToggleOffRef.current = true; // explicit user action — cleanup should abort
     }
-    setSettings(s => {
-      console.log(`[toggle][useAutomationSettings] setSettings — prev.enabled=${s.enabled} → next.enabled=${enabled}`);
-      return { ...s, enabled };
-    });
+    setSettings(s => ({ ...s, enabled }));
   }, [phone?.serial, slotIdx]);
 
   useEffect(() => {
@@ -4556,24 +4552,19 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   // this specific component instance there is zero possibility of calling the
   // wrong slot's setter — no state updates, no effects, no shared refs needed.
   useImperativeHandle(ref, () => ({
-    setEnabled: (v: boolean) => {
-      console.log(`[toggle][SlotHumanSessionView] imperative setEnabled called — slotIdx=${slotIdx} v=${v}`);
-      automation.setEnabledByUser(v);
-    },
-  }), [automation.setEnabledByUser, slotIdx]);
+    setEnabled: (v: boolean) => { automation.setEnabledByUser(v); },
+  }), [automation.setEnabledByUser]);
 
   // Report live status (enabled / running / nextRunAt) to the parent so the
   // slot-list card can show the current state next to the toggle.
   const onAutomationStateRef = useRef(onAutomationState);
   onAutomationStateRef.current = onAutomationState;
   useEffect(() => {
-    const state = {
+    onAutomationStateRef.current?.(slotIdx, {
       enabled: automation.settings.enabled,
       running: automation.running,
       nextRunAt: automation.nextRunAt,
-    };
-    console.log(`[toggle][SlotHumanSessionView] onAutomationState fired — slotIdx=${slotIdx}`, state);
-    onAutomationStateRef.current?.(slotIdx, state);
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [automation.settings.enabled, automation.running, automation.nextRunAt]);
   return (
@@ -4614,7 +4605,6 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
   // populated by SlotHumanSessionView via onAutomationState for display only.
   const [slotAutomationStates, setSlotAutomationStates] = useState<Record<number, SlotAutomationState>>({});
   const handleSlotAutomationState = useCallback((slotIdx: number, state: SlotAutomationState) => {
-    console.log(`[toggle][AccountSettingsPanel] handleSlotAutomationState — slotIdx=${slotIdx}`, state);
     setSlotAutomationStates(prev => ({ ...prev, [slotIdx]: state }));
   }, []);
 
@@ -4842,10 +4832,7 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
                       <div className="flex items-center gap-2 pl-2 border-l border-border">
                         <Switch
                           checked={as.enabled}
-                          onCheckedChange={v => {
-                            console.log(`[toggle][AccountSettingsPanel] Switch clicked — slotIdx=${i} v=${v} refPresent=${!!slotHandleRefs.current[i]} allRefKeys=${JSON.stringify(Object.keys(slotHandleRefs.current))}`);
-                            slotHandleRefs.current[i]?.setEnabled(v);
-                          }}
+                          onCheckedChange={v => { slotHandleRefs.current[i]?.setEnabled(v); }}
                         />
                         <div className="flex flex-col min-w-0">
                           <span className={`text-[11px] font-semibold leading-tight whitespace-nowrap ${
