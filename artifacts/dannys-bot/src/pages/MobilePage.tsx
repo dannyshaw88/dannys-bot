@@ -3953,7 +3953,7 @@ function AutomationSettingsPanel({
 
               {/* ── Activate % ── */}
               <div className="flex flex-col gap-1">
-                <Label className="text-xs font-semibold text-foreground whitespace-nowrap">Activate %</Label>
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">Activate %</Label>
                 <div className="flex items-center gap-1">
                   <Input type="number" min={0} max={100} maxLength={4} className="w-12 text-center"
                     value={settings.randomJitterActivatePctMin}
@@ -3967,11 +3967,9 @@ function AutomationSettingsPanel({
                 </div>
               </div>
 
-              <div className="w-px self-stretch bg-border shrink-0" />
-
               {/* ── Notifications ── */}
               <div className="flex flex-col gap-1">
-                <Label className="text-xs font-semibold text-foreground whitespace-nowrap">Notifications</Label>
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">Notifications</Label>
                 <div className="flex items-center gap-1">
                   <Input type="number" min={0} max={100} maxLength={4} className="w-12 text-center"
                     value={settings.checkNotificationsPctMin}
@@ -3987,7 +3985,7 @@ function AutomationSettingsPanel({
 
               {/* ── Scrolls ── */}
               <div className="flex flex-col gap-1">
-                <Label className="text-xs font-semibold text-foreground whitespace-nowrap">Scrolls</Label>
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">Scrolls</Label>
                 <div className="flex items-center gap-1">
                   <Input type="number" min={0} maxLength={4} className="w-12 text-center"
                     value={settings.checkNotificationsScrollsMin}
@@ -4003,7 +4001,7 @@ function AutomationSettingsPanel({
 
               {/* ── Click % ── */}
               <div className="flex flex-col gap-1">
-                <Label className="text-xs font-semibold text-foreground whitespace-nowrap">Click %</Label>
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">Click %</Label>
                 <div className="flex items-center gap-1">
                   <Input type="number" min={0} max={100} maxLength={4} className="w-12 text-center"
                     value={settings.checkNotificationsClickPctMin}
@@ -4017,11 +4015,9 @@ function AutomationSettingsPanel({
                 </div>
               </div>
 
-              <div className="w-px self-stretch bg-border shrink-0" />
-
               {/* ── Visit Profile ── */}
               <div className="flex flex-col gap-1">
-                <Label className="text-xs font-semibold text-foreground whitespace-nowrap">Visit Profile</Label>
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">Visit Profile</Label>
                 <div className="flex items-center gap-1">
                   <Input type="number" min={0} max={100} maxLength={4} className="w-12 text-center"
                     value={settings.visitProfilePctMin}
