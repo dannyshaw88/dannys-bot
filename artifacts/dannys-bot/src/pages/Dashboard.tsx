@@ -11635,7 +11635,7 @@ export function Dashboard() {
                   onClick={() => setManageColsOpen(o => !o)}
                   className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors py-2.5 px-2"
                 >
-                  <Settings2 className="w-3.5 h-3.5" /> Manage Columns
+                  <Settings2 className="w-3.5 h-3.5" /> MANAGE COLUMNS
                 </button>
                 {manageColsOpen && (
                   <>
@@ -11718,19 +11718,19 @@ export function Dashboard() {
               onClick={() => setShowOnlyErrors(v => !v)}
               className={`text-xs transition-colors py-2.5 px-2 ${showOnlyErrors ? "text-destructive font-medium" : "text-muted-foreground hover:text-destructive"}`}
             >
-              {showOnlyErrors ? "Show all" : "Show only errors"}
+              {showOnlyErrors ? "SHOW ALL" : "SHOW ONLY ERRORS"}
             </button>
             <button
               onClick={() => { const t = Date.now(); localStorage.setItem("dashboard_errors_cleared_at", String(t)); setErrorsCleared(t); }}
               className="text-xs text-muted-foreground hover:text-destructive transition-colors py-2.5 px-2"
             >
-              Clear errors
+              CLEAR ERRORS
             </button>
             <button
               onClick={() => { const t = Date.now(); localStorage.setItem("dashboard_cleared_at", String(t)); setClearedAt(t); }}
               className="text-xs text-muted-foreground hover:text-destructive transition-colors py-2.5 px-2"
             >
-              Clear Dashboard
+              CLEAR DASHBOARD
             </button>
           </div>
         </div>
