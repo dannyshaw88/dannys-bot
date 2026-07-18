@@ -4535,19 +4535,21 @@ function SlotHumanSessionView({
   releaseSlot?: (idx: number) => void;
   refreshKey?: number;
   onCopied?: (targetSlotIdxs: number[]) => void;
-  onAutomationState?: (state: SlotAutomationState) => void;
+  // slotIdx is passed as first arg so the parent can key the state correctly
+  // even if its closure-captured `i` is stale from a mid-render effect flush.
+  onAutomationState?: (slotIdx: number, state: SlotAutomationState) => void;
 }) {
   const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername, requestSlot, releaseSlot, refreshKey);
   const isFirst = slotIdx === 0;
   const isLast = slotIdx === (slotCount ?? 1) - 1;
 
   // Lift automation state to parent whenever it changes so the slot-list card
-  // can show a mirror toggle. Use a ref for the callback to avoid the effect
-  // depending on a potentially-new function reference on every parent render.
+  // can show a mirror toggle. Pass slotIdx explicitly so the parent never has
+  // to rely on a closure-captured `i` that might be stale during a flush.
   const onAutomationStateRef = useRef(onAutomationState);
   onAutomationStateRef.current = onAutomationState;
   useEffect(() => {
-    onAutomationStateRef.current?.({
+    onAutomationStateRef.current?.(slotIdx, {
       enabled: automation.settings.enabled,
       running: automation.running,
       nextRunAt: automation.nextRunAt,
@@ -4592,7 +4594,12 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
   // Mirror of each slot's live automation state — populated by SlotHumanSessionView
   // via onAutomationState so the slot-list card can render a toggle without opening HST.
   const [slotAutomationStates, setSlotAutomationStates] = useState<Record<number, SlotAutomationState>>({});
+  // Separate ref map for setEnabledByUser callbacks — keyed by the slotIdx
+  // passed as an explicit argument, so the toggle always fires the correct
+  // slot's setter regardless of any render/flush ordering in slotAutomationStates.
+  const setEnabledCallbacksRef = useRef<Record<number, (v: boolean) => void>>({});
   const handleSlotAutomationState = useCallback((slotIdx: number, state: SlotAutomationState) => {
+    setEnabledCallbacksRef.current[slotIdx] = state.setEnabledByUser;
     setSlotAutomationStates(prev => ({ ...prev, [slotIdx]: state }));
   }, []);
   const [slots, setSlots] = useState<AccountSlot[]>(
@@ -4774,7 +4781,7 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
             releaseSlot={releaseSlot}
             refreshKey={slotRefreshKeys[i] ?? 0}
             onCopied={handleCopied}
-            onAutomationState={state => handleSlotAutomationState(i, state)}
+            onAutomationState={handleSlotAutomationState}
           />
         </div>
       ))}
@@ -4813,7 +4820,7 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
                       <div className="flex items-center gap-2 pl-2 border-l border-border">
                         <Switch
                           checked={as.enabled}
-                          onCheckedChange={as.setEnabledByUser}
+                          onCheckedChange={v => setEnabledCallbacksRef.current[i]?.(v)}
                         />
                         <div className="flex flex-col min-w-0">
                           <span className={`text-[11px] font-semibold leading-tight whitespace-nowrap ${
