@@ -2472,6 +2472,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
     }
 
+    // ── Ad / deviation recovery ───────────────────────────────────────────
+    // A "next story" advance tap that lands on a sponsored post's CTA button
+    // (or a swipe Instagram intercepts for a full-screen ad) can open Chrome
+    // or Instagram's in-app WebView, taking us completely out of the story
+    // viewer — and possibly out of the Instagram app entirely.  Every
+    // subsequent scripted tap would land on the wrong app.  Check the
+    // foreground package and press Back until we are back in Instagram before
+    // doing anything else (including the exit-swipe below).
+    const _stPkg = await android.getForegroundPackage(serial).catch(() => null);
+    if (_stPkg && _stPkg !== "com.instagram.android") {
+      onLog?.(`Story loop: deviated — foreground app is "${_stPkg}" (expected Instagram) — pressing Back to recover`);
+      logger.info({ serial, pkg: _stPkg }, "[view-stories] deviated to external app — pressing Back to recover");
+      for (let _stRi = 0; _stRi < 5; _stRi++) {
+        await android.pressBack(serial);
+        await sleepOrAbort(serial, 700);
+        const _stNowPkg = await android.getForegroundPackage(serial).catch(() => null);
+        if (!_stNowPkg || _stNowPkg === "com.instagram.android") {
+          onLog?.(`Story loop: recovered — back in Instagram after ${_stRi + 1} Back press(es)`);
+          logger.info({ serial, attempts: _stRi + 1 }, "[view-stories] recovered to Instagram after ad deviation");
+          break;
+        }
+      }
+    }
+
     // Exit the story viewer by swiping down — only if we're actually still
     // in it; if the loop already broke out because the viewer was gone,
     // this would just be a harmless extra swipe on the feed, but skipping
@@ -3481,27 +3505,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
    * expected icon/button can't be located — per spec, a missing icon just
    * means that step is skipped for this user.
    */
-  // Returns true if the profile grid was actually scrolled (so the caller
-  // knows whether a scroll-back-to-top is needed before tapping Follow),
-  // false if the feed-scroll roll was missed or rolled 0 rows (profile is
-  // still at the top — no scroll-back needed, and doing one would pull-to-refresh).
+  // Returns the number of profile-grid rows that were actually scrolled down,
+  // so the caller can scroll EXACTLY that many rows back to the top before
+  // tapping Follow.  Returns 0 when the feed-scroll roll was missed or rolled
+  // 0 rows (profile is still at the top — doing a scroll-back there would
+  // pull-to-refresh instead of returning to the top).
   async function runProfileBrowsingSequence(
     serial: string,
     browsing: InjectBrowsingParams,
     onLog?: (msg: string) => void,
-  ): Promise<boolean> {
+  ): Promise<number> {
     const { w, h } = getScreenSize(serial);
 
     const feedChance = rollRange(browsing.feedChanceMin, browsing.feedChanceMax) / 100;
     if (!(feedChance > 0 && Math.random() < feedChance)) {
       onLog?.("Inject Browsing: feed-scroll roll missed — skipping grid scroll");
-      return false;
+      return 0;
     }
 
     const rows = Math.max(0, Math.round(rollRange(browsing.feedMin, browsing.feedMax)));
     if (rows === 0) {
       onLog?.("Inject Browsing: feed posts rolled to 0 — skipping grid scroll");
-      return false;
+      return 0;
     }
     onLog?.(`Inject Browsing: scrolling profile grid — ${rows} row(s)`);
     const x = Math.round(w / 2);
@@ -3516,7 +3541,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const clickChance = rollRange(browsing.clickPostPctMin, browsing.clickPostPctMax) / 100;
     if (!(clickChance > 0 && Math.random() < clickChance)) {
       onLog?.("Inject Browsing: click-post roll missed — not opening a post");
-      return;
+      return rows;
     }
 
     // Find real post thumbnail positions from the live accessibility tree.
@@ -3528,7 +3553,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const gridPosts = await android.findProfileGridPosts(serial, onLog).catch(() => [] as { x: number; y: number; cd: string }[]);
     if (gridPosts.length === 0) {
       onLog?.("Inject Browsing: no image_button nodes found in grid — skipping post open");
-      return;
+      return rows;
     }
     const slot = gridPosts[Math.floor(Math.random() * gridPosts.length)];
     const slotCd = slot.cd ? ` (${slot.cd})` : "";
@@ -3557,7 +3582,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         logger.info({ serial }, "[inject-browsing] findFeedActionIcons=null, isInPostViewer=true — no identifiable Like button; pressing Back without retry");
         await android.pressBack(serial);
         await sleepOrAbort(serial, 500);
-        return;
+        return rows;
       }
       // Case A: still on profile grid — scroll up once and retry using a
       // fresh a11y dump (same rule: no hardcoded coordinates).
@@ -3572,7 +3597,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const retryPosts = await android.findProfileGridPosts(serial, onLog).catch(() => [] as { x: number; y: number; cd: string }[]);
       if (retryPosts.length === 0) {
         onLog?.("Inject Browsing: retry — no image_button nodes found after scroll-up, giving up");
-        return;
+        return rows;
       }
       const retrySlot = retryPosts[Math.floor(Math.random() * retryPosts.length)];
       const retryCd = retrySlot.cd ? ` (${retrySlot.cd})` : "";
@@ -3588,7 +3613,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           await android.pressBack(serial);
           await sleepOrAbort(serial, 500);
         }
-        return;
+        return rows;
       }
       onLog?.("Inject Browsing: retry succeeded — post opened after scrolling up");
     }
@@ -3798,7 +3823,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Back out of the opened post to the profile grid before continuing.
     await android.pressBack(serial);
     await sleepOrAbort(serial, 500);
-    return true;
+    return rows;
   }
 
   async function runFollowUsersStep(
@@ -4057,17 +4082,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           const didScroll = await runProfileBrowsingSequence(serial, browsing, onLog).catch((e: any) => {
             if (e?.message === "cycle-aborted") throw e;
             onLog?.(`Inject Browsing: error — ${e?.message}`);
-            return false;
+            return 0;
           });
-          // Only scroll back to top if browsing actually scrolled the grid.
-          // If the feed-scroll roll was missed the profile is already at the
-          // top — doing a downward swipe there triggers pull-to-refresh, not
-          // a scroll-up, which is both wrong and bot-like.
-          if (didScroll) {
+          // Scroll EXACTLY as many rows back up as we scrolled down, so we
+          // stop at the top of the grid where the Follow button is visible.
+          // Doing MORE swipes than we scrolled overshoots the top and triggers
+          // a pull-to-refresh (a downward finger-drag from the very top of the
+          // content), which is both wrong and bot-like.  Using a start-y that
+          // is safely below the top of the content area (0.55 rather than
+          // 0.30) also avoids accidentally hitting the profile header zone.
+          if (didScroll > 0) {
             const { w: bw, h: bh } = getScreenSize(serial);
-            for (let _si = 0; _si < 4; _si++) {
-              await android.swipe(serial, Math.round(bw / 2), Math.round(bh * 0.30), Math.round(bw / 2), Math.round(bh * 0.75), 280);
-              await sleepOrAbort(serial, 180);
+            onLog?.(`Inject Browsing: scrolling back to top — ${didScroll} row(s)`);
+            for (let _si = 0; _si < didScroll; _si++) {
+              await android.swipe(serial, Math.round(bw / 2), Math.round(bh * 0.55), Math.round(bw / 2), Math.round(bh * 0.82), 300);
+              await sleepOrAbort(serial, 200);
             }
             await sleepOrAbort(serial, 400);
           }
