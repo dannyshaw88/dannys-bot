@@ -3949,67 +3949,79 @@ function AutomationSettingsPanel({
           </div>
 
           {settings.randomJitterEnabled && (
-            <div className="pl-1 flex items-center gap-2 flex-nowrap">
+            <div className="pl-1 flex items-end gap-3 flex-nowrap">
 
               {/* ── Activate % ── */}
-              <Label className="text-xs font-semibold text-foreground whitespace-nowrap">Activate %</Label>
-              <Input type="number" min={0} max={100} maxLength={4} className="w-12 text-center"
-                value={settings.randomJitterActivatePctMin}
-                onChange={e => setSettings(s => ({ ...s, randomJitterActivatePctMin: clamp4(Number(e.target.value)) }))}
-                disabled={loading} />
-              <span className="text-muted-foreground text-xs shrink-0">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className="w-12 text-center"
-                value={settings.randomJitterActivatePctMax}
-                onChange={e => setSettings(s => ({ ...s, randomJitterActivatePctMax: clamp4(Number(e.target.value)) }))}
-                disabled={loading} />
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs font-semibold text-foreground whitespace-nowrap">Activate %</Label>
+                <div className="flex items-center gap-1">
+                  <Input type="number" min={0} max={100} maxLength={4} className="w-12 text-center"
+                    value={settings.randomJitterActivatePctMin}
+                    onChange={e => setSettings(s => ({ ...s, randomJitterActivatePctMin: clamp4(Number(e.target.value)) }))}
+                    disabled={loading} />
+                  <span className="text-muted-foreground text-xs shrink-0">to</span>
+                  <Input type="number" min={0} max={100} maxLength={4} className="w-12 text-center"
+                    value={settings.randomJitterActivatePctMax}
+                    onChange={e => setSettings(s => ({ ...s, randomJitterActivatePctMax: clamp4(Number(e.target.value)) }))}
+                    disabled={loading} />
+                </div>
+              </div>
 
-              <div className="w-px h-4 bg-border shrink-0 mx-1" />
+              <div className="w-px self-stretch bg-border shrink-0" />
 
               {/* ── Notifications ── */}
-              <Label className="text-xs font-semibold text-foreground whitespace-nowrap">Notifications</Label>
-              <Input type="number" min={0} max={100} maxLength={4} className="w-12 text-center"
-                value={settings.checkNotificationsPctMin}
-                onChange={e => setSettings(s => ({ ...s, checkNotificationsPctMin: clamp4(Number(e.target.value)) }))}
-                disabled={loading} />
-              <span className="text-muted-foreground text-xs shrink-0">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className="w-12 text-center"
-                value={settings.checkNotificationsPctMax}
-                onChange={e => setSettings(s => ({ ...s, checkNotificationsPctMax: clamp4(Number(e.target.value)) }))}
-                disabled={loading} />
-              <Label className="text-xs text-muted-foreground whitespace-nowrap shrink-0">Scrolls</Label>
-              <Input type="number" min={0} maxLength={4} className="w-12 text-center"
-                value={settings.checkNotificationsScrollsMin}
-                onChange={e => setSettings(s => ({ ...s, checkNotificationsScrollsMin: clamp4(Number(e.target.value)) }))}
-                disabled={loading} />
-              <span className="text-muted-foreground text-xs shrink-0">to</span>
-              <Input type="number" min={0} maxLength={4} className="w-12 text-center"
-                value={settings.checkNotificationsScrollsMax}
-                onChange={e => setSettings(s => ({ ...s, checkNotificationsScrollsMax: clamp4(Number(e.target.value)) }))}
-                disabled={loading} />
-              <Label className="text-xs text-muted-foreground whitespace-nowrap shrink-0">Click %</Label>
-              <Input type="number" min={0} max={100} maxLength={4} className="w-12 text-center"
-                value={settings.checkNotificationsClickPctMin}
-                onChange={e => setSettings(s => ({ ...s, checkNotificationsClickPctMin: clamp4(Number(e.target.value)) }))}
-                disabled={loading} />
-              <span className="text-muted-foreground text-xs shrink-0">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className="w-12 text-center"
-                value={settings.checkNotificationsClickPctMax}
-                onChange={e => setSettings(s => ({ ...s, checkNotificationsClickPctMax: clamp4(Number(e.target.value)) }))}
-                disabled={loading} />
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs font-semibold text-foreground whitespace-nowrap">Notifications</Label>
+                <div className="flex items-center gap-1">
+                  <Input type="number" min={0} max={100} maxLength={4} className="w-12 text-center"
+                    value={settings.checkNotificationsPctMin}
+                    onChange={e => setSettings(s => ({ ...s, checkNotificationsPctMin: clamp4(Number(e.target.value)) }))}
+                    disabled={loading} />
+                  <span className="text-muted-foreground text-xs shrink-0">to</span>
+                  <Input type="number" min={0} max={100} maxLength={4} className="w-12 text-center"
+                    value={settings.checkNotificationsPctMax}
+                    onChange={e => setSettings(s => ({ ...s, checkNotificationsPctMax: clamp4(Number(e.target.value)) }))}
+                    disabled={loading} />
+                  <Label className="text-xs text-muted-foreground whitespace-nowrap shrink-0 ml-1">Scrolls</Label>
+                  <Input type="number" min={0} maxLength={4} className="w-12 text-center"
+                    value={settings.checkNotificationsScrollsMin}
+                    onChange={e => setSettings(s => ({ ...s, checkNotificationsScrollsMin: clamp4(Number(e.target.value)) }))}
+                    disabled={loading} />
+                  <span className="text-muted-foreground text-xs shrink-0">to</span>
+                  <Input type="number" min={0} maxLength={4} className="w-12 text-center"
+                    value={settings.checkNotificationsScrollsMax}
+                    onChange={e => setSettings(s => ({ ...s, checkNotificationsScrollsMax: clamp4(Number(e.target.value)) }))}
+                    disabled={loading} />
+                  <Label className="text-xs text-muted-foreground whitespace-nowrap shrink-0 ml-1">Click %</Label>
+                  <Input type="number" min={0} max={100} maxLength={4} className="w-12 text-center"
+                    value={settings.checkNotificationsClickPctMin}
+                    onChange={e => setSettings(s => ({ ...s, checkNotificationsClickPctMin: clamp4(Number(e.target.value)) }))}
+                    disabled={loading} />
+                  <span className="text-muted-foreground text-xs shrink-0">to</span>
+                  <Input type="number" min={0} max={100} maxLength={4} className="w-12 text-center"
+                    value={settings.checkNotificationsClickPctMax}
+                    onChange={e => setSettings(s => ({ ...s, checkNotificationsClickPctMax: clamp4(Number(e.target.value)) }))}
+                    disabled={loading} />
+                </div>
+              </div>
 
-              <div className="w-px h-4 bg-border shrink-0 mx-1" />
+              <div className="w-px self-stretch bg-border shrink-0" />
 
               {/* ── Visit Profile ── */}
-              <Label className="text-xs font-semibold text-foreground whitespace-nowrap">Visit Profile</Label>
-              <Input type="number" min={0} max={100} maxLength={4} className="w-12 text-center"
-                value={settings.visitProfilePctMin}
-                onChange={e => setSettings(s => ({ ...s, visitProfilePctMin: clamp4(Number(e.target.value)) }))}
-                disabled={loading} />
-              <span className="text-muted-foreground text-xs shrink-0">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className="w-12 text-center"
-                value={settings.visitProfilePctMax}
-                onChange={e => setSettings(s => ({ ...s, visitProfilePctMax: clamp4(Number(e.target.value)) }))}
-                disabled={loading} />
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs font-semibold text-foreground whitespace-nowrap">Visit Profile</Label>
+                <div className="flex items-center gap-1">
+                  <Input type="number" min={0} max={100} maxLength={4} className="w-12 text-center"
+                    value={settings.visitProfilePctMin}
+                    onChange={e => setSettings(s => ({ ...s, visitProfilePctMin: clamp4(Number(e.target.value)) }))}
+                    disabled={loading} />
+                  <span className="text-muted-foreground text-xs shrink-0">to</span>
+                  <Input type="number" min={0} max={100} maxLength={4} className="w-12 text-center"
+                    value={settings.visitProfilePctMax}
+                    onChange={e => setSettings(s => ({ ...s, visitProfilePctMax: clamp4(Number(e.target.value)) }))}
+                    disabled={loading} />
+                </div>
+              </div>
 
             </div>
           )}
