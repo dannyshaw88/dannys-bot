@@ -3859,7 +3859,7 @@ function AutomationSettingsPanel({
           </>)}
 
           {/* ── Filters — profile-quality gates applied before each follow ── */}
-          <div className="flex items-center gap-3" style={{ paddingTop: "4px" }}>
+          <div className="flex items-center gap-3" style={{ paddingTop: "5px" }}>
             <input
               type="checkbox"
               id={`follow-filters-enabled-${slotIdx ?? 0}`}
@@ -3872,7 +3872,7 @@ function AutomationSettingsPanel({
           </div>
 
           {settings.followFiltersEnabled && (
-            <div className="flex items-center gap-6 flex-wrap">
+            <div className="flex items-center gap-6 flex-wrap" style={{ paddingTop: "2px" }}>
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
