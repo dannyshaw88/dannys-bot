@@ -3872,7 +3872,7 @@ function AutomationSettingsPanel({
           </div>
 
           {settings.followFiltersEnabled && (
-            <div className="flex items-center gap-6 flex-wrap" style={{ paddingTop: "2px" }}>
+            <div className="flex items-center gap-6 flex-wrap" style={{ paddingTop: "4px" }}>
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
