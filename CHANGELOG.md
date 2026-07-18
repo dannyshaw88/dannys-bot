@@ -4,6 +4,40 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.1.676] — 2026-07-18
+
+### Account Slot Card — Mini Automation Toggle (Mirror of Human Session Tool Master Switch)
+
+Each account slot card on the Accounts tab now shows a live copy of the master on/off toggle from inside the Human Session Tool, directly on the card itself — no need to open the tool just to enable or disable an account.
+
+**What's shown on each card (next to the HUMAN SESSION TOOL button):**
+- **Switch** — identical to the master toggle inside the Human Session Tool. Flipping it on the card is the same action as flipping it inside the tool: the automation loop starts or stops immediately, settings are saved, and the cycle is aborted server-side if turned off mid-run.
+- **Status label** — updates in real time:
+  - **Active** (green) — enabled, waiting for the next scheduled cycle.
+  - **Running** (blue) — a cycle is currently executing on this account.
+  - **Disabled** (grey) — automation is off.
+- **Next run timestamp** — appears below the status label when Active and not currently running, showing the exact scheduled time and date of the next cycle (e.g. `Next run 11:42 · 18/07/2026`). Disappears automatically while a cycle is in progress or when the account is disabled.
+
+**How it works internally:** Each `SlotHumanSessionView` (which is always mounted in the background so the automation loop keeps running even when you are looking at another tab) now exposes its live `enabled`, `running`, `nextRunAt`, and `setEnabledByUser` values to the parent `AccountSettingsPanel` via a lightweight callback (`onAutomationState`). The slot card reads from this mirrored state. Both the card toggle and the HST toggle are always in sync — there is no separate save step or round-trip.
+
+---
+
+### Copy Settings — Follow Filters Now an Independent Section (Fixes Filters Not Copying)
+
+**Bug fixed:** Follow filter settings were not being copied when using Copy Settings, even when the user had them configured on the source slot.
+
+**Root cause:** The six filter items (Master toggle, Skip Private, English Speaking Only, 250+ Followers min, Skip Verified, Skip 25K+) were all nested as sub-items inside the **Follow Users** section. Whenever a user deselected the "Follow Users" section header checkbox in the Copy Settings dialog — for example, to avoid copying follow counts or sources — the deselect action also silently removed all filter checkboxes from the selection. The user would then copy with filters excluded and see no change on the target slot.
+
+**Fix:** Follow Filters is now its own standalone top-level section in the Copy Settings dialog. It appears between Follow Users and Inject Browsing and has its own independent master checkbox. Deselecting Follow Users no longer has any effect on whether filters are copied. The six filter sub-items (Master toggle, Skip Private users, English Speaking only, 250+ Followers min, Skip Verified users, Skip 25K+ Followers) are all selected by default when the dialog opens and can be checked or unchecked independently of any other section.
+
+---
+
+### Copy Settings — No More Double Hyphens in Labels
+
+All em dashes (—) and en dashes (–) in Copy Settings section and sub-item labels have been replaced with plain single hyphens (-). Previously the filter sub-items showed labels like "Filters — Master toggle" and "Filters — Skip Private users"; the "Run Interval" section label read "Run every X – Y minutes". All labels now use a plain hyphen: "Master toggle", "Skip Private users", "Run every X - Y minutes", etc. The redundant "Filters — " prefix on each filter sub-item has also been removed since they are now grouped under their own "Follow Filters" section header.
+
+---
+
 ## [1.1.675] — 2026-07-18
 
 ### Copy Settings — Cross-device support
