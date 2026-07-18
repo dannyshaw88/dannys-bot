@@ -7,7 +7,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Activity, Clock, User, Zap, Sparkles, Bell, Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, RefreshCw, Settings2, Upload, Download,
-  Fingerprint, ThumbsUp, Monitor,
+  Fingerprint, ThumbsUp,
 } from "lucide-react";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { TrustScoreBadge, getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
@@ -70,10 +70,10 @@ const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string |
   view_profile_feed:       { label: "View Profile Feed", cls: "text-cyan-600",    icon: "≡" },
 };
 
-const DEFAULT_COL_WIDTHS = { account: 160, open_eb: 80, event: 150, target: 100, detail: 200, timestamp: 220, trustscore: 120 };
-const DEFAULT_COL_ORDER: (keyof typeof DEFAULT_COL_WIDTHS)[] = ["account", "open_eb", "trustscore", "event", "target", "detail", "timestamp"];
+const DEFAULT_COL_WIDTHS = { account: 160, device_name: 140, account_slot: 100, event: 150, target: 100, detail: 200, timestamp: 220, trustscore: 120 };
+const DEFAULT_COL_ORDER: (keyof typeof DEFAULT_COL_WIDTHS)[] = ["account", "device_name", "account_slot", "trustscore", "event", "target", "detail", "timestamp"];
 const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
-  account: "ACCOUNT", open_eb: "OPEN EB", event: "ACTION", target: "TARGET", detail: "DETAIL", timestamp: "TIMESTAMP", trustscore: "TRUSTSCORE",
+  account: "ACCOUNT", device_name: "DEVICE", account_slot: "SLOT", event: "ACTION", target: "TARGET", detail: "DETAIL", timestamp: "TIMESTAMP", trustscore: "TRUSTSCORE",
 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
@@ -11302,6 +11302,8 @@ type FeedItem = {
   action?: string;
   targetUsername?: string;
   detail?: string;
+  sourceValue?: string;
+  sourceType?: string;
   importData?: LastImport;
 };
 
@@ -11440,6 +11442,8 @@ export function Dashboard() {
         targetUsername: a.targetUsername,
         detail: a.detail,
         profileLabel: a.profileLabel,
+        sourceValue: a.sourceValue,
+        sourceType: a.sourceType,
       }));
 
       if (isInitial) {
@@ -11726,7 +11730,7 @@ export function Dashboard() {
               onClick={() => { const t = Date.now(); localStorage.setItem("dashboard_cleared_at", String(t)); setClearedAt(t); }}
               className="text-xs text-muted-foreground hover:text-destructive transition-colors py-2.5 px-2"
             >
-              Clear feed
+              Clear Dashboard
             </button>
           </div>
         </div>
@@ -11860,7 +11864,7 @@ export function Dashboard() {
                             localStorage.setItem("dashboard_col_order", JSON.stringify(next));
                           }}
                           onDragEnd={() => { dashDragColRef.current = null; setDashDragOverCol(null); }}
-                          className={`px-3 py-4 font-bold cursor-default select-none ${isDragTarget ? "bg-primary/5 border-l-2 border-l-primary" : ""} ${(key === "trustscore" || key === "event" || key === "target" || key === "open_eb") ? "text-center" : ""}`}
+                          className={`px-3 py-4 font-bold cursor-default select-none ${isDragTarget ? "bg-primary/5 border-l-2 border-l-primary" : ""} ${(key === "trustscore" || key === "event" || key === "target" || key === "device_name" || key === "account_slot") ? "text-center" : ""}`}
                         >
                           {COL_LABELS[key]}
                         </th>
@@ -11900,7 +11904,8 @@ export function Dashboard() {
                       const label = getUsername(item.profileId, item.profileLabel);
 
                       const getCell = (col: keyof typeof DEFAULT_COL_WIDTHS) => {
-                        if (col === "open_eb") return <td key={col} className="px-3 py-1.5 text-center">{item.profileId ? <button onClick={() => { const p = profiles?.find((pr: any) => pr.id === item.profileId); if (p) openWindow(p.id, p.username ?? "", p.userAgentEmbedded ?? ""); }} className="inline-flex items-center gap-1 text-xs text-cyan-500 hover:text-cyan-400 transition-colors font-medium whitespace-nowrap"><Monitor className="w-3.5 h-3.5 shrink-0" /><span>Open EB</span></button> : <span className="text-muted-foreground text-xs">—</span>}</td>;
+                        if (col === "device_name") return <td key={col} className="px-3 py-1.5 text-center"><span className="text-xs text-muted-foreground font-mono">{item.sourceType === "phone" && item.sourceValue ? (item.sourceValue.split(":")[0] ?? "—") : "—"}</span></td>;
+                        if (col === "account_slot") return <td key={col} className="px-3 py-1.5 text-center"><span className="text-xs text-muted-foreground">{item.sourceType === "phone" && item.sourceValue?.includes(":") ? `Slot ${Number(item.sourceValue.split(":")[1]) + 1}` : "—"}</span></td>;
                         if (col === "trustscore") return <td key={col} className="px-3 py-1.5"><div className="flex justify-center">{item.profileId ? <TrustScoreBadge profileId={item.profileId} /> : <span className="text-muted-foreground text-xs">—</span>}</div></td>;
                         if (item.kind === "import") {
                           const imp = item.importData!;

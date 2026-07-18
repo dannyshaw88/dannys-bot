@@ -2850,6 +2850,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // running any tools, so each slot's settings are always applied to the
     // correct account even when multiple accounts share the same device.
     slotUsername: z.string().optional().default(""),
+    slotIdx: z.number().int().min(0).default(0),
   });
   const automationCycleInProgress = new Set<string>();
 
@@ -4233,7 +4234,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostLocalFolderEnabled, makePostLocalFolderPath,
         makePostLocalFolderNoRepeat, makePostLocalFolderRandom, makePostLocalFolderDeleteAfterUpload,
         makePostFixAiSlop, makePostCaptionText,
-        slotUsername,
+        slotUsername, slotIdx,
       } = automationCycleSchema.parse(req.body);
 
       // ── Global followed / skipped settings ─────────────────────────────────
@@ -4244,6 +4245,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const globalCycleSettings = await storage.getGlobalSettings();
       const globalSkipFollowed  = globalCycleSettings.skipFollowedUsers       === "true";
       const globalSkipSkipped   = globalCycleSettings.skipAlreadySkippedUsers === "true";
+
+      // ── Resolve profileId for Dashboard logging ─────────────────────────────
+      // Map slotUsername → profile row so cycle start/complete events appear
+      // in the main Dashboard activity feed alongside EB account actions.
+      let mobileProfileId: number | null = null;
+      if (slotUsername) {
+        const allProfiles = await storage.getProfiles();
+        const match = allProfiles.find(p => p.username === slotUsername || p.accountLabel === slotUsername);
+        if (match) mobileProfileId = match.id;
+      }
+      // Log cycle start to Dashboard
+      if (mobileProfileId) {
+        storage.createSessionAction({
+          profileId: mobileProfileId,
+          toolId: 0,
+          action: "tool_start",
+          targetUsername: "",
+          detail: "Phone farm cycle starting",
+          result: "ok",
+          sourceValue: `${serial}:${slotIdx}`,
+          sourceType: "phone",
+          timestamp: new Date().toISOString(),
+        }).catch(() => {});
+      }
 
       // 1. Power on the phone.
       tLog("▶ Waking screen…");
@@ -4633,6 +4658,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           feedShares: sharesFeed,
           cycles: 1,
         }).catch((e: any) => logger.warn({ err: e }, "[mobile-cycle] stat persist error"));
+      }
+      // Log cycle completion to Dashboard activity feed.
+      if (mobileProfileId) {
+        const parts: string[] = [];
+        if (followedCount) parts.push(`${followedCount} follows`);
+        if (likes + reelsLikes) parts.push(`${likes + reelsLikes} likes`);
+        if (storiesWatched) parts.push(`${storiesWatched} stories`);
+        if (reelsViewed) parts.push(`${reelsViewed} reels`);
+        if (sharesDm) parts.push(`${sharesDm} DMs`);
+        if (sharesFeed) parts.push(`${sharesFeed} feed shares`);
+        storage.createSessionAction({
+          profileId: mobileProfileId,
+          toolId: 0,
+          action: "tool_complete",
+          targetUsername: "",
+          detail: parts.length ? parts.join(", ") : "No actions taken",
+          result: "ok",
+          sourceValue: `${serial}:${slotIdx}`,
+          sourceType: "phone",
+          timestamp: new Date().toISOString(),
+        }).catch(() => {});
       }
       res.json({ ok: true, count, likes, likeFailures, sharesFeed, sharesDm, storiesWatched, followedCount, strayNavRecoveries, steps });
     } catch (e: any) {

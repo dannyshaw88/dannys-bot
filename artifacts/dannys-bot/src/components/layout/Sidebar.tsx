@@ -122,9 +122,8 @@ export function Sidebar() {
   const BRAND = "#1AD2F2";
   const navItems = [
     { name: "Dashboard",       shortLabel: "DASHBOARD",      path: "/dashboard",    icon: FilledDashboardIcon   },
-    { name: "Phone Farm",        shortLabel: "PHONE FARM",     path: "/mobile",       icon: FilledFarmIcon        },
+    { name: "Phone Farm",      shortLabel: "PHONE FARM",     path: "/mobile",       icon: FilledFarmIcon        },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon    },
-    { name: "Tools",           shortLabel: "TOOLS",          path: "/tools",        icon: FilledHammerIcon      },
   ];
 
   return (

@@ -1,4 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
+import { ToolsPageContent } from "@/pages/ToolsPage";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -330,7 +331,7 @@ export function SettingsPage() {
       </div>
 
       <div className="flex items-center gap-0 mb-6 border-b border-border/60 flex-wrap">
-        {(["My Account", "General", "Scraping", "Automation", "Security", "Data"] as const).map(tab => (
+        {(["My Account", "General", "Tools", "Scraping", "Automation", "Security", "Data"] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setSettingsTab(tab.toLowerCase())}
@@ -347,7 +348,13 @@ export function SettingsPage() {
         </div>
       )}
 
-      <div className={`space-y-4 max-w-2xl ${["my account"].includes(settingsTab) ? "hidden" : ""}`}>
+      {settingsTab === "tools" && (
+        <div>
+          <ToolsPageContent />
+        </div>
+      )}
+
+      <div className={`space-y-4 max-w-2xl ${["my account", "tools"].includes(settingsTab) ? "hidden" : ""}`}>
 
         {/* Talk to Equinox Bot shortcut */}
         <button

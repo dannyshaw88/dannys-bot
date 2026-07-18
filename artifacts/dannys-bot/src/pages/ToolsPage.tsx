@@ -692,16 +692,11 @@ function BulkImportTabContent() {
 const TOOLS_TABS = ["Evasion Stats", "Trust Scores", "Import"] as const;
 type ToolsTab = typeof TOOLS_TABS[number];
 
-export function ToolsPage() {
+export function ToolsPageContent() {
   const [activeTab, setActiveTab] = useState<ToolsTab>("Evasion Stats");
 
   return (
-    <AppLayout>
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Tools</h1>
-        <p className="text-muted-foreground mt-1">Evasion analytics, bulk import, and trust score configuration.</p>
-      </div>
-
+    <div>
       <div className="flex items-center gap-0 mb-6 border-b border-border/60">
         {TOOLS_TABS.map(tab => (
           <button
@@ -727,6 +722,18 @@ export function ToolsPage() {
       )}
 
       {activeTab === "Import" && <BulkImportTabContent />}
+    </div>
+  );
+}
+
+export function ToolsPage() {
+  return (
+    <AppLayout>
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">Tools</h1>
+        <p className="text-muted-foreground mt-1">Evasion analytics, bulk import, and trust score configuration.</p>
+      </div>
+      <ToolsPageContent />
     </AppLayout>
   );
 }

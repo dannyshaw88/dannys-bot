@@ -231,9 +231,11 @@ export function setTrustScore(profileId: number, id: string | null) {
 
 interface TrustScoreBadgeProps {
   profileId: number;
+  width?: number;
+  height?: number;
 }
 
-export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
+export function TrustScoreBadge({ profileId, width = 120, height = 25 }: TrustScoreBadgeProps) {
   const [score, setScore] = useState<string | null>(() => getTrustScore(profileId));
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -287,11 +289,11 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
           border: current ? `1px solid ${current.border}` : "1px dashed #94a3b8",
           cursor: "pointer",
           flexShrink: 0,
-          width: 72,
-          minWidth: 72,
-          maxWidth: 72,
+          width,
+          minWidth: width,
+          maxWidth: width,
           overflow: "hidden",
-          height: 25,
+          height,
         }}
         title={current ? current.label : "Click to set Trust Score"}
       >

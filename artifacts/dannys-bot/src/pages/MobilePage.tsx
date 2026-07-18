@@ -2418,6 +2418,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             makePostCaptionText: s.makePostCaptionText,
             makePostImageSettings: s.makePostImageSettings,
             slotUsername: slotUsername ?? "",
+            slotIdx: slotIdx ?? 0,
           }),
         });
         const body = await r.json().catch(() => null);
