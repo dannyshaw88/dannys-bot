@@ -2904,7 +2904,6 @@ function CopySettingsDialog({
                               {username ? `@${username}` : `Slot ${i + 1}`}
                               {isSelf && <span className="text-muted-foreground ml-1">(source)</span>}
                             </span>
-                            <SlotTrustScoreBadge serial={ds.phone.serial} slotIdx={i} width={65} />
                           </label>
                         );
                       })}
