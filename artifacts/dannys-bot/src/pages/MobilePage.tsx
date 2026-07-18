@@ -3193,9 +3193,9 @@ function AutomationSettingsPanel({
                 checked={settings.shuffleToolOrder}
                 onChange={e => setSettings(s => ({ ...s, shuffleToolOrder: e.target.checked }))}
                 disabled={loading}
-                className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                className="w-4 h-4 accent-primary cursor-pointer"
               />
-              <span className="text-xs text-muted-foreground">Shuffle tool order</span>
+              <span className="text-sm text-muted-foreground">Shuffle tool order</span>
             </label>
           </div>
           <br />
@@ -4600,10 +4600,6 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   return (
     <div className="h-full flex flex-col">
       <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
-        <Button variant="ghost" size="sm" onClick={onBack} className="gap-1.5 h-7 px-2">
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Back
-        </Button>
         <div className="flex-1" />
         <Button variant="outline" size="sm" onClick={onPrevSlot} disabled={isFirst} className="gap-1 h-7 px-2">
           <ChevronLeft className="w-3.5 h-3.5" />

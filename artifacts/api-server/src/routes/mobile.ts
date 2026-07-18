@@ -1137,6 +1137,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       sharpen: { enabled: true, min: 1.0, max: 2.0 },
       pixelate: { enabled: true, min: 0.9, max: 2.1 },
     }),
+    // ── Shuffle Tool Order — was missing from this persistence schema, causing
+    //    zod to silently strip it on every POST so Copy Settings never saved it
+    //    and the value reset to false on every restart.
+    shuffleToolOrder: z.boolean().default(false),
   });
   app.get("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {
     const cfg = loadInstanceConfigs();
