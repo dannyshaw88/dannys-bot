@@ -2904,6 +2904,7 @@ function CopySettingsDialog({
                               {username ? `@${username}` : `Slot ${i + 1}`}
                               {isSelf && <span className="text-muted-foreground ml-1">(source)</span>}
                             </span>
+                            <SlotTrustScoreBadge serial={ds.phone.serial} slotIdx={i} width={65} hideIcon />
                           </label>
                         );
                       })}
@@ -4371,7 +4372,7 @@ function AutomationSettingsPanel({
 const ROW_H = 30; // px per dropdown row
 const MAX_VISIBLE_ROWS = 5;
 
-function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 142 }: { serial: string; slotIdx: number; width?: number }) {
+function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 142, hideIcon = false }: { serial: string; slotIdx: number; width?: number; hideIcon?: boolean }) {
   const lsKey = `mobile_ts_${serial}_${slotIdx}`;
   const [scoreId, setScoreId] = useState<string | null>(() => {
     try { return localStorage.getItem(lsKey) ?? null; } catch { return null; }
@@ -4450,7 +4451,7 @@ function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 142 }: { ser
         {current ? (
           <>
             <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flexShrink: 1 }}>{current.label}</span>
-            <current.icon size={10} color={current.text} fill={current.text} strokeWidth={2} style={{ flexShrink: 0 }} />
+            {!hideIcon && <current.icon size={10} color={current.text} fill={current.text} strokeWidth={2} style={{ flexShrink: 0 }} />}
           </>
         ) : (
           <span>Score</span>
