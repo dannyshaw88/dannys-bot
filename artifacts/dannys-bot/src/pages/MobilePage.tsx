@@ -3123,9 +3123,9 @@ function AutomationSettingsPanel({
       </div>
 
       {/* Master toggle — turns the whole tool on/off. */}
-      <div className="inline-flex flex-col self-start bg-card border border-border rounded-xl p-5 gap-4">
-        {/* Row 1: toggle + status */}
-        <div className="flex items-center gap-3">
+      <div className="inline-flex self-start bg-card border border-border rounded-xl p-5">
+        {/* Single row: (STEP1) toggle status | Run every X to Y minutes */}
+        <div className="flex items-center gap-3 flex-wrap">
           <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">(STEP1)</span>
           <Switch
             checked={settings.enabled}
@@ -3143,10 +3143,7 @@ function AutomationSettingsPanel({
               </span>
             )}
           </div>
-        </div>
-
-        {/* Row 2: cycle interval */}
-        <div className="flex items-center gap-3 flex-wrap">
+          <div className="w-px self-stretch bg-border mx-1" />
           <Label className="text-sm text-muted-foreground whitespace-nowrap">Run every</Label>
           <Input
             type="number"
