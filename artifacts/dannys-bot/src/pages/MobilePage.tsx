@@ -2830,7 +2830,7 @@ function CopySettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v && !copying) onClose(); }}>
-      <DialogContent className="max-w-[52.8rem] max-h-[54vh] flex flex-col">
+      <DialogContent className="max-w-[52.8rem] max-h-[65vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Copy Settings to Other Slots</DialogTitle>
         </DialogHeader>
