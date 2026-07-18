@@ -4424,7 +4424,7 @@ function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 200 }: { ser
   }, [open, levels.length, scoreId]);
 
   return (
-    <div className="relative inline-block shrink-0">
+    <div className="relative shrink-0" style={{ display: "flex", alignSelf: "stretch" }}>
       <button
         ref={btnRef}
         type="button"
@@ -4432,8 +4432,8 @@ function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 200 }: { ser
         onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
         className="inline-flex items-center justify-center gap-1.5 rounded-md border px-2 text-[11px] font-semibold transition-all hover:brightness-125"
         style={current
-          ? { background: current.bg, borderColor: current.border, color: current.text, width: badgeWidth, alignSelf: "stretch", height: "100%" }
-          : { background: "transparent", borderStyle: "dashed", borderColor: "#94a3b8", color: "#94a3b8", width: badgeWidth, alignSelf: "stretch", height: "100%" }
+          ? { background: current.bg, borderColor: current.border, color: current.text, width: badgeWidth, minWidth: badgeWidth, height: "100%" }
+          : { background: "transparent", borderStyle: "dashed", borderColor: "#94a3b8", color: "#94a3b8", width: badgeWidth, minWidth: badgeWidth, height: "100%" }
         }
         title={current ? current.label : "Click to set Trust Score"}
       >
