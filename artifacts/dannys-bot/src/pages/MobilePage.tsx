@@ -6127,16 +6127,19 @@ export function MobilePage() {
       <main className="ml-[133px] flex-1 h-screen flex flex-col overflow-hidden">
 
         {/* Header */}
-        <div className="shrink-0 z-10 bg-background/95 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <FilledFarmIcon className="w-5 h-5" style={{ color: "#1AD2F2" }} />
-            <h1 className="text-lg font-bold text-foreground">
-              {targetSerial
-                ? openAccountSlot !== null
-                  ? `Phone Farm - Slot ${openAccountSlot + 1} - ${deviceFriendlyName ?? targetSerial}`
-                  : `Phone Farm - ${deviceFriendlyName ?? targetSerial}`
-                : "Phone Farm"}
-            </h1>
+        <div className="shrink-0 z-10 bg-background/95 backdrop-blur border-b border-border px-6 py-3 relative flex items-center justify-end">
+          {/* Title — absolutely centred in the bar, independent of button widths */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="flex items-center gap-3 pointer-events-auto">
+              <FilledFarmIcon className="w-5 h-5" style={{ color: "#1AD2F2" }} />
+              <h1 className="text-lg font-bold text-foreground">
+                {targetSerial
+                  ? openAccountSlot !== null
+                    ? `Phone Farm - Slot ${openAccountSlot + 1} - ${deviceFriendlyName ?? targetSerial}`
+                    : `Phone Farm - ${deviceFriendlyName ?? targetSerial}`
+                  : "Phone Farm"}
+              </h1>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <button onClick={() => refresh(true)} disabled={loading}
