@@ -3512,6 +3512,72 @@ export async function findHomeTab(serial: string): Promise<{ x: number; y: numbe
 }
 
 /**
+ * Slow (UIAutomator dump) "are we still inside the Instagram story viewer?"
+ * check, designed to avoid the false-negative bug in `findHomeTab`.
+ *
+ * WHY THIS EXISTS — the false-negative bug
+ * ─────────────────────────────────────────
+ * The previous slow-path in `stillInStoryViewer` (mobile.ts) used:
+ *
+ *   findHomeTab(serial).then(r => r === null)   // true = still in viewer
+ *
+ * `findHomeTab` strategy 3 is a positional fallback that returns the
+ * leftmost clickable node at y > 88% of screen height when no
+ * content-desc/resource-id match is found.  Inside the story viewer the
+ * bottom of the screen holds the "Send message" input bar and the heart /
+ * paper-plane action icons — all clickable, all at y > 88%.  Strategy 3
+ * picked them up, returned a non-null result, and
+ * `stillInStoryViewer()` concluded "home tab found → viewer closed."  The
+ * viewer was still open; the loop stopped anyway and the follow tool
+ * then tried to tap the Search icon while the phone was still inside a
+ * story.
+ *
+ * THE FIX — positive detection first
+ * ───────────────────────────────────
+ * Check for presence of story-viewer-specific resource IDs BEFORE asking
+ * whether the home tab is visible.  If any story-viewer marker is in the
+ * dump we are definitively inside the viewer.  Only when those are absent
+ * do we look for the home tab, and only via content-desc / known
+ * resource-ids — the unsafe positional fallback is never used.
+ *
+ * Safe default: when the dump is ambiguous (neither marker nor home-tab
+ * found) we return `true` (assume still in viewer).  A wrong "still open"
+ * causes a harmless mis-advance; a wrong "closed" causes blind taps on
+ * whatever is underneath — the exact failure this check exists to prevent.
+ */
+export async function isInStoryViewerSlow(serial: string): Promise<boolean> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => null);
+  if (!xml) return true; // dump failed → assume still in viewer (safe default)
+
+  // ── 1. Positive story-viewer markers ─────────────────────────────────────
+  // Any of these resource-id substrings are only present when the story /
+  // reel viewer is on screen.  If found we can return immediately — no need
+  // to check for the home tab.
+  const STORY_MARKERS = [
+    "toolbar_like_button",   // story like button (heart) in the action toolbar
+    "reel_viewer",           // covers reel_viewer_root, reel_viewer_video_player,
+                             //   reel_viewer_toolbar, reel_viewer_follow_button, etc.
+    "story_viewer",          // older IG builds use story_viewer_* resource IDs
+    "tray_viewer",           // some builds: tray_viewer_container
+  ] as const;
+  for (const marker of STORY_MARKERS) {
+    if (xml.includes(marker)) return true;
+  }
+
+  // ── 2. Home-tab check — content-desc and resource-id ONLY ────────────────
+  // Deliberately no positional fallback here (that's what caused the bug).
+  const homeByDesc = /content-desc="Home[^"]*"/.test(xml);
+  if (homeByDesc) return false;
+  const homeById = _findByResId(xml, ":id/feed_tab", ":id/home_tab");
+  if (homeById) return false;
+
+  // ── 3. Ambiguous — default to "still in viewer" ───────────────────────────
+  return true;
+}
+
+/**
  * Find the Reels tab (square icon with a play triangle) in Instagram's
  * bottom navigation bar.
  *

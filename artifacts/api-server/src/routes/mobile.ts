@@ -2192,7 +2192,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // check misses, how long the slow dump actually costs on this
       // device) instead of guessing from story-loop timestamps.
       const slowStart = Date.now();
-      const result = await android.findHomeTab(serial).then(r => r === null).catch(() => true);
+      // isInStoryViewerSlow checks for POSITIVE story-viewer markers first
+      // (reel_viewer/toolbar_like_button resource IDs), then for the home tab
+      // via content-desc/resource-id only — no positional fallback.  The old
+      // findHomeTab-based check used strategy-3 positional fallback which
+      // matched the story viewer's own bottom-bar clickables ("Send message"
+      // input + heart/share icons all sit at y > 88%), making it return
+      // non-null and falsely concluding the viewer was closed.
+      const result = await android.isInStoryViewerSlow(serial).catch(() => true);
       onLog?.(`  (story-viewer check: fast scan ${slowStart - fastStart}ms inconclusive → slow dump ${Date.now() - slowStart}ms)`);
       return result;
     };

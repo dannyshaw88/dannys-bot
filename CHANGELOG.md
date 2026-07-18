@@ -4,6 +4,57 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.17] — 2026-07-18
+
+### Fix — Story loop: "story viewer already closed" false negative while still inside a story
+
+**What was broken:** The story loop would stop mid-cycle with "Story 2: story viewer already closed — stopping story loop" even though the phone was visibly still inside the story viewer. The follow tool then attempted to tap the Search icon and failed because the accessibility tree showed story viewer elements, not the main navigation bar.
+
+**Root cause — `findHomeTab` positional fallback matching story viewer UI:**
+
+`stillInStoryViewer()` uses a two-step check:
+1. Fast: screenshot pixel-scan for the story progress bar segments → inconclusive (~113ms)
+2. Slow: `findHomeTab()` — if home tab is found the viewer is considered closed
+
+`findHomeTab` has three strategies tried in order:
+1. `content-desc="Home…"` match
+2. Known resource-ids (`feed_tab`, `home_tab`)
+3. **Positional fallback** — scans for any clickable node at y > 88% of screen height, sorts left-to-right, returns the leftmost
+
+Strategy 3 is the problem. Inside the story viewer, the bottom of the screen holds:
+- The "Send message" input bar
+- The heart (like) icon
+- The paper-plane (share) icon
+
+All three are clickable and sit at y > 88% of screen height. Strategy 3 picks them up, returns a non-null result, and `stillInStoryViewer()` concludes "home tab found → viewer closed" — while the story is still wide open.
+
+**Fix — replace with positive story-viewer detection (`isInStoryViewerSlow`):**
+
+Added a new exported function `isInStoryViewerSlow(serial)` in `androidManager.ts` that replaces the `findHomeTab`-based check:
+
+1. **Positive story-viewer markers first** — scans the XML for resource-id substrings that are only present inside the story/reel viewer:
+   - `toolbar_like_button` — the story like button in the action toolbar
+   - `reel_viewer` — covers `reel_viewer_root`, `reel_viewer_video_player`, `reel_viewer_toolbar`, `reel_viewer_follow_button`, etc.
+   - `story_viewer` — older IG builds
+   - `tray_viewer` — some builds use `tray_viewer_container`
+
+   If any of these are found → definitively in the viewer → return `true` immediately.
+
+2. **Home-tab check via content-desc / resource-id only** — no positional fallback:
+   - `content-desc="Home…"` → not in viewer → `false`
+   - `feed_tab` / `home_tab` resource-id → not in viewer → `false`
+
+3. **Ambiguous → assume still in viewer (`true`)** — a wrong "still open" causes a harmless mis-advance; a wrong "closed" causes blind taps on whatever is underneath, which is the exact failure this check prevents.
+
+**Safe default direction:**
+The previous `findHomeTab` function was designed as a locator ("where is the home tab?") and never intended as a definitive "are we outside the story viewer?" oracle. Its positional fallback exists to handle builds where IG strips content-desc and resource-id from nav items — legitimate for navigation use, dangerous when the goal is confirming screen context.
+
+**Affected files:**
+- `artifacts/api-server/src/mobile/androidManager.ts` — new `isInStoryViewerSlow(serial)` export (added after `findHomeTab`)
+- `artifacts/api-server/src/routes/mobile.ts` — `stillInStoryViewer()` slow-path now calls `android.isInStoryViewerSlow(serial)` instead of `android.findHomeTab(serial).then(r => r === null)`
+
+---
+
 ## [1.2.16] — 2026-07-18
 
 ### Fix — Story loop: "story viewer already closed" after collaboration-tagged stories
