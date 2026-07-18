@@ -27,7 +27,7 @@ const outDir = isReplit
   ? path.resolve(import.meta.dirname, "dist/public")
   : path.resolve(import.meta.dirname, "..", "..", "dist", "public");
 
-const apiPort = process.env.API_PORT ?? "8082";
+const apiPort = process.env.API_PORT ?? "3000";
 
 export default defineConfig({
   base: basePath,
