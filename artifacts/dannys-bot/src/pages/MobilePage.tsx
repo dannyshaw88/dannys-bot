@@ -5844,6 +5844,20 @@ export function MobilePage() {
   // can briefly letterbox the next one before its first frame arrives.
   useEffect(() => { setPhoneDims(null); }, [activeSerial]);
 
+  // Fetch the farm slot index for the targeted serial so the header can
+  // show "Phone Farm - Slot X - Device Name" instead of just "Phone Farm".
+  const [farmSlotIndex, setFarmSlotIndex] = useState<number | null>(null);
+  useEffect(() => {
+    if (!targetSerial) { setFarmSlotIndex(null); return; }
+    fetch("/api/mobile/farm-devices")
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then((d: { devices: Array<{ serial: string; slotIndex: number }> }) => {
+        const dev = d.devices.find(dev => dev.serial === targetSerial);
+        setFarmSlotIndex(dev?.slotIndex ?? null);
+      })
+      .catch(() => setFarmSlotIndex(null));
+  }, [targetSerial]);
+
   // Forget "live" state for any serial that's no longer plugged in, so a
   // phone unplugged then reconnected (or a different phone reusing a slot)
   // always starts idle again instead of resuming a stream on its own.
@@ -5864,6 +5878,15 @@ export function MobilePage() {
   // of the setup panels needs to take over the whole content area.
   const showSplitView = !!(data && data.adbFound && !error && (phones.length > 0 || loading));
 
+  // Resolved display info for the header when viewing a specific device.
+  const targetPhone = targetSerial ? allPhones.find(p => p.serial === targetSerial) : null;
+  const deviceFriendlyName = targetPhone
+    ? ([targetPhone.manufacturer, targetPhone.marketName || targetPhone.model].filter(Boolean).join(" ") || targetSerial)
+    : targetSerial;
+  // Best-effort slot number: use farmSlotIndex once loaded, otherwise fall back
+  // to the phone's index in the connected-phone list.
+  const slotNum = farmSlotIndex ?? (targetSerial ? allPhones.findIndex(p => p.serial === targetSerial) + 1 || null : null);
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar />
@@ -5880,7 +5903,11 @@ export function MobilePage() {
         <div className="shrink-0 z-10 bg-background/95 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <FilledFarmIcon className="w-5 h-5" style={{ color: "#1AD2F2" }} />
-            <h1 className="text-lg font-bold text-foreground">Phone Farm</h1>
+            <h1 className="text-lg font-bold text-foreground">
+              {targetSerial && slotNum !== null
+                ? `Phone Farm - Slot ${slotNum} - ${deviceFriendlyName ?? targetSerial}`
+                : "Phone Farm"}
+            </h1>
           </div>
           <div className="flex items-center gap-3">
             <button onClick={() => refresh(true)} disabled={loading}

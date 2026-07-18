@@ -72,6 +72,80 @@ function ThemePicker() {
   );
 }
 
+function FakePhoneCard() {
+  const { toast } = useToast();
+  const [count, setCount]   = useState<number | null>(null);
+  const [draft, setDraft]   = useState<number>(0);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/mobile/fake-phone-count")
+      .then(r => r.json())
+      .then(d => { setCount(d.count ?? 0); setDraft(d.count ?? 0); })
+      .catch(() => { setCount(0); setDraft(0); });
+  }, []);
+
+  const handleInject = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/mobile/fake-phone-count", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ count: draft }),
+      });
+      const d = await res.json();
+      if (d.ok) {
+        setCount(d.count);
+        toast({ title: d.count === 0 ? "Fake phones removed" : `${d.count} fake phone${d.count !== 1 ? "s" : ""} injected` });
+      } else {
+        toast({ title: "Failed to update fake phone count", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Failed to update fake phone count", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="desktop-card p-5" style={{ display: undefined }}>
+      <div className="flex items-start gap-3 mb-4">
+        <div className="p-2 rounded-lg bg-primary/10 text-primary mt-0.5">
+          <Phone className="w-4 h-4" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-foreground">Inject Fake Phones</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Add simulated devices to the Phone Farm for UI testing without physical hardware. Set to 0 to remove all fake phones.
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        <Input
+          type="number"
+          min={0}
+          max={10}
+          value={count === null ? "" : draft}
+          onChange={e => setDraft(Math.min(10, Math.max(0, parseInt(e.target.value, 10) || 0)))}
+          disabled={count === null || saving}
+          className="w-20 text-center"
+        />
+        <span className="text-xs text-muted-foreground">phones (0 – 10)</span>
+        <Button
+          size="sm"
+          onClick={handleInject}
+          disabled={count === null || saving || draft === count}
+        >
+          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Inject"}
+        </Button>
+        {count !== null && count > 0 && (
+          <span className="text-xs text-muted-foreground">{count} currently active</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AutostartCard() {
   const { toast } = useToast();
   const [enabled, setEnabled] = useState<boolean | null>(null);
@@ -311,6 +385,9 @@ export function SettingsPage() {
 
         {/* Autostart — Electron only */}
         {isElectron && settingsTab === "general" && <AutostartCard />}
+
+        {/* Fake Phone Injection */}
+        {settingsTab === "general" && <FakePhoneCard />}
 
         {/* HikerAPI Scraper Protection */}
         <div className="desktop-card p-6" style={{ display: settingsTab !== "scraping" ? "none" : undefined }}>

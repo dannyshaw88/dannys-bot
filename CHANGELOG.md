@@ -4,6 +4,19 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.1.674] — 2026-07-18
+
+### Phone Farm — Device page header shows slot number and device name
+When you click through to a specific phone's control page from the Phone Farm grid, the page header now reads **Phone Farm - Slot X - Device Name** (e.g. "Phone Farm - Slot 2 - Xiaomi Redmi Note 14") instead of the plain "Phone Farm" title. The slot number matches the phone's assigned position in the 3-column farm grid; the device name uses the same friendly marketing name displayed on the grid card.
+
+### Phone Farm — Device grid: live ADB name always preferred over stale stored name
+Device cards on the Phone Farm grid now use the live `marketName` reported by ADB in preference to the lookup-table–derived name. This prevents cases where a device's model code matched an incorrect entry in the lookup table and caused a wrong name to appear. As a further fallback, the lookup table now also checks the USB serial number — Xiaomi devices publish their model code as the USB serial — so offline devices without a stored market name still resolve correctly.
+
+### Tools — Fake Phone Injection: multiple phones supported
+The "Inject Fake Phones" setting (in Settings → General) now accepts a count (0–10) instead of a simple on/off toggle. Setting the count to 2 injects two distinct simulated devices into the Phone Farm; setting it to 0 removes all injected phones. Each fake phone uses a different Xiaomi/Redmi model name so the farm grid looks realistic during UI testing without requiring physical hardware.
+
+---
+
 ## [1.1.673] — 2026-07-18
 
 ### Phone Farm — Accounts page: friendly device name in top-right corner

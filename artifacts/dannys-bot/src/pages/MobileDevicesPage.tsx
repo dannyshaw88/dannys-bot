@@ -66,11 +66,26 @@ const MODEL_FRIENDLY_NAME: Record<string, string> = {
   "220333QAG":  "Redmi 10C",    "21121119SR": "Redmi 10",
 };
 
-function resolveDisplayName(device: FarmDevice): string {
+function resolveDisplayName(device: FarmDevice, phone?: UsbPhone): string {
+  // Live ADB marketName is most accurate — prefer it over any cached/lookup value.
+  const liveMarket = phone?.marketName?.trim();
+  if (liveMarket) {
+    const mfr = (phone?.manufacturer?.trim() || device.manufacturer?.trim());
+    return mfr ? `${mfr} ${liveMarket}` : liveMarket;
+  }
+  // Check device.model against the lookup table.
   const code = device.model?.trim();
   if (code && MODEL_FRIENDLY_NAME[code]) {
     const mfr = device.manufacturer?.trim();
     return mfr ? `${mfr} ${MODEL_FRIENDLY_NAME[code]}` : MODEL_FRIENDLY_NAME[code];
+  }
+  // Also check device.serial — Xiaomi devices publish their model code as the
+  // USB serial, so a phone registered before marketname detection was added
+  // can still resolve to a friendly name via the serial.
+  const sCode = device.serial?.trim();
+  if (sCode && MODEL_FRIENDLY_NAME[sCode]) {
+    const mfr = device.manufacturer?.trim();
+    return mfr ? `${mfr} ${MODEL_FRIENDLY_NAME[sCode]}` : MODEL_FRIENDLY_NAME[sCode];
   }
   return device.displayName || device.serial;
 }
@@ -352,12 +367,14 @@ function AddDevicePanel({
 
 function DeviceCard({
   device,
+  phone,
   online,
   active,
   onClick,
   onRemove,
 }: {
   device:   FarmDevice;
+  phone?:   UsbPhone;
   online:   boolean;
   active:   boolean;
   onClick:  () => void;
@@ -376,7 +393,7 @@ function DeviceCard({
         />
         <div className="shrink-0 text-center space-y-0.5">
           <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
-            {resolveDisplayName(device)}
+            {resolveDisplayName(device, phone)}
           </p>
           <div className="flex items-center justify-center gap-1.5 mt-1">
             {online ? (
@@ -542,10 +559,12 @@ export function MobileDevicesPage() {
                 const device    = slotMap.get(slotIndex) ?? null;
 
                 if (device) {
+                  const livePhone = usbPhones.find(p => p.serial === device.serial);
                   return (
                     <DeviceCard
                       key={device.serial}
                       device={device}
+                      phone={livePhone}
                       online={onlineSerials.has(device.serial)}
                       active={activeCycleSerials.has(device.serial)}
                       onClick={() => setLocation(`/mobile/farm/${encodeURIComponent(device.serial)}`)}

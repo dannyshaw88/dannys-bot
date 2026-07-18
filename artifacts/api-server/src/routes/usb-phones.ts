@@ -147,6 +147,50 @@ export interface UsbPhone {
 const devicePropsCache = new Map<string, { manufacturer?: string; androidVersion?: string; model?: string; marketName?: string }>();
 const seenSerials = new Set<string>();
 
+// ── Fake phone injection ───────────────────────────────────────────────────────
+// Lets users test the Phone Farm UI without physical hardware by injecting N
+// synthetic UsbPhone entries into every /api/mobile/usb-phones response.
+
+function fakePhoneCountFile(): string {
+  return path.join(adbToolsDir(), "fake-phone-count.json");
+}
+
+function loadFakePhoneCount(): number {
+  try {
+    const raw = JSON.parse(fs.readFileSync(fakePhoneCountFile(), "utf8"));
+    return typeof raw?.count === "number" && raw.count >= 0 ? Math.min(raw.count, 10) : 0;
+  } catch { return 0; }
+}
+
+function saveFakePhoneCount(count: number): void {
+  fs.writeFileSync(fakePhoneCountFile(), JSON.stringify({ count }, null, 2));
+}
+
+const FAKE_PHONE_MODELS: Array<{ manufacturer: string; marketName: string; androidVersion: string }> = [
+  { manufacturer: "Xiaomi", marketName: "Redmi Note 12",  androidVersion: "13" },
+  { manufacturer: "Xiaomi", marketName: "Redmi Note 14",  androidVersion: "14" },
+  { manufacturer: "Xiaomi", marketName: "Redmi 12",       androidVersion: "13" },
+  { manufacturer: "Xiaomi", marketName: "Redmi Note 13",  androidVersion: "14" },
+  { manufacturer: "Xiaomi", marketName: "POCO X6",        androidVersion: "14" },
+  { manufacturer: "Xiaomi", marketName: "Xiaomi 13T",     androidVersion: "13" },
+  { manufacturer: "Xiaomi", marketName: "Redmi 13C",      androidVersion: "13" },
+  { manufacturer: "Xiaomi", marketName: "Redmi A3",       androidVersion: "14" },
+  { manufacturer: "Xiaomi", marketName: "POCO M6 Pro",    androidVersion: "14" },
+  { manufacturer: "Xiaomi", marketName: "Redmi Note 11",  androidVersion: "12" },
+];
+
+function generateFakePhone(index: number): UsbPhone {
+  const m = FAKE_PHONE_MODELS[index % FAKE_PHONE_MODELS.length];
+  return {
+    serial:         `FAKE_${String(index + 1).padStart(3, "0")}`,
+    state:          "device",
+    model:          "FAKE",
+    marketName:     m.marketName,
+    manufacturer:   m.manufacturer,
+    androidVersion: m.androidVersion,
+  };
+}
+
 function listUsbPhones(adbPath: string, diag?: { rawOutput: string }): UsbPhone[] {
   const out = runAdb(adbPath, ["devices", "-l"]);
   if (diag) diag.rawOutput = out ?? "(adb devices -l produced no output or failed to run)";
@@ -262,6 +306,12 @@ router.get("/mobile/usb-phones", (_req, res) => {
   const diag = { rawOutput: "" };
   const phones = adbPath ? listUsbPhones(adbPath, diag) : [];
 
+  // Append fake phones if count > 0 (for UI testing without physical hardware).
+  const fakeCount = loadFakePhoneCount();
+  for (let i = 0; i < fakeCount; i++) {
+    phones.push(generateFakePhone(i));
+  }
+
   res.json({
     adbFound:  adbPath !== null,
     adbPath:   adbPath,
@@ -269,6 +319,29 @@ router.get("/mobile/usb-phones", (_req, res) => {
     rawOutput: adbPath ? diag.rawOutput : null,
     checkedAt: new Date().toISOString(),
   });
+});
+
+/**
+ * GET /api/mobile/fake-phone-count
+ * Returns the current number of fake phones being injected.
+ */
+router.get("/mobile/fake-phone-count", (_req, res) => {
+  res.json({ count: loadFakePhoneCount() });
+});
+
+/**
+ * POST /api/mobile/fake-phone-count
+ * Body: { count: number }  — how many fake phones to inject (0–10)
+ */
+router.post("/mobile/fake-phone-count", (req, res) => {
+  const raw = Number(req.body?.count);
+  if (!Number.isFinite(raw) || raw < 0) {
+    res.status(400).json({ ok: false, error: "count must be a non-negative number" });
+    return;
+  }
+  const count = Math.min(Math.floor(raw), 10);
+  saveFakePhoneCount(count);
+  res.json({ ok: true, count });
 });
 
 /**
