@@ -4,6 +4,19 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.1.673] — 2026-07-18
+
+### Phone Farm — Accounts page: friendly device name in top-right corner
+The top-right label on the Accounts page (shown after clicking a device on the Phone Farm grid) previously showed the raw Android model code (e.g. `2201117TY`). It now shows the same friendly marketing name used on the Phone Farm grid itself — e.g. "Xiaomi Redmi Note 11" — using the `marketName` value fetched from the device at registration time, with the raw model code retained only as a last-resort fallback.
+
+### Phone Farm — Debugging Log tab moved next to Action Log
+The Debugging Log tab was previously pushed to the far-right end of the tab bar, visually separated from all other tabs by an `ml-auto` spacer. It now sits immediately to the right of the Action Log tab in normal tab order — no more hunting for it at the opposite end of the bar.
+
+### Phone Farm — Random Jitter: settings condensed to single inline rows
+The three Random Jitter sub-sections (Activate Percentage, Check Notifications, Visit My Profile) previously stacked a section label, a sub-label, and inputs across two or three vertical rows each. They now render as compact single-line rows — bold group label followed by muted sub-label followed by the min/to/max inputs — all on one horizontal line. Font size has been bumped from 10 px to 12 px (`text-xs`) throughout these controls since the freed vertical space allows it.
+
+---
+
 ## [1.1.672] — 2026-07-17
 
 ### Phone Farm — Real device names instead of model codes
