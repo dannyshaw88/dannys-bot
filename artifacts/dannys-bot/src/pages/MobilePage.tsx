@@ -5929,8 +5929,8 @@ const TOTAL_SLOTS = 1;
 type MobileTab = "account" | "phonesettings" | "actionlog" | "metrics" | "log";
 const MOBILE_TABS: { id: MobileTab; label: string }[] = [
   { id: "account",      label: "Accounts"       },
-  { id: "phonesettings",label: "My Device" },
   { id: "metrics",      label: "Metrics"        },
+  { id: "phonesettings",label: "My Device" },
   { id: "actionlog",    label: "Action Log"     },
   { id: "log",          label: "Debugging Log"  },
 ];
