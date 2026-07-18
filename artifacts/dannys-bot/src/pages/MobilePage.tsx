@@ -2068,6 +2068,10 @@ interface AutomationSettingsData {
   makePostMakeUnique: boolean;
   makePostCaptionText: string;
   makePostImageSettings: ImageFilterSettings;
+  // Device profile — OEM-specific recents/floating-windows dismiss gesture.
+  // 'auto' = server looks up ro.product.model in its DEVICE_PROFILES table.
+  // 'left' / 'up' = stored override applied regardless of detected model.
+  dismissDirection: "auto" | "left" | "up";
 }
 
 const AUTOMATION_DEFAULTS: AutomationSettingsData = {
@@ -2144,6 +2148,7 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
     sharpen: { enabled: true, min: 1.0, max: 2.0 },
     pixelate: { enabled: true, min: 0.9, max: 2.1 },
   },
+  dismissDirection: "auto" as const,
 };
 
 // 4-digit-wide number inputs, shared by every field in this panel.
@@ -2432,6 +2437,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             makePostCaptionText: s.makePostCaptionText,
             makePostImageSettings: s.makePostImageSettings,
             shuffleToolOrder: s.shuffleToolOrder,
+            dismissDirection: s.dismissDirection,
             slotUsername: slotUsername ?? "",
             slotIdx: slotIdx ?? 0,
           }),
@@ -2608,6 +2614,7 @@ const COPY_SECTIONS: CopySection[] = [
   { key: 'runInterval',   label: 'Run Interval', sub: [
     { key: 'cycleInterval',     label: 'Run every X - Y minutes',      fields: ['cycleIntervalMin','cycleIntervalMax'] },
     { key: 'shuffleToolOrder',  label: 'Shuffle tool order',           fields: ['shuffleToolOrder'] },
+    { key: 'dismissDirection',  label: 'App close gesture (dismiss direction)', fields: ['dismissDirection'] },
   ]},
   { key: 'feed',          label: 'View Feed', sub: [
     { key: 'feedEnabled',       label: 'Enabled',                       fields: ['feedEnabled'] },
@@ -3179,6 +3186,18 @@ function AutomationSettingsPanel({
             disabled={loading}
           />
           <Label className="text-sm text-muted-foreground whitespace-nowrap">minutes</Label>
+          <div className="w-px self-stretch bg-border mx-1" />
+          <Label className="text-sm text-muted-foreground whitespace-nowrap">App close gesture</Label>
+          <select
+            value={settings.dismissDirection}
+            onChange={e => setSettings(s => ({ ...s, dismissDirection: e.target.value as "auto" | "left" | "up" }))}
+            disabled={loading}
+            className="text-sm bg-background border border-border rounded px-2 py-1 text-foreground"
+          >
+            <option value="auto">Auto (detect by model)</option>
+            <option value="left">Swipe left (Redmi 12 / MIUI floating windows)</option>
+            <option value="up">Swipe up (Redmi A5 / stock Android recents)</option>
+          </select>
         </div>
       </div>
 

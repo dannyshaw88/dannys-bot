@@ -959,6 +959,44 @@ export async function sleepScreen(serial: string): Promise<void> {
   await keyevent(serial, 223); // KEYCODE_SLEEP
 }
 
+// ── Device profile lookup table ────────────────────────────────────────────
+// Maps ro.product.model → the behavioral flags that differ between OEM
+// launchers. Only covers the Android system-shell surface; Instagram's own UI
+// is consistent across devices and needs no profile.
+//
+// Adding a new device: one entry per model string (as returned by
+// `adb shell getprop ro.product.model`). Two devices with the same dismiss
+// direction share the same profile entry — you write it once and both work.
+//
+// dismissDirection: how the recents/floating-windows card strip dismisses an
+//   app. 'left' = drag card off the left edge (MIUI/HyperOS floating-window
+//   carousel default). 'up' = standard Android swipe-up dismiss.
+const DEVICE_PROFILES: Record<string, { dismissDirection: "left" | "up" }> = {
+  "Redmi 12":  { dismissDirection: "left" },
+  "Redmi A5":  { dismissDirection: "up" },
+};
+
+/**
+ * Returns the dismiss direction for a given model string.
+ * Falls back to 'left' (MIUI floating-window carousel behaviour) for any
+ * model not yet in the lookup table — matches the existing codebase default.
+ */
+export function getModelDismissDirection(model: string): "left" | "up" {
+  return DEVICE_PROFILES[model]?.dismissDirection ?? "left";
+}
+
+/**
+ * Reads ro.product.model from the device (single synchronous getprop call).
+ * Used at automation-cycle call sites where the full DeviceProps have not
+ * already been fetched.
+ */
+export function getDeviceModel(serial: string): string {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const r = spawnSync(adb, ["-s", serial, "shell", "getprop", "ro.product.model"], { encoding: "utf8", timeout: 4000 });
+  return (r.stdout || "").trim().replace(/^\[|\]$/g, "") || "Unknown";
+}
+
 export async function openRecentApps(serial: string): Promise<void> {
   await keyevent(serial, 187); // KEYCODE_APP_SWITCH
 }
@@ -1007,7 +1045,7 @@ function _findLeftmostLabelInBand(xml: string, refY: number, bandPx: number): { 
  * more than one app open, the strip shows two cards at a time and you keep
  * dragging the LEFT-MOST card further left until each is gone in turn.
  */
-export async function closeInstagramViaRecents(serial: string, onLog?: (msg: string) => void): Promise<void> {
+export async function closeInstagramViaRecents(serial: string, dismissDirection: "left" | "up" = "left", onLog?: (msg: string) => void): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const { w, h } = getScreenSize(serial);
@@ -1070,21 +1108,32 @@ export async function closeInstagramViaRecents(serial: string, onLog?: (msg: str
     if (card) sawAnyLabel = true;
 
     if (card) {
-      // Drag fully off the left edge — a short flick isn't enough to
-      // register as a dismiss-drag on this launcher; use a slower,
-      // longer-distance move (matches "tap, hold, swipe left").
-      const dragToX = Math.max(Math.round(w * 0.02), card.x - Math.round(w * 0.5));
-      await swipe(serial, card.x, card.y, dragToX, card.y, 400);
-      method = `attempt ${attempt}: dragged left-most card at (${card.x},${card.y}) left to (${dragToX},${card.y})`;
+      if (dismissDirection === "up") {
+        // Standard Android upward-swipe dismiss (e.g. Redmi A5 / stock
+        // Android recents). Drag the card off the TOP of the screen.
+        const dragToY = Math.max(Math.round(h * 0.02), card.y - Math.round(h * 0.6));
+        await swipe(serial, card.x, card.y, card.x, dragToY, 400);
+        method = `attempt ${attempt}: swiped card at (${card.x},${card.y}) up to (${card.x},${dragToY})`;
+      } else {
+        // Drag fully off the left edge — a short flick isn't enough to
+        // register as a dismiss-drag on this launcher; use a slower,
+        // longer-distance move (matches "tap, hold, swipe left").
+        const dragToX = Math.max(Math.round(w * 0.02), card.x - Math.round(w * 0.5));
+        await swipe(serial, card.x, card.y, dragToX, card.y, 400);
+        method = `attempt ${attempt}: dragged left-most card at (${card.x},${card.y}) left to (${dragToX},${card.y})`;
+      }
     } else {
       // Couldn't find any label at all (e.g. dump failed, or — as observed
-      // on this device — the launcher just never exposes card captions) —
-      // fall back to a centred left-drag, which is correct for the common
-      // single-app case.
+      // on this device — the launcher just never exposes card captions).
       const cardX = Math.round(w * 0.5);
       const cardY = Math.round(h * 0.45);
-      await swipe(serial, cardX, cardY, Math.round(w * 0.05), cardY, 400);
-      method = `attempt ${attempt}: no label found in recents tree — fell back to centred drag-left (${cardX},${cardY})`;
+      if (dismissDirection === "up") {
+        await swipe(serial, cardX, cardY, cardX, Math.round(h * 0.02), 400);
+        method = `attempt ${attempt}: no label found — fell back to centred swipe-up (${cardX},${cardY})`;
+      } else {
+        await swipe(serial, cardX, cardY, Math.round(w * 0.05), cardY, 400);
+        method = `attempt ${attempt}: no label found in recents tree — fell back to centred drag-left (${cardX},${cardY})`;
+      }
     }
 
     const closed = await waitForClosed();

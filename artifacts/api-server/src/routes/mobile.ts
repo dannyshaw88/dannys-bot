@@ -279,6 +279,10 @@ type AutomationSettings = {
     sharpen: { enabled: boolean; min: number; max: number };
     pixelate: { enabled: boolean; min: number; max: number };
   };
+  // Device profile — OEM-specific Android system-shell behaviour.
+  // 'auto' = look up ro.product.model in the server-side DEVICE_PROFILES table.
+  // 'left' / 'up' = manual override stored per device.
+  dismissDirection?: "auto" | "left" | "up";
 };
 type DeviceSlot = { username: string; password: string; totpSecret?: string; emailAddress?: string; emailPassword?: string; phoneNumber?: string };
 type DeviceAccount = { slots: DeviceSlot[] };
@@ -1141,6 +1145,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     //    zod to silently strip it on every POST so Copy Settings never saved it
     //    and the value reset to false on every restart.
     shuffleToolOrder: z.boolean().default(false),
+    // ── Device profile: OEM dismiss gesture direction for the recents/floating-
+    //    windows app switcher. 'auto' = look up the model in DEVICE_PROFILES on
+    //    the server; 'left'/'up' = manual override stored per device.
+    dismissDirection: z.enum(["auto", "left", "up"]).default("auto"),
   });
   app.get("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {
     const cfg = loadInstanceConfigs();
@@ -1200,6 +1208,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         sharpen: { enabled: true, min: 1.0, max: 2.0 },
         pixelate: { enabled: true, min: 0.9, max: 2.1 },
       },
+      dismissDirection: "auto" as const,
     };
     res.json({ ...defaults, ...cfg[p(req, "serial")]?.automation });
   });
@@ -1286,6 +1295,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           sharpen: { enabled: true, min: 1.0, max: 2.0 },
           pixelate: { enabled: true, min: 0.9, max: 2.1 },
         },
+        dismissDirection: "auto" as const,
       };
       const saved = cfg[serial]?.slotAutomation?.[String(slotIdx)];
       const merged = { ...defaults, ...saved };
@@ -2911,6 +2921,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // is preserved.  Enables Instagram to see varied interaction patterns
     // across cycles rather than an identical ordered fingerprint every time.
     shuffleToolOrder: z.boolean().default(false),
+    // ── Device profile: OEM dismiss gesture direction (same field as
+    //    automationSchema — must be kept in sync per schema-drift rule).
+    dismissDirection: z.enum(["auto", "left", "up"]).default("auto"),
   });
   const automationCycleInProgress = new Set<string>();
   // Tracks WHICH slot index is actively running on each device.
@@ -4309,6 +4322,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostFixAiSlop, makePostCaptionText,
         slotUsername, slotIdx,
         shuffleToolOrder,
+        dismissDirection,
       } = automationCycleSchema.parse(req.body);
 
       // ── Global followed / skipped settings ─────────────────────────────────
@@ -4728,7 +4742,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // 5. Close Instagram completely — recents switcher + swipe away, not a
       // force-stop, so the device behaves like a person put it down.
       tLog("▶ Closing Instagram…");
-      await android.closeInstagramViaRecents(serial, (msg) => tLog(`  ${msg}`));
+      // Resolve dismiss direction: if 'auto', look up the device model in the
+      // DEVICE_PROFILES table (one getprop call); otherwise use the stored override.
+      const resolvedDismissDir: "left" | "up" = dismissDirection !== "auto"
+        ? dismissDirection
+        : android.getModelDismissDirection(android.getDeviceModel(serial));
+      tLog(`  dismiss direction: ${resolvedDismissDir} (setting: ${dismissDirection})`);
+      await android.closeInstagramViaRecents(serial, resolvedDismissDir, (msg) => tLog(`  ${msg}`));
       steps.push("closed-instagram");
       tLog("  ✓ Instagram closed");
 
