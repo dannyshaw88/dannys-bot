@@ -4,6 +4,30 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.25] — 2026-07-18
+
+### Fix — Feed scroll runs on the correct screen after a shuffled Follow
+
+**What was broken:**
+
+When the tool shuffle placed **Follow** before **View Feed** in the same automation cycle, the Feed tool would often scroll the wrong page — an Instagram profile page — instead of the home feed. No content was liked or feed-shared, and the logs showed the feed scroll actions running with 0 actions rolled (because the home feed's posts were never actually on screen).
+
+**Root cause:**
+
+Follow always ends with the phone sitting on the followed account's profile page. When View Feed ran next, its preamble called `findHomeTab()` to navigate back to the home feed before starting the scroll loop. On some device/screen combinations — particularly the Redmi A5 when the profile page was open — `findHomeTab()` returned `null`. There was no fallback: the code silently skipped the Home tap and proceeded straight into `runCheckFeedLoop`, which then scrolled whatever was on screen (the profile page).
+
+**Why Stories didn't have this problem:**
+
+The Stories tool already had a coordinate fallback for exactly this scenario. When `findHomeTab()` returns `null`, Stories taps `(10% width, 97.5% height)` — the fixed position of the Home icon in Instagram's bottom navigation bar. Feed had no equivalent fallback.
+
+**Fix (`artifacts/api-server/src/routes/mobile.ts`):**
+
+Added the same coordinate fallback to the Feed preamble. When `findHomeTab()` returns `null`, Feed now taps `(10% width, 97.5% height)` — identical to Stories — before starting the scroll loop. The existing 2-second settle delay runs after either the uiautomator-located tap or the coordinate fallback tap, ensuring the home feed is loaded before scrolling begins.
+
+The fix is a strict parity change: Feed now behaves identically to Stories on this code path. No other logic was altered.
+
+---
+
 ## [1.2.24] — 2026-07-18
 
 ### Fix — App Close Gesture setting no longer reverts to Auto on tab switch
