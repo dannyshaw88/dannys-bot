@@ -4,6 +4,29 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.1.679] — 2026-07-18
+
+### Bug Fix — Slot Toggle ON Firing All Slots (Root Cause Fix: Command-Down Architecture)
+
+**What was broken:** Turning one slot's toggle OFF worked correctly (only that slot disabled). But turning it back ON activated the Human Session Tool for every account slot simultaneously.
+
+**Why previous fixes didn't work:**
+- Fix 1 (slotIdx in callback signature): The `onAutomationState` callback was changed to pass `slotIdx` explicitly, and a `setEnabledCallbacksRef` map was introduced to store each slot's `setEnabledByUser` function keyed by slot index. The theory was correct but the implementation still relied on callbacks flowing *up* through refs, which remained fragile.
+- Fix 2 (DOM id scoping): Scoped all `id`/`htmlFor` attributes inside `AutomationSettingsPanel` to the slot index so HTML label clicks couldn't fire across slots. Correct and kept — but this wasn't the root cause of the ON-fires-all symptom.
+
+**Root cause:** The previous architecture had `setEnabledByUser` flowing *up* from each slot via `onAutomationState`, then stored in `setEnabledCallbacksRef.current[slotIdx]`, then called from the parent's mirror toggle. This violates React's unidirectional data flow and is inherently fragile — refs updated from effects can race with renders, and any stale ref entry means the wrong slot's function gets called.
+
+**Fix — Command-Down Architecture:** Toggle commands now flow *down* as props, never up as callbacks.
+- `SlotAutomationState` type no longer carries `setEnabledByUser` — it only carries display state (`enabled`, `running`, `nextRunAt`).
+- `AccountSettingsPanel` keeps an `enableCommands: Record<number, EnableCommand>` state. Each `EnableCommand` is `{ enabled: boolean; id: number }` where `id` is a strictly incrementing sequence number.
+- Mirror toggle click: `setEnableCommands(prev => ({ ...prev, [i]: { enabled: v, id: ++seq } }))`. Slot `i` only — no shared ref, no callback lookup.
+- `SlotHumanSessionView` receives `enableCommand?: EnableCommand` as a prop. A `useEffect([enableCommand?.id])` inside the component applies the command by calling its own `automation.setEnabledByUser(enableCommand.enabled)`. Because the effect depends only on `id` (not the boolean value), it fires exactly once per command and is completely isolated to that component instance's hook — physically impossible for it to affect another slot.
+- `setEnabledCallbacksRef` and all callback-up plumbing removed entirely.
+
+**Affected file:** `artifacts/dannys-bot/src/pages/MobilePage.tsx`
+
+---
+
 ## [1.1.678] — 2026-07-18
 
 ### Bug Fix — Per-Slot Toggles on Devices/Accounts Page Now Truly Independent

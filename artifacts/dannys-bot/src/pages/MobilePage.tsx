@@ -4516,11 +4516,15 @@ type SlotAutomationState = {
   enabled: boolean;
   running: boolean;
   nextRunAt: number | null;
-  setEnabledByUser: (v: boolean) => void;
 };
 
+// A toggle command sent DOWN from AccountSettingsPanel to a specific slot.
+// Using an incrementing id ensures the effect fires even if the value is the
+// same as before (e.g. the user clicks ON when already ON after a remount).
+type EnableCommand = { enabled: boolean; id: number };
+
 function SlotHumanSessionView({
-  phone, slotIdx, slotUsername, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, refreshKey, onCopied, onAutomationState,
+  phone, slotIdx, slotUsername, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, refreshKey, onCopied, onAutomationState, enableCommand,
 }: {
   phone: UsbPhone | null;
   slotIdx: number;
@@ -4535,17 +4539,30 @@ function SlotHumanSessionView({
   releaseSlot?: (idx: number) => void;
   refreshKey?: number;
   onCopied?: (targetSlotIdxs: number[]) => void;
-  // slotIdx is passed as first arg so the parent can key the state correctly
-  // even if its closure-captured `i` is stale from a mid-render effect flush.
   onAutomationState?: (slotIdx: number, state: SlotAutomationState) => void;
+  // Toggle command sent DOWN from the parent list so we never pass callbacks UP
+  // through a shared ref (which caused all slots to fire at once). Using an
+  // incrementing `id` means the effect fires even if the `enabled` value is
+  // unchanged (e.g. a second ON click after a remount resets the value to ON).
+  enableCommand?: EnableCommand;
 }) {
   const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername, requestSlot, releaseSlot, refreshKey);
   const isFirst = slotIdx === 0;
   const isLast = slotIdx === (slotCount ?? 1) - 1;
 
-  // Lift automation state to parent whenever it changes so the slot-list card
-  // can show a mirror toggle. Pass slotIdx explicitly so the parent never has
-  // to rely on a closure-captured `i` that might be stale during a flush.
+  // Apply a toggle command received from the parent.  The effect depends only
+  // on enableCommand.id so it fires exactly once per command regardless of the
+  // current enabled value, and is completely isolated to THIS slot instance —
+  // automation.setEnabledByUser is the useState-setter captured by THIS hook.
+  useEffect(() => {
+    if (enableCommand === undefined) return;
+    automation.setEnabledByUser(enableCommand.enabled);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enableCommand?.id]);
+
+  // Lift status (enabled / running / nextRunAt) to the parent for the mirror
+  // toggle display.  setEnabledByUser is intentionally NOT lifted — the parent
+  // sends commands down via enableCommand instead of calling callbacks up.
   const onAutomationStateRef = useRef(onAutomationState);
   onAutomationStateRef.current = onAutomationState;
   useEffect(() => {
@@ -4553,10 +4570,9 @@ function SlotHumanSessionView({
       enabled: automation.settings.enabled,
       running: automation.running,
       nextRunAt: automation.nextRunAt,
-      setEnabledByUser: automation.setEnabledByUser,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [automation.settings.enabled, automation.running, automation.nextRunAt, automation.setEnabledByUser]);
+  }, [automation.settings.enabled, automation.running, automation.nextRunAt]);
   return (
     <div className="h-full flex flex-col">
       <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
@@ -4591,17 +4607,19 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
     });
   }, []);
 
-  // Mirror of each slot's live automation state — populated by SlotHumanSessionView
-  // via onAutomationState so the slot-list card can render a toggle without opening HST.
+  // Mirror of each slot's live automation state (enabled / running / nextRunAt),
+  // populated by SlotHumanSessionView via onAutomationState for display only.
   const [slotAutomationStates, setSlotAutomationStates] = useState<Record<number, SlotAutomationState>>({});
-  // Separate ref map for setEnabledByUser callbacks — keyed by the slotIdx
-  // passed as an explicit argument, so the toggle always fires the correct
-  // slot's setter regardless of any render/flush ordering in slotAutomationStates.
-  const setEnabledCallbacksRef = useRef<Record<number, (v: boolean) => void>>({});
   const handleSlotAutomationState = useCallback((slotIdx: number, state: SlotAutomationState) => {
-    setEnabledCallbacksRef.current[slotIdx] = state.setEnabledByUser;
     setSlotAutomationStates(prev => ({ ...prev, [slotIdx]: state }));
   }, []);
+
+  // Toggle commands sent DOWN to each slot. Key = slotIdx, value = the command
+  // to apply. Using an incrementing `id` per command (not reusing the boolean
+  // value) guarantees the slot's useEffect fires exactly once per click even
+  // when the target enabled value happens to be the same as before.
+  const [enableCommands, setEnableCommands] = useState<Record<number, EnableCommand>>({});
+  const enableCommandSeqRef = useRef(0);
   const [slots, setSlots] = useState<AccountSlot[]>(
     Array.from({ length: ACCT_SLOT_COUNT }, emptySlot)
   );
@@ -4782,6 +4800,7 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
             refreshKey={slotRefreshKeys[i] ?? 0}
             onCopied={handleCopied}
             onAutomationState={handleSlotAutomationState}
+            enableCommand={enableCommands[i]}
           />
         </div>
       ))}
@@ -4812,15 +4831,18 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
                   </Button>
 
                   {/* Mirror of the master toggle inside the Human Session Tool.
-                      Shares the same enabled state — toggling here is identical
-                      to toggling inside the HST panel. */}
+                      Sends an EnableCommand DOWN to the specific slot component —
+                      no shared callback refs, no closure-capture ambiguity. */}
                   {slotAutomationStates[i] && (() => {
                     const as = slotAutomationStates[i];
                     return (
                       <div className="flex items-center gap-2 pl-2 border-l border-border">
                         <Switch
                           checked={as.enabled}
-                          onCheckedChange={v => setEnabledCallbacksRef.current[i]?.(v)}
+                          onCheckedChange={v => {
+                            const id = ++enableCommandSeqRef.current;
+                            setEnableCommands(prev => ({ ...prev, [i]: { enabled: v, id } }));
+                          }}
                         />
                         <div className="flex flex-col min-w-0">
                           <span className={`text-[11px] font-semibold leading-tight whitespace-nowrap ${
