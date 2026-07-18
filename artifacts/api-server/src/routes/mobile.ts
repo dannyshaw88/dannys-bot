@@ -1284,7 +1284,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         },
       };
       const saved = cfg[serial]?.slotAutomation?.[String(slotIdx)];
-      res.json({ ...defaults, ...saved });
+      const merged = { ...defaults, ...saved };
+      console.log(`[TOGGLE-DBG] GET slot settings  serial=${serial} slotIdx=${slotIdx} enabled=${merged.enabled}`);
+      res.json(merged);
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to load slot automation settings" }); }
   });
   app.post("/api/mobile/devices/:serial/slots/:slotIdx/automation-settings", (req: Request, res: Response) => {
@@ -1306,6 +1308,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         ...existing,
       };
       const input = automationSchema.parse({ ...base, ...req.body });
+      console.log(`[TOGGLE-DBG] POST slot settings serial=${serial} slotIdx=${slotIdx} enabled=${input.enabled} (all slots after save: ${JSON.stringify(Object.entries({ ...cfg[serial]?.slotAutomation, [String(slotIdx)]: input }).map(([k,v]: [string,any]) => ({ slot: k, enabled: v?.enabled })))})`);
       cfg[serial] = {
         ...cfg[serial],
         slotAutomation: { ...cfg[serial]?.slotAutomation, [String(slotIdx)]: input },
