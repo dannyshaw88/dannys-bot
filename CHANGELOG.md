@@ -4,6 +4,25 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.23] — 2026-07-18
+
+### Fix — App Close Gesture setting moved to My Device tab
+
+The "App close gesture" dropdown (Auto / Swipe left / Swipe up) has been moved from the Human Session Tool STEP1 card to the **My Device** tab, where it now sits as its own card at the top — above the Google Play Account card.
+
+**Why the move:** The gesture is a property of the physical hardware, not of the Instagram account or automation schedule. It belongs alongside the other device-level settings (SIM card, device spec, battery schedule, etc.) rather than buried inside the per-slot automation config.
+
+**How it works now:**
+
+- Open the Mobile page → select a device → click the **My Device** tab
+- The first card is **App Close Gesture** with a dropdown: `Auto — detect by model`, `Swipe left`, or `Swipe up`
+- Changing the dropdown saves immediately to the device's automation settings — no extra Save button needed
+- The setting still resolves the same way at cycle time: `Auto` reads `ro.product.model` from the device and looks it up in the built-in model table (Redmi 12 → left, Redmi A5 → up); explicit overrides bypass the lookup
+
+The setting is also still included in Copy Settings so it can be propagated across slots from the Human Session Tool panel.
+
+---
+
 ## [1.2.22] — 2026-07-18
 
 ### Feature — Multi-Device Support: Per-Model App-Close Gesture (Device Profile System)

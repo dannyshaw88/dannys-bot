@@ -3186,18 +3186,6 @@ function AutomationSettingsPanel({
             disabled={loading}
           />
           <Label className="text-sm text-muted-foreground whitespace-nowrap">minutes</Label>
-          <div className="w-px self-stretch bg-border mx-1" />
-          <Label className="text-sm text-muted-foreground whitespace-nowrap">App close gesture</Label>
-          <select
-            value={settings.dismissDirection}
-            onChange={e => setSettings(s => ({ ...s, dismissDirection: e.target.value as "auto" | "left" | "up" }))}
-            disabled={loading}
-            className="text-sm bg-background border border-border rounded px-2 py-1 text-foreground"
-          >
-            <option value="auto">Auto (detect by model)</option>
-            <option value="left">Swipe left (Redmi 12 / MIUI floating windows)</option>
-            <option value="up">Swipe up (Redmi A5 / stock Android recents)</option>
-          </select>
         </div>
       </div>
 
@@ -5108,6 +5096,32 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   // SIM phone number manual inputs (keyed by slot index)
   const [simPhoneInputs, setSimPhoneInputs] = React.useState<Record<number, string>>({});
 
+  // App close gesture (dismiss direction)
+  const [dismissDir,    setDismissDir]    = React.useState<"auto" | "left" | "up">("auto");
+  const [dismissSaving, setDismissSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!serial) return;
+    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings`)
+      .then(r => r.json())
+      .then(d => { if (d.dismissDirection) setDismissDir(d.dismissDirection); })
+      .catch(() => {});
+  }, [serial]);
+
+  const saveDismissDir = async (val: "auto" | "left" | "up") => {
+    if (!serial) return;
+    setDismissDir(val);
+    setDismissSaving(true);
+    try {
+      await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dismissDirection: val }),
+      });
+    } finally {
+      setDismissSaving(false);
+    }
+  };
+
   // Google Play settings
   const [gpEmail,      setGpEmail]      = React.useState("");
   const [gpPassword,   setGpPassword]   = React.useState("");
@@ -5288,6 +5302,28 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
 
   return (
     <div className="h-full overflow-y-auto p-6 space-y-6">
+
+      {/* ── App Close Gesture ───────────────────────────────────────── */}
+      <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+        <p className="text-sm font-semibold text-foreground">App Close Gesture</p>
+        <p className="text-xs text-muted-foreground">
+          How to dismiss Instagram in the recents screen at the end of each automation cycle.
+          Different Android launchers require different gestures.
+        </p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <select
+            value={dismissDir}
+            onChange={e => saveDismissDir(e.target.value as "auto" | "left" | "up")}
+            disabled={!serial || dismissSaving}
+            className="text-sm bg-background border border-border rounded px-3 py-1.5 text-foreground disabled:opacity-50"
+          >
+            <option value="auto">Auto — detect by model</option>
+            <option value="left">Swipe left (Redmi 12 / MIUI floating windows)</option>
+            <option value="up">Swipe up (Redmi A5 / stock Android recents)</option>
+          </select>
+          {dismissSaving && <span className="text-xs text-muted-foreground animate-pulse">Saving…</span>}
+        </div>
+      </div>
 
       {/* ── Google Play Account ─────────────────────────────────────── */}
       <div className="bg-card border border-border rounded-xl p-5 space-y-4">
