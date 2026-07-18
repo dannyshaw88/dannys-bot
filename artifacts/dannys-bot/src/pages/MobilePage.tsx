@@ -2893,11 +2893,17 @@ function CopySettingsDialog({
                               disabled={isSelf}
                               onChange={e => toggleTarget(ds.phone.serial, i, e.target.checked)}
                             />
-                            <span className="text-xs truncate min-w-0 flex-1">
+                            <span className="text-xs shrink-0" style={{
+                              width: "6.5rem",
+                              overflow: "hidden",
+                              whiteSpace: "nowrap",
+                              WebkitMaskImage: "linear-gradient(to right, black 70%, transparent 100%)",
+                              maskImage: "linear-gradient(to right, black 70%, transparent 100%)",
+                            }}>
                               {username ? `@${username}` : `Slot ${i + 1}`}
                               {isSelf && <span className="text-muted-foreground ml-1">(source)</span>}
                             </span>
-                            <SlotTrustScoreBadge serial={ds.phone.serial} slotIdx={i} width={100} />
+                            <SlotTrustScoreBadge serial={ds.phone.serial} slotIdx={i} width={65} />
                           </label>
                         );
                       })}
@@ -4432,7 +4438,14 @@ function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 160 }: { ser
       >
         {current ? (
           <>
-            <span className="truncate" style={{ maxWidth: 70 }}>{current.label}</span>
+            <span style={{
+              maxWidth: Math.max(20, badgeWidth - 42),
+              overflow: "hidden",
+              whiteSpace: "nowrap",
+              flexShrink: 1,
+              WebkitMaskImage: "linear-gradient(to right, black 55%, transparent 100%)",
+              maskImage: "linear-gradient(to right, black 55%, transparent 100%)",
+            }}>{current.label}</span>
             <current.icon size={10} color={current.text} fill={current.text} strokeWidth={2} style={{ flexShrink: 0 }} />
           </>
         ) : (
