@@ -4,6 +4,25 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.1.675] — 2026-07-18
+
+### Copy Settings — Cross-device support
+The **Copy Settings** dialog now lists every phone currently connected to the software, not just the slots on the device you are copying from. Slots are grouped under their device with a bold device name header. You can copy automation settings from any device's account slot to any other device's account slot — for example, from Device 1 Slot 1 directly to Device 3 Slot 3 — in a single operation. When the dialog opens it fetches all connected devices and their account slots automatically. A master checkbox on each device header lets you select or deselect all slots on that device at once. The slot you are copying *from* is shown greyed out and labelled "(source)" so it is never accidentally selected as a target.
+
+### Copy Settings — Larger dialog box
+The Copy Settings dialog is now 10% wider and 20% taller, giving both the device/slot list on the left and the settings sections on the right more breathing room without needing to scroll as much.
+
+### Copy Settings — Account names truncated with fade-out
+Account usernames in the left-hand slot list are now capped to approximately 15 characters. Any name that runs longer fades out smoothly to the edge of its column rather than being cut off abruptly with an ellipsis. The `@` prefix is included in the displayed text.
+
+### Copy Settings — Trust Score badge narrower with fade-out
+The Trust Score badge on each slot row inside the Copy Settings dialog has been reduced by 35% in width to avoid crowding the slot list. Label text that would overflow the narrower badge now fades out gracefully to the badge edge instead of being hard-clipped.
+
+### Copy Settings — Action Delay moved under View Feed
+"Action Delay" (Delay between actions) was previously listed as its own standalone section in the Copy Settings panel, separate from View Feed. This was incorrect — the setting lives inside the View Feed block in the actual automation settings UI and only applies when View Feed is active. It is now correctly shown as a sub-item of the **View Feed** section in the Copy Settings dialog, positioned after "Scroll amount" to match the UI order.
+
+---
+
 ## [1.1.674] — 2026-07-18
 
 ### Phone Farm — Device page header shows slot number and device name
