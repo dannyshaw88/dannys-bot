@@ -5063,7 +5063,8 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
                   </p>
                   <input
                     type="tel"
-                    className="mt-1 w-full text-xs rounded border border-border bg-background px-2 py-1 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    maxLength={15}
+                    className="mt-1 w-36 text-xs rounded border border-border bg-background px-2 py-1 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                     placeholder="Enter phone number"
                     value={simPhoneInputs[sim.slot] ?? ""}
                     onChange={e => setSimPhoneInputs(prev => ({ ...prev, [sim.slot]: e.target.value }))}
