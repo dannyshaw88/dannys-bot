@@ -4,6 +4,31 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.24] — 2026-07-18
+
+### Fix — App Close Gesture setting no longer reverts to Auto on tab switch
+
+**What was broken:** Changing the "App Close Gesture" dropdown to "Swipe left" or "Swipe up" on the My Device tab appeared to save, but switching to another tab and coming back reset it to "Auto" every time. The cycle also ignored the setting entirely.
+
+**Root cause — two separate bugs:**
+
+1. **Wrong storage endpoint:** The setting was being saved into the automation-settings blob (`cfg[serial].automation`). That endpoint runs the full `automationSchema.parse()` on the incoming body, which fills every other field with its default value and replaces the entire blob. Any subsequent autosave from the Human Session Tool panel (which also posts to that endpoint for some paths) would overwrite `dismissDirection` back to `"auto"`.
+
+2. **Cycle read the wrong place:** The automation cycle reads `dismissDirection` from the *slot-level* settings (`/slots/:slotIdx/automation-settings`), not the device-level automation blob. Because the My Device tab only ever wrote to the device-level blob, the cycle never saw the change — it always got `"auto"` from the slot and fell through to the model-lookup table.
+
+**Fix:**
+
+- Added a dedicated `/api/mobile/devices/:serial/device-prefs` GET/POST endpoint that stores a small `devicePrefs` object (currently just `dismissDirection`) as its own top-level key in `mobile-instances.json` — completely isolated from automation settings. Nothing else ever touches this key, so it can never be accidentally overwritten.
+- The My Device tab now reads and writes exclusively through this endpoint.
+- The cycle's dismiss-direction resolution now checks three levels in order:
+  1. Explicit slot-level override (set from Human Session Tool, default "auto")
+  2. Device-pref override set from My Device tab
+  3. Model lookup via `DEVICE_PROFILES` table (Redmi 12 → left, Redmi A5 → up)
+
+This means the My Device tab setting now actually affects what the cycle does, and it persists correctly across tab switches and app restarts.
+
+---
+
 ## [1.2.23] — 2026-07-18
 
 ### Fix — App Close Gesture setting moved to My Device tab

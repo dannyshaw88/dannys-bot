@@ -287,7 +287,8 @@ type AutomationSettings = {
 type DeviceSlot = { username: string; password: string; totpSecret?: string; emailAddress?: string; emailPassword?: string; phoneNumber?: string };
 type DeviceAccount = { slots: DeviceSlot[] };
 type DeviceSettings = { googlePlayEmail?: string; googlePlayPassword?: string; selectedSimSlot?: number };
-type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings; account?: DeviceAccount; slotAutomation?: Record<string, AutomationSettings>; deviceSettings?: DeviceSettings };
+type DevicePrefs = { dismissDirection?: "auto" | "left" | "up" };
+type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings; account?: DeviceAccount; slotAutomation?: Record<string, AutomationSettings>; deviceSettings?: DeviceSettings; devicePrefs?: DevicePrefs };
 type InstanceConfigMap = Record<string, InstanceConfig>;
 
 function configFilePath(): string {
@@ -1330,6 +1331,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       saveInstanceConfigs(cfg);
       res.json({ ok: true });
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to save slot automation settings" }); }
+  });
+
+  // ── Per-device prefs (hardware-level, not per-slot) ────────────────────────
+  // Stored separately from automation settings so they can never be
+  // accidentally overwritten by an autosave of the automation panel.
+  app.get("/api/mobile/devices/:serial/device-prefs", (req: Request, res: Response) => {
+    const cfg = loadInstanceConfigs();
+    res.json(cfg[p(req, "serial")]?.devicePrefs ?? {});
+  });
+  app.post("/api/mobile/devices/:serial/device-prefs", (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const allowed = z.object({ dismissDirection: z.enum(["auto", "left", "up"]).optional() }).parse(req.body);
+      const cfg = loadInstanceConfigs();
+      cfg[serial] = { ...cfg[serial], devicePrefs: { ...cfg[serial]?.devicePrefs, ...allowed } };
+      saveInstanceConfigs(cfg);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
   // ── Per-device linked Instagram account (Account Settings tab) ──────────────
@@ -4744,10 +4763,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       tLog("▶ Closing Instagram…");
       // Resolve dismiss direction: if 'auto', look up the device model in the
       // DEVICE_PROFILES table (one getprop call); otherwise use the stored override.
-      const resolvedDismissDir: "left" | "up" = dismissDirection !== "auto"
+      // Resolve dismiss direction in priority order:
+      //   1. Explicit slot-level override ("left" or "up")
+      //   2. Device-prefs override set from My Device tab (still "auto" at slot → check device prefs)
+      //   3. Model lookup via DEVICE_PROFILES table
+      const devicePrefsForDismiss = (() => {
+        try { return loadInstanceConfigs()[serial]?.devicePrefs ?? {}; } catch { return {}; }
+      })();
+      const effectiveDismiss = dismissDirection !== "auto"
         ? dismissDirection
+        : (devicePrefsForDismiss.dismissDirection && devicePrefsForDismiss.dismissDirection !== "auto")
+          ? devicePrefsForDismiss.dismissDirection
+          : "auto";
+      const resolvedDismissDir: "left" | "up" = effectiveDismiss !== "auto"
+        ? effectiveDismiss
         : android.getModelDismissDirection(android.getDeviceModel(serial));
-      tLog(`  dismiss direction: ${resolvedDismissDir} (setting: ${dismissDirection})`);
+      tLog(`  dismiss direction: ${resolvedDismissDir} (slot: ${dismissDirection}, device-pref: ${devicePrefsForDismiss.dismissDirection ?? "none"})`);
       await android.closeInstagramViaRecents(serial, resolvedDismissDir, (msg) => tLog(`  ${msg}`));
       steps.push("closed-instagram");
       tLog("  ✓ Instagram closed");

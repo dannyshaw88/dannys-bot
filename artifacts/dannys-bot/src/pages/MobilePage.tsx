@@ -5102,9 +5102,9 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
 
   React.useEffect(() => {
     if (!serial) return;
-    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings`)
+    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-prefs`)
       .then(r => r.json())
-      .then(d => { if (d.dismissDirection) setDismissDir(d.dismissDirection); })
+      .then(d => { setDismissDir(d.dismissDirection ?? "auto"); })
       .catch(() => {});
   }, [serial]);
 
@@ -5113,7 +5113,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     setDismissDir(val);
     setDismissSaving(true);
     try {
-      await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings`, {
+      await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-prefs`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dismissDirection: val }),
       });
