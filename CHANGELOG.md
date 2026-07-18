@@ -4,6 +4,34 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.14] — 2026-07-18
+
+### Fix — Phone Farm: All account slots showed "Running" when any one slot was toggled on (root cause, second pass)
+
+**What was broken:** On the Phone Farm page (Accounts tab), toggling any single account slot's Human Session automation on would cause **every other slot on the same device** to immediately display "Running" in blue — even though only one slot was actually executing. The automation didn't run on the other slots; it was purely a display bug.
+
+**Why the previous fix didn't solve it:** The previous fix (v1.2.13) removed `"startStop"` from `HUMAN_COPY_GROUPS` in the ProfilesPage Copy Settings dialog. That was a real regression but it is a **different path** — it only triggers when the user explicitly opens Copy Settings and clicks Copy with "Start / Stop" selected. The bug the user reported in v1.2.14 triggers from a **simple toggle click** with no Copy Settings involved.
+
+**Root cause (found):** The `useAutomationSettings` hook (used inside each `SlotHumanSessionView` component, one instance per slot) polls `/api/mobile/cycle-active` every 2 seconds to determine whether to show "Running". The response was `{ serials: string[] }` — a flat list of **device serials**. Because every slot on the same phone shares the **same device serial**, when slot 1's automation cycle started and the server added its serial to `automationCycleInProgress`, the poll response included that serial. All other slots (2, 3, 4, 5) on that same phone saw their serial in the list and set `serverCycleRunning = true` → `running || serverCycleRunning = true` → "Running" badge for all of them.
+
+**Fix — Backend** (`artifacts/api-server/src/routes/mobile.ts`):
+- Added `automationCycleActiveSlot: Map<string, number>` alongside the existing `automationCycleInProgress: Set<string>`. A device can only execute one slot at a time (the existing serial-level 409 guard enforces this), so a `Map<serial → slotIdx>` is sufficient.
+- When an automation cycle starts, both `automationCycleInProgress.add(serial)` and `automationCycleActiveSlot.set(serial, slotIdx)` are written (slotIdx read from `req.body.slotIdx`).
+- When the cycle finishes (finally block), both are cleared together.
+- `/api/mobile/cycle-active` now returns `{ serials: string[], slots: { serial: string, slotIdx: number }[] }` — the `serials` array is preserved for backward compatibility (mirror thumbnail gating); the new `slots` array carries the slot-level precision needed by the display.
+
+**Fix — Frontend** (`artifacts/dannys-bot/src/pages/MobilePage.tsx`):
+- Updated the `serverCycleRunning` poll to check `body.slots.some(s => s.serial === serial && s.slotIdx === mySlotIdx)` when `body.slots` is present, rather than `body.serials.includes(serial)`. Added `slotIdx` to the effect dependency array.
+- Falls back to the serial-only check if `body.slots` is absent (older server), so the fix is backward-compatible with any running server that hasn't updated yet.
+
+**Result:** Toggling slot 1 ON now shows "Running" only for slot 1. Slots 2–5 remain "Active" (toggle is on, scheduled, not currently executing) or "Disabled" depending on their individual enabled state. The "Running" label is now slot-accurate.
+
+**Affected files:**
+- `artifacts/api-server/src/routes/mobile.ts` — `automationCycleActiveSlot` map, add/remove in cycle handler, `/api/mobile/cycle-active` response
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — `serverCycleRunning` poll slot-level matching
+
+---
+
 ## [1.2.13] — 2026-07-18
 
 ### Fix — Human Session Copy Settings: "Start / Stop" removed from copyable sections (regression fix)

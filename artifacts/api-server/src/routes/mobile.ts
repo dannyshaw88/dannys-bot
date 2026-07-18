@@ -2887,6 +2887,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     slotIdx: z.number().int().min(0).default(0),
   });
   const automationCycleInProgress = new Set<string>();
+  // Tracks WHICH slot index is actively running on each device.
+  // A device can only run one slot at a time (serial-level 409 guard above),
+  // so a Map<serial, slotIdx> is sufficient.  Used by /api/mobile/cycle-active
+  // so the frontend can show "Running" only for the slot that is actually
+  // executing, not for every slot on the same physical phone.
+  const automationCycleActiveSlot = new Map<string, number>();
 
   // Per-serial persistent log of users followed. Survives server restarts by
   // writing each entry to a JSON file on disk alongside the database.
@@ -4215,9 +4221,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // abort POST that arrives after this cycle started will NOT match and is
     // safely ignored.
     const incomingCycleId: string = req.body?.cycleId ?? `fallback-${Date.now()}`;
+    const incomingSlotIdx: number = typeof req.body?.slotIdx === "number" ? req.body.slotIdx : 0;
     automationCycleCurrentId.set(serial, incomingCycleId);
     automationCycleAbortedId.delete(serial); // clear any abort from a previous cycle
     automationCycleInProgress.add(serial);
+    automationCycleActiveSlot.set(serial, incomingSlotIdx);
     checkFeedInProgress.add(serial); // also blocks a concurrent manual Check Feed call
     const steps: string[] = [];
     let storiesWatched = 0;
@@ -4730,6 +4738,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       });
     } finally {
       automationCycleInProgress.delete(serial);
+      automationCycleActiveSlot.delete(serial);
       checkFeedInProgress.delete(serial);
       automationCycleCurrentId.delete(serial);
       automationCycleAbortedId.delete(serial);
@@ -5427,10 +5436,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   });
 
   // Returns the set of device serials that currently have an automation cycle
-  // running.  The farm page polls this every 2 s so it can gate the live mirror
-  // thumbnail — black when idle, live screenshot when the cycle is active.
+  // running, plus the specific slot index that is active on each device.
+  // The farm page polls this every 2 s to:
+  //   1. gate the live mirror thumbnail (serial-level check, backward-compat)
+  //   2. show "Running" only for the SPECIFIC slot that is executing, not for
+  //      every slot on the same physical phone (slot-level check via `slots`)
   app.get("/api/mobile/cycle-active", (_req: Request, res: Response) => {
-    res.json({ serials: [...automationCycleInProgress] });
+    const serials = [...automationCycleInProgress];
+    const slots = serials.map(serial => ({
+      serial,
+      slotIdx: automationCycleActiveSlot.get(serial) ?? 0,
+    }));
+    res.json({ serials, slots });
   });
 
   // ── Element Inspector ─────────────────────────────────────────────────────

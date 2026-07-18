@@ -2236,23 +2236,36 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // This keeps `serverCycleRunning` accurate so:
   //   • the mirror stays live even right after remount (before runCycle fires)
   //   • a 409-deferred cycle is still visible as "running" in the UI
+  //
+  // IMPORTANT: match by (serial, slotIdx) — not just serial.  A device can
+  // only run one slot at a time (server-side 409 guard), but the response
+  // includes which specific slot is executing.  Without this, every slot on
+  // the same phone shows "Running" when any single slot is active.
   useEffect(() => {
     if (!phone || !settings.enabled) { setServerCycleRunning(false); return; }
     const serial = phone.serial;
+    const mySlotIdx = slotIdx ?? 0;
     let active = true;
     const poll = async () => {
       if (!active) return;
       try {
         const r = await fetch('/api/mobile/cycle-active');
         if (!active) return;
-        const body: { serials: string[] } = await r.json().catch(() => ({ serials: [] }));
-        setServerCycleRunning(body.serials.includes(serial));
+        const body: { serials?: string[]; slots?: { serial: string; slotIdx: number }[] } =
+          await r.json().catch(() => ({ serials: [], slots: [] }));
+        // Use slot-level info when available (new API); fall back to serial-only
+        // for any older server that hasn't deployed this fix yet.
+        if (body.slots) {
+          setServerCycleRunning(body.slots.some(s => s.serial === serial && s.slotIdx === mySlotIdx));
+        } else {
+          setServerCycleRunning((body.serials ?? []).includes(serial));
+        }
       } catch { /* ignore transient errors */ }
       if (active) setTimeout(poll, 2_000);
     };
     poll();
     return () => { active = false; setServerCycleRunning(false); };
-  }, [phone?.serial, settings.enabled]);
+  }, [phone?.serial, slotIdx, settings.enabled]);
 
   // Save on the fly: every settings change (including the master toggle)
   // is persisted automatically, debounced so rapid typing doesn't fire a
