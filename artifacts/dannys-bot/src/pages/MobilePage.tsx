@@ -2582,8 +2582,9 @@ function useCollisionScheduler(serial: string | null) {
 
 // ── Copy Settings dialog ──────────────────────────────────────────────────────
 // Lets the user duplicate the current slot's Human Session Tool settings to one
-// or more other account slots on the same device. Both sides (target slots and
-// setting sections) support Select All / Select None.
+// or more account slots on any connected device. The left panel groups slots by
+// device so you can copy from Device 1 Slot 1 to Device 3 Slot 3, etc.
+// Both sides (target slots and setting sections) support Select All / Select None.
 type CopySubSetting = { key: string; label: string; fields: string[] };
 type CopySection    = { key: string; label: string; sub: CopySubSetting[] };
 
@@ -2670,35 +2671,105 @@ const COPY_SECTIONS: CopySection[] = [
 
 const ALL_SUB_KEYS = COPY_SECTIONS.flatMap(s => s.sub.map(sub => sub.key));
 
+type CopyTarget = { serial: string; slotIdx: number };
+type DeviceSlots = { phone: UsbPhone; slots: string[] /* username per slot index */ };
+
+function deviceLabel(p: UsbPhone): string {
+  return [p.manufacturer, p.marketName || p.model].filter(Boolean).join(" ") || p.serial;
+}
+
 function CopySettingsDialog({
-  open, onClose, currentSlotIdx, slotUsernames, settings, phone, onCopied,
+  open, onClose, currentSlotIdx, settings, phone, onCopied,
 }: {
   open: boolean;
   onClose: () => void;
   currentSlotIdx: number;
-  slotUsernames: string[];
+  slotUsernames?: string[]; // kept for API compat but no longer used directly
   settings: AutomationSettingsData;
   phone: UsbPhone | null;
   onCopied?: (targetSlotIdxs: number[]) => void;
 }) {
-  const [selectedSlots, setSelectedSlots] = useState<number[]>([]);
+  const [selectedTargets, setSelectedTargets] = useState<CopyTarget[]>([]);
+  const [deviceSlots, setDeviceSlots] = useState<DeviceSlots[]>([]);
+  const [loadingDevices, setLoadingDevices] = useState(false);
   const [selectedSubKeys, setSelectedSubKeys] = useState<Set<string>>(new Set(ALL_SUB_KEYS));
   const [copying, setCopying] = useState(false);
   const [result, setResult] = useState<string | null>(null);
 
+  // Fetch all devices + their slots whenever the dialog opens
   useEffect(() => {
-    if (open) {
-      setSelectedSlots(slotUsernames.map((_, i) => i).filter(i => i !== currentSlotIdx));
-      setSelectedSubKeys(new Set(ALL_SUB_KEYS));
-      setResult(null);
-      setCopying(false);
-    }
+    if (!open) return;
+    setSelectedSubKeys(new Set(ALL_SUB_KEYS));
+    setResult(null);
+    setCopying(false);
+    setLoadingDevices(true);
+
+    fetch("/api/mobile/usb-phones")
+      .then(r => r.json())
+      .then(async (d: { phones?: UsbPhone[] }) => {
+        const all: UsbPhone[] = d.phones ?? [];
+        const withSlots: DeviceSlots[] = await Promise.all(
+          all.map(async p => {
+            try {
+              const r = await fetch(`/api/mobile/devices/${encodeURIComponent(p.serial)}/account`);
+              const data = await r.json();
+              const slots: string[] = (data?.slots ?? []).map((s: any) => s?.username ?? "");
+              return { phone: p, slots };
+            } catch {
+              return { phone: p, slots: [] };
+            }
+          })
+        );
+        setDeviceSlots(withSlots);
+        // Auto-select every slot except the one we're copying FROM
+        const targets: CopyTarget[] = [];
+        for (const ds of withSlots) {
+          for (let i = 0; i < ds.slots.length; i++) {
+            if (ds.phone.serial === phone?.serial && i === currentSlotIdx) continue;
+            targets.push({ serial: ds.phone.serial, slotIdx: i });
+          }
+        }
+        setSelectedTargets(targets);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingDevices(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const otherSlots = slotUsernames
-    .map((username, i) => ({ username, idx: i }))
-    .filter(s => s.idx !== currentSlotIdx);
+  const isSelected = (serial: string, slotIdx: number) =>
+    selectedTargets.some(t => t.serial === serial && t.slotIdx === slotIdx);
+
+  const toggleTarget = (serial: string, slotIdx: number, checked: boolean) =>
+    setSelectedTargets(prev =>
+      checked
+        ? [...prev, { serial, slotIdx }]
+        : prev.filter(t => !(t.serial === serial && t.slotIdx === slotIdx))
+    );
+
+  const toggleDevice = (ds: DeviceSlots, checked: boolean) =>
+    setSelectedTargets(prev => {
+      const rest = prev.filter(t => t.serial !== ds.phone.serial);
+      if (!checked) return rest;
+      const add: CopyTarget[] = ds.slots
+        .map((_, i) => ({ serial: ds.phone.serial, slotIdx: i }))
+        .filter(t => !(t.serial === phone?.serial && t.slotIdx === currentSlotIdx));
+      return [...rest, ...add];
+    });
+
+  const deviceCheckedState = (ds: DeviceSlots): "all" | "some" | "none" => {
+    const eligible = ds.slots.filter((_, i) => !(ds.phone.serial === phone?.serial && i === currentSlotIdx));
+    if (eligible.length === 0) return "none";
+    const sel = eligible.filter((_, i) => isSelected(ds.phone.serial, i)).length;
+    if (sel === 0) return "none";
+    if (sel === eligible.length) return "all";
+    return "some";
+  };
+
+  const allTargets: CopyTarget[] = deviceSlots.flatMap(ds =>
+    ds.slots
+      .map((_, i) => ({ serial: ds.phone.serial, slotIdx: i }))
+      .filter(t => !(t.serial === phone?.serial && t.slotIdx === currentSlotIdx))
+  );
 
   const toggleSub = (subKey: string, checked: boolean) =>
     setSelectedSubKeys(prev => { const n = new Set(prev); checked ? n.add(subKey) : n.delete(subKey); return n; });
@@ -2718,7 +2789,7 @@ function CopySettingsDialog({
   };
 
   const handleCopy = async () => {
-    if (!phone?.serial || selectedSlots.length === 0) return;
+    if (selectedTargets.length === 0) return;
     setCopying(true);
     setResult(null);
     const partial: Record<string, unknown> = {};
@@ -2732,17 +2803,20 @@ function CopySettingsDialog({
       }
     }
     let ok = 0, fail = 0;
-    const succeededSlots: number[] = [];
-    for (const slotIdx of selectedSlots) {
+    const localSucceeded: number[] = [];
+    for (const target of selectedTargets) {
       try {
         const r = await fetch(
-          `/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/automation-settings`,
+          `/api/mobile/devices/${encodeURIComponent(target.serial)}/slots/${target.slotIdx}/automation-settings`,
           { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(partial) },
         );
-        if (r.ok) { ok++; succeededSlots.push(slotIdx); } else fail++;
+        if (r.ok) {
+          ok++;
+          if (target.serial === phone?.serial) localSucceeded.push(target.slotIdx);
+        } else fail++;
       } catch { fail++; }
     }
-    if (succeededSlots.length > 0) onCopied?.(succeededSlots);
+    if (localSucceeded.length > 0) onCopied?.(localSucceeded);
     if (fail === 0) {
       setResult("ok");
       setTimeout(() => { onClose(); }, 500);
@@ -2760,37 +2834,86 @@ function CopySettingsDialog({
           <DialogTitle>Copy Settings to Other Slots</DialogTitle>
         </DialogHeader>
         <div className="flex gap-8 mt-2 flex-1 min-h-0">
-          {/* Left: target slots */}
-          <div className="w-[22rem] shrink-0 flex flex-col gap-1">
-            <div className="flex items-center justify-between mb-1">
+
+          {/* Left: target slots grouped by device */}
+          <div className="w-[22rem] shrink-0 flex flex-col min-h-0">
+            <div className="flex items-center justify-between mb-2 shrink-0">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Copy to</span>
               <div className="flex gap-1">
                 <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5"
-                  onClick={() => setSelectedSlots(otherSlots.map(s => s.idx))}>All</Button>
+                  onClick={() => setSelectedTargets(allTargets)}>All</Button>
                 <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5"
-                  onClick={() => setSelectedSlots([])}>None</Button>
+                  onClick={() => setSelectedTargets([])}>None</Button>
               </div>
             </div>
-            {otherSlots.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic">No other slots.</p>
-            ) : otherSlots.map(s => (
-              <label key={s.idx} className="flex items-center gap-2 cursor-pointer select-none py-0.5">
-                <input type="checkbox" className="w-3.5 h-3.5 accent-primary shrink-0"
-                  checked={selectedSlots.includes(s.idx)}
-                  onChange={e => setSelectedSlots(prev =>
-                    e.target.checked ? [...prev, s.idx] : prev.filter(i => i !== s.idx)
-                  )} />
-                <span className="text-sm truncate min-w-0">
-                  {s.username ? `@${s.username}` : `Slot ${s.idx + 1}`}
-                </span>
-                <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={s.idx} width={120} />
-              </label>
-            ))}
+            <div className="overflow-y-auto flex-1 space-y-3 pr-1">
+              {loadingDevices && (
+                <p className="text-xs text-muted-foreground italic pt-1">Loading devices…</p>
+              )}
+              {!loadingDevices && deviceSlots.length === 0 && (
+                <p className="text-xs text-muted-foreground italic pt-1">No devices found.</p>
+              )}
+              {deviceSlots.map(ds => {
+                const devState = deviceCheckedState(ds);
+                const isCurrentDevice = ds.phone.serial === phone?.serial;
+                const eligibleSlots = ds.slots.filter((_, i) =>
+                  !(isCurrentDevice && i === currentSlotIdx)
+                );
+                if (eligibleSlots.length === 0 && isCurrentDevice && ds.slots.length <= 1) return null;
+                return (
+                  <div key={ds.phone.serial} className="rounded-md border border-border/50 overflow-hidden">
+                    {/* Device header row */}
+                    <label className="flex items-center gap-2 px-2.5 py-1.5 bg-muted/40 cursor-pointer select-none hover:bg-muted/60 transition-colors">
+                      <input
+                        type="checkbox"
+                        className="w-3.5 h-3.5 accent-primary shrink-0"
+                        checked={devState === "all"}
+                        ref={el => { if (el) el.indeterminate = devState === "some"; }}
+                        onChange={e => toggleDevice(ds, e.target.checked)}
+                        disabled={eligibleSlots.length === 0}
+                      />
+                      <span className="text-xs font-bold text-foreground truncate min-w-0 flex-1">
+                        {deviceLabel(ds.phone)}
+                      </span>
+                      {isCurrentDevice && (
+                        <span className="text-[10px] text-muted-foreground shrink-0">(this device)</span>
+                      )}
+                    </label>
+                    {/* Slot rows */}
+                    <div className="divide-y divide-border/30">
+                      {ds.slots.map((username, i) => {
+                        const isSelf = isCurrentDevice && i === currentSlotIdx;
+                        return (
+                          <label key={i}
+                            className={`flex items-center gap-2 px-3 pl-6 py-1 select-none ${isSelf ? "opacity-40 cursor-default" : "cursor-pointer hover:bg-muted/20 transition-colors"}`}>
+                            <input
+                              type="checkbox"
+                              className="w-3 h-3 accent-primary shrink-0"
+                              checked={!isSelf && isSelected(ds.phone.serial, i)}
+                              disabled={isSelf}
+                              onChange={e => toggleTarget(ds.phone.serial, i, e.target.checked)}
+                            />
+                            <span className="text-xs truncate min-w-0 flex-1">
+                              {username ? `@${username}` : `Slot ${i + 1}`}
+                              {isSelf && <span className="text-muted-foreground ml-1">(source)</span>}
+                            </span>
+                            <SlotTrustScoreBadge serial={ds.phone.serial} slotIdx={i} width={100} />
+                          </label>
+                        );
+                      })}
+                      {ds.slots.length === 0 && (
+                        <p className="text-xs text-muted-foreground italic px-6 py-1">No slots configured</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* Right: settings with sub-items */}
           <div className="flex-1 min-w-0 flex flex-col min-h-0">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-2 shrink-0">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Settings</span>
               <div className="flex gap-1">
                 <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5"
@@ -2805,7 +2928,6 @@ function CopySettingsDialog({
                 const allSubs = section.sub;
                 return (
                   <div key={section.key} className="rounded-md border border-border/50 overflow-hidden">
-                    {/* Section header row */}
                     <label className="flex items-center gap-2 px-2.5 py-1.5 bg-muted/40 cursor-pointer select-none hover:bg-muted/60 transition-colors">
                       <input
                         type="checkbox"
@@ -2816,7 +2938,6 @@ function CopySettingsDialog({
                       />
                       <span className="text-xs font-bold text-foreground">{section.label}</span>
                     </label>
-                    {/* Sub-settings */}
                     {allSubs.length > 1 && (
                       <div className="divide-y divide-border/30">
                         {allSubs.map(sub => (
@@ -2845,7 +2966,7 @@ function CopySettingsDialog({
           )}
           <Button variant="secondary" onClick={onClose} disabled={copying}>Cancel</Button>
           <Button onClick={handleCopy}
-            disabled={copying || selectedSlots.length === 0 || selectedSubKeys.size === 0}
+            disabled={copying || selectedTargets.length === 0 || selectedSubKeys.size === 0}
             style={result === "ok" ? { background: "#16a34a", borderColor: "#16a34a" } : undefined}>
             {result === "ok"
               ? <CheckCircle2 className="w-4 h-4 text-white" />
