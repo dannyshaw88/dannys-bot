@@ -4,6 +4,70 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.26] — 2026-07-18
+
+### Fix — Follow tool no longer leaves the phone on a profile page after the last user
+
+**What was broken:**
+
+When Follow ran as the last (or only) tool before View Feed in a cycle, the phone was left sitting on the last followed user's profile page when the Follow tool finished. View Feed's preamble then called `findHomeTab()` to navigate to the home feed — but `findHomeTab()` returns `null` from a profile page (the Home icon in the bottom nav bar is obscured). The coordinate fallback at `(10% w, 97.5% h)` was meant to cover this, but from a profile page it was landing on the system navigation bar rather than Instagram's Home tab. Result: `runCheckFeedLoop` scrolled the profile grid instead of the home feed — zero feed actions rolled, zero likes/shares.
+
+**Root cause:**
+
+The `runFollowUsersStep` loop used a `if (!isLastUser)` guard around the Back × 2 navigation block that returns the phone to a clean Explore screen after each user. For all non-last users the guard ran, the phone exited the profile cleanly, and the next search-bar lookup worked. For the last user the guard was skipped — the phone stayed on the profile page when Follow returned control.
+
+The guard was originally an optimisation (avoid navigating away from the last profile when there's nothing to search for next) but it broke every subsequent tool that needs a clean starting screen.
+
+**Fix (`artifacts/api-server/src/routes/mobile.ts`):**
+
+Removed the `!isLastUser` condition entirely. Back × 2 (profile → search results → clean Explore) now always runs at the end of each user, including the last one. The extra ~1.3 s for the last user is a worthwhile trade for a guaranteed clean starting state for whatever tool runs next. The inter-user popup-dismiss call (`dismissInstagramInterstitials`) also now always runs at the same point for consistency.
+
+---
+
+### Fix — App-close gesture dismiss direction now resolves correctly for Redmi A5 (partial / fuzzy model matching)
+
+**What was broken:**
+
+The Redmi A5 was closing Instagram by swiping left instead of swiping up, even though `DEVICE_PROFILES["Redmi A5"]` was set to `"up"`. The cycle log showed `"dismiss direction: left (slot: auto, device-pref: none)"`, meaning it fell all the way through to the model-lookup fallback — and the model lookup was returning `"left"` (the default for unknown devices).
+
+**Root cause:**
+
+`getDeviceModel(serial)` reads `ro.product.model` from the device via `adb shell getprop`. On some Redmi A5 firmware builds the property returns a hardware model code (e.g. `23097RA8S` for the international build, `23116PN5BI` for India) rather than the marketing name `"Redmi A5"`. The `DEVICE_PROFILES` table only had an exact string key `"Redmi A5"`, so the code-variant strings missed the lookup and fell to the `"left"` default.
+
+**Two fixes (`artifacts/api-server/src/mobile/androidManager.ts`):**
+
+1. **Case-insensitive partial match** — after the exact-key lookup, `getModelDismissDirection` now checks `model.toLowerCase().includes("redmi a5")`. Any firmware that embeds the marketing name anywhere in the property string (common on newer MIUI/HyperOS builds) resolves correctly.
+2. **Hardware code prefixes** — explicit regex guards for the two known A5 model code families: `/^2309[0-9]ra/i` (international) and `/^2311[0-9]pn/i` (India). Both resolve to `"up"`.
+
+**Bonus: raw model string now logged (`artifacts/api-server/src/routes/mobile.ts`):**
+
+The dismiss-direction tLog line now reads `dismiss direction: up (slot: auto, device-pref: none, model: "23097RA8S")` — the raw `ro.product.model` string is visible in every cycle log. Any future device that still falls through to the wrong default can be identified immediately without adding debug code.
+
+---
+
+### Fix — Inject Browsing now always scrolls the profile grid when activated (redundant inner gate removed)
+
+**What was broken:**
+
+With "Inject Browsing Activate %" set to a high range (e.g. 75–100%), inject browsing appeared to not be doing anything. The cycle log showed `"Inject Browsing: feed-scroll roll missed — skipping grid scroll"` repeatedly, even on runs where the activation gate clearly passed.
+
+**Root cause:**
+
+There were two independent on/off gates stacked in sequence:
+
+1. `rollInjectBrowsingDecision` — the *activation* gate, controlled by "Activate %" (75–100% → fires ~87.5% of the time). ✓ Working correctly.
+2. Inside `runProfileBrowsingSequence`, a second `feedChance` gate rolled against "Feed Chance %" — a *separate* min/max pair — to decide whether to actually scroll the profile grid.
+
+The two gates were conceptually identical (both decided "do we scroll?") but driven by different sliders. In practice the inner `feedChance` gate was what the user saw as activation, because nothing visible happened when it missed — making it look like the outer activation gate wasn't working.
+
+**Fix (`artifacts/api-server/src/routes/mobile.ts`):**
+
+Removed the `feedChance` gate from `runProfileBrowsingSequence` entirely. The contract is now: **activation = guaranteed scroll**. If `rollInjectBrowsingDecision` says `willBrowse: true`, the profile grid is always scrolled. The only remaining random element inside the function is *how many rows* to scroll (`feedMin`/`feedMax`), which is independent of whether scrolling happens at all.
+
+The "Feed Chance %" slider values in existing saved settings are now ignored (the field is still accepted by the schema for compatibility but has no effect).
+
+---
+
 ## [1.2.25] — 2026-07-18
 
 ### Fix — Feed scroll runs on the correct screen after a shuffled Follow
