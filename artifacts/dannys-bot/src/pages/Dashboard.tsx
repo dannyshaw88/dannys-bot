@@ -78,6 +78,60 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.2.1",
+    date: "18 Jul 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "My Device tab crashed with 'Cannot read properties of undefined (reading length)' whenever a device was connected and the SIM detection returned a device-spec object without a sims field. Added optional chaining (deviceSpec.sims?.length) so the section falls through to the 'No SIM detected' fallback instead of crashing the whole tab.",
+        technical: [
+          "Root cause: the /api/mobile/devices/:serial/device-spec endpoint can return a deviceSpec object whose sims field is undefined if the phone reports no SIM data. The guard `deviceSpec &&` only checked for the object itself, not for sims inside it.",
+          "Fix: changed `deviceSpec.sims.length > 0` to `deviceSpec.sims?.length > 0` in PhoneSettingsPanel (MobilePage.tsx).",
+        ],
+      },
+      {
+        category: "Fixed",
+        text: "Story loop: when the 'advance to next story' tap landed on a sponsored post's CTA button, Instagram opened Chrome or its in-app WebView mid-loop. Every subsequent scripted tap then fired on the wrong app. Added a foreground-package check immediately after the story loop exits — if the foreground app is not com.instagram.android, the tool presses Back up to 5 times (700ms apart) until Instagram is restored, logging each attempt and recovery. This runs before the swipe-down exit check so all downstream code is safely back inside Instagram.",
+        technical: [
+          "Uses android.getForegroundPackage(serial) — already built for exactly this use-case (CTA-tap deviation detection).",
+          "Recovery loop: for _stRi 0..4 — pressBack → sleep 700ms → re-check package → break on match.",
+          "Placed between the for-loop closing brace and the stillInStoryViewer() exit-swipe block so the swipe only fires when we are genuinely inside Instagram.",
+        ],
+      },
+      {
+        category: "Fixed",
+        text: "Inject Browsing before-follow: the scroll-back-to-top used a hardcoded 4 swipes regardless of how many grid rows were actually browsed. If the profile was only scrolled 1–2 rows, the extra swipes overshot the top of the content and triggered a pull-to-refresh — exactly what the comment said it was designed to avoid. Additionally, several code paths inside runProfileBrowsingSequence returned bare `return` (undefined/falsy) even after the grid had been scrolled, so the caller thought no scroll happened and skipped the scroll-back entirely, leaving the Follow button off-screen.",
+        technical: [
+          "Changed runProfileBrowsingSequence return type from Promise<boolean> to Promise<number>: returns 0 when no scroll happened, or the exact row count when it did.",
+          "Updated all 7 internal return sites: the two early-exit `return false` paths now return 0; all `return;` paths that execute after the scroll loop now return `rows`; the final `return true` now returns `rows`.",
+          "Caller (before-follow path): catch block changed from `return false` to `return 0`; `if (didScroll)` → `if (didScroll > 0)`; scroll-back loop changed from hardcoded 4 iterations to `didScroll` iterations.",
+          "Scroll-back swipe coordinates changed from (bh*0.30 → bh*0.75) to (bh*0.55 → bh*0.82) — stays safely within the middle of the content area, never reaches the pull-to-refresh zone at the very top of the page.",
+          "Added a log line showing the exact row count being scrolled back so it is visible in the debug log.",
+        ],
+      },
+      {
+        category: "Fixed",
+        text: "SIM Card title in My Device tab showed raw comma-separated carrier names (e.g. 'EE,EE' or 'O2,Three') because Android's gsm.operator.alpha property returns multiple operator names joined by commas on multi-SIM and some single-SIM builds. The API endpoint now strips to the first non-empty comma-separated segment before returning, so the SIM row title is always clean.",
+        technical: [
+          "Fix applied at the /api/mobile/devices/:serial/device-spec endpoint in mobile.ts — cleanCarrier() splits on comma, trims, and returns the first non-empty segment or null.",
+          "Both SIM slots (carrier1 from gsm.operator.alpha, carrier2 from gsm.operator.alpha.2) go through the same cleanup.",
+        ],
+      },
+      {
+        category: "UI",
+        text: "Phone Farm page header title is now centred on both the device grid page and the individual device detail page, instead of being left-aligned.",
+        technical: [
+          "MobileDevicesPage.tsx (grid): added justify-center to the header flex container.",
+          "MobilePage.tsx (device detail): title group wrapped in an absolute-positioned, pointer-events-none overlay div centred in the bar so it sits in the true middle independently of the Refresh button on the right.",
+        ],
+      },
+      {
+        category: "UI",
+        text: "Dashboard activity feed control bar buttons are now uppercase: MANAGE COLUMNS, SHOW ONLY ERRORS, SHOW ALL, CLEAR ERRORS, CLEAR DASHBOARD.",
+      },
+    ],
+  },
+  {
     version: "1.2.0",
     date: "17 Jul 2026",
     items: [

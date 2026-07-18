@@ -533,7 +533,7 @@ export function MobileDevicesPage() {
       <Sidebar />
       <main className="ml-[133px] flex-1 h-screen flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="shrink-0 z-10 bg-background/95 backdrop-blur border-b border-border px-6 py-3 flex items-center gap-3">
+        <div className="shrink-0 z-10 bg-background/95 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-center gap-3">
           <PhoneFarmIcon className="w-5 h-5" style={{ color: "#1AD2F2" }} />
           <h1 className="text-lg font-bold text-foreground">Phone Farm</h1>
         </div>
