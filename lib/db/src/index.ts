@@ -288,7 +288,7 @@ sqlite.exec(`
   if (!ownerExists) {
     sqlite.prepare(
       "INSERT INTO licenses (username, password_hash, tier, account_limit, active, is_admin, created_at) VALUES (?, ?, 'owner', 9999, 1, 1, ?)"
-    ).run("EQUINOX", "6b371d058acf35caefe10819c1ee07bee49f9fdfe19869f63a7d4c3cc836e01f", new Date().toISOString());
+    ).run("EQUINOX", "bfcdfd2bdaa4995bbaf8238a9fc89d6c99431d541df4b8f2c0f1712ea8fb9837", new Date().toISOString());
     console.log("[db] Owner license account seeded");
   }
 }
