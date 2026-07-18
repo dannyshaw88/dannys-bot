@@ -3247,10 +3247,7 @@ function AutomationSettingsPanel({
               />
             </div>
           </div>
-        </div>}
 
-        {/* Like + Share to Feed + Share via DM — all three on the same row */}
-        {settings.feedEnabled && <div className="flex items-start gap-6 flex-wrap">
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground">Like % of posts</Label>
             <div className="flex items-center gap-3">
@@ -3275,10 +3272,12 @@ function AutomationSettingsPanel({
                 onChange={e => setSettings(s => ({ ...s, likePercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading}
               />
-
             </div>
           </div>
+        </div>}
 
+        {/* Share to Feed + Share via DM — second row */}
+        {settings.feedEnabled && <div className="flex items-start gap-6 flex-wrap">
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground">Share to Feed % of posts</Label>
             <div className="flex items-center gap-3">
