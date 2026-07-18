@@ -4617,7 +4617,11 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   );
 });
 
-function AccountSettingsPanel({ phone, addLog, onSlotChange }: { phone: UsbPhone | null; addLog: (msg: string) => void; onSlotChange?: (slotIdx: number | null) => void }) {
+type AccountSettingsPanelHandle = { backToSlots: () => void };
+type AccountSettingsPanelProps  = { phone: UsbPhone | null; addLog: (msg: string) => void; onSlotChange?: (slotIdx: number | null) => void };
+
+const AccountSettingsPanel = React.forwardRef<AccountSettingsPanelHandle, AccountSettingsPanelProps>(
+function AccountSettingsPanel({ phone, addLog, onSlotChange }, ref) {
   const [slotRefreshKeys, setSlotRefreshKeys] = useState<Record<number, number>>({});
   const handleCopied = useCallback((targetSlotIdxs: number[]) => {
     setSlotRefreshKeys(prev => {
@@ -4652,6 +4656,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange }: { phone: UsbPhone
   // null = show slot list; number = show Human Session Tool for that slot index
   const [openSlotTool, setOpenSlotTool] = useState<number | null>(null);
   useEffect(() => { onSlotChange?.(openSlotTool); }, [openSlotTool]);
+  useImperativeHandle(ref, () => ({ backToSlots: () => setOpenSlotTool(null) }));
   const { requestSlot, releaseSlot } = useCollisionScheduler(phone?.serial ?? null);
   const hydratedRef = useRef(false);
   const lastSavedRef = useRef<string>(JSON.stringify(Array.from({ length: ACCT_SLOT_COUNT }, emptySlot)));
@@ -5044,7 +5049,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange }: { phone: UsbPhone
       </div>
     </div>
   );
-}
+});
 
 // ─── Phone Settings Panel ──────────────────────────────────────────────────────
 
@@ -5984,6 +5989,7 @@ export function MobilePage() {
     return () => ro.disconnect();
   }, [paneEl]);
   const [activeTab, setActiveTab] = useState<MobileTab>("account");
+  const accountPanelRef = useRef<AccountSettingsPanelHandle>(null);
   // Per-serial "user explicitly turned the live view on" flag. Visiting the
   // Mobile tab, or a phone simply being connected, must never by itself
   // start streaming/waking the device — only pressing Power (below) or the
@@ -6242,7 +6248,7 @@ export function MobilePage() {
                   <button
                     key={t.id}
                     type="button"
-                    onClick={() => setActiveTab(t.id)}
+                    onClick={() => { setActiveTab(t.id); if (t.id === "account") accountPanelRef.current?.backToSlots(); }}
                     className={`px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
                       activeTab === t.id
                         ? "border-primary text-foreground"
@@ -6257,7 +6263,7 @@ export function MobilePage() {
                 {/* Accounts panel: always mounted so each slot's automation
                     hook persists across tab switches and navigation. */}
                 <div className={activeTab === "account" ? "h-full" : "hidden"}>
-                  <AccountSettingsPanel phone={slots[0]} addLog={addLog} onSlotChange={setOpenAccountSlot} />
+                  <AccountSettingsPanel ref={accountPanelRef} phone={slots[0]} addLog={addLog} onSlotChange={setOpenAccountSlot} />
                 </div>
                 {activeTab === "phonesettings" && (
                   <PhoneSettingsPanel serial={activeSerial} />
