@@ -6119,7 +6119,7 @@ export function MobilePage() {
             <FilledFarmIcon className="w-5 h-5" style={{ color: "#1AD2F2" }} />
             <h1 className="text-lg font-bold text-foreground">
               {targetSerial && slotNum !== null
-                ? `Phone Farm - Slot ${slotNum} - ${deviceFriendlyName ?? targetSerial}${openAccountSlot !== null ? ` - Account ${openAccountSlot + 1}` : ""}`
+                ? `Phone Farm - Slot ${openAccountSlot !== null ? openAccountSlot + 1 : slotNum} - ${deviceFriendlyName ?? targetSerial}`
                 : "Phone Farm"}
             </h1>
           </div>
