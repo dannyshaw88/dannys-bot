@@ -2590,9 +2590,6 @@ type CopySubSetting = { key: string; label: string; fields: string[] };
 type CopySection    = { key: string; label: string; sub: CopySubSetting[] };
 
 const COPY_SECTIONS: CopySection[] = [
-  { key: 'toolToggle',    label: 'Tool Toggle', sub: [
-    { key: 'enabled',           label: 'Enabled / Disabled',          fields: ['enabled'] },
-  ]},
   { key: 'runInterval',   label: 'Run Interval', sub: [
     { key: 'cycleInterval',     label: 'Run every X - Y minutes',      fields: ['cycleIntervalMin','cycleIntervalMax'] },
   ]},
