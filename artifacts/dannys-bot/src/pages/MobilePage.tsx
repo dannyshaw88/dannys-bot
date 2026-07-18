@@ -32,6 +32,7 @@ interface UsbPhone {
   state:           "device" | "unauthorized" | "offline" | string;
   model?:          string;
   manufacturer?:   string;
+  marketName?:     string;
   androidVersion?: string;
   product?:        string;
 }
@@ -4577,9 +4578,10 @@ function AccountSettingsPanel({ phone, addLog }: { phone: UsbPhone | null; addLo
     );
   }
 
-  const deviceName = phone.manufacturer
-    ? `${phone.manufacturer} ${phone.model ?? phone.serial}`
-    : (phone.model ?? phone.serial);
+  const deviceName = [
+    phone.manufacturer,
+    phone.marketName || phone.model,
+  ].filter(Boolean).join(" ") || phone.serial;
 
   return (
     <div className="h-full flex flex-col">
