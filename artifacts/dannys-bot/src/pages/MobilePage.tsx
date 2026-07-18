@@ -2595,13 +2595,11 @@ const COPY_SECTIONS: CopySection[] = [
   { key: 'runInterval',   label: 'Run Interval', sub: [
     { key: 'cycleInterval',     label: 'Run every X – Y minutes',      fields: ['cycleIntervalMin','cycleIntervalMax'] },
   ]},
-  { key: 'actionDelay',   label: 'Action Delay', sub: [
-    { key: 'actionDelay',       label: 'Delay between actions (s)',     fields: ['actionDelayMin','actionDelayMax'] },
-  ]},
   { key: 'feed',          label: 'View Feed', sub: [
     { key: 'feedEnabled',       label: 'Enabled',                       fields: ['feedEnabled'] },
     { key: 'feedActivatePct',   label: 'Activate Percentage',           fields: ['feedActivatePctMin','feedActivatePctMax'] },
     { key: 'feedScroll',        label: 'Scroll amount',                 fields: ['feedScrollMin','feedScrollMax'] },
+    { key: 'actionDelay',       label: 'Delay between actions (s)',     fields: ['actionDelayMin','actionDelayMax'] },
     { key: 'feedLike',          label: 'Like %',                        fields: ['likePercentMin','likePercentMax'] },
     { key: 'feedShareFeed',     label: 'Share to Feed %',               fields: ['shareFeedPercentMin','shareFeedPercentMax'] },
     { key: 'feedShareDm',       label: 'Share via DM %',                fields: ['shareDmPercentMin','shareDmPercentMax'] },
