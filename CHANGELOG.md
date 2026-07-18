@@ -4,6 +4,70 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.22] — 2026-07-18
+
+### Feature — Multi-Device Support: Per-Model App-Close Gesture (Device Profile System)
+
+**Problem this solves:**
+
+The software was originally built around the Redmi 12, whose recents screen is a Xiaomi/HyperOS "floating windows" card carousel. Closing an app on that launcher requires dragging the card off the **left edge** of the screen. On other Redmi models — such as the Redmi A5 — the recents screen uses the standard Android layout, which dismisses apps by **swiping upward**. Running the left-drag gesture on the A5 did nothing, so Instagram was never actually closed between cycles; the app was simply left running in the background while the next cycle began from whatever screen it was already on.
+
+This affected any device that is not a Redmi 12 or exact firmware equivalent. The force-stop fallback caught it eventually, but that path is invisible to Instagram — it doesn't look like a real person putting the phone down, which is the whole point of the recents-gesture approach.
+
+**What was built:**
+
+A lightweight **device profile system** that maps `ro.product.model` (the hardware model string returned by `adb shell getprop`) to a small set of OEM-specific behavioural flags. Version 1.2.22 adds the first flag: `dismissDirection` — which direction to drag a card in the recents screen to dismiss it.
+
+**Known model table (in `androidManager.ts`):**
+
+| Device model | Dismiss direction |
+|---|---|
+| Redmi 12 | Swipe left (MIUI/HyperOS floating-window carousel) |
+| Redmi A5 | Swipe up (standard Android recents) |
+
+Any model not in the table defaults to `left` (Redmi 12 behaviour), preserving existing behaviour for devices already working correctly.
+
+**How the selection works at runtime:**
+
+1. Each device slot stores a `dismissDirection` setting: `auto`, `left`, or `up`. Default is `auto`.
+2. When `auto`, the server reads `ro.product.model` from the device at close time (one `adb shell getprop` call), looks it up in the model table, and uses the correct direction automatically — no manual config needed.
+3. When set to `left` or `up` explicitly, that override is used regardless of what the device reports — useful for new or unusual models before they're added to the table.
+
+**New UI control — "App close gesture" dropdown in STEP1:**
+
+A `<select>` dropdown has been added to the STEP1 card of each slot's Human Session Tool settings (to the right of the cycle-interval minute fields), with three options:
+- **Auto (detect by model)** — default; reads `ro.product.model` at runtime and looks it up
+- **Swipe left** — force MIUI floating-window carousel dismiss for this slot
+- **Swipe up** — force standard Android upward dismiss for this slot
+
+The setting is included in **Copy Settings** (under the Run Interval section) so you can configure one slot and copy it to all others at once.
+
+**Adding future devices:**
+
+One line in `DEVICE_PROFILES` in `androidManager.ts` covers every device of that model — no per-serial, per-account, or per-slot code changes required:
+
+```ts
+"Redmi Note 14": { dismissDirection: "left" },
+```
+
+**Scaling to hundreds of devices:**
+
+Two device models currently in use need two table entries total. Every Redmi 12 you ever add uses the same `left` entry; every Redmi A5 uses the same `up` entry. The table only grows when you discover a genuinely new dismiss behaviour — not when you add more devices of a model you already have.
+
+**What did NOT change:**
+
+- The recents overlay is opened the same way on all devices: `KEYCODE_APP_SWITCH` (keycode 187) — a hardware keycode that works regardless of where the physical button is on screen, so the bottom-left vs. bottom-right recents button position difference between models is already handled.
+- All Instagram automation logic (feed scroll, story viewing, follow, DM share, etc.) is completely unchanged — only the Android system-shell close step is affected.
+- The poll-for-pidof logic, labelled-card detection, MAX_BLIND_ATTEMPTS cap, and force-stop fallback all remain exactly as before. The only thing that changes is which direction the swipe gesture goes.
+
+**Affected files:**
+
+- `artifacts/api-server/src/mobile/androidManager.ts` — `DEVICE_PROFILES` lookup table, `getModelDismissDirection(model)` export, `getDeviceModel(serial)` helper, `closeInstagramViaRecents` signature updated to accept `dismissDirection: 'left' | 'up'`, upward-swipe code path added alongside existing left-drag path
+- `artifacts/api-server/src/routes/mobile.ts` — `AutomationSettings` type extended with `dismissDirection?: 'auto' | 'left' | 'up'`; field added to `automationSchema` (persistence), `automationCycleSchema` (execution), and both GET-handler defaults objects; `dismissDirection` destructured from parsed body; direction resolved at `closeInstagramViaRecents` call site (`auto` → model lookup, explicit → pass-through)
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — `AutomationSettingsData` interface, `AUTOMATION_DEFAULTS`, cycle-start fetch payload, `COPY_SECTIONS` Run Interval group, and `AutomationSettingsPanel` STEP1 card all updated with the new dropdown
+
+---
+
 ## [1.2.18] — 2026-07-18
 
 ### Feature — Shuffle Tool Order (Human Session Step 2)
