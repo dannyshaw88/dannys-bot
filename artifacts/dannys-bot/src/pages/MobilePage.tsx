@@ -4358,7 +4358,7 @@ function AutomationSettingsPanel({
 const ROW_H = 30; // px per dropdown row
 const MAX_VISIBLE_ROWS = 5;
 
-function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 190 }: { serial: string; slotIdx: number; width?: number }) {
+function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 171 }: { serial: string; slotIdx: number; width?: number }) {
   const lsKey = `mobile_ts_${serial}_${slotIdx}`;
   const [scoreId, setScoreId] = useState<string | null>(() => {
     try { return localStorage.getItem(lsKey) ?? null; } catch { return null; }
