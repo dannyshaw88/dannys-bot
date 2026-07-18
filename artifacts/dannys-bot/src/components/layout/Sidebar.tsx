@@ -124,6 +124,7 @@ export function Sidebar() {
     { name: "Dashboard",       shortLabel: "DASHBOARD",      path: "/dashboard",    icon: FilledDashboardIcon   },
     { name: "Phone Farm",      shortLabel: "PHONE FARM",     path: "/mobile",       icon: FilledFarmIcon        },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon    },
+    { name: "Settings",        shortLabel: "SETTINGS",       path: "/settings",     icon: FilledSettingsIcon    },
   ];
 
   return (
@@ -185,27 +186,6 @@ export function Sidebar() {
           {slot}
         </div>
       )}
-
-      {/* ── Settings — same Jarvee style ── */}
-      <div className="pb-2">
-        <button
-          onClick={() => setLocation("/settings")}
-          className={cn(
-            "flex flex-col items-center justify-center w-full py-[23.5px] gap-1 transition-all duration-200 rounded-none",
-            location === "/settings"
-              ? "bg-primary/10 text-primary"
-              : "text-muted-foreground hover:bg-accent hover:text-foreground"
-          )}
-        >
-          <FilledSettingsIcon
-            className={cn("w-[32px] h-[32px] shrink-0 transition-colors", location === "/settings" ? "text-primary" : "text-muted-foreground")}
-            style={{ color: BRAND }}
-          />
-          <span className="text-[9px] font-bold tracking-wide text-foreground">
-            SETTINGS
-          </span>
-        </button>
-      </div>
 
       {/* ── Status pill ── */}
       <div className="pb-4 border-t border-border/50 pt-3 flex justify-center">
