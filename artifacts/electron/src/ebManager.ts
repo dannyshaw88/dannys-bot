@@ -205,7 +205,7 @@ let _iconPath    = "";
 // ── Global IPC log forwarder ───────────────────────────────────────────────────
 // The Electron main process runs in a separate OS process from the API server.
 // Its console.log output goes to the Electron terminal, NOT to the server's log
-// file (equinox-debug.log) that the user reads for debugging.
+// file (aura-farming-debug.log) that the user reads for debugging.
 //
 // This function sends every important log line to /api/ipc-log on the API server
 // so it appears in the same pino log stream.  Fire-and-forget: failures are
@@ -3019,7 +3019,7 @@ export async function openEbWindow(opts: {
   // server's real IP on every request → accounts get flagged immediately.
   //
   // Results are stored in _ebIpAudits (queryable via GET /eb/ip-audits)
-  // AND logged to equinox-debug.log via _ipcLog so they appear immediately.
+  // AND logged to aura-farming-debug.log via _ipcLog so they appear immediately.
   _ebCrashLog(profileId, "STEP-8b: exit-IP audit start");
   {
     let _auditServerIp = "unknown";
@@ -3067,7 +3067,7 @@ export async function openEbWindow(opts: {
     _ebCrashLog(profileId, _auditLeaking
       ? `STEP-8b: ⚠ IP LEAK — exitIp=${_auditExitIp} === serverIp=${_auditServerIp}`
       : `STEP-8b: audit done — exitIp=${_auditExitIp} serverIp=${_auditServerIp} leak=false`);
-    _ipcLog(_auditMsg); // → equinox-debug.log via pino
+    _ipcLog(_auditMsg); // → aura-farming-debug.log via pino
 
     if (_auditLeaking) {
       console.error(
