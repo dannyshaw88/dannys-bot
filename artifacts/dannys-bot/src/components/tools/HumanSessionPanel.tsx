@@ -1274,35 +1274,36 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 </div>
               </div>
               {/* Sub-row — all 5 jitter action chances on one row */}
-              <div className={`flex items-center gap-2 flex-wrap transition-opacity ${!settings.humanSessionEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+              <div className={`flex items-center gap-1 transition-opacity ${!settings.humanSessionEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                 {([
                   { minKey: "notificationsRunChanceMin",    maxKey: "notificationsRunChanceMax",    label: "Notifs",    Icon: Bell,      color: "text-orange-500" },
                   { minKey: "ownProfileRunChanceMin",       maxKey: "ownProfileRunChanceMax",       label: "Profile",   Icon: User,      color: "text-indigo-500" },
                   { minKey: "settingsActivityRunChanceMin", maxKey: "settingsActivityRunChanceMax", label: "Settings",  Icon: Settings,  color: "text-gray-500"   },
                   { minKey: "viewActivityRunChanceMin",     maxKey: "viewActivityRunChanceMax",     label: "Activity",  Icon: Zap,       color: "text-yellow-500" },
                   { minKey: "viewSavedRunChanceMin",        maxKey: "viewSavedRunChanceMax",        label: "Saved",     Icon: Bookmark,  color: "text-pink-500"   },
-                ] as { minKey: string; maxKey: string; label: string; Icon: React.ElementType; color: string }[]).map(({ minKey, maxKey, label, Icon, color }, idx, arr) => (
-                  <div key={minKey} className="flex items-center gap-1 shrink-0">
-                    <Icon className={`w-3 h-3 shrink-0 ${color}`} />
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide whitespace-nowrap shrink-0">{label}</span>
-                    <div className="flex items-center gap-0.5">
-                      <div className="relative">
-                        <NumField min={0} max={100} className="w-12 h-6 text-xs pr-4 pl-1"
+                ] as { minKey: string; maxKey: string; label: string; Icon: React.ElementType; color: string }[]).map(({ minKey, maxKey, label, Icon, color }) => (
+                  <div key={minKey} className="flex-1 flex flex-col items-center gap-0.5">
+                    <div className="flex items-center gap-1">
+                      <Icon className={`w-3 h-3 shrink-0 ${color}`} />
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide whitespace-nowrap">{label}</span>
+                    </div>
+                    <div className="flex items-center gap-0.5 w-full">
+                      <div className="relative flex-1">
+                        <NumField min={0} max={100} className="w-full h-7 text-xs pr-4 pl-1"
                           value={(settings as any)[minKey] ?? 100}
                           onChange={v => setSettings({ ...settings, [minKey]: v } as any)}
                         />
                         <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground pointer-events-none">%</span>
                       </div>
-                      <span className="text-[10px] text-muted-foreground px-0.5">–</span>
-                      <div className="relative">
-                        <NumField min={0} max={100} className="w-12 h-6 text-xs pr-4 pl-1"
+                      <span className="text-[10px] text-muted-foreground">–</span>
+                      <div className="relative flex-1">
+                        <NumField min={0} max={100} className="w-full h-7 text-xs pr-4 pl-1"
                           value={(settings as any)[maxKey] ?? 100}
                           onChange={v => setSettings({ ...settings, [maxKey]: v } as any)}
                         />
                         <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground pointer-events-none">%</span>
                       </div>
                     </div>
-                    {idx < arr.length - 1 && <span className="text-border/60 text-xs mx-0.5 shrink-0">|</span>}
                   </div>
                 ))}
               </div>
