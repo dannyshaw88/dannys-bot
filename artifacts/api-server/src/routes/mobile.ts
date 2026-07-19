@@ -4229,9 +4229,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
         scrapeRound++;
         onLog?.(`Follow: pool exhausted (${followed}/${targetCount} followed) — re-scraping from HikerAPI (round ${scrapeRound}/${MAX_SCRAPE_ROUNDS})…`);
+        // Abort check before any network calls — if the toggle was switched off
+        // while the previous candidates were running, stop immediately instead
+        // of firing a whole new batch of HikerAPI requests.
+        await sleepOrAbort(serial, 0);
         const newRaw: string[] = [];
         const shuffledSrcs = [...sources].sort(() => Math.random() - 0.5);
         for (const src of shuffledSrcs) {
+          // Check abort between every source so a long scrape round doesn't
+          // ignore a stop-signal for minutes.
+          await sleepOrAbort(serial, 0);
           if (newRaw.length >= targetCount * 3) break;
           const srcLabel = src.type === "hashtag"
             ? `#${src.value.replace(/^#/, "")}`
@@ -4264,6 +4271,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               }
             }
           } catch (e: any) {
+            // Must re-throw cycle-aborted — the generic catch here would
+            // otherwise swallow it and keep looping through more sources.
+            if (e?.message === "cycle-aborted") throw e;
             onLog?.(`Follow: HikerAPI re-scrape error for "${src.value}": ${e?.message}`);
           }
         }
