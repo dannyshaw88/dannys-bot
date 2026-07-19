@@ -814,12 +814,6 @@ export async function registerInstagramRoutes(
   app.get(api.profiles.list.path, async (req, res) => {
     try {
       const all = await storage.getProfiles();
-      console.log(`[DEBUG profiles/list] storage.getProfiles() returned ${all.length} rows`);
-      if (all.length > 0) {
-        const sample = all[0] as any;
-        console.log(`[DEBUG profiles/list] sample[0] keys: ${Object.keys(sample).join(", ")}`);
-        console.log(`[DEBUG profiles/list] sample[0] isTemplate=${JSON.stringify(sample.isTemplate)} creatorMode=${JSON.stringify(sample.creatorMode)} accountStatus=${JSON.stringify(sample.accountStatus)}`);
-      }
       const cm = req.query.creatorMode;
       let filtered: typeof all;
       // Always exclude isTemplate accounts — they are TrustScore skeleton profiles
@@ -829,7 +823,6 @@ export async function registerInstagramRoutes(
       if (cm === "1") filtered = nonTemplate.filter((p: any) => p.creatorMode);
       else if (cm === "0") filtered = nonTemplate.filter((p: any) => !p.creatorMode);
       else filtered = nonTemplate;
-      console.log(`[DEBUG profiles/list] after creatorMode(${cm}) filter: ${filtered.length} rows`);
       // Attach live EB fingerprint stats (battery %, connection Mbps) for any
       // profile that currently has an open browser session.  Null when the EB
       // is not running.  The frontend polls every 5 s so the values update live.
@@ -837,10 +830,8 @@ export async function registerInstagramRoutes(
         ...p,
         ebLiveStats: p.userAgentEmbedded ? getEbLiveStats(p.id, p.userAgentEmbedded) : null,
       }));
-      console.log(`[DEBUG profiles/list] sending ${enriched.length} enriched profiles`);
       res.json(enriched);
     } catch (err: any) {
-      console.error(`[DEBUG profiles/list] ERROR: ${err?.message ?? err}`, err?.stack ?? "");
       res.status(500).json({ error: String(err?.message ?? err) });
     }
   });

@@ -2,7 +2,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { BanAnalyticsPage } from "@/pages/BanAnalyticsPage";
 import { useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
-import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useQueryClient, useQuery, useQueries } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -424,12 +424,28 @@ export function BulkImportTabContent() {
   const createProfileMutation = useCreateProfile();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const { data: phonesData } = useQuery<{ phones: Array<{ serial: string; manufacturer?: string; model?: string }> }>({
+  const { data: phonesData } = useQuery<{ phones: Array<{ serial: string; manufacturer?: string; model?: string; marketName?: string }> }>({
     queryKey: ["/api/mobile/usb-phones"],
     queryFn: () => fetch("/api/mobile/usb-phones").then(r => r.json()),
-    refetchInterval: 10_000,
+    refetchInterval: 15_000,
   });
   const phones = phonesData?.phones ?? [];
+
+  // Slot counts per device — one query per connected phone, refreshed every 15 s.
+  const slotCountResults = useQueries({
+    queries: phones.map(p => ({
+      queryKey: ["/api/mobile/devices", p.serial, "account"],
+      queryFn: () => fetch(`/api/mobile/devices/${encodeURIComponent(p.serial)}/account`).then(r => r.ok ? r.json() : { slots: [] }),
+      refetchInterval: 15_000,
+      staleTime: 10_000,
+    })),
+  });
+  const slotCountBySerial: Record<string, number | null> = Object.fromEntries(
+    phones.map((p, i) => {
+      const data = slotCountResults[i]?.data as { slots?: unknown[] } | undefined;
+      return [p.serial, Array.isArray(data?.slots) ? data.slots.length : null];
+    })
+  );
 
   const handleParse = useCallback(() => {
     if (!rawText.trim()) { toast({ title: "Nothing to parse", description: "Paste account data first.", variant: "destructive" }); return; }
@@ -559,7 +575,7 @@ export function BulkImportTabContent() {
 
   const selectedPhone = phones.find(p => p.serial === selectedSerial);
   const deviceLabel = selectedPhone
-    ? (selectedPhone.manufacturer ? `${selectedPhone.manufacturer} ${selectedPhone.model ?? selectedPhone.serial}` : selectedPhone.serial)
+    ? (selectedPhone.marketName ?? (selectedPhone.manufacturer ? `${selectedPhone.manufacturer} ${selectedPhone.model ?? selectedPhone.serial}` : selectedPhone.serial))
     : null;
 
   return (
@@ -585,11 +601,14 @@ export function BulkImportTabContent() {
             className="flex-1 text-sm bg-background border border-border rounded-md px-3 py-1.5 outline-none focus:ring-1 focus:ring-primary"
           >
             <option value="">— No device (add to Profiles) —</option>
-            {phones.map(p => (
-              <option key={p.serial} value={p.serial}>
-                {p.manufacturer ? `${p.manufacturer} ${p.model ?? p.serial}` : p.serial}
-              </option>
-            ))}
+            {phones.map(p => {
+              const name = p.marketName ?? (p.manufacturer ? `${p.manufacturer} ${p.model ?? p.serial}` : p.serial);
+              const slots = slotCountBySerial[p.serial];
+              const slotSuffix = slots != null && slots > 0 ? ` - ${slots} slot${slots !== 1 ? 's' : ''} assigned` : '';
+              return (
+                <option key={p.serial} value={p.serial}>{name}{slotSuffix}</option>
+              );
+            })}
           </select>
         )}
         {selectedSerial && (

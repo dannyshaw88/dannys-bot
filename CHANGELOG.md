@@ -4,6 +4,50 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.38] — 2026-07-19
+
+### Fix — Account switch failure now aborts the automation cycle cleanly
+
+When the account switcher cannot locate the target Instagram account (e.g. the profile tab is not found in the UI tree), the automation cycle **no longer continues with whichever account happens to be active**. Instead it:
+
+1. Logs `✗ Account switch to @username failed — skipping all tools and going straight to cleanup`
+2. Sets an `accountSwitchFailed` flag that gates the entire tool dispatcher (Feed → Stories → Reels → Follow → Post → Jitter)
+3. Falls straight through to step 5: close Instagram via Recents → airplane mode → lock
+
+This prevents accidental actions being performed on the wrong account after a failed switch.
+
+---
+
+### Fix — "Hide" post options sheet no longer causes phantom taps during feed scroll
+
+The feed scroll loop previously did two separate UI dumps per iteration: one for the comments sheet check and another inside `dismissInstagramInterstitials`. A swipe that accidentally opened the three-dot post options sheet (showing a **"Hide"** option) was being seen by `dismissInstagramInterstitials` as a dismissible dialog, causing an unintended tap.
+
+Both checks are now combined into **one UI dump** that branches:
+
+- **Comments sheet detected** → press Back, recover
+- **"Hide" post options sheet detected** → press Back, skip interstitial scan entirely
+- **Neither** → run `dismissInstagramInterstitials` with the already-taken dump (no second round-trip)
+
+The debug log now also shows what label was tapped when a mid-scroll popup is dismissed.
+
+---
+
+### Fix — Accounts imported via the Import tool start with automation toggle disabled
+
+Accounts added through **Settings → Import** (the Bulk Account Import tool, profile-creation path) now receive `accountStatus: "stopped"` so their toggle on the Accounts page is **off** by default. Previously they inherited `"pending"` and were immediately queued as active.
+
+---
+
+### Change — Device dropdown shows commercial model name and assigned slot count
+
+The device selector in the Import tool now displays:
+
+- **Commercial model name** (`marketName` from `ro.product.marketname` / `ro.product.vendor.marketname`) rather than the raw ADB model string — e.g. "Redmi 12 5G" instead of "2312DRA50G"
+- Falls back through `manufacturer + model → serial` if no market name is available
+- **Slot count suffix** appended after the model name: `- N slots assigned` (refreshes every 15 s). Hidden when a device has no slots yet.
+
+---
+
 ## [1.2.37] — 2026-07-19
 
 ### Feature — Copy Settings: all unticked by default + session memory

@@ -1691,28 +1691,37 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await sleepOrAbort(serial, 180);
       await verifyStillInInstagram();
 
-      // Belt-and-suspenders: detect if the comments sheet accidentally opened
-      // despite the y1 coordinate fix. Comments sheet is identifiable by the
-      // "Add a comment…" / "Add a comment" placeholder EditText in the
-      // accessibility tree. If found, press Back to close it and wait for the
-      // feed to reappear before continuing.
+      // Single UI dump used for all mid-scroll sheet checks — avoids two
+      // sequential dumps (comments check + interstitial scan) that together
+      // could eat 5-9 s and leave an unexpected sheet open long enough to
+      // auto-dismiss before we react.
       {
         const xml = await android.dumpUi(serial).catch(() => "");
         if (/Add a comment|add a comment|Comments/i.test(xml) && /EditText|class="android\.widget\.EditText"/.test(xml)) {
+          // Comments sheet accidentally opened by the swipe — press Back.
           logger.warn({ serial }, "[check-feed] comments sheet opened by scroll — pressing Back to recover");
           onLog?.(`Scroll ${i + 1}/${count}: comments accidentally opened — recovering with Back`);
           await android.pressBack(serial);
           await sleepOrAbort(serial, 600);
+        } else if (xml.includes("Hide")) {
+          // Post options sheet (⋮ three-dot menu) accidentally opened — press Back.
+          // Do NOT run dismissInstagramInterstitials here; it would see stale
+          // dismiss-label nodes while the sheet is still open and tap something
+          // unintended.
+          logger.warn({ serial }, "[check-feed] post options sheet ('Hide') detected mid-scroll — pressing Back to recover");
+          onLog?.(`Scroll ${i + 1}/${count}: post options sheet detected — recovering with Back`);
+          await android.pressBack(serial);
+          await sleepOrAbort(serial, 400);
+        } else {
+          // No unexpected sheet — run interstitial check with the already-taken
+          // dump so we don't do a second round-trip to the device.
+          const midPopup = await android.dismissInstagramInterstitials(serial, xml).catch(() => null);
+          if (midPopup) {
+            logger.info({ serial, dismissed: midPopup }, "[check-feed] dismissed mid-scroll popup");
+            onLog?.(`Scroll ${i + 1}/${count}: dismissed mid-scroll popup (${midPopup})`);
+            await sleepOrAbort(serial, 400);
+          }
         }
-      }
-
-      // Dismiss any interstitial popup that appeared mid-scroll (e.g.
-      // "Your notifications are off → Not now", permission dialogs).
-      // This is fast when there's nothing to dismiss (one ui-dump, no match).
-      const midPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
-      if (midPopup) {
-        logger.info({ serial, dismissed: midPopup }, "[check-feed] dismissed mid-scroll popup");
-        await sleepOrAbort(serial, 400);
       }
 
       // Roll all three action chances up front (independent draws, same
@@ -4636,6 +4645,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // (screen unchanged) so the switcher can reuse the dump for its pre-check
       // and profile-tab lookup without doing two more sequential dumps.
       const switchPreloadXml = (!adsChoice.dismissed && !launchPopup) ? launchXml : undefined;
+      let accountSwitchFailed = false;
       if (slotUsername) {
         const lastUsername = automationLastActiveUsername.get(serial);
         if (lastUsername === slotUsername) {
@@ -4657,13 +4667,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               await sleepOrAbort(serial, 500);
             }
           } else {
-            steps.push("account-switch(not-found — proceeding with current account)");
-            // Don't update lastUsername — we don't know which account is active.
+            tLog(`✗ Account switch to @${slotUsername} failed — skipping all tools and going straight to cleanup`);
+            steps.push("account-switch(failed — aborting tool dispatch)");
+            accountSwitchFailed = true;
           }
         }
       }
 
       // ── Step 2: Shuffleable tool dispatcher ──────────────────────────────
+      // Skipped entirely when accountSwitchFailed — falls straight to step 5.
+      if (!accountSwitchFailed) {
       // When shuffleToolOrder is on the six tools are Fisher-Yates shuffled
       // into a random order before each cycle. When off they run in the
       // default sequence: Feed → Stories → Reels → Follow → Post → Jitter.
@@ -4973,6 +4986,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
         _toolsRan++;
       } // end tool dispatch loop
+      } // end if (!accountSwitchFailed) — failed switch aborts all tools
 
       // 5. Close Instagram completely — recents switcher + swipe away, not a
       // force-stop, so the device behaves like a person put it down.
