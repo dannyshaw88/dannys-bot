@@ -426,8 +426,6 @@ function PhoneShell({
       <rect x="216" y="148" width="6" height="42" rx="3" fill="#2a2a30" stroke="#3a3a3c" strokeWidth="0.5"/>
       <rect x="-2" y="138" width="6" height="32" rx="3" fill="#2a2a30" stroke="#3a3a3c" strokeWidth="0.5"/>
       <rect x="-2" y="178" width="6" height="32" rx="3" fill="#2a2a30" stroke="#3a3a3c" strokeWidth="0.5"/>
-      {/* Cyan accent */}
-      <rect x="90" y="272" width="40" height="2" rx="1" fill="#1AD2F2" opacity={online ? "0.7" : "0.2"}/>
     </svg>
   );
 }
