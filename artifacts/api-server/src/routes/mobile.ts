@@ -4629,7 +4629,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         toolId: 0,
         action: "tool_start",
         targetUsername: slotUsername || "",
-        detail: "Phone farm cycle starting",
+        detail: "Cycle-Starting-Farming-Aura",
         result: "ok",
         sourceValue: `${serial}:${slotIdx}`,
         sourceType: "phone",
