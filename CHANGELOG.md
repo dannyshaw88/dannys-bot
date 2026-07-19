@@ -4,6 +4,31 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.28] — 2026-07-19
+
+### Fix — Swipe-up recents dismiss now travels far enough on tall screens (Redmi A5)
+
+**Problem:** The Redmi A5 has a 1650 px tall display. The old formula
+started the dismiss drag at the detected card centre (`card.y ≈ 769`)
+and aimed for `max(h×0.02, card.y − h×0.6)`. On a 1650 px screen
+`h×0.6 = 990`, so `card.y − 990 = −221` went negative and clamped to
+`h×0.02 = 33`. This made the swipe travel only 736 px (45 % of screen
+height) — not enough for MIUI's recents to register it as a dismiss,
+so all 5 attempts failed and every cycle fell back to `am force-stop`.
+
+**Fix (`closeInstagramViaRecents`):**
+
+- When `dismissDirection === "up"` and a card label is found, the drag
+  now **starts 15 % of screen height below the card centre**
+  (`min(card.y + h×0.15, h×0.80)`) and ends at `h×0.02`. On the
+  Redmi A5 this gives startY ≈ 1017 → travel ≈ 984 px (60 % screen) —
+  well above MIUI's dismiss threshold.
+
+- The no-label centred fallback now starts at `h×0.65` instead of
+  `h×0.45`, giving ~63 % travel on any screen size.
+
+---
+
 ## [1.2.27] — 2026-07-19
 
 ### Fix — Shuffle tool order now only shows tools that will actually run

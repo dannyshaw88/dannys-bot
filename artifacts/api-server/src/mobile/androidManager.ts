@@ -1136,9 +1136,21 @@ export async function closeInstagramViaRecents(serial: string, dismissDirection:
       if (dismissDirection === "up") {
         // Standard Android upward-swipe dismiss (e.g. Redmi A5 / stock
         // Android recents). Drag the card off the TOP of the screen.
-        const dragToY = Math.max(Math.round(h * 0.02), card.y - Math.round(h * 0.6));
-        await swipe(serial, card.x, card.y, card.x, dragToY, 400);
-        method = `attempt ${attempt}: swiped card at (${card.x},${card.y}) up to (${card.x},${dragToY})`;
+        //
+        // On tall screens (Redmi A5: h=1650) the old formula
+        //   dragToY = max(h*0.02, card.y − h*0.6)
+        // could produce card.y − h*0.6 < 0, clamping dragToY to h*0.02=33
+        // while the swipe STARTED at card.y ≈ 769. That gave only 45%
+        // screen travel — not enough for MIUI to register a dismiss.
+        //
+        // Fix: start the drag below the card centre (15% of screen height
+        // below, capped at 80% screen height) so the gesture always travels
+        // at least 78% of the screen even when the card is detected in the
+        // upper half. End point is always the very top of the visible area.
+        const startY  = Math.min(Math.round(card.y + h * 0.15), Math.round(h * 0.80));
+        const dragToY = Math.round(h * 0.02);
+        await swipe(serial, card.x, startY, card.x, dragToY, 400);
+        method = `attempt ${attempt}: swiped card at (${card.x},${card.y}) from start (${card.x},${startY}) up to (${card.x},${dragToY})`;
       } else {
         // Drag fully off the left edge — a short flick isn't enough to
         // register as a dismiss-drag on this launcher; use a slower,
@@ -1153,8 +1165,11 @@ export async function closeInstagramViaRecents(serial: string, dismissDirection:
       const cardX = Math.round(w * 0.5);
       const cardY = Math.round(h * 0.45);
       if (dismissDirection === "up") {
-        await swipe(serial, cardX, cardY, cardX, Math.round(h * 0.02), 400);
-        method = `attempt ${attempt}: no label found — fell back to centred swipe-up (${cardX},${cardY})`;
+        // Start at 65% screen height (not the mid-point 45%) so the drag
+        // always travels ~63% of the screen regardless of screen size.
+        const noLabelStartY = Math.round(h * 0.65);
+        await swipe(serial, cardX, noLabelStartY, cardX, Math.round(h * 0.02), 400);
+        method = `attempt ${attempt}: no label found — fell back to swipe-up from (${cardX},${noLabelStartY})`;
       } else {
         await swipe(serial, cardX, cardY, Math.round(w * 0.05), cardY, 400);
         method = `attempt ${attempt}: no label found in recents tree — fell back to centred drag-left (${cardX},${cardY})`;
