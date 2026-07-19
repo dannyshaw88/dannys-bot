@@ -90,7 +90,17 @@ function formatActionPart(action: string, target: string, detail: string): strin
   }
 }
 
-function buildLabel(latest: RecentActivity, profiles: { id: number; accountLabel?: string | null; username: string }[] | undefined): string {
+function buildLabel(
+  latest: RecentActivity,
+  profiles: { id: number; accountLabel?: string | null; username: string }[] | undefined,
+): string {
+  // Phone farm event — profileId may be 0 if the slot has no linked EB profile
+  if (latest.sourceType === "phone") {
+    const account = latest.targetUsername ? `@${latest.targetUsername}` : "Phone Farm";
+    const actionPart = formatActionPart(latest.action, latest.targetUsername ? `@${latest.targetUsername}` : "", latest.detail);
+    return `${account} | Phone Farm: ${actionPart}`;
+  }
+  // Regular IG-profile event
   const profile = profiles?.find(p => p.id === latest.profileId);
   const accountName = profile?.accountLabel || profile?.username || `#${latest.profileId}`;
   const toolLabel = getToolLabel(latest.action, latest.detail);
@@ -108,14 +118,13 @@ export function LiveActivityTicker() {
     refetchInterval: 2000,
   });
 
-  const isReady = activities !== undefined;
   const latest = activities?.[0];
-  const hasRealActivity = latest && latest.profileId !== 0;
-  const isStartupEvent = latest?.profileId === 0 && latest?.action === "server_started";
 
-  const label = hasRealActivity
-    ? buildLabel(latest!, profiles)
-    : (isStartupEvent ? latest!.detail : null);
+  // Real activity = anything that isn't the server-startup sentinel
+  const isStartupSentinel = latest?.profileId === 0 && latest?.action === "server_started";
+  const hasRealActivity = !!latest && !isStartupSentinel;
+
+  const label = hasRealActivity ? buildLabel(latest!, profiles) : null;
 
   const ERROR_ACTIONS = new Set([
     "follow_blocked",
@@ -133,7 +142,7 @@ export function LiveActivityTicker() {
     <div className="border-b border-border/50 bg-muted/30 pl-6 pr-8 py-1.5 flex items-center justify-start gap-2 w-full overflow-hidden shrink-0">
       <Activity className={`w-3 h-3 shrink-0 ${isError ? "text-red-500" : "text-primary"}`} />
       <span className={`text-xs overflow-hidden min-w-0 truncate ${isError ? "text-red-500" : "text-muted-foreground"}`}>
-        {label || (isReady ? "Aura Farming started — no recent activity" : "Loading…")}
+        {label ?? "Aura Farming started — no recent activity"}
       </span>
     </div>
   );
