@@ -4,6 +4,32 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.43] — 2026-07-19
+
+### Feature — Phone Farm device card customisation (wallpaper + text layers)
+
+Each device card on the Phone Farm grid can now be individually personalised without leaving the grid view.
+
+**How to use:**
+- Hover over any device card — a **palette icon (🎨)** appears in the top-left corner alongside the existing trash/remove button.
+- Click the palette icon to open the **Customise** dialog for that device.
+
+**Wallpaper tab:**
+- 12 built-in portrait wallpapers to choose from: Galaxy, Abstract, Forest, Ocean, Mountains, City, Purple, Minimal, Blossom, Aurora, Neon, Water.
+- Select **None** to remove any wallpaper and return to the default black phone shell.
+- The selected wallpaper is immediately visible on the card's phone screen area in the grid.
+
+**Text Layers tab:**
+- Add as many text layers as you like on top of the wallpaper.
+- Each layer has individually configurable: text content, font (Inter, Oswald, Bebas Neue, Playfair Display, Pacifico, Mono, Impact, Serif), font size (8–72 px slider), colour picker, Bold / Italic / Shadow toggles, and X / Y position sliders (0–100%).
+- A live mini-preview inside the editor shows exactly how the text will look.
+- Text layers are stacked over the wallpaper on the card face in the grid.
+
+**Persistence:**
+- All customisations are saved to `localStorage` under the `slot-customizations` key — the same key used by the per-device control page — so they survive page refreshes and are consistent between the grid view and the individual device view.
+
+---
+
 ## [1.2.42] — 2026-07-19
 
 ### Improve — Debugging Log redesigned as a 3-column table (Timestamp | Duration | Message)
