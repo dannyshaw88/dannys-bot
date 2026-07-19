@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { TrustScoreBadge, getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
+import { DashboardSlotTrustScoreBadge } from "@/components/DashboardTrustScoreBadge";
 import { format } from "date-fns";
 import { type Profile } from "@shared/schema";
 
@@ -11985,7 +11986,7 @@ export function Dashboard() {
                       const getCell = (col: keyof typeof DEFAULT_COL_WIDTHS) => {
                         if (col === "device_name") { const serial = item.sourceType === "phone" && item.sourceValue ? item.sourceValue.split(":")[0] : null; const dName = serial ? (deviceNameMap.get(serial) ?? serial) : "—"; return <td key={col} className="px-3 py-1.5 text-center"><span className="text-xs text-foreground">{dName}</span></td>; }
                         if (col === "account_slot") return <td key={col} className="px-3 py-1.5 text-center"><span className="text-xs text-foreground">{item.sourceType === "phone" && item.sourceValue?.includes(":") ? `Slot ${Number(item.sourceValue.split(":")[1]) + 1}` : "—"}</span></td>;
-                        if (col === "trustscore") { const tsProfileId = item.profileId || (item.targetUsername ? (profiles?.find(p => p.username === item.targetUsername)?.id ?? 0) : 0); return <td key={col} className="px-3 py-1.5"><div className="flex justify-center">{tsProfileId ? <TrustScoreBadge profileId={tsProfileId} /> : <span className="text-muted-foreground text-xs">—</span>}</div></td>; }
+                        if (col === "trustscore") { if (item.sourceType === "phone" && item.sourceValue?.includes(":")) { const [phSerial, phSlotStr] = item.sourceValue.split(":"); return <td key={col} className="px-3 py-1.5"><div className="flex justify-center"><DashboardSlotTrustScoreBadge serial={phSerial} slotIdx={parseInt(phSlotStr, 10)} /></div></td>; } const tsProfileId = item.profileId || (item.targetUsername ? (profiles?.find(p => p.username === item.targetUsername)?.id ?? 0) : 0); return <td key={col} className="px-3 py-1.5"><div className="flex justify-center">{tsProfileId ? <TrustScoreBadge profileId={tsProfileId} /> : <span className="text-muted-foreground text-xs">—</span>}</div></td>; }
                         if (item.kind === "import") {
                           const imp = item.importData!;
                           if (col === "account") return <td key={col} className="px-3 py-3 font-medium truncate"><span className="flex items-center gap-1.5 text-foreground min-w-0"><Upload className="w-3.5 h-3.5 text-blue-500 shrink-0" /><span className="truncate text-xs font-semibold">Import</span></span></td>;
