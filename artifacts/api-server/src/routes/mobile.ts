@@ -3976,7 +3976,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const candidateSource = new Map<string, string>();
     const candidates: string[] = [];
 
-    for (const src of sources) {
+    // Shuffle sources before iterating so the loop (which breaks as soon as
+    // enough candidates are collected) starts from a different random source
+    // each cycle rather than always position 0 (#bodybuilding in this case).
+    // Without the shuffle, targetCount×3 candidates are found immediately from
+    // the first source, the break fires, and the rest of the list is never
+    // reached.
+    const shuffledSources = [...sources].sort(() => Math.random() - 0.5);
+
+    for (const src of shuffledSources) {
       if (candidates.length >= targetCount * 3) break;
       const sourceLabel = src.type === "hashtag"
         ? `#${src.value.replace(/^#/, "")}`

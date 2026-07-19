@@ -4,6 +4,37 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.32] — 2026-07-19
+
+### Fix — Follow tool always used the first source (#bodybuilding) instead of picking randomly
+
+**Problem:** With 1 563 hashtag sources configured, the Follow tool picked
+`#bodybuilding` (source index 0) on every single cycle and never used any other
+source. The debug log showed:
+
+```
+Follow: targeting 1 users from 1563 source(s)
+Follow: #bodybuilding → 26 users
+Follow: following 1 unique users
+```
+
+**Root cause:** The candidate-collection loop iterates through sources in order
+and breaks as soon as `candidates.length >= targetCount × 3`. With
+"Users to follow per operation" set to 1–1, `targetCount = 1`, so the break
+threshold is 3. The very first source (`#bodybuilding`) returns 50 users on the
+first HikerAPI call — `candidates.length` jumps to 50, which is ≥ 3, and the
+loop exits immediately. Sources at positions 1–1562 are never reached.
+
+**Fix (`routes/mobile.ts` — `runFollowUsers`):**
+A shallow copy of the sources array is Fisher-Yates shuffled with
+`[...sources].sort(() => Math.random() - 0.5)` before the loop runs.
+On each cycle the loop now starts from a different random source, so the early-
+break behaviour draws from a uniformly random position in the list each time
+rather than always position 0. With 1 563 sources the effective coverage across
+cycles is now the full list.
+
+---
+
 ## [1.2.31] — 2026-07-19
 
 ### Fix — Redmi A5 swipe-up dismiss now uses a fast flick (150 ms)
