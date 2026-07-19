@@ -69,21 +69,6 @@ const MODEL_FRIENDLY_NAME: Record<string, string> = {
   "220333QAG":  "Redmi 10C",    "21121119SR": "Redmi 10",
 };
 
-// ─── Device image mapping ─────────────────────────────────────────────────────
-// Maps resolved display-name substrings (lowercase) to a public image path.
-// Add new entries here as more device photos are added to public/phones/.
-const DEVICE_IMAGE_RULES: Array<{ match: string; src: string }> = [
-  { match: "redmi 12",  src: "/phones/redmi-12.png"  }, // covers "Redmi 12 5G", "Redmi Note 12", etc.
-  { match: "redmi a5",  src: "/phones/redmi-a5.png"  },
-];
-
-function getDeviceImage(device: FarmDevice, phone?: UsbPhone): string | null {
-  const name = resolveDisplayName(device, phone).toLowerCase();
-  for (const rule of DEVICE_IMAGE_RULES) {
-    if (name.includes(rule.match)) return rule.src;
-  }
-  return null;
-}
 
 function resolveDisplayName(device: FarmDevice, phone?: UsbPhone): string {
   // Live ADB marketName is most accurate — prefer it over any cached/lookup value.
@@ -355,9 +340,15 @@ function PhoneFarmIcon({ className, style }: { className?: string; style?: React
 }
 
 /** Generic phone silhouette — brand-neutral */
-function PhoneShell({ className, online, active }: { className?: string; online?: boolean; active?: boolean }) {
-  const glowId = online ? "glow-on" : "glow-off";
-  const statusColor = active ? "#22c55e" : "#60a5fa";
+function PhoneShell({
+  className, online, active, wallpaperUrl, texts, uid = 'default',
+}: {
+  className?: string; online?: boolean; active?: boolean;
+  wallpaperUrl?: string | null; texts?: TextLayer[]; uid?: string;
+}) {
+  const glowId   = `glow-${uid}`;
+  const sheenId  = `sheen-${uid}`;
+  const clipId   = `screen-clip-${uid}`;
   return (
     <svg
       viewBox="0 0 220 440"
@@ -366,11 +357,7 @@ function PhoneShell({ className, online, active }: { className?: string; online?
       fill="none"
     >
       <defs>
-        <linearGradient id="wallpaper" x1="12" y1="14" x2="208" y2="426" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#0f1824"/>
-          <stop offset="100%" stopColor="#071218"/>
-        </linearGradient>
-        <linearGradient id="sheen" x1="12" y1="14" x2="208" y2="134" gradientUnits="userSpaceOnUse">
+        <linearGradient id={sheenId} x1="12" y1="14" x2="208" y2="134" gradientUnits="userSpaceOnUse">
           <stop offset="0%" stopColor="#ffffff"/>
           <stop offset="100%" stopColor="#ffffff" stopOpacity="0"/>
         </linearGradient>
@@ -378,14 +365,52 @@ function PhoneShell({ className, online, active }: { className?: string; online?
           <stop offset="0%" stopColor={online ? "#1AD2F2" : "#444"} stopOpacity={online ? "0.15" : "0.06"}/>
           <stop offset="100%" stopColor={online ? "#1AD2F2" : "#444"} stopOpacity="0"/>
         </radialGradient>
+        {/* Clip path matches the screen rect exactly */}
+        <clipPath id={clipId}>
+          <rect x="12" y="14" width="196" height="412" rx="26"/>
+        </clipPath>
       </defs>
+
       {/* Body */}
       <rect x="2" y="2" width="216" height="436" rx="34" fill="#1c1c1e" stroke="#3a3a3c" strokeWidth="2"/>
       <rect x="8" y="8" width="204" height="424" rx="29" fill="#111113" stroke="#2c2c2e" strokeWidth="1"/>
-      {/* Screen — always black */}
+      {/* Screen background */}
       <rect x="12" y="14" width="196" height="412" rx="26" fill="#050508"/>
-      {/* Sheen / glass reflection */}
-      <rect x="12" y="14" width="196" height="120" rx="26" fill="url(#sheen)" opacity="0.05"/>
+
+      {/* Wallpaper — rendered inside the screen rect, clipped to rounded corners */}
+      {wallpaperUrl && (
+        <image
+          href={wallpaperUrl}
+          x="12" y="14" width="196" height="412"
+          preserveAspectRatio="xMidYMid slice"
+          clipPath={`url(#${clipId})`}
+        />
+      )}
+
+      {/* Text layers — rendered over wallpaper, clipped to screen */}
+      {texts?.map(layer => {
+        const tx = 12 + (layer.x / 100) * 196;
+        const ty = 14 + (layer.y / 100) * 412;
+        const font = SLOT_FONTS.find(f => f.id === layer.font);
+        return (
+          <text
+            key={layer.id}
+            x={tx} y={ty}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            clipPath={`url(#${clipId})`}
+            fontFamily={font?.family}
+            fontSize={layer.size}
+            fill={layer.color}
+            fontWeight={layer.bold ? 'bold' : 'normal'}
+            fontStyle={layer.italic ? 'italic' : 'normal'}
+            style={layer.shadow ? { filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.9))' } : undefined}
+          >{layer.text}</text>
+        );
+      })}
+
+      {/* Sheen / glass reflection over wallpaper */}
+      <rect x="12" y="14" width="196" height="120" rx="26" fill={`url(#${sheenId})`} opacity="0.05"/>
       {/* Glow */}
       <ellipse cx="110" cy="220" rx="90" ry="130" fill={`url(#${glowId})`}/>
 
@@ -407,38 +432,6 @@ function PhoneShell({ className, online, active }: { className?: string; online?
   );
 }
 
-/** Shows a device photo when available, falls back to the generic SVG shell. */
-function PhoneVisual({
-  device, phone, className, online, active,
-}: {
-  device: FarmDevice; phone?: UsbPhone;
-  className?: string; online?: boolean; active?: boolean;
-}) {
-  const imgSrc = getDeviceImage(device, phone);
-  if (imgSrc) {
-    return (
-      <div
-        className={`relative flex items-end justify-center ${className ?? ""}`}
-        style={{
-          height: "100%",
-          filter: online
-            ? (active
-                ? "drop-shadow(0 0 10px rgba(34,197,94,0.45))"
-                : "drop-shadow(0 0 8px rgba(26,210,242,0.30))")
-            : "drop-shadow(0 2px 6px rgba(0,0,0,0.25))",
-        }}
-      >
-        <img
-          src={imgSrc}
-          alt="Device"
-          draggable={false}
-          style={{ width: "auto", height: "100%", objectFit: "contain" }}
-        />
-      </div>
-    );
-  }
-  return <PhoneShell className={className} online={online} active={active} />;
-}
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
 
@@ -665,64 +658,15 @@ function DeviceCard({
         onClick={onClick}
         className="flex-1 flex flex-col items-center gap-1.5 py-2 px-2 rounded-2xl border border-border bg-card hover:border-primary/50 hover:bg-card/80 transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40"
       >
-        {/* Phone visual + wallpaper/text overlay */}
-        <div className="relative flex-1 min-h-0 flex items-center justify-center w-full">
-          <PhoneVisual
-            device={device}
-            phone={phone}
-            className="h-full w-auto max-w-[150px] group-hover:scale-[1.03] transition-transform duration-200"
-            online={online}
-            active={active}
-          />
-          {/* Wallpaper — sits over the SVG screen area (approx 5.5% / 3.2% inset, 89% wide, 93.6% tall, r≈12%) */}
-          {custom.wallpaper && (
-            <div
-              className="absolute pointer-events-none overflow-hidden"
-              style={{
-                top: '3.2%', left: 'calc(50% - 44.5%)',
-                width: '89%', height: '93.6%',
-                borderRadius: '11%',
-              }}
-            >
-              <img
-                src={`/wallpapers/${custom.wallpaper}`}
-                className="w-full h-full object-cover"
-                draggable={false}
-              />
-            </div>
-          )}
-          {/* Text layers */}
-          {custom.texts.length > 0 && (
-            <div
-              className="absolute pointer-events-none overflow-hidden"
-              style={{
-                top: '3.2%', left: 'calc(50% - 44.5%)',
-                width: '89%', height: '93.6%',
-                borderRadius: '11%',
-              }}
-            >
-              {custom.texts.map(layer => (
-                <div
-                  key={layer.id}
-                  className="absolute"
-                  style={{
-                    left: `${layer.x}%`,
-                    top: `${layer.y}%`,
-                    transform: 'translate(-50%, -50%)',
-                    fontFamily: SLOT_FONTS.find(f => f.id === layer.font)?.family,
-                    fontSize: `${Math.min(layer.size, 18)}px`,
-                    color: layer.color,
-                    fontWeight: layer.bold ? 'bold' : 'normal',
-                    fontStyle: layer.italic ? 'italic' : 'normal',
-                    textShadow: layer.shadow ? '0 1px 4px rgba(0,0,0,0.9)' : 'none',
-                    whiteSpace: 'pre',
-                    lineHeight: 1.2,
-                  }}
-                >{layer.text}</div>
-              ))}
-            </div>
-          )}
-        </div>
+        {/* Phone shell — wallpaper and text rendered natively inside the SVG screen */}
+        <PhoneShell
+          className="flex-1 min-h-0 w-auto max-w-[150px] group-hover:scale-[1.03] transition-transform duration-200"
+          online={online}
+          active={active}
+          wallpaperUrl={custom.wallpaper ? `/wallpapers/${custom.wallpaper}` : null}
+          texts={custom.texts}
+          uid={String(device.slotIndex)}
+        />
 
         <div className="shrink-0 text-center space-y-0.5">
           <p className="text-base font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
