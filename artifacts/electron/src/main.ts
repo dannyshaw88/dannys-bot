@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Tray, nativeImage, dialog, ipcMain, screen, shell } from "electron";
+import { app, BrowserWindow, Menu, Tray, nativeImage, dialog, ipcMain, screen, shell, powerSaveBlocker } from "electron";
 import { autoUpdater } from "electron-updater";
 import { spawn, ChildProcess, exec } from "child_process";
 import { promisify } from "util";
@@ -985,8 +985,29 @@ async function createWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, "preload.js"),
       devTools: !app.isPackaged,
+      // CRITICAL: prevents Chromium from throttling setTimeout/setInterval in
+      // the renderer when the window is minimised or hidden to the system tray.
+      // The automation cycle scheduler lives in the React renderer — it uses
+      // setTimeout to fire the POST that starts each cycle.  With the default
+      // backgroundThrottling:true, Chromium reduces timer resolution to 1 Hz
+      // (or pauses timers entirely for hidden windows), so the cycle POST never
+      // fires and the server sits idle even though the toggle is on.
+      // EB windows already set this for the same reason (see ebManager.ts).
+      backgroundThrottling: false,
     },
   });
+
+  // Prevent Windows from suspending the app process when the machine is idle
+  // or the user switches away.  Without this, Windows power-saving can pause
+  // all timers — including the cycle scheduler — while the window is minimised
+  // or hidden.  'prevent-app-suspension' keeps the Node.js server child process
+  // and the renderer's event loop running at full rate regardless of power state.
+  try {
+    powerSaveBlocker.start("prevent-app-suspension");
+  } catch {
+    // Not critical — log and continue if the API is unavailable on this OS.
+    appendToMainLog("[powerSaveBlocker] prevent-app-suspension failed (non-fatal)");
+  }
 
   // Hide to system tray on close — the app keeps running with no taskbar button;
   // only the tray icon (created by createTray below) lets the user restore or quit.
