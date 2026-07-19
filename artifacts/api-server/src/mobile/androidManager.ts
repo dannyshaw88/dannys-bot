@@ -728,11 +728,25 @@ export async function dismissInstagramInterstitials(
 
   for (const label of DISMISS_LABELS) {
     const pos = _findElem(xml, label);
-    if (pos) {
-      _adbTap(adb, serial, pos.x, pos.y);
-      await _sleep(600);
-      return label;
+    if (!pos) continue;
+
+    // "Dismiss" appears both on real interstitial popups AND as the tiny ✕
+    // button on each card in the "Suggested for you" section of a profile page.
+    // Guard against the card icon by checking the element width before tapping:
+    //   • Card ✕ icons:              ~17–30 px wide  (e.g. bounds [279,277][296,294])
+    //   • Real popup dismiss buttons: 200–500+ px wide
+    // A 100 px threshold gives a wide margin between the two.  If bounds can't
+    // be parsed (shouldn't happen with normal UIAutomator output), skip rather
+    // than risk a wrong tap.
+    if (label === "Dismiss") {
+      const boundsRe = /(?:text|content-desc)="Dismiss"[^>]*bounds="\[(\d+),\d+\]\[(\d+),\d+\]"/i;
+      const bm = xml.match(boundsRe);
+      if (!bm || (Number(bm[2]) - Number(bm[1])) < 100) continue;
     }
+
+    _adbTap(adb, serial, pos.x, pos.y);
+    await _sleep(600);
+    return label;
   }
   return null;
 }
