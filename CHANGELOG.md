@@ -4,6 +4,68 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.40] — 2026-07-19
+
+### Fix — Make a Post folder path no longer resets on restart
+
+Previously, selecting a folder via the **Browse…** button in the Make a Post tool (Human Session Tool) relied on a 600 ms debounce before writing to the database. If Electron closed before that timer fired — or the save request didn't complete before shutdown — the path was silently lost and had to be re-assigned every restart.
+
+**What changed:**
+- The Browse button now saves the selected path to the database **immediately** when the native file-dialog returns, bypassing the debounce entirely.
+- The debounce still runs for all manual text edits (unchanged behaviour), so typing in the path box still batches saves as before.
+- The folder path is now reliably persisted the moment you pick it — no restart required to confirm it stuck.
+
+### Fix — Dashboard COMPLETE stamp always appears (no more dangling STARTED)
+
+Phone-farm cycles that were aborted mid-run (e.g. manual stop, ADB disconnect, Airplane Mode recycle) logged a **STARTED** event on the Dashboard but never a matching **COMPLETE**, leaving the row permanently open.
+
+**Root cause:** the `tool_complete` `createSessionAction` call sat inside the `try` block. Any exception — including the deliberate `cycle-aborted` signal — jumped straight to the `catch` block which only returned a JSON response and never logged COMPLETE.
+
+**What changed:**
+- The catch block now always stamps a `tool_complete` entry with whatever partial stats had accumulated before the abort or error.
+- Aborted cycles are labelled **"Cycle aborted — X follows, Y likes, …"**; error cycles are labelled **"Cycle error: \<message\>"** with the same stat summary.
+- Successful cycles are unchanged.
+
+### Fix — Feed-only cycles no longer show "No actions taken"
+
+Cycles where only the feed scroll tool ran (no likes, follows, stories, or shares) logged **"No actions taken"** as their COMPLETE detail, giving no information about what happened.
+
+**What changed:**
+- The number of posts scrolled is now included in the COMPLETE summary as **"X posts scrolled"** when no other action stats are present.
+- Saves (image saves from the feed) are now also included in the summary: **"X saves"**.
+- If a cycle produced both scrolling and other stats (likes, follows, etc.), the scroll count is omitted from the detail to keep it concise.
+
+### Change — Dashboard Trust Score badge linked to Device → Account Slot
+
+The Trust Score badge in the Dashboard activity table now shows the score that was set on the **Device → Account Slot → Human Session Tool** panel — the same value stored under `mobile_ts_{serial}_{slotIdx}` — instead of the Embedded Browser profile's trust score.
+
+- Clicking the badge in the Dashboard sets or updates the slot trust score directly, which is immediately reflected on the Phone Farm page and vice versa (they share the same underlying storage key).
+- The Dashboard badge has its **own independent style settings** (`dashboard_trustlevels_v1`). Customising per-level colours or icons here does not affect the Human Session Tool badge, the Stats page badge, or any other Trust Score badge instance.
+- Non-phone-farm rows (Embedded Browser accounts) continue to show the profile-based badge unchanged.
+
+### Change — Phone Farm cards: Active status moved to footer
+
+The **"ACTIVE" / "NOT ACTIVE"** text overlay that appeared in the centre of the phone shell image has been removed. The status is now shown in the card label area beneath the phone, separated from the connectivity status by a `|`:
+
+> `● Connected | Active`  
+> `● Connected | Not Active`  
+> `○ Offline | Not Active`
+
+This keeps all card metadata in one readable line instead of floating text over the phone image.
+
+### Change — Redmi 12 and Redmi A5 device images added
+
+The generic black phone silhouette is now replaced by the actual device product photo for:
+
+| Device | Match rule |
+|---|---|
+| Xiaomi Redmi 12 5G / Redmi Note 12 | Name contains "Redmi 12" |
+| Xiaomi Redmi A5 | Name contains "Redmi A5" |
+
+Auto-assignment is based on the live ADB market name (or the model-code lookup table for older registrations) — no manual configuration needed. Adding images for future devices is a one-line entry in `DEVICE_IMAGE_RULES` at the top of `MobileDevicesPage.tsx`.
+
+---
+
 ## [1.2.39] — 2026-07-19
 
 ### Change — Collision Scheduler enabled by default for new devices (5 – 10 min rest)

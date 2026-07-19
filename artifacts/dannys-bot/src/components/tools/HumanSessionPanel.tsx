@@ -1992,7 +1992,14 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                       const result = await api.openFolderDialog();
                       if (result?.canceled || !result?.folder) return;
                       const folderPath: string = result.folder;
-                      setSettings({ ...settings, repostLocalFolderPath: folderPath });
+                      const updatedSettings = { ...settings, repostLocalFolderPath: folderPath };
+                      setSettings(updatedSettings);
+                      // Save immediately — bypass the 600ms debounce so the path
+                      // is written to the DB before Electron can close. The normal
+                      // debounce only fires if the user keeps editing; for a native
+                      // file-dialog pick we need instant persistence.
+                      if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+                      updateToolMutation.mutate({ id: tool.id, profileId: tool.profileId, settings: updatedSettings });
                       try {
                         const countResult = await api.countFolderFiles(folderPath);
                         setLocalFolderFileCount(countResult?.count ?? 0);
