@@ -66,6 +66,22 @@ const MODEL_FRIENDLY_NAME: Record<string, string> = {
   "220333QAG":  "Redmi 10C",    "21121119SR": "Redmi 10",
 };
 
+// ─── Device image mapping ─────────────────────────────────────────────────────
+// Maps resolved display-name substrings (lowercase) to a public image path.
+// Add new entries here as more device photos are added to public/phones/.
+const DEVICE_IMAGE_RULES: Array<{ match: string; src: string }> = [
+  { match: "redmi 12",  src: "/phones/redmi-12.png"  }, // covers "Redmi 12 5G", "Redmi Note 12", etc.
+  { match: "redmi a5",  src: "/phones/redmi-a5.jpg"  },
+];
+
+function getDeviceImage(device: FarmDevice, phone?: UsbPhone): string | null {
+  const name = resolveDisplayName(device, phone).toLowerCase();
+  for (const rule of DEVICE_IMAGE_RULES) {
+    if (name.includes(rule.match)) return rule.src;
+  }
+  return null;
+}
+
 function resolveDisplayName(device: FarmDevice, phone?: UsbPhone): string {
   // Live ADB marketName is most accurate — prefer it over any cached/lookup value.
   const liveMarket = phone?.marketName?.trim();
@@ -141,14 +157,7 @@ function PhoneShell({ className, online, active }: { className?: string; online?
       <rect x="12" y="14" width="196" height="120" rx="26" fill="url(#sheen)" opacity="0.05"/>
       {/* Glow */}
       <ellipse cx="110" cy="220" rx="90" ry="130" fill={`url(#${glowId})`}/>
-      {/* Status text overlay */}
-      {active ? (
-        <text x="110" y="222" textAnchor="middle" fontSize="18" fontWeight="700"
-          fontFamily="monospace" fill={statusColor} letterSpacing="3">ACTIVE</text>
-      ) : (
-        <text x="110" y="222" textAnchor="middle" fontSize="14" fontWeight="700"
-          fontFamily="monospace" fill="#00CFFF" letterSpacing="2">NOT ACTIVE</text>
-      )}
+
       {/* Punch-hole camera */}
       <circle cx="110" cy="36" r="5.5" fill="#000005"/>
       <circle cx="110" cy="36" r="3.5" fill="#0d1117"/>
@@ -165,6 +174,38 @@ function PhoneShell({ className, online, active }: { className?: string; online?
       <rect x="90" y="272" width="40" height="2" rx="1" fill="#1AD2F2" opacity={online ? "0.7" : "0.2"}/>
     </svg>
   );
+}
+
+/** Shows a device photo when available, falls back to the generic SVG shell. */
+function PhoneVisual({
+  device, phone, className, online, active,
+}: {
+  device: FarmDevice; phone?: UsbPhone;
+  className?: string; online?: boolean; active?: boolean;
+}) {
+  const imgSrc = getDeviceImage(device, phone);
+  if (imgSrc) {
+    return (
+      <div
+        className={`relative flex items-end justify-center ${className ?? ""}`}
+        style={{
+          filter: online
+            ? (active
+                ? "drop-shadow(0 0 10px rgba(34,197,94,0.45))"
+                : "drop-shadow(0 0 8px rgba(26,210,242,0.30))")
+            : "drop-shadow(0 2px 6px rgba(0,0,0,0.25))",
+        }}
+      >
+        <img
+          src={imgSrc}
+          alt="Device"
+          draggable={false}
+          style={{ width: "100%", height: "100%", objectFit: "contain" }}
+        />
+      </div>
+    );
+  }
+  return <PhoneShell className={className} online={online} active={active} />;
 }
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
@@ -386,8 +427,10 @@ function DeviceCard({
         onClick={onClick}
         className="flex-1 flex flex-col items-center gap-1.5 py-2 px-2 rounded-2xl border border-border bg-card hover:border-primary/50 hover:bg-card/80 transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40"
       >
-        <PhoneShell
-          className="flex-1 min-h-0 w-auto max-w-[150px] drop-shadow-lg group-hover:scale-[1.03] transition-transform duration-200"
+        <PhoneVisual
+          device={device}
+          phone={phone}
+          className="flex-1 min-h-0 w-auto max-w-[150px] group-hover:scale-[1.03] transition-transform duration-200"
           online={online}
           active={active}
         />
@@ -395,7 +438,7 @@ function DeviceCard({
           <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
             {resolveDisplayName(device, phone)}
           </p>
-          <div className="flex items-center justify-center gap-1.5 mt-1">
+          <div className="flex items-center justify-center gap-1 mt-1 flex-wrap">
             {online ? (
               <>
                 <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
@@ -406,6 +449,12 @@ function DeviceCard({
                 <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 shrink-0" />
                 <span className="text-[10px] text-muted-foreground">Offline</span>
               </>
+            )}
+            <span className="text-[10px] text-muted-foreground/30 select-none">|</span>
+            {active ? (
+              <span className="text-[10px] font-semibold text-green-400">Active</span>
+            ) : (
+              <span className="text-[10px] text-muted-foreground/60">Not Active</span>
             )}
           </div>
         </div>
