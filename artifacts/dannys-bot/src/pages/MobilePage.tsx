@@ -5058,7 +5058,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot }, ref)
 
                 {/* Trust Score — independent instance (mobile_ts_<serial>_<slotIdx>)
                     so styling changes here don't affect other badge placements */}
-                <div style={{ display: "flex", alignSelf: "flex-end", height: "40px" }}>
+                <div style={{ display: "flex", alignSelf: "flex-end", height: "38px" }}>
                   <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={i} width={114} />
                 </div>
               </div>
