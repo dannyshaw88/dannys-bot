@@ -1149,7 +1149,11 @@ export async function closeInstagramViaRecents(serial: string, dismissDirection:
         // upper half. End point is always the very top of the visible area.
         const startY  = Math.min(Math.round(card.y + h * 0.15), Math.round(h * 0.80));
         const dragToY = 0;
-        await swipe(serial, card.x, startY, card.x, dragToY, 400);
+        // Duration reduced 400 → 150 ms: MIUI's card-dismiss gesture requires
+        // a fast flick, not a slow drag. At 400 ms the velocity was too low for
+        // the launcher to register it as a dismiss; 150 ms matches a natural
+        // thumb-flick and reliably triggers the dismiss animation.
+        await swipe(serial, card.x, startY, card.x, dragToY, 150);
         method = `attempt ${attempt}: swiped card at (${card.x},${card.y}) from start (${card.x},${startY}) up to (${card.x},${dragToY})`;
       } else {
         // Drag fully off the left edge — a short flick isn't enough to
@@ -1168,7 +1172,8 @@ export async function closeInstagramViaRecents(serial: string, dismissDirection:
         // Start at 65% screen height (not the mid-point 45%) so the drag
         // always travels ~63% of the screen regardless of screen size.
         const noLabelStartY = Math.round(h * 0.65);
-        await swipe(serial, cardX, noLabelStartY, cardX, 0, 400);
+        // Same 150 ms fast-flick as the labelled-card path above.
+        await swipe(serial, cardX, noLabelStartY, cardX, 0, 150);
         method = `attempt ${attempt}: no label found — fell back to swipe-up from (${cardX},${noLabelStartY})`;
       } else {
         await swipe(serial, cardX, cardY, Math.round(w * 0.05), cardY, 400);

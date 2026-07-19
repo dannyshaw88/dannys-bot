@@ -4,6 +4,85 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.31] — 2026-07-19
+
+### Fix — Redmi A5 swipe-up dismiss now uses a fast flick (150 ms)
+
+**Problem:** The Redmi A5 (dismissDirection: "up") was consistently failing to
+clear the Instagram card from the recent-apps screen, despite the swipe starting
+far below the card and ending at y=0. The card visually moved but snapped back,
+causing the `pidof` poll to find Instagram still running on every attempt and
+ultimately falling back to `adb shell am force-stop`. The cycle therefore never
+completed a clean "open IG → run tools → dismiss via recents" lap.
+
+Root cause: the swipe was issued with a 400 ms duration. MIUI's task-switcher
+requires a **fast flick** (high velocity) to register a card dismiss — a slow
+400 ms drag across the full screen height produces a low enough velocity that the
+launcher treats it as a press-and-hold rather than a throw, snapping the card
+back to its original position. Reducing duration to 150 ms matches a natural
+thumb-flick and gives the gesture the velocity MIUI requires.
+
+**Changes (`androidManager.ts`):**
+- `closeInstagramViaRecents` — labelled-card path (dismissDirection "up"):
+  swipe duration `400 ms → 150 ms`.
+- `closeInstagramViaRecents` — no-label fallback path (dismissDirection "up"):
+  swipe duration `400 ms → 150 ms`.
+- Left-swipe paths (dismissDirection "left", used by other devices) unchanged.
+
+---
+
+### Fix — Story advance tap moved to extreme right edge (w×0.97)
+
+**Problem:** Even after the v1.2.30 fix that moved the advance tap from
+`w*0.92` to the same x, the story author's profile page was opened again during
+story viewing. The tap at 92% width still fell inside the story's drawable area,
+where authors can and do place mention/collaboration/hashtag stickers. One tap on
+such a sticker opens the author's profile directly, exits the story viewer, and
+leaves the phone on a profile page instead of the home feed. Subsequent tools in
+the automation cycle then ran from the wrong starting surface.
+
+**Changes (`routes/mobile.ts`):**
+- Story advance tap x: `w * 0.92 → w * 0.97` (~22 px from the right edge on a
+  720 px screen). Instagram's story editor clips interactive stickers away from
+  the physical screen edge, so this sliver is reliably empty. The tap remains
+  firmly in the "right half = advance slide" zone that IG recognises.
+- **Post-exit profile-page recovery** (new): after the story loop, exit-swipe,
+  and 800 ms settle, the code now calls `findHomeTab`. If the Home tab is absent
+  — meaning the phone ended up on a profile page or other non-feed surface — it
+  presses Back once and waits 600 ms before returning. This is a safety net for
+  the rare case where even the 97% tap hits something interactive, ensuring the
+  next tool always starts from the home feed.
+
+---
+
+### Fix — Follow tool `findInstagramSearchBar` Strategy 3 attribute-order sensitivity
+
+**Problem:** `findInstagramSearchBar` Strategy 3 used two regex patterns that
+required UIAutomator XML attributes to appear in a specific order:
+`(text|content-desc)` before `clickable` before `bounds`, or `bounds` before
+`clickable` before `(text|content-desc)`. UIAutomator does not guarantee
+attribute ordering, so any node where `bounds` appeared between the other two
+attributes silently missed both patterns. Additionally, the patterns required an
+exact match for `"Search"` or `"Search Instagram"` — but Instagram uses several
+content-desc variants depending on version and state:
+`"Search accounts, hashtags, and places"`, `"Search…"`, etc. When all three
+strategies failed the function fell back to a positional tap at `(360, 62)` which
+is sometimes slightly off, producing the intermittent search-bar miss reported on
+the Redmi A5.
+
+**Changes (`androidManager.ts`):**
+- Strategy 3 replaced with a line-by-line `xml.includes()` scan (same pattern
+  used throughout this codebase for attribute-order-independent detection):
+  each line that contains `"search"` (case-insensitive), has a parseable
+  `bounds=` attribute, has `centerY < topLimit` (top 30% of screen), and has
+  either `clickable="true"` or `focusable="true"`, and where the `"search"` text
+  appears inside a `text=""` or `content-desc=""` value (not just in a
+  resource-id) is returned as the search bar center.
+- Handles all IG content-desc variants, all attribute orderings, and both
+  `clickable` and `focusable` interactive-element markers.
+
+---
+
 ## [1.2.30] — 2026-07-19
 
 ### Fix — Story advance tap moved out of sticker zone
