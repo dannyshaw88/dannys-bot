@@ -4166,8 +4166,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (preFiltered > 0) onLog?.(`Follow: pre-filtered ${preFiltered} candidate${preFiltered !== 1 ? "s" : ""} via HikerAPI metadata`);
     }
 
-    const targets = filtered.slice(0, targetCount);
-    onLog?.(`Follow: following ${targets.length} unique users`);
+    // Use the full filtered pool so that when a candidate is skipped at the
+    // profile-quality gate the loop simply advances to the next candidate
+    // instead of ending with 0 follows. The loop breaks early once
+    // `followed` reaches `targetCount`.
+    const targets = filtered;
+    onLog?.(`Follow: ${targets.length} candidate${targets.length !== 1 ? "s" : ""} in pool, targeting ${targetCount} follow${targetCount !== 1 ? "s" : ""}`);
 
     let followed = 0;
 
@@ -4212,10 +4216,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     await sleepOrAbort(serial, 2500);
 
     for (let _fi = 0; _fi < targets.length; _fi++) {
+      if (followed >= targetCount) break;
       const username = targets[_fi];
       const isLastUser = _fi === targets.length - 1;
       try {
-        onLog?.(`Follow: → @${username}`);
+        onLog?.(`Follow: → @${username} (candidate ${_fi + 1}/${targets.length})`);
 
         // Tap the search bar — wait longer so the Explore page settles and the
         // field has time to focus before the keyboard opens.  A 600 ms wait was
