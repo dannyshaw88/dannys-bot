@@ -4179,7 +4179,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const searchBar = await android.findInstagramSearchBar(serial, onLog).catch(() => null);
         if (!searchBar) { onLog?.("Follow: search bar lookup threw — giving up"); break; }
         await android.tap(serial, searchBar.x, searchBar.y);
-        await sleepOrAbort(serial, 1500);
+        await sleepOrAbort(serial, 1000 + Math.floor(Math.random() * 4000));
 
         // Clear any existing text
         await android.keyevent(serial, "KEYCODE_MOVE_END");
