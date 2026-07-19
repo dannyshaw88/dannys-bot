@@ -159,6 +159,8 @@ type AutomationSettings = {
   shareFeedPercentMax: number;
   shareDmPercentMin: number;
   shareDmPercentMax: number;
+  savePercentMin: number;
+  savePercentMax: number;
   feedScrollMin: number;
   feedScrollMax: number;
   viewStoriesSlidesMin: number;
@@ -1027,6 +1029,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     shareFeedPercentMax: z.number().min(0).max(100).default(0),
     shareDmPercentMin: z.number().min(0).max(100).default(0),
     shareDmPercentMax: z.number().min(0).max(100).default(0),
+    savePercentMin: z.number().min(0).max(100).default(0),
+    savePercentMax: z.number().min(0).max(100).default(0),
     feedScrollMin: z.number().min(1).max(50),
     feedScrollMax: z.number().min(1).max(50),
     viewStoriesSlidesMin: z.number().min(0).max(100).default(0),
@@ -1160,6 +1164,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       likePercentMin: 3, likePercentMax: 5,
       shareFeedPercentMin: 0, shareFeedPercentMax: 0,
       shareDmPercentMin: 0, shareDmPercentMax: 0,
+      savePercentMin: 0, savePercentMax: 0,
       feedScrollMin: 5, feedScrollMax: 10,
       viewStoriesSlidesMin: 0, viewStoriesSlidesMax: 0,
       viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
@@ -1240,6 +1245,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         likePercentMin: 3, likePercentMax: 5,
         shareFeedPercentMin: 0, shareFeedPercentMax: 0,
         shareDmPercentMin: 0, shareDmPercentMax: 0,
+        savePercentMin: 0, savePercentMax: 0,
         feedScrollMin: 5, feedScrollMax: 10,
         viewStoriesSlidesMin: 0, viewStoriesSlidesMax: 0,
         viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
@@ -1586,12 +1592,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     likePercentMin: number; likePercentMax: number;
     shareFeedPercentMin?: number; shareFeedPercentMax?: number;
     shareDmPercentMin?: number; shareDmPercentMax?: number;
+    savePercentMin?: number; savePercentMax?: number;
     onLog?: (msg: string) => void;
-  }): Promise<{ count: number; likes: number; likeFailures: number; sharesFeed: number; sharesDm: number; strayNavRecoveries: number }> {
+  }): Promise<{ count: number; likes: number; likeFailures: number; sharesFeed: number; sharesDm: number; saves: number; strayNavRecoveries: number }> {
     const {
       count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
       shareFeedPercentMin = 0, shareFeedPercentMax = 0,
       shareDmPercentMin = 0, shareDmPercentMax = 0,
+      savePercentMin = 0, savePercentMax = 0,
       onLog,
     } = params;
     const delayLoSec = Math.min(delayMinSec, delayMaxSec);
@@ -1605,6 +1613,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const shareDmLo = Math.min(shareDmPercentMin, shareDmPercentMax);
     const shareDmHi = Math.max(shareDmPercentMin, shareDmPercentMax);
     const shareDmChance = (shareDmLo + Math.random() * (shareDmHi - shareDmLo)) / 100;
+    const saveLo = Math.min(savePercentMin, savePercentMax);
+    const saveHi = Math.max(savePercentMin, savePercentMax);
+    const saveChance = (saveLo + Math.random() * (saveHi - saveLo)) / 100;
 
     const { w, h } = getScreenSize(serial);
     const x  = Math.round(w / 2);
@@ -1642,6 +1653,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let likeFailures = 0;
     let sharesFeed = 0;
     let sharesDm = 0;
+    let saves = 0;
     let strayNavRecoveries = 0;
     // Sponsored posts ("Ads") render a full-width CTA button ("Shop Now",
     // "Install Now", "Learn More") overlaid near the bottom of the media —
@@ -1717,8 +1729,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const wantLike = likeChance > 0 && Math.random() < likeChance;
       const wantShareFeed = shareFeedChance > 0 && Math.random() < shareFeedChance;
       const wantShareDm = shareDmChance > 0 && Math.random() < shareDmChance;
+      const wantSave = saveChance > 0 && Math.random() < saveChance;
 
-      if (wantLike || wantShareFeed || wantShareDm) {
+      if (wantLike || wantShareFeed || wantShareDm || wantSave) {
         const feedbackCard = await android.isFeedbackOrSurveyCard(serial).catch(() => false);
         if (feedbackCard) {
           // This card replaced the post entirely — there is nothing safe to
@@ -1990,6 +2003,47 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               if (_cfDmSent) sharesDm++;
               await verifyStillInInstagram();
             }
+
+            // ── Save Post (bookmark / ribbon icon) ────────────────────────
+            // Taps the ribbon icon (row_feed_button_save / "Add to Saved")
+            // identified by findFeedActionIcons. After the tap Instagram
+            // shows a small "Save to collection?" bottom sheet. We dismiss
+            // it with a tap in the top-25% of the screen — far above any
+            // collection UI — which is safe on every layout because
+            // Instagram never puts any interactive control in that region
+            // while the sheet is open.
+            if (wantSave) {
+              const _saveBtn = icons.save;
+              if (!_saveBtn) {
+                logger.info({ serial }, "[check-feed] save button not found on this post — skipping save");
+                onLog?.(`Scroll ${i + 1}/${count}: save skipped — ribbon icon not found on this post`);
+              } else {
+                try {
+                  if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+                  await sleepOrAbort(serial, 200 + Math.round(Math.random() * 200));
+                  onLog?.(`Scroll ${i + 1}/${count}: tapping save (ribbon) icon at (${_saveBtn.x},${_saveBtn.y})…`);
+                  await android.tap(serial, _saveBtn.x, _saveBtn.y);
+                  // Wait for the "Save to collection?" popup to appear.
+                  await sleepOrAbort(serial, 600);
+                  // Dismiss the collection popup by tapping the top-25% of
+                  // the screen. Instagram's collection sheet sits in the
+                  // bottom half; the top quarter is always safe/empty while
+                  // the sheet is visible.
+                  const _dismissX = Math.round(w * 0.50);
+                  const _dismissY = Math.round(h * 0.12);
+                  onLog?.(`Scroll ${i + 1}/${count}: dismissing save-collection popup (tap at (${_dismissX},${_dismissY}))…`);
+                  await android.tap(serial, _dismissX, _dismissY);
+                  await sleepOrAbort(serial, 400);
+                  saves++;
+                  logger.info({ serial }, "[check-feed] saved post via ribbon icon");
+                  onLog?.(`Scroll ${i + 1}/${count}: ✓ post saved`);
+                  await verifyStillInInstagram();
+                } catch (e: any) {
+                  if (e?.message === "cycle-aborted") throw e;
+                  onLog?.(`Scroll ${i + 1}/${count}: save error — ${e?.message}`);
+                }
+              }
+            }
           }
         }
       } else {
@@ -2005,7 +2059,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       logger.warn({ serial, strayNavRecoveries }, "[check-feed] recovered from stray navigation (ad CTA) during this run");
       onLog?.(`⚠ Recovered from ${strayNavRecoveries} stray navigation(s) — likely tapped an ad CTA during scroll`);
     }
-    return { count, likes, likeFailures, sharesFeed, sharesDm, strayNavRecoveries };
+    return { count, likes, likeFailures, sharesFeed, sharesDm, saves, strayNavRecoveries };
   }
 
   // View stories from the stories bar at the top of the feed.
@@ -2856,6 +2910,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     shareFeedPercentMax: z.number().min(0).max(100).default(0),
     shareDmPercentMin: z.number().min(0).max(100).default(0),
     shareDmPercentMax: z.number().min(0).max(100).default(0),
+    savePercentMin: z.number().min(0).max(100).default(0),
+    savePercentMax: z.number().min(0).max(100).default(0),
     viewStoriesSlidesMin: z.number().min(0).max(100).default(0),
     viewStoriesSlidesMax: z.number().min(0).max(100).default(0),
     viewStoriesSlideWatchPctMin: z.number().min(1).max(100).default(50),
@@ -4429,6 +4485,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         feedEnabled, storiesEnabled,
         shareFeedPercentMin, shareFeedPercentMax,
         shareDmPercentMin, shareDmPercentMax,
+        savePercentMin, savePercentMax,
         viewStoriesSlidesMin, viewStoriesSlidesMax,
         viewStoriesSlideWatchPctMin, viewStoriesSlideWatchPctMax,
         viewStoriesLikePercentMin, viewStoriesLikePercentMax,
@@ -4620,7 +4677,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       //     closed before the next tool starts.
       //   • All other tools self-navigate to their own starting position
       //     (Search tab, Home tab, compose "+") so they work from any screen.
-      let likes = 0, likeFailures = 0, sharesFeed = 0, sharesDm = 0, strayNavRecoveries = 0;
+      let likes = 0, likeFailures = 0, sharesFeed = 0, sharesDm = 0, saves = 0, strayNavRecoveries = 0;
 
       // Pre-roll every tool's Activate Percentage gate BEFORE building the order.
       // This means the logged sequence only contains tools that will actually
@@ -4676,14 +4733,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               await sleepOrAbort(serial, 2000);
             }
             tLog(`▶ Starting feed scroll — ${count} posts`);
-            ({ likes, likeFailures, sharesFeed, sharesDm, strayNavRecoveries } = await runCheckFeedLoop(serial, {
+            ({ likes, likeFailures, sharesFeed, sharesDm, saves, strayNavRecoveries } = await runCheckFeedLoop(serial, {
               count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
               shareFeedPercentMin, shareFeedPercentMax,
               shareDmPercentMin, shareDmPercentMax,
+              savePercentMin, savePercentMax,
               onLog: (msg) => sendVideoLog(serial, `  ${msg}`),
             }));
-            steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
-            tLog(`▶ Feed done — ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} DM-shares`);
+            steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${saves} saves, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
+            tLog(`▶ Feed done — ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} DM-shares, ${saves} saves`);
           } else if (!feedEnabled) {
             steps.push("feed(skipped — View Feed disabled)");
             tLog("▶ View Feed disabled — skipping feed scroll");

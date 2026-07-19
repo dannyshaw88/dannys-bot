@@ -1968,6 +1968,8 @@ interface AutomationSettingsData {
   shareFeedPercentMax: number;
   shareDmPercentMin: number;
   shareDmPercentMax: number;
+  savePercentMin: number;
+  savePercentMax: number;
   feedScrollMin: number;
   feedScrollMax: number;
   viewStoriesSlidesMin: number;
@@ -2081,6 +2083,7 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   likePercentMin: 3, likePercentMax: 5,
   shareFeedPercentMin: 0, shareFeedPercentMax: 0,
   shareDmPercentMin: 0, shareDmPercentMax: 0,
+  savePercentMin: 0, savePercentMax: 0,
   feedScrollMin: 5, feedScrollMax: 10,
   viewStoriesSlidesMin: 0, viewStoriesSlidesMax: 0,
   viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
@@ -3364,6 +3367,34 @@ function AutomationSettingsPanel({
                 className={NUM_INPUT_CLASS}
                 value={settings.shareDmPercentMax}
                 onChange={e => setSettings(s => ({ ...s, shareDmPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading}
+              />
+
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Save % of posts</Label>
+            <div className="flex items-center gap-3">
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.savePercentMin}
+                onChange={e => setSettings(s => ({ ...s, savePercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading}
+              />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.savePercentMax}
+                onChange={e => setSettings(s => ({ ...s, savePercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading}
               />
 

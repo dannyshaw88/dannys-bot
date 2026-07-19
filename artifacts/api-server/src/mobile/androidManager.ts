@@ -1437,6 +1437,7 @@ export interface FeedActionIcons {
   comment: { x: number; y: number } | null;
   shareFeed: { x: number; y: number } | null; // repost / share-to-feed (double-arrow icon)
   shareDm: { x: number; y: number } | null;   // send / share-via-DM (paper-plane icon)
+  save: { x: number; y: number } | null;       // bookmark / ribbon (row_feed_button_save)
   /** True when the Like button resolved to "Unlike" — post is already liked.
    *  Callers must skip the like tap to avoid accidental unlike, but MUST still
    *  continue with ShareFeed/ShareDM actions — the icon row is fully present. */
@@ -1802,7 +1803,39 @@ export async function findFeedActionIcons(serial: string, onLog?: (msg: string) 
   // project rule that all detection uses live element structure, never
   // coordinates. If neither strategy confirms a role, that slot stays null
   // and callers skip the action.
-  return { like, comment, shareFeed, shareDm, alreadyLiked };
+
+  // ── Save/Bookmark button ──────────────────────────────────────────────────
+  // The ribbon/bookmark icon always lives far to the RIGHT of the action-bar
+  // row (confirmed: rid=row_feed_button_save, cd="Add to Saved", x=1014 on
+  // 1080 px screen — i.e. ~94 % of width). It is explicitly excluded from
+  // rowNodes above (the saveCutoffX heuristic + the /save/i label filter),
+  // so it is never confused with Comment/Repost/Send. We find it here by
+  // scanning for its well-known resource-id and content-desc labels rather
+  // than any positional assumption.
+  let save: { x: number; y: number } | null = null;
+  {
+    // Primary: resource-id match (most reliable — IG has kept this stable).
+    const ridSaveRe = /resource-id="[^"]*row_feed_button_save"[^>]*bounds="(\[\d+,\d+\]\[\d+,\d+\])"/;
+    const ridSaveM = ridSaveRe.exec(xml);
+    if (ridSaveM) {
+      save = _parseCenter(ridSaveM[1]);
+    }
+    // Fallback: content-desc label (covers future builds that rename the rid).
+    if (!save) {
+      const cdSaveRe = /content-desc="(?:Add to Saved|Remove from saved)"[^>]*bounds="(\[\d+,\d+\]\[\d+,\d+\])"/;
+      const cdSaveM = cdSaveRe.exec(xml);
+      if (cdSaveM) {
+        save = _parseCenter(cdSaveM[1]);
+      }
+    }
+    if (save) {
+      onLog?.(`[feed-icons] save button found at (${save.x},${save.y})`);
+    } else {
+      onLog?.(`[feed-icons] save button not found (will skip save action for this post)`);
+    }
+  }
+
+  return { like, comment, shareFeed, shareDm, save, alreadyLiked };
 }
 
 export interface ReelActionIcons {
