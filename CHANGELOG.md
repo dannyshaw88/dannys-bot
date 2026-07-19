@@ -4,6 +4,72 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.39] — 2026-07-19
+
+### Change — Collision Scheduler enabled by default for new devices (5 – 10 min rest)
+
+When a USB phone is connected for the first time and has no saved Collision Scheduler
+configuration, the scheduler is now **on by default** with:
+
+| Field | Value |
+|---|---|
+| Enabled | ✅ Yes |
+| Min rest between slots | **5 minutes** |
+| Max rest between slots | **10 minutes** |
+
+Previously the toggle arrived unchecked with `1 – 3 min` placeholder values, requiring a
+manual enable step before the queue protection was active.
+
+**What changed:**
+
+- `useState` defaults updated: `enabled: false → true`, `restMinMin: 1 → 5`,
+  `restMinMax: 3 → 10`.
+- The load effect now detects a new device (API returns `config: null`) and immediately
+  POSTs the defaults to the server, so they are persisted even if the user never opens the
+  Collision Scheduler panel — no "revert to disabled on reload" edge case.
+- Existing devices with saved configuration are **not affected** — their stored values load
+  and overwrite the defaults exactly as before.
+
+### Fix — Activity ticker now shows phone farm events (no longer stuck on "no recent activity")
+
+The `LiveActivityTicker` bar at the top of every page previously never updated beyond the
+startup stamp when the phone farm was the only active automation. Root cause: the
+"real activity" check required `profileId !== 0`, but phone farm cycles always write
+`profileId: 0` (system sentinel) when the slot username has no matching Embedded Browser
+profile.
+
+**What changed:**
+
+- **Real-activity gate broadened:** any event that is not the explicit server-startup
+  sentinel (`profileId: 0, action: "server_started"`) is now treated as displayable
+  activity — including all phone farm `tool_start` / `tool_complete` events.
+- **Phone farm formatter added:** events with `sourceType: "phone"` are labelled as
+  `@{slotUsername} | Phone Farm: {detail}` (e.g. `@nisasahiner44 | Phone Farm: 2 follows, 1 like`).
+- **Loading flash removed:** the ticker previously showed `"Loading…"` on initial mount
+  before the first API response arrived. It now always shows the static
+  `"Aura Farming started — no recent activity"` fallback, so the bar is visually stable
+  from the moment the app opens.
+
+### Change — Stats page: Phone Farm merged into Tool Performance tab
+
+The standalone **Tool Performance** tab (per-IG-account stats) has been removed. The
+**Phone Farm** tab has been renamed **Tool Performance** and given the full column
+infrastructure previously found in the removed tab:
+
+- **Sortable column headers** — click any stat column (Cycles, Likes, Follows, Stories,
+  Reels, DMs, Feed Shares) to sort slot rows highest → lowest; click again to invert. An
+  arrow indicator (▼ / ▲) shows the active sort. Default sort is highest-first on first
+  click (unlike the old per-account tab which sorted ascending).
+- **Drag-to-reorder columns** — grab any column header and drag it left or right; the
+  new order is saved to `localStorage` and restored on next open. A left-border highlight
+  shows the drop target while dragging.
+- **Sort is per device** — when a sort column is active, slot rows within each device
+  section are reordered independently; the device grouping is always preserved.
+- Stat data is fetched in parallel for all slots in a device section (`useQueries`) and
+  sorted in the render pass — no extra round-trips.
+
+---
+
 ## [1.2.38] — 2026-07-19
 
 ### Fix — Account switch failure now aborts the automation cycle cleanly

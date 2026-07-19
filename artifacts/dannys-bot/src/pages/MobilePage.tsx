@@ -5183,9 +5183,9 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const [resuming,      setResuming]      = React.useState(false);
 
   // Collision Scheduler form
-  const [csEnabled,    setCsEnabled]    = React.useState(false);
-  const [csMinMin,     setCsMinMin]     = React.useState(1);
-  const [csMinMax,     setCsMinMax]     = React.useState(3);
+  const [csEnabled,    setCsEnabled]    = React.useState(true);
+  const [csMinMin,     setCsMinMin]     = React.useState(5);
+  const [csMinMax,     setCsMinMax]     = React.useState(10);
   const csSaveRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const csInitRef = React.useRef(false);
 
@@ -5277,7 +5277,18 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     if (!serial) return;
     fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/collision-scheduler`)
       .then(r => r.json()).then(d => {
-        if (d.config) { setCsEnabled(d.config.enabled); setCsMinMin(d.config.restMinMin); setCsMinMax(d.config.restMinMax); }
+        if (d.config) {
+          setCsEnabled(d.config.enabled);
+          setCsMinMin(d.config.restMinMin);
+          setCsMinMax(d.config.restMinMax);
+        } else {
+          // New device — no saved config yet. Persist the defaults immediately so
+          // they survive a page reload without the user needing to touch anything.
+          fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/collision-scheduler`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: true, restMinMin: 5, restMinMax: 10 }),
+          }).catch(() => {});
+        }
       }).catch(() => {});
   }, [serial]);
 
