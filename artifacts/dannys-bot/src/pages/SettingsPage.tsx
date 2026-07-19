@@ -1058,9 +1058,9 @@ export function SettingsPage() {
 
 const PLAN_TIERS = [
   { id: "starter",    label: "Starter",    price: "£25/mo",  limit: 5,    deviceLimit: 1,  badge: "bg-slate-100 text-slate-700"   },
-  { id: "pro",        label: "Pro",         price: "£50/mo",  limit: 15,   deviceLimit: 3,  badge: "bg-blue-100 text-blue-700"    },
-  { id: "business",   label: "Business",    price: "£100/mo", limit: 100,  deviceLimit: 10, badge: "bg-purple-100 text-purple-700" },
-  { id: "enterprise", label: "Enterprise",  price: "£250/mo", limit: 9999, deviceLimit: 25, badge: "bg-amber-100 text-amber-700"  },
+  { id: "pro",        label: "Professional",   price: "£50/mo",  limit: 15,   deviceLimit: 3,  badge: "bg-blue-100 text-blue-700"    },
+  { id: "business",   label: "Influencer",     price: "£100/mo", limit: 100,  deviceLimit: 10, badge: "bg-purple-100 text-purple-700" },
+  { id: "enterprise", label: "Aura Farming",   price: "£250/mo", limit: 9999, deviceLimit: 25, badge: "bg-amber-100 text-amber-700"  },
 ];
 
 type LicenseUser = { id: number; username: string; tier: string; account_limit: number; active: number; is_admin: number; created_at: string; expires_at: string | null };
@@ -1431,7 +1431,6 @@ function MyAccountTabContent() {
                 <div className="flex items-center gap-2">
                   <span className={`text-xs font-medium ${isCurrent ? "" : "text-muted-foreground"}`}>{t.price}</span>
                   {isCurrent && <span className="text-[10px] font-bold text-primary uppercase tracking-wide">Current</span>}
-                  {!isCurrent && <span className="text-[10px] text-muted-foreground italic">coming soon</span>}
                 </div>
               </div>
             </label>
