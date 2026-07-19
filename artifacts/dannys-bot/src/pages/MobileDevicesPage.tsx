@@ -15,6 +15,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
 import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -582,6 +583,7 @@ export function MobileDevicesPage() {
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar />
       <main className="ml-[133px] flex-1 h-screen flex flex-col overflow-hidden">
+        <LiveActivityTicker />
         {/* Header */}
         <div className="shrink-0 z-10 bg-background/95 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-center gap-3">
           <PhoneFarmIcon className="w-5 h-5" style={{ color: "#1AD2F2" }} />

@@ -6,6 +6,7 @@ import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, u
 import { createPortal } from "react-dom";
 import { useParams, useSearch } from "wouter";
 import { Sidebar, FilledFarmIcon } from "@/components/layout/Sidebar";
+import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -6323,7 +6324,7 @@ export function MobilePage() {
           to render far down the page (extra collapsed space above it) and
           why taps landed on a zero-size element and did nothing. */}
       <main className="ml-[133px] flex-1 h-screen flex flex-col overflow-hidden">
-
+        <LiveActivityTicker />
         {/* Header */}
         <div className="shrink-0 z-10 bg-background/95 backdrop-blur border-b border-border px-6 py-3 relative flex items-center justify-end">
           {/* Title — absolutely centred in the bar, independent of button widths */}
