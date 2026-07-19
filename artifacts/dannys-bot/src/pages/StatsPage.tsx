@@ -195,42 +195,6 @@ const FARM_STAT_LABELS: { key: string; label: string; icon: React.ReactNode; col
   { key: "feed_shares", label: "Feed Shares",  icon: <Zap className="w-3 h-3" />,         color: "text-amber-500" },
 ];
 
-function PhoneSlotStats({ username }: { username: string }) {
-  const { data, isLoading } = useQuery<{ ok: boolean; daily: Record<string, number>; lifetime: Record<string, number> }>({
-    queryKey: [`/api/mobile/slot-stats?username=${encodeURIComponent(username)}`],
-    refetchInterval: 30000,
-  });
-
-  if (isLoading) return <div className="text-[11px] text-muted-foreground">Loading stats…</div>;
-  const daily = data?.daily ?? {};
-  const lifetime = data?.lifetime ?? {};
-  const hasAny = FARM_STAT_LABELS.some(s => (daily[s.key] ?? 0) > 0 || (lifetime[s.key] ?? 0) > 0);
-
-  return (
-    <div className="mt-1">
-      {!hasAny ? (
-        <span className="text-[11px] text-muted-foreground italic">No stats recorded yet</span>
-      ) : (
-        <div className="flex flex-wrap gap-x-4 gap-y-1">
-          {FARM_STAT_LABELS.map(s => {
-            const d = daily[s.key] ?? 0;
-            const l = lifetime[s.key] ?? 0;
-            if (d === 0 && l === 0) return null;
-            return (
-              <div key={s.key} className="flex items-center gap-1 text-[11px]">
-                <span className={s.color}>{s.icon}</span>
-                <span className="text-muted-foreground">{s.label}:</span>
-                <span className="font-semibold tabular-nums text-foreground">{d.toLocaleString()}</span>
-                <span className="text-muted-foreground">/ {l.toLocaleString()}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
 interface FarmPhone {
   serial: string;
   state: string;
@@ -239,7 +203,32 @@ interface FarmPhone {
   marketName?: string;
 }
 
-function PhoneFarmCard({ phone }: { phone: FarmPhone }) {
+function PhoneFarmSlotRow({ username }: { username: string }) {
+  const { data, isLoading } = useQuery<{ ok: boolean; daily: Record<string, number>; lifetime: Record<string, number> }>({
+    queryKey: [`/api/mobile/slot-stats?username=${encodeURIComponent(username)}`],
+    refetchInterval: 30000,
+  });
+  const daily = data?.daily ?? {};
+  const lifetime = data?.lifetime ?? {};
+  return (
+    <>
+      {FARM_STAT_LABELS.map(s => (
+        <td key={s.key} className="py-2.5 px-3 text-center tabular-nums">
+          {isLoading ? (
+            <span className="text-muted-foreground text-[11px]">…</span>
+          ) : (
+            <div className="flex items-center justify-center gap-0.5 text-[11px]">
+              <span className="font-bold text-foreground">{(daily[s.key] ?? 0).toLocaleString()}</span>
+              <span className="text-muted-foreground">/{(lifetime[s.key] ?? 0).toLocaleString()}</span>
+            </div>
+          )}
+        </td>
+      ))}
+    </>
+  );
+}
+
+function PhoneFarmPhoneSection({ phone, colCount }: { phone: FarmPhone; colCount: number }) {
   const { data: account, isLoading } = useQuery<{ slots: { username: string }[] }>({
     queryKey: [`/api/mobile/devices/${encodeURIComponent(phone.serial)}/account`],
     refetchInterval: 30000,
@@ -252,37 +241,41 @@ function PhoneFarmCard({ phone }: { phone: FarmPhone }) {
   const label = phone.marketName || (phone.manufacturer && phone.model ? `${phone.manufacturer} ${phone.model}` : phone.serial);
 
   return (
-    <Card className="border border-border/60 shadow-sm">
-      <CardHeader className="pb-3 pt-4 px-4">
-        <CardTitle className="text-sm flex items-center gap-2">
-          <Smartphone className="w-4 h-4 text-primary shrink-0" />
-          <span className="truncate">{label}</span>
-          <span className="ml-auto text-[10px] font-mono text-muted-foreground shrink-0">{phone.serial}</span>
-          <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${phone.state === "device" ? "bg-emerald-500/15 text-emerald-500" : "bg-amber-500/15 text-amber-500"}`}>
-            {phone.state}
-          </span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="px-4 pb-4">
-        {isLoading ? (
-          <div className="text-[11px] text-muted-foreground">Loading slots…</div>
-        ) : slots.length === 0 ? (
-          <div className="text-[11px] text-muted-foreground italic">No accounts configured on this device</div>
-        ) : (
-          <div className="space-y-3">
-            {slots.map(slot => (
-              <div key={slot.idx} className="border-l-2 border-border pl-3">
-                <div className="text-[12px] font-medium text-foreground">
-                  <span className="text-muted-foreground text-[10px] mr-1">Slot {slot.idx + 1}</span>
-                  @{slot.username}
-                </div>
-                <PhoneSlotStats username={slot.username} />
-              </div>
-            ))}
+    <>
+      <tr className="bg-background border-b border-border sticky top-0 z-10">
+        <td colSpan={colCount} className="px-3 py-1.5">
+          <div className="flex items-center gap-2">
+            <Smartphone className="w-3.5 h-3.5 text-primary shrink-0" />
+            <span className="text-sm font-bold text-foreground">{label}</span>
+            <span className="text-[10px] font-mono text-muted-foreground">{phone.serial}</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded ml-1 ${phone.state === "device" ? "bg-emerald-500/15 text-emerald-500" : "bg-amber-500/15 text-amber-500"}`}>
+              {phone.state}
+            </span>
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </td>
+      </tr>
+      {isLoading ? (
+        <tr className="animate-pulse">
+          <td colSpan={colCount} className="px-5 py-4 bg-muted/10 h-10" />
+        </tr>
+      ) : slots.length === 0 ? (
+        <tr>
+          <td colSpan={colCount} className="px-5 py-3 text-[12px] text-muted-foreground italic">
+            No accounts configured on this device
+          </td>
+        </tr>
+      ) : (
+        slots.map(slot => (
+          <tr key={slot.idx} className="border-b border-border/50 hover:bg-muted/10 transition-colors">
+            <td className="py-2.5 px-4 text-[12px]">
+              <span className="text-muted-foreground text-[10px] mr-1.5">Slot {slot.idx + 1}</span>
+              <span className="font-medium text-foreground">@{slot.username}</span>
+            </td>
+            <PhoneFarmSlotRow username={slot.username} />
+          </tr>
+        ))
+      )}
+    </>
   );
 }
 
@@ -1225,36 +1218,69 @@ function PhoneFarmTab() {
     refetchInterval: 15000,
   });
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-16 text-muted-foreground text-sm gap-2">
-        <Smartphone className="w-4 h-4 animate-pulse" />
-        Loading connected phones…
-      </div>
-    );
-  }
-  if (isError || !data?.adbFound) {
-    return (
-      <div className="flex items-center justify-center py-16 text-muted-foreground text-sm gap-2">
-        <PhoneOff className="w-4 h-4" />
-        {!data?.adbFound ? "ADB not found — make sure the API server is running on Windows with ADB installed." : "Failed to load device list."}
-      </div>
-    );
-  }
-  const phones = data.phones ?? [];
-  if (phones.length === 0) {
-    return (
-      <div className="flex items-center justify-center py-16 text-muted-foreground text-sm gap-2">
-        <PhoneOff className="w-4 h-4" />
-        No phones connected via USB.
-      </div>
-    );
-  }
+  const phones = data?.phones ?? [];
+  const colCount = 1 + FARM_STAT_LABELS.length;
+
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {phones.map(phone => (
-        <PhoneFarmCard key={phone.serial} phone={phone} />
-      ))}
-    </div>
+    <Card className="desktop-card border-none shadow-sm flex flex-col">
+      <CardHeader className="border-b border-border/50 bg-muted/5">
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Smartphone className="w-5 h-5 text-primary" /> Phone Farm
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0 flex flex-col">
+        <div className="overflow-x-auto">
+          <table className="text-sm w-full">
+            <thead className="text-xs bg-muted/30 text-muted-foreground border-b border-border/50">
+              <tr>
+                <th className="px-4 py-3 font-bold uppercase tracking-wide text-left w-56">
+                  Device / Account
+                </th>
+                {FARM_STAT_LABELS.map(s => (
+                  <th key={s.key} className={`px-3 py-3 text-center uppercase tracking-wide text-[10px] ${s.color}`}>
+                    <span className="inline-flex items-center gap-1">{s.icon} {s.label}</span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/50">
+              {isLoading ? (
+                Array.from({ length: 3 }).map((_, i) => (
+                  <tr key={i} className="animate-pulse">
+                    <td colSpan={colCount} className="px-5 py-4 bg-muted/10 h-12" />
+                  </tr>
+                ))
+              ) : isError ? (
+                <tr>
+                  <td colSpan={colCount} className="px-5 py-12 text-center text-muted-foreground text-sm">
+                    <div className="flex items-center justify-center gap-2">
+                      <PhoneOff className="w-4 h-4" /> Failed to load device list.
+                    </div>
+                  </td>
+                </tr>
+              ) : !data?.adbFound ? (
+                <tr>
+                  <td colSpan={colCount} className="px-5 py-12 text-center text-muted-foreground text-sm">
+                    ADB not found — make sure the API server is running on Windows with ADB installed.
+                  </td>
+                </tr>
+              ) : phones.length === 0 ? (
+                <tr>
+                  <td colSpan={colCount} className="px-5 py-12 text-center text-muted-foreground text-sm">
+                    <div className="flex items-center justify-center gap-2">
+                      <PhoneOff className="w-4 h-4" /> No phones connected via USB.
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                phones.map(phone => (
+                  <PhoneFarmPhoneSection key={phone.serial} phone={phone} colCount={colCount} />
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
