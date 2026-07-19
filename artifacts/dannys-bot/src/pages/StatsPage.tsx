@@ -654,7 +654,7 @@ export function StatsPage() {
         <div className="flex items-center gap-3 mb-3">
           <TabsList className="w-fit">
             <TabsTrigger value="farm" className="flex items-center gap-1.5">
-              <Smartphone className="w-3.5 h-3.5" />
+              <Activity className="w-3.5 h-3.5" />
               Tool Performance
             </TabsTrigger>
             <TabsTrigger value="metrics" className="flex items-center gap-1.5">
@@ -1012,17 +1012,105 @@ function PhoneFarmTab() {
   const farmDragColRef = useRef<string | null>(null);
   const [farmDragOverCol, setFarmDragOverCol] = useState<string | null>(null);
 
+  const [farmManageColsOpen, setFarmManageColsOpen] = useState(false);
+
+  const [farmVisibleCols, setFarmVisibleCols] = usePersistentSetting<Record<string, boolean>>(
+    "farm_visible_cols",
+    Object.fromEntries(FARM_STAT_LABELS.map(s => [s.key, true])),
+    (stored, defaults) => ({ ...defaults, ...stored }),
+  );
+
+  const moveFarmCol = (key: string, dir: -1 | 1) => {
+    const idx = farmColOrder.indexOf(key);
+    if (idx === -1) return;
+    const next = [...farmColOrder];
+    const swapIdx = idx + dir;
+    if (swapIdx < 0 || swapIdx >= next.length) return;
+    [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+    setFarmColOrder(next);
+  };
+
   const orderedLabels = farmColOrder
     .map(k => FARM_STAT_LABELS.find(s => s.key === k))
-    .filter(Boolean) as typeof FARM_STAT_LABELS;
-  const colCount = 1 + farmColOrder.length;
+    .filter(Boolean)
+    .filter(s => farmVisibleCols[s!.key] !== false) as typeof FARM_STAT_LABELS;
+  const colCount = 1 + orderedLabels.length;
 
   return (
     <Card className="desktop-card border-none shadow-sm flex flex-col">
-      <CardHeader className="border-b border-border/50 bg-muted/5">
+      <CardHeader className="border-b border-border/50 bg-muted/5 flex flex-row items-center justify-between py-3">
         <CardTitle className="text-lg flex items-center gap-2">
-          <Smartphone className="w-5 h-5 text-primary" /> Tool Performance
+          <Activity className="w-5 h-5 text-primary" /> Tool Performance
         </CardTitle>
+        <div className="relative">
+          <button
+            onClick={() => setFarmManageColsOpen(o => !o)}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1.5 rounded hover:bg-muted/40"
+          >
+            <Settings2 className="w-3.5 h-3.5" /> Columns
+          </button>
+          {farmManageColsOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setFarmManageColsOpen(false)} />
+              <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-lg shadow-2xl w-[360px] max-h-[80vh] overflow-y-auto">
+                <div className="px-5 pt-4 pb-3 border-b border-border">
+                  <p className="text-sm font-semibold">Tool Performance Columns</p>
+                </div>
+                <div className="p-4 flex flex-col gap-1">
+                  {farmColOrder.map((key, idx) => {
+                    const col = FARM_STAT_LABELS.find(s => s.key === key);
+                    if (!col) return null;
+                    const visible = farmVisibleCols[key] !== false;
+                    return (
+                      <div key={key} className="flex items-center gap-2">
+                        <div className="flex flex-col mr-0.5">
+                          <button
+                            onClick={() => moveFarmCol(key, -1)}
+                            disabled={idx === 0}
+                            className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"
+                          >
+                            <ChevronUp className="w-2.5 h-2.5" />
+                          </button>
+                          <button
+                            onClick={() => moveFarmCol(key, 1)}
+                            disabled={idx === farmColOrder.length - 1}
+                            className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"
+                          >
+                            <ChevronDown className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                        <Checkbox
+                          id={`farm-col-${key}`}
+                          checked={visible}
+                          onCheckedChange={checked => {
+                            setFarmVisibleCols(prev => ({ ...prev, [key]: !!checked }));
+                          }}
+                        />
+                        <label
+                          htmlFor={`farm-col-${key}`}
+                          className={`text-sm flex items-center gap-1.5 cursor-pointer select-none ${col.color}`}
+                        >
+                          {col.icon} {col.label}
+                        </label>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="px-4 pb-4">
+                  <button
+                    onClick={() => {
+                      setFarmColOrder(FARM_STAT_LABELS.map(s => s.key));
+                      setFarmVisibleCols(Object.fromEntries(FARM_STAT_LABELS.map(s => [s.key, true])));
+                    }}
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Reset to defaults
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="p-0 flex flex-col">
         <div className="overflow-x-auto">
