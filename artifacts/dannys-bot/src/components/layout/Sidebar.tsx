@@ -134,7 +134,7 @@ export function Sidebar() {
       <div className="flex flex-col items-center border-b border-border/50 pt-[14px] pb-[10px] px-2">
         <img src="/bot-logo.png" alt="Aura Farming" className="w-[55px] h-[55px] shrink-0 object-contain mb-[6px]" />
         <span className="font-bold text-base tracking-tight">
-          <span style={{ color: BRAND }}>Aura</span><span className="text-foreground"> Farming</span>
+          <span style={{ color: BRAND }}>Aura</span><span className="text-foreground">Farming</span>
         </span>
       </div>
 
