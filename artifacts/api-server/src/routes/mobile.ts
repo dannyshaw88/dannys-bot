@@ -4983,17 +4983,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // must confirm the full-screen viewer is fully closed first.
             tLog("▶ View Reels — exiting full-screen viewer…");
             let _reelsExited = false;
+            let _reHomeTab = null;
             for (let _re = 0; _re < 3; _re++) {
               try { await android.pressBack(serial); } catch { /* best effort */ }
               await sleepOrAbort(serial, 1200);
-              const _reHome = await android.findHomeTab(serial).catch(() => null);
-              if (_reHome) {
+              _reHomeTab = await android.findHomeTab(serial).catch(() => null);
+              if (_reHomeTab) {
                 _reelsExited = true;
-                tLog("▶ View Reels — confirmed back on home feed");
                 break;
               }
             }
-            if (!_reelsExited) {
+            // Always tap Home after Reels — the Back presses exit the full-screen
+            // viewer but leave the UI on the Reels tab. If the next account in
+            // the slot rotation runs its cycle from the Reels tab the bottom-nav
+            // layout is different enough to break account-switcher detection.
+            if (_reHomeTab) {
+              await android.tap(serial, _reHomeTab.x, _reHomeTab.y);
+              await sleepOrAbort(serial, 800);
+              tLog("▶ View Reels — tapped Home tab, back on home feed");
+            } else {
               tLog("▶ View Reels — exit uncertain after 3 Back presses — proceeding anyway");
             }
           } else if (!viewReelsEnabled) {
