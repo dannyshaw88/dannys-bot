@@ -6409,10 +6409,35 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
 
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto bg-black/90 border border-border rounded-xl p-3 font-mono text-[11px] leading-relaxed text-green-400/90">
+      <div className="flex-1 min-h-0 overflow-y-auto bg-black/90 border border-border rounded-xl p-3 font-mono text-[11px] leading-relaxed">
         {lines.length === 0
           ? <p className="text-white/30">No activity yet — taps, swipes, keys, and automation cycles will show up here.</p>
-          : lines.map((l, i) => <div key={i} className="whitespace-pre-wrap break-all">{l}</div>)
+          : lines.map((l, i) => {
+              // Parse:  [HH:MM:SS AM/PM]  [Xs]  message
+              //         [HH:MM:SS AM/PM]        message   (no duration)
+              const m   = l.match(/^\[([^\]]+)\]\s*(?:\[(\d+(?:\.\d+)?s)\]\s*)?([\s\S]*)$/);
+              const ts  = m?.[1] ?? '';
+              const dur = m?.[2] ?? '';
+              const msg = m ? (m[3] ?? '') : l;
+
+              // Colour the message based on its prefix
+              let msgClass = 'text-green-400/80';
+              if (/^(ERROR|FAILED|✗)/.test(msg))  msgClass = 'text-red-400';
+              else if (/^⚠/.test(msg))            msgClass = 'text-yellow-400';
+              else if (/^[✓✅]/.test(msg))        msgClass = 'text-green-300';
+              else if (/^▶/.test(msg))            msgClass = 'text-white/90';
+              else if (/^(WS |First frame|Frame |Decoder|Wake )/.test(msg)) msgClass = 'text-sky-400/70';
+
+              return (
+                <div key={i} className="flex gap-x-2 min-w-0 py-[1px]">
+                  <span className="text-green-400/25 whitespace-nowrap shrink-0 select-none">[{ts}]</span>
+                  <span className={`shrink-0 w-[4.5rem] text-right whitespace-nowrap ${dur ? 'text-amber-400/80' : ''}`}>
+                    {dur ? `[${dur}]` : ''}
+                  </span>
+                  <span className={`flex-1 min-w-0 break-words ${msgClass}`}>{msg}</span>
+                </div>
+              );
+            })
         }
         <div ref={bottomRef} />
       </div>

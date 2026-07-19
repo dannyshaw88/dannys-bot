@@ -4794,7 +4794,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               shareFeedPercentMin, shareFeedPercentMax,
               shareDmPercentMin, shareDmPercentMax,
               savePercentMin, savePercentMax,
-              onLog: (msg) => sendVideoLog(serial, `  ${msg}`),
+              onLog: (msg) => tLog(`  ${msg}`),
             }));
             feedScrolled = count;
             steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${saves} saves, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
