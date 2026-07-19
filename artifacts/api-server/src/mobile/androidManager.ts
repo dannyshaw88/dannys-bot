@@ -4960,18 +4960,31 @@ export async function findInstagramSearchBar(
       return { x: Math.round((Number(m[1]) + Number(m[3])) / 2), y: Math.round(centerY) };
     }
 
-    // 3. Clickable "Search" element in the top 30%
-    //    (Explore-page pre-tap state — the bar is a View/FrameLayout, not yet an
-    //    EditText, until the user taps it the first time)
-    for (const re2 of [
-      /<node[^>]*\b(?:text|content-desc)="(?:Search|Search Instagram)"[^>]*\bclickable="true"[^>]*\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^/]*\/>/gi,
-      /<node[^>]*\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^>]*\bclickable="true"[^>]*\b(?:text|content-desc)="(?:Search|Search Instagram)"[^/]*\/>/gi,
-    ]) {
-      while ((m = re2.exec(xml)) !== null) {
-        const centerY = (Number(m[2]) + Number(m[4])) / 2;
-        if (centerY > topLimit) continue;
-        return { x: Math.round((Number(m[1]) + Number(m[3])) / 2), y: Math.round(centerY) };
-      }
+    // 3. Any node in the top 30% whose text or content-desc contains "Search"
+    //    (case-insensitive) and is clickable or focusable.
+    //
+    //    Previous approach used two regex patterns that required a specific
+    //    attribute order (text/content-desc → clickable → bounds OR bounds →
+    //    clickable → text/content-desc).  UIAutomator doesn't guarantee order, so
+    //    any node where bounds appears between those two would silently miss both
+    //    patterns.  Additionally, IG's content-desc varies by version:
+    //    "Search", "Search Instagram", "Search accounts, hashtags, and places",
+    //    etc.  A line-by-line check is attribute-order-independent and catches
+    //    all variants.
+    for (const xmlLine of xml.split(/\r?\n/)) {
+      // Quick reject: line must mention "search" somewhere
+      if (!xmlLine.toLowerCase().includes("search")) continue;
+      // Must have a bounds attribute we can parse
+      const bm = xmlLine.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (!bm) continue;
+      const centerY = (Number(bm[2]) + Number(bm[4])) / 2;
+      if (centerY > topLimit) continue;
+      // Must be interactive (clickable OR focusable)
+      if (!xmlLine.includes('clickable="true"') && !xmlLine.includes('focusable="true"')) continue;
+      // "search" must appear inside a text="" or content-desc="" attribute value
+      // (not just anywhere in the line, e.g. a resource-id containing "search")
+      if (!/(?:text|content-desc)="[^"]*[Ss]earch[^"]*"/.test(xmlLine)) continue;
+      return { x: Math.round((Number(bm[1]) + Number(bm[3])) / 2), y: Math.round(centerY) };
     }
     // attempt loop continues — wait and re-dump
   }
