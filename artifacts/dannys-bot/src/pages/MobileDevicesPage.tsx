@@ -437,26 +437,26 @@ function DeviceCard({
           active={active}
         />
         <div className="shrink-0 text-center space-y-0.5">
-          <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
+          <p className="text-base font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
             {resolveDisplayName(device, phone)}
           </p>
           <div className="flex items-center justify-center gap-1 mt-1 flex-wrap">
             {online ? (
               <>
                 <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
-                <span className="text-[10px] text-muted-foreground">Connected</span>
+                <span className="text-sm text-muted-foreground">Connected</span>
               </>
             ) : (
               <>
                 <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 shrink-0" />
-                <span className="text-[10px] text-muted-foreground">Offline</span>
+                <span className="text-sm text-muted-foreground">Offline</span>
               </>
             )}
-            <span className="text-[10px] text-muted-foreground/30 select-none">|</span>
+            <span className="text-sm text-muted-foreground/30 select-none">|</span>
             {active ? (
-              <span className="text-[10px] font-semibold text-green-400">Active</span>
+              <span className="text-sm font-semibold text-green-400">Active</span>
             ) : (
-              <span className="text-[10px] text-muted-foreground/60">Not Active</span>
+              <span className="text-sm text-muted-foreground/60">Not Active</span>
             )}
           </div>
         </div>
