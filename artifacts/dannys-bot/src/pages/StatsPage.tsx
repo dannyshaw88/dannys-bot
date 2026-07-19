@@ -3,14 +3,12 @@ import { usePersistentSetting } from "@/hooks/use-persistent-setting";
 import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { useSelectedProfiles } from "@/contexts/SelectedProfilesContext";
 import { TrustScoreBadge } from "@/components/TrustScoreBadge";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useProfiles } from "@/hooks/use-profiles";
-import { useProxies } from "@/hooks/use-proxies";
 import { useUpdateTool } from "@/hooks/use-tools";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -19,61 +17,15 @@ import {
 } from "recharts";
 import {
   User, Heart, MessageCircle, Eye, UserPlus, UserMinus, Mail, Activity,
-  Settings2, ChevronDown, ChevronUp, ChevronRight, Fingerprint, Monitor, ImagePlus,
-  BarChart2, Zap, Repeat2, ShieldAlert, PhoneOff, Webhook, Bot, Globe, Lock, Flag,
+  Settings2, ChevronDown, ChevronUp, ChevronRight, Fingerprint, ImagePlus,
+  BarChart2, Zap, Repeat2, ShieldAlert, PhoneOff, Webhook, Bot, Lock, Flag,
 } from "lucide-react";
 import { type Profile, type Tool } from "@shared/schema";
 import { queryClient } from "@/lib/queryClient";
-import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 
 type StatKey = "follow" | "unfollow" | "dm" | "like" | "comment" | "story" | "repost" | "human_session";
-type ColKey = StatKey | "open_eb" | "trustscore" | "status" | "proxy_ip" | "select";
+type ColKey = StatKey | "trustscore";
 
-const STATUS_DISPLAY: Record<string, { label: string; pill: string }> = {
-  pending:              { label: "Pending",         pill: "bg-slate-50 text-slate-600 border-slate-200" },
-  verifying:            { label: "Verifying",       pill: "bg-blue-50 text-blue-600 border-blue-200" },
-  valid:                { label: "Valid",            pill: "bg-green-50 text-green-700 border-green-200" },
-  banned:               { label: "Banned",           pill: "bg-red-50 text-red-700 border-red-200" },
-  captcha:              { label: "Captcha",          pill: "bg-amber-50 text-amber-700 border-amber-200" },
-  locked:               { label: "Locked",           pill: "bg-red-50 text-red-700 border-red-200" },
-  email_confirmation:   { label: "Email Confirm",   pill: "bg-blue-50 text-blue-700 border-blue-200" },
-  phone_verification:   { label: "Phone Verify",    pill: "bg-blue-50 text-blue-700 border-blue-200" },
-  "2fa_verification":   { label: "2FA Verify",      pill: "bg-purple-50 text-purple-700 border-purple-200" },
-  stopped:              { label: "Stopped",          pill: "bg-slate-100 text-slate-600 border-slate-200" },
-  logged_out:           { label: "Logged Out",       pill: "bg-orange-50 text-orange-700 border-orange-200" },
-  bad_password:         { label: "Bad Password",    pill: "bg-red-50 text-red-700 border-red-200" },
-  action_blocked:       { label: "Action Blocked",  pill: "bg-red-50 text-red-700 border-red-200" },
-  action_required:      { label: "Action Required", pill: "bg-amber-50 text-amber-700 border-amber-200" },
-  account_disabled:     { label: "Disabled",        pill: "bg-red-50 text-red-700 border-red-200" },
-  api_block:            { label: "API Block",       pill: "bg-red-50 text-red-700 border-red-200" },
-  compromised:          { label: "Compromised",     pill: "bg-red-50 text-red-700 border-red-200" },
-  invalid_credentials:  { label: "Invalid Creds",  pill: "bg-red-50 text-red-700 border-red-200" },
-  no_internet:          { label: "No Internet",     pill: "bg-slate-100 text-slate-600 border-slate-200" },
-  suspended:            { label: "Suspended",        pill: "bg-amber-50 text-amber-700 border-amber-200" },
-  confirm_human:        { label: "Confirm Human",   pill: "bg-amber-50 text-amber-700 border-amber-200" },
-  temporary_locked:     { label: "Temp. Locked",   pill: "bg-amber-50 text-amber-700 border-amber-200" },
-  scrape_warning:       { label: "Scrape Warn",     pill: "bg-amber-50 text-amber-700 border-amber-200" },
-  post_deleted:         { label: "Post Deleted",    pill: "bg-red-50 text-red-700 border-red-200" },
-  captcha_disabled:     { label: "Captcha Dis.",    pill: "bg-slate-100 text-slate-600 border-slate-200" },
-  email_verification:   { label: "Email Verify",    pill: "bg-blue-50 text-blue-700 border-blue-200" },
-  phone_validation:     { label: "Phone Valid.",    pill: "bg-blue-50 text-blue-700 border-blue-200" },
-  password_reset:       { label: "Pwd Reset",       pill: "bg-blue-50 text-blue-700 border-blue-200" },
-  selfie_verification:  { label: "Selfie Verify",   pill: "bg-purple-50 text-purple-700 border-purple-200" },
-  own_phone_verification: { label: "Own Phone",     pill: "bg-blue-50 text-blue-700 border-blue-200" },
-  email_connection:     { label: "Email Connect",   pill: "bg-orange-50 text-orange-700 border-orange-200" },
-  upload:               { label: "Upload",           pill: "bg-blue-50 text-blue-700 border-blue-200" },
-  review:               { label: "Review",           pill: "bg-slate-100 text-slate-600 border-slate-200" },
-};
-
-function StatusPill({ status }: { status?: string | null }) {
-  const s = status ?? "pending";
-  const d = STATUS_DISPLAY[s] ?? { label: s.replace(/_/g, " "), pill: "bg-slate-50 text-slate-600 border-slate-200" };
-  return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold rounded-full border whitespace-nowrap ${d.pill}`}>
-      {d.label}
-    </span>
-  );
-}
 
 const ALL_STAT_TYPES: { key: StatKey; label: string; icon: React.ReactNode; color: string; isTool: boolean; toolTypeKey?: string; pieColor: string }[] = [
   { key: "follow",        label: "Follow",        icon: <UserPlus className="w-3.5 h-3.5" />,     color: "text-blue-500",    isTool: false, pieColor: "#3b82f6" },
@@ -124,16 +76,16 @@ function cleanEpName(name: string): string {
 }
 
 const DEFAULT_COL_WIDTHS: Record<ColKey | "account", number> = {
-  account: 160, select: 80, status: 120, open_eb: 80, trustscore: 120, proxy_ip: 150, follow: 110, unfollow: 110, dm: 110,
+  account: 160, trustscore: 120, follow: 110, unfollow: 110, dm: 110,
   like: 100, comment: 110, story: 120, repost: 110, human_session: 140,
 };
 
 const DEFAULT_VISIBLE: Record<ColKey, boolean> = {
-  select: true, status: true, follow: true, unfollow: true, dm: true, like: true,
-  comment: true, story: true, repost: true, human_session: true, open_eb: true, trustscore: true, proxy_ip: true,
+  follow: true, unfollow: true, dm: true, like: true,
+  comment: true, story: true, repost: true, human_session: true, trustscore: true,
 };
 
-const DEFAULT_STAT_COL_ORDER: ColKey[] = ["select", "status", "open_eb", "trustscore", "proxy_ip", "follow", "unfollow", "dm", "like", "comment", "story", "repost", "human_session"];
+const DEFAULT_STAT_COL_ORDER: ColKey[] = ["trustscore", "follow", "unfollow", "dm", "like", "comment", "story", "repost", "human_session"];
 
 function ProfileStatsRow({
   profile,
@@ -141,23 +93,15 @@ function ProfileStatsRow({
   statColOrder,
   colWidths,
   statsData,
-  proxies,
-  onOpenBrowser,
   onNavigateToProfile,
-  isSelected,
-  onToggleSelect,
   isFlagged,
 }: {
   profile: Profile;
   visibleCols: Record<ColKey, boolean>;
   statColOrder: ColKey[];
   colWidths: Record<ColKey | "account", number>;
-  proxies?: any[];
   statsData: any[];
-  onOpenBrowser: () => void;
   onNavigateToProfile: () => void;
-  isSelected: boolean;
-  onToggleSelect: () => void;
   isFlagged?: boolean;
 }) {
   const { data: tools } = useQuery<Tool[]>({ queryKey: [`/api/profiles/${profile.id}/tools`] });
@@ -194,59 +138,10 @@ function ProfileStatsRow({
 
       {/* All non-account columns — centred */}
       {statColOrder.filter(key => visibleCols[key]).map(key => {
-        if (key === "select") {
-          return (
-            <td key="select" style={{ width: colWidths.select }} className="px-3 py-3 text-center">
-              <button
-                onClick={onToggleSelect}
-                className={`text-[11px] font-bold uppercase tracking-wide transition-colors ${isSelected ? "text-sky-400 hover:text-sky-300" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                {isSelected ? "De-select" : "Select"}
-              </button>
-            </td>
-          );
-        }
-        if (key === "status") {
-          return (
-            <td key="status" style={{ width: colWidths.status }} className="px-4 py-3 text-center">
-              <div className="flex justify-center">
-                <StatusPill status={profile.accountStatus} />
-              </div>
-            </td>
-          );
-        }
-        if (key === "open_eb") {
-          return (
-            <td key="open_eb" style={{ width: colWidths.open_eb }} className="px-4 py-3 text-center">
-              <button
-                className="inline-flex items-center gap-1.5 text-xs text-cyan-500 hover:text-cyan-400 transition-colors font-medium whitespace-nowrap"
-                onClick={onOpenBrowser}
-                title="Open Embedded Browser for this account"
-              >
-                <Monitor className="w-3.5 h-3.5 shrink-0" />
-                <span>Open EB</span>
-              </button>
-            </td>
-          );
-        }
         if (key === "trustscore") {
           return (
             <td key="trustscore" style={{ width: colWidths.trustscore, textAlign: "center" }} className="px-4 py-3 align-middle">
               <TrustScoreBadge profileId={profile.id} />
-            </td>
-          );
-        }
-        if (key === "proxy_ip") {
-          const host: string | null | undefined =
-            (profile as any).proxyHost ||
-            proxies?.find((px: any) => px.id === profile.proxyId)?.host ||
-            null;
-          return (
-            <td key="proxy_ip" style={{ width: colWidths.proxy_ip }} className="px-4 py-3 text-center">
-              {host
-                ? <span className="font-mono text-[11px] text-foreground">{host}</span>
-                : <span className="text-muted-foreground/30 text-[11px]">—</span>
-              }
             </td>
           );
         }
@@ -289,9 +184,7 @@ export function StatsPage() {
   useScrollRestore("stats");
   const { data: rawProfiles, isLoading } = useProfiles();
   const profiles = useMemo(() => rawProfiles?.filter(p => !p.isTemplate), [rawProfiles]);
-  const { data: proxies } = useProxies();
   const [, setLocation] = useLocation();
-  const { openWindow } = useBrowserWindows();
 
   const [colWidths, setColWidths] = usePersistentSetting<Record<ColKey | "account", number>>(
     "stats_col_widths_px",
@@ -373,15 +266,15 @@ export function StatsPage() {
     setCollapsedGroups(next);
   };
 
-  const [sortKey, setSortKey] = useState<StatKey | "account" | "proxy_ip" | null>(() => {
+  const [sortKey, setSortKey] = useState<StatKey | "account" | null>(() => {
     const v = localStorage.getItem("stats:sortKey");
-    return v ? (v as StatKey | "account" | "proxy_ip") : null;
+    return v ? (v as StatKey | "account") : null;
   });
   const [sortDir, setSortDir] = useState<"asc" | "desc">(() =>
     localStorage.getItem("stats:sortDir") === "desc" ? "desc" : "asc"
   );
 
-  const cycleSort = (key: StatKey | "account" | "proxy_ip") => {
+  const cycleSort = (key: StatKey | "account") => {
     if (sortKey !== key) {
       setSortKey(key); setSortDir("asc");
       localStorage.setItem("stats:sortKey", key);
@@ -425,13 +318,6 @@ export function StatsPage() {
         const sb = (b.accountLabel || b.username || "").toLowerCase();
         return sortDir === "asc" ? sa.localeCompare(sb) : sb.localeCompare(sa);
       }
-      if (sortKey === "proxy_ip") {
-        const resolveHost = (p: Profile): string =>
-          (p as any).proxyHost || proxies?.find((px: any) => px.id === p.proxyId)?.host || "";
-        const ha = resolveHost(a).toLowerCase();
-        const hb = resolveHost(b).toLowerCase();
-        return sortDir === "asc" ? ha.localeCompare(hb) : hb.localeCompare(ha);
-      }
       const va = getStatById(a.id, sortKey, today);
       const vb = getStatById(b.id, sortKey, today);
       if (va !== vb) return sortDir === "asc" ? va - vb : vb - va;
@@ -472,32 +358,23 @@ export function StatsPage() {
   const colGroups: [string, string][] = [
     ["account", "Account"],
     ...statColOrder.map(k => {
-      if (k === "select") return ["select", "Select"] as [string, string];
-      if (k === "status") return ["status", "Status"] as [string, string];
-      if (k === "open_eb") return ["open_eb", "Open EB"] as [string, string];
       if (k === "trustscore") return ["trustscore", "TrustScore"] as [string, string];
-      if (k === "proxy_ip") return ["proxy_ip", "Proxy IP"] as [string, string];
       const found = ALL_STAT_TYPES.find(s => s.key === k);
       return [k, found ? found.label : k] as [string, string];
     }),
   ];
 
-  const sortIcon = (key: StatKey | "account" | "proxy_ip") => {
+  const sortIcon = (key: StatKey | "account") => {
     if (sortKey !== key) return <span className="text-[9px] opacity-30 ml-0.5">⇅</span>;
     return <span className="text-[9px] ml-0.5">{sortDir === "asc" ? "▲" : "▼"}</span>;
   };
-
-  const { selectedProfileIds, toggleProfileId } = useSelectedProfiles();
 
   const [flaggedIds] = useState<number[]>(() => {
     try { return JSON.parse(localStorage.getItem("equinox:flagged_profiles") ?? "[]") as number[]; } catch { return []; }
   });
 
   const makeRowProps = (profile: Profile) => ({
-    onOpenBrowser: () => openWindow(profile.id, profile.username ?? "", profile.userAgentEmbedded ?? ""),
     onNavigateToProfile: () => setLocation(`/profiles/${profile.id}`),
-    isSelected: selectedProfileIds.includes(profile.id),
-    onToggleSelect: () => toggleProfileId(profile.id),
     isFlagged: flaggedIds.includes(profile.id),
   });
 
@@ -711,11 +588,7 @@ export function StatsPage() {
                                 let icon: React.ReactNode;
                                 let label: string;
                                 let color: string;
-                                if (key === "select") { icon = null; label = "Select"; color = "text-foreground"; }
-                                else if (key === "status") { icon = <ShieldAlert className="w-3.5 h-3.5" />; label = "Status"; color = "text-muted-foreground"; }
-                                else if (key === "open_eb") { icon = <Monitor className="w-3.5 h-3.5" />; label = "Open EB"; color = "text-cyan-500"; }
-                                else if (key === "trustscore") { icon = <Activity className="w-3.5 h-3.5" />; label = "TrustScore"; color = "text-muted-foreground"; }
-                                else if (key === "proxy_ip") { icon = <Globe className="w-3.5 h-3.5" />; label = "Proxy IP"; color = "text-muted-foreground"; }
+                                if (key === "trustscore") { icon = <Activity className="w-3.5 h-3.5" />; label = "TrustScore"; color = "text-muted-foreground"; }
                                 else { const st = ALL_STAT_TYPES.find(s => s.key === key)!; icon = st.icon; label = st.label; color = st.color; }
                                 return (
                                   <div key={key} className="flex items-center gap-1.5 select-none mb-1">
@@ -799,35 +672,8 @@ export function StatsPage() {
                       {statColOrder.filter(key => visibleCols[key]).map(key => {
                         const isDragTarget = statDragOverCol === key;
                         let thContent: React.ReactNode;
-                        if (key === "select") {
-                          thContent = (
-                            <span className="inline-flex items-center justify-center text-[10px] uppercase tracking-wide font-bold text-foreground">
-                              Select
-                            </span>
-                          );
-                        } else if (key === "status") {
-                          thContent = (
-                            <span className="inline-flex items-center gap-1 text-foreground">
-                              <ShieldAlert className="w-3 h-3" />
-                              <span className="text-[10px] uppercase tracking-wide">Status</span>
-                            </span>
-                          );
-                        } else if (key === "open_eb") {
-                          thContent = (
-                            <span className="inline-flex items-center gap-1 text-cyan-500/70">
-                              <Monitor className="w-3 h-3" />
-                              <span className="text-[10px] uppercase tracking-wide">Open EB</span>
-                            </span>
-                          );
-                        } else if (key === "trustscore") {
+                        if (key === "trustscore") {
                           thContent = <span className="flex justify-center text-[10px] uppercase tracking-wide text-foreground">TrustScore</span>;
-                        } else if (key === "proxy_ip") {
-                          thContent = (
-                            <button onClick={() => cycleSort("proxy_ip")} className="inline-flex items-center gap-1 hover:opacity-90 transition-opacity text-foreground font-bold">
-                              <Globe className="w-3 h-3" />
-                              <span className="text-[10px] uppercase tracking-wide">Proxy IP</span>
-                            </button>
-                          );
                         } else {
                           const st = ALL_STAT_TYPES.find(s => s.key === key)!;
                           thContent = (
@@ -932,7 +778,6 @@ export function StatsPage() {
                                 statColOrder={statColOrder}
                                 colWidths={colWidths}
                                 statsData={statsMap.get(profile.id) ?? []}
-                                proxies={proxies}
                                 {...makeRowProps(profile)}
                               />
                             ))}
@@ -948,7 +793,6 @@ export function StatsPage() {
                           statColOrder={statColOrder}
                           colWidths={colWidths}
                           statsData={statsMap.get(profile.id) ?? []}
-                          proxies={proxies}
                           {...makeRowProps(profile)}
                         />
                       ))
