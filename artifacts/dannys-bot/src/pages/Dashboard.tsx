@@ -70,14 +70,10 @@ const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string |
   view_profile_feed:       { label: "View Profile Feed", cls: "text-cyan-600",    icon: "≡" },
 };
 
-const DEFAULT_COL_WIDTHS = { account: 160, device_name: 140, account_slot: 100, event: 150, target: 100, detail: 200, timestamp: 220, trustscore: 120 };
-// "target" is deliberately excluded from the default order — it only holds the
-// account username for phone-farm rows and is not useful as a standalone column
-// since the ACCOUNT column already carries that context when a profile is linked.
-// Users can re-add it via Manage Columns if they want it.
+const DEFAULT_COL_WIDTHS = { account: 160, device_name: 140, account_slot: 100, event: 150, detail: 200, timestamp: 220, trustscore: 120 };
 const DEFAULT_COL_ORDER: (keyof typeof DEFAULT_COL_WIDTHS)[] = ["account", "device_name", "account_slot", "trustscore", "event", "detail", "timestamp"];
 const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
-  account: "ACCOUNT", device_name: "DEVICE", account_slot: "SLOT", event: "ACTION", target: "TARGET", detail: "DETAIL", timestamp: "TIMESTAMP", trustscore: "TRUSTSCORE",
+  account: "ACCOUNT", device_name: "DEVICE", account_slot: "SLOT", event: "ACTION", detail: "DETAIL", timestamp: "TIMESTAMP", trustscore: "TRUSTSCORE",
 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
@@ -11557,6 +11553,20 @@ export function Dashboard() {
     refetchInterval: 5000,
   });
 
+  const { data: usbPhones } = useQuery<{ phones: { serial: string; manufacturer?: string | null; model?: string | null; marketName?: string | null }[] }>({
+    queryKey: ["/api/mobile/usb-phones"],
+    refetchInterval: 10000,
+  });
+
+  const deviceNameMap = useMemo(() => {
+    const m = new Map<string, string>();
+    (usbPhones?.phones ?? []).forEach(p => {
+      const label = [p.manufacturer, p.marketName || p.model].filter(Boolean).join(" ") || p.serial;
+      m.set(p.serial, label);
+    });
+    return m;
+  }, [usbPhones]);
+
   const getUsername = (profileId: number, _label?: string) => {
     const p = profiles?.find(p => Number(p.id) === Number(profileId));
     return p?.accountLabel || p?.username || _label || `#${profileId}`;
@@ -11619,7 +11629,6 @@ export function Dashboard() {
         return colOrder.map(col => {
           if (col === "account") return "Import";
           if (col === "event") return "Profile Import";
-          if (col === "target") return imp.fileName;
           if (col === "detail") return `${imp.created} created, ${imp.updated} updated, ${imp.failed} failed`;
           return fmtTs(imp.ts, true);
         });
@@ -11631,7 +11640,6 @@ export function Dashboard() {
           const style = ACTION_STYLES[item.action ?? ""];
           return style ? style.label : (item.action ?? "").replace(/_/g, " ");
         }
-        if (col === "target") return item.targetUsername ? `@${item.targetUsername}` : "";
         if (col === "detail") return item.detail ?? "";
         return fmtTs(item.ts, true);
       });
@@ -11935,7 +11943,7 @@ export function Dashboard() {
                             localStorage.setItem("dashboard_col_order", JSON.stringify(next));
                           }}
                           onDragEnd={() => { dashDragColRef.current = null; setDashDragOverCol(null); }}
-                          className={`px-3 py-4 font-bold cursor-default select-none ${isDragTarget ? "bg-primary/5 border-l-2 border-l-primary" : ""} ${(key === "trustscore" || key === "event" || key === "target" || key === "device_name" || key === "account_slot") ? "text-center" : ""}`}
+                          className={`px-3 py-4 font-bold cursor-default select-none ${isDragTarget ? "bg-primary/5 border-l-2 border-l-primary" : ""} ${(key === "trustscore" || key === "event" || key === "device_name" || key === "account_slot") ? "text-center" : ""}`}
                         >
                           {COL_LABELS[key]}
                         </th>
@@ -11975,21 +11983,19 @@ export function Dashboard() {
                       const label = getUsername(item.profileId, item.profileLabel);
 
                       const getCell = (col: keyof typeof DEFAULT_COL_WIDTHS) => {
-                        if (col === "device_name") return <td key={col} className="px-3 py-1.5 text-center"><span className="text-xs text-muted-foreground font-mono">{item.sourceType === "phone" && item.sourceValue ? (item.sourceValue.split(":")[0] ?? "—") : "—"}</span></td>;
+                        if (col === "device_name") { const serial = item.sourceType === "phone" && item.sourceValue ? item.sourceValue.split(":")[0] : null; const dName = serial ? (deviceNameMap.get(serial) ?? serial) : "—"; return <td key={col} className="px-3 py-1.5 text-center"><span className="text-xs text-muted-foreground">{dName}</span></td>; }
                         if (col === "account_slot") return <td key={col} className="px-3 py-1.5 text-center"><span className="text-xs text-muted-foreground">{item.sourceType === "phone" && item.sourceValue?.includes(":") ? `Slot ${Number(item.sourceValue.split(":")[1]) + 1}` : "—"}</span></td>;
-                        if (col === "trustscore") return <td key={col} className="px-3 py-1.5"><div className="flex justify-center">{item.profileId ? <TrustScoreBadge profileId={item.profileId} /> : <span className="text-muted-foreground text-xs">—</span>}</div></td>;
+                        if (col === "trustscore") { const tsProfileId = item.profileId || (item.targetUsername ? (profiles?.find(p => p.username === item.targetUsername)?.id ?? 0) : 0); return <td key={col} className="px-3 py-1.5"><div className="flex justify-center">{tsProfileId ? <TrustScoreBadge profileId={tsProfileId} /> : <span className="text-muted-foreground text-xs">—</span>}</div></td>; }
                         if (item.kind === "import") {
                           const imp = item.importData!;
                           if (col === "account") return <td key={col} className="px-3 py-3 font-medium truncate"><span className="flex items-center gap-1.5 text-foreground min-w-0"><Upload className="w-3.5 h-3.5 text-blue-500 shrink-0" /><span className="truncate text-xs font-semibold">Import</span></span></td>;
                           if (col === "event") return <td key={col} className="px-3 py-3 truncate text-center"><span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-bold uppercase tracking-wider">Profile Import</span></td>;
-                          if (col === "target") return <td key={col} className="px-3 py-3 text-xs text-muted-foreground truncate text-center" title={imp.fileName}>{imp.fileName}</td>;
                           if (col === "detail") return <td key={col} className="px-3 py-3 text-xs truncate"><span className="flex items-center gap-2">{imp.created > 0 && <span className="font-semibold text-emerald-600">{imp.created} created</span>}{imp.updated > 0 && <span className="font-semibold text-blue-600">{imp.updated} updated</span>}{imp.failed > 0 && <span className="font-semibold text-destructive">{imp.failed} failed</span>}</span></td>;
                           return <td key={col} className="px-3 py-3 text-muted-foreground text-xs font-mono truncate"><span className="flex items-center gap-1 min-w-0"><Clock className="w-3 h-3 shrink-0" /><span className="truncate">{fmtTs(imp.ts)}</span><button onClick={() => { localStorage.setItem("equinox_import_dismissed", String(imp.ts)); setImportDismissed(imp.ts); }} className="ml-auto text-muted-foreground hover:text-foreground transition-colors shrink-0" title="Dismiss"><X className="w-3 h-3" /></button></span></td>;
                         }
                         const style = ACTION_STYLES[item.action ?? ""] ?? { label: (item.action ?? "event").replace(/_/g, " "), cls: "text-muted-foreground", icon: "·" };
-                        if (col === "account") return <td key={col} className="px-3 py-3 font-medium truncate"><Link href={`/profiles/${item.profileId}?tab=human-session`} className="flex items-center gap-1.5 text-foreground hover:text-primary transition-colors group min-w-0"><User className="w-3.5 h-3.5 text-primary shrink-0" /><span className="group-hover:underline underline-offset-2 truncate">{label}</span></Link></td>;
+                        if (col === "account") { const acctDisplay = item.sourceType === "phone" && item.targetUsername ? `@${item.targetUsername}` : label; return <td key={col} className="px-3 py-3 font-medium truncate"><Link href={`/profiles/${item.profileId}?tab=human-session`} className="flex items-center gap-1.5 text-foreground hover:text-primary transition-colors group min-w-0"><User className="w-3.5 h-3.5 text-primary shrink-0" /><span className="group-hover:underline underline-offset-2 truncate">{acctDisplay}</span></Link></td>; }
                         if (col === "event") return <td key={col} className="px-3 py-3 truncate text-center"><span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider truncate inline-flex items-center gap-1 max-w-full ${style.cls}`}><span>{style.label}</span><span className="shrink-0 leading-none">{style.icon}</span></span></td>;
-                        if (col === "target") return <td key={col} className="px-3 py-3 text-xs text-foreground/80 truncate text-center" title={item.targetUsername || undefined}>{item.targetUsername ? `@${item.targetUsername}` : " "}</td>;
                         if (col === "detail") return <td key={col} className="px-3 py-3 text-foreground truncate text-xs" title={item.detail || undefined}>{item.detail || " "}</td>;
                         return <td key={col} className="px-3 py-3 text-muted-foreground text-xs font-mono truncate"><span className="flex items-center gap-1 min-w-0"><Clock className="w-3 h-3 shrink-0" /><span className="truncate">{fmtTs(item.ts)}</span></span></td>;
                       };
