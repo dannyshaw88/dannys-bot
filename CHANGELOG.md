@@ -4,6 +4,38 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.34] — 2026-07-19
+
+### Fix — Story viewer: link/mention stickers clicked mid-story (fallback centre-screen double-tap removed)
+
+**Problem (recurring, 10+ reported instances):** While viewing stories the bot would
+navigate to a user's profile page, external URL, or hashtag feed mid-story — never
+returning cleanly to the story viewer. The triggering mechanism varied per report but
+the root cause was always the same code path.
+
+**Root cause:** When `findStoryLikeButtonViaA11y` returned `null` (i.e. the
+`toolbar_like_button` resource-id was absent from the accessibility tree — common on
+certain IG builds and device/version combos), the code fell back to
+`doubleTap(w*0.50, h*0.44)` — a hard-coded centre-screen coordinate. Story authors
+routinely place link stickers ("Watch more"), mention stickers, collaboration-invite
+stickers, and hashtag stickers in the 30–60% height band of the frame. A single tap
+on any of these navigates away from the story viewer immediately. Since `doubleTap`
+sends two rapid taps, the first one was enough to activate the sticker.
+
+The `[13:19]` incident: slot 1 opened (kaydahking's story), fast-scan inconclusive,
+slow dump ran, `willLike` was true, `findStoryLikeButtonViaA11y` returned null, the
+fallback `doubleTap(540, 1081)` fired — hit the "Watch more" link sticker at screen
+centre — navigated to the linked profile page. Story loop detected "viewer closed",
+broke, pressed Back, recovered to feed.
+
+**Fix:** The fallback `doubleTap` at `(w*0.50, h*0.44)` is **permanently removed**.
+When the a11y like button is not found, the like is now silently skipped for that
+slide and a log line is emitted. No coordinate tap is fired. Skipping one like is
+always safer than a blind centre-screen tap that can and does cause unintended
+navigation. The a11y path (`toolbar_like_button`) continues to work as before.
+
+---
+
 ## [1.2.33] — 2026-07-19
 
 ### Follow Filters — all five filters are now fully functional

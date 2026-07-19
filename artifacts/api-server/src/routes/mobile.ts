@@ -2300,12 +2300,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           logger.info({ serial, story: s + 1, x: likeBtn.x, y: likeBtn.y }, "[view-stories] liked story via a11y toolbar_like_button");
           onLog?.(`Story ${s + 1}: liked via a11y at (${likeBtn.x},${likeBtn.y})`);
         } else {
-          // Fallback: double-tap centre of story content
-          const cx = Math.round(w * 0.50);
-          const cy = Math.round(h * 0.44);
-          await android.doubleTap(serial, cx, cy);
-          logger.info({ serial, story: s + 1 }, "[view-stories] liked story (fallback double-tap — a11y like button not found)");
-          onLog?.(`Story ${s + 1}: liked (fallback double-tap at (${cx},${cy}) — a11y like button not found)`);
+          // Like button not found in accessibility tree — skip the like entirely.
+          //
+          // The previous fallback (double-tap at w*0.50, h*0.44) is PERMANENTLY
+          // REMOVED. Tapping at the centre of the story screen is not safe:
+          // story authors commonly place link stickers, mention stickers, and
+          // hashtag stickers anywhere in the 30–60% height band. A tap on any
+          // of these navigates away from the story viewer — to an external URL,
+          // a profile page, or a hashtag feed — exactly the "random shit clicked
+          // mid-story" bug that has recurred repeatedly.
+          //
+          // Skipping the like on this slide is always safer than a blind
+          // centre-screen tap that can and does cause unintended navigation.
+          logger.info({ serial, story: s + 1 }, "[view-stories] like button not found via a11y — skipping like (no fallback tap)");
+          onLog?.(`Story ${s + 1}: like skipped — toolbar_like_button not found in a11y tree (no centre-screen tap; fallback removed)`);
         }
         // When a share is also scheduled on this slide, don't linger here —
         // every extra ms is runway the DM-share sequence won't have.
