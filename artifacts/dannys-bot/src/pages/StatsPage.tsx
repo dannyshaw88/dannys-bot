@@ -203,32 +203,17 @@ interface FarmPhone {
   marketName?: string;
 }
 
-function PhoneFarmSlotRow({ username }: { username: string }) {
-  const { data, isLoading } = useQuery<{ ok: boolean; daily: Record<string, number>; lifetime: Record<string, number> }>({
-    queryKey: [`/api/mobile/slot-stats?username=${encodeURIComponent(username)}`],
-    refetchInterval: 30000,
-  });
-  const daily = data?.daily ?? {};
-  const lifetime = data?.lifetime ?? {};
-  return (
-    <>
-      {FARM_STAT_LABELS.map(s => (
-        <td key={s.key} className="py-2.5 px-3 text-center tabular-nums">
-          {isLoading ? (
-            <span className="text-muted-foreground text-[11px]">…</span>
-          ) : (
-            <div className="flex items-center justify-center gap-0.5 text-[11px]">
-              <span className="font-bold text-foreground">{(daily[s.key] ?? 0).toLocaleString()}</span>
-              <span className="text-muted-foreground">/{(lifetime[s.key] ?? 0).toLocaleString()}</span>
-            </div>
-          )}
-        </td>
-      ))}
-    </>
-  );
-}
-
-function PhoneFarmPhoneSection({ phone, colCount }: { phone: FarmPhone; colCount: number }) {
+function PhoneFarmPhoneSection({
+  phone,
+  farmColOrder,
+  farmSortKey,
+  farmSortDir,
+}: {
+  phone: FarmPhone;
+  farmColOrder: string[];
+  farmSortKey: string | null;
+  farmSortDir: "desc" | "asc";
+}) {
   const { data: account, isLoading } = useQuery<{ slots: { username: string }[] }>({
     queryKey: [`/api/mobile/devices/${encodeURIComponent(phone.serial)}/account`],
     refetchInterval: 30000,
@@ -237,6 +222,36 @@ function PhoneFarmPhoneSection({ phone, colCount }: { phone: FarmPhone; colCount
   const slots = (account?.slots ?? [])
     .map((s, i) => ({ username: s.username?.trim() ?? "", idx: i }))
     .filter(s => s.username !== "");
+
+  const slotStatsResults = useQueries({
+    queries: slots.map(slot => ({
+      queryKey: [`/api/mobile/slot-stats?username=${encodeURIComponent(slot.username)}`],
+      refetchInterval: 30000,
+    })),
+  });
+
+  const orderedLabels = farmColOrder
+    .map(k => FARM_STAT_LABELS.find(s => s.key === k))
+    .filter(Boolean) as typeof FARM_STAT_LABELS;
+  const colCount = 1 + farmColOrder.length;
+
+  const slotsWithStats = slots.map((slot, i) => {
+    const d = slotStatsResults[i]?.data as { daily: Record<string, number>; lifetime: Record<string, number> } | undefined;
+    return {
+      ...slot,
+      isLoadingStats: slotStatsResults[i]?.isLoading ?? true,
+      daily: d?.daily ?? {},
+      lifetime: d?.lifetime ?? {},
+    };
+  });
+
+  const sortedSlots = farmSortKey
+    ? [...slotsWithStats].sort((a, b) => {
+        const va = a.daily[farmSortKey] ?? 0;
+        const vb = b.daily[farmSortKey] ?? 0;
+        return farmSortDir === "desc" ? vb - va : va - vb;
+      })
+    : slotsWithStats;
 
   const label = phone.marketName || (phone.manufacturer && phone.model ? `${phone.manufacturer} ${phone.model}` : phone.serial);
 
@@ -261,13 +276,28 @@ function PhoneFarmPhoneSection({ phone, colCount }: { phone: FarmPhone; colCount
           </td>
         </tr>
       ) : (
-        slots.map(slot => (
+        sortedSlots.map(slot => (
           <tr key={slot.idx} className="border-b border-border/50 hover:bg-muted/10 transition-colors">
             <td className="py-2.5 px-4 text-[12px]">
               <span className="text-muted-foreground text-[10px] mr-1.5">Slot {slot.idx + 1}</span>
               <span className="font-medium text-foreground">@{slot.username}</span>
             </td>
-            <PhoneFarmSlotRow username={slot.username} />
+            {orderedLabels.map(s => {
+              const daily = slot.daily[s.key] ?? 0;
+              const lifetime = slot.lifetime[s.key] ?? 0;
+              return (
+                <td key={s.key} className="py-2.5 px-3 text-center tabular-nums">
+                  {slot.isLoadingStats ? (
+                    <span className="text-muted-foreground text-[11px]">…</span>
+                  ) : (
+                    <div className="flex items-center justify-center gap-0.5 text-[11px]">
+                      <span className="font-bold text-foreground">{daily.toLocaleString()}</span>
+                      <span className="text-muted-foreground">/{lifetime.toLocaleString()}</span>
+                    </div>
+                  )}
+                </td>
+              );
+            })}
           </tr>
         ))
       )}
@@ -476,7 +506,7 @@ export function StatsPage() {
   // ── Metrics tab state ────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<string>(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get("tab") || "performance";
+    return params.get("tab") || "farm";
   });
 
   const [selectedAccountId, setSelectedAccountId] = useState<string>(() => {
@@ -623,17 +653,13 @@ export function StatsPage() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col gap-0">
         <div className="flex items-center gap-3 mb-3">
           <TabsList className="w-fit">
-            <TabsTrigger value="performance" className="flex items-center gap-1.5">
-              <Activity className="w-3.5 h-3.5" />
+            <TabsTrigger value="farm" className="flex items-center gap-1.5">
+              <Smartphone className="w-3.5 h-3.5" />
               Tool Performance
             </TabsTrigger>
             <TabsTrigger value="metrics" className="flex items-center gap-1.5">
               <BarChart2 className="w-3.5 h-3.5" />
               Metrics
-            </TabsTrigger>
-            <TabsTrigger value="farm" className="flex items-center gap-1.5">
-              <Smartphone className="w-3.5 h-3.5" />
-              Phone Farm
             </TabsTrigger>
           </TabsList>
           {activeTab === "metrics" && selectedProfile && (
@@ -647,261 +673,6 @@ export function StatsPage() {
           )}
         </div>
 
-        {/* ── Tool Performance Tab ────────────────────────────────────────────── */}
-        <TabsContent value="performance" className="mt-0">
-          <Card className="desktop-card border-none shadow-sm flex flex-col">
-            <CardHeader className="border-b border-border/50 bg-muted/5">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Activity className="w-5 h-5 text-primary" /> Tool Performance
-                <div className="flex items-center gap-4 ml-auto">
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <Checkbox
-                      checked={groupMode}
-                      onCheckedChange={checked => {
-                        const next = !!checked;
-                        setGroupMode(next);
-                        localStorage.setItem("stats:groupMode", String(next));
-                      }}
-                      className="w-3.5 h-3.5"
-                    />
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Group Accounts</span>
-                  </label>
-                  <div>
-                    <button
-                      onClick={() => setManageColsOpen(o => !o)}
-                      className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors"
-                    >
-                      <Settings2 className="w-3.5 h-3.5" /> Columns
-                    </button>
-                    {manageColsOpen && (
-                      <>
-                        <div className="fixed inset-0 z-40" onClick={() => setManageColsOpen(false)} />
-                        <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-lg shadow-2xl w-[520px] max-h-[80vh] overflow-y-auto">
-                          <div className="px-5 pt-4 pb-3 border-b border-border">
-                            <p className="text-sm font-semibold">Columns</p>
-                          </div>
-                          <div className="p-4">
-                            <p className="text-xs font-medium text-muted-foreground mb-2">Show / Hide &amp; Reorder</p>
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 mb-4">
-                              {statColOrder.map((key, ordIdx) => {
-                                let icon: React.ReactNode;
-                                let label: string;
-                                let color: string;
-                                if (key === "trustscore") { icon = <Activity className="w-3.5 h-3.5" />; label = "TrustScore"; color = "text-muted-foreground"; }
-                                else { const st = ALL_STAT_TYPES.find(s => s.key === key)!; icon = st.icon; label = st.label; color = st.color; }
-                                return (
-                                  <div key={key} className="flex items-center gap-1.5 select-none mb-1">
-                                    <div className="flex flex-col mr-0.5">
-                                      <button onClick={() => moveStatCol(key, -1)} disabled={ordIdx === 0} className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"><ChevronUp className="w-2.5 h-2.5" /></button>
-                                      <button onClick={() => moveStatCol(key, 1)} disabled={ordIdx === statColOrder.length - 1} className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"><ChevronDown className="w-2.5 h-2.5" /></button>
-                                    </div>
-                                    <label className="flex items-center gap-1.5 cursor-pointer flex-1 min-w-0">
-                                      <Checkbox checked={visibleCols[key]} onCheckedChange={(val) => toggleVisible(key, !!val)} className="h-3.5 w-3.5 shrink-0" />
-                                      <span className={`flex items-center gap-1 text-xs font-medium truncate ${color}`}>{icon} {label}</span>
-                                    </label>
-                                  </div>
-                                );
-                              })}
-                            </div>
-
-                            <div className="border-t border-border/50 my-3" />
-
-                            <p className="text-xs font-medium text-muted-foreground mb-2">Column widths (px)</p>
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                              {colGroups.map(([key, label]) => (
-                                <div key={key} className="flex items-center gap-1.5 mb-1">
-                                  <label className="text-xs w-16 text-muted-foreground shrink-0 truncate" title={label}>{label}</label>
-                                  <button
-                                    onClick={() => updateWidth(key as StatKey | "account", -10)}
-                                    className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
-                                  >
-                                    <ChevronDown className="w-3 h-3" />
-                                  </button>
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    value={colWidths[key as StatKey | "account"]}
-                                    onChange={e => {
-                                      const v = Math.max(1, Number(e.target.value) || 1);
-                                      const next = { ...colWidths, [key]: v };
-                                      setColWidths(next);
-                                      localStorage.setItem("stats_col_widths_px", JSON.stringify(next));
-                                    }}
-                                    className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
-                                  />
-                                  <button
-                                    onClick={() => updateWidth(key as StatKey | "account", 10)}
-                                    className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
-                                  >
-                                    <ChevronUp className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                          <div className="px-4 pb-4">
-                            <button
-                              onClick={() => { setColWidths(DEFAULT_COL_WIDTHS); localStorage.removeItem("stats_col_widths_px"); setStatColOrder(DEFAULT_STAT_COL_ORDER); localStorage.removeItem("stats_col_order"); }}
-                              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                            >
-                              Reset to defaults
-                            </button>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0 flex flex-col">
-              <div className="overflow-x-auto">
-                <table className="text-sm" style={{ tableLayout: "fixed", width: `${colWidths.account + statColOrder.filter(k => visibleCols[k]).reduce((s, k) => s + colWidths[k], 0)}px` }}>
-                  <colgroup>
-                    <col style={{ width: colWidths.account }} />
-                    {statColOrder.filter(k => visibleCols[k]).map(k => <col key={k} style={{ width: colWidths[k] }} />)}
-                  </colgroup>
-                  <thead className="text-xs bg-muted/30 text-muted-foreground border-b border-border/50">
-                    <tr>
-                      <th className="px-4 py-3 font-bold uppercase tracking-wide text-left">
-                        <button onClick={() => cycleSort("account")} className="flex items-center text-foreground hover:text-primary transition-colors">
-                          Account Name
-                        </button>
-                      </th>
-                      {statColOrder.filter(key => visibleCols[key]).map(key => {
-                        const isDragTarget = statDragOverCol === key;
-                        let thContent: React.ReactNode;
-                        if (key === "trustscore") {
-                          thContent = <span className="flex justify-center text-[10px] uppercase tracking-wide text-foreground">TrustScore</span>;
-                        } else {
-                          const st = ALL_STAT_TYPES.find(s => s.key === key)!;
-                          thContent = (
-                            <button onClick={() => cycleSort(key as StatKey)} className={`inline-flex items-center gap-1 hover:opacity-90 transition-opacity ${st.color} ${sortKey === key ? "opacity-100" : "opacity-60"}`}>
-                              {st.icon}<span className="uppercase tracking-wide text-[10px]">{st.label}</span>
-                            </button>
-                          );
-                        }
-                        return (
-                          <th
-                            key={key}
-                            draggable
-                            onDragStart={e => { statDragColRef.current = key; e.dataTransfer.effectAllowed = "move"; }}
-                            onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (statDragColRef.current && statDragColRef.current !== key) setStatDragOverCol(key); }}
-                            onDrop={e => {
-                              e.preventDefault();
-                              const from = statDragColRef.current as ColKey | null;
-                              statDragColRef.current = null;
-                              setStatDragOverCol(null);
-                              if (!from || from === key) return;
-                              const fromIdx = statColOrder.indexOf(from);
-                              const toIdx = statColOrder.indexOf(key);
-                              if (fromIdx === -1 || toIdx === -1) return;
-                              const next = [...statColOrder];
-                              next.splice(fromIdx, 1);
-                              next.splice(toIdx, 0, from);
-                              setStatColOrder(next);
-                              localStorage.setItem("stats_col_order", JSON.stringify(next));
-                            }}
-                            onDragEnd={() => { statDragColRef.current = null; setStatDragOverCol(null); }}
-                            className={`px-4 py-3 font-bold cursor-default select-none text-center ${isDragTarget ? "bg-primary/5 border-l-2 border-l-primary" : ""}`}
-                          >
-                            {thContent}
-                          </th>
-                        );
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/50">
-                    {isLoading ? (
-                      Array.from({ length: 4 }).map((_, i) => (
-                        <tr key={i} className="animate-pulse">
-                          <td colSpan={colCount} className="px-5 py-4 bg-muted/10 h-16" />
-                        </tr>
-                      ))
-                    ) : profiles?.length === 0 ? (
-                      <tr>
-                        <td colSpan={colCount} className="px-5 py-12 text-center text-muted-foreground">
-                          No accounts found. Add an account to see stats.
-                        </td>
-                      </tr>
-                    ) : groupMode && groupedStats ? (
-                      Array.from(groupedStats.entries()).map(([groupKey, groupProfiles]) => {
-                        const isCollapsed = collapsedGroupsSet.has(groupKey);
-                        return (
-                          <Fragment key={`group-${groupKey}`}>
-                            <tr className="bg-background border-b border-border sticky top-0 z-10">
-                              <td colSpan={colCount} className="px-3 py-1.5 select-none">
-                                <div className="flex items-center gap-1.5">
-                                  {/* Chevron — the ONLY clickable element for expand/collapse */}
-                                  <button
-                                    onClick={() => toggleGroupCollapse(groupKey)}
-                                    className="shrink-0 flex items-center justify-center"
-                                  >
-                                    {isCollapsed
-                                      ? <ChevronRight className="w-4 h-4 text-foreground shrink-0" strokeWidth={3} />
-                                      : <ChevronDown className="w-4 h-4 text-foreground shrink-0" strokeWidth={3} />
-                                    }
-                                  </button>
-                                  {/* Group name — not clickable */}
-                                  <span className={`text-sm font-bold truncate ${groupKey === "__ungrouped__" ? "text-muted-foreground" : "text-foreground"}`}>
-                                    {groupKey === "__ungrouped__" ? "No Group Assigned" : groupKey}
-                                  </span>
-                                  {groupKey !== "__ungrouped__" && (
-                                    <div className="relative group/icon shrink-0">
-                                      <button
-                                        onClick={e => { e.stopPropagation(); groupIconKeyRef.current = groupKey; groupIconInputRef.current?.click(); }}
-                                        title={groupIcons[groupKey] ? "Change group icon" : "Add group icon"}
-                                        className="shrink-0 w-[18px] h-[18px] rounded border border-dashed border-border/60 hover:border-primary/50 overflow-hidden flex items-center justify-center transition-colors bg-muted/20 hover:bg-muted/50"
-                                      >
-                                        {groupIcons[groupKey]
-                                          ? <img src={groupIcons[groupKey]} alt="" className="w-full h-full object-cover" />
-                                          : <ImagePlus className="w-2.5 h-2.5 text-muted-foreground/30" />
-                                        }
-                                      </button>
-                                      {groupIcons[groupKey] && (
-                                        <div className="absolute left-0 top-full mt-1 z-50 hidden group-hover/icon:block pointer-events-none">
-                                          <img src={groupIcons[groupKey]} alt="" className="max-w-[240px] max-h-[240px] w-auto h-auto rounded-md object-contain shadow-lg border border-border bg-background" />
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                  <span className="text-[10px] text-muted-foreground shrink-0">({groupProfiles.length})</span>
-                                </div>
-                              </td>
-                            </tr>
-                            {!isCollapsed && groupProfiles.map(profile => (
-                              <ProfileStatsRow
-                                key={profile.id}
-                                profile={profile}
-                                visibleCols={visibleCols}
-                                statColOrder={statColOrder}
-                                colWidths={colWidths}
-                                statsData={statsMap.get(profile.id) ?? []}
-                                {...makeRowProps(profile)}
-                              />
-                            ))}
-                          </Fragment>
-                        );
-                      })
-                    ) : (
-                      sortedProfiles.map(profile => (
-                        <ProfileStatsRow
-                          key={profile.id}
-                          profile={profile}
-                          visibleCols={visibleCols}
-                          statColOrder={statColOrder}
-                          colWidths={colWidths}
-                          statsData={statsMap.get(profile.id) ?? []}
-                          {...makeRowProps(profile)}
-                        />
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
 
         {/* ── Metrics Tab ─────────────────────────────────────────────────────── */}
         <TabsContent value="metrics" className="mt-0">
@@ -1215,13 +986,42 @@ function PhoneFarmTab() {
   });
 
   const phones = data?.phones ?? [];
-  const colCount = 1 + FARM_STAT_LABELS.length;
+
+  const [farmColOrder, setFarmColOrder] = usePersistentSetting<string[]>(
+    "farm_col_order",
+    FARM_STAT_LABELS.map(s => s.key),
+    (stored, defaults) => {
+      const filtered = stored.filter(k => defaults.includes(k));
+      const newKeys = defaults.filter(k => !filtered.includes(k));
+      return [...filtered, ...newKeys];
+    },
+  );
+
+  const [farmSortKey, setFarmSortKey] = useState<string | null>(null);
+  const [farmSortDir, setFarmSortDir] = useState<"desc" | "asc">("desc");
+
+  const cycleFarmSort = (key: string) => {
+    if (farmSortKey === key) {
+      setFarmSortDir(d => d === "desc" ? "asc" : "desc");
+    } else {
+      setFarmSortKey(key);
+      setFarmSortDir("desc");
+    }
+  };
+
+  const farmDragColRef = useRef<string | null>(null);
+  const [farmDragOverCol, setFarmDragOverCol] = useState<string | null>(null);
+
+  const orderedLabels = farmColOrder
+    .map(k => FARM_STAT_LABELS.find(s => s.key === k))
+    .filter(Boolean) as typeof FARM_STAT_LABELS;
+  const colCount = 1 + farmColOrder.length;
 
   return (
     <Card className="desktop-card border-none shadow-sm flex flex-col">
       <CardHeader className="border-b border-border/50 bg-muted/5">
         <CardTitle className="text-lg flex items-center gap-2">
-          <Smartphone className="w-5 h-5 text-primary" /> Phone Farm
+          <Smartphone className="w-5 h-5 text-primary" /> Tool Performance
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0 flex flex-col">
@@ -1232,11 +1032,43 @@ function PhoneFarmTab() {
                 <th className="px-4 py-3 font-bold uppercase tracking-wide text-left w-56">
                   Device / Account
                 </th>
-                {FARM_STAT_LABELS.map(s => (
-                  <th key={s.key} className={`px-3 py-3 text-center uppercase tracking-wide text-[10px] ${s.color}`}>
-                    <span className="inline-flex items-center gap-1">{s.icon} {s.label}</span>
-                  </th>
-                ))}
+                {orderedLabels.map(s => {
+                  const isSorted = farmSortKey === s.key;
+                  const isDragTarget = farmDragOverCol === s.key;
+                  return (
+                    <th
+                      key={s.key}
+                      draggable
+                      onDragStart={e => { farmDragColRef.current = s.key; e.dataTransfer.effectAllowed = "move"; }}
+                      onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (farmDragColRef.current && farmDragColRef.current !== s.key) setFarmDragOverCol(s.key); }}
+                      onDrop={e => {
+                        e.preventDefault();
+                        const from = farmDragColRef.current;
+                        farmDragColRef.current = null;
+                        setFarmDragOverCol(null);
+                        if (!from || from === s.key) return;
+                        const fromIdx = farmColOrder.indexOf(from);
+                        const toIdx = farmColOrder.indexOf(s.key);
+                        if (fromIdx === -1 || toIdx === -1) return;
+                        const next = [...farmColOrder];
+                        next.splice(fromIdx, 1);
+                        next.splice(toIdx, 0, from);
+                        setFarmColOrder(next);
+                      }}
+                      onDragEnd={() => { farmDragColRef.current = null; setFarmDragOverCol(null); }}
+                      onClick={() => cycleFarmSort(s.key)}
+                      className={`px-3 py-3 text-center uppercase tracking-wide text-[10px] cursor-pointer select-none ${isDragTarget ? "bg-primary/5 border-l-2 border-l-primary" : ""}`}
+                    >
+                      <span className={`inline-flex items-center gap-1 transition-opacity ${s.color} ${isSorted ? "opacity-100" : "opacity-60 hover:opacity-100"}`}>
+                        {s.icon} {s.label}
+                        {isSorted
+                          ? <span className="text-[9px]">{farmSortDir === "desc" ? "▼" : "▲"}</span>
+                          : <span className="text-[9px] opacity-30">⇅</span>
+                        }
+                      </span>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
@@ -1270,7 +1102,13 @@ function PhoneFarmTab() {
                 </tr>
               ) : (
                 phones.map(phone => (
-                  <PhoneFarmPhoneSection key={phone.serial} phone={phone} colCount={colCount} />
+                  <PhoneFarmPhoneSection
+                    key={phone.serial}
+                    phone={phone}
+                    farmColOrder={farmColOrder}
+                    farmSortKey={farmSortKey}
+                    farmSortDir={farmSortDir}
+                  />
                 ))
               )}
             </tbody>
