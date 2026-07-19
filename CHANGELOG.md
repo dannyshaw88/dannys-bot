@@ -4,6 +4,71 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.37] — 2026-07-19
+
+### Feature — Copy Settings: all unticked by default + session memory
+
+The Copy Settings dialog now opens with **every account slot and every setting unchecked** by default, rather than pre-selecting everything.
+
+**Session memory** is built in: any checkboxes you tick are saved immediately in session storage. The next time you open the dialog your last selection is automatically restored — accounts and settings exactly as you left them. The only two things that clear the memory back to all-unticked are a software restart (close and reopen Aura Farming) or clicking the **None** button.
+
+**What persists between opens:**
+- Which device/account slots are ticked in the Copy To panel
+- Which settings sections and sub-items are ticked in the Settings panel
+
+**What clears the memory:**
+- Software restart (session storage is wiped on close)
+- Clicking the **None** button on either panel manually
+
+---
+
+### Feature — Copy Settings: device list ordered by farm slot (Device 1 first)
+
+The left-hand device list in Copy Settings is now **always sorted by farm slot index** — Device 1 appears at the top, Device 2 below it, and so on, matching the order shown on the Phone Farm tab.
+
+Each device header now shows a **Device X —** prefix (e.g. "Device 1 — Samsung Galaxy A54") so you can immediately identify which physical phone you are targeting without cross-referencing another screen.
+
+Devices not yet registered in the farm registry (no slot assignment) fall to the bottom of the list.
+
+---
+
+### Change — Admin login renamed from EQUINOX to AURAFARMING
+
+The built-in administrator account username has been changed from **EQUINOX** to **AURAFARMING**. Password updated accordingly.
+
+- Login screen: username `aurafarming`
+- The change takes effect immediately on the running server and is baked into all future fresh installs
+- Existing installs are automatically migrated on next startup — no manual DB edit required
+
+---
+
+### Change — Subscription tier limits updated
+
+License tier limits have been updated to reflect the new per-device, per-slot model:
+
+| Tier | Devices | Account Slots | Monthly |
+|---|---|---|---|
+| Starter | 1 | 5 | £25/mo |
+| Pro | 3 | 5 | £50/mo |
+| Business | 10 | 10 | £100/mo |
+| Enterprise | 25 | Unlimited | £250/mo |
+
+The My Account tab in Settings now displays tier limits in the format **"X devices · Y slots"** instead of "up to N accounts".
+
+---
+
+### Change — Settings: Tools tab removed, sub-tabs promoted to top level
+
+The **Tools** tab has been removed from the Settings page. Its three sub-sections are now first-class top-level tabs in the Settings tab bar:
+
+- **Evasion Stats** — ban, automated-behaviour, captcha, and lock analytics
+- **Trust Scores** — per-account trust score management and templates
+- **Import** — bulk Jarvee/CSV account import
+
+The full Settings tab bar is now: My Account · General · Evasion Stats · Trust Scores · Import · Scraping · Automation · Security · Data.
+
+---
+
 ## [1.2.36] — 2026-07-19
 
 ### Feature — Stats page: Phone Farm tab shows per-device, per-slot action metrics
