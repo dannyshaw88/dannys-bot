@@ -2729,23 +2729,37 @@ function CopySettingsDialog({
 }) {
   const [selectedTargets, setSelectedTargets] = useState<CopyTarget[]>([]);
   const [deviceSlots, setDeviceSlots] = useState<DeviceSlots[]>([]);
+  const [farmSlotMap, setFarmSlotMap] = useState<Map<string, number>>(new Map());
   const [loadingDevices, setLoadingDevices] = useState(false);
-  const [selectedSubKeys, setSelectedSubKeys] = useState<Set<string>>(new Set(ALL_SUB_KEYS));
+  const [selectedSubKeys, setSelectedSubKeys] = useState<Set<string>>(new Set());
   const [copying, setCopying] = useState(false);
   const [result, setResult] = useState<string | null>(null);
 
-  // Fetch all devices + their slots whenever the dialog opens
+  // Fetch all devices + their slots whenever the dialog opens.
+  // Reads sessionStorage to restore the last selection; defaults to all-unticked.
+  // Only a page reload (software restart) or clicking "None" clears the memory.
   useEffect(() => {
     if (!open) return;
-    setSelectedSubKeys(new Set(ALL_SUB_KEYS));
     setResult(null);
     setCopying(false);
     setLoadingDevices(true);
 
-    fetch("/api/mobile/usb-phones")
-      .then(r => r.json())
-      .then(async (d: { phones?: UsbPhone[] }) => {
-        const all: UsbPhone[] = d.phones ?? [];
+    // Read session memory synchronously FIRST — before any setState can overwrite it
+    const savedSubKeysRaw = sessionStorage.getItem("copySettings_subKeys");
+    const savedTargetsRaw  = sessionStorage.getItem("copySettings_targets");
+    const restoredSubKeys  = savedSubKeysRaw ? new Set<string>(JSON.parse(savedSubKeysRaw) as string[]) : new Set<string>();
+    const restoredTargets: CopyTarget[] | null = savedTargetsRaw ? JSON.parse(savedTargetsRaw) as CopyTarget[] : null;
+
+    setSelectedSubKeys(restoredSubKeys);
+
+    Promise.all([
+      fetch("/api/mobile/usb-phones").then(r => r.json()),
+      fetch("/api/mobile/farm-devices").then(r => r.json()).catch(() => ({ devices: [] })),
+    ])
+      .then(async ([phonesData, farmData]: [{ phones?: UsbPhone[] }, { devices?: Array<{ slotIndex: number; serial: string }> }]) => {
+        const all: UsbPhone[] = phonesData.phones ?? [];
+        const farmDevices = farmData.devices ?? [];
+
         const withSlots: DeviceSlots[] = await Promise.all(
           all.map(async p => {
             try {
@@ -2758,16 +2772,32 @@ function CopySettingsDialog({
             }
           })
         );
-        setDeviceSlots(withSlots);
-        // Auto-select every slot except the one we're copying FROM
-        const targets: CopyTarget[] = [];
-        for (const ds of withSlots) {
-          for (let i = 0; i < ds.slots.length; i++) {
-            if (ds.phone.serial === phone?.serial && i === currentSlotIdx) continue;
-            targets.push({ serial: ds.phone.serial, slotIdx: i });
-          }
+
+        // Sort by farm slot index (Device 1 first); unregistered devices go last
+        const slotMap = new Map<string, number>(farmDevices.map(d => [d.serial, d.slotIndex]));
+        const sorted = [...withSlots].sort((a, b) => {
+          const ai = slotMap.get(a.phone.serial) ?? Infinity;
+          const bi = slotMap.get(b.phone.serial) ?? Infinity;
+          return ai - bi;
+        });
+
+        setDeviceSlots(sorted);
+        setFarmSlotMap(slotMap);
+
+        // Restore targets from session memory, filtered to currently-present valid slots
+        if (restoredTargets) {
+          const validSet = new Set(
+            sorted.flatMap(ds => ds.slots.map((_, i) => `${ds.phone.serial}:${i}`))
+          );
+          setSelectedTargets(
+            restoredTargets.filter(t =>
+              validSet.has(`${t.serial}:${t.slotIdx}`) &&
+              !(t.serial === phone?.serial && t.slotIdx === currentSlotIdx)
+            )
+          );
+        } else {
+          setSelectedTargets([]);
         }
-        setSelectedTargets(targets);
       })
       .catch(() => {})
       .finally(() => setLoadingDevices(false));
@@ -2778,20 +2808,27 @@ function CopySettingsDialog({
     selectedTargets.some(t => t.serial === serial && t.slotIdx === slotIdx);
 
   const toggleTarget = (serial: string, slotIdx: number, checked: boolean) =>
-    setSelectedTargets(prev =>
-      checked
+    setSelectedTargets(prev => {
+      const next = checked
         ? [...prev, { serial, slotIdx }]
-        : prev.filter(t => !(t.serial === serial && t.slotIdx === slotIdx))
-    );
+        : prev.filter(t => !(t.serial === serial && t.slotIdx === slotIdx));
+      sessionStorage.setItem("copySettings_targets", JSON.stringify(next));
+      return next;
+    });
 
   const toggleDevice = (ds: DeviceSlots, checked: boolean) =>
     setSelectedTargets(prev => {
       const rest = prev.filter(t => t.serial !== ds.phone.serial);
-      if (!checked) return rest;
+      if (!checked) {
+        sessionStorage.setItem("copySettings_targets", JSON.stringify(rest));
+        return rest;
+      }
       const add: CopyTarget[] = ds.slots
         .map((_, i) => ({ serial: ds.phone.serial, slotIdx: i }))
         .filter(t => !(t.serial === phone?.serial && t.slotIdx === currentSlotIdx));
-      return [...rest, ...add];
+      const next = [...rest, ...add];
+      sessionStorage.setItem("copySettings_targets", JSON.stringify(next));
+      return next;
     });
 
   const deviceCheckedState = (ds: DeviceSlots): "all" | "some" | "none" => {
@@ -2810,12 +2847,18 @@ function CopySettingsDialog({
   );
 
   const toggleSub = (subKey: string, checked: boolean) =>
-    setSelectedSubKeys(prev => { const n = new Set(prev); checked ? n.add(subKey) : n.delete(subKey); return n; });
+    setSelectedSubKeys(prev => {
+      const n = new Set(prev);
+      checked ? n.add(subKey) : n.delete(subKey);
+      sessionStorage.setItem("copySettings_subKeys", JSON.stringify([...n]));
+      return n;
+    });
 
   const toggleSection = (section: CopySection, checked: boolean) =>
     setSelectedSubKeys(prev => {
       const n = new Set(prev);
       section.sub.forEach(sub => checked ? n.add(sub.key) : n.delete(sub.key));
+      sessionStorage.setItem("copySettings_subKeys", JSON.stringify([...n]));
       return n;
     });
 
@@ -2879,9 +2922,9 @@ function CopySettingsDialog({
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Copy to</span>
               <div className="flex gap-1">
                 <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5"
-                  onClick={() => setSelectedTargets(allTargets)}>All</Button>
+                  onClick={() => { sessionStorage.setItem("copySettings_targets", JSON.stringify(allTargets)); setSelectedTargets(allTargets); }}>All</Button>
                 <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5"
-                  onClick={() => setSelectedTargets([])}>None</Button>
+                  onClick={() => { sessionStorage.removeItem("copySettings_targets"); setSelectedTargets([]); }}>None</Button>
               </div>
             </div>
             <div className="overflow-y-auto flex-1 space-y-3 pr-1">
@@ -2911,6 +2954,9 @@ function CopySettingsDialog({
                         disabled={eligibleSlots.length === 0}
                       />
                       <span className="text-xs font-bold text-foreground truncate min-w-0 flex-1">
+                        {farmSlotMap.has(ds.phone.serial) && (
+                          <span className="text-muted-foreground font-normal mr-0.5">Device {farmSlotMap.get(ds.phone.serial)} —</span>
+                        )}
                         {deviceLabel(ds.phone)}
                       </span>
                       {isCurrentDevice && (
@@ -2961,9 +3007,9 @@ function CopySettingsDialog({
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Settings</span>
               <div className="flex gap-1">
                 <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5"
-                  onClick={() => setSelectedSubKeys(new Set(ALL_SUB_KEYS))}>All</Button>
+                  onClick={() => { const all = new Set(ALL_SUB_KEYS); sessionStorage.setItem("copySettings_subKeys", JSON.stringify([...all])); setSelectedSubKeys(all); }}>All</Button>
                 <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5"
-                  onClick={() => setSelectedSubKeys(new Set())}>None</Button>
+                  onClick={() => { sessionStorage.removeItem("copySettings_subKeys"); setSelectedSubKeys(new Set()); }}>None</Button>
               </div>
             </div>
             <div className="overflow-y-auto flex-1 space-y-1 pr-1">
