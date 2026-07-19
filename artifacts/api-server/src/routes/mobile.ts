@@ -4166,14 +4166,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (preFiltered > 0) onLog?.(`Follow: pre-filtered ${preFiltered} candidate${preFiltered !== 1 ? "s" : ""} via HikerAPI metadata`);
     }
 
-    // Use the full filtered pool so that when a candidate is skipped at the
-    // profile-quality gate the loop simply advances to the next candidate
-    // instead of ending with 0 follows. The loop breaks early once
-    // `followed` reaches `targetCount`.
-    const targets = filtered;
+    // Mutable candidate pool. Extended automatically by re-scraping HikerAPI
+    // whenever the current batch is exhausted before `targetCount` is reached —
+    // the Follow tool never abandons mid-run just because a batch ran dry.
+    const targets = [...filtered];
+    // Track every username ever placed in the pool across all scrape rounds so
+    // re-scrapes never inject duplicates.
+    const attemptedSet = new Set<string>(targets.map(u => u.toLowerCase()));
     onLog?.(`Follow: ${targets.length} candidate${targets.length !== 1 ? "s" : ""} in pool, targeting ${targetCount} follow${targetCount !== 1 ? "s" : ""}`);
 
     let followed = 0;
+    let _fi = 0;              // manual index into `targets` (grows as re-scrapes inject new entries)
+    let scrapeRound = 0;
+    const MAX_SCRAPE_ROUNDS = 5;
 
     // Navigate to Search tab. Give the just-opened feed a moment to settle
     // before attempting to locate the bottom nav.
@@ -4215,12 +4220,80 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // feed scroll), leaving the search bar absent from the accessibility tree.
     await sleepOrAbort(serial, 2500);
 
-    for (let _fi = 0; _fi < targets.length; _fi++) {
-      if (followed >= targetCount) break;
-      const username = targets[_fi];
-      const isLastUser = _fi === targets.length - 1;
+    while (followed < targetCount) {
+      // Pool exhausted — fetch a fresh batch from HikerAPI rather than giving up
+      if (_fi >= targets.length) {
+        if (scrapeRound >= MAX_SCRAPE_ROUNDS) {
+          onLog?.(`Follow: pool exhausted after ${MAX_SCRAPE_ROUNDS} re-scrape rounds — stopping at ${followed}/${targetCount} follows`);
+          break;
+        }
+        scrapeRound++;
+        onLog?.(`Follow: pool exhausted (${followed}/${targetCount} followed) — re-scraping from HikerAPI (round ${scrapeRound}/${MAX_SCRAPE_ROUNDS})…`);
+        const newRaw: string[] = [];
+        const shuffledSrcs = [...sources].sort(() => Math.random() - 0.5);
+        for (const src of shuffledSrcs) {
+          if (newRaw.length >= targetCount * 3) break;
+          const srcLabel = src.type === "hashtag"
+            ? `#${src.value.replace(/^#/, "")}`
+            : `@${src.value.replace(/^@/, "")}`;
+          try {
+            if (src.type === "hashtag") {
+              const res = await hiker.getHashtagUsers(src.value.replace(/^#/, ""), 50);
+              for (const u of res.users) {
+                if (attemptedSet.has(u.username.toLowerCase())) continue;
+                if (!candidateSource.has(u.username)) candidateSource.set(u.username, srcLabel);
+                if (u.isVerified !== undefined || u.isPrivate !== undefined || u.followerCount !== undefined)
+                  candidateMeta.set(u.username, { isVerified: u.isVerified, isPrivate: u.isPrivate, followerCount: u.followerCount });
+                newRaw.push(u.username);
+                attemptedSet.add(u.username.toLowerCase());
+              }
+              onLog?.(`Follow: re-scrape ${srcLabel} → ${res.users.length} users`);
+            } else if (src.type === "target_followers") {
+              const userInfo = await hiker.getUserByUsername(src.value.replace(/^@/, "")).catch(() => null);
+              if (userInfo?.pk) {
+                const followers = await hiker.getFollowers(userInfo.pk, 50);
+                for (const u of followers) {
+                  if (attemptedSet.has(u.username.toLowerCase())) continue;
+                  if (!candidateSource.has(u.username)) candidateSource.set(u.username, srcLabel);
+                  if (u.isVerified !== undefined || u.isPrivate !== undefined || u.followerCount !== undefined)
+                    candidateMeta.set(u.username, { isVerified: u.isVerified, isPrivate: u.isPrivate, followerCount: u.followerCount });
+                  newRaw.push(u.username);
+                  attemptedSet.add(u.username.toLowerCase());
+                }
+                onLog?.(`Follow: re-scrape ${srcLabel} followers → ${followers.length} users`);
+              }
+            }
+          } catch (e: any) {
+            onLog?.(`Follow: HikerAPI re-scrape error for "${src.value}": ${e?.message}`);
+          }
+        }
+        // Apply the same skip/pre-filter rules as the initial pass
+        const newFiltered = newRaw.filter(u => {
+          if (skipFollowedUsernames?.has(u.toLowerCase())) return false;
+          if (skipSkippedUsernames?.has(u.toLowerCase())) return false;
+          if (filters) {
+            const meta = candidateMeta.get(u);
+            if (meta) {
+              if (filters.skipVerified  && meta.isVerified === true) return false;
+              if (filters.skipPrivate   && meta.isPrivate  === true) return false;
+              if (filters.maxFollowers !== undefined && meta.followerCount !== undefined && meta.followerCount >= filters.maxFollowers) return false;
+              if (filters.minFollowers !== undefined && meta.followerCount !== undefined && meta.followerCount <  filters.minFollowers) return false;
+            }
+          }
+          return true;
+        });
+        if (!newFiltered.length) {
+          onLog?.(`Follow: re-scrape round ${scrapeRound} returned no new viable candidates — stopping`);
+          break;
+        }
+        onLog?.(`Follow: re-scrape injected ${newFiltered.length} new candidate${newFiltered.length !== 1 ? "s" : ""} — continuing`);
+        targets.push(...newFiltered);
+        continue;
+      }
+
+      const username = targets[_fi++];
       try {
-        onLog?.(`Follow: → @${username} (candidate ${_fi + 1}/${targets.length})`);
+        onLog?.(`Follow: → @${username} (candidate ${_fi}/${targets.length})`);
 
         // Tap the search bar — wait longer so the Explore page settles and the
         // field has time to focus before the keyboard opens.  A 600 ms wait was

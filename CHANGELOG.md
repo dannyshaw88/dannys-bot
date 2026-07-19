@@ -4,6 +4,70 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.44] — 2026-07-19
+
+### Fix — Follow tool: filter-skipped targets no longer abandon the follow; exhausted pool auto-re-scrapes from HikerAPI
+
+**Problem 1 — Skipped candidate = abandoned follow**
+When the profile-quality filter gate (follower count, private account, verified badge, English-speaking) rejected a candidate after navigating to their profile, the follow tool continued to the next candidate in the pool. But the initial pool was sliced to exactly `targetCount` entries, so if the *only* candidate in the pool was filtered, the result was 0 follows — the tool gave up instead of trying another user.
+
+**Fix:** The pool is no longer pre-sliced. All HikerAPI-fetched candidates that survive the initial deduplication and pre-filter pass are kept in the pool. The loop advances to the next candidate on every filter skip and stops only once `followed` reaches `targetCount` — not when the array index hits the end.
+
+**Problem 2 — Pool exhausted = abandoned follow**
+Even with the full pool available, if every single candidate in that batch was filtered out (e.g. all pulled users exceeded the follower cap), the tool would exit with 0 follows rather than trying to find more eligible users.
+
+**Fix:** The pool is now a mutable array. When the index reaches the end with `followed < targetCount`, the tool immediately re-scrapes from HikerAPI — hitting all configured sources (hashtags and/or target-account followers) in a fresh shuffled order, collecting up to `targetCount × 3` new users. New users are:
+- Deduplicated against `attemptedSet` (every username ever placed in the pool across all rounds) so no user is retried.
+- Filtered through the same skip-list, already-followed list, and HikerAPI metadata pre-filter as the initial batch.
+- Injected into the pool and the loop continues immediately.
+
+This repeats up to **5 re-scrape rounds** before the tool finally stops. In practice, a single re-scrape round against a busy hashtag typically yields 30–50 fresh users, making exhaustion in 5 rounds essentially impossible under normal conditions.
+
+**Dashboard log output (new):**
+- `Follow: pool exhausted (0/1 followed) — re-scraping from HikerAPI (round 1/5)…`
+- `Follow: re-scrape #bodybuilding → 47 users`
+- `Follow: re-scrape injected 31 new candidates — continuing`
+
+### Fix — Dashboard action log: "Phone farm cycle starting" renamed to "Cycle-Starting-Farming-Aura"
+
+The detail string logged at the start of every Phone Farm automation cycle has been renamed from the generic `Phone farm cycle starting` to `Cycle-Starting-Farming-Aura` for clearer identification in the dashboard action log table.
+
+### Feature — Phone Farm: 100 additional wallpapers added (112 total)
+
+The Phone Farm device card wallpaper picker now ships with **112 wallpapers** (up from 12), downloaded at 440 × 880 px portrait resolution and grouped into named categories:
+
+| Category | Count | Examples |
+|---|---|---|
+| Nature | 40 | Deer, Fog, Lake, Waterfall, Jungle, Lightning, Glacier… |
+| Architecture & City | 16 | Streets, Bridge, Skyline, Tunnel, Tower, Dome… |
+| Space & Dark | 8 | Nebula, Cosmos, Eclipse, Void… |
+| Abstract & Patterns | 12 | Ink, Marble, Prism, Fractal, Vortex… |
+| Animals | 8 | Wolf, Eagle, Tiger, Leopard, Raven… |
+| Warm / Golden | 8 | Dusk, Ember, Amber, Terracotta, Crimson… |
+| Cool / Blue | 8 | Azure, Sapphire, Cobalt, Teal, Aqua… |
+| Minimal / Pastel | 4 | Linen, Sand, Ash, Pearl |
+| Originals | 12 | Galaxy, Abstract, Forest, Ocean, Aurora, Neon… |
+
+### Fix — Phone Farm device cards: cyan accent line removed from SVG shell
+
+A leftover `<rect>` element (the old "active status" indicator — a short cyan bar at y=272 in the centre of the 440-height SVG) was still rendering as a visible blue line across the middle of every phone shell on the grid. Removed.
+
+### Fix — Phone Farm device cards: wallpaper and text layers now render natively inside the SVG screen
+
+Previously, wallpaper and text overlays were positioned as absolutely-placed `<div>` elements layered on top of the SVG. Because the SVG scales to fit the card, pixel-exact positioning of the overlay required a fragile percentage-offset approximation that drifted when the card size changed.
+
+**New approach:** Both are rendered as native SVG elements:
+- **Wallpaper** — `<image href="…" clipPath="url(#screen-clip-{uid})">` with `preserveAspectRatio="xMidYMid slice"`, clipped to a `<clipPath>` that matches the screen rectangle exactly (`x=12 y=14 w=196 h=412 rx=26`).
+- **Text layers** — `<text>` elements with `dominantBaseline="middle"` and `textAnchor="middle"`, positioned by mapping the 0–100% X/Y sliders onto SVG coordinates, also clipped to the screen rect.
+- The glass sheen `<rect>` renders on top of both so the screen still looks realistic.
+- All gradient and clip-path IDs are now scoped to the device's `slotIndex` (e.g. `screen-clip-3`) to prevent cross-SVG ID collisions when multiple cards are on screen simultaneously.
+
+### Fix — Phone Farm device cards: all device photos removed; SVG shell is universal
+
+The three bundled real-device photos (`redmi-12.png`, `redmi-a5.jpg`, `redmi-a5.png`) and the conditional `PhoneVisual` component (which chose between a photo and the SVG) have been deleted. Every card on the Phone Farm grid now uses the black SVG shell unconditionally. `DEVICE_IMAGE_RULES` and `getDeviceImage` have also been removed.
+
+---
+
 ## [1.2.43] — 2026-07-19
 
 ### Feature — Phone Farm device card customisation (wallpaper + text layers)
