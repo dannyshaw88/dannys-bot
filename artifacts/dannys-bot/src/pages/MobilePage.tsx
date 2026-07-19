@@ -2637,6 +2637,7 @@ const COPY_SECTIONS: CopySection[] = [
     { key: 'feedLike',          label: 'Like %',                        fields: ['likePercentMin','likePercentMax'] },
     { key: 'feedShareFeed',     label: 'Share to Feed %',               fields: ['shareFeedPercentMin','shareFeedPercentMax'] },
     { key: 'feedShareDm',       label: 'Share via DM %',                fields: ['shareDmPercentMin','shareDmPercentMax'] },
+    { key: 'feedSavePct',       label: 'Save %',                        fields: ['savePercentMin','savePercentMax'] },
   ]},
   { key: 'stories',       label: 'View Stories', sub: [
     { key: 'storiesEnabled',    label: 'Enabled',                       fields: ['storiesEnabled'] },

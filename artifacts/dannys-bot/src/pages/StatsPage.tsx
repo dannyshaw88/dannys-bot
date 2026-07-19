@@ -19,6 +19,7 @@ import {
   User, Heart, MessageCircle, Eye, UserPlus, UserMinus, Mail, Activity,
   Settings2, ChevronDown, ChevronUp, ChevronRight, Fingerprint, ImagePlus,
   BarChart2, Zap, Repeat2, ShieldAlert, PhoneOff, Webhook, Bot, Lock, Flag,
+  Smartphone,
 } from "lucide-react";
 import { type Profile, type Tool } from "@shared/schema";
 import { queryClient } from "@/lib/queryClient";
@@ -179,6 +180,109 @@ function ProfileStatsRow({
         );
       })}
     </tr>
+  );
+}
+
+// ─── Phone Farm tab ───────────────────────────────────────────────────────────
+
+const FARM_STAT_LABELS: { key: string; label: string; icon: React.ReactNode; color: string }[] = [
+  { key: "cycles",      label: "Cycles",       icon: <Activity className="w-3 h-3" />,   color: "text-cyan-500" },
+  { key: "likes",       label: "Likes",        icon: <Heart className="w-3 h-3" />,       color: "text-rose-500" },
+  { key: "follows",     label: "Follows",      icon: <UserPlus className="w-3 h-3" />,    color: "text-blue-500" },
+  { key: "stories",     label: "Stories",      icon: <Eye className="w-3 h-3" />,         color: "text-emerald-500" },
+  { key: "reels",       label: "Reels",        icon: <Repeat2 className="w-3 h-3" />,     color: "text-sky-500" },
+  { key: "dms",         label: "DMs",          icon: <Mail className="w-3 h-3" />,        color: "text-violet-500" },
+  { key: "feed_shares", label: "Feed Shares",  icon: <Zap className="w-3 h-3" />,         color: "text-amber-500" },
+];
+
+function PhoneSlotStats({ username }: { username: string }) {
+  const { data, isLoading } = useQuery<{ ok: boolean; daily: Record<string, number>; lifetime: Record<string, number> }>({
+    queryKey: [`/api/mobile/slot-stats?username=${encodeURIComponent(username)}`],
+    refetchInterval: 30000,
+  });
+
+  if (isLoading) return <div className="text-[11px] text-muted-foreground">Loading stats…</div>;
+  const daily = data?.daily ?? {};
+  const lifetime = data?.lifetime ?? {};
+  const hasAny = FARM_STAT_LABELS.some(s => (daily[s.key] ?? 0) > 0 || (lifetime[s.key] ?? 0) > 0);
+
+  return (
+    <div className="mt-1">
+      {!hasAny ? (
+        <span className="text-[11px] text-muted-foreground italic">No stats recorded yet</span>
+      ) : (
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {FARM_STAT_LABELS.map(s => {
+            const d = daily[s.key] ?? 0;
+            const l = lifetime[s.key] ?? 0;
+            if (d === 0 && l === 0) return null;
+            return (
+              <div key={s.key} className="flex items-center gap-1 text-[11px]">
+                <span className={s.color}>{s.icon}</span>
+                <span className="text-muted-foreground">{s.label}:</span>
+                <span className="font-semibold tabular-nums text-foreground">{d.toLocaleString()}</span>
+                <span className="text-muted-foreground">/ {l.toLocaleString()}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface FarmPhone {
+  serial: string;
+  state: string;
+  model?: string;
+  manufacturer?: string;
+  marketName?: string;
+}
+
+function PhoneFarmCard({ phone }: { phone: FarmPhone }) {
+  const { data: account, isLoading } = useQuery<{ slots: { username: string }[] }>({
+    queryKey: [`/api/mobile/devices/${encodeURIComponent(phone.serial)}/account`],
+    refetchInterval: 30000,
+  });
+
+  const slots = (account?.slots ?? [])
+    .map((s, i) => ({ username: s.username?.trim() ?? "", idx: i }))
+    .filter(s => s.username !== "");
+
+  const label = phone.marketName || (phone.manufacturer && phone.model ? `${phone.manufacturer} ${phone.model}` : phone.serial);
+
+  return (
+    <Card className="border border-border/60 shadow-sm">
+      <CardHeader className="pb-3 pt-4 px-4">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <Smartphone className="w-4 h-4 text-primary shrink-0" />
+          <span className="truncate">{label}</span>
+          <span className="ml-auto text-[10px] font-mono text-muted-foreground shrink-0">{phone.serial}</span>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${phone.state === "device" ? "bg-emerald-500/15 text-emerald-500" : "bg-amber-500/15 text-amber-500"}`}>
+            {phone.state}
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="px-4 pb-4">
+        {isLoading ? (
+          <div className="text-[11px] text-muted-foreground">Loading slots…</div>
+        ) : slots.length === 0 ? (
+          <div className="text-[11px] text-muted-foreground italic">No accounts configured on this device</div>
+        ) : (
+          <div className="space-y-3">
+            {slots.map(slot => (
+              <div key={slot.idx} className="border-l-2 border-border pl-3">
+                <div className="text-[12px] font-medium text-foreground">
+                  <span className="text-muted-foreground text-[10px] mr-1">Slot {slot.idx + 1}</span>
+                  @{slot.username}
+                </div>
+                <PhoneSlotStats username={slot.username} />
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -537,6 +641,10 @@ export function StatsPage() {
             <TabsTrigger value="metrics" className="flex items-center gap-1.5">
               <BarChart2 className="w-3.5 h-3.5" />
               Metrics
+            </TabsTrigger>
+            <TabsTrigger value="farm" className="flex items-center gap-1.5">
+              <Smartphone className="w-3.5 h-3.5" />
+              Phone Farm
             </TabsTrigger>
           </TabsList>
           {activeTab === "metrics" && selectedProfile && (
@@ -1101,7 +1209,52 @@ export function StatsPage() {
             )}
           </div>
         </TabsContent>
+
+        {/* ── Phone Farm Tab ───────────────────────────────────────────────────── */}
+        <TabsContent value="farm" className="mt-0">
+          <PhoneFarmTab />
+        </TabsContent>
       </Tabs>
     </AppLayout>
+  );
+}
+
+function PhoneFarmTab() {
+  const { data, isLoading, isError } = useQuery<{ phones: FarmPhone[]; adbFound: boolean }>({
+    queryKey: ["/api/mobile/usb-phones"],
+    refetchInterval: 15000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16 text-muted-foreground text-sm gap-2">
+        <Smartphone className="w-4 h-4 animate-pulse" />
+        Loading connected phones…
+      </div>
+    );
+  }
+  if (isError || !data?.adbFound) {
+    return (
+      <div className="flex items-center justify-center py-16 text-muted-foreground text-sm gap-2">
+        <PhoneOff className="w-4 h-4" />
+        {!data?.adbFound ? "ADB not found — make sure the API server is running on Windows with ADB installed." : "Failed to load device list."}
+      </div>
+    );
+  }
+  const phones = data.phones ?? [];
+  if (phones.length === 0) {
+    return (
+      <div className="flex items-center justify-center py-16 text-muted-foreground text-sm gap-2">
+        <PhoneOff className="w-4 h-4" />
+        No phones connected via USB.
+      </div>
+    );
+  }
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {phones.map(phone => (
+        <PhoneFarmCard key={phone.serial} phone={phone} />
+      ))}
+    </div>
   );
 }

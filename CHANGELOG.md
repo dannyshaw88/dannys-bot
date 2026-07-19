@@ -4,6 +4,33 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.36] — 2026-07-19
+
+### Feature — Stats page: Phone Farm tab shows per-device, per-slot action metrics
+
+A new **Phone Farm** tab on the Statistics page displays all USB-connected Android devices and their configured Instagram account slots with daily and lifetime action counts.
+
+**What it shows:**
+- Every connected phone (manufacturer, model, serial, connection state)
+- Each non-empty account slot under that phone (slot number + @username)
+- Per-slot daily / lifetime stats: Cycles, Likes, Follows, Stories, Reels, DMs, Feed Shares
+- Auto-refreshes every 15 seconds (phone list) and 30 seconds (slot stats)
+
+**Data sources used:**
+- `GET /api/mobile/usb-phones` — connected device list
+- `GET /api/mobile/devices/:serial/account` — slot usernames per device
+- `GET /api/mobile/slot-stats?username=X` — daily + lifetime action counts per slot
+
+---
+
+### Feature — Copy Settings: Save Posts percentage now included
+
+The **Save Posts** percentage (Save %) is now listed in the **View Feed** section of the Copy Settings dialog.
+
+Previously `savePercentMin` / `savePercentMax` were absent from `COPY_SECTIONS`, so the dialog never showed or copied the Save % fields when bulk-copying settings between accounts. It is now included alongside Like %, Share to Feed %, and Share via DM %.
+
+---
+
 ## [1.2.35] — 2026-07-19
 
 ### Fix — View Feed: Save Posts percentage was always 0 regardless of UI setting
