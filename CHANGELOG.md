@@ -4,6 +4,56 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.27] — 2026-07-19
+
+### Fix — Shuffle tool order now only shows tools that will actually run
+
+**Problem:** When Shuffle Tool Order was on, the log line read e.g.
+`▶ Tool order shuffled: reels → post → stories → follow` but stories
+launched first. Not a bug in the shuffle itself — reels and post each
+missed their Activate Percentage roll and were silently skipped, so
+stories (3rd in the list) appeared to run out of order.
+
+**Root cause:** Every tool's Activate % roll happened *inside* the loop,
+after the shuffle order was already logged. The log therefore showed all
+six tools regardless of whether they would actually fire.
+
+**Fix:** All six Activate % rolls are now made *before* the shuffle, and
+only tools that pass are included in the sequence. The shuffle then
+operates on (and logs) only the tools that will genuinely execute. If a
+tool's activate roll misses it simply doesn't appear — not in the log and
+not in the run. Double-rolling the same tool is also eliminated.
+
+**Side-effect fix:** Previously `_toolsRan` (which controls whether a
+tool needs to navigate back to the home tab first) incremented even when
+a tool was skipped. With pre-filtering, it only increments for tools that
+ran, so the "is this the first tool?" check is now accurate.
+
+### Fix — Automation stops when app is minimised or closed to tray
+
+**Problem:** The cycle scheduler lives entirely in the React renderer —
+a `setTimeout(runCycle, …)` fires the POST that triggers each cycle on
+the server. When the main window is minimised or hidden to the tray,
+Chromium throttled or paused those timers, so the POST never fired and
+the server sat idle even with the toggle on.
+
+**Fix (Electron `main.ts`):**
+
+- `backgroundThrottling: false` added to the main `BrowserWindow`'s
+  `webPreferences`. This prevents Chromium from throttling
+  `setTimeout`/`setInterval` in the renderer when the window is
+  minimised or hidden. EB windows already carried this flag (documented
+  as "CRITICAL" in ebManager.ts); the main window was missing it.
+
+- `powerSaveBlocker.start('prevent-app-suspension')` called at window
+  creation. This prevents Windows from suspending the app process (and
+  its Node.js server child) when the machine is idle or in a power-saving
+  state, which could pause all timers even with backgroundThrottling off.
+
+These changes only take effect in the next installer build.
+
+---
+
 ## [1.2.26] — 2026-07-18
 
 ### Fix — Follow tool no longer leaves the phone on a profile page after the last user

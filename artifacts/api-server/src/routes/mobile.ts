@@ -4506,13 +4506,32 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       //     (Search tab, Home tab, compose "+") so they work from any screen.
       let likes = 0, likeFailures = 0, sharesFeed = 0, sharesDm = 0, strayNavRecoveries = 0;
 
-      const _toolSeq = ['feed', 'stories', 'reels', 'follow', 'post', 'jitter'];
+      // Pre-roll every tool's Activate Percentage gate BEFORE building the order.
+      // This means the logged sequence only contains tools that will actually
+      // execute — a tool whose activate roll misses is excluded from the list
+      // entirely rather than appearing first and then being silently skipped,
+      // which made the order look wrong (e.g. "shuffled: reels → stories" when
+      // reels missed its roll and stories appeared to run "first").
+      // The pre-rolled result is also used as the condition inside the loop so
+      // rollActivate() is never called twice for the same tool.
+      const _toolActivated: Record<string, boolean> = {
+        feed:    feedEnabled && rollActivate(feedActivatePctMin, feedActivatePctMax),
+        stories: storiesEnabled && viewStoriesSlidesMax > 0 && rollActivate(viewStoriesActivatePctMin ?? 100, viewStoriesActivatePctMax ?? 100),
+        reels:   (viewReelsEnabled ?? false) && (viewReelsScrollMax ?? 0) > 0 && rollActivate(viewReelsActivatePctMin ?? 100, viewReelsActivatePctMax ?? 100),
+        follow:  followEnabled && rollActivate(followActivatePctMin, followActivatePctMax),
+        post:    makePostEnabled && rollActivate(makePostActivatePctMin, makePostActivatePctMax),
+        jitter:  randomJitterEnabled && rollActivate(randomJitterActivatePctMin, randomJitterActivatePctMax),
+      };
+
+      // Build the sequence from only the tools that passed their activate gate.
+      const _toolSeq = ['feed', 'stories', 'reels', 'follow', 'post', 'jitter']
+        .filter(t => _toolActivated[t]);
       if (shuffleToolOrder) {
         for (let _si = _toolSeq.length - 1; _si > 0; _si--) {
           const _sj = Math.floor(Math.random() * (_si + 1));
           [_toolSeq[_si], _toolSeq[_sj]] = [_toolSeq[_sj], _toolSeq[_si]];
         }
-        tLog(`▶ Tool order shuffled: ${_toolSeq.join(' → ')}`);
+        tLog(`▶ Tool order shuffled: ${_toolSeq.length > 0 ? _toolSeq.join(' → ') : '(no tools active this execution)'}`);
       }
 
       let _toolsRan = 0; // how many tools have executed before the current one
@@ -4523,7 +4542,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
         // ── Feed ────────────────────────────────────────────────────────
         if (_tool === 'feed') {
-          if (feedEnabled && rollActivate(feedActivatePctMin, feedActivatePctMax)) {
+          if (_toolActivated[_tool]) { // pre-rolled above
             // When this is not the first tool the previous one may have left
             // the phone anywhere — navigate back to the home feed before
             // starting the scroll sequence.
@@ -4559,7 +4578,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
         // ── Stories ─────────────────────────────────────────────────────
         } else if (_tool === 'stories') {
-          if (storiesEnabled && viewStoriesSlidesMax > 0 && rollActivate(viewStoriesActivatePctMin, viewStoriesActivatePctMax)) {
+          if (_toolActivated[_tool]) { // pre-rolled above
             if (_isFirst) {
               // First tool — Instagram just opened, already on the home feed
               // with the story tray loaded. Tapping Home again would trigger
@@ -4612,7 +4631,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
         // ── Reels ───────────────────────────────────────────────────────
         } else if (_tool === 'reels') {
-          if (viewReelsEnabled && viewReelsScrollMax > 0 && rollActivate(viewReelsActivatePctMin, viewReelsActivatePctMax)) {
+          if (_toolActivated[_tool]) { // pre-rolled above
             tLog(`▶ Starting View Reels (up to ${viewReelsScrollMax})`);
             const reelsResult = await runViewReelsLoop(serial, {
               scrollMin: viewReelsScrollMin, scrollMax: viewReelsScrollMax,
@@ -4656,7 +4675,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
         // ── Follow Users ────────────────────────────────────────────────
         } else if (_tool === 'follow') {
-          if (followEnabled && rollActivate(followActivatePctMin, followActivatePctMax)) {
+          if (_toolActivated[_tool]) { // pre-rolled above
             tLog("▶ Follow Users — fetching targets via HikerAPI…");
             try {
               const followCount = await runFollowUsersStep(serial, {
@@ -4710,7 +4729,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
         // ── Make a Post ─────────────────────────────────────────────────
         } else if (_tool === 'post') {
-          if (makePostEnabled && rollActivate(makePostActivatePctMin, makePostActivatePctMax)) {
+          if (_toolActivated[_tool]) { // pre-rolled above
             if (!makePostLocalFolderEnabled || !makePostLocalFolderPath) {
               steps.push("make-a-post(skipped — Local Folder source not configured)");
               tLog("▶ Make a Post enabled but no Local Folder path configured — skipping");
@@ -4747,7 +4766,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
         // ── Random Jitter ───────────────────────────────────────────────
         } else if (_tool === 'jitter') {
-          if (randomJitterEnabled && rollActivate(randomJitterActivatePctMin, randomJitterActivatePctMax)) {
+          if (_toolActivated[_tool]) { // pre-rolled above
             const notifChance = rollRange(checkNotificationsPctMin, checkNotificationsPctMax) / 100;
             if (notifChance > 0 && Math.random() < notifChance) {
               tLog("▶ Random Jitter: checking notifications…");
