@@ -4,6 +4,61 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.35] — 2026-07-19
+
+### Fix — View Feed: Save Posts percentage was always 0 regardless of UI setting
+
+**Problem:** The Save Posts percentage sliders in the View Feed settings had no effect — saves
+never triggered no matter what value was entered.
+
+**Root cause:** `savePercentMin` and `savePercentMax` were never included in the JSON body sent
+to the automation-cycle API endpoint. The server-side Zod schema defaults both fields to `0`
+when absent, so `saveChance` was always 0 and `wantSave` was permanently false. Every feed
+scroll logged "no actions rolled this scroll" when saves were the only action configured.
+
+**Fix:** Added `savePercentMin` and `savePercentMax` to the request body in `MobilePage.tsx`
+so the server receives the actual values the user set.
+
+---
+
+### Fix — View Feed / Stories / Follow / Jitter: activation percentages ignored
+
+**Problem:** The per-tool activation percentage sliders (View Feed Activate %, View Stories
+Activate %, Follow Activate %, Jitter Activate %) had no effect — the server always received
+the schema default of 100% regardless of what the user configured.
+
+**Root cause:** `feedActivatePctMin/Max`, `viewStoriesActivatePctMin/Max`,
+`followActivatePctMin/Max`, and `randomJitterActivatePctMin/Max` were all missing from the
+automation-cycle request body. Because the Zod defaults are 100%, tools still activated (the
+gate always passed), masking the bug — but any custom cap the user set was silently thrown away.
+
+**Fix:** All eight missing activate-percentage fields added to the request body.
+
+---
+
+### Fix — Follow: search bar tap now waits a random 1–5 seconds before typing
+
+**Problem:** After tapping the Instagram search bar in the Follow flow, the bot waited a fixed
+1.5 seconds before pasting the target username. This is a recognisable machine-like pattern.
+
+**Fix:** The fixed 1 500 ms delay is replaced with a uniformly random delay of 1 000–5 000 ms
+(`1000 + Math.floor(Math.random() * 4000)`), giving each follow a different rhythm that is
+indistinguishable from a human pausing to type.
+
+---
+
+### Fix — Accounts tab: TrustScore badge height and alignment
+
+**Problem:** The TrustScore badge in each account slot row was mis-sized and mis-aligned —
+it was filling the full label+input height of the row (appearing too tall) and was not
+vertically centred with the adjacent input fields.
+
+**Fix:** Badge height set to 36 px (matching the visible input height minus a small margin),
+`align-self: flex-end` so its baseline aligns with the bottom of the input fields, and width
+narrowed to 114 px to fit cleanly in the row without crowding.
+
+---
+
 ## [1.2.34] — 2026-07-19
 
 ### Fix — Story viewer: link/mention stickers clicked mid-story (fallback centre-screen double-tap removed)
