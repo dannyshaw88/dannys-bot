@@ -4374,20 +4374,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const match = allProfiles.find(p => p.username === slotUsername || p.accountLabel === slotUsername);
         if (match) mobileProfileId = match.id;
       }
-      // Log cycle start to Dashboard
-      if (mobileProfileId) {
-        storage.createSessionAction({
-          profileId: mobileProfileId,
-          toolId: 0,
-          action: "tool_start",
-          targetUsername: "",
-          detail: "Phone farm cycle starting",
-          result: "ok",
-          sourceValue: `${serial}:${slotIdx}`,
-          sourceType: "phone",
-          timestamp: new Date().toISOString(),
-        }).catch(() => {});
-      }
+      // Log cycle start to Dashboard.
+      // profileId 0 is the system sentinel (same as "Aura Farming started")
+      // so events always appear even when slotUsername has no matching EB
+      // profile.  slotUsername goes into targetUsername so the ACCOUNT column
+      // shows which Instagram account ran the cycle even without a profile link.
+      storage.createSessionAction({
+        profileId: mobileProfileId ?? 0,
+        toolId: 0,
+        action: "tool_start",
+        targetUsername: slotUsername || "",
+        detail: "Phone farm cycle starting",
+        result: "ok",
+        sourceValue: `${serial}:${slotIdx}`,
+        sourceType: "phone",
+        timestamp: new Date().toISOString(),
+      }).catch(() => {});
 
       // 1. Power on the phone.
       tLog("▶ Waking screen…");
@@ -4864,7 +4866,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }).catch((e: any) => logger.warn({ err: e }, "[mobile-cycle] stat persist error"));
       }
       // Log cycle completion to Dashboard activity feed.
-      if (mobileProfileId) {
+      // Always log regardless of whether slotUsername matched an EB profile —
+      // use profileId 0 as a system sentinel so entries are always visible.
+      {
         const parts: string[] = [];
         if (followedCount) parts.push(`${followedCount} follows`);
         if (likes + reelsLikes) parts.push(`${likes + reelsLikes} likes`);
@@ -4873,10 +4877,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (sharesDm) parts.push(`${sharesDm} DMs`);
         if (sharesFeed) parts.push(`${sharesFeed} feed shares`);
         storage.createSessionAction({
-          profileId: mobileProfileId,
+          profileId: mobileProfileId ?? 0,
           toolId: 0,
           action: "tool_complete",
-          targetUsername: "",
+          targetUsername: slotUsername || "",
           detail: parts.length ? parts.join(", ") : "No actions taken",
           result: "ok",
           sourceValue: `${serial}:${slotIdx}`,

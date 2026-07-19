@@ -4,6 +4,50 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.29] — 2026-07-19
+
+### Fix — Dashboard now logs every phone farm cycle
+
+**Problem:** The Dashboard showed nothing for phone farm automation. Every
+cycle start and cycle complete event was silently dropped when the slot's
+Instagram username didn't have a matching EB profile in the database
+(`if (mobileProfileId)` was false → no log written).
+
+**Fix (`routes/mobile.ts`):**
+- Removed both `if (mobileProfileId)` guards on cycle-start and
+  cycle-complete logging.
+- `profileId` now uses `mobileProfileId ?? 0` — the same system sentinel
+  (0) that "Aura Farming started" entries already use, so phone farm rows
+  always appear in the feed even with no linked EB profile.
+- `targetUsername` is now set to `slotUsername` on both events so the
+  ACCOUNT column shows which Instagram account ran each cycle.
+- DEVICE and SLOT columns already showed the serial and slot index from
+  `sourceValue` (`serial:slotIdx`) — those continue to work as before.
+
+**Persistence:** The underlying SQLite database was already persisting all
+data across restarts — logs were simply never being written. With the gate
+removed, entries are written on every cycle and survive indefinitely (only
+the manual "CLEAR DASHBOARD" button removes them).
+
+### Fix — Dashboard duplicate timestamp column removed
+
+**Problem:** The column order stored in Electron settings / localStorage
+could have the same column key (e.g. "timestamp") appear twice, causing
+two identical Clock-icon date columns to render side by side. The column
+the user labelled "TARGET" was actually a second "TIMESTAMP" column
+rendering through the Clock fallback.
+
+**Fix (`Dashboard.tsx`):**
+- The `colOrder` merge function now **deduplicates** the stored array:
+  if any key appears more than once, only the first occurrence is kept.
+  Invalid keys (column keys removed in past versions) are also stripped.
+- `target` removed from `DEFAULT_COL_ORDER`. It was never populated for
+  phone farm cycles (always empty `targetUsername`) and was the source of
+  visual confusion — it looked like a second date column. Users who want
+  it back can re-add it via Manage Columns.
+
+---
+
 ## [1.2.28] — 2026-07-19
 
 ### Fix — Swipe-up recents dismiss now travels far enough on tall screens (Redmi A5)

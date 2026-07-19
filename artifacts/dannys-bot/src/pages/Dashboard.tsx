@@ -71,7 +71,11 @@ const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string |
 };
 
 const DEFAULT_COL_WIDTHS = { account: 160, device_name: 140, account_slot: 100, event: 150, target: 100, detail: 200, timestamp: 220, trustscore: 120 };
-const DEFAULT_COL_ORDER: (keyof typeof DEFAULT_COL_WIDTHS)[] = ["account", "device_name", "account_slot", "trustscore", "event", "target", "detail", "timestamp"];
+// "target" is deliberately excluded from the default order — it only holds the
+// account username for phone-farm rows and is not useful as a standalone column
+// since the ACCOUNT column already carries that context when a profile is linked.
+// Users can re-add it via Manage Columns if they want it.
+const DEFAULT_COL_ORDER: (keyof typeof DEFAULT_COL_WIDTHS)[] = ["account", "device_name", "account_slot", "trustscore", "event", "detail", "timestamp"];
 const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
   account: "ACCOUNT", device_name: "DEVICE", account_slot: "SLOT", event: "ACTION", target: "TARGET", detail: "DETAIL", timestamp: "TIMESTAMP", trustscore: "TRUSTSCORE",
 };
@@ -11401,8 +11405,21 @@ export function Dashboard() {
     "dashboard_col_order",
     DEFAULT_COL_ORDER,
     (s, d) => {
-      const missing = d.filter(k => !s.includes(k));
-      return missing.length ? [...s, ...missing] : s;
+      // 1. Strip any keys that no longer exist in DEFAULT_COL_WIDTHS.
+      const validKeys = new Set(Object.keys(DEFAULT_COL_WIDTHS) as (keyof typeof DEFAULT_COL_WIDTHS)[]);
+      // 2. Deduplicate — if localStorage somehow has the same column key twice
+      //    (e.g. "timestamp" appearing in two positions), keep only the first
+      //    occurrence so the user doesn't see two identical clock-icon columns.
+      const seen = new Set<string>();
+      const clean = (s as string[]).filter(k => {
+        if (!validKeys.has(k as keyof typeof DEFAULT_COL_WIDTHS) || seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      }) as (keyof typeof DEFAULT_COL_WIDTHS)[];
+      // 3. Append any columns from the new default that aren't already present
+      //    (handles newly-added columns across software updates).
+      const missing = d.filter(k => !seen.has(k));
+      return missing.length ? [...clean, ...missing] : clean;
     },
   );
   const moveCol = (key: keyof typeof DEFAULT_COL_WIDTHS, dir: -1 | 1) => {
