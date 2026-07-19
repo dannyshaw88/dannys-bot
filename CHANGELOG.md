@@ -4,6 +4,58 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.42] — 2026-07-19
+
+### Improve — Debugging Log redesigned as a 3-column table (Timestamp | Duration | Message)
+
+Previously every log line was rendered as a single string — `[19:04:46] [32.0s] ▶ Starting feed scroll`. When a message was long it wrapped back underneath the timestamp, making the log visually cluttered and timestamps illegible mid-wrap.
+
+**What changed:**
+- Each log line is now parsed and rendered in three fixed columns:
+  - **Timestamp** — dim green, never wraps, sits in its own `whitespace-nowrap` column.
+  - **Duration** — fixed `4.5rem` column, amber colour when a `[Xs]` elapsed-time value is present, blank when the line has no elapsed tag (e.g. mirror connection events that aren't part of an automation cycle). Always shows even when multiple consecutive lines share the same elapsed time.
+  - **Message** — occupies the remaining width and wraps freely within its own column so it can never bleed into the timestamp or duration cells.
+- Message text is colour-coded by prefix: **white** for `▶` section-header lines, **sky-blue** for mirror/stream events (`WS`, `First frame`, `Frame`, `Decoder`, `Wake`), **red** for `ERROR` / `FAILED` / `✗`, **yellow** for `⚠`, and the standard green for everything else.
+
+### Fix — Feed scroll lines now include elapsed time in the Debugging Log
+
+Lines logged by the feed scroll loop (`Scroll 1/7`, `Scroll 1/7: no actions rolled this scroll`, etc.) appeared without the `[Xs]` elapsed prefix even though all surrounding cycle lines had it.
+
+**Root cause:** The `onLog` callback passed to `runCheckFeedLoop` used `sendVideoLog` directly (`(msg) => sendVideoLog(serial, \`  ${msg}\`)`) which bypasses `tLog`, the wrapper that prepends `[elapsed]`. All other tool callbacks (`stories`, `reels`, `jitter`) already routed through `tLog`.
+
+**Fix:** Changed the feed loop's `onLog` to `(msg) => tLog(\`  ${msg}\`)` so every scroll line is stamped with elapsed seconds, consistent with the rest of the cycle log. The `[Xs]` value now appears even when two events happen within the same second.
+
+### Fix — Sidebar brand name spacing corrected ("Aura Farming" → "AuraFarming")
+
+A leading space in the `<span>` element for " Farming" produced a visible gap between the blue "Aura" and the foreground-colour "Farming" in the sidebar header.
+
+**Fix:** Removed the leading space so the two spans render flush: `AuraFarming`.
+
+### Improve — Inject Browsing: "Feed chance %" removed (was a dead/redundant field)
+
+The **Feed chance %** min/max pair in the Inject Browsing section of Phone Farm automation settings controlled whether the profile-grid feed-scroll step ran during an inject-browsing session. In practice the engine never consulted this value — `runProfileBrowsingSequence` scrolled the feed based on the **Feed posts** count alone, making Feed chance % a UI field that had no effect whatsoever regardless of what it was set to.
+
+**What changed:**
+- Removed from the Inject Browsing UI (Phone Farm → Accounts → Inject Browsing row).
+- Removed from the `AutomationSettingsData` TypeScript interface, the default values object, the API save/load mapping, the Zod persistence schema, the `InjectBrowsingParams` engine interface, the cycle destructuring block, the browsing-params object passed to `runFollowUsersStep`, and the Copy Settings mapping.
+- The feed-scroll step inside `runProfileBrowsingSequence` continues to fire unconditionally whenever inject browsing activates (controlled only by the **Feed posts** min/max). Existing saved settings that contain the old field are silently dropped on the next save — no data loss.
+
+### New — Inject Browsing: "Abandon Follow %" added
+
+A new **Abandon Follow %** min/max percentage pair appears directly after **Share to DM %** in the Inject Browsing section.
+
+**How it works:**
+- The chance is rolled **after** the full inject-browsing sequence completes (feed scroll, click posts, like, share to feed, share to DM) but **before** the Follow tap — so the browsing still happens, adding real session behaviour, but the follow itself is randomly skipped.
+- When the abandon roll fires the user is **not** added to any skip list. They can be scraped and followed again in any future automation cycle by this account or any other account configured in the farm. The log shows `↩ abandoned follow @username after inject-browsing (variation — user can be re-scraped)`.
+- The abandon check only fires for users where inject browsing ran **before** the follow (`Browse before follow %` roll succeeded). For users where browsing is scheduled to run after the follow, the follow already happened and abandon is not applicable.
+- Setting min and max to 0 (the default) disables the feature entirely — existing behaviour is fully preserved.
+
+**Purpose:** adds variation to the follow behavioural fingerprint so not every inject-browsing session terminates with a follow. Instagram's pattern-detection is sensitive to highly regular action sequences; randomising whether a browse leads to a follow or not makes the account's activity harder to classify as automated.
+
+**Included in Copy Settings** under Inject Browsing → Abandon Follow %.
+
+---
+
 ## [1.2.41] — 2026-07-19
 
 ### New — Debug Log and Action Log now record continuously in the background
