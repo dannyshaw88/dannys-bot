@@ -2502,30 +2502,34 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
       storiesWatched++;
 
-      // Advance to the next story by tapping the far-right edge (~92%) of the
+      // Advance to the next story by tapping the far-right edge (~97%) of the
       // screen at ~15% height — but ONLY when there are more slides left to
-      // watch.  Previously this used (w*0.75, h*0.50) which is dead centre
-      // vertically — prime territory for collaboration stickers, hashtag
-      // stickers, and mention stickers that story authors embed at mid-screen.
-      // Tapping one of those navigates to the tagged profile, closing the
-      // story viewer instantly and producing the "story viewer already closed"
-      // log.  The safe zone is the far right edge (92%) at ~15% height:
-      // story creators virtually never place stickers in the very top strip
-      // (too close to the muted/close controls, gets cropped on most devices),
-      // and the tap still sits well within the "right half = advance" region
-      // that Instagram recognises.  Using 15% instead of the previous 25%
-      // adds extra clearance from the ~20-25% band where mention/hashtag
-      // stickers are most commonly placed.
+      // watch.
       //
-      // Previously this tap also fired unconditionally at the end of every
-      // iteration, including the last one.  On 3-second stories that means:
-      // open tray → watch slide 1 → tray auto-advances through slides 2 and 3
-      // → unnecessary advance tap pushes us to slide 4 → the user sees 4-5
-      // slides fly by when they set "1 story to watch".  Skipping the advance
-      // on the last iteration lets the loop finish on whatever slide the tray
-      // is currently on, then exits cleanly via the swipe-down below.
+      // History of x-position changes and why:
+      //   w*0.75  (original) — dead centre; hit collaboration/hashtag/mention
+      //                        stickers constantly (all of which navigate away).
+      //   w*0.92  (v1.2.30)  — far right, 8% inset from edge; still hit
+      //                        mention stickers that the author placed in the
+      //                        right portion of the frame (confirmed Jul 2026).
+      //   w*0.97  (current)  — extreme right edge (3% inset, ~22 px on a
+      //                        720-px-wide screen).  Story creators virtually
+      //                        never place interactive stickers this close to
+      //                        the physical edge (IG's editor snaps/clips them
+      //                        away from that strip), so collision risk is
+      //                        near-zero while the tap still lands in the
+      //                        "right half = advance" zone Instagram recognises.
+      //
+      // y stays at 15%: enough clearance below the author header/mute-button
+      // row (~10% height) while sitting above the ~20-25% band where
+      // mention and hashtag stickers most commonly appear.
+      //
+      // Skipping the advance on the last iteration: on 3-second stories the
+      // unnecessary last-tap would push to slide totalStories+1, causing the
+      // tray to auto-advance to the next user's stories instead of staying on
+      // the final slide until we swipe down.
       if (s < totalStories - 1) {
-        await android.tap(serial, Math.round(w * 0.92), Math.round(h * 0.15));
+        await android.tap(serial, Math.round(w * 0.97), Math.round(h * 0.15));
         await sleepOrAbort(serial, 500 + Math.round(Math.random() * 400));
       }
     }
@@ -2567,6 +2571,34 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       );
     }
     await sleepOrAbort(serial, 800);
+
+    // ── Profile-page recovery ──────────────────────────────────────────────
+    // Even at x=97%, an advance tap can occasionally land on a mention/collab
+    // sticker placed near the right edge, navigating to the story author's
+    // profile page.  The ad-deviation block above only catches non-Instagram
+    // apps; this block catches the intra-Instagram case where we're left on a
+    // profile page instead of the home feed.
+    //
+    // Detection: findHomeTab looks for content-desc="Home" or the feed_tab
+    // resource-id in the accessibility tree.  On the home feed the Home tab is
+    // always present in the bottom nav.  On a profile page, inside the story
+    // viewer, or inside any other full-screen surface the home tab is absent —
+    // but we know we're not in the story viewer any more (the exit-swipe above
+    // just ran, or stillInStoryViewer() returned false before it).  So a null
+    // result here reliably means "we ended up somewhere other than the feed".
+    //
+    // Recovery: one pressBack is enough to return from a profile page to the
+    // feed.  A second Back would be needed only if we somehow navigated two
+    // levels deep, which this flow cannot do.
+    {
+      const _stFeedTab = await android.findHomeTab(serial).catch(() => null);
+      if (!_stFeedTab) {
+        onLog?.("Story exit: home-feed tab not found after story loop — pressing Back to recover from possible profile-page navigation");
+        logger.info({ serial }, "[view-stories] home tab absent post-exit — pressing Back to recover");
+        await android.pressBack(serial);
+        await sleepOrAbort(serial, 600);
+      }
+    }
 
     return { storiesWatched };
   }
