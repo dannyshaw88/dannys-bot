@@ -190,10 +190,10 @@ export class HikerApiClient {
     }
   }
 
-  async getFollowers(userId: string, max = 50): Promise<{ pk: string; username: string; fullName: string }[]> {
+  async getFollowers(userId: string, max = 50): Promise<{ pk: string; username: string; fullName: string; isVerified?: boolean; isPrivate?: boolean; followerCount?: number }[]> {
     const amount = Math.min(Math.max(max, 1), 200);
 
-    const extractUsers = (j: any): { pk: string; username: string; fullName: string }[] => {
+    const extractUsers = (j: any): { pk: string; username: string; fullName: string; isVerified?: boolean; isPrivate?: boolean; followerCount?: number }[] => {
       const arr: any[] = Array.isArray(j) ? j
         : Array.isArray(j?.users)           ? j.users
         : Array.isArray(j?.items)           ? j.items
@@ -202,7 +202,14 @@ export class HikerApiClient {
         : [];
       return arr
         .filter((u: any) => u?.pk && u?.username)
-        .map((u: any) => ({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") }));
+        .map((u: any) => ({
+          pk: String(u.pk),
+          username: String(u.username),
+          fullName: String(u.full_name ?? ""),
+          ...(u.is_verified  !== undefined && { isVerified:   Boolean(u.is_verified)            }),
+          ...(u.is_private   !== undefined && { isPrivate:    Boolean(u.is_private)             }),
+          ...(u.follower_count !== undefined && { followerCount: Number(u.follower_count)       }),
+        }));
     };
 
     // Try /v2/ first (fresher cache).
@@ -575,7 +582,7 @@ export class HikerApiClient {
     hashtag: string,
     max = 50,
     cursor = "",
-  ): Promise<{ users: { pk: string; username: string; fullName: string }[]; nextCursor: string | null }> {
+  ): Promise<{ users: { pk: string; username: string; fullName: string; isVerified?: boolean; isPrivate?: boolean; followerCount?: number }[]; nextCursor: string | null }> {
     const tag = hashtag.replace(/^#/, "");
     const amount = Math.min(Math.max(max, 1), 200);
 
@@ -615,7 +622,18 @@ export class HikerApiClient {
       }
 
       const seen = new Set<string>();
-      const users: { pk: string; username: string; fullName: string }[] = [];
+      const users: { pk: string; username: string; fullName: string; isVerified?: boolean; isPrivate?: boolean; followerCount?: number }[] = [];
+
+      const pushUser = (u: any) => {
+        users.push({
+          pk: String(u.pk),
+          username: String(u.username),
+          fullName: String(u.full_name ?? ""),
+          ...(u.is_verified   !== undefined && { isVerified:   Boolean(u.is_verified)   }),
+          ...(u.is_private    !== undefined && { isPrivate:    Boolean(u.is_private)    }),
+          ...(u.follower_count !== undefined && { followerCount: Number(u.follower_count) }),
+        });
+      };
 
       // Shape A: flat items array (HikerAPI v1 format — each item is a media object)
       for (const item of flatItems) {
@@ -627,7 +645,7 @@ export class HikerApiClient {
         if (!u?.pk || !u?.username) continue;
         if (seen.has(String(u.pk))) continue;
         seen.add(String(u.pk));
-        users.push({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") });
+        pushUser(u);
       }
 
       // Shape B: sections / layout_content (Instagram internal / HikerAPI v2 format)
@@ -645,7 +663,7 @@ export class HikerApiClient {
             if (!u?.pk || !u?.username) continue;
             if (seen.has(String(u.pk))) continue;
             seen.add(String(u.pk));
-            users.push({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") });
+            pushUser(u);
           }
         }
       }

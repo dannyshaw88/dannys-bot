@@ -2921,6 +2921,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     followFiltersEnabled: z.boolean().default(false),
     followFilterVerifiedUsers: z.boolean().default(false),
     followFilterMaxFollowers25k: z.boolean().default(false),
+    followFilterPrivateUsers: z.boolean().default(false),
+    followFilterEnglishSpeaking: z.boolean().default(false),
+    followFilterMinFollowers250: z.boolean().default(false),
     // ── Random Jitter — human-like interstitial actions fired on each cycle
     // at a random percentage chance.  Master gate: randomJitterEnabled.
     randomJitterEnabled: z.boolean().default(false),
@@ -3946,7 +3949,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       skipSkippedUsernames?: Set<string>;
       /** Profile-quality gates to apply after navigating to the target's
        *  profile but before the Follow tap. */
-      filters?: { skipVerified?: boolean; maxFollowers?: number };
+      filters?: { skipVerified?: boolean; maxFollowers?: number; skipPrivate?: boolean; minFollowers?: number; requireEnglish?: boolean };
     },
   ): Promise<number> {
     const { usersMin, usersMax, sources, onLog, recordFollow, browsing, skipFollowedUsernames, skipSkippedUsernames, filters } = params;
@@ -3974,6 +3977,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Track source per username so the Followed Users tab shows the hashtag
     // or target account the user was discovered from, not "hikerapi".
     const candidateSource = new Map<string, string>();
+    const candidateMeta   = new Map<string, { isVerified?: boolean; isPrivate?: boolean; followerCount?: number }>();
     const candidates: string[] = [];
 
     // Shuffle sources before iterating so the loop (which breaks as soon as
@@ -3994,6 +3998,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           const res = await hiker.getHashtagUsers(src.value.replace(/^#/, ""), 50);
           for (const u of res.users) {
             if (!candidateSource.has(u.username)) candidateSource.set(u.username, sourceLabel);
+            if (u.isVerified !== undefined || u.isPrivate !== undefined || u.followerCount !== undefined)
+              candidateMeta.set(u.username, { isVerified: u.isVerified, isPrivate: u.isPrivate, followerCount: u.followerCount });
             candidates.push(u.username);
           }
           onLog?.(`Follow: ${sourceLabel} → ${res.users.length} users`);
@@ -4003,6 +4009,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           const followers = await hiker.getFollowers(userInfo.pk, 50);
           for (const u of followers) {
             if (!candidateSource.has(u.username)) candidateSource.set(u.username, sourceLabel);
+            if (u.isVerified !== undefined || u.isPrivate !== undefined || u.followerCount !== undefined)
+              candidateMeta.set(u.username, { isVerified: u.isVerified, isPrivate: u.isPrivate, followerCount: u.followerCount });
             candidates.push(u.username);
           }
           onLog?.(`Follow: ${sourceLabel} followers → ${followers.length} users`);
@@ -4029,6 +4037,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const skipped = before - filtered.length;
       if (skipped > 0) onLog?.(`Follow: skipped ${skipped} user${skipped !== 1 ? 's' : ''} already in the global skip list`);
     }
+    // ── HikerAPI metadata pre-filter ────────────────────────────────────
+    // Free — uses data already returned by the batch scrape; no extra calls.
+    // Only skips candidates where the metadata is definitively present and
+    // matches a filter; absent metadata passes through to the profile check.
+    if (filters && (filters.skipVerified || filters.skipPrivate || filters.maxFollowers !== undefined || filters.minFollowers !== undefined)) {
+      const before = filtered.length;
+      filtered = filtered.filter(u => {
+        const meta = candidateMeta.get(u);
+        if (!meta) return true;
+        if (filters.skipVerified  && meta.isVerified === true) return false;
+        if (filters.skipPrivate   && meta.isPrivate  === true) return false;
+        if (filters.maxFollowers !== undefined && meta.followerCount !== undefined && meta.followerCount >= filters.maxFollowers) return false;
+        if (filters.minFollowers !== undefined && meta.followerCount !== undefined && meta.followerCount <  filters.minFollowers) return false;
+        return true;
+      });
+      const preFiltered = before - filtered.length;
+      if (preFiltered > 0) onLog?.(`Follow: pre-filtered ${preFiltered} candidate${preFiltered !== 1 ? "s" : ""} via HikerAPI metadata`);
+    }
+
     const targets = filtered.slice(0, targetCount);
     onLog?.(`Follow: following ${targets.length} unique users`);
 
@@ -4114,66 +4141,102 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
         await sleepOrAbort(serial, 1500);
 
-        // ── Verified-badge filter ───────────────────────────────────────────
-        // Dump the profile's accessibility tree and look for any indicator
-        // that this account is Meta-verified. If found, press Back and skip.
-        // Runs before Inject Browsing so no browsing time is wasted on a
-        // target that we would have skipped anyway.
-        if (filters?.skipVerified) {
+        // ── Profile-quality filter gate ────────────────────────────────────
+        // ONE shared XML dump covers ALL active profile-quality filters:
+        // Verified badge, Private account, Follower count (min & max), English
+        // Speaking. Extra 1 s settle lets the profile header fully render
+        // (badge + follower count) before the dump fires.
+        if (filters && (filters.skipVerified || filters.skipPrivate || filters.maxFollowers !== undefined || filters.minFollowers !== undefined || filters.requireEnglish)) {
           try {
+            await sleepOrAbort(serial, 1000);
             const profileXml = await android.dumpUi(serial).catch(() => "");
-            // Instagram's verified badge appears as a node whose content-desc
-            // contains "Verified" (exact wording varies by IG version/locale
-            // but the word "Verified" is consistent across all tested builds).
-            // We also check a selection of known resource-ids as a fallback.
-            const isVerified =
-              /content-desc="[^"]*[Vv]erified[^"]*"/.test(profileXml) ||
-              profileXml.includes(":id/is_verified") ||
-              profileXml.includes(":id/verified_badge") ||
-              profileXml.includes(":id/verified_checkmark");
-            if (isVerified) {
-              onLog?.(`Follow: @${username} is verified — skipping (Skip Verified filter)`);
-              // Add to global skipped list so HikerAPI won't scrape this
-              // username again in future cycles.
-              storage.addSkippedUser(username, "verified-badge").catch(() => {});
-              await android.pressBack(serial);
-              await sleepOrAbort(serial, 500);
-              continue;
-            }
-          } catch (filterErr: any) {
-            onLog?.(`Follow: verified-badge check failed for @${username} (${filterErr?.message}) — proceeding`);
-          }
-        }
 
-        // ── Max-followers filter (–25K) ────────────────────────────────────
-        // Reads the follower count from the profile page accessibility tree
-        // and skips this user if they have 25,000 or more followers.
-        if (filters?.maxFollowers !== undefined) {
-          try {
-            const profileXml = await android.dumpUi(serial).catch(() => "");
-            // Follower count appears in an accessibility node whose
-            // content-desc contains a number followed by "followers".
-            // Format varies by locale: "1,234 followers", "12K followers",
-            // "1.5M followers", etc.
-            const followerMatch = profileXml.match(
-              /content-desc="([0-9][0-9,.]*)([KkMm]?)\s*[Ff]ollowers/
-            );
-            if (followerMatch) {
-              const digits = parseFloat(followerMatch[1].replace(/,/g, ""));
-              const suffix = followerMatch[2].toLowerCase();
-              const count = suffix === "k" ? digits * 1_000
-                          : suffix === "m" ? digits * 1_000_000
-                          : digits;
-              if (!isNaN(count) && count >= filters.maxFollowers) {
-                onLog?.(`Follow: @${username} has ${count.toLocaleString()} followers (≥25K) — skipping (-25K filter)`);
-                storage.addSkippedUser(username, "too-many-followers").catch(() => {});
+            // ── Verified badge ──────────────────────────────────────────────
+            if (filters.skipVerified) {
+              const isVerified =
+                /content-desc="[^"]*[Vv]erified[^"]*"/.test(profileXml) ||
+                profileXml.includes(":id/is_verified") ||
+                profileXml.includes(":id/verified_badge") ||
+                profileXml.includes(":id/verified_checkmark");
+              if (isVerified) {
+                onLog?.(`Follow: @${username} is verified — skipping (Skip Verified filter)`);
+                storage.addSkippedUser(username, "verified-badge").catch(() => {});
                 await android.pressBack(serial);
                 await sleepOrAbort(serial, 500);
                 continue;
               }
             }
+
+            // ── Private account ─────────────────────────────────────────────
+            if (filters.skipPrivate) {
+              const isPrivate =
+                /content-desc="[^"]*[Pp]rivate\s+[Aa]ccount[^"]*"/.test(profileXml) ||
+                profileXml.includes(":id/private_profile") ||
+                profileXml.includes("This Account is Private");
+              if (isPrivate) {
+                onLog?.(`Follow: @${username} is private — skipping (Private Users filter)`);
+                storage.addSkippedUser(username, "private-account").catch(() => {});
+                await android.pressBack(serial);
+                await sleepOrAbort(serial, 500);
+                continue;
+              }
+            }
+
+            // ── Follower count (shared parse for max & min checks) ──────────
+            if (filters.maxFollowers !== undefined || filters.minFollowers !== undefined) {
+              const followerMatch = profileXml.match(
+                /content-desc="([0-9][0-9,.]*)([KkMm]?)\s*[Ff]ollowers/
+              );
+              if (followerMatch) {
+                const digits = parseFloat(followerMatch[1].replace(/,/g, ""));
+                const suffix = followerMatch[2].toLowerCase();
+                const count = suffix === "k" ? digits * 1_000
+                            : suffix === "m" ? digits * 1_000_000
+                            : digits;
+                if (!isNaN(count)) {
+                  if (filters.maxFollowers !== undefined && count >= filters.maxFollowers) {
+                    onLog?.(`Follow: @${username} has ${count.toLocaleString()} followers (≥25K) — skipping (-25K filter)`);
+                    storage.addSkippedUser(username, "too-many-followers").catch(() => {});
+                    await android.pressBack(serial);
+                    await sleepOrAbort(serial, 500);
+                    continue;
+                  }
+                  if (filters.minFollowers !== undefined && count < filters.minFollowers) {
+                    onLog?.(`Follow: @${username} has ${count.toLocaleString()} followers (<${filters.minFollowers}) — skipping (250 Followers+ filter)`);
+                    storage.addSkippedUser(username, "too-few-followers").catch(() => {});
+                    await android.pressBack(serial);
+                    await sleepOrAbort(serial, 500);
+                    continue;
+                  }
+                }
+              }
+            }
+
+            // ── English Speaking ────────────────────────────────────────────
+            // Scan all accessibility node text for non-ASCII ratio. A node
+            // where >40 % of characters are non-ASCII is treated as
+            // non-English and the user is skipped. Profiles with no bio text
+            // (or all-ASCII bios) pass through.
+            if (filters.requireEnglish) {
+              let skipForEnglish = false;
+              const allNodes = profileXml.match(/content-desc="([^"]{10,300})"/g) ?? [];
+              for (const m of allNodes) {
+                const text = m.replace(/^content-desc="/, "").replace(/"$/, "");
+                if (text.length < 10) continue;
+                const nonAscii = (text.match(/[^\x00-\x7F]/g) ?? []).length;
+                if (nonAscii / text.length > 0.4) { skipForEnglish = true; break; }
+              }
+              if (skipForEnglish) {
+                onLog?.(`Follow: @${username} bio appears non-English — skipping (English Speaking filter)`);
+                storage.addSkippedUser(username, "non-english").catch(() => {});
+                await android.pressBack(serial);
+                await sleepOrAbort(serial, 500);
+                continue;
+              }
+            }
+
           } catch (filterErr: any) {
-            onLog?.(`Follow: follower-count check failed for @${username} (${filterErr?.message}) — proceeding`);
+            onLog?.(`Follow: profile-filter check failed for @${username} (${filterErr?.message}) — proceeding`);
           }
         }
 
@@ -4370,6 +4433,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewReelsActivatePctMin, viewReelsActivatePctMax,
         followEnabled, followUsersMin, followUsersMax, followSkipFollowed, followSources,
         followFiltersEnabled, followFilterVerifiedUsers, followFilterMaxFollowers25k,
+        followFilterPrivateUsers, followFilterEnglishSpeaking, followFilterMinFollowers250,
         injectBrowsingEnabled,
         injectBrowsingActivatePctMin, injectBrowsingActivatePctMax,
         injectBrowsingBeforeFollowPctMin, injectBrowsingBeforeFollowPctMax,
@@ -4753,7 +4817,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   shareDmPctMin: injectBrowsingShareDmPctMin, shareDmPctMax: injectBrowsingShareDmPctMax,
                 } : undefined,
                 filters: followFiltersEnabled
-                  ? { skipVerified: followFilterVerifiedUsers, maxFollowers: followFilterMaxFollowers25k ? 25_000 : undefined }
+                  ? {
+                      skipVerified:  followFilterVerifiedUsers,
+                      maxFollowers:  followFilterMaxFollowers25k ? 25_000 : undefined,
+                      skipPrivate:   followFilterPrivateUsers,
+                      minFollowers:  followFilterMinFollowers250 ? 250 : undefined,
+                      requireEnglish: followFilterEnglishSpeaking,
+                    }
                   : undefined,
               });
               followedCount = followCount;

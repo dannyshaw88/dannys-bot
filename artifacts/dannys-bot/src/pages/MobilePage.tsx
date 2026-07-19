@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, useMemo, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { useParams } from "wouter";
+import { useParams, useSearch } from "wouter";
 import { Sidebar, FilledFarmIcon } from "@/components/layout/Sidebar";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -4625,10 +4625,10 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
 });
 
 type AccountSettingsPanelHandle = { backToSlots: () => void };
-type AccountSettingsPanelProps  = { phone: UsbPhone | null; addLog: (msg: string) => void; onSlotChange?: (slotIdx: number | null) => void };
+type AccountSettingsPanelProps  = { phone: UsbPhone | null; addLog: (msg: string) => void; onSlotChange?: (slotIdx: number | null) => void; initialSlot?: number | null };
 
 const AccountSettingsPanel = React.forwardRef<AccountSettingsPanelHandle, AccountSettingsPanelProps>(
-function AccountSettingsPanel({ phone, addLog, onSlotChange }, ref) {
+function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot }, ref) {
   const [slotRefreshKeys, setSlotRefreshKeys] = useState<Record<number, number>>({});
   const handleCopied = useCallback((targetSlotIdxs: number[]) => {
     setSlotRefreshKeys(prev => {
@@ -4661,7 +4661,9 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange }, ref) {
   const [totpError, setTotpError] = useState<(string | null)[]>(Array(ACCT_SLOT_COUNT).fill(null));
   const [showEmailPassword, setShowEmailPassword] = useState<boolean[]>(Array(ACCT_SLOT_COUNT).fill(false));
   // null = show slot list; number = show Human Session Tool for that slot index
-  const [openSlotTool, setOpenSlotTool] = useState<number | null>(null);
+  // initialSlot lets the Dashboard (or any deep-link) open a specific slot's
+  // Human Session Tool directly on mount (e.g. ?slot=0 in the URL).
+  const [openSlotTool, setOpenSlotTool] = useState<number | null>(initialSlot ?? null);
   useEffect(() => { onSlotChange?.(openSlotTool); }, [openSlotTool]);
   useImperativeHandle(ref, () => ({ backToSlots: () => setOpenSlotTool(null) }));
   const { requestSlot, releaseSlot } = useCollisionScheduler(phone?.serial ?? null);
@@ -5011,6 +5013,13 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange }, ref) {
                     autoComplete="off"
                     className="w-[20ch]"
                   />
+                </div>
+
+                {/* Trust Score — independent instance (mobile_ts_<serial>_<slotIdx>)
+                    so styling changes here don't affect other badge placements */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground invisible select-none">Trust Score</Label>
+                  <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={i} />
                 </div>
               </div>
           </div>
@@ -6013,6 +6022,11 @@ export function MobilePage() {
   // param) all connected phones are shown as before.
   const params = useParams<{ serial?: string }>();
   const targetSerial = params.serial ? decodeURIComponent(params.serial) : null;
+  const search = useSearch();
+  const initialSlot = (() => {
+    const s = new URLSearchParams(search).get("slot");
+    return s !== null ? Number(s) : null;
+  })();
 
   const [data,    setData]    = useState<PhonesResponse | null>(null);
   const [error,   setError]   = useState<string | null>(null);
@@ -6318,7 +6332,7 @@ export function MobilePage() {
                 {/* Accounts panel: always mounted so each slot's automation
                     hook persists across tab switches and navigation. */}
                 <div className={activeTab === "account" ? "h-full" : "hidden"}>
-                  <AccountSettingsPanel ref={accountPanelRef} phone={slots[0]} addLog={addLog} onSlotChange={setOpenAccountSlot} />
+                  <AccountSettingsPanel ref={accountPanelRef} phone={slots[0]} addLog={addLog} onSlotChange={setOpenAccountSlot} initialSlot={initialSlot} />
                 </div>
                 {activeTab === "phonesettings" && (
                   <PhoneSettingsPanel serial={activeSerial} />

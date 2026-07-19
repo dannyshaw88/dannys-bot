@@ -4,6 +4,87 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.33] — 2026-07-19
+
+### Follow Filters — all five filters are now fully functional
+
+**Problem:** Five profile-quality filters exist in the Follow Users settings (Skip Verified,
+Private Users, 250 Followers+, English Speaking, –25K Followers). Only Skip Verified and
+–25K Followers had any effect; the other three were silently discarded before the handler
+ran. Even Skip Verified used a stale partial approach (two separate XML dumps per user,
+one per active filter, so if both were on you paid the cost twice).
+
+**Root cause (three separate bugs):**
+
+1. `Private Users`, `250 Followers+`, `English Speaking` were missing from the *execution-time*
+   Zod schema in `routes/mobile.ts`. Zod stripped them from every incoming request so they
+   never reached the handler.
+2. Those same three fields were never destructured or passed through to `runFollowUsersStep`.
+3. The two XML-dump filter blocks (`skipVerified` and `maxFollowers`) each called
+   `android.dumpUi()` independently — two sequential ~5–15 s dumps per user whenever
+   both were active.
+
+**Fixes (`routes/mobile.ts`, `instagram/hikerApiClient.ts`):**
+
+- Added `followFilterPrivateUsers`, `followFilterEnglishSpeaking`, `followFilterMinFollowers250`
+  to the execution-time schema; destructured and wired through to `runFollowUsersStep`.
+- Extended `runFollowUsersStep`'s `filters` type to accept `skipPrivate`, `minFollowers`,
+  `requireEnglish`.
+- Replaced the two separate XML-dump filter blocks with **one shared dump** that checks all
+  five active filters in sequence — no extra phone round-trips.
+- Extended `HikerApiClient.getFollowers` and `getHashtagUsers` to pass through `is_verified`,
+  `is_private`, `follower_count` from the HikerAPI response (they were present in the raw
+  JSON but thrown away). A new **HikerAPI metadata pre-filter** step runs before any profile
+  navigation and silently drops candidates where the metadata confirms they match an active
+  filter — no profile visit wasted.
+- Private account detection: checks `content-desc="*Private Account*"`,
+  `:id/private_profile`, and the "This Account is Private" string.
+- English Speaking detection: scans all accessibility node text; skips users whose bio has
+  >40% non-ASCII characters.
+- All newly-skipped users are added to the global skip list so they are not re-scraped in
+  future cycles.
+
+---
+
+### Dashboard — account entries now navigate to the correct Human Session Tool
+
+**Problem:** Clicking an account row in the Dashboard always linked to
+`/profiles/<profileId>?tab=human-session` — even for Phone Farm accounts which have no
+browser profile. Phone Farm rows went to a dead `/profiles/0?tab=human-session` URL.
+
+**Fix (`pages/Dashboard.tsx`):** When `sourceType === "phone"`, the link resolves the
+`serial:slotIdx` stored in `sourceValue` and navigates to
+`/mobile/farm/<serial>?slot=<slotIdx>`, which opens the correct device's Phone Farm page
+with that slot's Human Session Tool already open on arrival. Browser/EB accounts are
+unchanged.
+
+**Fix (`pages/MobilePage.tsx`):** `AccountSettingsPanel` now accepts an `initialSlot` prop.
+`MobilePage` reads the `?slot=` query param via `useSearch()` and passes it as `initialSlot`,
+causing the panel to open that slot's Human Session Tool immediately on mount.
+
+---
+
+### Accounts page — Trust Score badge added next to each slot's Phone Number field
+
+Each Instagram account slot on the Phone Farm Accounts page now shows its Trust Score badge
+inline with the Phone Number field. The badge uses its own independent storage key
+(`mobile_ts_<serial>_<slotIdx>`) so modifying it later will not affect any other badge
+placement in the app.
+
+---
+
+### Dashboard — column headers black & bold; entry text black; DEVICE & SLOT columns
+
+- Column header row (`<thead>`) changed from `text-muted-foreground` (grey) to
+  `text-foreground` (black). Headers were already bold; they are now also clearly black.
+- DEVICE and ACCOUNT SLOT column entry text changed from `text-muted-foreground` (grey) to
+  `text-foreground` (black).
+- TIMESTAMP column entry text changed from `text-muted-foreground` (grey) to
+  `text-foreground` (black).
+- ACTION column entries remain colour-coded (unchanged).
+
+---
+
 ## [1.2.32] — 2026-07-19
 
 ### Fix — Follow tool always used the first source (#bodybuilding) instead of picking randomly
