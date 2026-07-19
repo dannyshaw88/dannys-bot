@@ -247,9 +247,9 @@ function PhoneFarmPhoneSection({ phone, colCount }: { phone: FarmPhone; colCount
           <div className="flex items-center gap-2">
             <Smartphone className="w-3.5 h-3.5 text-primary shrink-0" />
             <span className="text-sm font-bold text-foreground">{label}</span>
-            <span className="text-[10px] font-mono text-muted-foreground">{phone.serial}</span>
+            <span className="text-[10px] font-mono text-muted-foreground">#{phone.serial.slice(0, 8)}</span>
             <span className={`text-[10px] px-1.5 py-0.5 rounded ml-1 ${phone.state === "device" ? "bg-emerald-500/15 text-emerald-500" : "bg-amber-500/15 text-amber-500"}`}>
-              {phone.state}
+              {phone.state === "device" ? "Connected" : phone.state === "offline" ? "Offline" : phone.state === "unauthorized" ? "Unauthorized" : phone.state}
             </span>
           </div>
         </td>
