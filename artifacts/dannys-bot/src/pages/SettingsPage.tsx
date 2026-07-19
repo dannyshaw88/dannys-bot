@@ -1057,10 +1057,10 @@ export function SettingsPage() {
 }
 
 const PLAN_TIERS = [
-  { id: "starter",    label: "Starter",    price: "£25/mo",  limit: 15,   badge: "bg-slate-100 text-slate-700"   },
-  { id: "pro",        label: "Pro",         price: "£50/mo",  limit: 100,  badge: "bg-blue-100 text-blue-700"    },
-  { id: "business",   label: "Business",    price: "£100/mo", limit: 250,  badge: "bg-purple-100 text-purple-700" },
-  { id: "enterprise", label: "Enterprise",  price: "£250/mo", limit: 1000, badge: "bg-amber-100 text-amber-700"  },
+  { id: "starter",    label: "Starter",    price: "£25/mo",  limit: 5,    deviceLimit: 1,  badge: "bg-slate-100 text-slate-700"   },
+  { id: "pro",        label: "Pro",         price: "£50/mo",  limit: 15,   deviceLimit: 3,  badge: "bg-blue-100 text-blue-700"    },
+  { id: "business",   label: "Business",    price: "£100/mo", limit: 100,  deviceLimit: 10, badge: "bg-purple-100 text-purple-700" },
+  { id: "enterprise", label: "Enterprise",  price: "£250/mo", limit: 9999, deviceLimit: 25, badge: "bg-amber-100 text-amber-700"  },
 ];
 
 type LicenseUser = { id: number; username: string; tier: string; account_limit: number; active: number; is_admin: number; created_at: string; expires_at: string | null };
@@ -1071,7 +1071,7 @@ function AdminUsersSection() {
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [addForm, setAddForm] = useState({ username: "", password: "", tier: "starter", accountLimit: 15, expiresAt: "" });
+  const [addForm, setAddForm] = useState({ username: "", password: "", tier: "starter", accountLimit: 5, expiresAt: "" });
   const [editForm, setEditForm] = useState<{ tier: string; accountLimit: number; expiresAt: string; password: string } | null>(null);
 
   const fetchUsers = async () => {
@@ -1285,7 +1285,7 @@ function MyAccountTabContent() {
   const queryClient = useQueryClient();
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(() => {
-    try { return localStorage.getItem("equinox:avatar"); } catch { return null; }
+    try { return localStorage.getItem("aurafarming:avatar"); } catch { return null; }
   });
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1295,7 +1295,7 @@ function MyAccountTabContent() {
     const reader = new FileReader();
     reader.onload = ev => {
       const url = ev.target?.result as string;
-      try { localStorage.setItem("equinox:avatar", url); } catch {}
+      try { localStorage.setItem("aurafarming:avatar", url); } catch {}
       setAvatarUrl(url);
       toast({ title: "Profile picture updated" });
     };
@@ -1311,7 +1311,7 @@ function MyAccountTabContent() {
 
   const handleLogout = async () => {
     await fetch("/api/license/logout", { method: "POST", credentials: "include" });
-    try { localStorage.removeItem("equinox:savedLogin"); } catch {}
+    try { localStorage.removeItem("aurafarming:savedLogin"); } catch {}
     queryClient.invalidateQueries({ queryKey: ["/api/license/me"] });
     toast({ title: "Signed out" });
   };
@@ -1409,7 +1409,7 @@ function MyAccountTabContent() {
               <div className="flex-1 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${t.badge}`}>{t.label}</span>
-                  <span className="text-xs text-muted-foreground">up to {t.limit} accounts</span>
+                  <span className="text-xs text-muted-foreground">{t.deviceLimit} device{t.deviceLimit !== 1 ? "s" : ""} · {t.limit >= 9999 ? "Unlimited" : t.limit} slots</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`text-xs font-medium ${isCurrent ? "" : "text-muted-foreground"}`}>{t.price}</span>
