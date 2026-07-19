@@ -19,6 +19,7 @@ import {
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
   ChevronLeft, Home, LayoutGrid, Power, Volume2, VolumeX, Trash2,
   FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim,
+  Palette, Plus, X,
 } from "lucide-react";
 
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
@@ -45,6 +46,69 @@ interface PhonesResponse {
   phones:     UsbPhone[];
   rawOutput?: string | null;
   checkedAt:  string;
+}
+
+// ─── Slot customization types ─────────────────────────────────────────────────
+
+const SLOT_FONTS = [
+  { id: 'inter',    label: 'Inter',        family: "'Inter', system-ui, sans-serif" },
+  { id: 'oswald',   label: 'Oswald',       family: "'Oswald', sans-serif" },
+  { id: 'bebas',    label: 'Bebas Neue',   family: "'Bebas Neue', cursive" },
+  { id: 'playfair', label: 'Playfair',     family: "'Playfair Display', serif" },
+  { id: 'pacifico', label: 'Pacifico',     family: "'Pacifico', cursive" },
+  { id: 'mono',     label: 'Mono',         family: "'Courier New', monospace" },
+  { id: 'impact',   label: 'Impact',       family: "Impact, fantasy" },
+  { id: 'serif',    label: 'Serif',        family: "Georgia, serif" },
+] as const;
+
+const SLOT_WALLPAPERS = [
+  { id: 'wp-galaxy.jpg',    label: 'Galaxy' },
+  { id: 'wp-abstract.jpg',  label: 'Abstract' },
+  { id: 'wp-forest.jpg',    label: 'Forest' },
+  { id: 'wp-ocean.jpg',     label: 'Ocean' },
+  { id: 'wp-mountains.jpg', label: 'Mountains' },
+  { id: 'wp-city.jpg',      label: 'City' },
+  { id: 'wp-purple.jpg',    label: 'Purple' },
+  { id: 'wp-minimal.jpg',   label: 'Minimal' },
+  { id: 'wp-blossom.jpg',   label: 'Blossom' },
+  { id: 'wp-aurora.jpg',    label: 'Aurora' },
+  { id: 'wp-neon.jpg',      label: 'Neon' },
+  { id: 'wp-water.jpg',     label: 'Water' },
+];
+
+interface TextLayer {
+  id: string;
+  text: string;
+  font: string;
+  size: number;
+  color: string;
+  x: number;
+  y: number;
+  bold: boolean;
+  italic: boolean;
+  shadow: boolean;
+}
+
+interface SlotCustomization {
+  wallpaper: string | null;
+  texts: TextLayer[];
+}
+
+const DEFAULT_SLOT_CUSTOM: SlotCustomization = { wallpaper: null, texts: [] };
+
+function makeTextLayer(): TextLayer {
+  return {
+    id: `txt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    text: 'Label',
+    font: 'inter',
+    size: 20,
+    color: '#ffffff',
+    x: 50,
+    y: 50,
+    bold: false,
+    italic: false,
+    shadow: true,
+  };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -1238,6 +1302,238 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   );
 }));
 
+// ─── Slot Customize Dialog ────────────────────────────────────────────────────
+
+function CustomizePanel({
+  open, onOpenChange, custom, onChange, slotIdx,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  custom: SlotCustomization;
+  onChange: (c: SlotCustomization) => void;
+  slotIdx: number;
+}) {
+  const [tab, setTab] = useState<'wallpaper' | 'text'>('wallpaper');
+  const [editId, setEditId] = useState<string | null>(null);
+
+  const updateLayer = (id: string, patch: Partial<TextLayer>) =>
+    onChange({ ...custom, texts: custom.texts.map(t => t.id === id ? { ...t, ...patch } : t) });
+
+  const addLayer = () => {
+    const layer = makeTextLayer();
+    onChange({ ...custom, texts: [...custom.texts, layer] });
+    setEditId(layer.id);
+    setTab('text');
+  };
+
+  const removeLayer = (id: string) => {
+    onChange({ ...custom, texts: custom.texts.filter(t => t.id !== id) });
+    if (editId === id) setEditId(null);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Customise Slot {slotIdx + 1}</DialogTitle>
+        </DialogHeader>
+
+        {/* Tab strip */}
+        <div className="flex border-b border-border -mt-1 mb-3">
+          {(['wallpaper', 'text'] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                tab === t ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >{t === 'text' ? 'Text Layers' : 'Wallpaper'}</button>
+          ))}
+        </div>
+
+        {/* ── Wallpaper tab ── */}
+        {tab === 'wallpaper' && (
+          <div className="grid grid-cols-4 gap-2">
+            {/* None option */}
+            <button
+              onClick={() => onChange({ ...custom, wallpaper: null })}
+              className={`relative aspect-[9/16] rounded-lg border-2 flex items-center justify-center bg-zinc-900 transition-all ${
+                !custom.wallpaper ? 'border-primary ring-1 ring-primary/40' : 'border-border hover:border-muted-foreground'
+              }`}
+            >
+              <span className="text-[10px] text-muted-foreground font-medium">None</span>
+              {!custom.wallpaper && <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-primary" />}
+            </button>
+            {SLOT_WALLPAPERS.map(wp => (
+              <button
+                key={wp.id}
+                onClick={() => onChange({ ...custom, wallpaper: wp.id })}
+                className={`relative aspect-[9/16] rounded-lg border-2 overflow-hidden transition-all ${
+                  custom.wallpaper === wp.id ? 'border-primary ring-1 ring-primary/40' : 'border-border hover:border-muted-foreground'
+                }`}
+              >
+                <img src={`/wallpapers/${wp.id}`} className="w-full h-full object-cover" draggable={false} />
+                <div className="absolute bottom-0 inset-x-0 bg-black/60 py-0.5 px-1 text-left">
+                  <span className="text-[8px] text-white/80 leading-none">{wp.label}</span>
+                </div>
+                {custom.wallpaper === wp.id && (
+                  <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-primary" />
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* ── Text tab ── */}
+        {tab === 'text' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">{custom.texts.length} layer{custom.texts.length !== 1 ? 's' : ''}</span>
+              <Button size="sm" variant="outline" onClick={addLayer} className="gap-1.5 h-7 text-xs">
+                <Plus className="w-3 h-3" />Add Text
+              </Button>
+            </div>
+
+            {custom.texts.length === 0 && (
+              <div className="text-center py-8 text-sm text-muted-foreground">
+                No text layers yet — click <strong>Add Text</strong> to get started.
+              </div>
+            )}
+
+            {custom.texts.map(layer => (
+              <div key={layer.id} className={`rounded-lg border transition-colors ${editId === layer.id ? 'border-primary/50 bg-muted/20' : 'border-border'}`}>
+                {/* Layer row */}
+                <div className="flex items-center gap-2 px-3 py-2">
+                  <span
+                    className="flex-1 text-sm truncate cursor-pointer select-none"
+                    style={{
+                      fontFamily: SLOT_FONTS.find(f => f.id === layer.font)?.family,
+                      color: layer.color,
+                      fontWeight: layer.bold ? 'bold' : 'normal',
+                      fontStyle: layer.italic ? 'italic' : 'normal',
+                      textShadow: layer.shadow ? '0 1px 3px rgba(0,0,0,0.6)' : 'none',
+                    }}
+                    onClick={() => setEditId(editId === layer.id ? null : layer.id)}
+                  >{layer.text || <span className="text-muted-foreground italic text-xs">empty</span>}</span>
+                  <button
+                    onClick={() => setEditId(editId === layer.id ? null : layer.id)}
+                    className="text-xs text-muted-foreground hover:text-foreground px-1 transition-colors"
+                  >{editId === layer.id ? 'Done' : 'Edit'}</button>
+                  <button
+                    onClick={() => removeLayer(layer.id)}
+                    className="text-muted-foreground hover:text-destructive transition-colors"
+                  ><X className="w-3.5 h-3.5" /></button>
+                </div>
+
+                {/* Expanded editor */}
+                {editId === layer.id && (
+                  <div className="px-3 pb-3 space-y-3 border-t border-border/50 pt-3">
+                    {/* Text content */}
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Text</label>
+                      <input
+                        className="w-full bg-background border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                        value={layer.text}
+                        onChange={e => updateLayer(layer.id, { text: e.target.value })}
+                        placeholder="Enter text…"
+                        autoFocus
+                      />
+                    </div>
+
+                    {/* Font + size */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">Font</label>
+                        <select
+                          className="w-full bg-background border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                          value={layer.font}
+                          onChange={e => updateLayer(layer.id, { font: e.target.value })}
+                        >
+                          {SLOT_FONTS.map(f => (
+                            <option key={f.id} value={f.id}>{f.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">Size — {layer.size}px</label>
+                        <input
+                          type="range" min={8} max={72} value={layer.size}
+                          onChange={e => updateLayer(layer.id, { size: Number(e.target.value) })}
+                          className="w-full mt-2 accent-primary"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Colour + style toggles */}
+                    <div className="flex items-end gap-5">
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">Colour</label>
+                        <input
+                          type="color" value={layer.color}
+                          onChange={e => updateLayer(layer.id, { color: e.target.value })}
+                          className="w-10 h-8 rounded border border-border cursor-pointer bg-background block"
+                        />
+                      </div>
+                      {(['bold', 'italic', 'shadow'] as const).map(key => (
+                        <label key={key} className="flex flex-col items-center gap-1 cursor-pointer">
+                          <span className="text-xs text-muted-foreground capitalize">{key}</span>
+                          <input
+                            type="checkbox"
+                            checked={layer[key]}
+                            onChange={e => updateLayer(layer.id, { [key]: e.target.checked })}
+                            className="accent-primary w-4 h-4"
+                          />
+                        </label>
+                      ))}
+                    </div>
+
+                    {/* Position */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">X — {layer.x}%</label>
+                        <input type="range" min={0} max={100} value={layer.x}
+                          onChange={e => updateLayer(layer.id, { x: Number(e.target.value) })}
+                          className="w-full accent-primary" />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">Y — {layer.y}%</label>
+                        <input type="range" min={0} max={100} value={layer.y}
+                          onChange={e => updateLayer(layer.id, { y: Number(e.target.value) })}
+                          className="w-full accent-primary" />
+                      </div>
+                    </div>
+
+                    {/* Mini preview */}
+                    <div className="rounded bg-zinc-950 h-20 relative overflow-hidden border border-border/30">
+                      <span className="absolute inset-0 flex items-center justify-center text-[9px] text-white/10 select-none">preview</span>
+                      <div
+                        className="absolute pointer-events-none"
+                        style={{
+                          left: `${layer.x}%`,
+                          top: `${layer.y}%`,
+                          transform: 'translate(-50%, -50%)',
+                          fontFamily: SLOT_FONTS.find(f => f.id === layer.font)?.family,
+                          fontSize: `${Math.min(layer.size, 28)}px`,
+                          color: layer.color,
+                          fontWeight: layer.bold ? 'bold' : 'normal',
+                          fontStyle: layer.italic ? 'italic' : 'normal',
+                          textShadow: layer.shadow ? '0 1px 6px rgba(0,0,0,0.9)' : 'none',
+                          whiteSpace: 'pre',
+                          lineHeight: 1.2,
+                        }}
+                      >{layer.text || 'preview'}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Empty phone shell ────────────────────────────────────────────────────────
 
 function EmptyShell({ idx }: { idx: number }) {
@@ -1259,7 +1555,7 @@ function EmptyShell({ idx }: { idx: number }) {
 
 type PhoneSlotHandle = { getVideoSize: () => { w: number; h: number } | null };
 
-const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; live: boolean; onPower: () => void; phoneDims: { w: number; h: number } | null; paneSize: { w: number; h: number } | null; inspectMode?: boolean; logRecMode?: boolean; logMarkers?: LogMarker[]; onExpectedTap?: (x: number, y: number, kind?: "expected" | "vicinity") => void }>(function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower, phoneDims, paneSize, inspectMode = false, logRecMode, logMarkers, onExpectedTap }, ref) {
+const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; live: boolean; onPower: () => void; phoneDims: { w: number; h: number } | null; paneSize: { w: number; h: number } | null; inspectMode?: boolean; logRecMode?: boolean; logMarkers?: LogMarker[]; onExpectedTap?: (x: number, y: number, kind?: "expected" | "vicinity") => void; custom: SlotCustomization; onCustomChange: (c: SlotCustomization) => void }>(function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower, phoneDims, paneSize, inspectMode = false, logRecMode, logMarkers, onExpectedTap, custom, onCustomChange }, ref) {
   const liveCanvasRef = useRef<LiveCanvasHandle>(null);
   // Re-exposes LiveCanvas's own handle so the page-level Log tab (rendered
   // as a sibling, not a child, of this slot) can read the mirror's live
@@ -1271,6 +1567,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
     },
   }), []);
   const [clickTestMode, setClickTestMode] = useState(false);
+  const [showCustomize, setShowCustomize] = useState(false);
 
   // ── Element tree inspector ─────────────────────────────────────────────────
   // Full UIAutomator node tree shown below the mirror when inspect mode is on.
@@ -1494,6 +1791,13 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
           )}
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowCustomize(true)}
+            title="Customise slot appearance"
+            className="text-white/20 hover:text-white/60 transition-colors shrink-0"
+          >
+            <Palette className="w-3 h-3" />
+          </button>
           {isReady        && <span className="flex items-center gap-1 text-[9px] font-bold text-green-400 shrink-0"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />Live</span>}
           {isUnauthorized && <span className="text-[9px] font-semibold text-yellow-500 shrink-0">Auth needed</span>}
           {isOffline      && <span className="text-[9px] font-semibold text-red-500 shrink-0">Offline</span>}
@@ -1505,6 +1809,44 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
       <div className={`relative bg-zinc-900 min-h-0 ${inspectMode ? "flex-none" : "flex-1"}`}
            style={inspectMode ? { flexBasis: "50%", flexShrink: 1 } : undefined}>
         {isEmpty && <EmptyShell idx={idx} />}
+
+        {/* Wallpaper + text overlay — shown in all non-live states */}
+        {!live && (custom.wallpaper || custom.texts.length > 0) && (
+          <div className="absolute inset-0 pointer-events-none overflow-hidden">
+            {custom.wallpaper && (
+              <img
+                src={`/wallpapers/${custom.wallpaper}`}
+                className="absolute inset-0 w-full h-full object-cover"
+                draggable={false}
+              />
+            )}
+            {custom.texts.map(layer => (
+              <div
+                key={layer.id}
+                className="absolute"
+                style={{
+                  left: `${layer.x}%`,
+                  top: `${layer.y}%`,
+                  transform: 'translate(-50%, -50%)',
+                  fontFamily: SLOT_FONTS.find(f => f.id === layer.font)?.family,
+                  fontSize: `${layer.size}px`,
+                  color: layer.color,
+                  fontWeight: layer.bold ? 'bold' : 'normal',
+                  fontStyle: layer.italic ? 'italic' : 'normal',
+                  textShadow: layer.shadow
+                    ? '0 1px 8px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.6)'
+                    : 'none',
+                  whiteSpace: 'pre-wrap',
+                  textAlign: 'center',
+                  maxWidth: '90%',
+                  lineHeight: 1.2,
+                }}
+              >
+                {layer.text}
+              </div>
+            ))}
+          </div>
+        )}
         {isUnauthorized && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center">
             <AlertTriangle className="w-5 h-5 text-yellow-500" />
@@ -1830,6 +2172,14 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
           <NavBtn icon={<VolumeX     className="w-3 h-3" />}     label="Vol −"  onClick={() => sendKey(phone.serial, 25,  "Vol −",  onLog)} />
         </div>
       )}
+
+      <CustomizePanel
+        open={showCustomize}
+        onOpenChange={setShowCustomize}
+        custom={custom}
+        onChange={onCustomChange}
+        slotIdx={idx}
+      />
     </div>
   );
 });
@@ -6144,6 +6494,18 @@ export function MobilePage() {
   // automation toggle being enabled does.
   const [liveOn, setLiveOn] = useState<Record<string, boolean>>({});
 
+  // ── Slot customizations (wallpaper + text layers) — persisted to localStorage
+  const [slotCustom, setSlotCustom] = useState<Record<number, SlotCustomization>>(() => {
+    try {
+      const stored = localStorage.getItem('slot-customizations');
+      return stored ? JSON.parse(stored) : {};
+    } catch { return {}; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('slot-customizations', JSON.stringify(slotCustom)); }
+    catch { /* quota exceeded — ignore */ }
+  }, [slotCustom]);
+
   // ── Inspect state ───────────────────────────────────────────────────────────
   // Lifted here so the LogPanel button (sibling of PhoneSlot) can toggle it.
   const [inspectMode, setInspectMode] = useState(false);
@@ -6380,6 +6742,8 @@ export function MobilePage() {
                   logRecMode={logRecMode}
                   logMarkers={logMarkers}
                   onExpectedTap={(x, y, kind) => addLogMarker({ x, y, t: Date.now(), type: kind ?? "expected" })}
+                  custom={slotCustom[i] ?? DEFAULT_SLOT_CUSTOM}
+                  onCustomChange={c => setSlotCustom(prev => ({ ...prev, [i]: c }))}
                 />
               ))}
             </div>
