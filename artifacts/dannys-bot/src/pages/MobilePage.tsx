@@ -2005,7 +2005,6 @@ interface AutomationSettingsData {
   followEnabled: boolean;
   followUsersMin: number;
   followUsersMax: number;
-  followSkipFollowed: boolean;
   followSources: { type: string; value: string }[];
   // Inject Browsing — per-user profile-browsing behaviour woven into the
   // Follow Users flow (12 Jul 2026 rework). No per-item toggles: search
@@ -2100,7 +2099,6 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   viewReelsWatchPctMin: 30, viewReelsWatchPctMax: 70,
   followEnabled: false,
   followUsersMin: 1, followUsersMax: 3,
-  followSkipFollowed: true,
   followSources: [],
   injectBrowsingEnabled: false,
   injectBrowsingActivatePctMin: 0, injectBrowsingActivatePctMax: 0,
@@ -2386,7 +2384,6 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             followEnabled: s.followEnabled,
             followUsersMin: s.followUsersMin,
             followUsersMax: s.followUsersMax,
-            followSkipFollowed: s.followSkipFollowed,
             followSources: s.followSources,
             injectBrowsingEnabled: s.injectBrowsingEnabled,
             injectBrowsingActivatePctMin: s.injectBrowsingActivatePctMin,
@@ -2662,7 +2659,6 @@ const COPY_SECTIONS: CopySection[] = [
     { key: 'followEnabled',     label: 'Enabled',                       fields: ['followEnabled'] },
     { key: 'followActivate',    label: 'Activate Percentage',           fields: ['followActivatePctMin','followActivatePctMax'] },
     { key: 'followCount',       label: 'Follow count per session',      fields: ['followUsersMin','followUsersMax'] },
-    { key: 'followSkip',        label: 'Skip already followed',         fields: ['followSkipFollowed'] },
     { key: 'followSources',     label: 'Follow sources list',           fields: ['followSources'] },
   ]},
   // Follow Filters is its own top-level section so it can be selected/deselected
@@ -3740,23 +3736,6 @@ function AutomationSettingsPanel({
             </div>
           </div>
 
-          {/* Skip Followed Users — vertically centred alongside the row above */}
-          <div className="flex items-center gap-2 self-center mt-4">
-            <input
-              type="checkbox"
-              id={`follow-skip-followed-${slotIdx ?? 0}`}
-              checked={settings.followSkipFollowed}
-              onChange={e => setSettings(s => ({ ...s, followSkipFollowed: e.target.checked }))}
-              disabled={loading}
-              className="w-4 h-4 accent-primary cursor-pointer shrink-0"
-            />
-            <label
-              htmlFor={`follow-skip-followed-${slotIdx ?? 0}`}
-              className="text-sm font-medium text-foreground cursor-pointer select-none whitespace-nowrap"
-            >
-              Skip Followed Users
-            </label>
-          </div>
         </div>}
 
         {/* ── Followed Users panel (toggled via the Followed button above) */}

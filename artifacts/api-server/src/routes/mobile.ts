@@ -1092,7 +1092,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     followEnabled: z.boolean().default(false),
     followUsersMin: z.number().min(0).max(9999).default(1),
     followUsersMax: z.number().min(0).max(9999).default(3),
-    followSkipFollowed: z.boolean().default(true),
     followSources: z.array(followSourceSchema).default([]),
     injectBrowsingEnabled: z.boolean().default(false),
     injectBrowsingActivatePctMin: z.number().min(0).max(100).default(0),
@@ -1295,7 +1294,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewReelsActivatePctMin: 100, viewReelsActivatePctMax: 100,
         viewReelsWatchPctMin: 30, viewReelsWatchPctMax: 70,
         followEnabled: false, followUsersMin: 1, followUsersMax: 3, followSources: [],
-        followSkipFollowed: true,
         injectBrowsingEnabled: false,
         injectBrowsingActivatePctMin: 0, injectBrowsingActivatePctMax: 0,
         injectBrowsingBeforeFollowPctMin: 0, injectBrowsingBeforeFollowPctMax: 0,
@@ -2987,7 +2985,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     followEnabled: z.boolean().default(false),
     followUsersMin: z.number().min(0).max(9999).default(1),
     followUsersMax: z.number().min(0).max(9999).default(3),
-    followSkipFollowed: z.boolean().default(true),
     followSources: z.array(z.object({ type: z.string(), value: z.string() })).default([]),
     // Inject Browsing — per-user profile-browsing behaviour woven into the
     // Follow Users flow itself (12 Jul 2026 rework). There is no per-item
@@ -4548,7 +4545,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewReelsShareFeedPercentMin, viewReelsShareFeedPercentMax,
         viewReelsShareDmPercentMin, viewReelsShareDmPercentMax,
         viewReelsActivatePctMin, viewReelsActivatePctMax,
-        followEnabled, followUsersMin, followUsersMax, followSkipFollowed, followSources,
+        followEnabled, followUsersMin, followUsersMax, followSources,
         followFiltersEnabled, followFilterVerifiedUsers, followFilterMaxFollowers25k,
         followFilterPrivateUsers, followFilterEnglishSpeaking, followFilterMinFollowers250,
         injectBrowsingEnabled,
@@ -4919,7 +4916,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 onLog: (msg) => tLog(`  ${msg}`),
                 recordFollow: (username, source) => recordMobileFollow(serial, username, source),
                 skipFollowedUsernames: await (async () => {
-                  if (!followSkipFollowed && !globalSkipFollowed) return undefined;
+                  if (!globalSkipFollowed) return undefined;
                   const local = new Set(getMobileFollowedList(serial).map(e => e.username.toLowerCase()));
                   if (globalSkipFollowed) {
                     const globalSet = await storage.getAllFollowedUsernames();
