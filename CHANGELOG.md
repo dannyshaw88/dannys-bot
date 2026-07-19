@@ -4,6 +4,57 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.41] — 2026-07-19
+
+### New — Debug Log and Action Log now record continuously in the background
+
+Previously the Debugging Log and Action Log tabs only accumulated entries while the Phone Farm control screen (the mirror/tab panel) was mounted. Navigating away from that page — even briefly — silently stopped all logging, so returning showed an empty or incomplete log.
+
+**What changed:**
+- A new always-on log-stream WebSocket endpoint (`/api/mobile/log-stream/:serial`) was added to the API. It is a lightweight channel that carries only text log messages — no video frames — so it can stay connected in the background without consuming significant resources.
+- The automation engine's `sendVideoLog` now pushes every message to both the video-mirror WebSocket (when the mirror is open) and to any log-stream subscribers, so no log line is ever dropped because the mirror isn't active.
+- A new global `DeviceLogContext` is mounted at the app root (always alive, not tied to any page). It polls for connected phones every 5 seconds and opens a log-stream WebSocket for each real device. Log lines and Action Log lines accumulate in React state and survive page navigation.
+- The Phone Farm control screen now reads log state from this global context rather than managing its own local state. Clearing the log, the Action Log, and the log-marker (Log Record) behaviour all continue to work identically — only the persistence has changed.
+- Result: automation cycle progress is captured from the first cycle tick to the last, even if you browse to Settings or Dashboard mid-run.
+
+### Fix — "Skip Followed Users" per-device checkbox removed from Human Session Tool (redundant)
+
+The Human Session Tool's Follow section contained a **Skip Followed Users** checkbox that duplicated the global **Settings → Automation → Follow → Skip Followed Users** toggle, creating confusion about which one was actually in effect.
+
+**What changed:**
+- The per-device checkbox has been removed from the Human Session Tool UI entirely. The global setting in Settings is the single source of truth.
+- The global setting was already being checked by the automation cycle; the per-device flag has been removed from the API automation schema, the default values, and the cycle logic — the skip decision now reads exclusively from the global `skipFollowedUsers` preference.
+- The "Skip already followed" entry has also been removed from Copy Settings so it no longer appears as a copyable field.
+
+**Storage confirmation:** The followed-users list is stored entirely locally on the user's machine — JSON files under `EQUINOX_DATA_DIR/mobile-followed/<serial>.json` (Electron userData path, e.g. `%APPDATA%\AuraFarming\`) plus the local SQLite `database.db`. Nothing is stored on or sent to any remote server.
+
+### Improve — Phone Farm card text sizes increased for readability
+
+The model name and status labels on each phone card in the Phone Farm grid were too small to read comfortably at normal monitor distances.
+
+**What changed:**
+- **Model name** (e.g. "Redmi A5"): increased by one Tailwind size step (`text-sm` → `text-base`).
+- **Connected / Offline / Active / Not Active** labels: increased by two Tailwind size steps (`text-[10px]` → `text-sm`).
+- The separator `|` between connectivity and activity status is also scaled to match.
+
+### Improve — Settings → My Account → User Management: DEVICES / ACCOUNT SLOTS / EXPIRES on separate rows
+
+In the User Management list each user's limit details (DEVICES, ACCOUNT SLOTS, EXPIRES) were displayed on a single horizontal line, making them cramped and hard to scan when values were long.
+
+**What changed:**
+- The three labels now stack vertically on separate rows (`flex-col`) instead of sitting side-by-side in a single `flex-row`.
+- Spacing between rows is kept tight (`gap-0.5`) so the card height increases minimally.
+
+### Improve — Dashboard TrustScore badge column narrowed
+
+The TrustScore column in the Dashboard activity table had a default width of 120 px, which was wider than needed for the badge content.
+
+**What changed:**
+- Default column width reduced by 10% from 120 px to 108 px.
+- This change applies only to the Dashboard activity table column width. The TrustScore badge component itself and its appearance anywhere else in the app are unchanged.
+
+---
+
 ## [1.2.40] — 2026-07-19
 
 ### Fix — Make a Post folder path no longer resets on restart

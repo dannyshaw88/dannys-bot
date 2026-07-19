@@ -71,7 +71,7 @@ const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string |
   view_profile_feed:       { label: "View Profile Feed", cls: "text-cyan-600",    icon: "≡" },
 };
 
-const DEFAULT_COL_WIDTHS = { account: 160, device_name: 140, account_slot: 100, event: 150, detail: 200, timestamp: 220, trustscore: 120 };
+const DEFAULT_COL_WIDTHS = { account: 160, device_name: 140, account_slot: 100, event: 150, detail: 200, timestamp: 220, trustscore: 108 };
 const DEFAULT_COL_ORDER: (keyof typeof DEFAULT_COL_WIDTHS)[] = ["account", "device_name", "account_slot", "trustscore", "event", "detail", "timestamp"];
 const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
   account: "ACCOUNT", device_name: "DEVICE", account_slot: "SLOT", event: "ACTION", detail: "DETAIL", timestamp: "TIMESTAMP", trustscore: "TRUSTSCORE",

@@ -1350,7 +1350,7 @@ function AdminUsersSection() {
                       {u.is_admin === 1 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-cyan-100 text-cyan-700">Admin</span>}
                       {tierBadge(u.tier)}
                     </div>
-                    <div className="flex items-center gap-3 mt-0.5">
+                    <div className="flex flex-col gap-0.5 mt-0.5">
                       <span className="text-[10px] text-muted-foreground">DEVICES: {u.is_admin === 1 ? "∞" : (PLAN_TIERS.find(t => t.id === u.tier)?.deviceLimit ?? "—")}</span>
                       <span className="text-[10px] text-muted-foreground">ACCOUNT SLOTS: {u.is_admin === 1 ? "∞" : u.account_limit}</span>
                       <span className="text-[10px] text-muted-foreground">EXPIRES: {fmtExpiry(u.expires_at)}</span>
