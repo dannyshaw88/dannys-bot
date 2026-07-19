@@ -1151,6 +1151,18 @@ function AdminUsersSection() {
     return <span>{label}</span>;
   };
 
+  const fmtExpiry = (d: string | null) => {
+    if (!d) return <span>—</span>;
+    const dt = new Date(d);
+    const days = Math.ceil((dt.getTime() - Date.now()) / 86400000);
+    const time = dt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const date = dt.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
+    const label = `${time} ${date}`;
+    if (days <= 0) return <span className="text-destructive font-medium">{label}</span>;
+    if (days <= 7) return <span className="text-amber-500 font-medium">{label}</span>;
+    return <span>{label}</span>;
+  };
+
   const tierBadge = (tierId: string) => {
     const t = PLAN_TIERS.find(t => t.id === tierId);
     return t ? <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${t.badge}`}>{t.label}</span>
@@ -1255,8 +1267,9 @@ function AdminUsersSection() {
                       {tierBadge(u.tier)}
                     </div>
                     <div className="flex items-center gap-3 mt-0.5">
-                      <span className="text-[10px] text-muted-foreground">{u.is_admin === 1 ? "∞" : u.account_limit} slots</span>
-                      <span className="text-[10px] text-muted-foreground">Exp: {fmtDate(u.expires_at)}</span>
+                      <span className="text-[10px] text-muted-foreground">DEVICES: {u.is_admin === 1 ? "∞" : (PLAN_TIERS.find(t => t.id === u.tier)?.deviceLimit ?? "—")}</span>
+                      <span className="text-[10px] text-muted-foreground">ACCOUNT SLOTS: {u.is_admin === 1 ? "∞" : u.account_limit}</span>
+                      <span className="text-[10px] text-muted-foreground">EXPIRES: {fmtExpiry(u.expires_at)}</span>
                     </div>
                   </div>
                   <Switch checked={!!u.active} onCheckedChange={() => handleToggleActive(u)} className="scale-75" />
@@ -1364,8 +1377,12 @@ function MyAccountTabContent() {
               <span className="font-semibold">{me.isAdmin ? "Owner (Unlimited)" : tier?.label ?? me.tier}</span>
             </div>
             <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Devices</span>
+              <span className="font-semibold">{me.isAdmin ? "∞" : `${tier?.deviceLimit ?? "—"}`}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
               <span className="text-muted-foreground">Account slots</span>
-              <span className="font-semibold">{me.isAdmin ? "Unlimited" : `${me.accountLimit ?? "—"}`}</span>
+              <span className="font-semibold">{me.isAdmin ? "∞" : `${me.accountLimit ?? "—"}`}</span>
             </div>
             {!me.isAdmin && (
               <div className="flex items-center justify-between text-xs">
