@@ -284,11 +284,19 @@ sqlite.exec(`
 
 // Seed owner license account if not already present
 {
-  const ownerExists = sqlite.prepare("SELECT 1 FROM licenses WHERE LOWER(username) = 'equinox'").get();
+  // Rename legacy 'EQUINOX' admin to 'AURAFARMING' on existing installs
+  const legacyAdmin = sqlite.prepare("SELECT 1 FROM licenses WHERE LOWER(username) = 'equinox'").get();
+  if (legacyAdmin) {
+    sqlite.prepare(
+      "UPDATE licenses SET username = 'AURAFARMING', password_hash = ? WHERE LOWER(username) = 'equinox'"
+    ).run("0faee339bea0e01815d0a19471e9d5e5d5563ce44dde52ced1f91997ef472407");
+    console.log("[db] Admin account migrated from EQUINOX → AURAFARMING");
+  }
+  const ownerExists = sqlite.prepare("SELECT 1 FROM licenses WHERE LOWER(username) = 'aurafarming'").get();
   if (!ownerExists) {
     sqlite.prepare(
       "INSERT INTO licenses (username, password_hash, tier, account_limit, active, is_admin, created_at) VALUES (?, ?, 'owner', 9999, 1, 1, ?)"
-    ).run("EQUINOX", "bfcdfd2bdaa4995bbaf8238a9fc89d6c99431d541df4b8f2c0f1712ea8fb9837", new Date().toISOString());
+    ).run("AURAFARMING", "0faee339bea0e01815d0a19471e9d5e5d5563ce44dde52ced1f91997ef472407", new Date().toISOString());
     console.log("[db] Owner license account seeded");
   }
 }

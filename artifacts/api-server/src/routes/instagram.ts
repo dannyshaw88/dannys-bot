@@ -7322,10 +7322,10 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
 
   app.get("/api/license/tiers", (_req, res) => {
     res.json([
-      { id: "starter",    label: "Starter",    price: "£25/mo",  accountLimit: 15   },
-      { id: "pro",        label: "Pro",         price: "£50/mo",  accountLimit: 100  },
-      { id: "business",   label: "Business",    price: "£100/mo", accountLimit: 250  },
-      { id: "enterprise", label: "Enterprise",  price: "£250/mo", accountLimit: 1000 },
+      { id: "starter",    label: "Starter",    price: "£25/mo",  deviceLimit: 1,  accountLimit: 5    },
+      { id: "pro",        label: "Pro",         price: "£50/mo",  deviceLimit: 3,  accountLimit: 15   },
+      { id: "business",   label: "Business",    price: "£100/mo", deviceLimit: 10, accountLimit: 100  },
+      { id: "enterprise", label: "Enterprise",  price: "£250/mo", deviceLimit: 25, accountLimit: 9999 },
     ]);
   });
 
