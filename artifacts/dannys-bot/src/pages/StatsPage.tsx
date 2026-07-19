@@ -7,7 +7,7 @@ import { TrustScoreBadge } from "@/components/TrustScoreBadge";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useProfiles } from "@/hooks/use-profiles";
 import { useUpdateTool } from "@/hooks/use-tools";
 import { Switch } from "@/components/ui/switch";
@@ -514,6 +514,47 @@ export function StatsPage() {
     return params.get("profileId") || "";
   });
 
+  // Fetch devices + slots for grouped account selector
+  const { data: metricsPhones } = useQuery<{ phones: FarmPhone[]; adbFound: boolean }>({
+    queryKey: ["/api/mobile/usb-phones"],
+    refetchInterval: 30000,
+    enabled: activeTab === "metrics",
+  });
+  const metricsPhoneList = metricsPhones?.phones ?? [];
+
+  const deviceSlotResults = useQueries({
+    queries: metricsPhoneList.map(phone => ({
+      queryKey: [`/api/mobile/devices/${encodeURIComponent(phone.serial)}/account`],
+      refetchInterval: 30000,
+      enabled: activeTab === "metrics",
+    })),
+  });
+
+  const deviceGroups = useMemo(() => {
+    return metricsPhoneList.map((phone, idx) => {
+      const slots = (deviceSlotResults[idx]?.data as { slots: { username: string }[] } | undefined)?.slots ?? [];
+      const slotProfiles = slots
+        .map(s => (profiles ?? []).find(p => p.username === s.username?.trim()))
+        .filter(Boolean) as Profile[];
+      return {
+        serial: phone.serial,
+        label: phone.marketName || phone.model || phone.manufacturer || phone.serial,
+        profiles: slotProfiles,
+      };
+    }).filter(g => g.profiles.length > 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metricsPhoneList, deviceSlotResults.map(r => r.dataUpdatedAt).join(","), profiles]);
+
+  const assignedProfileIds = useMemo(
+    () => new Set(deviceGroups.flatMap(g => g.profiles.map(p => p.id))),
+    [deviceGroups],
+  );
+  const unassignedProfiles = useMemo(
+    () => [...(profiles ?? [])].filter(p => !assignedProfileIds.has(p.id))
+      .sort((a, b) => (a.accountLabel || a.username || "").localeCompare(b.accountLabel || b.username || "")),
+    [profiles, assignedProfileIds],
+  );
+
   const selectedProfile = useMemo(() => {
     if (!selectedAccountId || !profiles) return profiles?.[0] ?? null;
     return profiles.find(p => String(p.id) === selectedAccountId) ?? profiles[0] ?? null;
@@ -677,22 +718,53 @@ export function StatsPage() {
         {/* ── Metrics Tab ─────────────────────────────────────────────────────── */}
         <TabsContent value="metrics" className="mt-0">
           <div className="flex flex-col gap-4">
-            {/* Account selector */}
+            {/* Account selector — grouped by device */}
             <div className="flex items-center gap-3">
               <span className="text-sm font-semibold text-muted-foreground whitespace-nowrap">Account:</span>
               <Select
                 value={selectedAccountId || (profiles?.[0] ? String(profiles[0].id) : "")}
                 onValueChange={setSelectedAccountId}
               >
-                <SelectTrigger className="w-64">
+                <SelectTrigger className="w-72">
                   <SelectValue placeholder="Select account…" />
                 </SelectTrigger>
-                <SelectContent className="max-h-[calc(25*2.25rem)] overflow-y-auto">
-                  {[...(profiles ?? [])].sort((a, b) => (a.accountLabel || a.username || "").localeCompare(b.accountLabel || b.username || "")).map(p => (
-                    <SelectItem key={p.id} value={String(p.id)}>
-                      {p.accountLabel || p.username}
-                    </SelectItem>
-                  ))}
+                <SelectContent className="max-h-[calc(30*2rem)] overflow-y-auto">
+                  {deviceGroups.length > 0 ? (
+                    <>
+                      {deviceGroups.map(group => (
+                        <SelectGroup key={group.serial}>
+                          <SelectLabel className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-2 py-1.5">
+                            <Smartphone className="w-3 h-3" />
+                            {group.label}
+                          </SelectLabel>
+                          {group.profiles.map(p => (
+                            <SelectItem key={p.id} value={String(p.id)} className="pl-6">
+                              {p.accountLabel || p.username}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ))}
+                      {unassignedProfiles.length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-2 py-1.5">
+                            Other
+                          </SelectLabel>
+                          {unassignedProfiles.map(p => (
+                            <SelectItem key={p.id} value={String(p.id)} className="pl-6">
+                              {p.accountLabel || p.username}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
+                    </>
+                  ) : (
+                    // Fallback flat list when no device data yet
+                    [...(profiles ?? [])].sort((a, b) => (a.accountLabel || a.username || "").localeCompare(b.accountLabel || b.username || "")).map(p => (
+                      <SelectItem key={p.id} value={String(p.id)}>
+                        {p.accountLabel || p.username}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
               {selectedProfile && (
