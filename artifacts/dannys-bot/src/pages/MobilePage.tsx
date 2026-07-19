@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import { useParams, useSearch } from "wouter";
 import { Sidebar, FilledFarmIcon } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
+import { useDeviceLog } from "@/contexts/DeviceLogContext";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -6163,8 +6164,6 @@ export function MobilePage() {
   // start streaming/waking the device — only pressing Power (below) or the
   // automation toggle being enabled does.
   const [liveOn, setLiveOn] = useState<Record<string, boolean>>({});
-  const [logLines,       setLogLines]       = useState<string[]>([]);
-  const [actionLogLines, setActionLogLines] = useState<string[]>([]);
 
   // ── Inspect state ───────────────────────────────────────────────────────────
   // Lifted here so the LogPanel button (sibling of PhoneSlot) can toggle it.
@@ -6174,43 +6173,12 @@ export function MobilePage() {
   const [logRecMode,    setLogRecMode]    = useState(false);
   const [logMarkers,    setLogMarkers]    = useState<LogMarker[]>([]);
   // Ref so addLog's stable useCallback closure can read current logRecMode
-  // without going stale (addLog has [] deps to avoid re-creating every render).
+  // without going stale.
   const logRecModeRef = useRef(false);
   useEffect(() => { logRecModeRef.current = logRecMode; }, [logRecMode]);
 
   const addLogMarker = useCallback((m: LogMarker) => {
     setLogMarkers(prev => [...prev, m]);
-  }, []);
-
-  const addLog = useCallback((msg: string) => {
-    const now  = new Date();
-    const stamp = now.toLocaleTimeString();
-    setLogLines(prev => {
-      const next = [...prev, `[${stamp}] ${msg}`];
-      return next.length > LOG_MAX_LINES ? next.slice(next.length - LOG_MAX_LINES) : next;
-    });
-    // Mirror matching lines into the Action Log with a full date+time stamp.
-    if (ACTION_LOG_RE.test(msg)) {
-      const dateStamp = now.toLocaleString(undefined, { dateStyle: "short", timeStyle: "medium" });
-      setActionLogLines(prev => {
-        const next = [...prev, `[${dateStamp}]  ${msg}`];
-        return next.length > LOG_MAX_LINES ? next.slice(next.length - LOG_MAX_LINES) : next;
-      });
-    }
-    // When Log Record is active, parse automation taps and add orange bot markers.
-    if (logRecModeRef.current) {
-      const m = BOT_TAP_RE.exec(msg);
-      if (m) {
-        setLogMarkers(prev => [...prev, {
-          x: parseInt(m[1], 10),
-          y: parseInt(m[2], 10),
-          t: Date.now(),
-          type: "bot",
-          label: msg.length > 80 ? msg.substring(0, 77) + "…" : msg,
-        }]);
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const refresh = useCallback(async (showSpinner = false) => {
@@ -6238,6 +6206,32 @@ export function MobilePage() {
   // the Log tab (a sibling, not a child, of the mirror) can pull the live
   // decoded video frame size for Check Screen Info.
   const activeSlotRef = useRef<PhoneSlotHandle>(null);
+
+  // ── Global log state (persists regardless of which page is open) ────────────
+  const {
+    logLines,
+    actionLogLines,
+    addLog: _ctxAddLog,
+    clearLogLines,
+    clearActionLogLines,
+  } = useDeviceLog(activeSerial);
+
+  // Wrap the context addLog to preserve BOT_TAP_RE log-marker logic.
+  const addLog = useCallback((msg: string) => {
+    _ctxAddLog(msg);
+    if (logRecModeRef.current) {
+      const m = BOT_TAP_RE.exec(msg);
+      if (m) {
+        setLogMarkers(prev => [...prev, {
+          x: parseInt(m[1], 10),
+          y: parseInt(m[2], 10),
+          t: Date.now(),
+          type: "bot",
+          label: msg.length > 80 ? msg.substring(0, 77) + "…" : msg,
+        }]);
+      }
+    }
+  }, [_ctxAddLog]);
 
   // Poll /api/mobile/cycle-active every 2 s so the mirror auto-connects
   // whenever any slot's automation is running, without needing a device-level
@@ -6439,7 +6433,7 @@ export function MobilePage() {
                 {activeTab === "actionlog" && (
                   <ActionLogPanel
                     lines={actionLogLines}
-                    onClear={() => setActionLogLines([])}
+                    onClear={clearActionLogLines}
                   />
                 )}
                 {activeTab === "metrics" && (
@@ -6448,7 +6442,7 @@ export function MobilePage() {
                 {activeTab === "log"     && (
                   <LogPanel
                     lines={logLines}
-                    onClear={() => setLogLines([])}
+                    onClear={clearLogLines}
                     serial={activeSerial}
                     addLog={addLog}
                     getVideoSize={() => activeSlotRef.current?.getVideoSize() ?? null}

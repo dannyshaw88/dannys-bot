@@ -546,14 +546,31 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // the client's Log panel without a separate channel.
   const videoSessionWS = new Map<string, import('ws').WebSocket>();
 
-  // Helper: push an info message to the connected video WebSocket for a
-  // device (if one is connected).  Used by the automation cycle to stream
-  // step-by-step progress into the Log panel.  No-ops silently when no WS
-  // is connected, so callers don't need to guard the call.
+  // Maps serial → set of connected log-stream WebSocket clients.
+  // Log-stream is a lightweight, always-on channel (no video frames) that
+  // lets the frontend receive automation log messages regardless of whether
+  // the phone mirror screen is open.
+  const logStreamWSS = new WebSocketServer({ noServer: true });
+  const logSessionWS = new Map<string, Set<import('ws').WebSocket>>();
+
+  // Helper: push an info message to the connected video WebSocket AND to any
+  // log-stream subscribers for a device. No-ops silently when nothing is
+  // connected, so callers don't need to guard the call.
   const sendVideoLog = (serial: string, msg: string): void => {
+    const payload = JSON.stringify({ info: msg });
+    // Video stream client (if mirror is open)
     const vws = videoSessionWS.get(serial);
     if (vws && vws.readyState === 1) {
-      try { vws.send(JSON.stringify({ info: msg })); } catch { /* ignore */ }
+      try { vws.send(payload); } catch { /* ignore */ }
+    }
+    // Log-stream subscribers (always-on, no video)
+    const lws = logSessionWS.get(serial);
+    if (lws) {
+      for (const ws of lws) {
+        if (ws.readyState === 1) {
+          try { ws.send(payload); } catch { /* ignore */ }
+        }
+      }
     }
   };
 
@@ -865,6 +882,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
       logger.info({ serial, elapsedMs: elapsed(), adbPath }, "[mobile-video] timing: about to spawn screenrecord");
       spawnStream();
+    });
+  });
+
+  // ── Log-stream WebSocket ───────────────────────────────────────────────────
+  // Lightweight always-on channel: no video frames, just { info } / { error }
+  // log messages pushed by sendVideoLog.  The frontend connects one of these
+  // per real device so logs accumulate even when the mirror screen is closed.
+  httpServer.on("upgrade", (request, socket, head) => {
+    const url = request.url ?? "";
+    const m = url.match(/^\/api\/mobile\/log-stream\/([^/?#]+)/);
+    if (!m) return;
+    const serial = decodeURIComponent(m[1]);
+    (socket as any).__wsHandled = true;
+    logStreamWSS.handleUpgrade(request, socket as any, head, (ws) => {
+      if (!logSessionWS.has(serial)) logSessionWS.set(serial, new Set());
+      logSessionWS.get(serial)!.add(ws);
+      ws.on("close", () => {
+        const set = logSessionWS.get(serial);
+        if (set) { set.delete(ws); if (set.size === 0) logSessionWS.delete(serial); }
+      });
     });
   });
 

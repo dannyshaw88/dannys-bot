@@ -23,6 +23,7 @@ import { BrowserWindowsProvider, useBrowserWindows } from "@/contexts/BrowserWin
 import { SidebarSlotProvider } from "@/contexts/SidebarSlotContext";
 import { NavigationHistoryProvider } from "@/contexts/NavigationHistoryContext";
 import { SelectedProfilesProvider } from "@/contexts/SelectedProfilesContext";
+import { DeviceLogProvider } from "@/contexts/DeviceLogContext";
 import { BrowserWindow } from "@/components/BrowserWindow";
 import { BrowserTaskbar } from "@/components/BrowserTaskbar";
 import { AuraFarmingBot } from "@/components/EquinoxBot";
@@ -327,9 +328,11 @@ function App() {
             <SidebarSlotProvider>
               <BrowserWindowsProvider>
                 <SelectedProfilesProvider>
-                  <LicenseGate>
-                    <AppInner />
-                  </LicenseGate>
+                  <DeviceLogProvider>
+                    <LicenseGate>
+                      <AppInner />
+                    </LicenseGate>
+                  </DeviceLogProvider>
                 </SelectedProfilesProvider>
               </BrowserWindowsProvider>
             </SidebarSlotProvider>
