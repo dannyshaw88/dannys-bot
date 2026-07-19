@@ -2366,12 +2366,12 @@ interface AutomationSettingsData {
   injectBrowsingEnabled: boolean;
   injectBrowsingActivatePctMin: number; injectBrowsingActivatePctMax: number;
   injectBrowsingBeforeFollowPctMin: number; injectBrowsingBeforeFollowPctMax: number;
-  injectBrowsingFeedChanceMin: number; injectBrowsingFeedChanceMax: number;
   injectBrowsingFeedMin: number; injectBrowsingFeedMax: number;
   injectBrowsingClickPostPctMin: number; injectBrowsingClickPostPctMax: number;
   injectBrowsingLikePctMin: number; injectBrowsingLikePctMax: number;
   injectBrowsingShareFeedPctMin: number; injectBrowsingShareFeedPctMax: number;
   injectBrowsingShareDmPctMin: number; injectBrowsingShareDmPctMax: number;
+  injectBrowsingAbandonFollowPctMin: number; injectBrowsingAbandonFollowPctMax: number;
   // Follow Filters — profile-quality gates applied before each follow action.
   // Not wired to execution logic yet — UI-only until the automation hooks are built.
   followFiltersEnabled: boolean;
@@ -2453,12 +2453,12 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   injectBrowsingEnabled: false,
   injectBrowsingActivatePctMin: 0, injectBrowsingActivatePctMax: 0,
   injectBrowsingBeforeFollowPctMin: 0, injectBrowsingBeforeFollowPctMax: 0,
-  injectBrowsingFeedChanceMin: 100, injectBrowsingFeedChanceMax: 100,
   injectBrowsingFeedMin: 3, injectBrowsingFeedMax: 6,
   injectBrowsingClickPostPctMin: 0, injectBrowsingClickPostPctMax: 0,
   injectBrowsingLikePctMin: 0, injectBrowsingLikePctMax: 0,
   injectBrowsingShareFeedPctMin: 0, injectBrowsingShareFeedPctMax: 0,
   injectBrowsingShareDmPctMin: 0, injectBrowsingShareDmPctMax: 0,
+  injectBrowsingAbandonFollowPctMin: 0, injectBrowsingAbandonFollowPctMax: 0,
   followFiltersEnabled: false,
   followFilterPrivateUsers: false,
   followFilterEnglishSpeaking: false,
@@ -2740,8 +2740,6 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             injectBrowsingActivatePctMax: s.injectBrowsingActivatePctMax,
             injectBrowsingBeforeFollowPctMin: s.injectBrowsingBeforeFollowPctMin,
             injectBrowsingBeforeFollowPctMax: s.injectBrowsingBeforeFollowPctMax,
-            injectBrowsingFeedChanceMin: s.injectBrowsingFeedChanceMin,
-            injectBrowsingFeedChanceMax: s.injectBrowsingFeedChanceMax,
             injectBrowsingFeedMin: s.injectBrowsingFeedMin,
             injectBrowsingFeedMax: s.injectBrowsingFeedMax,
             injectBrowsingClickPostPctMin: s.injectBrowsingClickPostPctMin,
@@ -2752,6 +2750,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             injectBrowsingShareFeedPctMax: s.injectBrowsingShareFeedPctMax,
             injectBrowsingShareDmPctMin: s.injectBrowsingShareDmPctMin,
             injectBrowsingShareDmPctMax: s.injectBrowsingShareDmPctMax,
+            injectBrowsingAbandonFollowPctMin: s.injectBrowsingAbandonFollowPctMin,
+            injectBrowsingAbandonFollowPctMax: s.injectBrowsingAbandonFollowPctMax,
             followFiltersEnabled: s.followFiltersEnabled,
             followFilterPrivateUsers: s.followFilterPrivateUsers,
             followFilterEnglishSpeaking: s.followFilterEnglishSpeaking,
@@ -3026,12 +3026,12 @@ const COPY_SECTIONS: CopySection[] = [
     { key: 'injectEnabled',     label: 'Enabled',                       fields: ['injectBrowsingEnabled'] },
     { key: 'injectActivate',    label: 'Activate Percentage',           fields: ['injectBrowsingActivatePctMin','injectBrowsingActivatePctMax'] },
     { key: 'injectBefore',      label: 'Before Follow %',               fields: ['injectBrowsingBeforeFollowPctMin','injectBrowsingBeforeFollowPctMax'] },
-    { key: 'injectFeedChance',  label: 'Feed browse chance %',          fields: ['injectBrowsingFeedChanceMin','injectBrowsingFeedChanceMax'] },
     { key: 'injectFeedCount',   label: 'Feed posts to view',            fields: ['injectBrowsingFeedMin','injectBrowsingFeedMax'] },
     { key: 'injectClickPost',   label: 'Click post %',                  fields: ['injectBrowsingClickPostPctMin','injectBrowsingClickPostPctMax'] },
     { key: 'injectLike',        label: 'Like %',                        fields: ['injectBrowsingLikePctMin','injectBrowsingLikePctMax'] },
     { key: 'injectShareFeed',   label: 'Share to Feed %',               fields: ['injectBrowsingShareFeedPctMin','injectBrowsingShareFeedPctMax'] },
     { key: 'injectShareDm',     label: 'Share DM %',                    fields: ['injectBrowsingShareDmPctMin','injectBrowsingShareDmPctMax'] },
+    { key: 'injectAbandon',     label: 'Abandon Follow %',              fields: ['injectBrowsingAbandonFollowPctMin','injectBrowsingAbandonFollowPctMax'] },
   ]},
   { key: 'randomJitter',  label: 'Random Jitter', sub: [
     { key: 'jitterEnabled',     label: 'Enabled',                       fields: ['randomJitterEnabled'] },
@@ -4262,14 +4262,6 @@ function AutomationSettingsPanel({
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Feed chance %</Label>
-              <div className="flex items-center gap-2">
-                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedChanceMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedChanceMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
-                <span className="text-muted-foreground text-sm">to</span>
-                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedChanceMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedChanceMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
-              </div>
-            </div>
-            <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Feed posts</Label>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={50} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
@@ -4307,6 +4299,14 @@ function AutomationSettingsPanel({
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingShareDmPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareDmPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
                 <span className="text-muted-foreground text-sm">to</span>
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingShareDmPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareDmPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Abandon Follow %</Label>
+              <div className="flex items-center gap-2">
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingAbandonFollowPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingAbandonFollowPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                <span className="text-muted-foreground text-sm">to</span>
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingAbandonFollowPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingAbandonFollowPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
               </div>
             </div>
           </div>

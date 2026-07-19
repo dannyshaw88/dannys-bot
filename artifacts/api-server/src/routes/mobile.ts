@@ -209,8 +209,6 @@ type AutomationSettings = {
   injectBrowsingActivatePctMax?: number;
   injectBrowsingBeforeFollowPctMin?: number;
   injectBrowsingBeforeFollowPctMax?: number;
-  injectBrowsingFeedChanceMin?: number;
-  injectBrowsingFeedChanceMax?: number;
   injectBrowsingFeedMin?: number;
   injectBrowsingFeedMax?: number;
   injectBrowsingClickPostPctMin?: number;
@@ -221,6 +219,8 @@ type AutomationSettings = {
   injectBrowsingShareFeedPctMax?: number;
   injectBrowsingShareDmPctMin?: number;
   injectBrowsingShareDmPctMax?: number;
+  injectBrowsingAbandonFollowPctMin?: number;
+  injectBrowsingAbandonFollowPctMax?: number;
   // Random Jitter — human-like interstitial actions (same persistence fix as
   // Follow/Inject Browsing above; was missing from this type even though the
   // zod schema and defaults object already used these keys).
@@ -1098,8 +1098,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     injectBrowsingActivatePctMax: z.number().min(0).max(100).default(0),
     injectBrowsingBeforeFollowPctMin: z.number().min(0).max(100).default(0),
     injectBrowsingBeforeFollowPctMax: z.number().min(0).max(100).default(0),
-    injectBrowsingFeedChanceMin: z.number().min(0).max(100).default(100),
-    injectBrowsingFeedChanceMax: z.number().min(0).max(100).default(100),
     injectBrowsingFeedMin: z.number().min(0).max(50).default(3),
     injectBrowsingFeedMax: z.number().min(0).max(50).default(6),
     injectBrowsingClickPostPctMin: z.number().min(0).max(100).default(0),
@@ -1110,6 +1108,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     injectBrowsingShareFeedPctMax: z.number().min(0).max(100).default(0),
     injectBrowsingShareDmPctMin: z.number().min(0).max(100).default(0),
     injectBrowsingShareDmPctMax: z.number().min(0).max(100).default(0),
+    injectBrowsingAbandonFollowPctMin: z.number().min(0).max(100).default(0),
+    injectBrowsingAbandonFollowPctMax: z.number().min(0).max(100).default(0),
     // ── Follow Filters — profile-quality gates. Were missing from the
     //    persistence schema, causing zod to strip them on every POST so
     //    Copy Settings never actually applied them to target slots.
@@ -1297,12 +1297,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         injectBrowsingEnabled: false,
         injectBrowsingActivatePctMin: 0, injectBrowsingActivatePctMax: 0,
         injectBrowsingBeforeFollowPctMin: 0, injectBrowsingBeforeFollowPctMax: 0,
-        injectBrowsingFeedChanceMin: 100, injectBrowsingFeedChanceMax: 100,
         injectBrowsingFeedMin: 3, injectBrowsingFeedMax: 6,
         injectBrowsingClickPostPctMin: 0, injectBrowsingClickPostPctMax: 0,
         injectBrowsingLikePctMin: 0, injectBrowsingLikePctMax: 0,
         injectBrowsingShareFeedPctMin: 0, injectBrowsingShareFeedPctMax: 0,
         injectBrowsingShareDmPctMin: 0, injectBrowsingShareDmPctMax: 0,
+        injectBrowsingAbandonFollowPctMin: 0, injectBrowsingAbandonFollowPctMax: 0,
         followFiltersEnabled: false,
         followFilterPrivateUsers: false,
         followFilterEnglishSpeaking: false,
@@ -3648,12 +3648,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   interface InjectBrowsingParams {
     activatePctMin: number; activatePctMax: number;
     beforeFollowPctMin: number; beforeFollowPctMax: number;
-    feedChanceMin: number; feedChanceMax: number;
     feedMin: number; feedMax: number;
     clickPostPctMin: number; clickPostPctMax: number;
     likePctMin: number; likePctMax: number;
     shareFeedPctMin: number; shareFeedPctMax: number;
     shareDmPctMin: number; shareDmPctMax: number;
+    /** Chance (%) to skip the follow entirely after browsing — adds variation
+     *  so not every browsing session ends in a follow. The user can still be
+     *  scraped and followed again later by any account. */
+    abandonFollowPctMin: number; abandonFollowPctMax: number;
   }
 
   /** Picks a value uniformly from [lo, hi], tolerating either order. */
@@ -4384,6 +4387,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           onLog?.("Inject Browsing: rolled to browse this profile after following");
         }
 
+        // Abandon Follow — fires only when pre-follow browsing ran. Rolls a
+        // per-user chance to skip the follow entirely so not every browsing
+        // session ends identically. The user is NOT added to any skip list and
+        // CAN be scraped and followed again in a future cycle or by another
+        // account — the goal is purely to add variation to the follow pattern.
+        if (browsing && willBrowse && browseBeforeFollow && browsing.abandonFollowPctMin > 0) {
+          const abandonChance = rollRange(browsing.abandonFollowPctMin, browsing.abandonFollowPctMax) / 100;
+          if (Math.random() < abandonChance) {
+            onLog?.(`Follow: ↩ abandoned follow @${username} after inject-browsing (variation — user can be re-scraped)`);
+            await android.pressBack(serial);
+            await sleepOrAbort(serial, 500);
+            await android.pressBack(serial);
+            await sleepOrAbort(serial, 800);
+            const interPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
+            if (interPopup) await sleepOrAbort(serial, 400);
+            continue;
+          }
+        }
+
         // Dismiss any interstitial/upsell popup that appeared during navigation
         // to this profile or during pre-follow browsing (e.g. "Instagram Plus
         // — Choose custom fonts for your profile bio" with "Not now" dismiss).
@@ -4551,12 +4573,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         injectBrowsingEnabled,
         injectBrowsingActivatePctMin, injectBrowsingActivatePctMax,
         injectBrowsingBeforeFollowPctMin, injectBrowsingBeforeFollowPctMax,
-        injectBrowsingFeedChanceMin, injectBrowsingFeedChanceMax,
         injectBrowsingFeedMin, injectBrowsingFeedMax,
         injectBrowsingClickPostPctMin, injectBrowsingClickPostPctMax,
         injectBrowsingLikePctMin, injectBrowsingLikePctMax,
         injectBrowsingShareFeedPctMin, injectBrowsingShareFeedPctMax,
         injectBrowsingShareDmPctMin, injectBrowsingShareDmPctMax,
+        injectBrowsingAbandonFollowPctMin, injectBrowsingAbandonFollowPctMax,
         randomJitterEnabled,
         checkNotificationsPctMin, checkNotificationsPctMax,
         checkNotificationsScrollsMin, checkNotificationsScrollsMax,
@@ -4932,12 +4954,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 browsing: injectBrowsingEnabled ? {
                   activatePctMin: injectBrowsingActivatePctMin, activatePctMax: injectBrowsingActivatePctMax,
                   beforeFollowPctMin: injectBrowsingBeforeFollowPctMin, beforeFollowPctMax: injectBrowsingBeforeFollowPctMax,
-                  feedChanceMin: injectBrowsingFeedChanceMin, feedChanceMax: injectBrowsingFeedChanceMax,
                   feedMin: injectBrowsingFeedMin, feedMax: injectBrowsingFeedMax,
                   clickPostPctMin: injectBrowsingClickPostPctMin, clickPostPctMax: injectBrowsingClickPostPctMax,
                   likePctMin: injectBrowsingLikePctMin, likePctMax: injectBrowsingLikePctMax,
                   shareFeedPctMin: injectBrowsingShareFeedPctMin, shareFeedPctMax: injectBrowsingShareFeedPctMax,
                   shareDmPctMin: injectBrowsingShareDmPctMin, shareDmPctMax: injectBrowsingShareDmPctMax,
+                  abandonFollowPctMin: injectBrowsingAbandonFollowPctMin, abandonFollowPctMax: injectBrowsingAbandonFollowPctMax,
                 } : undefined,
                 filters: followFiltersEnabled
                   ? {
