@@ -1,5 +1,6 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { ToolsPageContent } from "@/pages/ToolsPage";
+import { TrustScoresTabContent, BulkImportTabContent } from "@/pages/ToolsPage";
+import { BanAnalyticsPage } from "@/pages/BanAnalyticsPage";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -342,7 +343,7 @@ export function SettingsPage() {
       </div>
 
       <div className="flex items-center gap-0 mb-6 border-b border-border/60 flex-wrap">
-        {(["My Account", "General", "Tools", "Scraping", "Automation", "Security", "Data"] as const).map(tab => (
+        {(["My Account", "General", "Evasion Stats", "Trust Scores", "Import", "Scraping", "Automation", "Security", "Data"] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setSettingsTab(tab.toLowerCase())}
@@ -359,13 +360,25 @@ export function SettingsPage() {
         </div>
       )}
 
-      {settingsTab === "tools" && (
+      {settingsTab === "evasion stats" && (
         <div>
-          <ToolsPageContent />
+          <BanAnalyticsPage />
         </div>
       )}
 
-      <div className={`space-y-4 max-w-2xl ${["my account", "tools"].includes(settingsTab) ? "hidden" : ""}`}>
+      {settingsTab === "trust scores" && (
+        <div>
+          <TrustScoresTabContent />
+        </div>
+      )}
+
+      {settingsTab === "import" && (
+        <div>
+          <BulkImportTabContent />
+        </div>
+      )}
+
+      <div className={`space-y-4 max-w-2xl ${["my account", "evasion stats", "trust scores", "import"].includes(settingsTab) ? "hidden" : ""}`}>
 
         {/* Talk to Equinox Bot shortcut */}
         <button

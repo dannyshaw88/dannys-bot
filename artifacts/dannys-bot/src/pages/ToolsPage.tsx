@@ -53,7 +53,7 @@ interface TsEditState {
   showIconPicker: boolean;
 }
 
-function TrustScoresTabContent() {
+export function TrustScoresTabContent() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
 
@@ -414,7 +414,7 @@ function ImportMaskedCell({ value, placeholder }: { value: string; placeholder?:
   );
 }
 
-function BulkImportTabContent() {
+export function BulkImportTabContent() {
   const { toast } = useToast();
   const [rawText, setRawText] = useState("");
   const [rows, setRows] = useState<ImportParsedRow[]>([]);
