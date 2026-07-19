@@ -71,7 +71,7 @@ const MODEL_FRIENDLY_NAME: Record<string, string> = {
 // Add new entries here as more device photos are added to public/phones/.
 const DEVICE_IMAGE_RULES: Array<{ match: string; src: string }> = [
   { match: "redmi 12",  src: "/phones/redmi-12.png"  }, // covers "Redmi 12 5G", "Redmi Note 12", etc.
-  { match: "redmi a5",  src: "/phones/redmi-a5.jpg"  },
+  { match: "redmi a5",  src: "/phones/redmi-a5.png"  },
 ];
 
 function getDeviceImage(device: FarmDevice, phone?: UsbPhone): string | null {
@@ -189,6 +189,7 @@ function PhoneVisual({
       <div
         className={`relative flex items-end justify-center ${className ?? ""}`}
         style={{
+          height: "100%",
           filter: online
             ? (active
                 ? "drop-shadow(0 0 10px rgba(34,197,94,0.45))"
@@ -200,7 +201,7 @@ function PhoneVisual({
           src={imgSrc}
           alt="Device"
           draggable={false}
-          style={{ width: "100%", height: "100%", objectFit: "contain" }}
+          style={{ width: "auto", height: "100%", objectFit: "contain" }}
         />
       </div>
     );
