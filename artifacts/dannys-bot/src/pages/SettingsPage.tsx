@@ -74,48 +74,71 @@ function ThemePicker() {
   );
 }
 
+type FakePhoneEntry = { manufacturer: string; marketName: string; androidVersion: string };
+
+const INJECTABLE_MODELS: Array<FakePhoneEntry & { label: string; image?: string }> = [
+  { manufacturer: "Xiaomi", marketName: "Redmi 12 5G",   androidVersion: "13", label: "Redmi 12 5G",   image: "/phones/redmi-12.png"  },
+  { manufacturer: "Xiaomi", marketName: "Redmi A5",      androidVersion: "13", label: "Redmi A5",      image: "/phones/redmi-a5.png"  },
+  { manufacturer: "Xiaomi", marketName: "Redmi Note 12", androidVersion: "13", label: "Redmi Note 12"  },
+  { manufacturer: "Xiaomi", marketName: "Redmi Note 14", androidVersion: "14", label: "Redmi Note 14"  },
+  { manufacturer: "Xiaomi", marketName: "Redmi Note 13", androidVersion: "14", label: "Redmi Note 13"  },
+  { manufacturer: "Xiaomi", marketName: "POCO X6",       androidVersion: "14", label: "POCO X6"        },
+  { manufacturer: "Xiaomi", marketName: "Xiaomi 13T",    androidVersion: "13", label: "Xiaomi 13T"     },
+  { manufacturer: "Xiaomi", marketName: "Redmi 13C",     androidVersion: "13", label: "Redmi 13C"      },
+  { manufacturer: "Xiaomi", marketName: "Redmi A3",      androidVersion: "14", label: "Redmi A3"       },
+  { manufacturer: "Xiaomi", marketName: "POCO M6 Pro",   androidVersion: "14", label: "POCO M6 Pro"    },
+];
+
 function FakePhoneCard() {
   const { toast } = useToast();
-  const [count, setCount]     = useState<number | null>(null);
-  const [injecting, setInjecting] = useState(false);
-  const [removing, setRemoving]   = useState(false);
+  const [phones, setPhones]       = useState<FakePhoneEntry[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [saving, setSaving]       = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
 
   useEffect(() => {
-    fetch("/api/mobile/fake-phone-count")
+    fetch("/api/mobile/fake-phone-list")
       .then(r => r.json())
-      .then(d => setCount(d.count ?? 0))
-      .catch(() => setCount(0));
+      .then(d => setPhones(d.phones ?? []))
+      .catch(() => setPhones([]))
+      .finally(() => setLoading(false));
   }, []);
 
-  const postCount = async (next: number, label: string, setBusy: (v: boolean) => void) => {
-    setBusy(true);
+  const saveList = async (next: FakePhoneEntry[], label: string) => {
+    setSaving(true);
     try {
-      const res = await fetch("/api/mobile/fake-phone-count", {
+      const res = await fetch("/api/mobile/fake-phone-list", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ count: next }),
+        body: JSON.stringify({ phones: next }),
       });
       const d = await res.json();
       if (d.ok) {
-        setCount(d.count);
+        setPhones(d.phones);
         toast({ title: label });
       } else {
-        toast({ title: "Failed to update fake phone count", variant: "destructive" });
+        toast({ title: "Failed to update devices", variant: "destructive" });
       }
     } catch {
-      toast({ title: "Failed to update fake phone count", variant: "destructive" });
+      toast({ title: "Failed to update devices", variant: "destructive" });
     } finally {
-      setBusy(false);
+      setSaving(false);
     }
   };
 
-  const handleInject = () => {
-    const next = Math.min(10, (count ?? 0) + 1);
-    postCount(next, `${next} fake phone${next !== 1 ? "s" : ""} injected`, setInjecting);
+  const handleAdd = (model: typeof INJECTABLE_MODELS[0]) => {
+    if (phones.length >= 10) return;
+    const next = [...phones, { manufacturer: model.manufacturer, marketName: model.marketName, androidVersion: model.androidVersion }];
+    saveList(next, `${model.manufacturer} ${model.label} added to Phone Farm`);
+    setShowPicker(false);
   };
 
-  const handleRemove = () => {
-    postCount(0, "Fake phones removed", setRemoving);
+  const handleRemoveOne = (index: number) => {
+    saveList(phones.filter((_, i) => i !== index), "Device removed");
+  };
+
+  const handleRemoveAll = () => {
+    saveList([], "All fake devices removed");
   };
 
   return (
@@ -127,34 +150,95 @@ function FakePhoneCard() {
         <div>
           <p className="text-sm font-semibold text-foreground">Inject Fake Phones</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Add simulated devices to the Phone Farm for UI testing without physical hardware. Each click injects one more device (max 10).
+            Add simulated devices to the Phone Farm for UI testing without physical hardware.
           </p>
         </div>
       </div>
+
+      {/* Active injected devices */}
+      {phones.length > 0 && (
+        <div className="mb-3 space-y-1.5">
+          {phones.map((p, i) => (
+            <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/40 border border-border/50">
+              {(() => {
+                const model = INJECTABLE_MODELS.find(m => m.marketName === p.marketName);
+                return model?.image ? (
+                  <img src={model.image} alt={p.marketName} className="w-5 h-7 object-contain shrink-0" />
+                ) : (
+                  <Phone className="w-4 h-4 text-muted-foreground shrink-0" />
+                );
+              })()}
+              <span className="text-xs font-medium text-foreground flex-1 truncate">
+                {p.manufacturer} {p.marketName}
+              </span>
+              <span className="text-[10px] text-muted-foreground">Android {p.androidVersion}</span>
+              <button
+                onClick={() => handleRemoveOne(i)}
+                disabled={saving}
+                className="ml-1 text-muted-foreground hover:text-destructive transition-colors"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Action buttons */}
       <div className="flex items-center gap-3">
         <Button
           size="sm"
-          onClick={handleInject}
-          disabled={count === null || injecting || removing || (count ?? 0) >= 10}
+          onClick={() => setShowPicker(v => !v)}
+          disabled={loading || saving || phones.length >= 10}
         >
-          {injecting ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Plus className="w-3.5 h-3.5 mr-1" />}
           Inject
         </Button>
-        {count !== null && count > 0 && (
+        {phones.length > 0 && (
           <>
-            <span className="text-xs text-muted-foreground">{count} active</span>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleRemove}
-              disabled={removing || injecting}
-            >
-              {removing ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+            <span className="text-xs text-muted-foreground">{phones.length} active</span>
+            <Button size="sm" variant="outline" onClick={handleRemoveAll} disabled={saving}>
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
               Remove All
             </Button>
           </>
         )}
       </div>
+
+      {/* Device picker */}
+      {showPicker && (
+        <div className="mt-3 rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+          <div className="px-3 py-2 border-b border-border/60 flex items-center justify-between">
+            <p className="text-xs font-semibold text-foreground">Choose a device to inject</p>
+            <button onClick={() => setShowPicker(false)} className="text-muted-foreground hover:text-foreground transition-colors">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="max-h-64 overflow-y-auto">
+            {INJECTABLE_MODELS.map(model => (
+              <button
+                key={model.marketName}
+                onClick={() => handleAdd(model)}
+                disabled={saving}
+                className="w-full flex items-center gap-3 px-3 py-2 hover:bg-muted/50 transition-colors text-left border-b border-border/30 last:border-0 disabled:opacity-50"
+              >
+                {model.image ? (
+                  <img src={model.image} alt={model.label} className="w-6 h-9 object-contain shrink-0" />
+                ) : (
+                  <div className="w-6 h-9 flex items-center justify-center shrink-0">
+                    <Phone className="w-4 h-4 text-muted-foreground" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-foreground truncate">{model.manufacturer} {model.label}</p>
+                  <p className="text-[10px] text-muted-foreground">Android {model.androidVersion}</p>
+                </div>
+                <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

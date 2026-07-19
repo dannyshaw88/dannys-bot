@@ -169,7 +169,8 @@ function saveFakePhoneCount(count: number): void {
 const FAKE_PHONE_MODELS: Array<{ manufacturer: string; marketName: string; androidVersion: string }> = [
   { manufacturer: "Xiaomi", marketName: "Redmi Note 12",  androidVersion: "13" },
   { manufacturer: "Xiaomi", marketName: "Redmi Note 14",  androidVersion: "14" },
-  { manufacturer: "Xiaomi", marketName: "Redmi 12",       androidVersion: "13" },
+  { manufacturer: "Xiaomi", marketName: "Redmi 12 5G",    androidVersion: "13" },
+  { manufacturer: "Xiaomi", marketName: "Redmi A5",       androidVersion: "13" },
   { manufacturer: "Xiaomi", marketName: "Redmi Note 13",  androidVersion: "14" },
   { manufacturer: "Xiaomi", marketName: "POCO X6",        androidVersion: "14" },
   { manufacturer: "Xiaomi", marketName: "Xiaomi 13T",     androidVersion: "13" },
@@ -178,6 +179,27 @@ const FAKE_PHONE_MODELS: Array<{ manufacturer: string; marketName: string; andro
   { manufacturer: "Xiaomi", marketName: "POCO M6 Pro",    androidVersion: "14" },
   { manufacturer: "Xiaomi", marketName: "Redmi Note 11",  androidVersion: "12" },
 ];
+
+// ── List-based fake phone injection ──────────────────────────────────────────
+// Stores a user-chosen list of specific device models (as opposed to the
+// count-based system which just cycles through FAKE_PHONE_MODELS by index).
+
+type FakePhoneEntry = { manufacturer: string; marketName: string; androidVersion: string };
+
+function fakePhoneListFile(): string {
+  return path.join(adbToolsDir(), "fake-phone-list.json");
+}
+
+function loadFakePhoneList(): FakePhoneEntry[] {
+  try {
+    const raw = JSON.parse(fs.readFileSync(fakePhoneListFile(), "utf8"));
+    return Array.isArray(raw) ? raw : [];
+  } catch { return []; }
+}
+
+function saveFakePhoneList(list: FakePhoneEntry[]): void {
+  fs.writeFileSync(fakePhoneListFile(), JSON.stringify(list, null, 2));
+}
 
 function generateFakePhone(index: number): UsbPhone {
   const m = FAKE_PHONE_MODELS[index % FAKE_PHONE_MODELS.length];
@@ -306,10 +328,24 @@ router.get("/mobile/usb-phones", (_req, res) => {
   const diag = { rawOutput: "" };
   const phones = adbPath ? listUsbPhones(adbPath, diag) : [];
 
-  // Append fake phones if count > 0 (for UI testing without physical hardware).
+  // Append count-based fake phones (legacy).
   const fakeCount = loadFakePhoneCount();
   for (let i = 0; i < fakeCount; i++) {
     phones.push(generateFakePhone(i));
+  }
+
+  // Append list-based fake phones (user-chosen specific models).
+  const fakeList = loadFakePhoneList();
+  for (let i = 0; i < fakeList.length; i++) {
+    const m = fakeList[i];
+    phones.push({
+      serial:         `FAKE_CUSTOM_${String(i + 1).padStart(3, "0")}`,
+      state:          "device",
+      model:          "FAKE",
+      marketName:     m.marketName,
+      manufacturer:   m.manufacturer,
+      androidVersion: m.androidVersion,
+    });
   }
 
   res.json({
@@ -344,6 +380,36 @@ router.post("/mobile/fake-phone-count", (req, res) => {
   const count = Math.min(Math.floor(raw), 10);
   saveFakePhoneCount(count);
   res.json({ ok: true, count });
+});
+
+/**
+ * GET /api/mobile/fake-phone-list
+ * Returns the current list of user-chosen injected fake phone models.
+ */
+router.get("/mobile/fake-phone-list", (_req, res) => {
+  res.json({ phones: loadFakePhoneList() });
+});
+
+/**
+ * POST /api/mobile/fake-phone-list
+ * Body: { phones: Array<{manufacturer, marketName, androidVersion}> }
+ * Replaces the entire list of injected fake phones.
+ */
+router.post("/mobile/fake-phone-list", (req, res) => {
+  const list = req.body?.phones;
+  if (!Array.isArray(list)) {
+    res.status(400).json({ ok: false, error: "phones must be an array" });
+    return;
+  }
+  const clean: FakePhoneEntry[] = list
+    .filter((e): e is FakePhoneEntry =>
+      e && typeof e.manufacturer === "string" &&
+      typeof e.marketName === "string" &&
+      typeof e.androidVersion === "string"
+    )
+    .slice(0, 10);
+  saveFakePhoneList(clean);
+  res.json({ ok: true, phones: loadFakePhoneList() });
 });
 
 /**
