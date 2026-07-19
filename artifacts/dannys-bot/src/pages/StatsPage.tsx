@@ -140,8 +140,10 @@ function ProfileStatsRow({
       {statColOrder.filter(key => visibleCols[key]).map(key => {
         if (key === "trustscore") {
           return (
-            <td key="trustscore" style={{ width: colWidths.trustscore, textAlign: "center" }} className="px-4 py-3 align-middle">
-              <TrustScoreBadge profileId={profile.id} />
+            <td key="trustscore" style={{ width: colWidths.trustscore }} className="px-4 py-3">
+              <div className="flex items-center justify-center h-full">
+                <TrustScoreBadge profileId={profile.id} width={90} height={50} />
+              </div>
             </td>
           );
         }
