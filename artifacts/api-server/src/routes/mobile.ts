@@ -4480,6 +4480,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let followedCount = 0;
     let reelsViewed = 0;
     let reelsLikes = 0;
+    // Hoisted so the catch block can include partial stats in the COMPLETE log
+    // even when the cycle is aborted or errors mid-run.
+    let likes = 0, likeFailures = 0, sharesFeed = 0, sharesDm = 0, saves = 0, strayNavRecoveries = 0;
+    let feedScrolled = 0; // number of feed posts requested to scroll this cycle
+    let _slotUsername = "";       // captured from schema parse for catch-block use
+    let _mobileProfileId: number | null = null; // same
     const cycleStart = Date.now();
     // tLog prefixes every log line with elapsed seconds so the user can see
     // exactly where each chunk of time is going in the Log tab.
@@ -4554,6 +4560,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const match = allProfiles.find(p => p.username === slotUsername || p.accountLabel === slotUsername);
         if (match) mobileProfileId = match.id;
       }
+      // Capture for catch-block COMPLETE log (in scope there).
+      _slotUsername = slotUsername || "";
+      _mobileProfileId = mobileProfileId;
       // Log cycle start to Dashboard.
       // profileId 0 is the system sentinel (same as "Aura Farming started")
       // so events always appear even when slotUsername has no matching EB
@@ -4690,7 +4699,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       //     closed before the next tool starts.
       //   • All other tools self-navigate to their own starting position
       //     (Search tab, Home tab, compose "+") so they work from any screen.
-      let likes = 0, likeFailures = 0, sharesFeed = 0, sharesDm = 0, saves = 0, strayNavRecoveries = 0;
+      // (likes, sharesFeed, etc. already hoisted before try — no re-declaration needed)
 
       // Pre-roll every tool's Activate Percentage gate BEFORE building the order.
       // This means the logged sequence only contains tools that will actually
@@ -4753,6 +4762,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               savePercentMin, savePercentMax,
               onLog: (msg) => sendVideoLog(serial, `  ${msg}`),
             }));
+            feedScrolled = count;
             steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${saves} saves, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
             tLog(`▶ Feed done — ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} DM-shares, ${saves} saves`);
           } else if (!feedEnabled) {
@@ -5068,6 +5078,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (reelsViewed) parts.push(`${reelsViewed} reels`);
         if (sharesDm) parts.push(`${sharesDm} DMs`);
         if (sharesFeed) parts.push(`${sharesFeed} feed shares`);
+        if (saves) parts.push(`${saves} saves`);
+        if (feedScrolled && !parts.length) parts.push(`${feedScrolled} posts scrolled`);
         storage.createSessionAction({
           profileId: mobileProfileId ?? 0,
           toolId: 0,
@@ -5083,6 +5095,31 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       res.json({ ok: true, count, likes, likeFailures, sharesFeed, sharesDm, storiesWatched, followedCount, strayNavRecoveries, steps });
     } catch (e: any) {
       const aborted = (e?.message === "cycle-aborted");
+      // Always stamp COMPLETE so the Dashboard never leaves a dangling STARTED.
+      // Accumulate whatever partial stats were collected before the abort/error.
+      if (_slotUsername || _mobileProfileId !== null) {
+        const parts: string[] = [];
+        if (followedCount) parts.push(`${followedCount} follows`);
+        if (likes + reelsLikes) parts.push(`${likes + reelsLikes} likes`);
+        if (storiesWatched) parts.push(`${storiesWatched} stories`);
+        if (reelsViewed) parts.push(`${reelsViewed} reels`);
+        if (sharesDm) parts.push(`${sharesDm} DMs`);
+        if (sharesFeed) parts.push(`${sharesFeed} feed shares`);
+        if (saves) parts.push(`${saves} saves`);
+        if (feedScrolled && !parts.length) parts.push(`${feedScrolled} posts scrolled`);
+        const statsSuffix = parts.length ? ` — ${parts.join(", ")}` : "";
+        storage.createSessionAction({
+          profileId: _mobileProfileId ?? 0,
+          toolId: 0,
+          action: "tool_complete",
+          targetUsername: _slotUsername,
+          detail: aborted ? `Cycle aborted${statsSuffix}` : `Cycle error: ${e?.message ?? "unknown"}${statsSuffix}`,
+          result: aborted ? "ok" : "error",
+          sourceValue: `${serial}:${incomingSlotIdx}`,
+          sourceType: "phone",
+          timestamp: new Date().toISOString(),
+        }).catch(() => {});
+      }
       res.status(aborted ? 200 : 400).json({
         ok: aborted,
         aborted,
