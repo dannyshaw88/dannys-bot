@@ -16,7 +16,9 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
-import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, X } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -105,6 +107,234 @@ function resolveDisplayName(device: FarmDevice, phone?: UsbPhone): string {
     return mfr ? `${mfr} ${MODEL_FRIENDLY_NAME[sCode]}` : MODEL_FRIENDLY_NAME[sCode];
   }
   return device.displayName || device.serial;
+}
+
+// ─── Slot customization types & constants ────────────────────────────────────
+
+const SLOT_FONTS = [
+  { id: 'inter',    label: 'Inter',       family: "'Inter', system-ui, sans-serif" },
+  { id: 'oswald',   label: 'Oswald',      family: "'Oswald', sans-serif" },
+  { id: 'bebas',    label: 'Bebas Neue',  family: "'Bebas Neue', cursive" },
+  { id: 'playfair', label: 'Playfair',    family: "'Playfair Display', serif" },
+  { id: 'pacifico', label: 'Pacifico',    family: "'Pacifico', cursive" },
+  { id: 'mono',     label: 'Mono',        family: "'Courier New', monospace" },
+  { id: 'impact',   label: 'Impact',      family: "Impact, fantasy" },
+  { id: 'serif',    label: 'Serif',       family: "Georgia, serif" },
+] as const;
+
+const SLOT_WALLPAPERS = [
+  { id: 'wp-galaxy.jpg',    label: 'Galaxy' },
+  { id: 'wp-abstract.jpg',  label: 'Abstract' },
+  { id: 'wp-forest.jpg',    label: 'Forest' },
+  { id: 'wp-ocean.jpg',     label: 'Ocean' },
+  { id: 'wp-mountains.jpg', label: 'Mountains' },
+  { id: 'wp-city.jpg',      label: 'City' },
+  { id: 'wp-purple.jpg',    label: 'Purple' },
+  { id: 'wp-minimal.jpg',   label: 'Minimal' },
+  { id: 'wp-blossom.jpg',   label: 'Blossom' },
+  { id: 'wp-aurora.jpg',    label: 'Aurora' },
+  { id: 'wp-neon.jpg',      label: 'Neon' },
+  { id: 'wp-water.jpg',     label: 'Water' },
+];
+
+interface TextLayer {
+  id: string; text: string; font: string; size: number; color: string;
+  x: number; y: number; bold: boolean; italic: boolean; shadow: boolean;
+}
+
+interface SlotCustomization { wallpaper: string | null; texts: TextLayer[]; }
+const DEFAULT_SLOT_CUSTOM: SlotCustomization = { wallpaper: null, texts: [] };
+
+function makeTextLayer(): TextLayer {
+  return {
+    id: `txt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    text: 'Label', font: 'inter', size: 20, color: '#ffffff',
+    x: 50, y: 50, bold: false, italic: false, shadow: true,
+  };
+}
+
+// ─── Slot Customize Dialog ────────────────────────────────────────────────────
+
+function CustomizePanel({
+  open, onOpenChange, custom, onChange, label,
+}: {
+  open: boolean; onOpenChange: (v: boolean) => void;
+  custom: SlotCustomization; onChange: (c: SlotCustomization) => void;
+  label: string;
+}) {
+  const [tab, setTab] = useState<'wallpaper' | 'text'>('wallpaper');
+  const [editId, setEditId] = useState<string | null>(null);
+
+  const updateLayer = (id: string, patch: Partial<TextLayer>) =>
+    onChange({ ...custom, texts: custom.texts.map(t => t.id === id ? { ...t, ...patch } : t) });
+
+  const addLayer = () => {
+    const layer = makeTextLayer();
+    onChange({ ...custom, texts: [...custom.texts, layer] });
+    setEditId(layer.id);
+    setTab('text');
+  };
+
+  const removeLayer = (id: string) => {
+    onChange({ ...custom, texts: custom.texts.filter(t => t.id !== id) });
+    if (editId === id) setEditId(null);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Customise {label}</DialogTitle>
+        </DialogHeader>
+
+        <div className="flex border-b border-border -mt-1 mb-3">
+          {(['wallpaper', 'text'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                tab === t ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >{t === 'text' ? 'Text Layers' : 'Wallpaper'}</button>
+          ))}
+        </div>
+
+        {tab === 'wallpaper' && (
+          <div className="grid grid-cols-4 gap-2">
+            <button
+              onClick={() => onChange({ ...custom, wallpaper: null })}
+              className={`relative aspect-[9/16] rounded-lg border-2 flex items-center justify-center bg-zinc-900 transition-all ${
+                !custom.wallpaper ? 'border-primary ring-1 ring-primary/40' : 'border-border hover:border-muted-foreground'
+              }`}
+            >
+              <span className="text-[10px] text-muted-foreground font-medium">None</span>
+              {!custom.wallpaper && <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-primary" />}
+            </button>
+            {SLOT_WALLPAPERS.map(wp => (
+              <button key={wp.id} onClick={() => onChange({ ...custom, wallpaper: wp.id })}
+                className={`relative aspect-[9/16] rounded-lg border-2 overflow-hidden transition-all ${
+                  custom.wallpaper === wp.id ? 'border-primary ring-1 ring-primary/40' : 'border-border hover:border-muted-foreground'
+                }`}
+              >
+                <img src={`/wallpapers/${wp.id}`} className="w-full h-full object-cover" draggable={false} />
+                <div className="absolute bottom-0 inset-x-0 bg-black/60 py-0.5 px-1 text-left">
+                  <span className="text-[8px] text-white/80 leading-none">{wp.label}</span>
+                </div>
+                {custom.wallpaper === wp.id && <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-primary" />}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {tab === 'text' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">{custom.texts.length} layer{custom.texts.length !== 1 ? 's' : ''}</span>
+              <Button size="sm" variant="outline" onClick={addLayer} className="gap-1.5 h-7 text-xs">
+                <Plus className="w-3 h-3" />Add Text
+              </Button>
+            </div>
+            {custom.texts.length === 0 && (
+              <div className="text-center py-8 text-sm text-muted-foreground">
+                No text layers yet — click <strong>Add Text</strong> to get started.
+              </div>
+            )}
+            {custom.texts.map(layer => (
+              <div key={layer.id} className={`rounded-lg border transition-colors ${editId === layer.id ? 'border-primary/50 bg-muted/20' : 'border-border'}`}>
+                <div className="flex items-center gap-2 px-3 py-2">
+                  <span className="flex-1 text-sm truncate cursor-pointer select-none"
+                    style={{
+                      fontFamily: SLOT_FONTS.find(f => f.id === layer.font)?.family,
+                      color: layer.color,
+                      fontWeight: layer.bold ? 'bold' : 'normal',
+                      fontStyle: layer.italic ? 'italic' : 'normal',
+                      textShadow: layer.shadow ? '0 1px 3px rgba(0,0,0,0.6)' : 'none',
+                    }}
+                    onClick={() => setEditId(editId === layer.id ? null : layer.id)}
+                  >{layer.text || <span className="text-muted-foreground italic text-xs">empty</span>}</span>
+                  <button onClick={() => setEditId(editId === layer.id ? null : layer.id)}
+                    className="text-xs text-muted-foreground hover:text-foreground px-1 transition-colors"
+                  >{editId === layer.id ? 'Done' : 'Edit'}</button>
+                  <button onClick={() => removeLayer(layer.id)} className="text-muted-foreground hover:text-destructive transition-colors">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                {editId === layer.id && (
+                  <div className="px-3 pb-3 space-y-3 border-t border-border/50 pt-3">
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Text</label>
+                      <input className="w-full bg-background border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                        value={layer.text} onChange={e => updateLayer(layer.id, { text: e.target.value })}
+                        placeholder="Enter text…" autoFocus />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">Font</label>
+                        <select className="w-full bg-background border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                          value={layer.font} onChange={e => updateLayer(layer.id, { font: e.target.value })}>
+                          {SLOT_FONTS.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">Size — {layer.size}px</label>
+                        <input type="range" min={8} max={72} value={layer.size}
+                          onChange={e => updateLayer(layer.id, { size: Number(e.target.value) })}
+                          className="w-full mt-2 accent-primary" />
+                      </div>
+                    </div>
+                    <div className="flex items-end gap-5">
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">Colour</label>
+                        <input type="color" value={layer.color}
+                          onChange={e => updateLayer(layer.id, { color: e.target.value })}
+                          className="w-10 h-8 rounded border border-border cursor-pointer bg-background block" />
+                      </div>
+                      {(['bold', 'italic', 'shadow'] as const).map(key => (
+                        <label key={key} className="flex flex-col items-center gap-1 cursor-pointer">
+                          <span className="text-xs text-muted-foreground capitalize">{key}</span>
+                          <input type="checkbox" checked={layer[key]}
+                            onChange={e => updateLayer(layer.id, { [key]: e.target.checked })}
+                            className="accent-primary w-4 h-4" />
+                        </label>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">X — {layer.x}%</label>
+                        <input type="range" min={0} max={100} value={layer.x}
+                          onChange={e => updateLayer(layer.id, { x: Number(e.target.value) })}
+                          className="w-full accent-primary" />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">Y — {layer.y}%</label>
+                        <input type="range" min={0} max={100} value={layer.y}
+                          onChange={e => updateLayer(layer.id, { y: Number(e.target.value) })}
+                          className="w-full accent-primary" />
+                      </div>
+                    </div>
+                    <div className="rounded bg-zinc-950 h-20 relative overflow-hidden border border-border/30">
+                      <span className="absolute inset-0 flex items-center justify-center text-[9px] text-white/10 select-none">preview</span>
+                      <div className="absolute pointer-events-none"
+                        style={{
+                          left: `${layer.x}%`, top: `${layer.y}%`,
+                          transform: 'translate(-50%, -50%)',
+                          fontFamily: SLOT_FONTS.find(f => f.id === layer.font)?.family,
+                          fontSize: `${Math.min(layer.size, 28)}px`,
+                          color: layer.color,
+                          fontWeight: layer.bold ? 'bold' : 'normal',
+                          fontStyle: layer.italic ? 'italic' : 'normal',
+                          textShadow: layer.shadow ? '0 1px 6px rgba(0,0,0,0.9)' : 'none',
+                          whiteSpace: 'pre', lineHeight: 1.2,
+                        }}
+                      >{layer.text || 'preview'}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 // ─── SVG icons ───────────────────────────────────────────────────────────────
@@ -415,27 +645,85 @@ function DeviceCard({
   active,
   onClick,
   onRemove,
+  custom,
+  onCustomize,
 }: {
-  device:   FarmDevice;
-  phone?:   UsbPhone;
-  online:   boolean;
-  active:   boolean;
-  onClick:  () => void;
-  onRemove: () => void;
+  device:      FarmDevice;
+  phone?:      UsbPhone;
+  online:      boolean;
+  active:      boolean;
+  onClick:     () => void;
+  onRemove:    () => void;
+  custom:      SlotCustomization;
+  onCustomize: (c: SlotCustomization) => void;
 }) {
+  const [panelOpen, setPanelOpen] = useState(false);
+
   return (
     <div className="group h-full relative flex flex-col">
       <button
         onClick={onClick}
         className="flex-1 flex flex-col items-center gap-1.5 py-2 px-2 rounded-2xl border border-border bg-card hover:border-primary/50 hover:bg-card/80 transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40"
       >
-        <PhoneVisual
-          device={device}
-          phone={phone}
-          className="flex-1 min-h-0 w-auto max-w-[150px] group-hover:scale-[1.03] transition-transform duration-200"
-          online={online}
-          active={active}
-        />
+        {/* Phone visual + wallpaper/text overlay */}
+        <div className="relative flex-1 min-h-0 flex items-center justify-center w-full">
+          <PhoneVisual
+            device={device}
+            phone={phone}
+            className="h-full w-auto max-w-[150px] group-hover:scale-[1.03] transition-transform duration-200"
+            online={online}
+            active={active}
+          />
+          {/* Wallpaper — sits over the SVG screen area (approx 5.5% / 3.2% inset, 89% wide, 93.6% tall, r≈12%) */}
+          {custom.wallpaper && (
+            <div
+              className="absolute pointer-events-none overflow-hidden"
+              style={{
+                top: '3.2%', left: 'calc(50% - 44.5%)',
+                width: '89%', height: '93.6%',
+                borderRadius: '11%',
+              }}
+            >
+              <img
+                src={`/wallpapers/${custom.wallpaper}`}
+                className="w-full h-full object-cover"
+                draggable={false}
+              />
+            </div>
+          )}
+          {/* Text layers */}
+          {custom.texts.length > 0 && (
+            <div
+              className="absolute pointer-events-none overflow-hidden"
+              style={{
+                top: '3.2%', left: 'calc(50% - 44.5%)',
+                width: '89%', height: '93.6%',
+                borderRadius: '11%',
+              }}
+            >
+              {custom.texts.map(layer => (
+                <div
+                  key={layer.id}
+                  className="absolute"
+                  style={{
+                    left: `${layer.x}%`,
+                    top: `${layer.y}%`,
+                    transform: 'translate(-50%, -50%)',
+                    fontFamily: SLOT_FONTS.find(f => f.id === layer.font)?.family,
+                    fontSize: `${Math.min(layer.size, 18)}px`,
+                    color: layer.color,
+                    fontWeight: layer.bold ? 'bold' : 'normal',
+                    fontStyle: layer.italic ? 'italic' : 'normal',
+                    textShadow: layer.shadow ? '0 1px 4px rgba(0,0,0,0.9)' : 'none',
+                    whiteSpace: 'pre',
+                    lineHeight: 1.2,
+                  }}
+                >{layer.text}</div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="shrink-0 text-center space-y-0.5">
           <p className="text-base font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
             {resolveDisplayName(device, phone)}
@@ -462,6 +750,15 @@ function DeviceCard({
         </div>
       </button>
 
+      {/* Palette button — appears on hover */}
+      <button
+        onClick={e => { e.stopPropagation(); setPanelOpen(true); }}
+        title="Customise wallpaper & text"
+        className="absolute top-2 left-2 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary/10 hover:border-primary/40 hover:text-primary text-muted-foreground"
+      >
+        <Palette className="w-3 h-3" />
+      </button>
+
       {/* Remove button — appears on hover */}
       <button
         onClick={e => { e.stopPropagation(); onRemove(); }}
@@ -470,6 +767,14 @@ function DeviceCard({
       >
         <Trash2 className="w-3 h-3" />
       </button>
+
+      <CustomizePanel
+        open={panelOpen}
+        onOpenChange={setPanelOpen}
+        custom={custom}
+        onChange={onCustomize}
+        label={resolveDisplayName(device, phone)}
+      />
     </div>
   );
 }
@@ -503,6 +808,18 @@ export function MobileDevicesPage() {
   const [devices,    setDevices]    = useState<FarmDevice[]>([]);
   const [loadingDb,  setLoadingDb]  = useState(true);
   const [addingSlot, setAddingSlot] = useState<number | null>(null);
+
+  // ── Slot customizations — shared with MobilePage via same localStorage key
+  const [slotCustom, setSlotCustom] = useState<Record<number, SlotCustomization>>(() => {
+    try {
+      const stored = localStorage.getItem('slot-customizations');
+      return stored ? JSON.parse(stored) : {};
+    } catch { return {}; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('slot-customizations', JSON.stringify(slotCustom)); }
+    catch { /* quota exceeded */ }
+  }, [slotCustom]);
 
   // Live USB status — polled every 2 s for the Connected/Offline badge.
   const [usbPhones, setUsbPhones] = useState<UsbPhone[]>([]);
@@ -621,6 +938,8 @@ export function MobileDevicesPage() {
                       active={activeCycleSerials.has(device.serial)}
                       onClick={() => setLocation(`/mobile/farm/${encodeURIComponent(device.serial)}`)}
                       onRemove={() => handleRemove(device.slotIndex)}
+                      custom={slotCustom[device.slotIndex] ?? DEFAULT_SLOT_CUSTOM}
+                      onCustomize={c => setSlotCustom(prev => ({ ...prev, [device.slotIndex]: c }))}
                     />
                   );
                 }
