@@ -2503,17 +2503,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       storiesWatched++;
 
       // Advance to the next story by tapping the far-right edge (~92%) of the
-      // screen at ~25% height — but ONLY when there are more slides left to
+      // screen at ~15% height — but ONLY when there are more slides left to
       // watch.  Previously this used (w*0.75, h*0.50) which is dead centre
       // vertically — prime territory for collaboration stickers, hashtag
       // stickers, and mention stickers that story authors embed at mid-screen.
       // Tapping one of those navigates to the tagged profile, closing the
       // story viewer instantly and producing the "story viewer already closed"
-      // log.  The safe zone is the far right edge (92%) at upper-quarter
-      // height (25%): story creators never place stickers there because it's
-      // too close to the muted/close controls and gets cropped on many
-      // devices.  The tap is still well inside the "right half = advance"
-      // region that Instagram uses.
+      // log.  The safe zone is the far right edge (92%) at ~15% height:
+      // story creators virtually never place stickers in the very top strip
+      // (too close to the muted/close controls, gets cropped on most devices),
+      // and the tap still sits well within the "right half = advance" region
+      // that Instagram recognises.  Using 15% instead of the previous 25%
+      // adds extra clearance from the ~20-25% band where mention/hashtag
+      // stickers are most commonly placed.
       //
       // Previously this tap also fired unconditionally at the end of every
       // iteration, including the last one.  On 3-second stories that means:
@@ -2523,7 +2525,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // on the last iteration lets the loop finish on whatever slide the tray
       // is currently on, then exits cleanly via the swipe-down below.
       if (s < totalStories - 1) {
-        await android.tap(serial, Math.round(w * 0.92), Math.round(h * 0.25));
+        await android.tap(serial, Math.round(w * 0.92), Math.round(h * 0.15));
         await sleepOrAbort(serial, 500 + Math.round(Math.random() * 400));
       }
     }

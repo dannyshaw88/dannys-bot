@@ -1148,7 +1148,7 @@ export async function closeInstagramViaRecents(serial: string, dismissDirection:
         // at least 78% of the screen even when the card is detected in the
         // upper half. End point is always the very top of the visible area.
         const startY  = Math.min(Math.round(card.y + h * 0.15), Math.round(h * 0.80));
-        const dragToY = Math.round(h * 0.02);
+        const dragToY = 0;
         await swipe(serial, card.x, startY, card.x, dragToY, 400);
         method = `attempt ${attempt}: swiped card at (${card.x},${card.y}) from start (${card.x},${startY}) up to (${card.x},${dragToY})`;
       } else {
@@ -1168,7 +1168,7 @@ export async function closeInstagramViaRecents(serial: string, dismissDirection:
         // Start at 65% screen height (not the mid-point 45%) so the drag
         // always travels ~63% of the screen regardless of screen size.
         const noLabelStartY = Math.round(h * 0.65);
-        await swipe(serial, cardX, noLabelStartY, cardX, Math.round(h * 0.02), 400);
+        await swipe(serial, cardX, noLabelStartY, cardX, 0, 400);
         method = `attempt ${attempt}: no label found — fell back to swipe-up from (${cardX},${noLabelStartY})`;
       } else {
         await swipe(serial, cardX, cardY, Math.round(w * 0.05), cardY, 400);

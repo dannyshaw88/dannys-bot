@@ -883,7 +883,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       const tapX = drag.startX, tapY = drag.startY;
       const timer = setTimeout(async () => {
         pendingSingleTapRef.current = null;
-        addLog(`Tap → (${tapX}, ${tapY})`);
+        addLog(`[manual] Tap → (${tapX}, ${tapY})`);
         try {
           const phoneSize = phoneSizeRef.current;
           const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/tap`, {
