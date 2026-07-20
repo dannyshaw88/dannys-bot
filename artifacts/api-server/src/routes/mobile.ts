@@ -6430,18 +6430,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     res.json({ serials, slots });
   });
 
-  // ── DEBUG: temporarily mark a serial as active (preview only) ────────────
-  app.post("/api/mobile/debug-activate/:serial", (req: Request, res: Response) => {
-    const serial = p(req, "serial");
-    automationCycleInProgress.add(serial);
-    automationCycleActiveSlot.set(serial, 0);
-    setTimeout(() => {
-      automationCycleInProgress.delete(serial);
-      automationCycleActiveSlot.delete(serial);
-    }, 60_000);
-    res.json({ ok: true, serial, durationMs: 60_000 });
-  });
-
   // ── Element Inspector ─────────────────────────────────────────────────────
   // Like Chrome DevTools F12 — click a point on the phone mirror and get back
   // every accessibility node whose bounds contain that point, sorted from most
