@@ -187,6 +187,25 @@ type AutomationSettings = {
   viewReelsActivatePctMax?: number;
   viewReelsWatchPctMin?: number;
   viewReelsWatchPctMax?: number;
+  // View Explore Page — taps the Search/Explore tab, scrolls the grid N times,
+  // and optionally clicks individual posts to like / share / save them.
+  viewExploreEnabled?: boolean;
+  viewExploreActivatePctMin?: number;
+  viewExploreActivatePctMax?: number;
+  viewExploreScrollMin?: number;
+  viewExploreScrollMax?: number;
+  viewExploreActionDelayMin?: number;
+  viewExploreActionDelayMax?: number;
+  viewExploreClickPostPctMin?: number;
+  viewExploreClickPostPctMax?: number;
+  viewExploreLikePercentMin?: number;
+  viewExploreLikePercentMax?: number;
+  viewExploreShareFeedPercentMin?: number;
+  viewExploreShareFeedPercentMax?: number;
+  viewExploreShareDmPercentMin?: number;
+  viewExploreShareDmPercentMax?: number;
+  viewExploreSavePercentMin?: number;
+  viewExploreSavePercentMax?: number;
   // Follow Filters — profile-quality gates. Persisted so Copy Settings
   // can apply them to other slots without the fields being stripped.
   followFiltersEnabled?: boolean;
@@ -1090,6 +1109,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     viewReelsShareDmPercentMax: z.number().min(0).max(100).default(0),
     viewReelsActivatePctMin: z.number().min(0).max(100).default(100),
     viewReelsActivatePctMax: z.number().min(0).max(100).default(100),
+    // View Explore Page — see AutomationSettings type above for full comment.
+    viewExploreEnabled: z.boolean().default(false),
+    viewExploreActivatePctMin: z.number().min(0).max(100).default(100),
+    viewExploreActivatePctMax: z.number().min(0).max(100).default(100),
+    viewExploreScrollMin: z.number().min(0).max(100).default(0),
+    viewExploreScrollMax: z.number().min(0).max(100).default(0),
+    viewExploreActionDelayMin: z.number().min(0).max(9999).default(3),
+    viewExploreActionDelayMax: z.number().min(0).max(9999).default(6),
+    viewExploreClickPostPctMin: z.number().min(0).max(100).default(0),
+    viewExploreClickPostPctMax: z.number().min(0).max(100).default(0),
+    viewExploreLikePercentMin: z.number().min(0).max(100).default(0),
+    viewExploreLikePercentMax: z.number().min(0).max(100).default(0),
+    viewExploreShareFeedPercentMin: z.number().min(0).max(100).default(0),
+    viewExploreShareFeedPercentMax: z.number().min(0).max(100).default(0),
+    viewExploreShareDmPercentMin: z.number().min(0).max(100).default(0),
+    viewExploreShareDmPercentMax: z.number().min(0).max(100).default(0),
+    viewExploreSavePercentMin: z.number().min(0).max(100).default(0),
+    viewExploreSavePercentMax: z.number().min(0).max(100).default(0),
     followEnabled: z.boolean().default(false),
     followUsersMin: z.number().min(0).max(9999).default(1),
     followUsersMax: z.number().min(0).max(9999).default(3),
@@ -1214,6 +1251,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       viewReelsShareDmPercentMin: 0, viewReelsShareDmPercentMax: 0,
       viewReelsActivatePctMin: 100, viewReelsActivatePctMax: 100,
       viewReelsWatchPctMin: 30, viewReelsWatchPctMax: 70,
+      viewExploreEnabled: false, viewExploreActivatePctMin: 100, viewExploreActivatePctMax: 100,
+      viewExploreScrollMin: 0, viewExploreScrollMax: 0,
+      viewExploreActionDelayMin: 3, viewExploreActionDelayMax: 6,
+      viewExploreClickPostPctMin: 0, viewExploreClickPostPctMax: 0,
+      viewExploreLikePercentMin: 0, viewExploreLikePercentMax: 0,
+      viewExploreShareFeedPercentMin: 0, viewExploreShareFeedPercentMax: 0,
+      viewExploreShareDmPercentMin: 0, viewExploreShareDmPercentMax: 0,
+      viewExploreSavePercentMin: 0, viewExploreSavePercentMax: 0,
       followEnabled: false, followUsersMin: 1, followUsersMax: 3, followSources: [],
       injectBrowsingEnabled: false,
       injectBrowsingActivatePctMin: 0, injectBrowsingActivatePctMax: 0,
@@ -1295,6 +1340,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewReelsShareDmPercentMin: 0, viewReelsShareDmPercentMax: 0,
         viewReelsActivatePctMin: 100, viewReelsActivatePctMax: 100,
         viewReelsWatchPctMin: 30, viewReelsWatchPctMax: 70,
+        viewExploreEnabled: false, viewExploreActivatePctMin: 100, viewExploreActivatePctMax: 100,
+        viewExploreScrollMin: 0, viewExploreScrollMax: 0,
+        viewExploreActionDelayMin: 3, viewExploreActionDelayMax: 6,
+        viewExploreClickPostPctMin: 0, viewExploreClickPostPctMax: 0,
+        viewExploreLikePercentMin: 0, viewExploreLikePercentMax: 0,
+        viewExploreShareFeedPercentMin: 0, viewExploreShareFeedPercentMax: 0,
+        viewExploreShareDmPercentMin: 0, viewExploreShareDmPercentMax: 0,
+        viewExploreSavePercentMin: 0, viewExploreSavePercentMax: 0,
         followEnabled: false, followUsersMin: 1, followUsersMax: 3, followSources: [],
         injectBrowsingEnabled: false,
         injectBrowsingActivatePctMin: 0, injectBrowsingActivatePctMax: 0,
@@ -1620,6 +1673,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   const _viewFeedLastDmRecipient        = new Map<string, { x: number; y: number }>();
   const _viewStoriesLastDmRecipient     = new Map<string, { x: number; y: number }>();
   const _viewReelsLastDmRecipient       = new Map<string, { x: number; y: number }>();
+  const _viewExploreLastDmRecipient     = new Map<string, { x: number; y: number }>();
   const _injectBrowsingLastDmRecipient  = new Map<string, { x: number; y: number }>();
 
   // Shared by the standalone `/check-feed` route and the full
@@ -2716,6 +2770,316 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // Repost/Send) instead of the feed's horizontal bottom action bar. See
   // findReelActionIcons in androidManager.ts for the detection approach and
   // its "not yet validated on a real device" caveat.
+  // ── View Explore Page ─────────────────────────────────────────────────────
+  // Taps the Search/Explore tab, scrolls the grid N times, and optionally
+  // clicks individual posts to like / share-to-feed / share-via-DM / save them.
+  // Navigation: identical to the Follow tool's approach (findInstagramSearchTab).
+  // Post actions: uses findFeedActionIcons — an opened Explore post looks and
+  // behaves exactly like a regular feed post once tapped.
+  // Exit: taps the Home tab at the end to return to the home feed.
+  // This function is fully isolated — no code is shared with any other tool.
+  async function runViewExplorePage(serial: string, params: {
+    scrollCount: number;
+    delayMinSec: number; delayMaxSec: number;
+    clickPostPctMin: number; clickPostPctMax: number;
+    likePercentMin: number; likePercentMax: number;
+    shareFeedPercentMin: number; shareFeedPercentMax: number;
+    shareDmPercentMin: number; shareDmPercentMax: number;
+    savePercentMin: number; savePercentMax: number;
+    onLog?: (msg: string) => void;
+  }): Promise<{ postsScrolled: number; postsClicked: number; likes: number; sharesFeed: number; sharesDm: number; saves: number }> {
+    const {
+      scrollCount, delayMinSec, delayMaxSec,
+      clickPostPctMin, clickPostPctMax,
+      likePercentMin, likePercentMax,
+      shareFeedPercentMin, shareFeedPercentMax,
+      shareDmPercentMin, shareDmPercentMax,
+      savePercentMin, savePercentMax,
+      onLog,
+    } = params;
+
+    const { w, h } = getScreenSize(serial);
+    onLog?.(`Explore loop: device resolution ${w}×${h}`);
+
+    // Navigate to the Search/Explore tab — identical to the Follow tool.
+    const searchTab = await android.findInstagramSearchTab(serial, onLog).catch(() => null);
+    if (!searchTab) {
+      onLog?.("View Explore Page: Search tab not found — skipping");
+      logger.warn({ serial }, "[view-explore] Search tab not found");
+      return { postsScrolled: 0, postsClicked: 0, likes: 0, sharesFeed: 0, sharesDm: 0, saves: 0 };
+    }
+    await android.tap(serial, searchTab.x, searchTab.y);
+    // Same 2500ms settle used by Follow — enough for the Explore grid to render.
+    await sleepOrAbort(serial, 2500);
+
+    // Pre-roll session-level chance values once so every scroll sees consistent rates.
+    const clickChance     = (Math.min(clickPostPctMin, clickPostPctMax) + Math.random() * Math.abs(clickPostPctMax - clickPostPctMin)) / 100;
+    const likeChance      = (Math.min(likePercentMin, likePercentMax) + Math.random() * Math.abs(likePercentMax - likePercentMin)) / 100;
+    const shareFeedChance = (Math.min(shareFeedPercentMin, shareFeedPercentMax) + Math.random() * Math.abs(shareFeedPercentMax - shareFeedPercentMin)) / 100;
+    const shareDmChance   = (Math.min(shareDmPercentMin, shareDmPercentMax) + Math.random() * Math.abs(shareDmPercentMax - shareDmPercentMin)) / 100;
+    const saveChance      = (Math.min(savePercentMin, savePercentMax) + Math.random() * Math.abs(savePercentMax - savePercentMin)) / 100;
+
+    const delayLoSec = Math.min(delayMinSec, delayMaxSec);
+    const delayHiSec = Math.max(delayMinSec, delayMaxSec);
+
+    let postsScrolled = 0, postsClicked = 0, likes = 0, sharesFeed = 0, sharesDm = 0, saves = 0;
+
+    // Scroll geometry: same safe band as runCheckFeedLoop.
+    const x  = Math.round(w / 2);
+    const y1 = Math.round(h * 0.80);
+    const y2 = Math.round(h * 0.22);
+
+    for (let i = 0; i < scrollCount; i++) {
+      if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+      onLog?.(`Explore scroll ${i + 1}/${scrollCount}`);
+
+      // Optionally click a post from the currently visible grid.
+      if (clickChance > 0 && Math.random() < clickChance) {
+        // Parse grid_card_layout_container bounds from the accessibility tree.
+        const xml = await android.dumpUi(serial).catch(() => "");
+        const gridCells: Array<{ x: number; y: number }> = [];
+        const cellRe = /id="grid_card_layout_container"[^/]*?bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/g;
+        let cm: RegExpExecArray | null;
+        while ((cm = cellRe.exec(xml)) !== null) {
+          const cx = Math.round((parseInt(cm[1]) + parseInt(cm[3])) / 2);
+          const cy = Math.round((parseInt(cm[2]) + parseInt(cm[4])) / 2);
+          // Exclude cells that clip into the search/action bar (top ~155px)
+          // or the bottom nav (bottom ~30px from screen edge).
+          if (cy > 155 && cy < h - 30) gridCells.push({ x: cx, y: cy });
+        }
+
+        if (gridCells.length > 0) {
+          const cell = gridCells[Math.floor(Math.random() * gridCells.length)];
+          onLog?.(`Explore scroll ${i + 1}/${scrollCount}: clicking grid post at (${cell.x},${cell.y})`);
+          await android.tap(serial, cell.x, cell.y);
+          await sleepOrAbort(serial, 1800); // let post detail view animate open
+          postsClicked++;
+
+          const wantLike      = likeChance     > 0 && Math.random() < likeChance;
+          const wantShareFeed = shareFeedChance > 0 && Math.random() < shareFeedChance;
+          const wantShareDm   = shareDmChance  > 0 && Math.random() < shareDmChance;
+          const wantSave      = saveChance     > 0 && Math.random() < saveChance;
+
+          if (wantLike || wantShareFeed || wantShareDm || wantSave) {
+            await sleepOrAbort(serial, 600); // settle before scanning action bar
+            onLog?.(`Explore scroll ${i + 1}/${scrollCount}: scanning action bar…`);
+            const icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
+            if (!icons) {
+              onLog?.(`Explore scroll ${i + 1}/${scrollCount}: no action bar found — skipping actions`);
+              logger.info({ serial }, "[view-explore] opened post has no action bar");
+            } else {
+              // ── Like ──────────────────────────────────────────────────────
+              if (wantLike) {
+                const jx = icons.like.x + Math.round((Math.random() - 0.5) * 6);
+                const jy = icons.like.y + Math.round((Math.random() - 0.5) * 6);
+                await android.tap(serial, jx, jy);
+                likes++;
+                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: ✓ liked at (${jx},${jy})`);
+                await sleepOrAbort(serial, 300);
+              }
+
+              // ── Share to Feed (repost) ─────────────────────────────────────
+              if (wantShareFeed && !icons.shareFeed) {
+                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: skipped repost — share-to-feed icon not found`);
+              }
+              if (wantShareFeed && icons.shareFeed) {
+                try {
+                  if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+                  await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
+                  const _eSfX = icons.shareFeed.x, _eSfY = icons.shareFeed.y;
+                  onLog?.(`Explore scroll ${i + 1}/${scrollCount}: tapping share-to-feed at (${_eSfX},${_eSfY})…`);
+                  await android.tap(serial, _eSfX, _eSfY);
+                  await sleepOrAbort(serial, 400);
+                  const _eRpBtn = await android.findButtonByLabel(serial, "Repost").catch(() => null);
+                  const _eRpDx = _eRpBtn ? Math.abs(_eRpBtn.x - _eSfX) : 0;
+                  const _eRpDy = _eRpBtn ? Math.abs(_eRpBtn.y - _eSfY) : 0;
+                  const _eRpSame = !!_eRpBtn && _eRpDx < 60 && _eRpDy < 60;
+                  if (_eRpBtn && !_eRpSame) {
+                    await android.tap(serial, _eRpBtn.x, _eRpBtn.y);
+                    await sleepOrAbort(serial, 300);
+                    const _eClose = await android.findButtonByLabel(serial, "Close").catch(() => null);
+                    if (_eClose) { await android.tap(serial, _eClose.x, _eClose.y); await sleepOrAbort(serial, 150); }
+                    sharesFeed++;
+                    onLog?.(`Explore scroll ${i + 1}/${scrollCount}: ✓ reposted to feed`);
+                  } else if (_eRpSame) {
+                    sharesFeed++;
+                    onLog?.(`Explore scroll ${i + 1}/${scrollCount}: ✓ reposted to feed (single-tap)`);
+                  } else {
+                    await android.pressBack(serial).catch(() => {});
+                    onLog?.(`Explore scroll ${i + 1}/${scrollCount}: repost — Repost button not found after tap`);
+                  }
+                } catch (e: any) {
+                  if (e?.message === "cycle-aborted") throw e;
+                  onLog?.(`Explore scroll ${i + 1}/${scrollCount}: share-to-feed error — ${e?.message}`);
+                }
+              }
+
+              // ── Share via DM (isolated; not shared with any other tool) ───
+              const _veOverlap = !!icons.shareDm && !!icons.shareFeed &&
+                Math.abs(icons.shareDm.x - icons.shareFeed.x) < 15 &&
+                Math.abs(icons.shareDm.y - icons.shareFeed.y) < 15;
+              if (wantShareDm && !icons.shareDm) {
+                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: skipped share-via-DM — paper-plane icon not found`);
+              }
+              if (wantShareDm && icons.shareDm && _veOverlap) {
+                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: share-via-DM skipped — icon overlaps share-to-feed (ambiguous layout)`);
+              }
+              if (wantShareDm && icons.shareDm && !_veOverlap) {
+                const _vePfx = `Explore scroll ${i + 1}/${scrollCount}`;
+                let _veDmSent = false;
+                try {
+                  if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+                  await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
+                  onLog?.(`${_vePfx}: tapping share-via-DM icon at (${icons.shareDm.x},${icons.shareDm.y})…`);
+                  await android.tap(serial, icons.shareDm.x, icons.shareDm.y);
+                  await sleepOrAbort(serial, 1500);
+                  onLog?.(`${_vePfx}: confirming share sheet opened and picking DM recipient…`);
+                  let _veScan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
+                  if (!_veScan?.sheetOpen) {
+                    onLog?.(`${_vePfx}: share sheet not yet visible — waiting 1500ms and retrying…`);
+                    await sleepOrAbort(serial, 1500);
+                    _veScan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
+                  }
+                  if (!_veScan?.sheetOpen) {
+                    logger.warn({ serial }, "[view-explore] share sheet not confirmed open after retry — skipping DM");
+                    onLog?.(`${_vePfx}: share aborted — share sheet did not open`);
+                    await android.pressBack(serial);
+                    await sleepOrAbort(serial, 200);
+                  } else {
+                    if (_veScan.preSelectedRecipients && _veScan.preSelectedRecipients.length > 0) {
+                      onLog?.(`${_vePfx}: deselecting ${_veScan.preSelectedRecipients.length} pre-selected recipient(s)…`);
+                      for (const _r of _veScan.preSelectedRecipients) {
+                        onLog?.(`${_vePfx}: deselecting${(_r as any).name ? ` (${(_r as any).name})` : ""} at (${_r.x},${_r.y})`);
+                        await android.tap(serial, _r.x, _r.y);
+                        await sleepOrAbort(serial, 400);
+                      }
+                    }
+                    const _veRecipients = _veScan.recipients ?? [];
+                    if (_veRecipients.length === 0) {
+                      await android.pressBack(serial);
+                      logger.warn({ serial }, "[view-explore] no recipient found — closed without sending");
+                      onLog?.(`${_vePfx}: share skipped — no recipient avatars found`);
+                    } else {
+                      const _veLast = _viewExploreLastDmRecipient.get(serial);
+                      const _vePool = _veLast ? _veRecipients.filter(r => !(r.x === _veLast.x && r.y === _veLast.y)) : _veRecipients;
+                      const _veCands = _vePool.length > 0 ? _vePool : _veRecipients;
+                      const _vePick = _veCands[Math.floor(Math.random() * _veCands.length)];
+                      _viewExploreLastDmRecipient.set(serial, { x: _vePick.x, y: _vePick.y });
+                      onLog?.(`${_vePfx}: tapping recipient at (${_vePick.x},${_vePick.y})${(_vePick as any).name ? ` (${(_vePick as any).name})` : ""}`);
+                      await android.tap(serial, _vePick.x, _vePick.y);
+                      await sleepOrAbort(serial, 800);
+                      const _veIsOpen = async () => {
+                        const _x = await android.dumpUi(serial).catch(() => "");
+                        return _x.includes("direct_private_share") || _x.includes("grid_view_pog_avatar_view") ||
+                               _x.includes("android.widget.EditText") || _x.includes("Copy link");
+                      };
+                      const _veSb = await android.findButtonByLabel(serial, "Send").catch(() => null);
+                      if (_veSb) {
+                        await android.tap(serial, _veSb.x, _veSb.y);
+                        await sleepOrAbort(serial, 1500);
+                        if (!(await _veIsOpen())) {
+                          _veDmSent = true;
+                          logger.info({ serial }, "[view-explore] shared post via DM — Send tapped");
+                          onLog?.(`${_vePfx}: ✓ shared via DM — Send tapped`);
+                          await sleepOrAbort(serial, 300);
+                        } else {
+                          onLog?.(`${_vePfx}: Send tapped but sheet still open — pressing Back`);
+                          await android.pressBack(serial);
+                          await sleepOrAbort(serial, 200);
+                        }
+                      } else if (!(await _veIsOpen())) {
+                        _veDmSent = true;
+                        logger.info({ serial }, "[view-explore] share sheet auto-dismissed — DM likely sent");
+                        onLog?.(`${_vePfx}: ✓ shared via DM — sheet auto-dismissed`);
+                        await sleepOrAbort(serial, 200);
+                      } else {
+                        const _veFbX = Math.round(w * 0.50), _veFbY = Math.round(h * 0.982);
+                        onLog?.(`${_vePfx}: Send not found via a11y — tapping coordinate fallback (${_veFbX},${_veFbY})`);
+                        await android.tap(serial, _veFbX, _veFbY);
+                        await sleepOrAbort(serial, 1500);
+                        if (!(await _veIsOpen())) {
+                          _veDmSent = true;
+                          onLog?.(`${_vePfx}: ✓ shared via DM — sent via coordinate fallback`);
+                          await sleepOrAbort(serial, 300);
+                        } else {
+                          await android.pressBack(serial);
+                          await sleepOrAbort(serial, 200);
+                        }
+                      }
+                    }
+                  }
+                } catch (e: any) {
+                  if (e?.message === "cycle-aborted") throw e;
+                  onLog?.(`${_vePfx}: share-via-DM error — ${e?.message}`);
+                }
+                if (_veDmSent) sharesDm++;
+              }
+
+              // ── Save Post ──────────────────────────────────────────────────
+              if (wantSave) {
+                const _eSaveBtn = icons.save;
+                if (!_eSaveBtn) {
+                  onLog?.(`Explore scroll ${i + 1}/${scrollCount}: save skipped — ribbon icon not found`);
+                } else {
+                  try {
+                    if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+                    await sleepOrAbort(serial, 200 + Math.round(Math.random() * 200));
+                    onLog?.(`Explore scroll ${i + 1}/${scrollCount}: tapping save (ribbon) at (${_eSaveBtn.x},${_eSaveBtn.y})…`);
+                    await android.tap(serial, _eSaveBtn.x, _eSaveBtn.y);
+                    await sleepOrAbort(serial, 600);
+                    // Dismiss "Save to collection?" bottom sheet by tapping the
+                    // top-25% of the screen — always safe, no interactive controls
+                    // in that zone while the collection sheet is visible.
+                    const _eDismissX = Math.round(w * 0.50);
+                    const _eDismissY = Math.round(h * 0.12);
+                    await android.tap(serial, _eDismissX, _eDismissY);
+                    await sleepOrAbort(serial, 400);
+                    saves++;
+                    logger.info({ serial }, "[view-explore] saved post via ribbon icon");
+                    onLog?.(`Explore scroll ${i + 1}/${scrollCount}: ✓ saved`);
+                  } catch (e: any) {
+                    if (e?.message === "cycle-aborted") throw e;
+                    onLog?.(`Explore scroll ${i + 1}/${scrollCount}: save error — ${e?.message}`);
+                  }
+                }
+              }
+            }
+          }
+
+          // Press Back to return to the Explore grid after viewing the post.
+          await android.pressBack(serial);
+          await sleepOrAbort(serial, 800);
+        } else {
+          onLog?.(`Explore scroll ${i + 1}/${scrollCount}: no grid posts visible — skipping click`);
+        }
+      }
+
+      postsScrolled++;
+
+      if (i < scrollCount - 1) {
+        // Delay between scrolls.
+        const delaySec = delayLoSec + Math.random() * (delayHiSec - delayLoSec);
+        if (delaySec > 0) await sleepOrAbort(serial, Math.round(delaySec * 1000));
+        // Swipe up to reveal more Explore posts.
+        await android.swipe(serial, x, y1, x, y2, 400 + Math.round(Math.random() * 200));
+        await sleepOrAbort(serial, 800);
+      }
+    }
+
+    // Navigate back to the home feed — Explore has its own distinct UI so
+    // tapping Home is the cleanest exit (same pattern as after View Reels).
+    onLog?.("View Explore Page: navigating back to home feed…");
+    const homeTab = await android.findHomeTab(serial).catch(() => null);
+    if (homeTab) {
+      await android.tap(serial, homeTab.x, homeTab.y);
+    } else {
+      await android.tap(serial, Math.round(w * 0.10), Math.round(h * 0.975));
+    }
+    await sleepOrAbort(serial, 1000);
+
+    return { postsScrolled, postsClicked, likes, sharesFeed, sharesDm, saves };
+  }
+
   async function runViewReelsLoop(serial: string, params: {
     scrollMin: number; scrollMax: number;
     watchPctMin: number; watchPctMax: number;
@@ -2980,6 +3344,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     viewReelsActivatePctMax: z.number().min(0).max(100).default(100),
     viewReelsWatchPctMin: z.number().min(1).max(100).default(30),
     viewReelsWatchPctMax: z.number().min(1).max(100).default(70),
+    // View Explore Page — see AutomationSettings type for full comment.
+    viewExploreEnabled: z.boolean().default(false),
+    viewExploreActivatePctMin: z.number().min(0).max(100).default(100),
+    viewExploreActivatePctMax: z.number().min(0).max(100).default(100),
+    viewExploreScrollMin: z.number().min(0).max(100).default(0),
+    viewExploreScrollMax: z.number().min(0).max(100).default(0),
+    viewExploreActionDelayMin: z.number().min(0).max(9999).default(3),
+    viewExploreActionDelayMax: z.number().min(0).max(9999).default(6),
+    viewExploreClickPostPctMin: z.number().min(0).max(100).default(0),
+    viewExploreClickPostPctMax: z.number().min(0).max(100).default(0),
+    viewExploreLikePercentMin: z.number().min(0).max(100).default(0),
+    viewExploreLikePercentMax: z.number().min(0).max(100).default(0),
+    viewExploreShareFeedPercentMin: z.number().min(0).max(100).default(0),
+    viewExploreShareFeedPercentMax: z.number().min(0).max(100).default(0),
+    viewExploreShareDmPercentMin: z.number().min(0).max(100).default(0),
+    viewExploreShareDmPercentMax: z.number().min(0).max(100).default(0),
+    viewExploreSavePercentMin: z.number().min(0).max(100).default(0),
+    viewExploreSavePercentMax: z.number().min(0).max(100).default(0),
     // Follow Users — HikerAPI-driven follow flow. HikerAPI fetches candidates
     // from the configured target sources (hashtags / followers-of-account);
     // the software then navigates to Instagram Search and follows each user by
@@ -4668,6 +5050,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewReelsShareFeedPercentMin, viewReelsShareFeedPercentMax,
         viewReelsShareDmPercentMin, viewReelsShareDmPercentMax,
         viewReelsActivatePctMin, viewReelsActivatePctMax,
+        viewExploreEnabled, viewExploreActivatePctMin, viewExploreActivatePctMax,
+        viewExploreScrollMin, viewExploreScrollMax,
+        viewExploreActionDelayMin, viewExploreActionDelayMax,
+        viewExploreClickPostPctMin, viewExploreClickPostPctMax,
+        viewExploreLikePercentMin, viewExploreLikePercentMax,
+        viewExploreShareFeedPercentMin, viewExploreShareFeedPercentMax,
+        viewExploreShareDmPercentMin, viewExploreShareDmPercentMax,
+        viewExploreSavePercentMin, viewExploreSavePercentMax,
         followEnabled, followUsersMin, followUsersMax, followSources, followMaxScrapeSessions,
         followFiltersEnabled, followFilterVerifiedUsers, followFilterMaxFollowers25k,
         followFilterPrivateUsers, followFilterEnglishSpeaking, followFilterMinFollowers250,
@@ -4869,6 +5259,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const _toolActivated: Record<string, boolean> = {
         feed:    feedEnabled && rollActivate(feedActivatePctMin, feedActivatePctMax),
         stories: storiesEnabled && viewStoriesSlidesMax > 0 && rollActivate(viewStoriesActivatePctMin ?? 100, viewStoriesActivatePctMax ?? 100),
+        explore: (viewExploreEnabled ?? false) && (viewExploreScrollMax ?? 0) > 0 && rollActivate(viewExploreActivatePctMin ?? 100, viewExploreActivatePctMax ?? 100),
         reels:   (viewReelsEnabled ?? false) && (viewReelsScrollMax ?? 0) > 0 && rollActivate(viewReelsActivatePctMin ?? 100, viewReelsActivatePctMax ?? 100),
         follow:  followEnabled && rollActivate(followActivatePctMin, followActivatePctMax),
         post:    makePostEnabled && rollActivate(makePostActivatePctMin, makePostActivatePctMax),
@@ -4876,7 +5267,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       };
 
       // Build the sequence from only the tools that passed their activate gate.
-      const _toolSeq = ['feed', 'stories', 'reels', 'follow', 'post', 'jitter']
+      const _toolSeq = ['feed', 'stories', 'explore', 'reels', 'follow', 'post', 'jitter']
         .filter(t => _toolActivated[t]);
       if (shuffleToolOrder) {
         for (let _si = _toolSeq.length - 1; _si > 0; _si--) {
@@ -4982,6 +5373,40 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             steps.push("stories(skipped — Activate Percentage roll missed this execution)");
             tLog("▶ View Stories from Feed Activate Percentage roll missed — skipping stories this execution");
           }
+
+        // ── Explore ─────────────────────────────────────────────────────
+        } else if (_tool === 'explore') {
+          if (_toolActivated[_tool]) {
+            // Navigate to the Search/Explore tab, scroll the grid, and
+            // optionally click posts to like/share/save.  The function
+            // handles its own Home-tab exit at the end, so no nav needed here.
+            tLog(`▶ Starting View Explore Page (${viewExploreScrollMax} scrolls max)`);
+            const exploreResult = await runViewExplorePage(serial, {
+              scrollCount: Math.floor(rollRange(viewExploreScrollMin ?? 0, viewExploreScrollMax ?? 0)),
+              delayMinSec: viewExploreActionDelayMin ?? 3,
+              delayMaxSec: viewExploreActionDelayMax ?? 6,
+              clickPostPctMin: viewExploreClickPostPctMin ?? 0,
+              clickPostPctMax: viewExploreClickPostPctMax ?? 0,
+              likePercentMin: viewExploreLikePercentMin ?? 0,
+              likePercentMax: viewExploreLikePercentMax ?? 0,
+              shareFeedPercentMin: viewExploreShareFeedPercentMin ?? 0,
+              shareFeedPercentMax: viewExploreShareFeedPercentMax ?? 0,
+              shareDmPercentMin: viewExploreShareDmPercentMin ?? 0,
+              shareDmPercentMax: viewExploreShareDmPercentMax ?? 0,
+              savePercentMin: viewExploreSavePercentMin ?? 0,
+              savePercentMax: viewExploreSavePercentMax ?? 0,
+              onLog: (msg) => tLog(`  ${msg}`),
+            });
+            steps.push(`explore(${exploreResult.postsScrolled} scrolls, ${exploreResult.postsClicked} clicked, ${exploreResult.likes} likes, ${exploreResult.sharesFeed} feed-shares, ${exploreResult.sharesDm} dm-shares, ${exploreResult.saves} saves)`);
+            tLog(`▶ View Explore Page done — ${exploreResult.postsScrolled} scrolls, ${exploreResult.postsClicked} clicked, ${exploreResult.likes} likes`);
+          } else if (!viewExploreEnabled) {
+            steps.push("explore(skipped — View Explore Page disabled)");
+            tLog("▶ View Explore Page disabled — skipping");
+          } else if (viewExploreEnabled && (viewExploreScrollMax ?? 0) > 0) {
+            steps.push("explore(skipped — Activate Percentage roll missed this execution)");
+            tLog("▶ View Explore Page Activate Percentage roll missed — skipping this execution");
+          }
+          _toolsRan++;
 
         // ── Reels ───────────────────────────────────────────────────────
         } else if (_tool === 'reels') {

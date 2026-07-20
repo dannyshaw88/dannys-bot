@@ -2332,6 +2332,25 @@ interface AutomationSettingsData {
   viewStoriesLikePercentMax: number;
   viewStoriesShareDmPercentMin: number;
   viewStoriesShareDmPercentMax: number;
+  // View Explore Page — taps the Search/Explore tab, scrolls the grid N times,
+  // and optionally clicks individual posts to like / share / save them.
+  viewExploreEnabled: boolean;
+  viewExploreActivatePctMin: number;
+  viewExploreActivatePctMax: number;
+  viewExploreScrollMin: number;
+  viewExploreScrollMax: number;
+  viewExploreActionDelayMin: number;
+  viewExploreActionDelayMax: number;
+  viewExploreClickPostPctMin: number;
+  viewExploreClickPostPctMax: number;
+  viewExploreLikePercentMin: number;
+  viewExploreLikePercentMax: number;
+  viewExploreShareFeedPercentMin: number;
+  viewExploreShareFeedPercentMax: number;
+  viewExploreShareDmPercentMin: number;
+  viewExploreShareDmPercentMax: number;
+  viewExploreSavePercentMin: number;
+  viewExploreSavePercentMax: number;
   // View Reels — taps the Reels tab, then snap-swipes through N reels,
   // acting on each via the right-side vertical icon column instead of the
   // feed's horizontal bottom action bar.
@@ -2441,6 +2460,15 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
   viewStoriesLikePercentMin: 0, viewStoriesLikePercentMax: 0,
   viewStoriesShareDmPercentMin: 0, viewStoriesShareDmPercentMax: 0,
+  viewExploreEnabled: false,
+  viewExploreActivatePctMin: 100, viewExploreActivatePctMax: 100,
+  viewExploreScrollMin: 0, viewExploreScrollMax: 0,
+  viewExploreActionDelayMin: 3, viewExploreActionDelayMax: 6,
+  viewExploreClickPostPctMin: 0, viewExploreClickPostPctMax: 0,
+  viewExploreLikePercentMin: 0, viewExploreLikePercentMax: 0,
+  viewExploreShareFeedPercentMin: 0, viewExploreShareFeedPercentMax: 0,
+  viewExploreShareDmPercentMin: 0, viewExploreShareDmPercentMax: 0,
+  viewExploreSavePercentMin: 0, viewExploreSavePercentMax: 0,
   viewReelsEnabled: false,
   viewReelsScrollMin: 0, viewReelsScrollMax: 0,
   viewReelsLikePercentMin: 0, viewReelsLikePercentMax: 0,
@@ -2720,6 +2748,23 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             viewStoriesLikePercentMax: s.viewStoriesLikePercentMax,
             viewStoriesShareDmPercentMin: s.viewStoriesShareDmPercentMin,
             viewStoriesShareDmPercentMax: s.viewStoriesShareDmPercentMax,
+            viewExploreEnabled: s.viewExploreEnabled,
+            viewExploreActivatePctMin: s.viewExploreActivatePctMin,
+            viewExploreActivatePctMax: s.viewExploreActivatePctMax,
+            viewExploreScrollMin: s.viewExploreScrollMin,
+            viewExploreScrollMax: s.viewExploreScrollMax,
+            viewExploreActionDelayMin: s.viewExploreActionDelayMin,
+            viewExploreActionDelayMax: s.viewExploreActionDelayMax,
+            viewExploreClickPostPctMin: s.viewExploreClickPostPctMin,
+            viewExploreClickPostPctMax: s.viewExploreClickPostPctMax,
+            viewExploreLikePercentMin: s.viewExploreLikePercentMin,
+            viewExploreLikePercentMax: s.viewExploreLikePercentMax,
+            viewExploreShareFeedPercentMin: s.viewExploreShareFeedPercentMin,
+            viewExploreShareFeedPercentMax: s.viewExploreShareFeedPercentMax,
+            viewExploreShareDmPercentMin: s.viewExploreShareDmPercentMin,
+            viewExploreShareDmPercentMax: s.viewExploreShareDmPercentMax,
+            viewExploreSavePercentMin: s.viewExploreSavePercentMin,
+            viewExploreSavePercentMax: s.viewExploreSavePercentMax,
             viewReelsEnabled: s.viewReelsEnabled,
             viewReelsScrollMin: s.viewReelsScrollMin,
             viewReelsScrollMax: s.viewReelsScrollMax,
@@ -2998,6 +3043,17 @@ const COPY_SECTIONS: CopySection[] = [
     { key: 'storiesWatchPct',   label: '% to watch',                    fields: ['viewStoriesSlideWatchPctMin','viewStoriesSlideWatchPctMax'] },
     { key: 'storiesLike',       label: 'Like %',                        fields: ['viewStoriesLikePercentMin','viewStoriesLikePercentMax'] },
     { key: 'storiesShareDm',    label: 'Share DM %',                    fields: ['viewStoriesShareDmPercentMin','viewStoriesShareDmPercentMax'] },
+  ]},
+  { key: 'explore',       label: 'View Explore Page', sub: [
+    { key: 'exploreEnabled',    label: 'Enabled',                       fields: ['viewExploreEnabled'] },
+    { key: 'exploreActivate',   label: 'Activate Percentage',           fields: ['viewExploreActivatePctMin','viewExploreActivatePctMax'] },
+    { key: 'exploreScroll',     label: 'Scroll amount',                 fields: ['viewExploreScrollMin','viewExploreScrollMax'] },
+    { key: 'exploreDelay',      label: 'Delay between actions (s)',     fields: ['viewExploreActionDelayMin','viewExploreActionDelayMax'] },
+    { key: 'exploreClickPost',  label: 'Click posts %',                 fields: ['viewExploreClickPostPctMin','viewExploreClickPostPctMax'] },
+    { key: 'exploreLike',       label: 'Like %',                        fields: ['viewExploreLikePercentMin','viewExploreLikePercentMax'] },
+    { key: 'exploreShareFeed',  label: 'Share to Feed %',               fields: ['viewExploreShareFeedPercentMin','viewExploreShareFeedPercentMax'] },
+    { key: 'exploreShareDm',    label: 'Share via DM %',                fields: ['viewExploreShareDmPercentMin','viewExploreShareDmPercentMax'] },
+    { key: 'exploreSave',       label: 'Save %',                        fields: ['viewExploreSavePercentMin','viewExploreSavePercentMax'] },
   ]},
   { key: 'reels',         label: 'View Reels', sub: [
     { key: 'reelsEnabled',      label: 'Enabled',                       fields: ['viewReelsEnabled'] },
@@ -3813,8 +3869,148 @@ function AutomationSettingsPanel({
 
         {saveError && <p className="text-xs text-destructive">{saveError}</p>}
 
-        {/* Border separator between the like/share settings above and View
-            Stories from Feed below — same card/step (STEP2), not its own step. */}
+        {/* Border separator between View Feed above and View Explore Page below */}
+        <div className="border-t border-border" />
+
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id={`explore-enabled-${slotIdx ?? 0}`}
+              checked={settings.viewExploreEnabled}
+              onChange={e => setSettings(s => ({ ...s, viewExploreEnabled: e.target.checked }))}
+              disabled={loading}
+              className="w-4 h-4 accent-primary cursor-pointer"
+            />
+            <label htmlFor={`explore-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">View Explore Page</label>
+          </div>
+        </div>
+
+        {settings.viewExploreEnabled && <div className="flex items-start gap-6 flex-wrap">
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Activate Percentage</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewExploreActivatePctMin}
+                onChange={e => setSettings(s => ({ ...s, viewExploreActivatePctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewExploreActivatePctMax}
+                onChange={e => setSettings(s => ({ ...s, viewExploreActivatePctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Scroll this many times</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewExploreScrollMin}
+                onChange={e => setSettings(s => ({ ...s, viewExploreScrollMin: clamp4(Number(e.target.value)) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewExploreScrollMax}
+                onChange={e => setSettings(s => ({ ...s, viewExploreScrollMax: clamp4(Number(e.target.value)) }))}
+                disabled={loading} />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Delay between actions</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewExploreActionDelayMin}
+                onChange={e => setSettings(s => ({ ...s, viewExploreActionDelayMin: clamp4(Number(e.target.value)) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewExploreActionDelayMax}
+                onChange={e => setSettings(s => ({ ...s, viewExploreActionDelayMax: clamp4(Number(e.target.value)) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-xs">seconds</span>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Click posts %</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewExploreClickPostPctMin}
+                onChange={e => setSettings(s => ({ ...s, viewExploreClickPostPctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewExploreClickPostPctMax}
+                onChange={e => setSettings(s => ({ ...s, viewExploreClickPostPctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Like % of posts</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewExploreLikePercentMin}
+                onChange={e => setSettings(s => ({ ...s, viewExploreLikePercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewExploreLikePercentMax}
+                onChange={e => setSettings(s => ({ ...s, viewExploreLikePercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Share to Feed % of posts</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewExploreShareFeedPercentMin}
+                onChange={e => setSettings(s => ({ ...s, viewExploreShareFeedPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewExploreShareFeedPercentMax}
+                onChange={e => setSettings(s => ({ ...s, viewExploreShareFeedPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Share via DM % of posts</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewExploreShareDmPercentMin}
+                onChange={e => setSettings(s => ({ ...s, viewExploreShareDmPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewExploreShareDmPercentMax}
+                onChange={e => setSettings(s => ({ ...s, viewExploreShareDmPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Save % of posts</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewExploreSavePercentMin}
+                onChange={e => setSettings(s => ({ ...s, viewExploreSavePercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewExploreSavePercentMax}
+                onChange={e => setSettings(s => ({ ...s, viewExploreSavePercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+            </div>
+          </div>
+        </div>}
+
+        {/* Border separator between View Explore Page above and View
+            Stories from Feed below — same card/step (STEP2). */}
         <div className="border-t border-border" />
 
         <div className="space-y-1">
