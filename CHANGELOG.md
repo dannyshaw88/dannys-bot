@@ -4,6 +4,18 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.49] — 2026-07-20
+
+### Fix — Phone Farm active card glow is now an inner bottom-rise effect
+
+The active device card glow previously used `box-shadow`, which painted the effect outside the card border. It is now an inner gradient overlay (`::after` pseudo-element, clipped by `overflow: hidden`) that rises from the bottom of the card and fades to transparent at ~65 % of the card height — staying fully inside the box with no bleed past the edges. The gradient pulses between 55 % and 100 % opacity on a 2.4 s cycle, same as before. The subtle cyan border tint is retained.
+
+### Mirror — long-press (tap-and-hold) now works
+
+Holding on the mirror without moving for ≥ 600 ms now fires a genuine long-press on the device (`adb shell input swipe x y x y 2000` — the zero-distance 2 s swipe that is the standard ADB long-press idiom). Previously the mirror had no hold path at all — any hold resolved as a regular tap when the finger lifted, which opened the profile tab instead of triggering the account switcher, context menus, or any other hold-activated UI. A new `/api/mobile/devices/:serial/input/longpress` backend route handles rescaling exactly like `/input/tap`.
+
+---
+
 ## [1.2.48] — 2026-07-20
 
 ### Fix — Inject Browsing: scroll-back geometry now mirrors scroll-down exactly

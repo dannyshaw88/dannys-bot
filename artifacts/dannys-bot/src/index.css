@@ -372,14 +372,24 @@
   }
 }
 
-/* Device card active glow pulse */
-@keyframes device-card-glow-pulse {
-  0%, 100% { box-shadow: 0 0 12px 4px rgba(34, 211, 238, 0.25), 0 0 28px 8px rgba(34, 211, 238, 0.10); }
-  50%       { box-shadow: 0 0 22px 8px rgba(34, 211, 238, 0.38), 0 0 48px 16px rgba(34, 211, 238, 0.16); }
+/* Device card active glow — inner gradient rising from the bottom */
+@keyframes device-card-inner-glow-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%       { opacity: 1; }
 }
 .device-card-active {
-  animation: device-card-glow-pulse 2.4s ease-in-out infinite;
-  border-color: rgba(34, 211, 238, 0.45) !important;
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(34, 211, 238, 0.35) !important;
+}
+.device-card-active::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(34, 211, 238, 0.22) 0%, rgba(34, 211, 238, 0.06) 45%, transparent 65%);
+  pointer-events: none;
+  border-radius: inherit;
+  animation: device-card-inner-glow-pulse 2.4s ease-in-out infinite;
 }
 
 /* Hide number input spinners */
