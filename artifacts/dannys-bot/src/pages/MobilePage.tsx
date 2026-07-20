@@ -3929,7 +3929,7 @@ function AutomationSettingsPanel({
                 value={settings.viewExploreActionDelayMax}
                 onChange={e => setSettings(s => ({ ...s, viewExploreActionDelayMax: clamp4(Number(e.target.value)) }))}
                 disabled={loading} />
-              <span className="text-muted-foreground text-xs">seconds</span>
+              <span className="text-muted-foreground text-xs">s</span>
             </div>
           </div>
 
