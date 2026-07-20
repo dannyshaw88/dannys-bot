@@ -2257,28 +2257,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await new Promise(r => setTimeout(r, 600)); // let the story viewer (or a follow toast) finish appearing
 
       // Verify a story actually opened instead of blindly assuming it did.
-      // The main feed's bottom nav bar (Home/Search/Reels/Shop/Profile) is
-      // always visible on the feed and never visible inside the story viewer
-      // (which is full-screen) — its continued presence after the tap is a
-      // reliable signal the tap missed (e.g. hit the follow badge, dismissed
-      // a suggestion chip, or missed the bubble/tray band entirely) rather
-      // than opening a story.
-      // Root-cause fix (12 Jul 2026, user-reported "not instant" reports):
-      // this used to call findHomeTab directly — a full uiautomator dump +
-      // adb pull, ~3-4s on this farm's devices — on every single tray-tap
-      // attempt, adding several real seconds to the very start of every
-      // story cycle before the fast pixel-scan path (added for the rest of
-      // the loop) ever got a chance to run. Try the fast screenshot-based
-      // check first and only pay for the slow dump when it's inconclusive.
+      // Fast path: pixel-scan for the story progress-bar strip.
+      // Slow path: isInStoryViewerSlow — checks for positive story-viewer
+      // resource IDs (toolbar_like_button, reel_viewer, etc.) first, then
+      // home-tab via content-desc/resource-id ONLY (no positional fallback).
+      //
+      // The old slow fallback used findHomeTab, whose positional strategy 3
+      // picks up the story viewer's reply bar and action icons at y > 88%,
+      // returns non-null, and concludes "home tab visible = story didn't open"
+      // — a false negative that caused retry taps to fire inside a live story.
+      // isInStoryViewerSlow was written specifically to fix that bug and must
+      // be used here instead.
       const stillOnFeedFast = await android.isStoryViewerOpenFast(serial).catch(() => null);
-      const stillOnFeed = stillOnFeedFast === true
-        ? false
-        : await android.findHomeTab(serial).then(r => r !== null).catch(() => false);
-      if (!stillOnFeed) {
+      const storyOpen = stillOnFeedFast === true
+        ? true
+        : await android.isInStoryViewerSlow(serial).catch(() => false);
+      if (storyOpen) {
         onLog?.(`Story tray: slot ${target} opened successfully`);
         return { slot: target, opened: true };
       }
-      onLog?.(`Story tray: tap on slot ${target} did NOT open a story — bottom nav still visible (likely hit a follow/suggestion badge or missed the bubble)`);
+      onLog?.(`Story tray: tap on slot ${target} did NOT open a story — story viewer not detected (likely hit a follow/suggestion badge or missed the bubble)`);
     }
 
     onLog?.(`Story tray: exhausted ${maxAttempts} slot attempts — no story opened this cycle`);
