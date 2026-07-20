@@ -4,6 +4,28 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.51] — 2026-07-20
+
+### Fix — View Reels: Home tab is now always tapped after Reels finishes, no matter what
+
+**Problem:** After the Reels tool finished watching its batch of reels, it pressed Back up to 3 times and looked for the Instagram Home tab in the accessibility tree after each press. If the Home tab was found during those presses it was tapped and the device returned cleanly to the home feed. However, if all 3 back-press attempts failed to expose the Home tab (e.g. the full-screen viewer was slow to dismiss, the device was under load, or a gesture landed slightly off), the code fell into an `else` branch that simply logged "exit uncertain after 3 Back presses — proceeding anyway" and moved on — **without tapping Home at all**. The next tool in the shuffle then started from the Reels tab UI instead of the home feed, causing every subsequent navigation (account switcher detection, Search tab lookup, story tray) to fail or operate on the wrong screen.
+
+This was the root cause of both devices in the 20 Jul 2026 logs ending up inside a story viewer when Follow/Explore tried to find the Search tab: the Reels exit left the phone on the Reels tab, the next tool assumed home-feed context, and the stale story-viewer state from an earlier run was what the accessibility dump returned.
+
+**Fix — two-layer guarantee, Home tap is now unconditional:**
+
+1. **Fresh retry after the loop** — if `_reHomeTab` is still null after all 3 back presses, `findHomeTab` is called one more time after a final 1200 ms settle. By this point the viewer animation has fully completed on every tested device, so this catch-up call succeeds in all cases where the loop timing was simply too tight.
+
+2. **Positional fallback** — if the fresh retry also returns null (genuine accessibility-tree failure), the code taps the leftmost bottom-navigation position (12 % from the left edge, 50 px from the bottom of the screen) — the fixed position of the Home icon on every tested Instagram build. A log line "tapped Home tab (positional fallback)" distinguishes this path from the normal tap.
+
+The result: regardless of how stubborn the full-screen viewer is to dismiss and regardless of which tool comes next in the shuffle, the device is always returned to the home feed before the next tool starts.
+
+### Fix — Dashboard activity log: "Cycle Starting Farming Aura" → "Cycle Started, Farming Aura"
+
+The detail string written to the activity log at the start of each automation cycle was grammatically inconsistent with other log entries. Changed from the present-participle form "Cycle Starting Farming Aura" to the past-tense confirmation form **"Cycle Started, Farming Aura"** to match the style of all other cycle-event log entries (e.g. "Aura Farming started at …").
+
+---
+
 ## [1.2.50] — 2026-07-20
 
 ### Fix — View Explore Page: share-to-feed and save icons now found in vertical-column viewer
