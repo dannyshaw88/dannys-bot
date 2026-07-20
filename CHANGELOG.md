@@ -4,6 +4,29 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.57] — 2026-07-20
+
+### Fix — Account switcher: poll for account rows to fully populate before giving up
+
+**Problem:** Account switching failed intermittently (~2 in 3 cycles) with "not found in switcher — is the account logged in on this device?" even though the account was correctly logged in. The next cycle succeeded on the same account.
+
+**Root cause:** After the 2s long-press gesture + 0.7s sleep, a single `_uiDump` was taken and the code immediately gave up if the target username wasn't found. On a freshly launched Instagram (first video frame still dark/small — screen not yet fully initialised), the account switcher sheet opens visually but its account rows take several additional seconds to render into the accessibility tree. The single dump fired against an empty or partially populated switcher shell and returned nothing. On a warm Instagram (already rendering a full frame) the rows populate faster and the same single dump succeeded.
+
+**Fix:** Replaced the single dump with a poll loop — up to 5 × 1.5s (7.5s total budget). Each iteration dumps and checks for the username; the loop exits immediately on the first hit — zero extra wait when Instagram is warm. If the switcher is still populating, the next poll catches it once ready. All downstream logic (already-active fallback, BACK dismiss, tap-and-confirm) is unchanged.
+
+Log line added per retry:
+- `"↳ Switcher not fully populated yet — retrying in 1.5s (poll N/5)"`
+
+### UI — Phone Farm: aura glow reshaped and doubled in brightness
+
+**Change:** The active-device glow on Phone Farm cards was switched from a flat full-width `linear-gradient` to an elliptical `radial-gradient` anchored at the bottom centre.
+
+- **2× brighter** — peak alpha 0.22 → 0.44, mid alpha 0.06 → 0.12
+- **10% inset each side at the base** — ellipse width set to 80%, so the glow starts 10% in from each edge at its widest point
+- **Tapers naturally toward the card midpoint** — the elliptical shape narrows as it rises, fading to nothing around the card's vertical midpoint
+
+---
+
 ## [1.2.56] — 2026-07-20
 
 ### Fix — View Reels: pre-scan poll waits for reel player to appear in accessibility tree
