@@ -2121,17 +2121,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   await sleepOrAbort(serial, 200 + Math.round(Math.random() * 200));
                   onLog?.(`Scroll ${i + 1}/${count}: tapping save (ribbon) icon at (${_saveBtn.x},${_saveBtn.y})…`);
                   await android.tap(serial, _saveBtn.x, _saveBtn.y);
-                  // Wait for the "Save to collection?" popup to appear.
-                  await sleepOrAbort(serial, 600);
-                  // Dismiss the collection popup by tapping the top-25% of
-                  // the screen. Instagram's collection sheet sits in the
-                  // bottom half; the top quarter is always safe/empty while
-                  // the sheet is visible.
-                  const _dismissX = Math.round(w * 0.50);
-                  const _dismissY = Math.round(h * 0.12);
-                  onLog?.(`Scroll ${i + 1}/${count}: dismissing save-collection popup (tap at (${_dismissX},${_dismissY}))…`);
-                  await android.tap(serial, _dismissX, _dismissY);
-                  await sleepOrAbort(serial, 400);
+                  // Instagram shows a brief non-modal toast after save — no
+                  // tap is needed or safe here. Any tap in this region risks
+                  // hitting the post's profile header and navigating away.
+                  // Just wait for the toast to clear naturally.
+                  await sleepOrAbort(serial, 800);
                   saves++;
                   logger.info({ serial }, "[check-feed] saved post via ribbon icon");
                   onLog?.(`Scroll ${i + 1}/${count}: ✓ post saved`);
