@@ -6438,8 +6438,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     setTimeout(() => {
       automationCycleInProgress.delete(serial);
       automationCycleActiveSlot.delete(serial);
-    }, 10_000);
-    res.json({ ok: true, serial, durationMs: 10_000 });
+    }, 60_000);
+    res.json({ ok: true, serial, durationMs: 60_000 });
   });
 
   // ── Element Inspector ─────────────────────────────────────────────────────
