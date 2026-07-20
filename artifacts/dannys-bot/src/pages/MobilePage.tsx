@@ -3729,7 +3729,7 @@ function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Delay between actions</Label>
+            <Label className="text-sm text-muted-foreground">Delay between actions, in s</Label>
             <div className="flex items-center gap-3">
               <Input
                 type="number"
@@ -3739,7 +3739,6 @@ function AutomationSettingsPanel({
                 onChange={e => setSettings(s => ({ ...s, actionDelayMin: clamp4(Number(e.target.value)) }))}
                 disabled={loading}
               />
-              <span className="text-muted-foreground text-sm">s</span>
               <span className="text-muted-foreground text-sm">to</span>
               <Input
                 type="number"
