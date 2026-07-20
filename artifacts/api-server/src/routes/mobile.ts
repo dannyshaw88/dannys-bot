@@ -1112,6 +1112,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     viewReelsSavePercentMax: z.number().min(0).max(100).default(0),
     viewReelsActivatePctMin: z.number().min(0).max(100).default(100),
     viewReelsActivatePctMax: z.number().min(0).max(100).default(100),
+    // viewReelsWatchPctMin/Max were missing from this persistence schema even
+    // though they appeared in the GET defaults and the execution schema.  Zod
+    // was silently stripping them on every POST so Watch % never actually saved
+    // to disk and always reset to the 30-70 default on the next page load.
+    viewReelsWatchPctMin: z.number().min(1).max(100).default(30),
+    viewReelsWatchPctMax: z.number().min(1).max(100).default(70),
     // View Explore Page — see AutomationSettings type above for full comment.
     viewExploreEnabled: z.boolean().default(false),
     viewExploreActivatePctMin: z.number().min(0).max(100).default(100),
@@ -1341,6 +1347,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewReelsLikePercentMin: 0, viewReelsLikePercentMax: 0,
         viewReelsShareFeedPercentMin: 0, viewReelsShareFeedPercentMax: 0,
         viewReelsShareDmPercentMin: 0, viewReelsShareDmPercentMax: 0,
+        viewReelsSavePercentMin: 0, viewReelsSavePercentMax: 0,
         viewReelsActivatePctMin: 100, viewReelsActivatePctMax: 100,
         viewReelsWatchPctMin: 30, viewReelsWatchPctMax: 70,
         viewExploreEnabled: false, viewExploreActivatePctMin: 100, viewExploreActivatePctMax: 100,

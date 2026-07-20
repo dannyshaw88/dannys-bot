@@ -4,6 +4,46 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.59] — 2026-07-20
+
+### Fix — Copy Settings: Abandon Follow % now appears under Follow Users
+
+The **Abandon Follow %** setting was only listed under **Inject Browsing** in the Copy Settings dialog. Selecting "Follow Users" to copy never included it, so users had to also remember to tick the Inject Browsing section just for that one field.
+
+`injectAbandon` (`injectBrowsingAbandonFollowPctMin` / `injectBrowsingAbandonFollowPctMax`) has been added as a sub-item of the **Follow Users** section in `COPY_SECTIONS`. It still also appears under Inject Browsing so neither section loses it. Checking "Follow Users" now copies Abandon Follow % along with the rest of the Follow Users settings.
+
+---
+
+### Fix — View Reels: Watch % never saved or copied (root cause fixed)
+
+**Root cause:** `viewReelsWatchPctMin` and `viewReelsWatchPctMax` were **absent from the server's slot-level persistence schema** (`automationSchema` at the `/api/mobile/devices/:serial/slots/:slotIdx/automation-settings` POST handler). Zod strips unknown keys by default, so every time the client sent these two fields — whether via a normal settings autosave or a Copy Settings operation — the server silently discarded them. The stored slot config never contained Watch %, so on every page reload the values reverted to the hardcoded defaults (30 % – 70 %).
+
+**Fix:** Both fields have been added to the persistence `automationSchema` with the correct `z.number().min(1).max(100)` range and `.default(30)` / `.default(70)`. They will now survive POSTs and be stored on disk, making Watch % settings persist across restarts and copy correctly to other slots.
+
+---
+
+### Fix — View Reels: Save % missing from slot GET defaults
+
+`viewReelsSavePercentMin` and `viewReelsSavePercentMax` were present in the persistence schema (and were being saved and loaded correctly from disk) but were **absent from the hard-coded slot defaults object** returned when a slot has never been saved before. A brand-new slot's GET response was therefore missing these two fields, which could cause the frontend to display 0 as a stale default even before the user had touched those inputs.
+
+Both fields are now included in the slot defaults object (`viewReelsSavePercentMin: 0, viewReelsSavePercentMax: 0`) so every GET response is consistent with the schema regardless of whether the slot has been saved before.
+
+---
+
+### UI — Copy Settings button moved to fixed slot nav bar
+
+The **Copy Settings** button has been moved from inside the scrollable Human Session Tool panel header into the **fixed slot navigation bar** (the `← SLOT N  SLOT N+1 →` strip at the top). It now sits left of the back-arrow (prev-slot) button and uses `variant="outline"` / `h-7 px-2` to match the slot navigation buttons exactly. The button is only shown when two or more slots are available (the same guard as before).
+
+The `showCopyDialog` state has been lifted from `AutomationSettingsPanel` up to `SlotHumanSessionView` so the nav-bar button can open the dialog without any prop drilling of a callback, while the dialog itself continues to render inside `AutomationSettingsPanel` (keeping all its required `settings` / `phone` / `onCopied` context).
+
+---
+
+### UI — Human Session Tool: TrustScore badge width reduced 15 %
+
+The `SlotTrustScoreBadge` rendered in the **Human Session Tool** panel header now renders at `width={121}` (default 142 × 0.85 ≈ 121 px). The two other badge instances (slot-list card `65 px`, account-settings panel `114 px`) are unchanged.
+
+---
+
 ## [1.2.58] — 2026-07-20
 
 ### Feature — View Reels: Save % action (bookmark reel)

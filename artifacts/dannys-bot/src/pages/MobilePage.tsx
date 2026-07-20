@@ -3108,6 +3108,7 @@ const COPY_SECTIONS: CopySection[] = [
     { key: 'followActivate',    label: 'Activate Percentage',           fields: ['followActivatePctMin','followActivatePctMax'] },
     { key: 'followCount',       label: 'Follow count per session',      fields: ['followUsersMin','followUsersMax'] },
     { key: 'followSources',     label: 'Follow sources list',           fields: ['followSources'] },
+    { key: 'injectAbandon',     label: 'Abandon Follow %',              fields: ['injectBrowsingAbandonFollowPctMin','injectBrowsingAbandonFollowPctMax'] },
   ]},
   // Follow Filters is its own top-level section so it can be selected/deselected
   // independently from Follow Users. Previously it was nested inside Follow Users,
