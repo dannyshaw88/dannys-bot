@@ -38,10 +38,11 @@
   "nsis": {
     "oneClick": false,
     "allowToChangeInstallationDirectory": true,
-    "createDesktopShortcut": true,
+    "createDesktopShortcut": false,
     "createStartMenuShortcut": true,
     "shortcutName": "Aura Farming",
     "installerIcon": null,
-    "uninstallerIcon": null
+    "uninstallerIcon": null,
+    "include": "installer.nsh"
   }
 }
