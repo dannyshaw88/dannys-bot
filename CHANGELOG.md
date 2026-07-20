@@ -4,6 +4,30 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.65] — 2026-07-20
+
+### Fixed — Jitter profile tab tapped wrong element (top-of-screen story avatar instead of bottom-nav tab)
+
+**Root cause:** `findInstagramProfileTab` Strategy 1 matched the very first XML node
+whose `content-desc` starts with "Profil". The Instagram accessibility tree is laid out
+top-to-bottom, and the story tray / feed avatars near the top of the screen carry
+content-desc values like "Profile picture" or the user's own story thumbnail label —
+all of which start with "Profil". These nodes appear *before* the actual bottom-nav
+Profile tab in the XML, so Strategy 1 always returned the wrong coordinates (y ≈ 371
+on a 1280-tall screen — 29 % from the top) and tapped into the stories row instead of
+the bottom-right nav tab. The `✓ visited own profile` log line was written anyway
+because the code does not verify that the tap actually landed on the profile page.
+
+**Fix:** Strategy 1 now collects *all* content-desc="Profil…" matches, parses each
+one's bounds, discards any whose y-centre is above 85 % of screen height (i.e. not in
+the bottom-nav band), and returns the rightmost survivor. This is identical to the
+positional logic already used by Strategy 3, but applied specifically to the
+content-desc match so the resource-id fast-path in Strategy 2 is still tried before
+the full positional scan. `_getScreenSize(xml)` is now called once at the top of the
+function and shared by all three strategies.
+
+---
+
 ## [1.2.64] — 2026-07-20
 
 ### Fix — Jitter Tool: "Profile tab not found" every cycle (Back press was exiting Instagram)

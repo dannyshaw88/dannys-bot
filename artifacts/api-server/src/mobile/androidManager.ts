@@ -4890,13 +4890,31 @@ export async function findInstagramProfileTab(serial: string): Promise<{ x: numb
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial).catch(() => "");
   if (!xml) return null;
+  const { w: xmlW, h: xmlH } = _getScreenSize(xml);
   // ── Strategy 1: content-desc prefix match.
   // Use "Profil" (not "Profile") so this also matches the Indonesian locale
   // where Instagram renders the tab as content-desc="Profil" (no trailing 'e').
   // "Profil" is a prefix of "Profile", "Profil", "Profilo" (IT), etc.
-  const re = /content-desc="Profil[^"]*"[^>]*bounds="([^"]+)"/i;
-  const m = xml.match(re);
-  if (m) return _parseCenter(m[1]);
+  //
+  // IMPORTANT: scan ALL matches and keep only those whose y-centre is in the
+  // bottom-nav band (> 85 % of screen height). Instagram's story tray and feed
+  // posts carry "Profile picture" / user-avatar nodes at the TOP of the
+  // accessibility tree that also match "Profil" — a simple first-match returns
+  // those top-of-screen coordinates and taps the wrong element.
+  {
+    const s1Re = /content-desc="Profil[^"]*"[^>]*bounds="(\[[^\]]+\]\[[^\]]+\])"/gi;
+    const botMin = Math.round(xmlH * 0.85);
+    const hits: { x: number; y: number }[] = [];
+    let s1m: RegExpExecArray | null;
+    while ((s1m = s1Re.exec(xml)) !== null) {
+      const c = _parseCenter(s1m[1]);
+      if (c && c.y > botMin) hits.push(c);
+    }
+    if (hits.length > 0) {
+      hits.sort((a, b) => a.x - b.x);
+      return hits[hits.length - 1]; // rightmost in bottom-nav band = Profile tab
+    }
+  }
   // ── Strategy 2: known resource-ids — :id/profile_tab confirmed on this device (node [96]).
   const byId = _findByResId(xml,
     ":id/profile_tab", ":id/profile", ":id/tab_profile", ":id/nav_profile",
@@ -4914,7 +4932,7 @@ export async function findInstagramProfileTab(serial: string): Promise<{ x: numb
   //  b) Require candidates span > 55 % of screen width — Instagram's nav tabs
   //     spread across the full card width, while Reels action icons are all
   //     clustered on the right edge and fail this check.
-  const { w: xmlW, h: xmlH } = _getScreenSize(xml);
+  // (xmlW / xmlH already parsed above for Strategy 1)
   const botMin = Math.round(xmlH * 0.88);
   const raw: { x: number; y: number }[] = [];
   const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
