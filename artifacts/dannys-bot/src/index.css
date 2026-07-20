@@ -372,6 +372,16 @@
   }
 }
 
+/* Device card active glow pulse */
+@keyframes device-card-glow-pulse {
+  0%, 100% { box-shadow: 0 0 12px 4px rgba(34, 211, 238, 0.25), 0 0 28px 8px rgba(34, 211, 238, 0.10); }
+  50%       { box-shadow: 0 0 22px 8px rgba(34, 211, 238, 0.38), 0 0 48px 16px rgba(34, 211, 238, 0.16); }
+}
+.device-card-active {
+  animation: device-card-glow-pulse 2.4s ease-in-out infinite;
+  border-color: rgba(34, 211, 238, 0.45) !important;
+}
+
 /* Hide number input spinners */
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {

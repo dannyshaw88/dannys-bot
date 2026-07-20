@@ -226,7 +226,7 @@ const SLOT_WALLPAPERS = [
   { id: 'wp-p507.jpg', label: 'Aqua' },
   // — minimal / pastel —
   { id: 'wp-p600.jpg', label: 'Linen' },
-  { id: 'wp-p601.jpg', label: 'Sand' },
+
   { id: 'wp-p602.jpg', label: 'Ash' },
   { id: 'wp-p603.jpg', label: 'Pearl' },
 ];
@@ -763,7 +763,7 @@ function DeviceCard({
     <div className="group h-full relative flex flex-col">
       <button
         onClick={onClick}
-        className="flex-1 flex flex-col items-center gap-1.5 py-2 px-2 rounded-2xl border border-border bg-card hover:border-primary/50 hover:bg-card/80 transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40"
+        className={`flex-1 flex flex-col items-center gap-1.5 py-2 px-2 rounded-2xl border border-border bg-card hover:border-primary/50 hover:bg-card/80 transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40${active ? ' device-card-active' : ''}`}
       >
         {/* Phone shell — wallpaper and text rendered natively inside the SVG screen */}
         <PhoneShell
