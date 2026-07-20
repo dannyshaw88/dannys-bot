@@ -3024,7 +3024,6 @@ const COPY_SECTIONS: CopySection[] = [
   { key: 'runInterval',   label: 'Run Interval', sub: [
     { key: 'cycleInterval',     label: 'Run every X - Y minutes',      fields: ['cycleIntervalMin','cycleIntervalMax'] },
     { key: 'shuffleToolOrder',  label: 'Shuffle tool order',           fields: ['shuffleToolOrder'] },
-    { key: 'dismissDirection',  label: 'App close gesture (dismiss direction)', fields: ['dismissDirection'] },
   ]},
   { key: 'feed',          label: 'View Feed', sub: [
     { key: 'feedEnabled',       label: 'Enabled',                       fields: ['feedEnabled'] },
