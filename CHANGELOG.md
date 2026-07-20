@@ -4,6 +4,28 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.53] — 2026-07-20
+
+### Fix — View Stories: advance tap no longer opens the story author's profile
+
+**Problem:** After watching a story slide for the configured watch percentage, the tool tapped the story author's name/avatar and opened their profile instead of advancing to the next slide.
+
+**Root cause:** The advance tap that fires after the watch-period sleep was positioned at `x = 97%, y = 15%` of screen height. The code comment claimed the author header (progress strip + avatar + name + mute button) ended at ~10% height, leaving 5% clearance. In practice the author bar runs to ~12–15% on most story layouts, so the y = 15% tap landed squarely on the author's username row and triggered a profile navigation.
+
+The x position (97% from left = 3% from right edge) was always correct — that is well within the "right half = advance" zone Instagram recognises.
+
+**Fix:** y moved from `h × 0.15` to `h × 0.45` — mid-screen. This puts the tap firmly in the story content area, below the author header (~12–15%) and well above the reply bar (~88%). At x = 97% (the extreme physical edge of the screen), Instagram's story editor clips interactive stickers away from that strip, so sticker-collision risk at mid-screen y remains near-zero.
+
+**Before (broken):**
+- Tap lands at (1048, 334) on a 1080×2226 device — inside author header → profile opens
+  
+**After (fixed):**
+- Tap lands at (1048, 1002) on a 1080×2226 device — mid-screen story content → next slide advances
+
+This fix is isolated to `runViewStoriesFromFeedLoop` and has no effect on any other tool.
+
+---
+
 ## [1.2.52] — 2026-07-20
 
 ### Fix — View Explore Page: likes, reposts, and DM shares now actually execute

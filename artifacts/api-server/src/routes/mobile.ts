@@ -2655,7 +2655,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       storiesWatched++;
 
       // Advance to the next story by tapping the far-right edge (~97%) of the
-      // screen at ~15% height — but ONLY when there are more slides left to
+      // screen at ~45% height — but ONLY when there are more slides left to
       // watch.
       //
       // History of x-position changes and why:
@@ -2672,16 +2672,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       //                        near-zero while the tap still lands in the
       //                        "right half = advance" zone Instagram recognises.
       //
-      // y stays at 15%: enough clearance below the author header/mute-button
-      // row (~10% height) while sitting above the ~20-25% band where
-      // mention and hashtag stickers most commonly appear.
+      // History of y-position changes and why:
+      //   h*0.15  (previous) — intended to clear the author header (~10%),
+      //                        but the actual author bar (progress strip +
+      //                        avatar + name + mute button) runs to ~12–15%
+      //                        on most story layouts, so the tap landed on the
+      //                        author's name/avatar and opened their profile
+      //                        every time the advance fired (confirmed Jul 2026).
+      //   h*0.45  (current)  — mid-screen; well below the author header
+      //                        (~12–15%) and above the reply bar (~88%).
+      //                        Interactive stickers (mentions, hashtags, links)
+      //                        most commonly appear in the 20–60% band, but at
+      //                        x=97% (the extreme physical edge) Instagram's
+      //                        editor clips them away so sticker collision risk
+      //                        remains near-zero at this x even at mid-screen y.
       //
       // Skipping the advance on the last iteration: on 3-second stories the
       // unnecessary last-tap would push to slide totalStories+1, causing the
       // tray to auto-advance to the next user's stories instead of staying on
       // the final slide until we swipe down.
       if (s < totalStories - 1) {
-        await android.tap(serial, Math.round(w * 0.97), Math.round(h * 0.15));
+        await android.tap(serial, Math.round(w * 0.97), Math.round(h * 0.45));
         await sleepOrAbort(serial, 500 + Math.round(Math.random() * 400));
       }
     }
