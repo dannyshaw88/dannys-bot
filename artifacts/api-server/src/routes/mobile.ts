@@ -4887,11 +4887,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           if (didScroll > 0) {
             const { w: bw, h: bh } = getScreenSize(serial);
             onLog?.(`Inject Browsing: scrolling back to top — ${didScroll} row(s)`);
+            // Swipe geometry must mirror the scroll-down exactly so N scrolls
+            // back up covers the same content distance as N scrolls down.
+            // Scroll-down: finger 0.78→0.30 = 48% of screen height per swipe.
+            // Scroll-up:   finger 0.35→0.80 = 45% of screen height per swipe.
+            // (0.35 start avoids the profile header tap zone; 0.80 end matches
+            //  the same lower-screen anchor as the down-swipe start.)
+            // Pull-to-refresh is triggered by content position, not finger
+            // start-y, so a longer swipe here does NOT risk pull-to-refresh
+            // as long as we don't scroll MORE rows than we scrolled down.
             for (let _si = 0; _si < didScroll; _si++) {
-              await android.swipe(serial, Math.round(bw / 2), Math.round(bh * 0.55), Math.round(bw / 2), Math.round(bh * 0.82), 300);
-              await sleepOrAbort(serial, 200);
+              await android.swipe(serial, Math.round(bw / 2), Math.round(bh * 0.35), Math.round(bw / 2), Math.round(bh * 0.80), 400);
+              await sleepOrAbort(serial, 350);
             }
-            await sleepOrAbort(serial, 400);
+            await sleepOrAbort(serial, 500);
           }
         } else if (browsing && willBrowse && !browseBeforeFollow) {
           onLog?.("Inject Browsing: rolled to browse this profile after following");
