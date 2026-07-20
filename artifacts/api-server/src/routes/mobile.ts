@@ -2890,7 +2890,56 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           if (wantLike || wantShareFeed || wantShareDm || wantSave) {
             await sleepOrAbort(serial, 600); // settle before scanning action bar
             onLog?.(`Explore scroll ${i + 1}/${scrollCount}: scanning action bar…`);
-            const icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
+            let icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
+
+            // ── Explore-only: vertical icon column fallback ──────────────────
+            // When an Explore grid post opens in the vertical/Reels-style
+            // viewer, Like lands at x > 80% of screen width (e.g. x≈999 on a
+            // 1080 px device). findFeedActionIcons scans HORIZONTALLY — it
+            // looks for other icons at the same Y ±20 px as Like. In the
+            // vertical viewer Comment/Repost/Send sit BELOW Like in a column,
+            // so all of them fall outside the row tolerance and the row dump
+            // comes back empty → shareFeed and shareDm are always null.
+            // Fix: detect the vertical layout by Like's X position, then
+            // overlay shareFeed/shareDm from findReelActionIcons (which scans
+            // VERTICALLY). Save is not returned by findReelActionIcons; a
+            // separate broader scan covers it below.
+            // This block is intentionally isolated to runViewExplorePage and
+            // has no effect on any other tool.
+            if (icons && icons.like.x > Math.round(w * 0.80)) {
+              onLog?.(`Explore scroll ${i + 1}/${scrollCount}: vertical column layout detected (like.x=${icons.like.x}) — re-scanning shareFeed/shareDm via column scan`);
+              const _veColIcons = await android.findReelActionIcons(serial, onLog).catch(() => null);
+              if (_veColIcons) {
+                icons = { ...icons, shareFeed: _veColIcons.shareFeed, shareDm: _veColIcons.shareDm };
+              }
+              // Save: findFeedActionIcons already ran a global scan for
+              // row_feed_button_save / "Add to Saved". If still null, try a
+              // broader heuristic: any clickable node in the right column
+              // (x > 80% screen) whose rid or content-desc matches
+              // save|bookmark.
+              if (!icons.save) {
+                const _veXml2 = await android.dumpUi(serial).catch(() => "");
+                const _veSaveRe2 = /<node\s([^>]+?)\s*\/?>/g;
+                let _veSmatch2: RegExpExecArray | null;
+                while ((_veSmatch2 = _veSaveRe2.exec(_veXml2)) !== null) {
+                  const _veA2 = _veSmatch2[1];
+                  if (!/clickable="true"/.test(_veA2)) continue;
+                  const _veB2 = _veA2.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+                  if (!_veB2) continue;
+                  const _veCx2 = Math.round((+_veB2[1] + +_veB2[3]) / 2);
+                  const _veCy2 = Math.round((+_veB2[2] + +_veB2[4]) / 2);
+                  if (_veCx2 <= Math.round(w * 0.80)) continue; // must be in right column
+                  const _veCd2  = (_veA2.match(/content-desc="([^"]*)"/) || [])[1] ?? "";
+                  const _veRid2 = (_veA2.match(/resource-id="([^"]*)"/)  || [])[1] ?? "";
+                  if (/save|bookmark/i.test(_veCd2) || /save|bookmark/i.test(_veRid2)) {
+                    icons = { ...icons, save: { x: _veCx2, y: _veCy2 } };
+                    onLog?.(`[view-explore] save found in right column at (${_veCx2},${_veCy2}) via cd="${_veCd2}" rid="${_veRid2}"`);
+                    break;
+                  }
+                }
+              }
+            }
+
             if (!icons) {
               onLog?.(`Explore scroll ${i + 1}/${scrollCount}: no action bar found — skipping actions`);
               logger.info({ serial }, "[view-explore] opened post has no action bar");

@@ -4,6 +4,21 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.50] — 2026-07-20
+
+### Fix — View Explore Page: share-to-feed and save icons now found in vertical-column viewer
+
+**Root cause**: When a post is opened from the Explore grid it opens in a Reels-style vertical icon column viewer. The Like icon lands at x ≈ 999 on a 1080 px screen (92.5% from the left). `findFeedActionIcons` scans *horizontally* — it looks for Comment/Repost/Send at the same Y ±20 px as Like. In the vertical viewer those icons sit *below* Like in a column, so all three fall outside the row tolerance → the row dump is empty → `shareFeed` and `save` are always null.
+
+**Fix (isolated to `runViewExplorePage` — no other tool is touched)**:
+After `findFeedActionIcons` returns, if `icons.like.x > 80% of screen width` (vertical column layout detected):
+1. `findReelActionIcons` is called to scan the vertical column and get `shareFeed` / `shareDm`.
+2. A separate broader inline scan searches the right column (x > 80% of screen) for any clickable node whose `resource-id` or `content-desc` contains `save` / `bookmark` — covers Explore viewer builds that don't use the standard `row_feed_button_save` identifier.
+
+Like was never broken (it is found by `_findCentermostLikeNode` which has no X constraint), so the like action is unchanged.
+
+---
+
 ## [1.2.49] — 2026-07-20
 
 ### Fix — Phone Farm active card glow is now an inner bottom-rise effect
