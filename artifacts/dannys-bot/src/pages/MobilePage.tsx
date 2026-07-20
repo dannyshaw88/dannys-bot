@@ -3729,7 +3729,7 @@ function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Delay between actions, in s</Label>
+            <Label className="text-sm text-muted-foreground">Delay between actions in s</Label>
             <div className="flex items-center gap-3">
               <Input
                 type="number"
@@ -3917,7 +3917,7 @@ function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Delay between actions, in s</Label>
+            <Label className="text-sm text-muted-foreground">Delay between actions in s</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewExploreActionDelayMin}
