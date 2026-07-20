@@ -4,6 +4,25 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.61] — 2026-07-20
+
+### Fix — Follow Users: search bar not cleared between rejected candidates
+
+**Problem:** When a candidate was visited to check profile-quality filters (Private, Verified, Follower count, English Speaking) and was rejected, the code pressed Back (profile → search results page) and `continue`d to the next candidate. The next iteration then tapped the search bar — which still contained `@previous_username` — and typed the new username directly appended to it, producing a concatenated string like `"@lima_martial_art@thevikassahanii"` that matched nothing in search, silently failing the follow.
+
+The existing "clear any existing text" block used `KEYCODE_CTRL_A` to select-all before deleting, but Android silently ignores `KEYCODE_CTRL_A` in `EditText` fields (it is a PC keyboard shortcut with no Android equivalent), so no selection was made and `KEYCODE_DEL` deleted only the last character, leaving the rest of the old username in the bar.
+
+**Root cause confirmed via UI dump:** Node `[26]` shows `EditText text="@lima_martial_art@thevikassahanii"` — two usernames concatenated. Node `[27]` shows `Button desc="Clear Text" center=(976,183)` — Instagram's native × button was present and untapped.
+
+**Fix:** After tapping the search bar, the code now immediately dumps the UI and scans for a node with `content-desc="Clear Text"` (Instagram's × button, always rendered when the bar has content). If found, it taps the button's centre coordinates — reliably clearing the field in one tap. A keyboard fallback (`KEYCODE_MOVE_END` → `KEYCODE_MOVE_HOME` → `KEYCODE_SHIFT_LEFT` → `KEYCODE_MOVE_END` → `KEYCODE_DEL`) fires only when the × button is absent (e.g. the bar is already empty and the button was never rendered).
+
+The fix log line confirms the action:
+```
+Follow: tapped "Clear Text" (×) button at (976,183) — search bar cleared
+```
+
+---
+
 ## [1.2.60] — 2026-07-20
 
 ### Fix — Account switching: profile tab poll loop (nav bar not yet rendered)

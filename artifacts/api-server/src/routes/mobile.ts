@@ -4958,13 +4958,59 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         await android.tap(serial, searchBar.x, searchBar.y);
         await sleepOrAbort(serial, 1000 + Math.floor(Math.random() * 4000));
 
-        // Clear any existing text
-        await android.keyevent(serial, "KEYCODE_MOVE_END");
-        await sleepOrAbort(serial, 150);
-        await android.keyevent(serial, "KEYCODE_CTRL_A");
-        await sleepOrAbort(serial, 150);
-        await android.keyevent(serial, "KEYCODE_DEL");
-        await sleepOrAbort(serial, 300);
+        // Clear any existing text from the search bar.
+        //
+        // Context: when a previous candidate was visited for profile-quality
+        // filter checks and was rejected, the code presses Back (profile →
+        // search results page), which leaves the prior username still in the
+        // search bar.  The next iteration then taps the bar — which already
+        // has "@prev_username" in it — and without a reliable clear, types the
+        // new username directly appended to the old one (e.g.
+        // "@lima_martial_art@thevikassahanii"), causing the search to find
+        // nothing and the follow to silently fail.
+        //
+        // Fix: dump the UI immediately after the search-bar tap to look for
+        // Instagram's native "Clear Text" (×) button (content-desc="Clear Text"
+        // — reliably present whenever the bar has content).  Tap it if found.
+        // This is more reliable than KEYCODE_CTRL_A (which Android ignores in
+        // text fields) or KEYCODE_DEL (which only deletes one character at a
+        // time when no selection is active).
+        {
+          const _clearXml = await android.dumpUi(serial).catch(() => "");
+          let _clearTapped = false;
+          if (_clearXml) {
+            const _nodeRe = /<node\s[^>]+?\/>/g;
+            let _nm: RegExpExecArray | null;
+            while ((_nm = _nodeRe.exec(_clearXml)) !== null) {
+              if (_nm[0].includes('content-desc="Clear Text"')) {
+                const _bm = _nm[0].match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+                if (_bm) {
+                  const _cx = Math.round((Number(_bm[1]) + Number(_bm[3])) / 2);
+                  const _cy = Math.round((Number(_bm[2]) + Number(_bm[4])) / 2);
+                  await android.tap(serial, _cx, _cy);
+                  onLog?.(`Follow: tapped "Clear Text" (×) button at (${_cx},${_cy}) — search bar cleared`);
+                  _clearTapped = true;
+                  await sleepOrAbort(serial, 300);
+                  break;
+                }
+              }
+            }
+          }
+          if (!_clearTapped) {
+            // Keyboard fallback: select-all via Home→Shift+End→Del sequence —
+            // KEYCODE_CTRL_A is silently ignored in Android EditText fields.
+            await android.keyevent(serial, "KEYCODE_MOVE_END");
+            await sleepOrAbort(serial, 100);
+            await android.keyevent(serial, "KEYCODE_MOVE_HOME");
+            await sleepOrAbort(serial, 100);
+            await android.keyevent(serial, "KEYCODE_SHIFT_LEFT");
+            await sleepOrAbort(serial, 100);
+            await android.keyevent(serial, "KEYCODE_MOVE_END");
+            await sleepOrAbort(serial, 100);
+            await android.keyevent(serial, "KEYCODE_DEL");
+            await sleepOrAbort(serial, 200);
+          }
+        }
 
         // Type @username character by character on the on-screen keyboard
         // (fixes the d→f / a→s coordinate-offset bug via UIAutomator key detection)
