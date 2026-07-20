@@ -4,6 +4,71 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.58] — 2026-07-20
+
+### Feature — View Reels: Save % action (bookmark reel)
+
+A new **Save %** setting has been added to the View Reels tool. It works identically to the existing Like %, Share to Feed %, and Share via DM % controls — a random percentage is rolled per reel, and if it hits, the save/bookmark button is tapped.
+
+**Execution order within each reel:** Like → Share to Feed → **Save** → Share via DM. Save fires after the feed-share and before the DM share so multi-action reels flow in the natural top-to-bottom icon column order.
+
+**Two-pass save button detection (`findReelActionIcons`):**
+
+Instagram renders the save button in two distinct layouts depending on the device, firmware, and IG build:
+
+1. **Column type** — Save appears as a static icon in the right-side vertical action column alongside Like, Comment, and Share. Detected by scanning column nodes for `content-desc="Save"` or `content-desc="Saved"` (exact match; avoids false positives from sheet labels like "Save to Collection").
+
+2. **Floaty type** — Save appears as a floating element (ribbon or pill) rendered *outside* the right column, often near the bottom of the reel frame. After the column scan fails, the function performs a second full-screen XML scan for any clickable node with `content-desc="Save"` or `"Saved"` at any screen position. A dedicated log line confirms which path fired: `[reel-icons] save found via full-screen scan (floaty type) at (x,y)`.
+
+**Already-saved guard:** If the button's `content-desc` resolves to `"Saved"` (past tense — filled bookmark icon), `alreadySaved` is set to `true` and the tap is skipped with a log line: `Reel N/M: already saved — skipping save`.
+
+**Structural fallbacks extended:** The unlabelled-column fallbacks (ViewGroup and Button node patterns) now recognise 4-node sequences (Comment → shareFeed → shareDm → save) in addition to the existing 3-node and 2-node cases, for devices that strip all `content-desc` labels from the Reels column.
+
+**`ReelActionIcons` interface additions:**
+- `save: { x: number; y: number } | null`
+- `alreadySaved: boolean`
+
+**UI:** Save % min/max inputs are placed between Share to Feed % and Share via DM % in the View Reels settings panel, and the field appears in the global settings modal row data.
+
+---
+
+### Fix — View Reels: floating-window / window-context diagnostic in poll log
+
+**Problem:** When the View Reels pre-scan poll failed (player nodes not found), the log only said `"player not in tree yet"` with no indication of *why* — making it impossible to distinguish between two very different root causes when reading a submitted log.
+
+**Two known causes:**
+
+**A) Floating/multi-window (Instagram in a pop-up window):** Android's UIAutomator dumps the *focused* accessibility window. On devices running Xiaomi MIUI Free-form mode, Samsung Multi-window, or any launcher that allows floating app windows, Instagram can be running inside a pop-up while the Android recents/task-switcher layer holds focus. UIAutomator returns the recents XML (`task_view_thumbnail`, `recents_container`, etc.) — none of which are Instagram nodes — so every poll sees an empty tree not because the reel hasn't loaded, but because UIAutomator is looking at the wrong window entirely. This will never resolve on its own within the poll budget and requires dismissing the floating-window context at the OS level.
+
+**B) Regular window, player still loading:** Instagram IS the focused window and UIAutomator is dumping it correctly, but the reel video player hasn't attached its accessibility nodes yet (brief animation on first launch or inter-reel transition). This resolves within 1–2 polls.
+
+**Fix:** Each failed poll now inspects the dump and emits one of four diagnostic strings appended to the log line:
+
+- `⚠ floating/multi-window — dump returned Android recents layer (task_view_thumbnail detected); UIAutomator is not focused on the Instagram window`
+- `⚠ floating-window bar detected (txtSmallWindow / 'Floating windows' present) — Instagram may be in a pop-up window`
+- `regular window — Instagram a11y tree visible but reel player not yet attached (still loading)`
+- `unrecognised context — dump is N chars, no Instagram or recents nodes found`
+
+**Impact:** Future log submissions that show repeated `⚠ floating/multi-window` lines immediately identify the root cause without requiring a follow-up dump or guesswork.
+
+---
+
+### Fix — Windows installer: desktop shortcut position preserved across updates
+
+**Problem:** Every time a new version was installed on Windows, the desktop shortcut was deleted and recreated by the NSIS installer. Windows then lost the saved icon position for `Aura Farming.lnk` and repositioned it — usually to the top-left or according to auto-arrange — forcing the user to manually move it back after every update.
+
+**Root cause:** `electron-builder`'s built-in `createDesktopShortcut: true` causes NSIS to unconditionally delete the old `.lnk` and create a new one on every install, even when reinstalling over an existing version. Windows records icon positions in the Shell Bags registry blob keyed to the `.lnk` file identity; deleting and recreating the file breaks that association.
+
+**Fix:**
+- `createDesktopShortcut` set to `false` in `electron-builder.json` — NSIS no longer owns the shortcut.
+- New `installer.nsh` custom NSIS hooks file added:
+  - `customInstall` macro: checks `IfFileExists "$DESKTOP\Aura Farming.lnk"` — if the shortcut already exists (i.e. this is an update), skips creation entirely, leaving the existing `.lnk` in place at its current position. If the shortcut does not exist (first install), creates it pointing to `$INSTDIR\Aura Farming.exe`.
+  - `customUnInstall` macro: deletes the shortcut cleanly when the user runs the full uninstaller.
+
+**Result:** First install → shortcut created at Windows default position. Every subsequent update → shortcut untouched; stays exactly where the user placed it.
+
+---
+
 ## [1.2.57] — 2026-07-20
 
 ### Fix — Account switcher: poll for account rows to fully populate before giving up
