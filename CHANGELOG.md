@@ -4,6 +4,47 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.45] — 2026-07-20
+
+### New Tool — View Explore Page
+
+A new automation tool called **View Explore Page** has been added to the Human Session Tool panel, sitting between View Feed and View Stories in the cycle order.
+
+**What it does:**
+- Taps the Search/Explore tab (the same way the Follow tool navigates there) and waits for the Explore grid to fully load
+- Scrolls through the grid a configurable number of times (min/max scroll count)
+- Optionally taps individual grid posts at a configurable click percentage — the post opens exactly like a regular feed post
+- Once a post is open, the same actions available in View Feed are available here: Like, Share to Feed (repost), Share via DM, and Save
+- After acting on a post it presses Back to return to the Explore grid and continues scrolling
+- At the end of the tool run it taps the Home tab to cleanly return to the home feed
+
+**Settings available in the UI:**
+- **Enabled** — master toggle to include/exclude this tool from the cycle
+- **Activate Percentage** (min/max) — per-execution chance gate; if the roll misses, the whole tool is skipped for that cycle run
+- **Scroll this many times** (min/max) — how many swipe-up scrolls to perform on the Explore grid
+- **Delay between actions in s** (min/max) — pause between scroll events, in seconds
+- **Click posts %** (min/max) — chance per scroll that a random visible grid post will be tapped open
+- **Like % of posts** (min/max) — chance to like each opened post
+- **Share to Feed % of posts** (min/max) — chance to repost each opened post to the user's feed
+- **Share via DM % of posts** (min/max) — chance to share each opened post to a DM contact (full share-sheet flow with recipient rotation, same as View Feed)
+- **Save % of posts** (min/max) — chance to save each opened post to collections (collection popup auto-dismissed)
+
+**Implementation notes:**
+- The function `runViewExplorePage` is fully isolated — no code is shared with any other tool
+- Grid post tiles are identified by the `grid_card_layout_container` accessibility resource-id, filtered to exclude nodes in the search-bar zone (top 155px) and bottom nav zone (bottom 30px)
+- Action icons on opened posts are detected by `findFeedActionIcons` — an Explore post's action bar is identical to a regular feed post's
+- DM recipient rotation uses a dedicated per-device last-recipient map (`_viewExploreLastDmRecipient`) so the same recipient is not picked back-to-back, independent of the View Feed DM rotation
+- The tool slot is placed between `stories` and `reels` in `_toolSeq` and respects the shuffle tool order setting
+- All session-level chance values (click, like, share-feed, share-DM, save) are pre-rolled once at the start of the run so every scroll sees consistent rates
+
+### UI polish — "Delay between actions" label
+
+The unit label in the delay field for both **View Feed** and **View Explore Page** has been updated:
+- Label changed from `Delay between actions` to `Delay between actions in s`
+- The redundant `s` suffix that previously appeared inline after the minimum input field has been removed — the unit is now in the label only, matching the style of every other labelled field in the panel
+
+---
+
 ## [1.2.44] — 2026-07-19
 
 ### Fix — Follow tool: filter-skipped targets no longer abandon the follow; exhausted pool auto-re-scrapes from HikerAPI
