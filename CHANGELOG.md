@@ -6,9 +6,30 @@ All notable changes to Aura Farming are documented here.
 
 ## [1.2.52] — 2026-07-20
 
-### Fix — View Explore Page: action icons now found when post opens as a Reels viewer
+### Fix — View Explore Page: likes, reposts, and DM shares now actually execute
 
-When you tapped a post from the Explore grid it opened in the Reels-style viewer where Like/Share/etc sit in a vertical column on the right edge of the screen. The old icon scanner looked for them near the centre of the screen (where feed post icons live) and found nothing, so likes, reposts, and DM shares were silently skipped every time. The fix: when the centre scan returns nothing, the code now immediately tries the right-edge column scanner instead. Icon detection is now isolated exclusively to the View Explore Page tool and does not affect any other tool.
+**Problem:** Every like, repost, and DM share configured for the View Explore Page tool was being silently skipped on every single run — zero actions were being performed on opened posts, even with those features turned on.
+
+**Root cause:** When you tap a post from the Explore grid, Instagram opens it inside a Reels-style full-screen viewer. In that viewer, the Like, Repost, and Share icons are arranged in a **vertical column on the right edge** of the screen (x ≈ 998 px on a 1080 px device). The existing icon scanner (`findFeedActionIcons`) was designed for the regular home feed, where those icons sit in a **horizontal bar near the centre-bottom** of the screen. It searched for Like/Unlike near centre-x (≈ 540 px), found nothing at that position, returned null, and the code immediately fell through to "no action bar found — skipping actions".
+
+This affected 100 % of Explore post interactions — no likes, no reposts, no DM shares were ever attempted regardless of your configured percentages.
+
+**Fix:** Added an isolated null-path fallback exclusively inside the View Explore Page function. When `findFeedActionIcons` returns null (centre scan found nothing), the code now immediately tries `findReelActionIcons`, which scans the right-edge vertical column instead. If that scan succeeds, its results (Like, Repost/Share-to-feed, Share-via-DM positions) are used for all subsequent actions.
+
+**What the debug log now shows when working correctly:**
+```
+Explore scroll 1/2: feed scan found nothing — trying Reels column scan
+Explore scroll 1/2: Reels column found — like=(998,1343) shareFeed=(998,1713) shareDm=(998,1898)
+Explore scroll 1/2: ✓ liked at (999,1341)
+```
+
+**What it showed before (broken):**
+```
+[feed-icons] no Like/Unlike node found near centre — nearcentre clickable nodes: (178,645) cd="" rid="layout_container" ...
+Explore scroll 1/2: no action bar found — skipping actions
+```
+
+**Isolation:** This fallback exists only inside `runViewExplorePage`. No other tool is affected — View Feed, View Reels, Follow, and all other tools are completely unchanged.
 
 ---
 
