@@ -4,6 +4,79 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.62] — 2026-07-20
+
+### Fix — Jitter Tool: Profile tab not found on this device
+
+**Problem:** The Jitter tool logged `"Profile tab not found — skipping visit profile"` on every cycle. The profile visit was silently skipped every time, so accounts on this farm never received the jitter benefit.
+
+**Root cause:** `findInstagramProfileTab` had only two strategies — (1) a content-desc regex match and (2) a `_findByResId` call — neither of which matched the actual node structure on this device's IG build. Strategy 1 failed because the Profile tab node's `content-desc` does not match the expected pattern on this build. Strategy 2 failed because the resource-id searched was not the one present in the accessibility tree. Both returned null, the function returned null, and the Jitter tool's caller skipped the visit without retrying.
+
+**Fix:** Rewrote `findInstagramProfileTab` to use the same hardened 3-strategy pattern already used by `findHomeTab`:
+
+1. **Strategy 1 — content-desc regex:** Matches any node whose `content-desc` contains `"Profile"` (case-insensitive). Unchanged from before but kept as the first and fastest path for builds where it works.
+
+2. **Strategy 2 — resource-id:** Now searches `:id/profile_tab` **first** (the actual resource-id confirmed in the UI dump at node [96] on this device's build), followed by the previous ID as a secondary attempt. Both are tried before falling through.
+
+3. **Strategy 3 — positional fallback (new):** Scans all clickable nodes whose centre Y is in the bottom 12% of the screen (the navigation bar band). Among those candidates, it returns the **rightmost** one — the Profile tab is always the 5th and rightmost icon in Instagram's bottom nav, regardless of IG version or device resolution. This is the same logic used by `findHomeTab`'s positional fallback (which finds the leftmost node for Home).
+
+The positional fallback fires only when Strategies 1 and 2 both miss, so it adds no overhead on builds where the label/resource-id match succeeds.
+
+---
+
+### Fix — Phone Farm: Aura glow renders in front of phone and text (now behind)
+
+**Problem:** The active-device "aura glow" card effect (the animated elliptical inner glow on the selected device card in the Phone Farm tab) was being painted **on top of** the phone SVG graphic and the account/slot text labels. The glow partially obscured the card content, making the text hard to read on brighter accounts and the phone illustration invisible on active cards.
+
+**Root cause:** The glow was implemented as a CSS `::after` pseudo-element with `position: absolute; inset: 0`. In CSS paint order, `::after` is drawn after the element's content — including all child elements — so it always renders on top. No z-index manipulation can fix this because the pseudo-element's stacking context sits above non-positioned children.
+
+**Fix applied:**
+
+- **`::after` → `::before`:** The pseudo-element is now `::before`, which is drawn *before* the element's children in paint order, placing it permanently behind the phone SVG and all text without any z-index tricks.
+- **Pulse speed: 2.4 s → 1.2 s** — the breathing animation is now twice as fast, giving active cards a more energetic, live feel.
+- **Vertical reach: 69% → 93% (+35%)** — the ellipse's semi-minor axis was increased so the glow fills more of the card height, making the effect more visible especially on taller device cards.
+- **Opacity raised ~10%:** Peak opacity raised from 0.85 → 0.93, mid-stop from 0.42 → 0.46, outer stop from 0.11 → 0.12 — slightly denser glow that reads better at a glance without becoming garish.
+
+---
+
+### Fix — Inject Browsing (Profile Grid): scroll fires before new thumbnails render
+
+**Problem:** When the Inject Browsing tool scrolled down through a target user's profile grid to find a post to open, it occasionally opened the wrong post or tapped dead space. The inter-scroll pause was too short — the next swipe was being sent while the newly-loaded row of thumbnails was still animating or not yet drawn into the accessibility tree, causing the subsequent thumbnail-tap to land on a stale node.
+
+**Root cause:** The sleep between grid scrolls was `350 + rand(0–300) ms` (350–650 ms total). On this device, new thumbnail rows take 600–900 ms to fully render and settle after a scroll. A significant portion of inter-scroll windows therefore elapsed before the new content was ready.
+
+**Fix:** Inter-scroll sleep doubled to `800 + rand(0–400) ms` (800–1200 ms total). The lower bound now exceeds the worst-case observed render time, and the random jitter ensures the timing pattern doesn't look mechanical. No other changes to the scroll or tap logic.
+
+---
+
+### Feature — Inject Browsing: Save Post %
+
+A new **Save Post %** action has been added to the Inject Browsing tool, sitting between Share DM % and Abandon Follow % in the action sequence.
+
+**How it works:**
+
+When an Inject Browsing cycle opens a post, after the optional Share-to-DM action the bot now rolls independently against the `Save Post %` min/max range. If the roll hits, it looks up the bookmark icon (`row_feed_button_save` resource-id) in the current post's action row. If the icon is found, it taps it, waits 800 ms for the save animation to complete, and logs `✓ post saved`. The save is skipped (with a log note) if:
+- The roll misses (below the rolled %)
+- The bookmark icon is not found in the accessibility tree for this post (some IG builds omit it in certain feed views)
+- The cycle has been aborted
+
+**Settings wired end-to-end:**
+
+| Layer | Field(s) added |
+|---|---|
+| Frontend interface (`MobileSlotSettings`) | `injectBrowsingSavePostPctMin`, `injectBrowsingSavePostPctMax` |
+| Zod persistence schema (server POST handler) | `injectBrowsingSavePostPctMin`, `injectBrowsingSavePostPctMax` |
+| Both server default-object blocks | `0` / `0` |
+| `InjectBrowsingParams` inner interface | `savePostPctMin`, `savePostPctMax` |
+| `browsing` params assembly (destructuring → object) | ✓ |
+| Save-post execution block in `runProfileBrowsingSequence` | ✓ (rolls %, finds icon, taps, waits, logs) |
+| UI — `COPY_SECTIONS` (Inject Browsing sub-array) | `injectSavePost` row between Share DM % and Abandon Follow % |
+| UI — default values (both `DEFAULT_SLOT_SETTINGS` blocks) | `0` / `0` |
+
+**UI position:** Save Post % appears in the Inject Browsing settings panel between **Share DM %** and **Abandon Follow %**, matching the execution order in the automation code.
+
+---
+
 ## [1.2.61] — 2026-07-20
 
 ### Fix — Follow Users: search bar not cleared between rejected candidates

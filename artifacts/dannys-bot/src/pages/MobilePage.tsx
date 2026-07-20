@@ -2429,6 +2429,7 @@ interface AutomationSettingsData {
   injectBrowsingLikePctMin: number; injectBrowsingLikePctMax: number;
   injectBrowsingShareFeedPctMin: number; injectBrowsingShareFeedPctMax: number;
   injectBrowsingShareDmPctMin: number; injectBrowsingShareDmPctMax: number;
+  injectBrowsingSavePostPctMin: number; injectBrowsingSavePostPctMax: number;
   injectBrowsingAbandonFollowPctMin: number; injectBrowsingAbandonFollowPctMax: number;
   // Follow Filters — profile-quality gates applied before each follow action.
   // Not wired to execution logic yet — UI-only until the automation hooks are built.
@@ -2526,6 +2527,7 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   injectBrowsingLikePctMin: 0, injectBrowsingLikePctMax: 0,
   injectBrowsingShareFeedPctMin: 0, injectBrowsingShareFeedPctMax: 0,
   injectBrowsingShareDmPctMin: 0, injectBrowsingShareDmPctMax: 0,
+  injectBrowsingSavePostPctMin: 0, injectBrowsingSavePostPctMax: 0,
   injectBrowsingAbandonFollowPctMin: 0, injectBrowsingAbandonFollowPctMax: 0,
   followFiltersEnabled: false,
   followFilterPrivateUsers: false,
@@ -2837,6 +2839,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             injectBrowsingShareFeedPctMax: s.injectBrowsingShareFeedPctMax,
             injectBrowsingShareDmPctMin: s.injectBrowsingShareDmPctMin,
             injectBrowsingShareDmPctMax: s.injectBrowsingShareDmPctMax,
+            injectBrowsingSavePostPctMin: s.injectBrowsingSavePostPctMin,
+            injectBrowsingSavePostPctMax: s.injectBrowsingSavePostPctMax,
             injectBrowsingAbandonFollowPctMin: s.injectBrowsingAbandonFollowPctMin,
             injectBrowsingAbandonFollowPctMax: s.injectBrowsingAbandonFollowPctMax,
             followFiltersEnabled: s.followFiltersEnabled,
@@ -3130,6 +3134,7 @@ const COPY_SECTIONS: CopySection[] = [
     { key: 'injectLike',        label: 'Like %',                        fields: ['injectBrowsingLikePctMin','injectBrowsingLikePctMax'] },
     { key: 'injectShareFeed',   label: 'Share to Feed %',               fields: ['injectBrowsingShareFeedPctMin','injectBrowsingShareFeedPctMax'] },
     { key: 'injectShareDm',     label: 'Share DM %',                    fields: ['injectBrowsingShareDmPctMin','injectBrowsingShareDmPctMax'] },
+    { key: 'injectSavePost',    label: 'Save Post %',                   fields: ['injectBrowsingSavePostPctMin','injectBrowsingSavePostPctMax'] },
     { key: 'injectAbandon',     label: 'Abandon Follow %',              fields: ['injectBrowsingAbandonFollowPctMin','injectBrowsingAbandonFollowPctMax'] },
   ]},
   { key: 'randomJitter',  label: 'Random Jitter', sub: [

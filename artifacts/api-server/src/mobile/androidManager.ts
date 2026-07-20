@@ -4890,11 +4890,39 @@ export async function findInstagramProfileTab(serial: string): Promise<{ x: numb
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial).catch(() => "");
   if (!xml) return null;
+  // 1. content-desc exact/prefix match — fastest path when nav bar is rendered.
+  const re = /content-desc="Profile[^"]*"[^>]*bounds="([^"]+)"/;
+  const m = xml.match(re);
+  if (m) return _parseCenter(m[1]);
+  // 2. Known resource-ids — :id/profile_tab confirmed on this device (node [96]).
   const byId = _findByResId(xml,
-    ":id/profile", ":id/tab_profile", ":id/nav_profile",
+    ":id/profile_tab", ":id/profile", ":id/tab_profile", ":id/nav_profile",
     ":id/bottom_tab_profile", ":id/avatar_tab");
   if (byId) return byId;
-  return _findElem(xml, "Profile");
+  // 3. Positional fallback — collect clickable nodes in the bottom-nav band
+  //    (y > 88% of screen height), sort left-to-right, return the RIGHTMOST
+  //    (index -1). The profile tab is always the 5th/rightmost of the 5 tabs.
+  //    Mirrors findHomeTab strategy 3 (which returns the leftmost), mirrored.
+  const { h: xmlH } = _getScreenSize(xml);
+  const botMin = Math.round(xmlH * 0.88);
+  const raw: { x: number; y: number }[] = [];
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+  let nm: RegExpExecArray | null;
+  while ((nm = nodeRe.exec(xml)) !== null) {
+    const attrs = nm[1];
+    if (!/clickable="true"/.test(attrs)) continue;
+    const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+    if (!bm) continue;
+    const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
+    if (cy < botMin) continue;
+    raw.push({ x: Math.round((Number(bm[1]) + Number(bm[3])) / 2), y: cy });
+  }
+  const deduped = raw.filter((n, i, arr) =>
+    arr.findIndex(o => Math.abs(o.x - n.x) < 40 && Math.abs(o.y - n.y) < 40) === i,
+  );
+  if (deduped.length === 0) return null;
+  deduped.sort((a, b) => a.x - b.x);
+  return deduped[deduped.length - 1]; // rightmost = Profile tab
 }
 
 /**

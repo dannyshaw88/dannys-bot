@@ -240,6 +240,8 @@ type AutomationSettings = {
   injectBrowsingShareFeedPctMax?: number;
   injectBrowsingShareDmPctMin?: number;
   injectBrowsingShareDmPctMax?: number;
+  injectBrowsingSavePostPctMin?: number;
+  injectBrowsingSavePostPctMax?: number;
   injectBrowsingAbandonFollowPctMin?: number;
   injectBrowsingAbandonFollowPctMax?: number;
   // Random Jitter — human-like interstitial actions (same persistence fix as
@@ -1155,6 +1157,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     injectBrowsingShareFeedPctMax: z.number().min(0).max(100).default(0),
     injectBrowsingShareDmPctMin: z.number().min(0).max(100).default(0),
     injectBrowsingShareDmPctMax: z.number().min(0).max(100).default(0),
+    injectBrowsingSavePostPctMin: z.number().min(0).max(100).default(0),
+    injectBrowsingSavePostPctMax: z.number().min(0).max(100).default(0),
     injectBrowsingAbandonFollowPctMin: z.number().min(0).max(100).default(0),
     injectBrowsingAbandonFollowPctMax: z.number().min(0).max(100).default(0),
     // ── Follow Filters — profile-quality gates. Were missing from the
@@ -1278,6 +1282,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       injectBrowsingLikePctMin: 0, injectBrowsingLikePctMax: 0,
       injectBrowsingShareFeedPctMin: 0, injectBrowsingShareFeedPctMax: 0,
       injectBrowsingShareDmPctMin: 0, injectBrowsingShareDmPctMax: 0,
+      injectBrowsingSavePostPctMin: 0, injectBrowsingSavePostPctMax: 0,
       randomJitterEnabled: false,
       checkNotificationsPctMin: 0, checkNotificationsPctMax: 0,
       checkNotificationsScrollsMin: 2, checkNotificationsScrollsMax: 5,
@@ -1367,6 +1372,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         injectBrowsingLikePctMin: 0, injectBrowsingLikePctMax: 0,
         injectBrowsingShareFeedPctMin: 0, injectBrowsingShareFeedPctMax: 0,
         injectBrowsingShareDmPctMin: 0, injectBrowsingShareDmPctMax: 0,
+        injectBrowsingSavePostPctMin: 0, injectBrowsingSavePostPctMax: 0,
         injectBrowsingAbandonFollowPctMin: 0, injectBrowsingAbandonFollowPctMax: 0,
         followFiltersEnabled: false,
         followFilterPrivateUsers: false,
@@ -4286,6 +4292,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     likePctMin: number; likePctMax: number;
     shareFeedPctMin: number; shareFeedPctMax: number;
     shareDmPctMin: number; shareDmPctMax: number;
+    /** Chance (%) to save the viewed post — taps the ribbon/bookmark icon. */
+    savePostPctMin: number; savePostPctMax: number;
     /** Chance (%) to skip the follow entirely after browsing — adds variation
      *  so not every browsing session ends in a follow. The user can still be
      *  scraped and followed again later by any account. */
@@ -4383,7 +4391,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     for (let i = 0; i < rows; i++) {
       if (isCycleAborted(serial)) throw new Error("cycle-aborted");
       await android.swipe(serial, x, y1, x, y2, 500 + Math.round(Math.random() * 200));
-      await sleepOrAbort(serial, 350 + Math.round(Math.random() * 300));
+      await sleepOrAbort(serial, 800 + Math.round(Math.random() * 400));
     }
 
     const clickChance = rollRange(browsing.clickPostPctMin, browsing.clickPostPctMax) / 100;
@@ -4665,6 +4673,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       } catch (e: any) {
         if (e?.message === "cycle-aborted") throw e;
         onLog?.(`Inject Browsing: share-via-DM error — ${e?.message}`);
+      }
+    }
+
+    // ── Save Post ────────────────────────────────────────────────────────────
+    const savePostChance = rollRange(browsing.savePostPctMin, browsing.savePostPctMax) / 100;
+    if (!(savePostChance > 0 && Math.random() < savePostChance)) {
+      onLog?.("Inject Browsing: save-post roll missed — skipping");
+    } else if (!icons.save) {
+      logger.info({ serial }, "[inject-browsing] skipped save-post — row_feed_button_save not found on this post");
+      onLog?.("Inject Browsing: skipped save-post — bookmark icon not found on this post");
+    } else {
+      try {
+        if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+        await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
+        onLog?.(`Inject Browsing: tapping save icon at (${icons.save.x},${icons.save.y})…`);
+        await android.tap(serial, icons.save.x, icons.save.y);
+        await sleepOrAbort(serial, 800);
+        onLog?.("Inject Browsing: ✓ post saved");
+      } catch (e: any) {
+        if (e?.message === "cycle-aborted") throw e;
+        onLog?.(`Inject Browsing: save-post error — ${e?.message}`);
       }
     }
 
@@ -5373,6 +5402,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         injectBrowsingLikePctMin, injectBrowsingLikePctMax,
         injectBrowsingShareFeedPctMin, injectBrowsingShareFeedPctMax,
         injectBrowsingShareDmPctMin, injectBrowsingShareDmPctMax,
+        injectBrowsingSavePostPctMin, injectBrowsingSavePostPctMax,
         injectBrowsingAbandonFollowPctMin, injectBrowsingAbandonFollowPctMax,
         randomJitterEnabled,
         checkNotificationsPctMin, checkNotificationsPctMax,
@@ -5809,6 +5839,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   likePctMin: injectBrowsingLikePctMin, likePctMax: injectBrowsingLikePctMax,
                   shareFeedPctMin: injectBrowsingShareFeedPctMin, shareFeedPctMax: injectBrowsingShareFeedPctMax,
                   shareDmPctMin: injectBrowsingShareDmPctMin, shareDmPctMax: injectBrowsingShareDmPctMax,
+                  savePostPctMin: injectBrowsingSavePostPctMin, savePostPctMax: injectBrowsingSavePostPctMax,
                   abandonFollowPctMin: injectBrowsingAbandonFollowPctMin, abandonFollowPctMax: injectBrowsingAbandonFollowPctMax,
                 } : undefined,
                 filters: followFiltersEnabled
