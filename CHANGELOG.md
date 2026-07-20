@@ -4,6 +4,27 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.56] — 2026-07-20
+
+### Fix — View Reels: pre-scan poll waits for reel player to appear in accessibility tree
+
+**Problem:** View Reels occasionally failed to like/share a reel even though the reel was visually playing on screen. The next cycle (or next reel in the same cycle) worked fine on the identical reel.
+
+**Root cause:** Identical to the floating-window issue previously fixed in View Explore Page (v1.2.55). The reel player sometimes opens in a separate accessibility window layer before handing focus to the main window. During this transition, `uiautomator dump` still returns the underlying Reels-tab UI rather than the player's nodes. `findReelActionIcons` running against that dump finds no action-icon column and returns null — the like/share is silently skipped with no visible error. The next cycle the player renders into the main window and succeeds immediately.
+
+The v1.2.55 pre-poll fix was applied only to the Explore tool. View Reels had no equivalent gate and was vulnerable to the same failure.
+
+**Fix:** Inserted the same cheap pre-scan poll gate into the View Reels loop. Before calling `findReelActionIcons`, the code now does raw dumps every 2 seconds (up to 6 polls = 12 s budget) checking for any known reel-player node (`like_count`, `comment_button`, `direct_share_button`). The moment one appears the poll exits and the column scan runs — zero extra wait in the normal case. If the budget expires the code falls through to the scan anyway (same behaviour as before).
+
+This block is isolated to the View Reels loop and has no effect on any other tool.
+
+Log lines added:
+- `"Reel N/M: player not in tree yet — retrying in 2s (poll N/6)"` — each 2s wait
+- `"Reel N/M: player ready after Xs extra wait"` — on success after ≥1 retry
+- `"Reel N/M: player never appeared in tree — proceeding anyway"` — if all 6 polls fail
+
+---
+
 ## [1.2.55] — 2026-07-20
 
 ### Fix — View Explore Page: pre-scan poll waits for post viewer to appear in accessibility tree

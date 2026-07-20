@@ -3289,6 +3289,42 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const wantShareDm   = shareDmPercentMax > 0 && Math.random() * 100 < rollRange(shareDmPercentMin, shareDmPercentMax);
 
       if (wantLike || wantShareFeed || wantShareDm) {
+        // ── View Reels: wait for reel player nodes to appear ────────────────
+        // Problem: the reel viewer sometimes opens in a separate accessibility
+        // window layer (observed on Xiaomi MIUI). UIAutomator's dump captures
+        // only the focused window — during the opening animation or before the
+        // view attaches, the dump still returns the underlying Reels tab UI
+        // rather than the player. findReelActionIcons running against that dump
+        // finds nothing and returns null, so the like/share is silently skipped.
+        //
+        // Fix: cheap raw-dump poll for ANY known reel-player node before the
+        // expensive column scan. The moment one appears the tree is ready.
+        // If no node appears within the budget, fall through — the existing
+        // null path handles it as before, but now logs every poll attempt.
+        // This block is isolated to the View Reels loop and has no effect on
+        // any other tool.
+        {
+          const REEL_NODES = [
+            "com.instagram.android:id/like_count",
+            "com.instagram.android:id/comment_button",
+            "com.instagram.android:id/direct_share_button",
+          ];
+          const POLL_MS   = 2000;
+          const MAX_POLLS = 6; // up to 12 s extra wait
+          let reelReady = false;
+          for (let p = 0; p < MAX_POLLS && !reelReady; p++) {
+            const pollXml = await android.dumpUi(serial).catch(() => "");
+            if (REEL_NODES.some(n => pollXml.includes(n))) {
+              reelReady = true;
+              if (p > 0) onLog?.(`Reel ${i + 1}/${totalReels}: player ready after ${p * POLL_MS / 1000}s extra wait`);
+            } else {
+              onLog?.(`Reel ${i + 1}/${totalReels}: player not in tree yet — retrying in ${POLL_MS / 1000}s (poll ${p + 1}/${MAX_POLLS})`);
+              await sleepOrAbort(serial, POLL_MS);
+            }
+          }
+          if (!reelReady) onLog?.(`Reel ${i + 1}/${totalReels}: player never appeared in tree — proceeding anyway`);
+        }
+
         onLog?.(`Reel ${i + 1}/${totalReels}: scanning right-side action column…`);
         const icons = await android.findReelActionIcons(serial, (msg) => onLog?.(`  ${msg}`)).catch(() => null);
         if (!icons) {
