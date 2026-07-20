@@ -4243,14 +4243,31 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   /** Visit own profile: tap profile icon in bottom nav, dwell briefly, return to home. */
   async function runVisitOwnProfile(serial: string, onLog?: (msg: string) => void): Promise<void> {
-    // Press Back once before scanning so we are guaranteed to be on the
-    // Instagram home feed, not still on the notifications page or any other
-    // intermediate screen that could cause findInstagramProfileTab to match
-    // a wrong element (e.g. the "Add Story" + button in the top-left of the
-    // feed, which can appear in the accessibility tree with similar attributes
-    // to the profile tab when the nav-bar is not fully rendered yet).
-    await android.pressBack(serial);
-    await sleepOrAbort(serial, 800);
+    // Navigate reliably to the home feed BEFORE looking for the profile tab.
+    //
+    // WHY NOT pressBack: runCheckNotifications already calls pressBack at the
+    // end to return to the home feed. Pressing Back a second time from the
+    // home feed on this device either exits Instagram entirely (KEYCODE_BACK
+    // from the root feed Activity = app exit on many Xiaomi/Redmi builds) or
+    // shows a "press Back again to exit" snackbar. In either case the
+    // accessibility tree no longer contains the Instagram bottom nav bar, so
+    // all three strategies in findInstagramProfileTab return null and the step
+    // is silently skipped every cycle.
+    //
+    // FIX: tap the Home tab by resource-id / content-desc — this is always
+    // safe from any screen inside Instagram (it just refreshes the feed) and
+    // guarantees the nav bar is fully rendered before we scan for the Profile
+    // tab. Fall back to pressBack only if findHomeTab itself returns null
+    // (e.g., we are somehow outside Instagram entirely).
+    const homeTabFirst = await android.findHomeTab(serial).catch(() => null);
+    if (homeTabFirst) {
+      await android.tap(serial, homeTabFirst.x, homeTabFirst.y);
+      await sleepOrAbort(serial, 1000);
+    } else {
+      // Last resort: press Back and hope we land somewhere with a nav bar.
+      await android.pressBack(serial);
+      await sleepOrAbort(serial, 1000);
+    }
 
     // Locate profile tab via accessibility tree — more reliable than fixed %
     // coordinates which drift across screen resolutions and OEM skins.

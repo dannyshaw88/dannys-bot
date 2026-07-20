@@ -4,6 +4,35 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.64] — 2026-07-20
+
+### Fix — Jitter Tool: "Profile tab not found" every cycle (Back press was exiting Instagram)
+
+**Problem:** `runVisitOwnProfile` logged `"Random Jitter: profile tab not found — skipping visit profile"` on every single cycle even after the v1.2.63 locale/guard fixes. The profile visit was never executed.
+
+**Root cause — double Back press exiting Instagram:**
+
+`runCheckNotifications` (which runs immediately before `runVisitOwnProfile`) already calls `pressBack` at its end to return to the home feed after browsing notifications. `runVisitOwnProfile` then called `pressBack` a *second* time — from the home feed.
+
+On this Redmi Note 11 (`23076RN8DY`) running MIUI/HyperOS, pressing Back from the root Instagram home-feed Activity behaves as an app-exit gesture: Instagram either fully closes (returns to the Android home screen) or shows an exit confirmation snackbar and suspends the feed. In both cases the UIAutomator accessibility dump taken immediately after no longer contains the Instagram bottom navigation bar, so all three strategies inside `findInstagramProfileTab` return null and the step is silently skipped.
+
+The v1.2.63 locale (Strategy 1) and Reels-guard (Strategy 3) fixes were both correct and still apply — but they were never reached because the double Back press meant Instagram itself wasn't on screen when the scan ran.
+
+**Fix — tap Home tab instead of pressing Back:**
+
+Replaced the `pressBack` at the top of `runVisitOwnProfile` with a `findHomeTab` → tap sequence:
+
+1. Call `android.findHomeTab(serial)` to locate the Home tab by resource-id (`:id/feed_tab` / `:id/home_tab`) or content-desc ("Home…") in the current accessibility tree.
+2. If found, tap it and wait 1 000 ms. Tapping the Home tab from anywhere inside Instagram is always safe — from the feed it simply refreshes; from a detail or secondary page it navigates back to the feed. It never exits the app.
+3. If `findHomeTab` returns null (unlikely — would mean we are already outside Instagram), fall back to a single `pressBack` + 1 000 ms wait, which is the original behaviour.
+
+After either path the phone is guaranteed to be on the Instagram home feed with the bottom navigation bar fully rendered, so `findInstagramProfileTab` Strategies 1/2/3 all have a clean tree to scan.
+
+**Why the previous comment was wrong:**
+The old comment said *"Press Back once before scanning so we are guaranteed to be on the Instagram home feed"*. This was true when `runVisitOwnProfile` ran from an arbitrary mid-session screen (before `runCheckNotifications` existed). Now that `runCheckNotifications` always runs first and already returns to the feed, a second Back press is not only unnecessary — it's actively harmful on exit-sensitive devices.
+
+---
+
 ## [1.2.63] — 2026-07-20
 
 ### Fix — Phone Farm: Aura glow now correctly renders behind the phone and text
