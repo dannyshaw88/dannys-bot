@@ -4,6 +4,25 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.48] — 2026-07-20
+
+### Fix — Inject Browsing: scroll-back geometry now mirrors scroll-down exactly
+
+**Problem:** When Inject Browsing scrolled a profile grid down N rows before the follow tap, the scroll-back sequence failed to return fully to the top. With 7 rows scrolled down, the Follow button was still off-screen after the 7 scroll-back swipes, causing "Follow button not found" every time inject browsing ran before a follow.
+
+**Root cause — swipe distance mismatch:**
+
+| Direction | Finger travel | Distance |
+|---|---|---|
+| Scroll down | `0.78 → 0.30` of screen height | **48 %** per swipe |
+| Scroll back up | `0.55 → 0.82` of screen height | **27 %** per swipe |
+
+7 swipes down × 48 % = 336 % of content scrolled. 7 swipes back up × 27 % = only 189 % recovered — barely over half. The code comment claimed a short start-y of 0.55 was needed to "avoid the profile header zone", but pull-to-refresh is triggered by the content's scroll *position*, not the finger's *start point* on screen — so a longer swipe does not risk pull-to-refresh as long as the row count does not exceed the rows scrolled down.
+
+**Fix:** Scroll-back swipe changed to `0.35 → 0.80` (45 % of screen height, matching the 48 % down within rounding), swipe duration raised from 300 ms to 400 ms, inter-swipe sleep raised from 200 ms to 350 ms to match the scroll-down pacing.
+
+---
+
 ## [1.2.47] — 2026-07-20
 
 ### Phone Farm — active device card now pulses with a cyan aura glow
