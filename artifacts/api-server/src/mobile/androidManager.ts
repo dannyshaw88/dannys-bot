@@ -4178,8 +4178,32 @@ export async function switchToInstagramAccount(
   //    (no @ prefix) or content-desc="username". Try both the bare username
   //    and the @-prefixed variant since different IG versions use different
   //    attributes.
-  const xml = await _uiDump(adbPath, serial).catch(() => "");
-  const coords = _findElem(xml, clean, `@${clean}`);
+  //
+  //    Poll loop (up to 5 × 1500ms = 7.5s) — the switcher sheet sometimes
+  //    opens visually but takes several extra seconds to fully populate its
+  //    account rows in the accessibility tree (observed on freshly launched
+  //    Instagram where the first video frame was still tiny / screen dark).
+  //    A single dump fired immediately after the gesture catches the shell
+  //    before the rows render and returns "not found" even though the account
+  //    IS logged in. Subsequent cycles (warm Instagram) succeed because the
+  //    switcher populates faster. The poll exits on the first dump that
+  //    contains the username — zero extra wait in the normal (warm) case.
+  let xml = "";
+  let coords: { x: number; y: number } | null = null;
+  const SWITCHER_POLL_MS  = 1500;
+  const SWITCHER_MAX_POLL = 5;
+  for (let p = 0; p < SWITCHER_MAX_POLL; p++) {
+    xml = await _uiDump(adbPath, serial).catch(() => "");
+    coords = _findElem(xml, clean, `@${clean}`);
+    if (coords) break; // found — proceed to tap
+    // Also break early if the username appears anywhere in the XML —
+    // that means we're already on this account (active-account path below).
+    if (xml.includes(`"@${clean}"`) || xml.includes(`"${clean}"`)) break;
+    if (p < SWITCHER_MAX_POLL - 1) {
+      onLog?.(`  ↳ Switcher not fully populated yet — retrying in ${SWITCHER_POLL_MS / 1000}s (poll ${p + 1}/${SWITCHER_MAX_POLL})`);
+      await _sleep(SWITCHER_POLL_MS);
+    }
+  }
 
   if (!coords) {
     // Primary search (exact text/content-desc) found nothing.  The currently-
