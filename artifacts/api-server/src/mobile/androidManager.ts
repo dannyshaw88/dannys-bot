@@ -2988,6 +2988,11 @@ export async function isFeedbackOrSurveyCard(serial: string): Promise<boolean> {
     "Why am I seeing this",
     "Rate this ad",
     "How relevant was this ad",
+    // Embedded Reels suggestion card — "Watch more reels" / "Watch Again"
+    // buttons appear when Instagram injects a Reels card into the home feed.
+    // Tapping Like on this card opens the Reel full-screen viewer.
+    "Watch more reels",
+    "Watch Again",
   ];
   return MARKERS.some(m => xml.includes(m));
 }
