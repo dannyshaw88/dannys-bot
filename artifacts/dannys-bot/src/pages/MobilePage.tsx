@@ -737,6 +737,10 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   const pendingSingleTapRef = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
   const DOUBLE_TAP_MS = 350;
   const DOUBLE_TAP_PX = 40; // phone-coordinate pixels
+  // A stationary hold longer than this fires as a long-press (zero-distance
+  // 2000ms swipe) rather than a regular tap.  600ms is well above the longest
+  // intentional fast-tap (~200ms) and well below an accidental hold.
+  const LONG_PRESS_MS = 600;
 
   useEffect(() => {
     return () => { if (pendingSingleTapRef.current) clearTimeout(pendingSingleTapRef.current.timer); };
@@ -902,6 +906,39 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       // parsing.  Normal interaction resumes once recording stops.
       if (logRecModeRef2.current) {
         onExpectedTapRef.current?.(drag.startX, drag.startY, "expected");
+        return;
+      }
+
+      // ── Long-press — stationary hold ≥ 600ms ────────────────────────────
+      // A zero-distance swipe with a 2000ms duration is the standard ADB
+      // idiom for a long-press (the same as switchToInstagramAccount uses to
+      // open the account switcher).  Without this path, holding on the mirror
+      // always resolved to a regular tap, which opened the profile tab instead
+      // of triggering the account switcher, context menus, etc.
+      if (durationMs >= LONG_PRESS_MS) {
+        // Clean up any pending single-tap (shouldn't exist, but be safe).
+        if (pendingSingleTapRef.current) {
+          clearTimeout(pendingSingleTapRef.current.timer);
+          pendingSingleTapRef.current = null;
+        }
+        addLog(`[manual] Long-press → (${drag.startX}, ${drag.startY}) [held ${durationMs}ms]`);
+        try {
+          const phoneSize = phoneSizeRef.current;
+          const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/longpress`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ x: drag.startX, y: drag.startY, videoW: phoneSize?.w, videoH: phoneSize?.h }),
+          });
+          if (!r.ok) {
+            const body = await r.json().catch(() => null);
+            addLog(`Long-press FAILED (${r.status}) — ${body?.error ?? "no error detail"}`);
+          } else {
+            const body = await r.json().catch(() => null);
+            if (body?.rescaled) addLog(`Rescale: video ${body.video[0]}×${body.video[1]} → device ${body.device[0]}×${body.device[1]}, (${body.from[0]},${body.from[1]}) → (${body.to[0]},${body.to[1]})`);
+          }
+        } catch (err: any) {
+          addLog(`Long-press FAILED — ${err?.message ?? "network error"}`);
+        }
         return;
       }
 

@@ -6169,6 +6169,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
+  // Manual long-press from the operator holding on the mirrored screen.
+  // The standard ADB idiom for a long-press is a zero-distance swipe with a
+  // long duration — same as the automation uses in switchToInstagramAccount
+  // to open the account switcher.  2000ms is the same duration used there.
+  app.post("/api/mobile/devices/:serial/input/longpress", async (req: Request, res: Response) => {
+    try {
+      const input = tapSchema.parse(req.body);
+      const serial = p(req, "serial");
+      const result = rescaleForDevice(serial, input.x, input.y, input.videoW, input.videoH);
+      await android.swipe(serial, result.x, result.y, result.x, result.y, 2000);
+      res.json({ ok: true, rescaled: result.rescaled, video: result.video, device: result.device, from: result.from, to: result.to });
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
+
   // Manual double-tap (like) from the operator clicking the mirrored screen
   // twice — must go through the same single-adb-call `doubleTap` used by
   // the automated Check Feed loop. Sending this as two separate
