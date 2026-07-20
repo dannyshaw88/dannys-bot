@@ -1658,7 +1658,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const adbPath = tools.adb.path;
       if (adbPath) {
         const wm = spawnSync(adbPath, ["-s", serial, "shell", "wm", "size"], { encoding: "utf8", timeout: 3000 });
-        const m = (wm.stdout ?? "").match(/(\d+)x(\d+)/);
+        const out = wm.stdout ?? "";
+        // UIAutomator and `adb shell input tap` both operate in the OVERRIDE
+        // (logical) coordinate space, not the physical pixel space.
+        // OEM devices (Xiaomi, Oppo, etc.) often print both:
+        //   Physical size: 1080x2400
+        //   Override size: 720x1280
+        // A naïve /(\d+)x(\d+)/ grabs the first match (physical), causing
+        // every percentage-based tap to land at the wrong position.
+        // Always prefer Override size when present — identical fix already
+        // applied to the same function in androidManager.ts.
+        const mOverride = out.match(/Override\s+size:\s*(\d+)x(\d+)/i);
+        const mAny      = out.match(/(\d+)x(\d+)/);
+        const m = mOverride ?? mAny;
         if (m) { w = parseInt(m[1]); h = parseInt(m[2]); }
       }
     } catch { /* fall back to defaults above */ }

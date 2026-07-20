@@ -4,6 +4,33 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.54] — 2026-07-20
+
+### Fix — View Stories: advance tap lands at the correct position on all devices
+
+**Problem:** After watching a story slide, the advance tap was landing in the wrong place — appearing to the user as top-left of the screen instead of middle-right.
+
+**Root cause — two bugs compounding each other:**
+
+**Bug 1 — Wrong screen dimensions on OEM phones (the x problem):**
+`getScreenSize()` inside `mobile.ts` used a naive regex `/(\d+)x(\d+)/` that always grabs the first number pair from `adb shell wm size`. On OEM phones (Xiaomi, Oppo, Realme, etc.) that apply a display-size override, `wm size` prints two lines:
+```
+Physical size: 1080x2400
+Override size: 720x1280
+```
+The naive regex matched the Physical size. But `adb shell input tap` and the UIAutomator accessibility tree both operate in the Override (logical) coordinate space. So the code computed `x = 1080 * 0.97 = 1048` but sent it into a 720-pixel-wide coordinate space — the coordinate was out of bounds and landed nowhere near the intended right edge.
+
+This exact bug was already found and fixed in `androidManager.ts` months ago, but `mobile.ts` never received the same fix. The fix is now applied: Override size is always preferred when present, falling back to the first match if no override line exists.
+
+**Bug 2 — y too close to the top (the top-vs-middle problem):**
+The y position was at `h × 0.15` (15% from top), intended to sit below the author header. In practice the author bar (progress strip + avatar + name + mute button) runs to ~12–15% on most story layouts, putting the tap right on the author's name row and opening their profile. Fixed in v1.2.53: y moved to `h × 0.45` (mid-screen).
+
+**Combined effect of both fixes:**
+- x: now correctly reads Override dimensions → `w * 0.97` reliably lands within 3% of the right edge on every device
+- y: `h * 0.45` is firmly in story content, below the author header and above the reply bar
+
+---
+
 ## [1.2.53] — 2026-07-20
 
 ### Fix — View Stories: advance tap no longer opens the story author's profile
