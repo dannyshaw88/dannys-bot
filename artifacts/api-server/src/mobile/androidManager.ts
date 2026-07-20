@@ -4890,20 +4890,31 @@ export async function findInstagramProfileTab(serial: string): Promise<{ x: numb
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial).catch(() => "");
   if (!xml) return null;
-  // 1. content-desc exact/prefix match — fastest path when nav bar is rendered.
-  const re = /content-desc="Profile[^"]*"[^>]*bounds="([^"]+)"/;
+  // ── Strategy 1: content-desc prefix match.
+  // Use "Profil" (not "Profile") so this also matches the Indonesian locale
+  // where Instagram renders the tab as content-desc="Profil" (no trailing 'e').
+  // "Profil" is a prefix of "Profile", "Profil", "Profilo" (IT), etc.
+  const re = /content-desc="Profil[^"]*"[^>]*bounds="([^"]+)"/i;
   const m = xml.match(re);
   if (m) return _parseCenter(m[1]);
-  // 2. Known resource-ids — :id/profile_tab confirmed on this device (node [96]).
+  // ── Strategy 2: known resource-ids — :id/profile_tab confirmed on this device (node [96]).
   const byId = _findByResId(xml,
     ":id/profile_tab", ":id/profile", ":id/tab_profile", ":id/nav_profile",
     ":id/bottom_tab_profile", ":id/avatar_tab");
   if (byId) return byId;
-  // 3. Positional fallback — collect clickable nodes in the bottom-nav band
-  //    (y > 88% of screen height), sort left-to-right, return the RIGHTMOST
-  //    (index -1). The profile tab is always the 5th/rightmost of the 5 tabs.
-  //    Mirrors findHomeTab strategy 3 (which returns the leftmost), mirrored.
-  const { h: xmlH } = _getScreenSize(xml);
+  // ── Strategy 3: positional fallback.
+  // Collect clickable nodes in the bottom-nav band (y > 88 % of screen height),
+  // deduplicate, sort left-to-right, return the RIGHTMOST — the Profile tab is
+  // always the 5th/rightmost of Instagram's 5 bottom-nav tabs.
+  //
+  // GUARDS against false positives:
+  //  a) Require ≥ 4 candidates — a real nav bar has 4-5 tabs; if we see fewer
+  //     the phone is probably showing a full-screen Reels/story view whose action
+  //     icons (Like, Comment, Send) sit at the same y-band but are too few.
+  //  b) Require candidates span > 55 % of screen width — Instagram's nav tabs
+  //     spread across the full card width, while Reels action icons are all
+  //     clustered on the right edge and fail this check.
+  const { w: xmlW, h: xmlH } = _getScreenSize(xml);
   const botMin = Math.round(xmlH * 0.88);
   const raw: { x: number; y: number }[] = [];
   const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
@@ -4920,8 +4931,10 @@ export async function findInstagramProfileTab(serial: string): Promise<{ x: numb
   const deduped = raw.filter((n, i, arr) =>
     arr.findIndex(o => Math.abs(o.x - n.x) < 40 && Math.abs(o.y - n.y) < 40) === i,
   );
-  if (deduped.length === 0) return null;
+  if (deduped.length < 4) return null; // guard (a): too few nodes → not a nav bar
   deduped.sort((a, b) => a.x - b.x);
+  const spanW = deduped[deduped.length - 1].x - deduped[0].x;
+  if (spanW < xmlW * 0.55) return null; // guard (b): too narrow → action-icon cluster, not nav bar
   return deduped[deduped.length - 1]; // rightmost = Profile tab
 }
 

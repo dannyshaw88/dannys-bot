@@ -4,6 +4,49 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.63] — 2026-07-20
+
+### Fix — Phone Farm: Aura glow now correctly renders behind the phone and text
+
+**Problem:** The aura glow on active device cards (introduced in v1.2.62) was still painting **on top of** the phone SVG and the device name/status text, making the content hard to read on active cards — exactly the opposite of intended.
+
+**Root cause:** Switching from `::after` to `::before` is not sufficient to push a pseudo-element behind children. In CSS, a `position: absolute` pseudo-element (whether `::before` or `::after`) participates in stacking order based on its `z-index`, not on its source order. Without an explicit `z-index`, a positioned `::before` still renders *above* all non-positioned children (the phone SVG and text labels are non-positioned flex items). Source order only controls paint order for non-positioned elements.
+
+**Fix (two-part):**
+
+1. **`isolation: isolate` added to `.device-card-active`** — This creates a new, self-contained stacking context for the card. Inside an isolated stacking context, `z-index: -1` on a child pushes it *behind all siblings* but keeps it *above the card's own background* (the isolation boundary stops it from escaping beneath the card entirely, which would make it invisible).
+
+2. **`z-index: -1` added to `.device-card-active::before`** — Within the isolated stacking context established above, this places the glow gradient below every non-positioned child (phone SVG, text, status dots) while keeping it visible above the card background. No changes to the gradient shape, opacity, or animation timing.
+
+---
+
+### Fix — Jitter Tool: Profile tab positional fallback was picking Reels (Indonesian locale + full-screen guard)
+
+**Problem:** `findInstagramProfileTab` Strategy 3 (positional fallback) was tapping the Reels tab instead of the Profile tab. The Jitter tool's "visit own profile" step therefore navigated to Reels every cycle, logged `✓ visited own profile` incorrectly, and never actually visited the profile.
+
+**Root cause — two separate failures, both needed:**
+
+**Failure 1 — Indonesian locale (Strategy 1 regex):**
+Strategy 1 used the regex `content-desc="Profile[^"]*"`. On this device, Instagram is installed in Indonesian (Bahasa Indonesia), and the profile tab's `content-desc` attribute reads `"Profil"` — not `"Profile"`. The letter 'e' is absent in Indonesian. The regex never matched, Strategy 1 always fell through.
+
+**Failure 2 — Reels full-screen guard (Strategy 3 false positive):**
+When a previous tool (e.g., View Reels or Inject Browsing) left the phone on the full-screen Reels viewer, `findInstagramProfileTab` was called while the nav bar was hidden. In Reels full-screen mode:
+- Strategy 1: no Profile node in the accessibility tree (nav bar not rendered)
+- Strategy 2: `:id/profile_tab` absent from the tree (same reason)
+- Strategy 3 (positional): scanned all clickable nodes at y > 88% of screen height and returned the rightmost one. In the Reels viewer, the bottom-right action column (Like, Comment, Share icons) is the dominant clickable cluster at that y-band. The rightmost of those icons was returned — landing a tap on a Reels action, not the nav bar.
+
+**Fixes applied:**
+
+**Strategy 1 — locale-agnostic prefix:** Changed regex from `"Profile[^"]*"` to `"Profil[^"]*"` (case-insensitive). `"Profil"` is a prefix that matches `"Profile"` (English), `"Profil"` (Indonesian, Dutch), `"Profilo"` (Italian), and any future locale variant that starts with the same root. No false positives: no Instagram UI element other than the profile tab uses a content-desc starting with "Profil".
+
+**Strategy 3 — two geometric guards:**
+- **Guard A — minimum candidate count:** Only treat the scan result as a valid nav bar if at least **4 candidates** are found after deduplication. Instagram's bottom nav always has 4-5 tabs; the Reels action-icon column has 3 (Like, Comment, Share). If fewer than 4 candidates are found, Strategy 3 returns null rather than guessing.
+- **Guard B — horizontal spread:** Only trust the scan result if the candidates span more than **55% of screen width** from leftmost to rightmost. A real nav bar stretches across the entire card width (roughly 5% → 95%). The Reels action-icon column is clustered in the right 20% of the screen and fails this check immediately.
+
+Both guards must pass for Strategy 3 to return a result. If either fails, `findInstagramProfileTab` returns null — the poll loop in the caller will retry up to 5× before giving up, which is already the correct graceful-failure path.
+
+---
+
 ## [1.2.62] — 2026-07-20
 
 ### Fix — Jitter Tool: Profile tab not found on this device

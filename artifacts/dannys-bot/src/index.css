@@ -384,12 +384,20 @@
 .device-card-active {
   position: relative;
   overflow: hidden;
+  /* isolation: isolate creates a new stacking context so that ::before with
+     z-index: -1 renders BEHIND card children (phone SVG, text) but still
+     ABOVE the card's own background — without it, the absolutely-positioned
+     ::before paints above non-positioned children regardless of pseudo-element
+     order. */
+  isolation: isolate;
   border-color: rgba(34, 211, 238, 0.35) !important;
 }
 .device-card-active::before {
   content: '';
   position: absolute;
   inset: 0;
+  /* z-index: -1 within the isolation context puts the glow behind all children. */
+  z-index: -1;
   background: radial-gradient(
     ellipse 80% 93% at 50% 100%,
     rgba(34, 211, 238, 0.93)  0%,
