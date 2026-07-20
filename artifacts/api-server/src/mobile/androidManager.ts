@@ -2974,7 +2974,7 @@ export async function getContentDescNear(serial: string, x: number, y: number, t
  * cascades into the rest of the cycle misbehaving. Detected from on-screen
  * text so it's caught regardless of where the card lands after a scroll.
  */
-export async function isFeedbackOrSurveyCard(serial: string): Promise<boolean> {
+export async function isFeedbackOrSurveyCard(serial: string): Promise<string | null> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial).catch(() => "");
@@ -2994,7 +2994,8 @@ export async function isFeedbackOrSurveyCard(serial: string): Promise<boolean> {
     "Watch more reels",
     "Watch Again",
   ];
-  return MARKERS.some(m => xml.includes(m));
+  const matched = MARKERS.find(m => xml.includes(m));
+  return matched ?? null;
 }
 
 /**

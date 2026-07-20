@@ -1830,12 +1830,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const wantSave = saveChance > 0 && Math.random() < saveChance;
 
       if (wantLike || wantShareFeed || wantShareDm || wantSave) {
-        const feedbackCard = await android.isFeedbackOrSurveyCard(serial).catch(() => false);
+        const feedbackCard = await android.isFeedbackOrSurveyCard(serial).catch(() => null);
         if (feedbackCard) {
           // This card replaced the post entirely — there is nothing safe to
           // tap for like/share/share-DM. Skip all three and just scroll on.
-          logger.info({ serial }, "[check-feed] feedback/survey card detected in place of a post — skipping like/share/share-DM, scrolling past");
-          onLog?.(`Scroll ${i + 1}/${count}: feedback/survey card on screen — skipping like/share`);
+          logger.info({ serial, marker: feedbackCard }, "[check-feed] skip card detected in place of a post — skipping like/share/share-DM, scrolling past");
+          onLog?.(`Scroll ${i + 1}/${count}: skip card detected ("${feedbackCard}") — skipping like/share`);
           if (wantLike) likeFailures++;
         } else {
           // Settle wait: give the feed post's action bar time to fully render
