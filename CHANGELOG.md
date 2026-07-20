@@ -4,6 +4,29 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.46] — 2026-07-20
+
+### Settings — "Abort after X scrapes" moved to Settings → Scraping (global)
+
+**What changed:**
+The "Abort after X scrapes" field previously lived inside each account's Human Session Tool → Follow Users settings panel. It has been moved to **Settings → Scraping** as a global setting that applies to every account's Follow Users tool equally.
+
+**Why:**
+The scrape-session cap is a server-wide safety limit — it controls how many HikerAPI scrape calls the server can make in total per automation cycle run, across all devices and accounts. It made no sense as a per-account value that had to be copied slot by slot via Copy Settings. A single number in the global Settings page is the correct home for it.
+
+**Technical details:**
+- Removed `followMaxScrapeSessions` from `AutomationSettingsData`, `AUTOMATION_DEFAULTS`, the cycle POST request body, the Copy Settings field map, and the Follow Users UI block in `MobilePage.tsx`
+- Added `followMaxScrapeSessions` to the `GlobalSettings` type (`shared/schema.ts`), `GET /api/settings`, and `PUT /api/settings` in `instagram.ts` — stored as a key-value pair in the global settings table like every other global setting
+- The automation cycle runner now reads `followMaxScrapeSessions` from `globalCycleSettings` (already fetched at cycle start for skip-followed / skip-skipped logic), instead of the per-slot destructure
+- A new **Scrape Limit** card appears in Settings → Scraping with a single number input ("0 = unlimited"), saving immediately via the standard `mutation.mutate()` pattern used by all other global settings toggles
+
+### Settings → Copy Settings — two corrections
+
+- **Removed "App close gesture (dismiss direction)"** from the Copy Settings field list. This setting lives in the My Device tab and is a per-device hardware preference, not a per-account automation setting. It cannot meaningfully be copied between accounts.
+- **Renamed "Run Interval" section heading** to **"Human Session Tool"** to match the name of the panel it describes.
+
+---
+
 ## [1.2.45] — 2026-07-20
 
 ### New Tool — View Explore Page
