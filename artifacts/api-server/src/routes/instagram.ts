@@ -5541,12 +5541,13 @@ export async function registerInstagramRoutes(
       hikerRepostGetFeed: settings.hikerRepostGetFeed !== "false",
       hikerSyncProfile: settings.hikerSyncProfile !== "false",
       hikerGlobalByUsername: settings.hikerGlobalByUsername !== "false",
+      followMaxScrapeSessions: parseInt(settings.followMaxScrapeSessions ?? "0", 10),
     });
   });
 
 
   app.put("/api/settings", async (req, res) => {
-    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, scrapeAllIfSkipped, useLocalTime, twoCaptchaApiKey, openaiApiKey, geminiApiKey, verifyDelayMode, verifyAllDelayMin, verifyAllDelayMax, sameProxyDelayMin, sameProxyDelayMax, logMaxRows, backupEnabled, backupIntervalDays, themeColor, themeMode, preFilledPhoneNumber, protectAccountsEnabled, protectAccountsMinMins, protectAccountsMaxMins, hikerFollowHashtag, hikerFollowGetFollowers, hikerFollowByUsername, hikerUnfollowByUsername, hikerContactGetFollowers, hikerContactByUsername, hikerDmByUsername, hikerDmGetFollowers, hikerRepostGetFeed, hikerSyncProfile, hikerGlobalByUsername } = req.body;
+    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, scrapeAllIfSkipped, useLocalTime, twoCaptchaApiKey, openaiApiKey, geminiApiKey, verifyDelayMode, verifyAllDelayMin, verifyAllDelayMax, sameProxyDelayMin, sameProxyDelayMax, logMaxRows, backupEnabled, backupIntervalDays, themeColor, themeMode, preFilledPhoneNumber, protectAccountsEnabled, protectAccountsMinMins, protectAccountsMaxMins, hikerFollowHashtag, hikerFollowGetFollowers, hikerFollowByUsername, hikerUnfollowByUsername, hikerContactGetFollowers, hikerContactByUsername, hikerDmByUsername, hikerDmGetFollowers, hikerRepostGetFeed, hikerSyncProfile, hikerGlobalByUsername, followMaxScrapeSessions } = req.body;
     if (typeof skipFollowedUsers === "boolean") {
       await storage.setGlobalSetting("skipFollowedUsers", String(skipFollowedUsers));
     }
@@ -5638,6 +5639,9 @@ export async function registerInstagramRoutes(
     for (const [key, val] of hikerBoolKeys) {
       if (typeof val === "boolean") await storage.setGlobalSetting(key, String(val));
     }
+    if (typeof followMaxScrapeSessions === "number" && followMaxScrapeSessions >= 0) {
+      await storage.setGlobalSetting("followMaxScrapeSessions", String(Math.round(followMaxScrapeSessions)));
+    }
     const settings = await storage.getGlobalSettings();
     res.json({
       skipFollowedUsers: settings.skipFollowedUsers === "true",
@@ -5676,6 +5680,7 @@ export async function registerInstagramRoutes(
       hikerRepostGetFeed: settings.hikerRepostGetFeed !== "false",
       hikerSyncProfile: settings.hikerSyncProfile !== "false",
       hikerGlobalByUsername: settings.hikerGlobalByUsername !== "false",
+      followMaxScrapeSessions: parseInt(settings.followMaxScrapeSessions ?? "0", 10),
     });
   });
 

@@ -574,6 +574,35 @@ export function SettingsPage() {
           </div>
         </div>
 
+        {/* Abort after X scrapes — global scrape-session limit applied to every account's Follow Users tool */}
+        <div className="desktop-card p-6" style={{ display: settingsTab !== "scraping" ? "none" : undefined }}>
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2 rounded-lg bg-orange-100 text-orange-600">
+              <Shield className="w-4 h-4" />
+            </div>
+            <h3 className="text-base font-semibold">Scrape Limit</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mb-5">
+            Maximum number of HikerAPI scrape sessions the Follow Users tool is allowed to run per automation cycle, across all accounts. Set to 0 for unlimited.
+          </p>
+          <div className="flex items-center gap-3">
+            <Label className="text-sm font-medium w-44 shrink-0">Abort after X scrapes</Label>
+            <Input
+              type="number"
+              min={0}
+              max={999}
+              className="w-20 text-center"
+              value={settings?.followMaxScrapeSessions ?? 0}
+              onChange={e => {
+                const v = Math.max(0, Math.min(999, Math.trunc(Number(e.target.value) || 0)));
+                mutation.mutate({ followMaxScrapeSessions: v });
+              }}
+              disabled={isLoading || mutation.isPending}
+            />
+            <span className="text-xs text-muted-foreground">(0 = unlimited)</span>
+          </div>
+        </div>
+
         {/* Fake Phone Injection */}
         {settingsTab === "automation" && <FakePhoneCard />}
 

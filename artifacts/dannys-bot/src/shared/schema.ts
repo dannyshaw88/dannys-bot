@@ -303,4 +303,5 @@ export type GlobalSettings = {
   hikerSyncProfile: boolean;
   hikerGlobalByUsername: boolean;
   hikerHumanSessionFeed: boolean;
+  followMaxScrapeSessions: number;
 };

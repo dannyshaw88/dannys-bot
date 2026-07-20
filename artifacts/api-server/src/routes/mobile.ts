@@ -222,7 +222,6 @@ type AutomationSettings = {
   followUsersMin?: number;
   followUsersMax?: number;
   followSources?: { type: string; value: string }[];
-  followMaxScrapeSessions?: number;
   // Inject Browsing — per-user profile-browsing behaviour (same fix).
   injectBrowsingEnabled?: boolean;
   injectBrowsingActivatePctMin?: number;
@@ -1131,7 +1130,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     followUsersMin: z.number().min(0).max(9999).default(1),
     followUsersMax: z.number().min(0).max(9999).default(3),
     followSources: z.array(followSourceSchema).default([]),
-    followMaxScrapeSessions: z.number().min(0).max(999).default(0),
     injectBrowsingEnabled: z.boolean().default(false),
     injectBrowsingActivatePctMin: z.number().min(0).max(100).default(0),
     injectBrowsingActivatePctMax: z.number().min(0).max(100).default(0),
@@ -5058,7 +5056,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewExploreShareFeedPercentMin, viewExploreShareFeedPercentMax,
         viewExploreShareDmPercentMin, viewExploreShareDmPercentMax,
         viewExploreSavePercentMin, viewExploreSavePercentMax,
-        followEnabled, followUsersMin, followUsersMax, followSources, followMaxScrapeSessions,
+        followEnabled, followUsersMin, followUsersMax, followSources,
         followFiltersEnabled, followFilterVerifiedUsers, followFilterMaxFollowers25k,
         followFilterPrivateUsers, followFilterEnglishSpeaking, followFilterMinFollowers250,
         injectBrowsingEnabled,
@@ -5095,8 +5093,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // gives phone automation a single, shared "already followed" / "skip
       // list" that spans all devices and all browser-bot accounts.
       const globalCycleSettings = await storage.getGlobalSettings();
-      const globalSkipFollowed  = globalCycleSettings.skipFollowedUsers       === "true";
-      const globalSkipSkipped   = globalCycleSettings.skipAlreadySkippedUsers === "true";
+      const globalSkipFollowed          = globalCycleSettings.skipFollowedUsers       === "true";
+      const globalSkipSkipped           = globalCycleSettings.skipAlreadySkippedUsers === "true";
+      const globalFollowMaxScrapeSessions = parseInt(globalCycleSettings.followMaxScrapeSessions ?? "0", 10);
 
       // ── Resolve profileId for Dashboard logging ─────────────────────────────
       // Map slotUsername → profile row so cycle start/complete events appear
@@ -5469,7 +5468,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 usersMin: followUsersMin,
                 usersMax: followUsersMax,
                 sources: followSources,
-                maxScrapeSessions: followMaxScrapeSessions,
+                maxScrapeSessions: globalFollowMaxScrapeSessions,
                 onLog: (msg) => tLog(`  ${msg}`),
                 recordFollow: (username, source) => recordMobileFollow(serial, username, source),
                 skipFollowedUsernames: await (async () => {
