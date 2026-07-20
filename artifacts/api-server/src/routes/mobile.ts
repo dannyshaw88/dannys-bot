@@ -2833,17 +2833,38 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
       // Optionally click a post from the currently visible grid.
       if (clickChance > 0 && Math.random() < clickChance) {
-        // Parse grid_card_layout_container bounds from the accessibility tree.
+        // Parse explore grid cells from the accessibility tree.
+        // Uses per-node parsing so content-desc values containing "/" don't
+        // break the regex match between resource-id and bounds.
         const xml = await android.dumpUi(serial).catch(() => "");
         const gridCells: Array<{ x: number; y: number }> = [];
-        const cellRe = /id="grid_card_layout_container"[^/]*?bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/g;
+        const nodeRe2 = /<node\s([^>]*?)\s*\/?>/g;
         let cm: RegExpExecArray | null;
-        while ((cm = cellRe.exec(xml)) !== null) {
-          const cx = Math.round((parseInt(cm[1]) + parseInt(cm[3])) / 2);
-          const cy = Math.round((parseInt(cm[2]) + parseInt(cm[4])) / 2);
+        while ((cm = nodeRe2.exec(xml)) !== null) {
+          const attrs = cm[1];
+          if (!attrs.includes("grid_card_layout_container") &&
+              !attrs.includes("media_group_image_view") &&
+              !attrs.includes("grid_media_item")) continue;
+          const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+          if (!bm) continue;
+          const cx = Math.round((parseInt(bm[1]) + parseInt(bm[3])) / 2);
+          const cy = Math.round((parseInt(bm[2]) + parseInt(bm[4])) / 2);
           // Exclude cells that clip into the search/action bar (top ~155px)
           // or the bottom nav (bottom ~30px from screen edge).
           if (cy > 155 && cy < h - 30) gridCells.push({ x: cx, y: cy });
+        }
+        // Coordinate fallback: if a11y returns nothing, generate tappable
+        // centers for the standard 3-column explore grid layout.
+        if (gridCells.length === 0) {
+          const colXs = [Math.round(w / 6), Math.round(w / 2), Math.round(5 * w / 6)];
+          const gridTop = Math.round(h * 0.18);
+          const gridBot = Math.round(h * 0.87);
+          const cellH   = Math.round((gridBot - gridTop) / 3);
+          for (let row = 0; row < 3; row++) {
+            const cy = gridTop + Math.round(cellH * (row + 0.5));
+            for (const cx of colXs) gridCells.push({ x: cx, y: cy });
+          }
+          onLog?.(`Explore scroll ${i + 1}/${scrollCount}: a11y grid empty — coordinate fallback (${gridCells.length} cells)`);
         }
 
         if (gridCells.length > 0) {
@@ -5119,7 +5140,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         toolId: 0,
         action: "tool_start",
         targetUsername: slotUsername || "",
-        detail: "Cycle-Starting-Farming-Aura",
+        detail: "Cycle Starting Farming Aura",
         result: "ok",
         sourceValue: `${serial}:${slotIdx}`,
         sourceType: "phone",
