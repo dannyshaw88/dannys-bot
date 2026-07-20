@@ -1828,6 +1828,17 @@ export async function findFeedActionIcons(serial: string, onLog?: (msg: string) 
         save = _parseCenter(cdSaveM[1]);
       }
     }
+    // Sanity check: the save/bookmark icon must sit on the same horizontal
+    // row as the Like button (the feed post's action bar). An embedded Reels
+    // card in the feed also exposes a row_feed_button_save / "Add to Saved"
+    // node, but its save icon is in the Reel's vertical right-edge column at
+    // a completely different Y position. If the detected save button is more
+    // than 80 px away from the Like button's Y, it belongs to a different
+    // card and must be rejected — tapping it navigates into the Reel viewer.
+    if (save && Math.abs(save.y - like.y) > 80) {
+      onLog?.(`[feed-icons] save button at (${save.x},${save.y}) rejected — y=${save.y} is ${Math.abs(save.y - like.y)}px from Like row (y=${like.y}); likely belongs to an embedded Reel card`);
+      save = null;
+    }
     if (save) {
       onLog?.(`[feed-icons] save button found at (${save.x},${save.y})`);
     } else {
