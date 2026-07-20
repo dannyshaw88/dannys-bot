@@ -3516,7 +3516,7 @@ function CopySettingsDialog({
 
 function AutomationSettingsPanel({
   phone, settings, setSettings, setEnabledByUser, loading, saveError, running, nextRunAt,
-  slotIdx, slotUsername, slotUsernames, onCopied,
+  slotIdx, slotUsername, slotUsernames, onCopied, showCopyDialog, setShowCopyDialog,
 }: {
   phone: UsbPhone | null;
   settings: AutomationSettingsData;
@@ -3530,9 +3530,13 @@ function AutomationSettingsPanel({
   slotUsername?: string;
   slotUsernames?: string[];
   onCopied?: (targetSlotIdxs: number[]) => void;
+  showCopyDialog?: boolean;
+  setShowCopyDialog?: (v: boolean) => void;
 }) {
   // Follow Users UI local state — hooks must come before any conditional return.
-  const [showCopyDialog, setShowCopyDialog] = useState(false);
+  const [_localShowCopyDialog, _localSetShowCopyDialog] = useState(false);
+  const showCopyDialogResolved = showCopyDialog ?? _localShowCopyDialog;
+  const setShowCopyDialogResolved = setShowCopyDialog ?? _localSetShowCopyDialog;
   const [showFollowedUsers, setShowFollowedUsers] = useState(false);
   const [showSources, setShowSources] = useState(false);
   const [newFollowSourceType, setNewFollowSourceType] = useState<'hashtag' | 'target_followers'>('hashtag');
@@ -3639,16 +3643,9 @@ function AutomationSettingsPanel({
             Human Session Tool{slotUsername ? ` for @${slotUsername}` : ""}
           </h2>
           {slotIdx !== undefined && (
-            <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={slotIdx} />
+            <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={slotIdx} width={121} />
           )}
         </div>
-        {slotIdx !== undefined && slotUsernames && slotUsernames.length > 1 && (
-          <Button type="button" variant="secondary" size="sm" className="h-7 text-xs gap-1.5 ml-auto"
-            onClick={() => setShowCopyDialog(true)}>
-            <Copy className="w-3 h-3" />
-            Copy Settings
-          </Button>
-        )}
       </div>
 
       {/* Master toggle — turns the whole tool on/off. */}
@@ -5060,8 +5057,8 @@ function AutomationSettingsPanel({
       {/* Copy Settings dialog — Dialog renders as a portal outside the scroll div */}
       {slotIdx !== undefined && slotUsernames && (
         <CopySettingsDialog
-          open={showCopyDialog}
-          onClose={() => setShowCopyDialog(false)}
+          open={showCopyDialogResolved}
+          onClose={() => setShowCopyDialogResolved(false)}
           currentSlotIdx={slotIdx}
           slotUsernames={slotUsernames}
           settings={settings}
@@ -5255,6 +5252,8 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   const isFirst = slotIdx === 0;
   const isLast = slotIdx === (slotCount ?? 1) - 1;
 
+  const [showCopyDialog, setShowCopyDialog] = useState(false);
+
   // Expose setEnabled so the parent can toggle THIS slot directly by calling
   // slotHandleRefs.current[i]?.setEnabled(v).  Because the ref is bound to
   // this specific component instance there is zero possibility of calling the
@@ -5275,10 +5274,17 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [automation.settings.enabled, automation.running, automation.nextRunAt]);
+  const canCopy = slotUsernames && slotUsernames.length > 1;
   return (
     <div className="h-full flex flex-col">
       <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
         <div className="flex-1" />
+        {canCopy && (
+          <Button variant="outline" size="sm" onClick={() => setShowCopyDialog(true)} className="gap-1 h-7 px-2">
+            <Copy className="w-3 h-3" />
+            Copy Settings
+          </Button>
+        )}
         <Button variant="outline" size="sm" onClick={onPrevSlot} disabled={isFirst} className="gap-1 h-7 px-2">
           <ChevronLeft className="w-3.5 h-3.5" />
           SLOT {slotIdx}
@@ -5289,7 +5295,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
         </Button>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <AutomationSettingsPanel phone={phone} {...automation} slotIdx={slotIdx} slotUsername={slotUsername} slotUsernames={slotUsernames} onCopied={onCopied} />
+        <AutomationSettingsPanel phone={phone} {...automation} slotIdx={slotIdx} slotUsername={slotUsername} slotUsernames={slotUsernames} onCopied={onCopied} showCopyDialog={showCopyDialog} setShowCopyDialog={setShowCopyDialog} />
       </div>
     </div>
   );
