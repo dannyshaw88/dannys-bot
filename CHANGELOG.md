@@ -4,6 +4,14 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.52] — 2026-07-20
+
+### Fix — View Explore Page: action icons now found when post opens as a Reels viewer
+
+When you tapped a post from the Explore grid it opened in the Reels-style viewer where Like/Share/etc sit in a vertical column on the right edge of the screen. The old icon scanner looked for them near the centre of the screen (where feed post icons live) and found nothing, so likes, reposts, and DM shares were silently skipped every time. The fix: when the centre scan returns nothing, the code now immediately tries the right-edge column scanner instead. Icon detection is now isolated exclusively to the View Explore Page tool and does not affect any other tool.
+
+---
+
 ## [1.2.51] — 2026-07-20
 
 ### Fix — View Reels: Home tab is now always tapped after Reels finishes, no matter what

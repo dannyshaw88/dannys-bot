@@ -2884,20 +2884,36 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             onLog?.(`Explore scroll ${i + 1}/${scrollCount}: scanning action bar…`);
             let icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
 
-            // ── Explore-only: vertical icon column fallback ──────────────────
-            // When an Explore grid post opens in the vertical/Reels-style
-            // viewer, Like lands at x > 80% of screen width (e.g. x≈999 on a
-            // 1080 px device). findFeedActionIcons scans HORIZONTALLY — it
-            // looks for other icons at the same Y ±20 px as Like. In the
-            // vertical viewer Comment/Repost/Send sit BELOW Like in a column,
-            // so all of them fall outside the row tolerance and the row dump
-            // comes back empty → shareFeed and shareDm are always null.
-            // Fix: detect the vertical layout by Like's X position, then
-            // overlay shareFeed/shareDm from findReelActionIcons (which scans
-            // VERTICALLY). Save is not returned by findReelActionIcons; a
-            // separate broader scan covers it below.
+            // ── Explore-only: Reels column fallback (null path) ─────────────
+            // findFeedActionIcons looks for Like/Unlike near screen centre-x
+            // (≈540 px). In the Reels viewer that Explore posts open into,
+            // every icon sits at x≈998 (right edge) — the feed scanner misses
+            // them entirely and returns null. When that happens, fall straight
+            // through to findReelActionIcons which scans the right-edge column
+            // directly. Save is not in the Reels column; it stays null here
+            // and the broader save scan below picks it up if present.
             // This block is intentionally isolated to runViewExplorePage and
             // has no effect on any other tool.
+            if (!icons) {
+              onLog?.(`Explore scroll ${i + 1}/${scrollCount}: feed scan found nothing — trying Reels column scan`);
+              const _veReelIcons = await android.findReelActionIcons(serial, onLog).catch(() => null);
+              if (_veReelIcons) {
+                icons = {
+                  like:       _veReelIcons.like,
+                  comment:    _veReelIcons.comment,
+                  shareFeed:  _veReelIcons.shareFeed,
+                  shareDm:    _veReelIcons.shareDm,
+                  save:       null,
+                  alreadyLiked: _veReelIcons.alreadyLiked,
+                };
+                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: Reels column found — like=(${_veReelIcons.like.x},${_veReelIcons.like.y}) shareFeed=${_veReelIcons.shareFeed ? `(${_veReelIcons.shareFeed.x},${_veReelIcons.shareFeed.y})` : "null"} shareDm=${_veReelIcons.shareDm ? `(${_veReelIcons.shareDm.x},${_veReelIcons.shareDm.y})` : "null"}`);
+              }
+            }
+
+            // ── Explore-only: vertical column overlay (non-null path) ────────
+            // If findFeedActionIcons DID return icons but Like is in the right
+            // column (x > 80%), the horizontal row scan will have returned null
+            // for shareFeed/shareDm. Overlay those from findReelActionIcons.
             if (icons && icons.like.x > Math.round(w * 0.80)) {
               onLog?.(`Explore scroll ${i + 1}/${scrollCount}: vertical column layout detected (like.x=${icons.like.x}) — re-scanning shareFeed/shareDm via column scan`);
               const _veColIcons = await android.findReelActionIcons(serial, onLog).catch(() => null);
