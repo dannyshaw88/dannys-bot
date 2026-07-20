@@ -4,6 +4,25 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.55] — 2026-07-20
+
+### Fix — View Explore Page: pre-scan poll waits for post viewer to appear in accessibility tree
+
+**Problem:** Occasionally the first Explore post clicked would have its action icons visibly on screen but the tool would log "no action bar found" and skip all actions. The next post clicked would work fine.
+
+**Root cause:** When a Reel is tapped from the Explore grid, the reel player sometimes opens in a separate window layer before handing focus to the accessibility system (observed on Xiaomi MIUI). During this transition — which can take several seconds — `uiautomator dump` still returns the **Explore grid's** accessibility tree, not the reel player's. Running `findFeedActionIcons` and `findReelActionIcons` against a grid dump wastes ~9 seconds per cycle and both return null. After two cycles (~18 s) the tool gave up.
+
+The second post worked because it happened to complete its window transition faster, so the dump already contained reel-player nodes by the time the scan ran.
+
+**Fix:** Inserted a lightweight pre-scan poll before the expensive icon scans. After the existing 1800ms + 600ms settle, the code now does cheap raw dumps every 2 seconds (up to 6 polls = 12 s budget) checking for any known post-viewer accessibility node (`like_button`, `comment_button`, `direct_share_button`, `row_feed_button_like`). As soon as one appears the poll exits and the normal scans run — in the common case (viewer ready immediately) there is zero extra wait. If the budget expires without the nodes appearing, the code falls through to the existing scans anyway (same behaviour as before).
+
+Log lines added:
+- `"viewer not ready yet — retrying in 2s (poll N/6)"` — emitted each 2s cycle while waiting
+- `"post viewer ready after Xs extra wait"` — emitted on success after at least one retry
+- `"viewer never appeared in tree — proceeding anyway"` — emitted if all 6 polls fail
+
+---
+
 ## [1.2.54] — 2026-07-20
 
 ### Fix — View Stories: advance tap lands at the correct position on all devices
