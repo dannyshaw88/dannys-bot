@@ -4186,7 +4186,18 @@ export async function switchToInstagramAccount(
 
   // 1. Find the profile tab.
   //    Try the preloaded XML first (same screen state, no extra dump needed).
-  //    Fall back to a fresh dump only if the tab isn't found there.
+  //    Fall back to a poll loop if the tab isn't found there.
+  //
+  //    Poll loop rationale: on a cold-start (first cycle after launch, or
+  //    shortly after airplane-mode reconnect) Instagram's process is alive and
+  //    the screen reports as "open", but the bottom navigation bar — including
+  //    the profile tab — hasn't rendered into the accessibility tree yet.  A
+  //    single dump fired immediately after the "open" confirmation sees an
+  //    empty or bare-skeleton UI and returns null, causing the switch to fail
+  //    before the switcher-sheet polling logic is even reached.
+  //    The poll mirrors the existing switcher-sheet poll: up to 5 × 1500 ms
+  //    (7.5 s total budget), exits the moment the tab appears, zero extra
+  //    wait on a warm Instagram where the nav bar is already rendered.
   let profileTab: { x: number; y: number } | null = null;
   if (preloadedXml) {
     profileTab =
@@ -4195,10 +4206,19 @@ export async function switchToInstagramAccount(
       ?? _findElem(preloadedXml, "Profile");
   }
   if (!profileTab) {
-    profileTab = await findInstagramProfileTab(serial).catch(() => null);
+    const PROFILE_TAB_POLL_MS  = 1500;
+    const PROFILE_TAB_MAX_POLL = 5;
+    for (let pt = 0; pt < PROFILE_TAB_MAX_POLL; pt++) {
+      profileTab = await findInstagramProfileTab(serial).catch(() => null);
+      if (profileTab) break;
+      if (pt < PROFILE_TAB_MAX_POLL - 1) {
+        onLog?.(`  ↳ Profile tab not yet visible — waiting ${PROFILE_TAB_POLL_MS / 1000}s for nav bar to render (poll ${pt + 1}/${PROFILE_TAB_MAX_POLL})…`);
+        await _sleep(PROFILE_TAB_POLL_MS);
+      }
+    }
   }
   if (!profileTab) {
-    onLog?.("  ⚠ Profile tab not found — cannot switch account");
+    onLog?.("  ⚠ Profile tab not found after polling — cannot switch account");
     return false;
   }
 

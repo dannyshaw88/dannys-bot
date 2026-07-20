@@ -4,6 +4,23 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.60] — 2026-07-20
+
+### Fix — Account switching: profile tab poll loop (nav bar not yet rendered)
+
+**Problem:** Account switching failed intermittently with `"Profile tab not found — cannot switch account"` even though Instagram was confirmed open. The failure occurred *before* the switcher-sheet polling logic was even reached, so the existing 5 × 1.5 s switcher-sheet poll introduced in a previous build had no effect on this failure mode.
+
+**Root cause:** On a cold-start (first cycle after launch, or shortly after airplane-mode reconnect), Instagram's process is alive and the "Instagram open" confirmation passes, but the bottom navigation bar — including the profile-tab icon — has not yet rendered into the accessibility tree. The code attempted a single `findInstagramProfileTab` dump immediately after that confirmation; that single dump saw a bare-skeleton UI (nav bar absent), returned null, and gave up. On warm cycles (Instagram already showing a full frame) the nav bar was already rendered so the single dump succeeded, producing the observed intermittent pattern.
+
+**Fix:** Replaced the single `findInstagramProfileTab` call with a poll loop matching the existing switcher-sheet pattern — up to **5 × 1.5 s (7.5 s total budget)**. The loop exits the moment the profile tab appears in the accessibility tree; on a warm Instagram it exits on the first iteration with zero extra wait. If all five polls miss, the existing `"Profile tab not found"` failure path fires as before (message now reads `"Profile tab not found after polling"`).
+
+The log now emits a line per missed poll:
+```
+↳ Profile tab not yet visible — waiting 1.5s for nav bar to render (poll N/5)…
+```
+
+---
+
 ## [1.2.59] — 2026-07-20
 
 ### Fix — Copy Settings: Abandon Follow % now appears under Follow Users
