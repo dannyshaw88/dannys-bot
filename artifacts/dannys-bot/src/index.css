@@ -372,7 +372,9 @@
   }
 }
 
-/* Device card active glow — inner gradient rising from the bottom */
+/* Device card active glow — elliptical spotlight rising from the bottom centre.
+   Widest at the very bottom (80% of card width = 10% inset each side), tapers
+   naturally to nothing around the card's midpoint, 2× brighter than before. */
 @keyframes device-card-inner-glow-pulse {
   0%, 100% { opacity: 0.55; }
   50%       { opacity: 1; }
@@ -386,7 +388,12 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(to top, rgba(34, 211, 238, 0.22) 0%, rgba(34, 211, 238, 0.06) 45%, transparent 65%);
+  background: radial-gradient(
+    ellipse 80% 55% at 50% 100%,
+    rgba(34, 211, 238, 0.44)  0%,
+    rgba(34, 211, 238, 0.12) 52%,
+    transparent              72%
+  );
   pointer-events: none;
   border-radius: inherit;
   animation: device-card-inner-glow-pulse 2.4s ease-in-out infinite;
