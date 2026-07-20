@@ -1854,8 +1854,11 @@ export interface ReelActionIcons {
   comment: { x: number; y: number } | null;
   shareFeed: { x: number; y: number } | null; // repost / share-to-feed
   shareDm: { x: number; y: number } | null;   // send / share-via-DM
+  save: { x: number; y: number } | null;      // bookmark / save ribbon
   /** True when the Like button resolved to "Unlike" — reel is already liked. */
   alreadyLiked?: boolean;
+  /** True when the Save button resolved to "Saved" — reel is already saved. */
+  alreadySaved: boolean;
 }
 
 /**
@@ -1976,25 +1979,36 @@ export async function findReelActionIcons(serial: string, onLog?: (msg: string) 
   //     action, shareDm found nothing left).
   //   sendNode: "Send", "Direct", "Message", OR "Share" (the standard Reels
   //     DM-share label) — all open the share sheet leading to DM.
-  const commentNode = colNodes.find(n => /^comment$/i.test(n.cd)) ?? null;
-  const repostNode  = colNodes.find(n => /\brepost\b/i.test(n.cd)) ?? null;
-  const sendNode    = colNodes.find(n => /\b(send|direct|message|share)\b/i.test(n.cd) && n !== repostNode) ?? null;
+  const commentNode  = colNodes.find(n => /^comment$/i.test(n.cd)) ?? null;
+  const repostNode   = colNodes.find(n => /\brepost\b/i.test(n.cd)) ?? null;
+  const sendNode     = colNodes.find(n => /\b(send|direct|message|share)\b/i.test(n.cd) && n !== repostNode) ?? null;
+  // "Save" (unsaved) or "Saved" (already saved) — exact match only to avoid
+  // catching unrelated labels like "Save to Collection" sheet buttons.
+  const saveColNode  = colNodes.find(n => /^saved?$/i.test(n.cd)) ?? null;
 
   let comment:   { x: number; y: number } | null = commentNode ? pos(commentNode) : null;
   let shareFeed: { x: number; y: number } | null = repostNode  ? pos(repostNode)  : null;
   let shareDm:   { x: number; y: number } | null = sendNode    ? pos(sendNode)    : null;
+  let save:      { x: number; y: number } | null = saveColNode ? pos(saveColNode) : null;
+  let alreadySaved = saveColNode ? /^saved$/i.test(saveColNode.cd) : false;
 
   // Structural fallback — mirrors findFeedActionIcons (replit.md rule:
   // "Feed action-bar icons with no content-desc/resource-id — structural
-  // fallback"). Fires when label matching leaves shareFeed OR shareDm null,
-  // i.e. this device/IG build strips content-desc from the Reels column.
+  // fallback"). Fires when label matching leaves shareFeed, shareDm, or save
+  // null, i.e. this device/IG build strips content-desc from the Reels column.
   // Icons stack VERTICALLY in the column (Y ascending = top to bottom):
-  // Comment → shareFeed (Repost) → shareDm (Send/Share). Only trust the
-  // result when an EXACT count is found — ambiguous counts stay null.
-  if (!shareFeed || !shareDm) {
+  // Comment → shareFeed (Repost) → shareDm (Send/Share) → save. Only trust
+  // the result when an EXACT count is found — ambiguous counts stay null.
+  if (!shareFeed || !shareDm || !save) {
     // ── Structural fallback A: ViewGroup icon pattern ──
     const vgCandidates = colNodes.filter(n => n.cls === "android.view.ViewGroup" && !n.cd && !n.txt);
-    if (!comment && !shareFeed && !shareDm && vgCandidates.length === 3) {
+    if (!comment && !shareFeed && !shareDm && !save && vgCandidates.length === 4) {
+      onLog?.(`[reel-icons] structural ViewGroup fallback: 4 unlabelled column nodes — assigning Comment/shareFeed/shareDm/save by Y order`);
+      comment   = pos(vgCandidates[0]);
+      shareFeed = pos(vgCandidates[1]);
+      shareDm   = pos(vgCandidates[2]);
+      save      = pos(vgCandidates[3]);
+    } else if (!comment && !shareFeed && !shareDm && vgCandidates.length === 3) {
       onLog?.(`[reel-icons] structural ViewGroup fallback: 3 unlabelled column nodes — assigning Comment/shareFeed/shareDm by Y order`);
       comment   = pos(vgCandidates[0]);
       shareFeed = pos(vgCandidates[1]);
@@ -2016,7 +2030,13 @@ export async function findReelActionIcons(serial: string, onLog?: (msg: string) 
     // Only runs if fallback A also produced nothing.
     if (!shareFeed && !shareDm) {
       const btnCandidates = colNodes.filter(n => n.cls === "android.widget.Button" && !n.cd && !n.txt);
-      if (!comment && btnCandidates.length === 3) {
+      if (!comment && btnCandidates.length === 4) {
+        onLog?.(`[reel-icons] structural Button fallback: 4 unlabelled Buttons — assigning Comment/shareFeed/shareDm/save by Y order`);
+        comment   = pos(btnCandidates[0]);
+        shareFeed = pos(btnCandidates[1]);
+        shareDm   = pos(btnCandidates[2]);
+        save      = pos(btnCandidates[3]);
+      } else if (!comment && btnCandidates.length === 3) {
         onLog?.(`[reel-icons] structural Button fallback: 3 unlabelled Buttons — assigning Comment/shareFeed/shareDm by Y order`);
         comment   = pos(btnCandidates[0]);
         shareFeed = pos(btnCandidates[1]);
@@ -2031,8 +2051,30 @@ export async function findReelActionIcons(serial: string, onLog?: (msg: string) 
     }
   }
 
-  onLog?.(`[reel-icons] result — like:(${like.x},${like.y}) comment:${comment ? `(${comment.x},${comment.y})` : "null"} shareFeed:${shareFeed ? `(${shareFeed.x},${shareFeed.y})` : "null"} shareDm:${shareDm ? `(${shareDm.x},${shareDm.y})` : "null"}`);
-  return { like, comment, shareFeed, shareDm, alreadyLiked };
+  // ── Full-screen "floaty" save — some IG builds render the Save button as a
+  // floating element OUTSIDE the right-column (a ribbon or pill near the
+  // bottom of the reel). Scan the entire XML if the column scan missed it.
+  if (!save) {
+    const nodeRe3 = /<node\s([^>]+?)\s*\/?>/g;
+    let fsm: RegExpExecArray | null;
+    while ((fsm = nodeRe3.exec(xml)) !== null) {
+      const a3 = fsm[1];
+      if (!/clickable="true"/.test(a3)) continue;
+      const cd3 = (a3.match(/content-desc="([^"]*)"/) ?? [])[1] ?? "";
+      if (!/^saved?$/i.test(cd3)) continue;
+      const bm3 = a3.match(/bounds="(\[\d+,\d+\]\[\d+,\d+\])"/);
+      if (!bm3) continue;
+      const c3 = _parseCenter(bm3[1]);
+      if (!c3) continue;
+      alreadySaved = /^saved$/i.test(cd3);
+      save = c3;
+      onLog?.(`[reel-icons] save found via full-screen scan (floaty type) at (${c3.x},${c3.y}) cd="${cd3}"`);
+      break;
+    }
+  }
+
+  onLog?.(`[reel-icons] result — like:(${like.x},${like.y}) comment:${comment ? `(${comment.x},${comment.y})` : "null"} shareFeed:${shareFeed ? `(${shareFeed.x},${shareFeed.y})` : "null"} shareDm:${shareDm ? `(${shareDm.x},${shareDm.y})` : "null"} save:${save ? `(${save.x},${save.y})${alreadySaved ? " (already saved)" : ""}` : "null"}`);
+  return { like, comment, shareFeed, shareDm, save, alreadyLiked, alreadySaved };
 }
 
 /**

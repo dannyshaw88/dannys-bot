@@ -2400,6 +2400,8 @@ interface AutomationSettingsData {
   viewReelsShareFeedPercentMax: number;
   viewReelsShareDmPercentMin: number;
   viewReelsShareDmPercentMax: number;
+  viewReelsSavePercentMin: number;
+  viewReelsSavePercentMax: number;
   viewReelsActivatePctMin: number;
   viewReelsActivatePctMax: number;
   viewReelsWatchPctMin: number;
@@ -2510,6 +2512,7 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   viewReelsLikePercentMin: 0, viewReelsLikePercentMax: 0,
   viewReelsShareFeedPercentMin: 0, viewReelsShareFeedPercentMax: 0,
   viewReelsShareDmPercentMin: 0, viewReelsShareDmPercentMax: 0,
+  viewReelsSavePercentMin: 0, viewReelsSavePercentMax: 0,
   viewReelsActivatePctMin: 100, viewReelsActivatePctMax: 100,
   viewReelsWatchPctMin: 30, viewReelsWatchPctMax: 70,
   followEnabled: false,
@@ -2809,6 +2812,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             viewReelsShareFeedPercentMax: s.viewReelsShareFeedPercentMax,
             viewReelsShareDmPercentMin: s.viewReelsShareDmPercentMin,
             viewReelsShareDmPercentMax: s.viewReelsShareDmPercentMax,
+            viewReelsSavePercentMin: s.viewReelsSavePercentMin,
+            viewReelsSavePercentMax: s.viewReelsSavePercentMax,
             viewReelsActivatePctMin: s.viewReelsActivatePctMin,
             viewReelsActivatePctMax: s.viewReelsActivatePctMax,
             viewReelsWatchPctMin: s.viewReelsWatchPctMin,
@@ -3095,6 +3100,7 @@ const COPY_SECTIONS: CopySection[] = [
     { key: 'reelsWatchPct',     label: 'Watch %',                       fields: ['viewReelsWatchPctMin','viewReelsWatchPctMax'] },
     { key: 'reelsLike',         label: 'Like %',                        fields: ['viewReelsLikePercentMin','viewReelsLikePercentMax'] },
     { key: 'reelsShareFeed',    label: 'Share to Feed %',               fields: ['viewReelsShareFeedPercentMin','viewReelsShareFeedPercentMax'] },
+    { key: 'reelsSave',         label: 'Save %',                        fields: ['viewReelsSavePercentMin','viewReelsSavePercentMax'] },
     { key: 'reelsShareDm',      label: 'Share via DM %',                fields: ['viewReelsShareDmPercentMin','viewReelsShareDmPercentMax'] },
   ]},
   { key: 'follow',        label: 'Follow Users', sub: [
@@ -4232,6 +4238,22 @@ function AutomationSettingsPanel({
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewReelsShareFeedPercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewReelsShareFeedPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Save %</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewReelsSavePercentMin}
+                onChange={e => setSettings(s => ({ ...s, viewReelsSavePercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewReelsSavePercentMax}
+                onChange={e => setSettings(s => ({ ...s, viewReelsSavePercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
 
             </div>

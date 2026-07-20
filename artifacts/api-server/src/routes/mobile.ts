@@ -183,6 +183,8 @@ type AutomationSettings = {
   viewReelsShareFeedPercentMax?: number;
   viewReelsShareDmPercentMin?: number;
   viewReelsShareDmPercentMax?: number;
+  viewReelsSavePercentMin?: number;
+  viewReelsSavePercentMax?: number;
   viewReelsActivatePctMin?: number;
   viewReelsActivatePctMax?: number;
   viewReelsWatchPctMin?: number;
@@ -1106,6 +1108,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     viewReelsShareFeedPercentMax: z.number().min(0).max(100).default(0),
     viewReelsShareDmPercentMin: z.number().min(0).max(100).default(0),
     viewReelsShareDmPercentMax: z.number().min(0).max(100).default(0),
+    viewReelsSavePercentMin: z.number().min(0).max(100).default(0),
+    viewReelsSavePercentMax: z.number().min(0).max(100).default(0),
     viewReelsActivatePctMin: z.number().min(0).max(100).default(100),
     viewReelsActivatePctMax: z.number().min(0).max(100).default(100),
     // View Explore Page — see AutomationSettings type above for full comment.
@@ -1247,6 +1251,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       viewReelsLikePercentMin: 0, viewReelsLikePercentMax: 0,
       viewReelsShareFeedPercentMin: 0, viewReelsShareFeedPercentMax: 0,
       viewReelsShareDmPercentMin: 0, viewReelsShareDmPercentMax: 0,
+      viewReelsSavePercentMin: 0, viewReelsSavePercentMax: 0,
       viewReelsActivatePctMin: 100, viewReelsActivatePctMax: 100,
       viewReelsWatchPctMin: 30, viewReelsWatchPctMax: 70,
       viewExploreEnabled: false, viewExploreActivatePctMin: 100, viewExploreActivatePctMax: 100,
@@ -3231,19 +3236,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     likePercentMin: number; likePercentMax: number;
     shareFeedPercentMin: number; shareFeedPercentMax: number;
     shareDmPercentMin: number; shareDmPercentMax: number;
+    savePercentMin: number; savePercentMax: number;
     onLog?: (msg: string) => void;
-  }): Promise<{ reelsViewed: number; likes: number; sharesFeed: number; sharesDm: number }> {
+  }): Promise<{ reelsViewed: number; likes: number; sharesFeed: number; sharesDm: number; saves: number }> {
     const {
       scrollMin, scrollMax,
       watchPctMin, watchPctMax,
       likePercentMin, likePercentMax,
       shareFeedPercentMin, shareFeedPercentMax,
       shareDmPercentMin, shareDmPercentMax,
+      savePercentMin, savePercentMax,
       onLog,
     } = params;
 
     const totalReels = Math.floor(rollRange(scrollMin, scrollMax));
-    if (totalReels <= 0) return { reelsViewed: 0, likes: 0, sharesFeed: 0, sharesDm: 0 };
+    if (totalReels <= 0) return { reelsViewed: 0, likes: 0, sharesFeed: 0, sharesDm: 0, saves: 0 };
 
     const { w, h } = getScreenSize(serial);
     onLog?.(`Reels loop: device resolution ${w}×${h}`);
@@ -3252,13 +3259,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (!reelsTab) {
       onLog?.("Reels tab not found — a11y miss and positional fallback found < 2 bottom-nav nodes; skipping View Reels");
       logger.warn({ serial }, "[view-reels] Reels tab not found");
-      return { reelsViewed: 0, likes: 0, sharesFeed: 0, sharesDm: 0 };
+      return { reelsViewed: 0, likes: 0, sharesFeed: 0, sharesDm: 0, saves: 0 };
     }
     await android.tap(serial, reelsTab.x, reelsTab.y);
     onLog?.(`Tapped Reels tab at (${reelsTab.x},${reelsTab.y}) — waiting for Reels to load`);
     await sleepOrAbort(serial, 1500);
 
-    let likes = 0, sharesFeed = 0, sharesDm = 0, reelsViewed = 0;
+    let likes = 0, sharesFeed = 0, sharesDm = 0, saves = 0, reelsViewed = 0;
 
     // Reels snap fully to the next clip on a swipe — unlike the feed's
     // partial scroll (runCheckFeedLoop), a single full-height swipe here
@@ -3286,9 +3293,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Roll like/share decisions fresh per reel so each reel is independent.
       const wantLike      = likePercentMax > 0 && Math.random() * 100 < rollRange(likePercentMin, likePercentMax);
       const wantShareFeed = shareFeedPercentMax > 0 && Math.random() * 100 < rollRange(shareFeedPercentMin, shareFeedPercentMax);
+      const wantSave      = savePercentMax > 0 && Math.random() * 100 < rollRange(savePercentMin, savePercentMax);
       const wantShareDm   = shareDmPercentMax > 0 && Math.random() * 100 < rollRange(shareDmPercentMin, shareDmPercentMax);
 
-      if (wantLike || wantShareFeed || wantShareDm) {
+      if (wantLike || wantShareFeed || wantSave || wantShareDm) {
         // ── View Reels: wait for reel player nodes to appear ────────────────
         // Problem: the reel viewer sometimes opens in a separate accessibility
         // window layer (observed on Xiaomi MIUI). UIAutomator's dump captures
@@ -3348,6 +3356,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               sharesFeed++;
               onLog?.(`Reel ${i + 1}/${totalReels}: shared to feed at (${icons.shareFeed.x},${icons.shareFeed.y})`);
               await sleepOrAbort(serial, 400);
+            }
+          }
+          if (wantSave) {
+            // ── View Reels — Save (isolated; not shared with any other tool) ──
+            if (icons.alreadySaved) {
+              onLog?.(`Reel ${i + 1}/${totalReels}: already saved — skipping save`);
+            } else if (!icons.save) {
+              onLog?.(`Reel ${i + 1}/${totalReels}: Save icon not found — skipping`);
+            } else {
+              await android.tap(serial, icons.save.x, icons.save.y);
+              saves++;
+              onLog?.(`Reel ${i + 1}/${totalReels}: saved at (${icons.save.x},${icons.save.y})`);
+              await sleepOrAbort(serial, 300);
             }
           }
           if (wantShareDm) {
@@ -3464,7 +3485,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
     }
 
-    return { reelsViewed, likes, sharesFeed, sharesDm };
+    return { reelsViewed, likes, sharesFeed, sharesDm, saves };
   }
 
   app.post("/api/mobile/devices/:serial/check-feed", async (req: Request, res: Response) => {
@@ -3521,6 +3542,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     viewReelsShareFeedPercentMax: z.number().min(0).max(100).default(0),
     viewReelsShareDmPercentMin: z.number().min(0).max(100).default(0),
     viewReelsShareDmPercentMax: z.number().min(0).max(100).default(0),
+    viewReelsSavePercentMin: z.number().min(0).max(100).default(0),
+    viewReelsSavePercentMax: z.number().min(0).max(100).default(0),
     viewReelsActivatePctMin: z.number().min(0).max(100).default(100),
     viewReelsActivatePctMax: z.number().min(0).max(100).default(100),
     viewReelsWatchPctMin: z.number().min(1).max(100).default(30),
@@ -5239,6 +5262,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewReelsLikePercentMin, viewReelsLikePercentMax,
         viewReelsShareFeedPercentMin, viewReelsShareFeedPercentMax,
         viewReelsShareDmPercentMin, viewReelsShareDmPercentMax,
+        viewReelsSavePercentMin, viewReelsSavePercentMax,
         viewReelsActivatePctMin, viewReelsActivatePctMax,
         viewExploreEnabled, viewExploreActivatePctMin, viewExploreActivatePctMax,
         viewExploreScrollMin, viewExploreScrollMax,
@@ -5609,11 +5633,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               likePercentMin: viewReelsLikePercentMin, likePercentMax: viewReelsLikePercentMax,
               shareFeedPercentMin: viewReelsShareFeedPercentMin, shareFeedPercentMax: viewReelsShareFeedPercentMax,
               shareDmPercentMin: viewReelsShareDmPercentMin, shareDmPercentMax: viewReelsShareDmPercentMax,
+              savePercentMin: viewReelsSavePercentMin ?? 0, savePercentMax: viewReelsSavePercentMax ?? 0,
               onLog: (msg) => tLog(`  ${msg}`),
             });
             reelsViewed = reelsResult.reelsViewed;
             reelsLikes = reelsResult.likes;
-            steps.push(`reels(${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes, ${reelsResult.sharesFeed} feed-shares, ${reelsResult.sharesDm} dm-shares)`);
+            steps.push(`reels(${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes, ${reelsResult.sharesFeed} feed-shares, ${reelsResult.sharesDm} dm-shares, ${reelsResult.saves} saves)`);
             tLog(`▶ View Reels done — ${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes`);
             // Robust Reels exit — press Back up to 3 times, polling for the
             // home tab each attempt. The previous single Back+1200ms was
