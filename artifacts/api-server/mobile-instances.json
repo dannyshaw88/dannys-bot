@@ -150,7 +150,7 @@
         "makePostPerSessionMin": 1,
         "makePostPerSessionMax": 1,
         "makePostSourceUsername": "",
-        "makePostDisableUsernameSource": false,
+        "makePostDisableUsernameSource": true,
         "makePostAlterationEnabled": true,
         "makePostAlterationLevel": "small",
         "makePostImageSettingsEnabled": true,

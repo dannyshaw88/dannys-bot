@@ -3021,7 +3021,7 @@ type CopySubSetting = { key: string; label: string; fields: string[] };
 type CopySection    = { key: string; label: string; sub: CopySubSetting[] };
 
 const COPY_SECTIONS: CopySection[] = [
-  { key: 'runInterval',   label: 'Run Interval', sub: [
+  { key: 'runInterval',   label: 'Human Session Tool', sub: [
     { key: 'cycleInterval',     label: 'Run every X - Y minutes',      fields: ['cycleIntervalMin','cycleIntervalMax'] },
     { key: 'shuffleToolOrder',  label: 'Shuffle tool order',           fields: ['shuffleToolOrder'] },
   ]},
