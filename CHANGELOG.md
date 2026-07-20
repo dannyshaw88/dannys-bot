@@ -4,6 +4,36 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.47] — 2026-07-20
+
+### Phone Farm — active device card now pulses with a cyan aura glow
+
+When a device's automation cycle is running, its card on the Phone Farm page now shows a pulsating light-cyan glow (roughly 25–38 % opacity, cycling every 2.4 s) so it is immediately obvious at a glance which phones are actively farming. The glow also shifts the card border to a faint cyan tint. Cards with no active cycle show no glow at all — the effect is strictly opt-in on active state.
+
+### Phone Farm — "Sand" wallpaper removed from the wallpaper picker
+
+The Sand wallpaper (`wp-p601.jpg`) was not rendering correctly and has been removed from the built-in wallpaper list. All other wallpapers are unaffected.
+
+### Dashboard — detail text corrected: "Cycle Starting Farming Aura"
+
+The cycle-start log entry that appeared in the Activity Log detail column was previously written as `Cycle-Starting-Farming-Aura` (hyphens). It now correctly reads `Cycle Starting Farming Aura` (spaces), matching the display style of every other detail message.
+
+### View Explore Page — grid post detection completely rewritten
+
+**Problem:** The Explore grid was logging "no grid posts visible — skipping click" on every scroll, even when posts were clearly visible on screen. Two separate bugs caused this:
+
+1. **Regex slash-break** — the old pattern used `[^/]*?` between the resource-id and bounds attributes. Any `content-desc` value containing a `/` (e.g. a URL in a caption, or a username with a slash) caused the regex to fail to match, returning zero cells even when the grid was fully loaded.
+
+2. **Reels cells invisible** — roughly half the posts on a typical Explore page are Reels. Reel cells use the resource-id `layout_container` (not `grid_card_layout_container`), so the old code never detected them at all.
+
+**Fix:** Grid detection now works by matching the tappable image child nodes directly — `image_button` for photo and carousel posts, `image_preview` for Reels — using a size filter (≥ 150 × 150 px) to exclude small UI images such as profile pictures and icons. This is robust to any parent container ID and to any content-desc value regardless of special characters. A coordinate-based fallback (9 cells across 3 columns × 3 rows, calculated from the known grid geometry) fires automatically if the accessibility tree returns nothing, ensuring the tool never silently skips all scrolls.
+
+### GitHub Actions — Windows installer workflow confirmed canonical
+
+`build-windows-installer.yml` is the single active workflow that builds and publishes the Windows installer on every push to `main` and on version tags. The three other installer-related workflow files (`build.yml`, `windows-installer.yml`, `release.yml`) are inert deprecated stubs with no triggers and will never run.
+
+---
+
 ## [1.2.46] — 2026-07-20
 
 ### Settings — "Abort after X scrapes" moved to Settings → Scraping (global)
