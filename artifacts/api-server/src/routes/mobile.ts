@@ -203,6 +203,7 @@ type AutomationSettings = {
   followUsersMin?: number;
   followUsersMax?: number;
   followSources?: { type: string; value: string }[];
+  followMaxScrapeSessions?: number;
   // Inject Browsing — per-user profile-browsing behaviour (same fix).
   injectBrowsingEnabled?: boolean;
   injectBrowsingActivatePctMin?: number;
@@ -1093,6 +1094,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     followUsersMin: z.number().min(0).max(9999).default(1),
     followUsersMax: z.number().min(0).max(9999).default(3),
     followSources: z.array(followSourceSchema).default([]),
+    followMaxScrapeSessions: z.number().min(0).max(999).default(0),
     injectBrowsingEnabled: z.boolean().default(false),
     injectBrowsingActivatePctMin: z.number().min(0).max(100).default(0),
     injectBrowsingActivatePctMax: z.number().min(0).max(100).default(0),
@@ -2986,6 +2988,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     followUsersMin: z.number().min(0).max(9999).default(1),
     followUsersMax: z.number().min(0).max(9999).default(3),
     followSources: z.array(z.object({ type: z.string(), value: z.string() })).default([]),
+    followMaxScrapeSessions: z.number().min(0).max(999).default(0),
     // Inject Browsing — per-user profile-browsing behaviour woven into the
     // Follow Users flow itself (12 Jul 2026 rework). There is no per-item
     // enable toggle anymore: search-browsing (landing on the profile via
@@ -4060,6 +4063,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       /** Profile-quality gates to apply after navigating to the target's
        *  profile but before the Follow tap. */
       filters?: { skipVerified?: boolean; maxFollowers?: number; skipPrivate?: boolean; minFollowers?: number; requireEnglish?: boolean };
+      /** Jarvee-style "abort after X scrapes" limit. 0 = unlimited.
+       *  Counts the initial HikerAPI fetch as scrape #1; re-scrapes count
+       *  from #2 onward.  When the total reaches this number the session
+       *  ends even if targetCount hasn't been reached. */
+      maxScrapeSessions?: number;
     },
   ): Promise<number> {
     const { usersMin, usersMax, sources, onLog, recordFollow, browsing, skipFollowedUsernames, skipSkippedUsernames, filters } = params;
@@ -4178,7 +4186,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let followed = 0;
     let _fi = 0;              // manual index into `targets` (grows as re-scrapes inject new entries)
     let scrapeRound = 0;
-    const MAX_SCRAPE_ROUNDS = 5;
+    // 0 = unlimited (Jarvee-style "abort after X scrapes"). When a positive
+    // limit is set the follow session ends as soon as that many HikerAPI
+    // scrape rounds have been used — the initial scrape counts as round 1.
+    const MAX_SCRAPE_ROUNDS = (params.maxScrapeSessions ?? 0) > 0
+      ? (params.maxScrapeSessions as number) - 1   // -1: initial scrape already done before loop
+      : 50;  // effectively unlimited
 
     // Navigate to Search tab. Give the just-opened feed a moment to settle
     // before attempting to locate the bottom nav.
@@ -4655,7 +4668,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewReelsShareFeedPercentMin, viewReelsShareFeedPercentMax,
         viewReelsShareDmPercentMin, viewReelsShareDmPercentMax,
         viewReelsActivatePctMin, viewReelsActivatePctMax,
-        followEnabled, followUsersMin, followUsersMax, followSources,
+        followEnabled, followUsersMin, followUsersMax, followSources, followMaxScrapeSessions,
         followFiltersEnabled, followFilterVerifiedUsers, followFilterMaxFollowers25k,
         followFilterPrivateUsers, followFilterEnglishSpeaking, followFilterMinFollowers250,
         injectBrowsingEnabled,
@@ -5031,6 +5044,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 usersMin: followUsersMin,
                 usersMax: followUsersMax,
                 sources: followSources,
+                maxScrapeSessions: followMaxScrapeSessions,
                 onLog: (msg) => tLog(`  ${msg}`),
                 recordFollow: (username, source) => recordMobileFollow(serial, username, source),
                 skipFollowedUsernames: await (async () => {

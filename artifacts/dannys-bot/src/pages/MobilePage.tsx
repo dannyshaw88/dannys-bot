@@ -2356,6 +2356,7 @@ interface AutomationSettingsData {
   followUsersMin: number;
   followUsersMax: number;
   followSources: { type: string; value: string }[];
+  followMaxScrapeSessions: number;
   // Inject Browsing — per-user profile-browsing behaviour woven into the
   // Follow Users flow (12 Jul 2026 rework). No per-item toggles: search
   // browsing is mandatory, "Get Suggested Users" was removed, and the old
@@ -2450,6 +2451,7 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   followEnabled: false,
   followUsersMin: 1, followUsersMax: 3,
   followSources: [],
+  followMaxScrapeSessions: 0,
   injectBrowsingEnabled: false,
   injectBrowsingActivatePctMin: 0, injectBrowsingActivatePctMax: 0,
   injectBrowsingBeforeFollowPctMin: 0, injectBrowsingBeforeFollowPctMax: 0,
@@ -2735,6 +2737,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             followUsersMin: s.followUsersMin,
             followUsersMax: s.followUsersMax,
             followSources: s.followSources,
+            followMaxScrapeSessions: s.followMaxScrapeSessions,
             injectBrowsingEnabled: s.injectBrowsingEnabled,
             injectBrowsingActivatePctMin: s.injectBrowsingActivatePctMin,
             injectBrowsingActivatePctMax: s.injectBrowsingActivatePctMax,
@@ -3010,6 +3013,7 @@ const COPY_SECTIONS: CopySection[] = [
     { key: 'followActivate',    label: 'Activate Percentage',           fields: ['followActivatePctMin','followActivatePctMax'] },
     { key: 'followCount',       label: 'Follow count per session',      fields: ['followUsersMin','followUsersMax'] },
     { key: 'followSources',     label: 'Follow sources list',           fields: ['followSources'] },
+    { key: 'followMaxScrape',   label: 'Max scrape sessions',           fields: ['followMaxScrapeSessions'] },
   ]},
   // Follow Filters is its own top-level section so it can be selected/deselected
   // independently from Follow Users. Previously it was nested inside Follow Users,
@@ -4083,6 +4087,17 @@ function AutomationSettingsPanel({
                 value={settings.followUsersMax}
                 onChange={e => setSettings(s => ({ ...s, followUsersMax: clamp4(Number(e.target.value)) }))}
                 disabled={loading} />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Abort after X scrapes</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={999} maxLength={3} className={NUM_INPUT_CLASS}
+                value={settings.followMaxScrapeSessions}
+                onChange={e => setSettings(s => ({ ...s, followMaxScrapeSessions: Math.max(0, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-xs">(0 = unlimited)</span>
             </div>
           </div>
 
