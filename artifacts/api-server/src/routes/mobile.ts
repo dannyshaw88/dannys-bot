@@ -3391,7 +3391,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               await android.tap(serial, icons.save.x, icons.save.y);
               saves++;
               onLog?.(`Reel ${i + 1}/${totalReels}: saved at (${icons.save.x},${icons.save.y})`);
-              await sleepOrAbort(serial, 300);
+              // Wait long enough for Instagram to show the "Save to collection?"
+              // bottom sheet if it's going to (common on fresh/new accounts).
+              await sleepOrAbort(serial, 600);
+              // Conditionally dismiss: dump once, check for the collection popup.
+              // Only tap if the popup is actually there — an unconditional tap at
+              // the top of the screen would hit the Reels "For you" tab or the
+              // creator header and could navigate away from the reel.
+              const _vrSaveXml = await android.dumpUi(serial).catch(() => "");
+              if (_vrSaveXml.includes("Start a collection") || _vrSaveXml.includes("Collect the posts")) {
+                const _vrDismissX = Math.round(w * 0.50);
+                const _vrDismissY = Math.round(h * 0.12);
+                await android.tap(serial, _vrDismissX, _vrDismissY);
+                onLog?.(`Reel ${i + 1}/${totalReels}: dismissed "Save to collection?" popup`);
+                await sleepOrAbort(serial, 300);
+              }
             }
           }
           if (wantShareDm) {
