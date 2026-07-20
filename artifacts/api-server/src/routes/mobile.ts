@@ -5531,12 +5531,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // viewer but leave the UI on the Reels tab. If the next account in
             // the slot rotation runs its cycle from the Reels tab the bottom-nav
             // layout is different enough to break account-switcher detection.
+            // If the Back loop didn't surface the home tab, try one more fresh
+            // lookup now that the viewer has had time to dismiss.
+            if (!_reHomeTab) {
+              _reHomeTab = await android.findHomeTab(serial).catch(() => null);
+            }
             if (_reHomeTab) {
               await android.tap(serial, _reHomeTab.x, _reHomeTab.y);
               await sleepOrAbort(serial, 800);
               tLog("▶ View Reels — tapped Home tab, back on home feed");
             } else {
-              tLog("▶ View Reels — exit uncertain after 3 Back presses — proceeding anyway");
+              // Positional fallback — home tab is always the leftmost nav icon.
+              const { w: _rhW, h: _rhH } = getScreenSize(serial);
+              await android.tap(serial, Math.round(_rhW * 0.12), Math.round(_rhH - 50));
+              await sleepOrAbort(serial, 800);
+              tLog("▶ View Reels — tapped Home tab (positional fallback), back on home feed");
             }
           } else if (!viewReelsEnabled) {
             steps.push("reels(skipped — View Reels disabled)");
