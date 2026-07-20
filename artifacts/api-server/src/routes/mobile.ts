@@ -3326,7 +3326,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               reelReady = true;
               if (p > 0) onLog?.(`Reel ${i + 1}/${totalReels}: player ready after ${p * POLL_MS / 1000}s extra wait`);
             } else {
-              onLog?.(`Reel ${i + 1}/${totalReels}: player not in tree yet — retrying in ${POLL_MS / 1000}s (poll ${p + 1}/${MAX_POLLS})`);
+              // Diagnose what the dump DID contain so future logs make it
+              // immediately obvious why the player nodes are missing.
+              // Two known causes:
+              //   A) Floating window — Android's UIAutomator dumps the focused
+              //      accessibility window. If Instagram is running inside a
+              //      floating/pop-up window (common on Xiaomi MIUI "Free-form"
+              //      or Samsung "Multi-window"), the recents/task-switcher layer
+              //      is focused instead of Instagram. The dump returns the
+              //      recents XML (task_view_thumbnail, txtSmallWindow, etc.)
+              //      rather than any Instagram node — a dead giveaway.
+              //   B) Regular window, player still loading — Instagram IS the
+              //      focused window but the reel video frame hasn't attached to
+              //      the a11y tree yet (brief animation / first-launch lag).
+              let windowCtx: string;
+              if (pollXml.includes("task_view_thumbnail") || pollXml.includes("recents_container") || pollXml.includes("recents_view")) {
+                windowCtx = "⚠ floating/multi-window — dump returned Android recents layer (task_view_thumbnail detected); UIAutomator is not focused on the Instagram window";
+              } else if (pollXml.includes("txtSmallWindow") || pollXml.includes("Floating windows")) {
+                windowCtx = "⚠ floating-window bar detected (txtSmallWindow / 'Floating windows' present) — Instagram may be in a pop-up window";
+              } else if (pollXml.includes("com.instagram.android")) {
+                windowCtx = "regular window — Instagram a11y tree visible but reel player not yet attached (still loading)";
+              } else {
+                windowCtx = `unrecognised context — dump is ${pollXml.length} chars, no Instagram or recents nodes found`;
+              }
+              onLog?.(`Reel ${i + 1}/${totalReels}: player not in tree yet [${windowCtx}] — retrying in ${POLL_MS / 1000}s (poll ${p + 1}/${MAX_POLLS})`);
               await sleepOrAbort(serial, POLL_MS);
             }
           }
