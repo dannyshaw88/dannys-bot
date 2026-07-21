@@ -7467,21 +7467,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
-  // ── Collision Scheduler settings ──────────────────────────────────────────
+  // ── Collision Preventer settings ──────────────────────────────────────────
   // Stored as a global setting keyed by serial. Purely advisory (client-side
   // queue logic uses the values); server just persists and returns them.
 
-  app.get("/api/mobile/devices/:serial/collision-scheduler", async (req: Request, res: Response) => {
+  app.get("/api/mobile/devices/:serial/collision-preventer", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
       const all    = await storage.getGlobalSettings();
-      const raw    = all[`collision_scheduler_${serial}`];
+      // Support legacy key name so existing saved configs are not lost.
+      const raw    = all[`collision_scheduler_${serial}`] ?? all[`collision_preventer_${serial}`] ?? null;
       const config = raw ? JSON.parse(raw) : null;
       res.json({ config });
     } catch (e: any) { res.status(500).json({ error: e?.message }); }
   });
 
-  app.post("/api/mobile/devices/:serial/collision-scheduler", async (req: Request, res: Response) => {
+  app.post("/api/mobile/devices/:serial/collision-preventer", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
       const cfg    = z.object({
@@ -7489,7 +7490,46 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         restMinMin:  z.number().min(0).max(60),
         restMinMax:  z.number().min(0).max(60),
       }).parse(req.body);
-      await storage.setGlobalSetting(`collision_scheduler_${serial}`, JSON.stringify(cfg));
+      await storage.setGlobalSetting(`collision_preventer_${serial}`, JSON.stringify(cfg));
+      res.json({ ok: true });
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
+
+  // ── Client-side dashboard event logger ────────────────────────────────────
+  // Used by the Collision Preventer (and any future client-side events) to
+  // create a session_action row without going through the full cycle endpoint.
+  app.post("/api/mobile/devices/:serial/log-event", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const body = z.object({
+        slotUsername: z.string(),
+        slotIdx:      z.number().int().min(0).default(0),
+        action:       z.string(),
+        detail:       z.string(),
+        result:       z.string().default("ok"),
+      }).parse(req.body);
+
+      // Resolve EB profileId the same way the cycle does.
+      let profileId = 0;
+      if (body.slotUsername) {
+        const allProfiles = await storage.getProfiles();
+        const match = allProfiles.find(
+          p => p.username === body.slotUsername || p.accountLabel === body.slotUsername
+        );
+        if (match) profileId = match.id;
+      }
+
+      await storage.createSessionAction({
+        profileId,
+        toolId: 0,
+        action: body.action,
+        targetUsername: body.slotUsername,
+        detail: body.detail,
+        result: body.result,
+        sourceValue: `${serial}:${body.slotIdx}`,
+        sourceType: "phone",
+        timestamp: new Date().toISOString(),
+      });
       res.json({ ok: true });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });

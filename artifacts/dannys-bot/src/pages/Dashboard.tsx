@@ -69,6 +69,7 @@ const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string |
   visit_profile:           { label: "Visit Profile",   cls: "text-sky-700",       icon: "◉" },
   view_profile_post:       { label: "View Profile Post", cls: "text-cyan-700",    icon: "◈" },
   view_profile_feed:       { label: "View Profile Feed", cls: "text-cyan-600",    icon: "≡" },
+  collision_prevented:     { label: "Collision Prevented", cls: "text-orange-600", icon: "⛔" },
 };
 
 const DEFAULT_COL_WIDTHS = { account: 160, device_name: 140, account_slot: 100, event: 150, detail: 200, timestamp: 220, trustscore: 108 };

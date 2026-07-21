@@ -2585,7 +2585,7 @@ const clamp4 = (n: number) => Math.min(9999, Math.max(0, Math.trunc(Number.isFin
 // the Human Session Tool tab never unmounts this and interrupts an
 // in-progress automation cycle — the loop must keep running in the
 // background regardless of which tab is currently visible.
-function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void, slotIdx?: number, slotUsername?: string, requestSlot?: (idx: number, readyAt: number) => Promise<void>, releaseSlot?: (idx: number) => void, refreshKey?: number) {
+function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void, slotIdx?: number, slotUsername?: string, requestSlot?: (idx: number, readyAt: number) => Promise<boolean>, releaseSlot?: (idx: number) => void, refreshKey?: number) {
   const [settings, setSettings] = useState<AutomationSettingsData>(AUTOMATION_DEFAULTS);
   const [loading,  setLoading]  = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -2738,10 +2738,16 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     const runCycle = async () => {
       if (cancelled) return;
       setNextRunAt(null);
-      // Collision scheduler: wait for device to be free before running.
+      // Collision preventer: wait for device to be free before running.
       if (requestSlot && slotIdx !== undefined) {
-        await requestSlot(slotIdx, Date.now());
+        const collisionPrevented = await requestSlot(slotIdx, Date.now());
         if (cancelled) { releaseSlot?.(slotIdx); return; }
+        if (collisionPrevented && phone?.serial && slotUsername) {
+          fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/log-event`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ slotUsername, slotIdx, action: 'collision_prevented', detail: 'Collision Prevented' }),
+          }).catch(() => {});
+        }
       }
       const s = settingsRef.current;
       const min = Math.max(1, Math.min(s.feedScrollMin, s.feedScrollMax));
@@ -3005,27 +3011,27 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   return { settings, setSettings, setEnabledByUser, loading, saveError, running: running || serverCycleRunning, nextRunAt };
 }
 
-// ── Per-device collision scheduler ───────────────────────────────────────────
+// ── Per-device collision preventer ────────────────────────────────────────────
 // Ensures only one account slot on a device runs at a time. When a second slot
 // becomes ready while one is running, it queues itself (sorted by readyAt so
 // the slot that has been waiting longest goes next). After each slot finishes,
 // the device rests for restMinMin–restMinMax minutes before the next slot runs.
-interface CollisionSchedulerConfig { enabled: boolean; restMinMin: number; restMinMax: number; }
+interface CollisionPreventerConfig { enabled: boolean; restMinMin: number; restMinMax: number; }
 
-function useCollisionScheduler(serial: string | null) {
-  const [config, setConfig] = useState<CollisionSchedulerConfig>({ enabled: false, restMinMin: 1, restMinMax: 3 });
+function useCollisionPreventer(serial: string | null) {
+  const [config, setConfig] = useState<CollisionPreventerConfig>({ enabled: false, restMinMin: 1, restMinMax: 3 });
   const configRef = useRef(config);
   useEffect(() => { configRef.current = config; }, [config]);
 
   // Queue entries: slotIdx, the timestamp the slot first became ready, and the
-  // resolve callback that grants permission to run.
-  const queueRef = useRef<{ slotIdx: number; readyAt: number; resolve: () => void }[]>([]);
+  // resolve callback that grants permission to run. Boolean arg = collisionPrevented.
+  const queueRef = useRef<{ slotIdx: number; readyAt: number; resolve: (collisionPrevented: boolean) => void }[]>([]);
   const busyRef  = useRef(false); // true = a slot is currently running
 
   // Load saved config on mount / serial change.
   useEffect(() => {
     if (!serial) return;
-    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/collision-scheduler`)
+    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/collision-preventer`)
       .then(r => r.json()).then(d => { if (d.config) setConfig(d.config); }).catch(() => {});
   }, [serial]);
 
@@ -3034,13 +3040,14 @@ function useCollisionScheduler(serial: string | null) {
     queueRef.current.sort((a, b) => a.readyAt - b.readyAt);
     const next = queueRef.current.shift()!;
     busyRef.current = true;
-    next.resolve();
+    next.resolve(true); // true = was queued = collision was prevented
   }, []);
 
-  const requestSlot = useCallback((slotIdx: number, readyAt: number): Promise<void> => {
-    if (!configRef.current.enabled) return Promise.resolve();
-    return new Promise<void>(resolve => {
-      if (!busyRef.current) { busyRef.current = true; resolve(); }
+  // Returns true if the slot had to wait (collision was prevented), false if it ran immediately.
+  const requestSlot = useCallback((slotIdx: number, readyAt: number): Promise<boolean> => {
+    if (!configRef.current.enabled) return Promise.resolve(false);
+    return new Promise<boolean>(resolve => {
+      if (!busyRef.current) { busyRef.current = true; resolve(false); }
       else queueRef.current.push({ slotIdx, readyAt, resolve });
     });
   }, []);
@@ -5444,7 +5451,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot }, ref)
   const [openSlotTool, setOpenSlotTool] = useState<number | null>(initialSlot ?? null);
   useEffect(() => { onSlotChange?.(openSlotTool); }, [openSlotTool]);
   useImperativeHandle(ref, () => ({ backToSlots: () => setOpenSlotTool(null) }));
-  const { requestSlot, releaseSlot } = useCollisionScheduler(phone?.serial ?? null);
+  const { requestSlot, releaseSlot } = useCollisionPreventer(phone?.serial ?? null);
   const hydratedRef = useRef(false);
   const lastSavedRef = useRef<string>(JSON.stringify(Array.from({ length: ACCT_SLOT_COUNT }, emptySlot)));
   // Kept outside the effect so clearTimeout on new keystrokes works without
@@ -5872,7 +5879,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const [stopping,      setStopping]      = React.useState(false);
   const [resuming,      setResuming]      = React.useState(false);
 
-  // Collision Scheduler form
+  // Collision Preventer form
   const [csEnabled,    setCsEnabled]    = React.useState(true);
   const [csMinMin,     setCsMinMin]     = React.useState(5);
   const [csMinMax,     setCsMinMax]     = React.useState(10);
@@ -5962,10 +5969,10 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
       .catch(() => {});
   }, [serial, applyConfig]);
 
-  // Load collision scheduler settings
+  // Load collision preventer settings
   React.useEffect(() => {
     if (!serial) return;
-    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/collision-scheduler`)
+    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/collision-preventer`)
       .then(r => r.json()).then(d => {
         if (d.config) {
           setCsEnabled(d.config.enabled);
@@ -5974,7 +5981,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
         } else {
           // New device — no saved config yet. Persist the defaults immediately so
           // they survive a page reload without the user needing to touch anything.
-          fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/collision-scheduler`, {
+          fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/collision-preventer`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ enabled: true, restMinMin: 5, restMinMax: 10 }),
           }).catch(() => {});
@@ -6053,13 +6060,13 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     } finally { setResuming(false); }
   };
 
-  // Auto-save collision scheduler whenever any value changes (debounced 600 ms)
+  // Auto-save collision preventer whenever any value changes (debounced 600 ms)
   React.useEffect(() => {
     if (!serial) return;
     if (!csInitRef.current) { csInitRef.current = true; return; }
     if (csSaveRef.current) clearTimeout(csSaveRef.current);
     csSaveRef.current = setTimeout(() => {
-      fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/collision-scheduler`, {
+      fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/collision-preventer`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: csEnabled, restMinMin: csMinMin, restMinMax: csMinMax }),
       }).catch(() => {});
@@ -6232,12 +6239,12 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
 
       <h2 className="text-lg font-bold text-foreground">Phone Settings</h2>
 
-      {/* ── Collision Scheduler ────────────────────────────────────────── */}
+      {/* ── Collision Preventer ────────────────────────────────────────── */}
       <div className="bg-card border border-border rounded-xl p-5 space-y-5">
         {/* Title row — always visible */}
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold text-foreground">Collision Scheduler</p>
+            <p className="text-sm font-semibold text-foreground">Collision Preventer</p>
             {!csEnabled && (
               <p className="text-xs text-muted-foreground mt-1">
                 Prevents two account slots from running at the same time on this device. Enable to configure.
