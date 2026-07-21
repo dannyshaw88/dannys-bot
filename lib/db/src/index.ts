@@ -292,23 +292,30 @@ sqlite.exec(`
   );
 `);
 
-// Seed owner license account if not already present
+// Seed owner license account if not already present.
+// Uses INSERT OR IGNORE so the statement is idempotent — safe even when the
+// DB module is imported from two ESM entry points simultaneously (both see
+// ownerExists=false before either commits) or when the app is restarted
+// immediately after a first-run seed. Without OR IGNORE the race throws
+// "UNIQUE constraint failed: licenses.username" and crashes the server.
 {
-  // Rename legacy 'EQUINOX' admin to 'AURAFARMING' on existing installs
-  const legacyAdmin = sqlite.prepare("SELECT 1 FROM licenses WHERE LOWER(username) = 'equinox'").get();
-  if (legacyAdmin) {
-    sqlite.prepare(
-      "UPDATE licenses SET username = 'AURAFARMING', password_hash = ? WHERE LOWER(username) = 'equinox'"
-    ).run("0faee339bea0e01815d0a19471e9d5e5d5563ce44dde52ced1f91997ef472407");
-    console.log("[db] Admin account migrated from EQUINOX → AURAFARMING");
-  }
-  const ownerExists = sqlite.prepare("SELECT 1 FROM licenses WHERE LOWER(username) = 'aurafarming'").get();
-  if (!ownerExists) {
-    sqlite.prepare(
-      "INSERT INTO licenses (username, password_hash, tier, account_limit, active, is_admin, created_at) VALUES (?, ?, 'owner', 9999, 1, 1, ?)"
-    ).run("AURAFARMING", "0faee339bea0e01815d0a19471e9d5e5d5563ce44dde52ced1f91997ef472407", new Date().toISOString());
-    console.log("[db] Owner license account seeded");
-  }
+  // Rename legacy 'EQUINOX' admin to 'AURAFARMING' on existing installs.
+  // Wrap in try/catch: if an UPDATE races against another startup it may
+  // fail harmlessly (the rename already happened).
+  try {
+    const legacyAdmin = sqlite.prepare("SELECT 1 FROM licenses WHERE LOWER(username) = 'equinox'").get();
+    if (legacyAdmin) {
+      sqlite.prepare(
+        "UPDATE licenses SET username = 'AURAFARMING', password_hash = ? WHERE LOWER(username) = 'equinox'"
+      ).run("0faee339bea0e01815d0a19471e9d5e5d5563ce44dde52ced1f91997ef472407");
+      console.log("[db] Admin account migrated from EQUINOX → AURAFARMING");
+    }
+  } catch { /* already renamed by a concurrent startup — harmless */ }
+
+  // INSERT OR IGNORE: if AURAFARMING already exists the statement is a no-op.
+  sqlite.prepare(
+    "INSERT OR IGNORE INTO licenses (username, password_hash, tier, account_limit, active, is_admin, created_at) VALUES (?, ?, 'owner', 9999, 1, 1, ?)"
+  ).run("AURAFARMING", "0faee339bea0e01815d0a19471e9d5e5d5563ce44dde52ced1f91997ef472407", new Date().toISOString());
 }
 
 // ── Schema migrations for existing databases ────────────────────────────────

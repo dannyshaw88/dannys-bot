@@ -4,6 +4,33 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.71] — 2026-07-21
+
+### Fixed — Server failed to start: "UNIQUE constraint failed: licenses.username"
+
+**Symptom:** On some installs the app showed "Server failed to start" immediately
+after launch. The log contained two identical `IMPORT ERROR: SqliteError: UNIQUE
+constraint failed: licenses.username` lines with different stack traces.
+
+**Root cause:** The DB module (`index.mjs`) was being imported from two separate
+ESM entry points inside the same Electron process at startup. Both imports
+executed the owner-license seed block simultaneously. Both ran the
+`SELECT … WHERE LOWER(username) = 'aurafarming'` check before either committed
+its `INSERT`, so both saw `ownerExists = false`. The first INSERT succeeded;
+the second threw a UNIQUE constraint error that propagated out of the ESM module
+initialiser and crashed the server.
+
+**Fix:** The plain `INSERT` is replaced with `INSERT OR IGNORE`. SQLite's `OR
+IGNORE` conflict resolver silently discards the duplicate row instead of throwing,
+making the seed block fully idempotent regardless of how many times the module
+is loaded or how many concurrent startups race. The legacy EQUINOX→AURAFARMING
+rename `UPDATE` is also wrapped in a try/catch for the same reason.
+
+**Files changed:**
+- `lib/db/src/index.ts` — seed block now uses `INSERT OR IGNORE`; rename step wrapped in try/catch
+
+---
+
 ## [1.2.70] — 2026-07-21
 
 ### Fixed — Make a Post: false "Did not post" abort + hang + Posted Media tab not updating
