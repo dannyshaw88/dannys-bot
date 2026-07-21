@@ -4,6 +4,43 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.77] — 2026-07-21
+
+### Fixed — Mobile automation cycle timer fires correctly when configured interval is reached
+
+**Problem:** After the software started (or after a cycle completed), the mobile phone farm
+automation scheduled the next cycle run using a random delay within the configured
+"Run every X to Y minutes" window. However, if the saved settings had a higher maximum
+than the current UI value (e.g. from a previous configuration), or if settings were loaded
+slightly after the timer was first set, the `nextRunAt` timestamp could be placed far beyond
+the configured maximum — sometimes 60–100+ minutes further out than intended. The timer
+would count down to that inflated timestamp and fire normally, but because the wait was so
+much longer than expected, it looked to the user as though the tool had silently stopped
+working.
+
+**Root cause:** The scheduling `setTimeout` in the `useAutomationSettings` hook
+(`artifacts/dannys-bot/src/pages/MobilePage.tsx`) is set once — either at startup or after
+each completed cycle — using `settingsRef.current` at that exact moment. If
+`cycleIntervalMax` was larger at the time of scheduling than the value the user currently
+sees in the UI (because settings hadn't fully loaded yet, or were changed mid-wait), the
+timer was locked to that inflated value with no mechanism to correct itself. There was no
+periodic re-check to validate that the pending `nextRunAt` still fell within the current
+bounds.
+
+**Fix:** Added a `rescheduleKey` state counter and a dedicated clamp `useEffect` that
+watches `cycleIntervalMin` and `cycleIntervalMax`. Whenever either setting changes, the
+effect checks whether the currently scheduled `nextRunAt` exceeds
+`Date.now() + cycleIntervalMax × 60 000 ms`. If it does, `rescheduleKey` is incremented.
+Because `rescheduleKey` is included in the run-loop effect's dependency array, React's
+cleanup fires immediately — cancelling the stale `setTimeout` — and the effect re-runs,
+picking a fresh random delay within the correct `[min, max]` window and setting a new
+timer. The correction happens automatically within milliseconds of the settings loading,
+with no need for the user to toggle the automation off and back on.
+
+**Files changed:** `artifacts/dannys-bot/src/pages/MobilePage.tsx`
+
+---
+
 ## [1.2.76] — 2026-07-21
 
 ### Fixed — Desktop icon position jumbles when installing an update
