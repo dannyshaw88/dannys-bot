@@ -224,7 +224,11 @@ export type InsertFollowedUser = z.infer<typeof insertFollowedUserSchema>;
 // the next HikerAPI scrape fires. Saves HikerAPI quota.
 export const overspillUsers = sqliteTable("overspill_users", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  profileId: integer("profile_id").notNull(),
+  profileId: integer("profile_id").notNull().default(0),
+  /** Phone-farm slot key (Instagram username, lowercased, no @) used when
+   *  the slot has no matching EB profile. One of profileId > 0 or
+   *  phoneSlotKey !== '' will always be set. */
+  phoneSlotKey: text("phone_slot_key").notNull().default(""),
   instagramUsername: text("instagram_username").notNull(),
   instagramUserId: text("instagram_user_id").notNull().default(""),
   sourceValue: text("source_value").notNull().default(""),

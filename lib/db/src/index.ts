@@ -330,6 +330,8 @@ const _migrations: string[] = [
   "ALTER TABLE proxies ADD COLUMN last_rotated_at TEXT",
   "ALTER TABLE proxies ADD COLUMN last_rotation_old_ip TEXT",
   "ALTER TABLE proxies ADD COLUMN last_rotation_new_ip TEXT",
+  // Phone-farm surplus: slot key for accounts without an EB profile
+  "ALTER TABLE overspill_users ADD COLUMN phone_slot_key TEXT NOT NULL DEFAULT ''",
 ];
 for (const sql of _migrations) {
   try { sqlite.exec(sql); } catch { /* column already exists */ }

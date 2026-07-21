@@ -3227,6 +3227,19 @@ export async function registerInstagramRoutes(
     res.json({ ok: true });
   });
 
+  // Phone-farm slot surplus (no EB profile required) — keyed by Instagram username
+  app.get("/api/mobile/slot-surplus/:slotKey", async (req, res) => {
+    const key = decodeURIComponent(req.params.slotKey).replace(/^@/, "").toLowerCase();
+    const data = await storage.getOverspillUsersByPhoneSlot(key);
+    res.json(data);
+  });
+
+  app.delete("/api/mobile/slot-surplus/:slotKey", async (req, res) => {
+    const key = decodeURIComponent(req.params.slotKey).replace(/^@/, "").toLowerCase();
+    await storage.clearOverspillByPhoneSlot(key);
+    res.json({ ok: true });
+  });
+
   app.post("/api/profiles/:profileId/followed-users", async (req, res) => {
     const profileId = Number(req.params.profileId);
     const { instagramUsername, sourceValue, sourceType } = req.body;

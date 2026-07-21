@@ -3628,13 +3628,24 @@ function AutomationSettingsPanel({
     if (!slotUsername) return;
     setLoadingOverspill(true);
     try {
+      // Try phone-slot endpoint first (works without an EB profile).
+      // Falls back to the EB-profile endpoint if the slot happens to match.
+      const slotKey = slotUsername.replace(/^@/, '').toLowerCase();
+      const slotData = await fetch(`/api/mobile/slot-surplus/${encodeURIComponent(slotKey)}`).then(r => r.json()).catch(() => null);
+      if (Array.isArray(slotData) && slotData.length > 0) {
+        setMobileOverspillList(slotData);
+        return;
+      }
+      // Also check the EB-profile table in case this account has a profile.
       const profiles = await fetch('/api/profiles').then(r => r.json()).catch(() => null);
       const profile = Array.isArray(profiles)
         ? profiles.find((p: any) => p.username === slotUsername || p.accountLabel === slotUsername)
         : null;
-      if (!profile?.id) { setMobileOverspillList([]); return; }
-      const data = await fetch(`/api/profiles/${profile.id}/overspill-users`).then(r => r.json()).catch(() => null);
-      if (Array.isArray(data)) setMobileOverspillList(data);
+      if (profile?.id) {
+        const data = await fetch(`/api/profiles/${profile.id}/overspill-users`).then(r => r.json()).catch(() => null);
+        if (Array.isArray(data)) { setMobileOverspillList(data); return; }
+      }
+      setMobileOverspillList(Array.isArray(slotData) ? slotData : []);
     } catch {} finally { setLoadingOverspill(false); }
   }, [slotUsername]);
 

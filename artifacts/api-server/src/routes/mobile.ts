@@ -4795,6 +4795,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
        *  HikerAPI is called. Leftover candidates at the end of the session
        *  are written back to Surplus for the next cycle. */
       profileId?: number;
+      /** Phone-farm slot key (Instagram username, no @) used when the slot
+       *  has no matching EB profile. Surplus is keyed by this when profileId
+       *  is absent. */
+      phoneSlotKey?: string;
     },
   ): Promise<number> {
     const { usersMin, usersMax, sources, onLog, recordFollow, browsing, skipFollowedUsernames, skipSkippedUsernames, filters } = params;
@@ -4831,9 +4835,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // burning HikerAPI quota on sources that were already scraped.
     const overspillIdsToDelete: number[] = [];
     const profileId = params.profileId;
+    const phoneSlotKey = params.phoneSlotKey?.replace(/^@/, "").toLowerCase() || "";
     if (profileId && profileId > 0) {
       try {
         const overspillRows = await storage.getOverspillUsersByProfile(profileId);
+        if (overspillRows.length > 0) {
+          onLog?.(`Follow: ${overspillRows.length} candidate${overspillRows.length !== 1 ? "s" : ""} in Surplus — using before HikerAPI`);
+          for (const row of overspillRows) {
+            const u = row.instagramUsername;
+            if (skipFollowedUsernames?.has(u.toLowerCase())) continue;
+            if (skipSkippedUsernames?.has(u.toLowerCase())) continue;
+            if (!candidateSource.has(u)) candidateSource.set(u, row.sourceValue || "surplus");
+            candidates.push(u);
+            overspillIdsToDelete.push(row.id);
+          }
+        }
+      } catch (e: any) {
+        onLog?.(`Follow: could not load Surplus — ${e?.message}`);
+      }
+    } else if (phoneSlotKey) {
+      try {
+        const overspillRows = await storage.getOverspillUsersByPhoneSlot(phoneSlotKey);
         if (overspillRows.length > 0) {
           onLog?.(`Follow: ${overspillRows.length} candidate${overspillRows.length !== 1 ? "s" : ""} in Surplus — using before HikerAPI`);
           for (const row of overspillRows) {
@@ -5394,11 +5416,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // targetCount was reached first) is written to the Surplus table so the
     // NEXT cycle can consume them before calling HikerAPI again — saving
     // API quota.  Only candidates from index _fi onward were never attempted.
-    if (profileId && profileId > 0 && _fi < targets.length) {
+    if (_fi < targets.length && (profileId && profileId > 0 || phoneSlotKey)) {
       const surplus = targets.slice(_fi);
       const now = new Date().toISOString();
       const surplusEntries = surplus.map(u => ({
-        profileId: profileId as number,
+        profileId: (profileId && profileId > 0) ? profileId : 0,
+        phoneSlotKey: (profileId && profileId > 0) ? "" : phoneSlotKey,
         instagramUsername: u,
         instagramUserId: "",
         sourceValue: candidateSource.get(u) ?? "surplus",
@@ -5981,6 +6004,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     }
                   : undefined,
                 profileId: mobileProfileId ?? undefined,
+                phoneSlotKey: mobileProfileId ? undefined : (slotUsername || undefined),
               });
               followedCount = followCount;
               steps.push(`follow(${followCount} followed)`);

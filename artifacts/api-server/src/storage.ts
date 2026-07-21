@@ -97,9 +97,11 @@ export interface IStorage {
 
   // Overspill Users
   getOverspillUsersByProfile(profileId: number): Promise<OverspillUser[]>;
+  getOverspillUsersByPhoneSlot(phoneSlotKey: string): Promise<OverspillUser[]>;
   addOverspillUsers(entries: InsertOverspillUser[]): Promise<void>;
   deleteOverspillUsers(ids: number[]): Promise<void>;
   clearOverspillByProfile(profileId: number): Promise<void>;
+  clearOverspillByPhoneSlot(phoneSlotKey: string): Promise<void>;
 
   // Session Actions
   getSessionActionsByProfile(profileId: number, limit?: number): Promise<SessionAction[]>;
@@ -825,6 +827,12 @@ export class DatabaseStorage implements IStorage {
       .orderBy(overspillUsers.id);
   }
 
+  async getOverspillUsersByPhoneSlot(phoneSlotKey: string): Promise<OverspillUser[]> {
+    return await db.select().from(overspillUsers)
+      .where(eq(overspillUsers.phoneSlotKey, phoneSlotKey))
+      .orderBy(overspillUsers.id);
+  }
+
   async addOverspillUsers(entries: InsertOverspillUser[]): Promise<void> {
     if (!entries.length) return;
     const BATCH = 500;
@@ -845,6 +853,10 @@ export class DatabaseStorage implements IStorage {
 
   async clearOverspillByProfile(profileId: number): Promise<void> {
     await db.delete(overspillUsers).where(eq(overspillUsers.profileId, profileId));
+  }
+
+  async clearOverspillByPhoneSlot(phoneSlotKey: string): Promise<void> {
+    await db.delete(overspillUsers).where(eq(overspillUsers.phoneSlotKey, phoneSlotKey));
   }
 
   async getSessionActionsByProfile(profileId: number, limit: number = 500): Promise<SessionAction[]> {
