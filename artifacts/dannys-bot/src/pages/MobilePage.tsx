@@ -2591,6 +2591,12 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   const [saveError, setSaveError] = useState<string | null>(null);
   const [running,  setRunning]  = useState(false);
   const [nextRunAt, setNextRunAt] = useState<number | null>(null);
+  // Incremented by the clamp effect to force the run-loop to restart its wait
+  // timer when cycleIntervalMax is reduced mid-wait (prevents the next run
+  // staying scheduled beyond the newly configured maximum).
+  const [rescheduleKey, setRescheduleKey] = useState(0);
+  const nextRunAtRef = useRef<number | null>(null);
+  nextRunAtRef.current = nextRunAt;
   // Reflects server-side cycle state independently of the client fetch.
   // Keeps running=true even right after remount, before runCycle() fires.
   const [serverCycleRunning, setServerCycleRunning] = useState(false);
@@ -3003,7 +3009,22 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phone?.serial, settings.enabled]);
+  }, [phone?.serial, settings.enabled, rescheduleKey]);
+
+  // Clamp: if cycleIntervalMax was reduced mid-wait (or was stale at startup),
+  // the existing setTimeout will fire too late. Detect this every time the
+  // interval settings change and force the run-loop to restart its timer by
+  // incrementing rescheduleKey — the run-loop cleanup cancels the stale timer
+  // and the new run picks a fresh delay within the current [min, max] bounds.
+  useEffect(() => {
+    if (!settings.enabled || running || !nextRunAtRef.current) return;
+    const safeMax = Math.max(1, Math.max(settings.cycleIntervalMin, settings.cycleIntervalMax));
+    const remainingMs = nextRunAtRef.current - Date.now();
+    if (remainingMs > safeMax * 60_000) {
+      setRescheduleKey(k => k + 1);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.cycleIntervalMin, settings.cycleIntervalMax]);
 
   // Expose the union: client fetch in-flight OR server confirmed active.
   // This keeps the mirror live immediately on remount without waiting for
