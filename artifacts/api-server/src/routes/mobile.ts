@@ -6181,7 +6181,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (sharesDm) parts.push(`${sharesDm} DMs`);
         if (sharesFeed) parts.push(`${sharesFeed} feed shares`);
         if (saves) parts.push(`${saves} saves`);
-        if (feedScrolled && !parts.length) parts.push(`${feedScrolled} posts scrolled`);
+        if (feedScrolled) parts.push(`${feedScrolled} posts scrolled`);
         storage.createSessionAction({
           profileId: mobileProfileId ?? 0,
           toolId: 0,
@@ -6226,7 +6226,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (sharesDm) parts.push(`${sharesDm} DMs`);
         if (sharesFeed) parts.push(`${sharesFeed} feed shares`);
         if (saves) parts.push(`${saves} saves`);
-        if (feedScrolled && !parts.length) parts.push(`${feedScrolled} posts scrolled`);
+        if (feedScrolled) parts.push(`${feedScrolled} posts scrolled`);
         const statsSuffix = parts.length ? ` — ${parts.join(", ")}` : "";
         storage.createSessionAction({
           profileId: _mobileProfileId ?? 0,
