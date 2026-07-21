@@ -576,23 +576,32 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   const logStreamWSS = new WebSocketServer({ noServer: true });
   const logSessionWS = new Map<string, Set<import('ws').WebSocket>>();
 
-  // Helper: push an info message to the connected video WebSocket AND to any
-  // log-stream subscribers for a device. No-ops silently when nothing is
-  // connected, so callers don't need to guard the call.
+  // Helper: push an info message to the log-stream WebSocket subscribers for
+  // a device, falling back to the video WebSocket only when no log-stream
+  // clients are connected.  No-ops silently when nothing is connected.
+  //
+  // Previously this sent to BOTH channels simultaneously.  DeviceLogContext
+  // opens a log-stream WS for every connected phone (always-on), while
+  // LiveCanvas opens a video WS whenever the mirror is live — both forward
+  // j.info messages to the same React log state, so every message appeared
+  // twice in the Debugging Log panel.  Fix: log-stream is the canonical
+  // delivery channel; video WS is only a fallback for the rare case where
+  // no log-stream client is connected yet.
   const sendVideoLog = (serial: string, msg: string): void => {
     const payload = JSON.stringify({ info: msg });
-    // Video stream client (if mirror is open)
-    const vws = videoSessionWS.get(serial);
-    if (vws && vws.readyState === 1) {
-      try { vws.send(payload); } catch { /* ignore */ }
-    }
-    // Log-stream subscribers (always-on, no video)
     const lws = logSessionWS.get(serial);
-    if (lws) {
-      for (const ws of lws) {
-        if (ws.readyState === 1) {
-          try { ws.send(payload); } catch { /* ignore */ }
-        }
+    const activeLogClients = lws ? [...lws].filter(ws => ws.readyState === 1) : [];
+
+    if (activeLogClients.length > 0) {
+      // Log-stream is connected — deliver only via that channel.
+      for (const ws of activeLogClients) {
+        try { ws.send(payload); } catch { /* ignore */ }
+      }
+    } else {
+      // No log-stream clients yet — fall back to the video WebSocket.
+      const vws = videoSessionWS.get(serial);
+      if (vws && vws.readyState === 1) {
+        try { vws.send(payload); } catch { /* ignore */ }
       }
     }
   };
