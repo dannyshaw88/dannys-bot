@@ -4678,7 +4678,7 @@ function AutomationSettingsPanel({
 
               {/* ── Notifications ── */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Notifications</Label>
+                <Label className="text-xs text-muted-foreground">Notifications %</Label>
                 <div className="flex items-center gap-2">
                   <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.checkNotificationsPctMin}
@@ -4726,7 +4726,7 @@ function AutomationSettingsPanel({
 
               {/* ── Visit Profile ── */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Visit Profile</Label>
+                <Label className="text-xs text-muted-foreground">Visit Profile %</Label>
                 <div className="flex items-center gap-2">
                   <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.visitProfilePctMin}

@@ -105,7 +105,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         { key: "vr_like_pct", label: "% of reels to like",      settingKeys: ["reelLikePercentMin","reelLikePercentMax"] },
         { key: "vr_skip",     label: "Skip chance %",     settingKeys: ["viewReelsNotUsedMin","viewReelsNotUsedMax"] },
       ]},
-      { key: "humanSession", label: "Human Jitter", description: "Core session order and cool-down", subOptions: [
+      { key: "humanSession", label: "Random Actions", description: "Core session order and cool-down", subOptions: [
         { key: "hs_enabled",      label: "Enabled",                                      settingKeys: ["humanSessionEnabled"] },
         { key: "hs_order",        label: "Execution order",                  settingKeys: ["humanSessionOrderMin","humanSessionOrderMax"] },
         { key: "hs_chance",       label: "Skip chance %",      settingKeys: ["humanSessionNotUsedMin","humanSessionNotUsedMax"] },
@@ -1235,7 +1235,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               )}
             </div>
 
-            {/* ── Human Jitter ── */}
+            {/* ── Random Actions ── */}
             <div className="px-4 py-3 space-y-2">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3 shrink-0">
@@ -1246,7 +1246,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   />
                   <label htmlFor="humanSessionEnabled" className="font-semibold text-sm flex items-center gap-2 cursor-pointer select-none whitespace-nowrap shrink-0">
                     <User className="w-4 h-4 text-violet-500" />
-                    Human Jitter
+                    Random Actions
                   </label>
                 </div>
                 <div className={`flex flex-col gap-1.5 shrink-0 transition-opacity ${!settings.humanSessionEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
