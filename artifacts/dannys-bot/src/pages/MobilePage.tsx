@@ -6587,13 +6587,28 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
   /** Toggle Inspect on/off. */
   onToggleInspect?: () => void;
 }) {
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const bottomRef  = useRef<HTMLDivElement>(null);
+  const scrollRef  = useRef<HTMLDivElement>(null);
+  const pinnedRef  = useRef(true); // true = auto-scroll to bottom; false = user scrolled up
   const [scanning,       setScanning]       = React.useState(false);
   const [copied,         setCopied]         = React.useState(false);
   const [copiedCapture,  setCopiedCapture]  = React.useState(false);
   const [lastCapture,    setLastCapture]    = React.useState<string[] | null>(null);
   const [checkingInfo,   setCheckingInfo]   = React.useState(false);
-  useEffect(() => { bottomRef.current?.scrollIntoView({ block: "end" }); }, [lines.length]);
+
+  // Only auto-scroll when the user is already at (or near) the bottom.
+  useEffect(() => {
+    if (pinnedRef.current) {
+      bottomRef.current?.scrollIntoView({ block: "end" });
+    }
+  }, [lines.length]);
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    // Consider "at bottom" when within 60px of the end.
+    pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+  };
 
   const handleCheckScreenInfo = async () => {
     if (!serial) return;
@@ -6757,7 +6772,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
 
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto bg-black/90 border border-border rounded-xl p-3 font-mono text-[11px] leading-relaxed">
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 min-h-0 overflow-y-auto bg-black/90 border border-border rounded-xl p-3 font-mono text-[11px] leading-relaxed">
         {lines.length === 0
           ? <p className="text-white/30">No activity yet — taps, swipes, keys, and automation cycles will show up here.</p>
           : lines.map((l, i) => {
@@ -6770,10 +6785,11 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
 
               // Colour the message based on its prefix
               let msgClass = 'text-green-400/80';
-              if (/^(ERROR|FAILED|✗)/.test(msg))  msgClass = 'text-red-400';
-              else if (/^⚠/.test(msg))            msgClass = 'text-yellow-400';
-              else if (/^[✓✅]/.test(msg))        msgClass = 'text-green-300';
-              else if (/^▶/.test(msg))            msgClass = 'text-white/90';
+              if (/^(ERROR|FAILED|✗)/.test(msg))           msgClass = 'text-red-400';
+              else if (/^⚠/.test(msg))                     msgClass = 'text-yellow-400';
+              else if (/^[✓✅]/.test(msg))                 msgClass = 'text-green-300';
+              else if (/shuffled/.test(msg))               msgClass = 'text-blue-400';
+              else if (/^▶/.test(msg))                     msgClass = 'text-white/90';
               else if (/^(WS |First frame|Frame |Decoder|Wake )/.test(msg)) msgClass = 'text-sky-400/70';
 
               return (
