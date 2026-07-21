@@ -938,16 +938,27 @@ export async function swipe(
   y2: number,
   durationMs: number = 300,
 ): Promise<void> {
-  // Add ±0.5–1 % independent jitter to every coordinate so no two swipes are
-  // pixel-identical.  Each axis gets its own sign and magnitude so the motion
-  // is subtly different every time — prevents the robotic "always types BY"
-  // pattern on the software keyboard.  Values are rounded to whole pixels and
-  // clamped to ≥ 0 so they're always valid ADB input coordinates.
-  const pct = () => (Math.random() * 0.005 + 0.005) * (Math.random() < 0.5 ? 1 : -1);
-  const jx1 = Math.max(0, Math.round(x1 + x1 * pct()));
-  const jy1 = Math.max(0, Math.round(y1 + y1 * pct()));
-  const jx2 = Math.max(0, Math.round(x2 + x2 * pct()));
-  const jy2 = Math.max(0, Math.round(y2 + y2 * pct()));
+  // ── Coordinate jitter ────────────────────────────────────────────────────
+  // Vertical feed-scrolls always use the same centre X, so every swipe lands
+  // on the exact same pixel — on a soft keyboard this types the same letter
+  // every time (looks robotic).  We add a tiny random X offset to break that.
+  //
+  // Rules to avoid breaking other gestures:
+  //   1. Long-press (x1==x2 && y1==y2, duration ≥ 1 s): NO jitter at all —
+  //      splitting start/end would turn the stationary hold into a micro-swipe.
+  //   2. Vertical swipe (x1==x2, y1≠y2): apply ONE shared X offset to both
+  //      endpoints so the line stays perfectly straight, just shifted ±0.5–1 %.
+  //   3. All other swipes: no jitter — targets are precise (card dismissals,
+  //      user-defined mirror gestures, etc.).
+  let jx1 = x1, jy1 = y1, jx2 = x2, jy2 = y2;
+  const isLongPress = (x1 === x2 && y1 === y2);
+  const isVertical  = (x1 === x2 && y1 !== y2);
+  if (!isLongPress && isVertical) {
+    const pct = (Math.random() * 0.005 + 0.005) * (Math.random() < 0.5 ? 1 : -1);
+    const xOff = Math.round(x1 * pct);
+    jx1 = Math.max(0, x1 + xOff);
+    jx2 = Math.max(0, x2 + xOff);
+  }
 
   runInputShell(
     serial,
