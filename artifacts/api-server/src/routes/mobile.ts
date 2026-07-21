@@ -6118,7 +6118,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await sleepOrAbort(serial, 1500); // let the radios reconnect before touching the screen
       await android.swipeUpFromBottom(serial);
       steps.push("swipe-up");
-      tLog("▶ Locking phone — cycle complete ✓");
+      {
+        const parts: string[] = [];
+        if (followedCount)            parts.push(`${followedCount} follows`);
+        if (likes + reelsLikes)       parts.push(`${likes + reelsLikes} likes`);
+        if (storiesWatched)           parts.push(`${storiesWatched} stories`);
+        if (reelsViewed)              parts.push(`${reelsViewed} reels`);
+        if (sharesDm)                 parts.push(`${sharesDm} DMs`);
+        if (sharesFeed)               parts.push(`${sharesFeed} feed shares`);
+        if (saves)                    parts.push(`${saves} saves`);
+        const summary = parts.length ? ` — ${parts.join(", ")}` : "";
+        tLog(`Cycle complete ✓${summary}`);
+      }
       await android.sleepScreen(serial);
       steps.push("power-off");
 
@@ -6162,6 +6173,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       res.json({ ok: true, count, likes, likeFailures, sharesFeed, sharesDm, storiesWatched, followedCount, strayNavRecoveries, steps });
     } catch (e: any) {
       const aborted = (e?.message === "cycle-aborted");
+      // Emit a log-stream message so the Action Log tab always gets an entry,
+      // even when the cycle errors or is aborted before reaching the end.
+      {
+        const parts: string[] = [];
+        if (followedCount)            parts.push(`${followedCount} follows`);
+        if (likes + reelsLikes)       parts.push(`${likes + reelsLikes} likes`);
+        if (storiesWatched)           parts.push(`${storiesWatched} stories`);
+        if (reelsViewed)              parts.push(`${reelsViewed} reels`);
+        if (sharesDm)                 parts.push(`${sharesDm} DMs`);
+        if (sharesFeed)               parts.push(`${sharesFeed} feed shares`);
+        if (saves)                    parts.push(`${saves} saves`);
+        const summary = parts.length ? ` — ${parts.join(", ")}` : "";
+        if (aborted) {
+          tLog(`Cycle aborted${summary}`);
+        } else {
+          tLog(`Cycle failed — ${e?.message ?? "unknown error"}${summary}`);
+        }
+      }
       // Always stamp COMPLETE so the Dashboard never leaves a dangling STARTED.
       // Accumulate whatever partial stats were collected before the abort/error.
       if (_slotUsername || _mobileProfileId !== null) {

@@ -18,7 +18,7 @@ import {
 } from "react";
 
 const LOG_MAX_LINES = 500;
-const ACTION_LOG_RE = /Cycle\s+(complete|failed|aborted)/i;
+const ACTION_LOG_RE = /Cycle\s+(complete|failed|aborted)/i; // "Cycle failed" added to catch-block tLog
 
 interface SerialLogs {
   logLines:       string[];
