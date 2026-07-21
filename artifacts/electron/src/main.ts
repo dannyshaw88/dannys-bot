@@ -335,6 +335,35 @@ function restartApp(): void {
   app.quit();
 }
 
+// Returns true if the user confirmed (or there are no active devices).
+// Shows a warning dialog when one or more automation cycles are running.
+async function confirmIfDevicesActive(action: string): Promise<boolean> {
+  try {
+    if (serverPort) {
+      const res = await fetch(`http://127.0.0.1:${serverPort}/api/mobile/cycle-active`);
+      if (res.ok) {
+        const data = await res.json() as { serials: string[] };
+        const count = data.serials?.length ?? 0;
+        if (count > 0) {
+          const deviceText = count === 1 ? "1 device is" : `${count} devices are`;
+          const { response } = await dialog.showMessageBox({
+            type: "warning",
+            title: `${action} — Device${count > 1 ? "s" : ""} Active`,
+            message: `${deviceText} currently running automation. ${action} now will interrupt them.\n\nAre you sure?`,
+            buttons: [`Yes, ${action}`, "Cancel"],
+            defaultId: 1,
+            cancelId: 1,
+          });
+          return response === 0;
+        }
+      }
+    }
+  } catch {
+    // API not reachable — don't block the action
+  }
+  return true;
+}
+
 // Inline HTML for the tray popup — sharp corners, no native chrome
 const TRAY_MENU_HTML = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><style>
@@ -423,13 +452,16 @@ function createTray(): void {
 
   ipcMain.on("tray-restart", () => {
     trayPopup?.hide();
-    restartApp();
+    confirmIfDevicesActive("Restart").then((confirmed) => {
+      if (confirmed) restartApp();
+    });
   });
 
   ipcMain.on("tray-close", () => {
     trayPopup?.hide();
-    isQuitting = true;
-    app.quit();
+    confirmIfDevicesActive("Close").then((confirmed) => {
+      if (confirmed) { isQuitting = true; app.quit(); }
+    });
   });
 
   // Left-click: toggle main window (minimize/restore — never hide, to keep
@@ -493,14 +525,18 @@ function setupAutoUpdater(): void {
   // important regardless of whether the check was automatic or manual.
   autoUpdater.on("update-downloaded", () => {
     if (!win) return;
-    dialog.showMessageBox(win, {
-      type: "info",
-      title: "Update Ready",
-      message: "Aura Farming has been updated. Restart now to apply?",
-      buttons: ["Restart Now", "Later"],
-      defaultId: 0,
-    }).then(({ response }) => {
-      if (response === 0) autoUpdater.quitAndInstall(false, true);
+    // Guard: warn the user if devices are actively running before restarting.
+    confirmIfDevicesActive("Restart to update").then((confirmed) => {
+      if (!confirmed || !win) return;
+      dialog.showMessageBox(win, {
+        type: "info",
+        title: "Update Ready",
+        message: "Aura Farming has been updated. Restart now to apply?",
+        buttons: ["Restart Now", "Later"],
+        defaultId: 0,
+      }).then(({ response }) => {
+        if (response === 0) autoUpdater.quitAndInstall(false, true);
+      });
     });
   });
 
