@@ -4,6 +4,94 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.75] — 2026-07-21
+
+### Fixed — Follow Surplus not saving for phone-farm accounts without an EB profile
+
+**Problem:** The Surplus system (which stores leftover HikerAPI candidates at the end of a follow
+cycle so they can be consumed next time instead of burning fresh API quota) silently did nothing
+for phone-farm slots that had no matching account in the EB Profiles table. The save gate required
+a valid `profileId > 0`, which was always null for standalone phone accounts. Every cycle ended
+with unused candidates discarded and the Surplus panel showing "No surplus candidates yet —
+leftover HikerAPI candidates will appear here after the first Follow cycle." indefinitely.
+
+**Example from log:** `#hiitcardio → 22 users scraped → 12 in pool → 1 followed → 10 candidates
+orphaned`. Those 10 should have persisted for the next cycle; they were dropped.
+
+**Fix:** Added a `phone_slot_key` column (the account's Instagram username, lowercased) to the
+`overspill_users` DB table as a secondary key. When no EB profile exists for a slot, surplus is
+now stored and retrieved by `phone_slot_key` instead. All five layers updated:
+- **DB schema** — `phone_slot_key TEXT DEFAULT ''` column added via migration (non-destructive;
+  existing rows unaffected).
+- **Storage layer** — `getOverspillUsersByPhoneSlot` and `clearOverspillByPhoneSlot` added.
+- **API** — new `GET/DELETE /api/mobile/slot-surplus/:slotKey` endpoints.
+- **Automation engine** — `runFollowUsersStep` now accepts `phoneSlotKey` and falls back to it
+  when `profileId` is absent; both the read-before-scrape and write-after-cycle paths are wired.
+- **Phone Farm UI** — `loadSurplus` now hits the slot-surplus endpoint directly without requiring
+  an EB profile match. Log message "Follow: saved N unused candidates to Surplus for next cycle"
+  will now appear correctly.
+
+---
+
+### Fixed — Dashboard Detail column omitting feed-scroll count when other actions also ran
+
+**Problem:** The Detail column in the Dashboard Activity Log showed "N follows" (or similar) but
+silently dropped the feed-scroll count when any other action also occurred that cycle. The code
+used `if (feedScrolled && !parts.length)` — the `!parts.length` guard meant scrolls only appeared
+when scrolling was the *only* thing that happened.
+
+**Example:** `@lisaberry2001` — 2 follows + 8 feed scrolls → Detail showed "2 follows done" with
+the 8 scrolls invisible.
+
+**Fix:** Removed the `!parts.length` guard from both the success-complete and error/abort code
+paths. Feed scrolls now always appear alongside any other stats.
+
+---
+
+### New — My Device tab: "Collision Scheduler" renamed to "Collision Preventer"
+
+The card on the My Device tab was labelled "Collision Scheduler" — a name that sounds like it
+*creates* a schedule rather than *prevents* two slots running at once. Renamed to
+**Collision Preventer** everywhere: card title, description text, internal hook and interface
+names, and the API endpoints (`/collision-preventer`). Existing saved configuration is
+automatically migrated (the old key is read as a fallback so no settings are lost on upgrade).
+
+### New — Dashboard logs a "Collision Prevented" entry whenever the Collision Preventer fires
+
+When the Collision Preventer queues a slot because another slot is already running, a new row now
+appears in the Dashboard Activity Log:
+
+- **ACTION column:** orange **"Collision Prevented"** badge (⛔ icon)
+- **DETAIL column:** `Collision Prevented`
+- Attributed to the correct account and slot
+
+This makes it easy to see at a glance how often slots are colliding on a device and which
+accounts are being held back.
+
+Implementation: `requestSlot()` now returns `Promise<boolean>` (`true` = queued, `false` = ran
+immediately). When `true`, the automation hook fires `POST /api/mobile/devices/:serial/log-event`
+which resolves the EB `profileId` from the slot username and writes a `session_action` row — the
+same mechanism used by the cycle itself.
+
+---
+
+### Improved — Dashboard Detail column: clearer action labels
+
+All four stat labels in the Dashboard Detail column were bare nouns. They now include a verb so it
+is immediately clear what happened:
+
+| Before | After (singular / plural) |
+|---|---|
+| `2 follows` | `1 follow done` / `2 follows done` |
+| `2 likes` | `1 like done` / `2 likes done` |
+| `7 stories` | `1 storie watched` / `7 stories watched` |
+| `8 reels` | `1 reel watched` / `8 reels watched` |
+
+Singular/plural forms handled correctly via ternary. Applied across all four code paths (success
+complete, error/abort complete, tLog cycle-summary, and error tLog summary).
+
+---
+
 ## [1.2.74] — 2026-07-21
 
 ### Improved — Debugging Log: shuffle lines now highlighted in blue
