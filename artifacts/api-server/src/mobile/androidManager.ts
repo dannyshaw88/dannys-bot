@@ -938,9 +938,20 @@ export async function swipe(
   y2: number,
   durationMs: number = 300,
 ): Promise<void> {
+  // Add ±0.5–1 % independent jitter to every coordinate so no two swipes are
+  // pixel-identical.  Each axis gets its own sign and magnitude so the motion
+  // is subtly different every time — prevents the robotic "always types BY"
+  // pattern on the software keyboard.  Values are rounded to whole pixels and
+  // clamped to ≥ 0 so they're always valid ADB input coordinates.
+  const pct = () => (Math.random() * 0.005 + 0.005) * (Math.random() < 0.5 ? 1 : -1);
+  const jx1 = Math.max(0, Math.round(x1 + x1 * pct()));
+  const jy1 = Math.max(0, Math.round(y1 + y1 * pct()));
+  const jx2 = Math.max(0, Math.round(x2 + x2 * pct()));
+  const jy2 = Math.max(0, Math.round(y2 + y2 * pct()));
+
   runInputShell(
     serial,
-    ["swipe", String(x1), String(y1), String(x2), String(y2), String(Math.max(1, Math.round(durationMs)))],
+    ["swipe", String(jx1), String(jy1), String(jx2), String(jy2), String(Math.max(1, Math.round(durationMs)))],
     "swipe",
   );
 }
