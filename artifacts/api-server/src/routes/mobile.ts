@@ -6144,10 +6144,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       steps.push("swipe-up");
       {
         const parts: string[] = [];
-        if (followedCount)            parts.push(`${followedCount} follows`);
-        if (likes + reelsLikes)       parts.push(`${likes + reelsLikes} likes`);
-        if (storiesWatched)           parts.push(`${storiesWatched} stories`);
-        if (reelsViewed)              parts.push(`${reelsViewed} reels`);
+        if (followedCount)            parts.push(`${followedCount} follow${followedCount === 1 ? ' done' : 's done'}`);
+        if (likes + reelsLikes)       parts.push(`${likes + reelsLikes} like${(likes + reelsLikes) === 1 ? ' done' : 's done'}`);
+        if (storiesWatched)           parts.push(`${storiesWatched} stor${storiesWatched === 1 ? 'ie watched' : 'ies watched'}`);
+        if (reelsViewed)              parts.push(`${reelsViewed} reel${reelsViewed === 1 ? ' watched' : 's watched'}`);
         if (sharesDm)                 parts.push(`${sharesDm} DMs`);
         if (sharesFeed)               parts.push(`${sharesFeed} feed shares`);
         if (saves)                    parts.push(`${saves} saves`);
@@ -6174,10 +6174,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // use profileId 0 as a system sentinel so entries are always visible.
       {
         const parts: string[] = [];
-        if (followedCount) parts.push(`${followedCount} follows`);
-        if (likes + reelsLikes) parts.push(`${likes + reelsLikes} likes`);
-        if (storiesWatched) parts.push(`${storiesWatched} stories`);
-        if (reelsViewed) parts.push(`${reelsViewed} reels`);
+        if (followedCount) parts.push(`${followedCount} follow${followedCount === 1 ? ' done' : 's done'}`);
+        if (likes + reelsLikes) parts.push(`${likes + reelsLikes} like${(likes + reelsLikes) === 1 ? ' done' : 's done'}`);
+        if (storiesWatched) parts.push(`${storiesWatched} stor${storiesWatched === 1 ? 'ie watched' : 'ies watched'}`);
+        if (reelsViewed) parts.push(`${reelsViewed} reel${reelsViewed === 1 ? ' watched' : 's watched'}`);
         if (sharesDm) parts.push(`${sharesDm} DMs`);
         if (sharesFeed) parts.push(`${sharesFeed} feed shares`);
         if (saves) parts.push(`${saves} saves`);
@@ -6201,10 +6201,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // even when the cycle errors or is aborted before reaching the end.
       {
         const parts: string[] = [];
-        if (followedCount)            parts.push(`${followedCount} follows`);
-        if (likes + reelsLikes)       parts.push(`${likes + reelsLikes} likes`);
-        if (storiesWatched)           parts.push(`${storiesWatched} stories`);
-        if (reelsViewed)              parts.push(`${reelsViewed} reels`);
+        if (followedCount)            parts.push(`${followedCount} follow${followedCount === 1 ? ' done' : 's done'}`);
+        if (likes + reelsLikes)       parts.push(`${likes + reelsLikes} like${(likes + reelsLikes) === 1 ? ' done' : 's done'}`);
+        if (storiesWatched)           parts.push(`${storiesWatched} stor${storiesWatched === 1 ? 'ie watched' : 'ies watched'}`);
+        if (reelsViewed)              parts.push(`${reelsViewed} reel${reelsViewed === 1 ? ' watched' : 's watched'}`);
         if (sharesDm)                 parts.push(`${sharesDm} DMs`);
         if (sharesFeed)               parts.push(`${sharesFeed} feed shares`);
         if (saves)                    parts.push(`${saves} saves`);
@@ -6219,10 +6219,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Accumulate whatever partial stats were collected before the abort/error.
       if (_slotUsername || _mobileProfileId !== null) {
         const parts: string[] = [];
-        if (followedCount) parts.push(`${followedCount} follows`);
-        if (likes + reelsLikes) parts.push(`${likes + reelsLikes} likes`);
-        if (storiesWatched) parts.push(`${storiesWatched} stories`);
-        if (reelsViewed) parts.push(`${reelsViewed} reels`);
+        if (followedCount) parts.push(`${followedCount} follow${followedCount === 1 ? ' done' : 's done'}`);
+        if (likes + reelsLikes) parts.push(`${likes + reelsLikes} like${(likes + reelsLikes) === 1 ? ' done' : 's done'}`);
+        if (storiesWatched) parts.push(`${storiesWatched} stor${storiesWatched === 1 ? 'ie watched' : 'ies watched'}`);
+        if (reelsViewed) parts.push(`${reelsViewed} reel${reelsViewed === 1 ? ' watched' : 's watched'}`);
         if (sharesDm) parts.push(`${sharesDm} DMs`);
         if (sharesFeed) parts.push(`${sharesFeed} feed shares`);
         if (saves) parts.push(`${saves} saves`);
