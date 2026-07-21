@@ -4,6 +4,39 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.66] — 2026-07-21
+
+### Fixed — Make a Post: "Sharing posts" popup blocked the Share tap
+
+**Root cause:** Instagram shows a "Sharing posts" bottom sheet on the caption/share
+screen the first time an account posts (explaining public discovery and reuse rules).
+The sheet renders on top of the caption UI — the Share button is still present in the
+accessibility tree, so the code found it and proceeded, but the actual tap landed on
+the bottom sheet instead of Share. The post never submitted; the poll loop kept
+retrying until it timed out.
+
+The existing `dismissInstagramInterstitials` call (after the Share tap) was already
+in place for post-share popups, but it explicitly excludes generic "OK" buttons to
+avoid accidentally dismissing compose screens — so the "Sharing posts" sheet was
+never cleared.
+
+**Fix (two parts):**
+
+1. `dismissInstagramInterstitials` (androidManager.ts) — added a specific guard at
+   the top of the function: if `text="Sharing posts"` is present in the accessibility
+   tree, find and tap the "OK" `igds_button` immediately. The guard makes tapping "OK"
+   safe — it only fires when the known popup title is present, never on a generic
+   compose screen.
+
+2. Make a Post flow (mobile.ts) — added a `dismissInstagramInterstitials` call
+   immediately before the Share tap (after caption entry). If the "Sharing posts"
+   sheet (or any other interstitial) loaded while the caption screen was open, it is
+   now cleared before Share is tapped, and the 600 ms settle wait is included.
+   A log line `dismissed caption-screen popup ("Sharing posts — OK")` confirms when
+   this fires.
+
+---
+
 ## [1.2.65] — 2026-07-20
 
 ### Fixed — Jitter profile tab tapped wrong element (top-of-screen story avatar instead of bottom-nav tab)

@@ -4136,6 +4136,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
     }
 
+    // Dismiss any interstitial that appeared while the caption screen was
+    // loading — most importantly the "Sharing posts" bottom sheet that
+    // Instagram shows on first-time posting for an account. If this popup is
+    // present and not cleared before the Share tap, the tap lands on the sheet
+    // instead of the Share button and the post never submits.
+    const preTapPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
+    if (preTapPopup) {
+      onLog?.(`Make a Post: dismissed caption-screen popup ("${preTapPopup}") before Share tap`);
+      await sleepOrAbort(serial, 600);
+    }
+
     // Re-find Share (screen may have re-rendered after the caption/advanced steps).
     const finalShareBtn = await android.findShareFooterButton(serial).catch(() => null) ?? shareBtn;
     onLog?.("Make a Post: tapping Share…");

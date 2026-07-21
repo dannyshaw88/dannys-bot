@@ -697,12 +697,31 @@ export async function dismissInstagramInterstitials(
   const xml = preloadedXml ?? await _uiDump(adb, serial).catch(() => "");
   if (!xml) return null;
 
+  // ── Specific popup guards ────────────────────────────────────────────────
+  // These check for a known popup title before tapping "OK" / generic
+  // buttons, so we never accidentally dismiss a legitimate compose screen.
+
+  // "Sharing posts" bottom sheet — Instagram shows this on the caption/share
+  // screen the first time an account posts, explaining public sharing & reuse.
+  // The sheet has id="igds_button" children: "OK" (tap to proceed) and
+  // "Manage Settings" (tap to open settings). We must tap "OK".
+  // Guard: only act when text="Sharing posts" is present in the tree.
+  if (xml.includes('text="Sharing posts"')) {
+    const okPos = _findElem(xml, "OK");
+    if (okPos) {
+      _adbTap(adb, serial, okPos.x, okPos.y);
+      await _sleep(600);
+      return "Sharing posts — OK";
+    }
+  }
+
   // Ordered by specificity — more specific labels first so we don't
   // accidentally tap a generic button on a legitimate screen.
-  // NOTE: "Cancel" and "OK" are intentionally excluded — they are too
-  // generic and will dismiss legitimate compose/picker screens (e.g. the
-  // Instagram story/post composer has a Cancel button that, if tapped here,
-  // sends the user back to the home feed before any UI scan can run).
+  // NOTE: "Cancel" and "OK" are intentionally excluded from the generic list
+  // — they are too generic and will dismiss legitimate compose/picker screens
+  // (e.g. the Instagram story/post composer has a Cancel button that, if
+  // tapped here, sends the user back to the home feed before any UI scan can
+  // run). Add specific guards above for any "OK"-dismissible popup instead.
   const DISMISS_LABELS = [
     "Not now",
     "Not Now",
