@@ -195,6 +195,17 @@ const FARM_STAT_LABELS: { key: string; label: string; icon: React.ReactNode; col
   { key: "feed_shares", label: "Feed Shares",  icon: <Zap className="w-3 h-3" />,         color: "text-amber-500" },
 ];
 
+const FARM_DEFAULT_COL_WIDTHS: Record<string, number> = {
+  account:     224,
+  cycles:       80,
+  likes:        80,
+  follows:      80,
+  stories:      80,
+  reels:        80,
+  dms:          80,
+  feed_shares: 100,
+};
+
 interface FarmPhone {
   serial: string;
   state: string;
@@ -1096,6 +1107,19 @@ function PhoneFarmTab() {
 
   const [farmManageColsOpen, setFarmManageColsOpen] = useState(false);
 
+  const [farmColWidths, setFarmColWidths] = usePersistentSetting<Record<string, number>>(
+    "farm_col_widths_px",
+    FARM_DEFAULT_COL_WIDTHS,
+    (s, d) => ({ ...d, ...s }),
+  );
+
+  const nudgeFarmColWidth = (key: string, delta: number) => {
+    const v = Math.max(40, Math.min(600, (farmColWidths[key] ?? FARM_DEFAULT_COL_WIDTHS[key] ?? 80) + delta));
+    const next = { ...farmColWidths, [key]: v };
+    setFarmColWidths(next);
+    localStorage.setItem("farm_col_widths_px", JSON.stringify(next));
+  };
+
   const [farmVisibleCols, setFarmVisibleCols] = usePersistentSetting<Record<string, boolean>>(
     "farm_visible_cols",
     Object.fromEntries(FARM_STAT_LABELS.map(s => [s.key, true])),
@@ -1129,22 +1153,49 @@ function PhoneFarmTab() {
             onClick={() => setFarmManageColsOpen(o => !o)}
             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1.5 rounded hover:bg-muted/40"
           >
-            <Settings2 className="w-3.5 h-3.5" /> Columns
+            <Settings2 className="w-3.5 h-3.5" /> MANAGE COLUMNS
           </button>
           {farmManageColsOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setFarmManageColsOpen(false)} />
-              <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-lg shadow-2xl w-[360px] max-h-[80vh] overflow-y-auto">
+              <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-lg shadow-2xl w-[480px] max-h-[80vh] overflow-y-auto">
                 <div className="px-5 pt-4 pb-3 border-b border-border">
                   <p className="text-sm font-semibold">Tool Performance Columns</p>
                 </div>
-                <div className="p-4 flex flex-col gap-1">
+                <div className="p-4 grid grid-cols-2 gap-x-4 gap-y-1">
+                  {/* Account / Device column width (always shown, not togglable) */}
+                  {(() => {
+                    const key = "account";
+                    const label = "Device / Account";
+                    return (
+                      <div key={key} className="flex items-center gap-1 mb-1">
+                        <div className="flex flex-col mr-0.5">
+                          <button disabled className="h-4 w-4 flex items-center justify-center rounded text-muted-foreground opacity-20"><ChevronUp className="w-2.5 h-2.5" /></button>
+                          <button disabled className="h-4 w-4 flex items-center justify-center rounded text-muted-foreground opacity-20"><ChevronDown className="w-2.5 h-2.5" /></button>
+                        </div>
+                        <label className="text-xs w-16 text-muted-foreground shrink-0 truncate" title={label}>{label}</label>
+                        <button onClick={() => nudgeFarmColWidth(key, -10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronDown className="w-3 h-3" /></button>
+                        <input
+                          type="number" min={40} max={600}
+                          value={farmColWidths[key] ?? FARM_DEFAULT_COL_WIDTHS[key]}
+                          onChange={e => {
+                            const v = Math.max(40, Math.min(600, Number(e.target.value)));
+                            const next = { ...farmColWidths, [key]: v };
+                            setFarmColWidths(next);
+                            localStorage.setItem("farm_col_widths_px", JSON.stringify(next));
+                          }}
+                          className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
+                        />
+                        <button onClick={() => nudgeFarmColWidth(key, 10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronUp className="w-3 h-3" /></button>
+                      </div>
+                    );
+                  })()}
                   {farmColOrder.map((key, idx) => {
                     const col = FARM_STAT_LABELS.find(s => s.key === key);
                     if (!col) return null;
                     const visible = farmVisibleCols[key] !== false;
                     return (
-                      <div key={key} className="flex items-center gap-2">
+                      <div key={key} className="flex items-center gap-1 mb-1">
                         <div className="flex flex-col mr-0.5">
                           <button
                             onClick={() => moveFarmCol(key, -1)}
@@ -1167,13 +1218,28 @@ function PhoneFarmTab() {
                           onCheckedChange={checked => {
                             setFarmVisibleCols(prev => ({ ...prev, [key]: !!checked }));
                           }}
+                          className="shrink-0"
                         />
                         <label
                           htmlFor={`farm-col-${key}`}
-                          className={`text-sm flex items-center gap-1.5 cursor-pointer select-none ${col.color}`}
+                          className={`text-xs w-12 shrink-0 truncate cursor-pointer select-none ${col.color}`}
+                          title={col.label}
                         >
-                          {col.icon} {col.label}
+                          {col.label}
                         </label>
+                        <button onClick={() => nudgeFarmColWidth(key, -10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronDown className="w-3 h-3" /></button>
+                        <input
+                          type="number" min={40} max={600}
+                          value={farmColWidths[key] ?? FARM_DEFAULT_COL_WIDTHS[key] ?? 80}
+                          onChange={e => {
+                            const v = Math.max(40, Math.min(600, Number(e.target.value)));
+                            const next = { ...farmColWidths, [key]: v };
+                            setFarmColWidths(next);
+                            localStorage.setItem("farm_col_widths_px", JSON.stringify(next));
+                          }}
+                          className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
+                        />
+                        <button onClick={() => nudgeFarmColWidth(key, 10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronUp className="w-3 h-3" /></button>
                       </div>
                     );
                   })}
@@ -1183,6 +1249,8 @@ function PhoneFarmTab() {
                     onClick={() => {
                       setFarmColOrder(FARM_STAT_LABELS.map(s => s.key));
                       setFarmVisibleCols(Object.fromEntries(FARM_STAT_LABELS.map(s => [s.key, true])));
+                      setFarmColWidths(FARM_DEFAULT_COL_WIDTHS);
+                      localStorage.removeItem("farm_col_widths_px");
                     }}
                     className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                   >
@@ -1196,10 +1264,16 @@ function PhoneFarmTab() {
       </CardHeader>
       <CardContent className="p-0 flex flex-col">
         <div className="overflow-x-auto">
-          <table className="text-sm w-full">
+          <table className="text-sm w-full table-fixed">
+            <colgroup>
+              <col style={{ width: `${farmColWidths.account ?? FARM_DEFAULT_COL_WIDTHS.account}px` }} />
+              {orderedLabels.map(s => (
+                <col key={s.key} style={{ width: `${farmColWidths[s.key] ?? FARM_DEFAULT_COL_WIDTHS[s.key] ?? 80}px` }} />
+              ))}
+            </colgroup>
             <thead className="text-xs bg-muted/30 text-muted-foreground border-b border-border/50">
               <tr>
-                <th className="px-4 py-3 font-bold uppercase tracking-wide text-left w-56">
+                <th className="px-4 py-3 font-bold uppercase tracking-wide text-left" style={{ width: `${farmColWidths.account ?? FARM_DEFAULT_COL_WIDTHS.account}px` }}>
                   Device / Account
                 </th>
                 {orderedLabels.map(s => {
