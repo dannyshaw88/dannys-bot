@@ -1057,7 +1057,17 @@ function PhoneFarmTab() {
     refetchInterval: 15000,
   });
 
-  const phones = data?.phones ?? [];
+  const { data: farmData } = useQuery<{ devices: { serial: string; slotIndex: number }[] }>({
+    queryKey: ["/api/mobile/farm-devices"],
+    refetchInterval: 30000,
+  });
+
+  // Sort phones by farm slot index (Device 1 first) to match Phone Farm page order.
+  const phones = (() => {
+    const raw = data?.phones ?? [];
+    const slotMap = new Map((farmData?.devices ?? []).map(d => [d.serial, d.slotIndex]));
+    return [...raw].sort((a, b) => (slotMap.get(a.serial) ?? Infinity) - (slotMap.get(b.serial) ?? Infinity));
+  })();
 
   const [farmColOrder, setFarmColOrder] = usePersistentSetting<string[]>(
     "farm_col_order",
