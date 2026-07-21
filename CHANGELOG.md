@@ -4,6 +4,26 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.69] — 2026-07-21
+
+### Fixed — GitHub Actions: Windows installer artifact named incorrectly
+
+The GitHub Actions build workflow was uploading the Windows installer artifact under
+the name `AuraFarming-Windows-Installer` instead of `Equinox-Windows-Installer`.
+
+**Impact:** Users downloading from the Actions run page had to look for the wrong
+artifact name — the correct installer was there but labelled incorrectly, causing
+confusion.
+
+**Fix:** Renamed the `upload-artifact` step's `name` field in
+`.github/workflows/build-windows-installer.yml` from `AuraFarming-Windows-Installer`
+to `Equinox-Windows-Installer`.
+
+**Files changed:**
+- `.github/workflows/build-windows-installer.yml` — artifact upload name corrected
+
+---
+
 ## [1.2.68] — 2026-07-21
 
 ### Fixed — Make a Post: successful post incorrectly reported as failed
