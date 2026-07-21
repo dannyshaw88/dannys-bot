@@ -4,6 +4,49 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.79] — 2026-07-21
+
+### Diagnostic — Human Session Tool: scheduling events now appear in equinox-debug.log
+
+**Problem:** The `[HST-DBG]` diagnostic lines added in v1.2.78 only appeared in the in-app
+Action Log tab, not in the `equinox-debug.log` file. When the timer fires (or is cancelled)
+20–30 minutes after startup, most users check the log file, not the Action Log — so the
+diagnostic output was invisible.
+
+**What changed:** A new `/api/hst-dbg` server endpoint logs messages at `INFO` level directly
+into `equinox-debug.log`. The scheduling effect now posts to this endpoint at five critical
+moments:
+
+1. **Effect started / timer set** — `[HST-DBG] @username — effect started, timer set for
+   X.Xmin (interval Min-Maxmin, rKey=N)`. Confirms the effect ran and how long the timer was
+   set for. If this appears once and is never followed by "timer fired", the effect is running
+   correctly and the first cycle hasn't fired yet.
+
+2. **Effect started / immediate fire** — `[HST-DBG] @username — effect started, firing
+   immediately (manual toggle-on)`. Only appears when the user manually flips the toggle on.
+
+3. **Timer fired** — `[HST-DBG] @username — timer fired (cancelled=false/true)`. The most
+   important entry. `cancelled=true` means the effect was torn down and restarted (a React
+   dependency changed) while the timer was running — the old timer still fires, sees the stale
+   flag, and returns without doing anything. `cancelled=false` means the timer fired cleanly
+   and the cycle will proceed.
+
+4. **Sending POST** — `[HST-DBG] @username — sending POST /automation-cycle
+   (serial=ABC123, count=N)`. Confirms the HTTP request to the server was actually dispatched.
+
+5. **Cleanup** — `[HST-DBG] @username — CLEANUP (serial=..., enabled=..., rKey=N)`. Fires
+   whenever the effect tears itself down. Each cleanup means the effect is about to re-run
+   (setting a fresh timer) or stop (toggle turned off / phone disconnected).
+
+**How to read the log:** After starting the app and enabling the toggle, you should see one
+`effect started, timer set for X.Xmin` per enabled slot. After that interval elapses, each
+slot should show `timer fired (cancelled=false)` → `sending POST`. If `timer fired
+(cancelled=true)` appears instead, or if `CLEANUP` appears repeatedly before the timer fires,
+something is causing the scheduling effect to restart — the cleanup line's `enabled` and `rKey`
+values identify which dependency changed.
+
+---
+
 ## [1.2.78] — 2026-07-21
 
 ### Diagnostic — Human Session Tool scheduling: full execution-path tracing added to Action Log

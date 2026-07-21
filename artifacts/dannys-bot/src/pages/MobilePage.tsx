@@ -2741,11 +2741,23 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     let timer: ReturnType<typeof setTimeout> | null = null;
     const serial = phone.serial;
 
+    // ── Server-side diagnostic log ─────────────────────────────────────────
+    // Posts key scheduling events to /api/hst-dbg so they appear in
+    // equinox-debug.log, not just the in-app Action Log.
+    const srvLog = (msg: string) => {
+      fetch('/api/hst-dbg', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ msg }),
+      }).catch(() => {});
+    };
+
     const runCycle = async () => {
       // ── DIAGNOSTIC: log that the timer fired BEFORE the cancelled guard ──
       // This appears in the Action Log even when cancelled=true so we can see
       // whether the timer is firing correctly or the effect re-ran mid-wait.
       const _dbgTag = slotUsername ? `@${slotUsername}` : `slot${slotIdx ?? 0}`;
+      srvLog(`${_dbgTag} — timer fired (cancelled=${cancelled})`);
       onLog?.(`[HST-DBG] ${_dbgTag} — timer fired (cancelled=${cancelled})`);
       if (cancelled) {
         onLog?.(`[HST-DBG] ${_dbgTag} — effect was reset mid-wait; skipping this fire (new timer already running)`);
@@ -2786,6 +2798,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       cycleAbortRef.current = ctrl;
       cycleIdRef.current = cycleId; // expose to cleanup closure for the abort POST
       onLog?.(`[HST-DBG] ${_dbgTag} — sending cycle to server (serial=${serial}, count=${count})`);
+      srvLog(`${_dbgTag} — sending POST /automation-cycle (serial=${serial}, count=${count})`);
       try {
         const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle`, {
           method: "POST",
@@ -2979,7 +2992,9 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     // don't fire simultaneously the moment the software restarts.
     const wasManualToggleOn = manualToggleOnRef.current;
     manualToggleOnRef.current = false;
+    const _startTag = slotUsername ? `@${slotUsername}` : `slot${slotIdx ?? 0}`;
     if (wasManualToggleOn) {
+      srvLog(`${_startTag} — effect started, firing immediately (manual toggle-on)`);
       runCycle();
     } else {
       const s0 = settingsRef.current;
@@ -2988,12 +3003,14 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       const startDelayMs = (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
       setNextRunAt(Date.now() + Math.round(startDelayMs));
       timer = setTimeout(runCycle, Math.round(startDelayMs));
+      srvLog(`${_startTag} — effect started, timer set for ${(startDelayMs / 60_000).toFixed(1)}min (interval ${safeMin}-${safeMax}min, rKey=${rescheduleKey})`);
     }
     return () => {
       // ── DIAGNOSTIC: log WHY the effect is cleaning up ───────────────────
       // Visible in the Action Log so we can tell whether a dependency changed
       // (effect re-ran) or the component unmounted / toggle turned off.
       const _cleanTag = slotUsername ? `@${slotUsername}` : `slot${slotIdx ?? 0}`;
+      srvLog(`${_cleanTag} — CLEANUP (serial=${serial}, enabled=${settings.enabled}, rKey=${rescheduleKey})`);
       onLog?.(`[HST-DBG] ${_cleanTag} — effect cleanup (serial=${serial}, enabled=${settings.enabled}, rescheduleKey=${rescheduleKey})`);
       cancelled = true;
       if (timer) clearTimeout(timer);

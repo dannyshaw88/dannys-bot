@@ -937,6 +937,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     });
   });
 
+  // ── HST diagnostic log endpoint ────────────────────────────────────────────
+  // Receives fire-and-forget POST from the client scheduling effect so that
+  // [HST-DBG] messages appear in equinox-debug.log, not just the UI Action Log.
+  app.post("/api/hst-dbg", (req: Request, res: Response) => {
+    const msg = typeof req.body?.msg === "string" ? req.body.msg : String(req.body?.msg ?? "");
+    if (msg) logger.info(`[HST-DBG] ${msg}`);
+    res.json({ ok: true });
+  });
+
   // ── Screen size ────────────────────────────────────────────────────────────
   app.get("/api/mobile/devices/:serial/screen-size", async (req: Request, res: Response) => {
     try {
