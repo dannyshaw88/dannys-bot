@@ -103,7 +103,7 @@ const MAX_VISIBLE_ROWS = 5;
 interface DashboardSlotTrustScoreBadgeProps {
   serial: string;
   slotIdx: number;
-  /** Badge width in px — defaults to 120 to fit the Dashboard table column. */
+  /** Badge width in px — defaults to 102 to fit the Dashboard table column. */
   width?: number;
   /** Badge height in px — defaults to 25. */
   height?: number;
@@ -112,7 +112,7 @@ interface DashboardSlotTrustScoreBadgeProps {
 export function DashboardSlotTrustScoreBadge({
   serial,
   slotIdx,
-  width = 120,
+  width = 102,
   height = 25,
 }: DashboardSlotTrustScoreBadgeProps) {
   const [scoreId, setScoreId] = useState<string | null>(
