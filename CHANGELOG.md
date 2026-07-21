@@ -4,6 +4,67 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.73] — 2026-07-21
+
+### Fixed — Action Log was always blank inside an account slot
+
+**Symptom:** The Action Log tab inside the Phone Farm account view showed no entries at
+all, even after multiple completed automation cycles.
+
+**Root cause:** Two separate gaps in how log messages reached the Action Log:
+
+1. **Error and abort paths never called `tLog`.** When a cycle threw an error or was
+   manually aborted, the catch block wrote a summary only to
+   `storage.createSessionAction` (the Dashboard activity feed). It never called
+   `sendVideoLog` / `tLog`, so the log-stream WebSocket the frontend listens on received
+   nothing. The `ACTION_LOG_RE` regex in `DeviceLogContext` therefore never matched, and
+   the Action Log stayed empty for every cycle that did not reach its final lock step.
+
+2. **Successful cycles only emitted the log entry at the very last step.** The
+   "cycle complete" `tLog` fired after the full airplane-mode recycle sequence and the
+   `sleepScreen` call — the very final line of the try block. Any error thrown before
+   that point (e.g. a mid-cycle device disconnect, a failed account switch, or a tool
+   error) caused the catch path to run instead, and see point 1 above.
+
+**Fix:**
+- The catch block now calls `tLog` with a structured message before doing anything else:
+  - Aborted cycle → `"Cycle aborted — 3 follows, 12 likes, 5 stories"`
+  - Error cycle → `"Cycle failed — <error message> — 3 follows, 12 likes"`
+  - Both include whatever partial stats (follows, likes, stories, reels, DMs, feed
+    shares, saves) had been accumulated before the abort/error.
+- The success path `tLog` was updated to the same stats-summary format:
+  `"Cycle complete ✓ — 10 follows, 50 likes, 3 stories"`.
+- `DeviceLogContext.ACTION_LOG_RE` already matched `Cycle (complete|failed|aborted)` and
+  required no change.
+
+**Files changed:**
+- `artifacts/api-server/src/routes/mobile.ts` — catch block now calls `tLog` for
+  abort and error cases; success `tLog` updated to include inline stats summary.
+- `artifacts/dannys-bot/src/contexts/DeviceLogContext.tsx` — comment clarification only.
+
+---
+
+### Fixed — Offline device incorrectly showed as Active in Phone Farm grid
+
+**Symptom:** A phone card in the Phone Farm device grid displayed both "Offline" and
+"Active" simultaneously — e.g. "Xiaomi Redmi Note 14 · Offline · Active".
+
+**Root cause:** The `active` prop on `DeviceCard` was set purely from
+`activeCycleSerials.has(device.serial)` — whether a cycle entry existed for that serial.
+It was never gated on whether the phone was currently connected. A stale cycle entry (from
+a device that had been running when it dropped off USB) persisted in the cycle-active poll
+and kept the card green even after the phone went offline.
+
+**Fix:** `active` is now `activeCycleSerials.has(serial) && onlineSerials.has(serial)`.
+A device can only be Active if it is also Connected. Stale cycle entries for offline
+devices are silently ignored at the display layer.
+
+**Files changed:**
+- `artifacts/dannys-bot/src/pages/MobileDevicesPage.tsx` — `active` prop now requires
+  both `activeCycleSerials` and `onlineSerials` membership.
+
+---
+
 ## [1.2.72] — 2026-07-21
 
 ### Fixed — English Speaking filter silently missed non-English bios (Devanagari, Arabic, Chinese, etc.)
