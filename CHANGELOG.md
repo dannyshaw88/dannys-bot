@@ -4,6 +4,73 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.74] — 2026-07-21
+
+### Improved — Debugging Log: shuffle lines now highlighted in blue
+
+Tool-order shuffle messages (e.g. `▶ Tool order shuffled: stories → feed → follow → reels`) now
+render in **blue** in the Debugging Log panel. Previously they used the same white colour as all
+other `▶`-prefixed lines, making them easy to overlook when scanning a long log. Blue makes it
+immediately obvious at a glance when the cycle randomised its tool execution order.
+
+### Fixed — Debugging Log: scrolling up no longer snaps you back to the bottom on every new line
+
+Previously, every new log line that arrived via WebSocket forced the view to scroll to the very
+bottom of the log panel — even if you had deliberately scrolled up to read earlier output. This
+made reviewing mid-cycle log history impossible while the automation was running.
+
+**Fix:** The log panel now tracks whether the user is "pinned" to the bottom of the log:
+- If you are within 60 px of the bottom edge, new lines continue to auto-scroll as before.
+- If you have scrolled up at all, new lines arrive silently in the background and the view stays
+  exactly where you left it.
+- Auto-scroll re-engages the moment you scroll back down to the bottom.
+
+### Improved — Dashboard TrustScore badge is 15% narrower
+
+The TrustScore badge in the Dashboard activity table was slightly wider than necessary, eating
+into surrounding columns. Its default width has been reduced from 120 px to 102 px (exactly −15%).
+This change is scoped exclusively to the Dashboard badge component (`DashboardTrustScoreBadge`);
+the TrustScore badges on the Phone Farm slot view and all other locations are unaffected.
+
+### Fixed — Statistics page: devices now appear in the correct order (Device 1 first)
+
+The Tool Performance tab on the Statistics page was displaying devices in the order the ADB server
+happened to enumerate them — typically the reverse of what the Phone Farm page shows. Device 2
+(Redmi A5) appeared above Device 1 (Redmi 12 5G), which was confusing when cross-referencing
+stats against the farm view.
+
+**Fix:** The Statistics page now fetches the farm device registry (`/api/mobile/farm-devices`) and
+sorts connected phones by their assigned farm slot index before rendering — identical logic to the
+Phone Farm page. Device 1 always appears first, Device 2 second, and so on regardless of USB
+enumeration order.
+
+### Improved — Statistics page: "Columns" button renamed to "MANAGE COLUMNS"
+
+The button that opens the Tool Performance column configurator was labelled "Columns" in a mixed
+capitalisation style inconsistent with the Dashboard control bar (which uses all-caps labels:
+MANAGE COLUMNS, SHOW ONLY ERRORS, etc.). The button is now labelled **MANAGE COLUMNS** in full
+uppercase to match the Dashboard styling.
+
+### New — Statistics page Tool Performance: per-column pixel width controls
+
+The Manage Columns panel on the Statistics Tool Performance tab now includes **pixel width
+controls for every column**, matching the functionality already present on the Dashboard.
+
+**What's new:**
+- The panel now uses a two-column grid layout (wider, 480 px dialog) instead of the old single
+  column list.
+- Every stat column (Cycles, Likes, Follows, Stories, Reels, DMs, Feed Shares) has a numeric
+  input showing its current width in pixels, with **−** and **+** buttons that step by 10 px.
+- The **Device / Account** column (the leftmost account name column) also has its own width
+  control at the top of the panel — defaulting to 224 px.
+- Column widths are applied via a `<colgroup>` on the table so widths are consistent across all
+  rows, including device header rows.
+- Width preferences are saved to `farm_col_widths_px` in localStorage and persist across sessions.
+- "Reset to defaults" now also resets all widths back to their defaults alongside resetting column
+  order and visibility.
+
+---
+
 ## [1.2.73] — 2026-07-21
 
 ### Fixed — Action Log was always blank inside an account slot
