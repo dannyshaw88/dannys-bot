@@ -4875,7 +4875,22 @@ function AutomationSettingsPanel({
                           if (!api?.openFolderDialog) return;
                           const result = await api.openFolderDialog();
                           if (result?.canceled || !result?.folder) return;
-                          setSettings(s => ({ ...s, makePostLocalFolderPath: result.folder }));
+                          const updatedSettings = { ...settings, makePostLocalFolderPath: result.folder };
+                          setSettings(() => updatedSettings);
+                          // Save immediately — bypass the debounce so the path is
+                          // written to mobile-instances.json before Electron can
+                          // close or the user navigates away (same pattern as
+                          // HumanSessionPanel.tsx).
+                          if (phone) {
+                            const saveUrl = slotIdx !== undefined
+                              ? `/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/automation-settings`
+                              : `/api/mobile/devices/${encodeURIComponent(phone.serial)}/automation-settings`;
+                            fetch(saveUrl, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify(updatedSettings),
+                            }).catch(() => { /* debounce will retry on next render */ });
+                          }
                         }}
                         className="h-7 px-3 text-xs rounded border border-border bg-background hover:border-foreground/30 hover:bg-accent transition-colors shrink-0 font-medium text-foreground"
                       >

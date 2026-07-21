@@ -5208,14 +5208,40 @@ export async function findInstagramSearchBar(
     // attempt loop continues — wait and re-dump
   }
 
+  // Method 4 — container nodes (action_bar_search_hints_text_layout /
+  // explore_action_bar_container / explore_action_bar) are present in the
+  // accessibility tree even when the inner EditText is transitioning or
+  // temporarily detached.  Do one final dump and check for them.
+  {
+    const xml4 = await _uiDump(adb, serial);
+    if (xml4) {
+      for (const containerId of [
+        ":id/action_bar_search_hints_text_layout",
+        ":id/explore_action_bar_container",
+        ":id/explore_action_bar",
+      ]) {
+        if (!xml4.includes(containerId)) continue;
+        for (const line of xml4.split(/\r?\n/)) {
+          if (!line.includes(containerId)) continue;
+          const bm = line.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+          if (!bm) continue;
+          const cx = Math.round((Number(bm[1]) + Number(bm[3])) / 2);
+          const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
+          onLog?.(`Follow: search bar found via container "${containerId}" at (${cx}, ${cy})`);
+          return { x: cx, y: cy };
+        }
+      }
+    }
+  }
+
   // Positional fallback — Instagram's Explore search bar does not appear in the
   // UIAutomator accessibility tree on some device/app combinations (the Scan
   // Screen Layout tool confirms 0 elements in the TOP zone even when the bar is
   // visually present).  The bar is always at the very top of the Explore page,
-  // centred horizontally, sitting at ~3.8 % of screen height (~85 px on a
-  // 2226 px device).  Since the caller has already navigated to the Search tab
-  // and waited for the page to settle, tapping this position is safe.
-  const fallbackY = Math.round(screenH * 0.038);
+  // centred horizontally.  Calibrated from a real Redmi 12 5G dump: the search
+  // bar container sits at y=153 px on a 2226 px screen → 6.9 % of screen height.
+  // (Old value was 3.8 % / ~85 px which landed inside the status bar at 0–104 px.)
+  const fallbackY = Math.round(screenH * 0.069);
   const fallbackX = Math.round(screenW / 2);
   onLog?.(`Follow: search bar not in a11y tree — using positional fallback (${fallbackX}, ${fallbackY})`);
   return { x: fallbackX, y: fallbackY };
