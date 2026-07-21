@@ -1292,6 +1292,20 @@ class AutomationEngine {
 
         const s = hsTool.settings as any;
 
+        // Clamp: if the scheduled time now exceeds the configured delayMax (e.g.
+        // settings changed mid-wait, or the API server survived an app restart
+        // carrying a stale timer from the previous session), reschedule within the
+        // current [delayMin, delayMax] window instead of silently waiting hours.
+        if (state.nextHumanSessionAt > 0) {
+          const maxAllowedMs = (s.delayMax ?? 60) * 60_000;
+          const remaining = state.nextHumanSessionAt - Date.now();
+          if (remaining > maxAllowedMs) {
+            const waitMs = randInt((s.delayMin ?? 30) * 60_000, maxAllowedMs);
+            state.nextHumanSessionAt = Date.now() + waitMs;
+            console.log(`[engine] @${freshProfile.username}: next-run was ${Math.round(remaining / 60000)}min out (exceeds delayMax ${s.delayMax ?? 60}min) — rescheduled to ${Math.round(waitMs / 60000)}min`);
+          }
+        }
+
         if (Date.now() >= state.nextHumanSessionAt) {
           // Acquire proxy slot immediately before the session starts.
           // HS manages its own per-session slot lifecycle so the slot is only
