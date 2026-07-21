@@ -4,6 +4,103 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.68] — 2026-07-21
+
+### Fixed — Make a Post: successful post incorrectly reported as failed
+
+**Root cause (hanging + false failure):** After tapping Share, the code polled every
+1.5 s for the caption screen to disappear — the definitive sign the post submitted.
+But Instagram keeps the caption screen's view hierarchy alive while it tears down,
+so `share_footer_button` (and the generic `_findElem("Share")` fallback) stayed in
+the accessibility tree even after a successful post.  The poll loop read the
+lingering node as "post never left the caption screen."
+
+Worse: at 6 s the code retried the Share tap.  By that point Instagram had already
+posted and was showing the "Want to send it to friends?" prompt.  The retry tap
+landed on that dialog, opening a DM share sheet — which has its own "Share" node —
+so the loop then continued until the 15 s abort, logged "post did not submit", and
+counted the post as 0/1 posted even though it had succeeded.
+
+**Fix:** On every poll iteration the loop now checks for Instagram's success
+strings (`"Posted! All set."`, `"Post shared"`, `"Video shared"`, `"Reel shared"`,
+`"Your post is now shared"`) **before** checking whether Share is still visible.
+The moment a success signal appears the loop exits with `shareConfirmed = true` and
+logs `"detected Instagram success signal — post submitted ✓"`.  Because the loop
+breaks on success before reaching attempt 3, the retry tap never fires in the
+success case.
+
+**New helper:** `findMakeAPostSuccessSignal(serial)` exported from
+`androidManager.ts` — performs a single UIAutomator dump and scans for all known
+Instagram post-success strings.
+
+**Files changed:**
+- `artifacts/api-server/src/mobile/androidManager.ts` — `findMakeAPostSuccessSignal` function added
+- `artifacts/api-server/src/routes/mobile.ts` — poll loop updated to check success signal first
+
+---
+
+### Fixed — Fix AI Slop: AI-image detection bypasses metadata strip via perceptual fingerprint
+
+**Root cause:** Instagram's "AI Info" label uses two independent detection layers:
+
+1. **C2PA metadata** — a cryptographic JUMBF manifest embedded in the file binary.
+   The binary-strip + Sharp `withMetadata(false)` pass was already removing this
+   correctly, and this layer continued to pass.
+
+2. **Perceptual / neural detection** — a CNN that analyses pixel-level patterns
+   independent of any metadata.  Instagram rolled this out more aggressively around
+   mid-July 2026.  No amount of metadata stripping defeats it; it keys on the
+   characteristic frequency-domain and spatial patterns of AI-generated images.
+
+The `makeUniqueImage` 7-layer pixel-perturbation pipeline (sub-pixel crop,
+micro-rotation, per-channel colour gain, hue shift, brightness jitter, Gaussian
+noise, JPEG re-encode) that defeats perceptual detection was only wired into the
+EB browser-based repost engine — it was **never called** in the real-device
+Make a Post flow.  There is even a `makePostMakeUnique` boolean sitting in the
+settings schema that mapped to nothing in `runMakePostStep`.
+
+**Fix:** `fixAiSlop.ts` now chains two steps:
+
+- **Step 2a** (existing): Sharp pass with `withMetadata(false)` → produces a
+  clean Buffer with all EXIF / XMP / IPTC / ICC stripped.
+- **Step 2b** (new): `makeUniqueImage(buffer)` → applies the 7-layer pixel
+  pipeline to the clean buffer.  Both steps execute in a single call; only one
+  temp file is written at the end.
+
+Enabling the "Fix AI Slop" checkbox now defeats both detection layers.  No
+settings change is needed — the pixel perturbation runs automatically whenever
+the checkbox is on.
+
+**Files changed:**
+- `artifacts/api-server/src/instagram/fixAiSlop.ts` — Step 2b added; import
+  of `makeUniqueImage` from `./makeUnique` added at the top of the file
+
+---
+
+### Changed — "Human Jitter" renamed to "Random Actions"
+
+The section label in the Human Session automation panel has been renamed from
+"Human Jitter" to "Random Actions" for clarity.  The rename applies to the
+visible checkbox label, the internal options-array entry used by the filter UI,
+and the section comment.
+
+**Files changed:**
+- `artifacts/dannys-bot/src/components/tools/HumanSessionPanel.tsx`
+
+---
+
+### Changed — Notifications and Visit Profile labels now show % symbol
+
+The "Notifications" and "Visit Profile" setting labels in the Random Actions
+(formerly Human Jitter) jitter panel now read **"Notifications %"** and
+**"Visit Profile %"** to make it immediately clear both fields accept a
+percentage value.
+
+**Files changed:**
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx`
+
+---
+
 ## [1.2.67] — 2026-07-21
 
 ### Fixed — Follow tool: search bar tap lands in status bar on Redmi 12 5G
