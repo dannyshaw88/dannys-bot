@@ -4,6 +4,64 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.72] — 2026-07-21
+
+### Fixed — English Speaking filter silently missed non-English bios (Devanagari, Arabic, Chinese, etc.)
+
+**Symptom:** Accounts with Sanskrit/Devanagari bios (e.g. `rishi_yogshala_rishkesh`) were
+followed even with the English Speaking filter enabled. The filter appeared to pass every
+non-English profile through as if the bio were blank.
+
+**Root cause:** The filter only scanned `content-desc="..."` XML attributes in the
+UIAutomator accessibility dump, but Instagram stores profile bio text in `text="..."`
+attributes on `TextView` nodes — not in `content-desc`. The Devanagari bio was therefore
+completely invisible to the check, and no non-ASCII characters were ever found.
+
+**Fix:** The filter now scans both `content-desc="..."` and `text="..."` attributes. Any
+node (in either attribute) where more than 40% of characters are non-ASCII causes the
+profile to be skipped. Profiles with no bio, or entirely ASCII bios, pass through as
+before.
+
+**Files changed:**
+- `artifacts/api-server/src/routes/mobile.ts` — English Speaking filter block now matches
+  both attribute types; variable renamed `text` → `val` to avoid shadowing.
+
+---
+
+### Added — Surplus candidate pool (saves HikerAPI quota between cycles)
+
+**What it does:** When the Follow tool finishes a cycle having followed fewer users than
+were scraped from HikerAPI, the leftover (unused) candidates are now saved to a per-account
+**Surplus** table in the database. The next time that account runs the Follow tool, it
+draws from Surplus first. HikerAPI is only called if the Surplus pool is empty or too small
+to fill the target count. Once the Surplus is exhausted the normal HikerAPI scrape runs
+and any new leftovers go back into Surplus, repeating the cycle.
+
+**Why it matters:** HikerAPI costs money per scrape. Previously, every single cycle
+called HikerAPI even when the last cycle had scraped far more candidates than it could
+follow. Those extra candidates were silently discarded. Now they are preserved and reused,
+so HikerAPI is only called when genuinely needed.
+
+**Behaviour details:**
+- Each Instagram account has its own isolated Surplus list (keyed by `profileId`).
+- Surplus candidates that appear in the "already followed" or "global skip" lists are
+  silently dropped when the pool is loaded — they are never re-attempted.
+- Users that were filtered out on-device (non-English, too many followers, private, etc.)
+  are NOT added to Surplus — only candidates that passed all pre-filters but weren't
+  reached because the target count was already hit go into Surplus.
+- The **Surplus** tab in the Follow Users tool (Sources → Surplus) shows the current
+  queue count and each queued username, source, and date scraped.
+- When Surplus has enough candidates (≥ 3× the target count), the log line
+  `Follow: Surplus pool is sufficient — skipping HikerAPI scrape this cycle` confirms
+  that HikerAPI was not called at all.
+
+**Files changed:**
+- `artifacts/api-server/src/routes/mobile.ts` — `runFollowUsersStep` gains a `profileId`
+  param; Surplus load runs before HikerAPI scrape; HikerAPI scrape is guarded by a
+  candidate-count check; unused candidates are written to Surplus after the follow loop.
+
+---
+
 ## [1.2.71] — 2026-07-21
 
 ### Fixed — Server failed to start: "UNIQUE constraint failed: licenses.username"

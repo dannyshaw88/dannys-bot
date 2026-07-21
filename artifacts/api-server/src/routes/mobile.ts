@@ -4790,6 +4790,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
        *  from #2 onward.  When the total reaches this number the session
        *  ends even if targetCount hasn't been reached. */
       maxScrapeSessions?: number;
+      /** DB profile ID for this Instagram account. When provided, Surplus
+       *  candidates saved from previous cycles are consumed first before
+       *  HikerAPI is called. Leftover candidates at the end of the session
+       *  are written back to Surplus for the next cycle. */
+      profileId?: number;
     },
   ): Promise<number> {
     const { usersMin, usersMax, sources, onLog, recordFollow, browsing, skipFollowedUsernames, skipSkippedUsernames, filters } = params;
@@ -4820,44 +4825,79 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const candidateMeta   = new Map<string, { isVerified?: boolean; isPrivate?: boolean; followerCount?: number }>();
     const candidates: string[] = [];
 
-    // Shuffle sources before iterating so the loop (which breaks as soon as
-    // enough candidates are collected) starts from a different random source
-    // each cycle rather than always position 0 (#bodybuilding in this case).
-    // Without the shuffle, targetCount×3 candidates are found immediately from
-    // the first source, the break fires, and the rest of the list is never
-    // reached.
-    const shuffledSources = [...sources].sort(() => Math.random() - 0.5);
-
-    for (const src of shuffledSources) {
-      if (candidates.length >= targetCount * 3) break;
-      const sourceLabel = src.type === "hashtag"
-        ? `#${src.value.replace(/^#/, "")}`
-        : `@${src.value.replace(/^@/, "")}`;
+    // ── Surplus / Overspill candidates ──────────────────────────────────────
+    // Before calling HikerAPI, check the Surplus table for candidates saved
+    // from previous cycles for this account. Consuming these first avoids
+    // burning HikerAPI quota on sources that were already scraped.
+    const overspillIdsToDelete: number[] = [];
+    const profileId = params.profileId;
+    if (profileId && profileId > 0) {
       try {
-        if (src.type === "hashtag") {
-          const res = await hiker.getHashtagUsers(src.value.replace(/^#/, ""), 50);
-          for (const u of res.users) {
-            if (!candidateSource.has(u.username)) candidateSource.set(u.username, sourceLabel);
-            if (u.isVerified !== undefined || u.isPrivate !== undefined || u.followerCount !== undefined)
-              candidateMeta.set(u.username, { isVerified: u.isVerified, isPrivate: u.isPrivate, followerCount: u.followerCount });
-            candidates.push(u.username);
+        const overspillRows = await storage.getOverspillUsersByProfile(profileId);
+        if (overspillRows.length > 0) {
+          onLog?.(`Follow: ${overspillRows.length} candidate${overspillRows.length !== 1 ? "s" : ""} in Surplus — using before HikerAPI`);
+          for (const row of overspillRows) {
+            const u = row.instagramUsername;
+            if (skipFollowedUsernames?.has(u.toLowerCase())) continue;
+            if (skipSkippedUsernames?.has(u.toLowerCase())) continue;
+            if (!candidateSource.has(u)) candidateSource.set(u, row.sourceValue || "surplus");
+            candidates.push(u);
+            overspillIdsToDelete.push(row.id);
           }
-          onLog?.(`Follow: ${sourceLabel} → ${res.users.length} users`);
-        } else if (src.type === "target_followers") {
-          const userInfo = await hiker.getUserByUsername(src.value.replace(/^@/, "")).catch(() => null);
-          if (!userInfo?.pk) { onLog?.(`Follow: could not resolve @${src.value} — skipping source`); continue; }
-          const followers = await hiker.getFollowers(userInfo.pk, 50);
-          for (const u of followers) {
-            if (!candidateSource.has(u.username)) candidateSource.set(u.username, sourceLabel);
-            if (u.isVerified !== undefined || u.isPrivate !== undefined || u.followerCount !== undefined)
-              candidateMeta.set(u.username, { isVerified: u.isVerified, isPrivate: u.isPrivate, followerCount: u.followerCount });
-            candidates.push(u.username);
-          }
-          onLog?.(`Follow: ${sourceLabel} followers → ${followers.length} users`);
         }
       } catch (e: any) {
-        onLog?.(`Follow: HikerAPI error for source "${src.value}": ${e?.message}`);
+        onLog?.(`Follow: could not load Surplus — ${e?.message}`);
       }
+    }
+    // Delete the Surplus records we loaded so they aren't re-used if the cycle
+    // is interrupted before the new surplus is saved at the end.
+    if (overspillIdsToDelete.length > 0) {
+      storage.deleteOverspillUsers(overspillIdsToDelete).catch(() => {});
+    }
+
+    // Only call HikerAPI if Surplus didn't already fill the candidate pool.
+    if (candidates.length < targetCount * 3) {
+      // Shuffle sources before iterating so the loop (which breaks as soon as
+      // enough candidates are collected) starts from a different random source
+      // each cycle rather than always position 0 (#bodybuilding in this case).
+      // Without the shuffle, targetCount×3 candidates are found immediately from
+      // the first source, the break fires, and the rest of the list is never
+      // reached.
+      const shuffledSources = [...sources].sort(() => Math.random() - 0.5);
+
+      for (const src of shuffledSources) {
+        if (candidates.length >= targetCount * 3) break;
+        const sourceLabel = src.type === "hashtag"
+          ? `#${src.value.replace(/^#/, "")}`
+          : `@${src.value.replace(/^@/, "")}`;
+        try {
+          if (src.type === "hashtag") {
+            const res = await hiker.getHashtagUsers(src.value.replace(/^#/, ""), 50);
+            for (const u of res.users) {
+              if (!candidateSource.has(u.username)) candidateSource.set(u.username, sourceLabel);
+              if (u.isVerified !== undefined || u.isPrivate !== undefined || u.followerCount !== undefined)
+                candidateMeta.set(u.username, { isVerified: u.isVerified, isPrivate: u.isPrivate, followerCount: u.followerCount });
+              candidates.push(u.username);
+            }
+            onLog?.(`Follow: ${sourceLabel} → ${res.users.length} users`);
+          } else if (src.type === "target_followers") {
+            const userInfo = await hiker.getUserByUsername(src.value.replace(/^@/, "")).catch(() => null);
+            if (!userInfo?.pk) { onLog?.(`Follow: could not resolve @${src.value} — skipping source`); continue; }
+            const followers = await hiker.getFollowers(userInfo.pk, 50);
+            for (const u of followers) {
+              if (!candidateSource.has(u.username)) candidateSource.set(u.username, sourceLabel);
+              if (u.isVerified !== undefined || u.isPrivate !== undefined || u.followerCount !== undefined)
+                candidateMeta.set(u.username, { isVerified: u.isVerified, isPrivate: u.isPrivate, followerCount: u.followerCount });
+              candidates.push(u.username);
+            }
+            onLog?.(`Follow: ${sourceLabel} followers → ${followers.length} users`);
+          }
+        } catch (e: any) {
+          onLog?.(`Follow: HikerAPI error for source "${src.value}": ${e?.message}`);
+        }
+      }
+    } else {
+      onLog?.("Follow: Surplus pool is sufficient — skipping HikerAPI scrape this cycle");
     }
 
     if (!candidates.length) { onLog?.("Follow: no candidates collected — skipping"); return 0; }
@@ -5196,14 +5236,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // where >40 % of characters are non-ASCII is treated as
             // non-English and the user is skipped. Profiles with no bio text
             // (or all-ASCII bios) pass through.
+            // Both content-desc="..." and text="..." attributes are scanned —
+            // Instagram stores the bio text in text= nodes (TextView), NOT
+            // content-desc= nodes, so checking only content-desc silently
+            // misses Devanagari/Sanskrit/Arabic/Chinese bios entirely.
             if (filters.requireEnglish) {
               let skipForEnglish = false;
-              const allNodes = profileXml.match(/content-desc="([^"]{10,300})"/g) ?? [];
+              const contentDescNodes = profileXml.match(/content-desc="([^"]{10,300})"/g) ?? [];
+              const textNodes        = profileXml.match(/\btext="([^"]{10,300})"/g) ?? [];
+              const allNodes = [...contentDescNodes, ...textNodes];
               for (const m of allNodes) {
-                const text = m.replace(/^content-desc="/, "").replace(/"$/, "");
-                if (text.length < 10) continue;
-                const nonAscii = (text.match(/[^\x00-\x7F]/g) ?? []).length;
-                if (nonAscii / text.length > 0.4) { skipForEnglish = true; break; }
+                const val = m.replace(/^(?:content-desc|text)="/, "").replace(/"$/, "");
+                if (val.length < 10) continue;
+                const nonAscii = (val.match(/[^\x00-\x7F]/g) ?? []).length;
+                if (nonAscii / val.length > 0.4) { skipForEnglish = true; break; }
               }
               if (skipForEnglish) {
                 onLog?.(`Follow: @${username} bio appears non-English — skipping (English Speaking filter)`);
@@ -5341,6 +5387,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (e?.message === "cycle-aborted") throw e;
         onLog?.(`Follow: error on @${username}: ${e?.message}`);
       }
+    }
+
+    // ── Save unused candidates to Surplus ────────────────────────────────────
+    // Any candidate that was in the pool but never attempted (because
+    // targetCount was reached first) is written to the Surplus table so the
+    // NEXT cycle can consume them before calling HikerAPI again — saving
+    // API quota.  Only candidates from index _fi onward were never attempted.
+    if (profileId && profileId > 0 && _fi < targets.length) {
+      const surplus = targets.slice(_fi);
+      const now = new Date().toISOString();
+      const surplusEntries = surplus.map(u => ({
+        profileId: profileId as number,
+        instagramUsername: u,
+        instagramUserId: "",
+        sourceValue: candidateSource.get(u) ?? "surplus",
+        sourceType: "phone",
+        scrapedAt: now,
+      }));
+      storage.addOverspillUsers(surplusEntries).catch(() => {});
+      onLog?.(`Follow: saved ${surplusEntries.length} unused candidate${surplusEntries.length !== 1 ? "s" : ""} to Surplus for next cycle`);
     }
 
     return followed;
@@ -5914,6 +5980,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                       requireEnglish: followFilterEnglishSpeaking,
                     }
                   : undefined,
+                profileId: mobileProfileId ?? undefined,
               });
               followedCount = followCount;
               steps.push(`follow(${followCount} followed)`);
