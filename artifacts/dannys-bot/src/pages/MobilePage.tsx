@@ -2742,18 +2742,31 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     const serial = phone.serial;
 
     const runCycle = async () => {
-      if (cancelled) return;
+      // ── DIAGNOSTIC: log that the timer fired BEFORE the cancelled guard ──
+      // This appears in the Action Log even when cancelled=true so we can see
+      // whether the timer is firing correctly or the effect re-ran mid-wait.
+      const _dbgTag = slotUsername ? `@${slotUsername}` : `slot${slotIdx ?? 0}`;
+      onLog?.(`[HST-DBG] ${_dbgTag} — timer fired (cancelled=${cancelled})`);
+      if (cancelled) {
+        onLog?.(`[HST-DBG] ${_dbgTag} — effect was reset mid-wait; skipping this fire (new timer already running)`);
+        return;
+      }
       setNextRunAt(null);
       // Collision preventer: wait for device to be free before running.
       if (requestSlot && slotIdx !== undefined) {
+        onLog?.(`[HST-DBG] ${_dbgTag} — awaiting collision-preventer slot…`);
         const collisionPrevented = await requestSlot(slotIdx, Date.now());
-        if (cancelled) { releaseSlot?.(slotIdx); return; }
+        if (cancelled) {
+          onLog?.(`[HST-DBG] ${_dbgTag} — cancelled while waiting for collision-preventer; releasing slot`);
+          releaseSlot?.(slotIdx); return;
+        }
         if (collisionPrevented && phone?.serial && slotUsername) {
           fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/log-event`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ slotUsername, slotIdx, action: 'collision_prevented', detail: 'Collision Prevented' }),
           }).catch(() => {});
         }
+        onLog?.(`[HST-DBG] ${_dbgTag} — slot acquired (collisionPrevented=${collisionPrevented})`);
       }
       const s = settingsRef.current;
       const min = Math.max(1, Math.min(s.feedScrollMin, s.feedScrollMax));
@@ -2772,6 +2785,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       const ctrl = new AbortController();
       cycleAbortRef.current = ctrl;
       cycleIdRef.current = cycleId; // expose to cleanup closure for the abort POST
+      onLog?.(`[HST-DBG] ${_dbgTag} — sending cycle to server (serial=${serial}, count=${count})`);
       try {
         const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle`, {
           method: "POST",
@@ -2940,6 +2954,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           return;
         }
         const acctTag = slotUsername ? `@${slotUsername} — ` : "";
+        onLog?.(`[HST-DBG] ${_dbgTag} — fetch/cycle threw: name=${(e as any)?.name} message=${e?.message}`);
         onLog?.(`${acctTag}Cycle failed — ${e?.message ?? "network error"}`);
       } finally {
         cycleAbortRef.current = null;
@@ -2947,6 +2962,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         // Release the collision scheduler slot regardless of outcome (success / error / abort).
         if (releaseSlot && slotIdx !== undefined) releaseSlot(slotIdx);
       }
+      onLog?.(`[HST-DBG] ${_dbgTag} — post-finally gate (cancelled=${cancelled}); will ${cancelled ? "NOT reschedule (new effect already running)" : "reschedule"}`);
       if (cancelled) return;
       setRunning(false);
       const s2 = settingsRef.current;
@@ -2974,6 +2990,11 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       timer = setTimeout(runCycle, Math.round(startDelayMs));
     }
     return () => {
+      // ── DIAGNOSTIC: log WHY the effect is cleaning up ───────────────────
+      // Visible in the Action Log so we can tell whether a dependency changed
+      // (effect re-ran) or the component unmounted / toggle turned off.
+      const _cleanTag = slotUsername ? `@${slotUsername}` : `slot${slotIdx ?? 0}`;
+      onLog?.(`[HST-DBG] ${_cleanTag} — effect cleanup (serial=${serial}, enabled=${settings.enabled}, rescheduleKey=${rescheduleKey})`);
       cancelled = true;
       if (timer) clearTimeout(timer);
       setRunning(false);
