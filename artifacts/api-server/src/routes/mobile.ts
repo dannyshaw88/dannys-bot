@@ -4164,6 +4164,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let shareConfirmed = false;
     for (let attempt = 0; attempt < 10; attempt++) {
       await sleepOrAbort(serial, 1500);
+      // Check for Instagram's "Posted! All set." success overlay FIRST.
+      // After a post submits, IG keeps the caption screen's view hierarchy
+      // alive while it tears down — share_footer_button and any "Share" text
+      // node stay in the a11y tree during this window even though the post
+      // already went through. Detecting the success overlay here lets us exit
+      // immediately instead of mis-reading the lingering Share node as a
+      // failure. Also prevents the retry tap (attempt 3) from landing on the
+      // "Want to send it to friends?" prompt that IG shows on success, which
+      // would open a DM share sheet whose own "Share" element would then keep
+      // the poll loop spinning until abort.
+      if (await android.findMakeAPostSuccessSignal(serial).catch(() => false)) {
+        onLog?.("Make a Post: detected Instagram success signal — post submitted ✓");
+        shareConfirmed = true;
+        break;
+      }
       const shareStillVisible = await android.findShareFooterButton(serial).catch(() => null);
       if (!shareStillVisible) {
         shareConfirmed = true;

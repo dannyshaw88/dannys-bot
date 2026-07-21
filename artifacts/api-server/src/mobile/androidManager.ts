@@ -2701,6 +2701,32 @@ export async function findShareFooterButton(serial: string): Promise<{ x: number
 }
 
 /**
+ * Returns true if Instagram's post-success notification is visible in the
+ * accessibility tree. After a post submits, IG overlays "Posted! All set."
+ * (or equivalent) while the caption screen tears down — the share_footer_button
+ * / "Share" text nodes from the caption screen stay in the tree during this
+ * window. Checking for the success signal FIRST lets the poll loop exit
+ * immediately instead of mis-detecting the lingering Share node as a failure.
+ *
+ * Also catches the case where the retry tap lands on the "Want to send it to
+ * friends?" prompt that IG shows on success, opening a DM share sheet whose
+ * own "Share" element would otherwise keep the poll loop spinning.
+ */
+export async function findMakeAPostSuccessSignal(serial: string): Promise<boolean> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return false;
+  return (
+    xml.includes("Posted! All set.") ||
+    xml.includes("Post shared") ||
+    xml.includes("Video shared") ||
+    xml.includes("Reel shared") ||
+    xml.includes("Your post is now shared")
+  );
+}
+
+/**
  * Scans the accessibility tree for tappable recipient items inside Instagram's
  * DM share sheet.
  *
