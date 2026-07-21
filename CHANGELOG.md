@@ -4,6 +4,98 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.76] — 2026-07-21
+
+### Fixed — Desktop icon position jumbles when installing an update
+
+**Problem:** Every time the user installed a newer version of Aura Farming over an existing one,
+the Windows NSIS installer silently deleted the desktop shortcut and re-created it in a default
+position, causing the Aura Farming icon to jump around the desktop and push other icons out of
+place. This happened because the old uninstaller's cleanup step unconditionally deleted the `.lnk`
+file — even when it was being called as part of an update, not a real uninstall.
+
+**Root cause:** The `customUnInstall` macro in `installer.nsh` always ran `Delete "$DESKTOP\Aura
+Farming.lnk"` regardless of whether the call came from a user-initiated uninstall or from the
+new installer silently removing the previous version mid-upgrade.
+
+**Fix:** Added a `customInit` macro (runs at the very start of the new installer, before the old
+uninstaller is called) that writes a registry flag — `HKCU\Software\AuraFarming\UpdatingNow=1`.
+The `customUnInstall` macro now reads this flag: if it is present the shortcut is left completely
+untouched (update path), and if it is absent the shortcut is removed normally (real uninstall).
+The flag is cleared at the end of `customInstall` once the new shortcut logic has run. The
+shortcut itself is still only ever created if one does not already exist, so the first-install
+position is respected from then on.
+
+**Files changed:** `artifacts/electron/installer.nsh`
+
+---
+
+### New — Tray menu Restart / Close / Update now warns when a device is actively running
+
+**What changed:** Right-clicking the Aura Farming system-tray icon shows Restart and Close
+options. Previously selecting either of those would immediately kill the app — interrupting any
+phone-farm automation cycle that was mid-run without any warning. The same was true for the
+"Restart Now" button in the automatic-update notification that appears when a new version has
+finished downloading.
+
+**Fix:** All three destructive actions (tray Restart, tray Close, and update Restart) now call a
+new `confirmIfDevicesActive()` guard function in the Electron main process before proceeding. The
+guard hits the `/api/mobile/cycle-active` API endpoint. If one or more devices are currently
+running an automation cycle it shows a native Windows warning dialog:
+
+> **Restart — Device Active**
+> 1 device is currently running automation. Restart now will interrupt it.
+> Are you sure?   [Yes, Restart]   [Cancel]
+
+The device count is pluralised correctly ("1 device is" / "N devices are"). If the API is not
+reachable (e.g. the server hasn't started yet) the guard is a no-op and the action proceeds
+normally so nothing is ever permanently blocked.
+
+**Files changed:** `artifacts/electron/src/main.ts`
+
+---
+
+### Fixed — Timestamp format was date-first everywhere; now consistently time-first
+
+**Problem:** Three different places in the app displayed timestamps in `DD Mon YYYY, HH:mm:ss`
+order (date before time), which is awkward to read when scanning a busy activity log because your
+eye has to skip past the date to reach the time — the part that changes most frequently.
+
+**Affected locations and what they showed before → after:**
+
+| Location | Before | After |
+|---|---|---|
+| Dashboard activity log — startup row (Detail column) | `Aura Farming started: 21 Jul 2026, 20:02:29` | `Aura Farming started: 20:02:29 21 Jul 2026` |
+| Dashboard header — "started at" badge | `Aura Farming started at: Jul 21 2026 20:02:29` | `Aura Farming started at: 20:02:29, Jul 21 2026` |
+| Dashboard activity log — TIME STAMP column (right side) | `Jul 21 2026, 19:02:29` | `19:02:29, Jul 21 2026` |
+
+The CSV export format (`yyyy-MM-dd HH:mm:ss`) is unchanged — it is used by spreadsheet tools and
+must stay in ISO order for correct sorting.
+
+**Files changed:**
+- `artifacts/api-server/src/routes/instagram.ts` — startup log detail string
+- `artifacts/dannys-bot/src/pages/Dashboard.tsx` — header badge format + timestamp column format
+
+---
+
+### Fixed — Statistics page Manage Columns: width buttons now use left/right arrows
+
+**Problem:** The pixel-width editor in the Statistics → Tool Performance → Manage Columns panel
+used ChevronUp (▲) and ChevronDown (▼) buttons to increase and decrease column width. Up/down
+arrows have no intuitive connection to making a column wider or narrower — the user reported not
+knowing what the buttons were doing.
+
+**Fix:** Replaced the up/down chevrons with left/right chevrons: **◄** (ChevronLeft) narrows the
+column by 10 px (the right edge of the column moves left) and **►** (ChevronRight) widens it by
+10 px (the right edge moves right). Hover tooltips "Narrow column" and "Widen column" added for
+extra clarity. The underlying width logic and 10 px step size are unchanged — only the button
+icons and tooltips were updated. Applies to both the fixed Device/Account column row and every
+toggleable stat column row in the panel.
+
+**Files changed:** `artifacts/dannys-bot/src/pages/StatsPage.tsx`
+
+---
+
 ## [1.2.75] — 2026-07-21
 
 ### Fixed — Follow Surplus not saving for phone-farm accounts without an EB profile
