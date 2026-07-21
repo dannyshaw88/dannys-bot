@@ -17,7 +17,7 @@ import {
 } from "recharts";
 import {
   User, Heart, MessageCircle, Eye, UserPlus, UserMinus, Mail, Activity,
-  Settings2, ChevronDown, ChevronUp, ChevronRight, Fingerprint, ImagePlus,
+  Settings2, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Fingerprint, ImagePlus,
   BarChart2, Zap, Repeat2, ShieldAlert, PhoneOff, Webhook, Bot, Lock, Flag,
   Smartphone,
 } from "lucide-react";
@@ -1174,7 +1174,7 @@ function PhoneFarmTab() {
                           <button disabled className="h-4 w-4 flex items-center justify-center rounded text-muted-foreground opacity-20"><ChevronDown className="w-2.5 h-2.5" /></button>
                         </div>
                         <label className="text-xs w-16 text-muted-foreground shrink-0 truncate" title={label}>{label}</label>
-                        <button onClick={() => nudgeFarmColWidth(key, -10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronDown className="w-3 h-3" /></button>
+                        <button onClick={() => nudgeFarmColWidth(key, -10)} title="Narrow column" className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronLeft className="w-3 h-3" /></button>
                         <input
                           type="number" min={40} max={600}
                           value={farmColWidths[key] ?? FARM_DEFAULT_COL_WIDTHS[key]}
@@ -1186,7 +1186,7 @@ function PhoneFarmTab() {
                           }}
                           className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
                         />
-                        <button onClick={() => nudgeFarmColWidth(key, 10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronUp className="w-3 h-3" /></button>
+                        <button onClick={() => nudgeFarmColWidth(key, 10)} title="Widen column" className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronRight className="w-3 h-3" /></button>
                       </div>
                     );
                   })()}
@@ -1227,7 +1227,7 @@ function PhoneFarmTab() {
                         >
                           {col.label}
                         </label>
-                        <button onClick={() => nudgeFarmColWidth(key, -10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronDown className="w-3 h-3" /></button>
+                        <button onClick={() => nudgeFarmColWidth(key, -10)} title="Narrow column" className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronLeft className="w-3 h-3" /></button>
                         <input
                           type="number" min={40} max={600}
                           value={farmColWidths[key] ?? FARM_DEFAULT_COL_WIDTHS[key] ?? 80}
@@ -1239,7 +1239,7 @@ function PhoneFarmTab() {
                           }}
                           className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
                         />
-                        <button onClick={() => nudgeFarmColWidth(key, 10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronUp className="w-3 h-3" /></button>
+                        <button onClick={() => nudgeFarmColWidth(key, 10)} title="Widen column" className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronRight className="w-3 h-3" /></button>
                       </div>
                     );
                   })}
