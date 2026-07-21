@@ -4,6 +4,72 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.67] — 2026-07-21
+
+### Fixed — Follow tool: search bar tap lands in status bar on Redmi 12 5G
+
+**Root cause (coordinate fallback):** When Instagram's Explore search bar is not
+returned by the UIAutomator accessibility tree, the code fell back to a hardcoded
+positional tap at `screenH * 0.038` — approximately 85 px on a 2226 px device.
+The status bar occupies 0–104 px, so the fallback tap was hitting the notification
+area instead of the search bar (whose actual centre is y = 153 px, or 6.9 % of
+screen height).  This caused the Follow cycle to open the notification shade rather
+than focus the search field, silently skipping every follow attempt.
+
+**Root cause (a11y gap):** On this device/app-version combination the inner
+`EditText` (`action_bar_search_edit_text`) is sometimes absent from the
+accessibility tree during page transitions.  The existing three retry attempts
+(Methods 1–3) look only for the EditText and for text/content-desc nodes
+containing "Search" — all of which are children of the bar container.  When the
+container's children are detached mid-transition the retries silently exhaust and
+the broken positional fallback fires.
+
+**Fix — two layers:**
+
+1. **Method 4 (new container fallback):** After the three retry attempts a final
+   UIAutomator dump is taken and the code looks for the container nodes that wrap
+   the search field — `action_bar_search_hints_text_layout` →
+   `explore_action_bar_container` → `explore_action_bar` — in that priority order.
+   These container nodes persist in the a11y tree even while child views are
+   transitioning, so this nearly eliminates the "not found" case without adding any
+   extra wait time.
+
+2. **Calibrated coordinate fallback:** `screenH * 0.038` → `screenH * 0.069`
+   (153 ÷ 2226, measured from a real Redmi 12 5G accessibility dump).  If even the
+   containers are absent the tap now lands at the true centre of the search bar
+   instead of the status bar.
+
+**File changed:** `artifacts/api-server/src/mobile/androidManager.ts`
+(`findInstagramSearchBar` function, lines 5210–5248)
+
+---
+
+### Fixed — Make a Post: assigned directory (PC source folder) lost on restart
+
+**Root cause:** When the user picks a local Windows folder via the "Browse" dialog
+in the Make a Post panel, the click handler only called `setSettings(...)` — which
+schedules a 500 ms debounced save via a `useEffect`.  That debounce timer is
+cancelled by the effect's cleanup (`return () => clearTimeout(t)`) whenever the
+component unmounts.  If the user closes Electron or navigates away within that
+500 ms window, the path is never written to `mobile-instances.json` and is silently
+lost on next launch.
+
+**Fix:** After `setSettings`, the handler now immediately `fetch`-POSTs the full
+updated settings object directly to the server — bypassing the debounce entirely —
+so the path is persisted to `mobile-instances.json` before Electron can close.
+The debounced autosave remains in place as a belt-and-braces fallback for normal
+in-session use.
+
+This is the same pattern already used in `HumanSessionPanel.tsx` for its folder
+dialog (comment: *"save immediately — bypass the debounce so the path is written
+before Electron can close"*).
+
+**File changed:** `artifacts/dannys-bot/src/pages/MobilePage.tsx`
+(`AutomationSettingsPanel` → Make a Post local folder `onClick` handler,
+lines 4873–4895)
+
+---
+
 ## [1.2.66] — 2026-07-21
 
 ### Fixed — Make a Post: "Sharing posts" popup blocked the Share tap
