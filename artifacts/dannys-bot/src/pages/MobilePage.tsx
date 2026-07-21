@@ -3544,6 +3544,7 @@ function AutomationSettingsPanel({
   const showCopyDialogResolved = showCopyDialog ?? _localShowCopyDialog;
   const setShowCopyDialogResolved = setShowCopyDialog ?? _localSetShowCopyDialog;
   const [showFollowedUsers, setShowFollowedUsers] = useState(false);
+  const [showSurplus, setShowSurplus] = useState(false);
   const [showSources, setShowSources] = useState(false);
   const [newFollowSourceType, setNewFollowSourceType] = useState<'hashtag' | 'target_followers'>('hashtag');
   const [newFollowSourceValue, setNewFollowSourceValue] = useState('');
@@ -3587,6 +3588,8 @@ function AutomationSettingsPanel({
   };
   const [mobileFollowedList, setMobileFollowedList] = useState<{username:string;followedAt:number}[]>([]);
   const [loadingFollowed, setLoadingFollowed] = useState(false);
+  const [mobileOverspillList, setMobileOverspillList] = useState<{id:number;instagramUsername:string;sourceValue:string;scrapedAt:string}[]>([]);
+  const [loadingOverspill, setLoadingOverspill] = useState(false);
   // Make a Post UI local state
   const [makePostImageSettingsOpen, setMakePostImageSettingsOpen] = useState(false);
   const [showPostedMedia, setShowPostedMedia] = useState(false);
@@ -3621,6 +3624,20 @@ function AutomationSettingsPanel({
     } catch {}
   };
 
+  const loadSurplus = React.useCallback(async () => {
+    if (!slotUsername) return;
+    setLoadingOverspill(true);
+    try {
+      const profiles = await fetch('/api/profiles').then(r => r.json()).catch(() => null);
+      const profile = Array.isArray(profiles)
+        ? profiles.find((p: any) => p.username === slotUsername || p.accountLabel === slotUsername)
+        : null;
+      if (!profile?.id) { setMobileOverspillList([]); return; }
+      const data = await fetch(`/api/profiles/${profile.id}/overspill-users`).then(r => r.json()).catch(() => null);
+      if (Array.isArray(data)) setMobileOverspillList(data);
+    } catch {} finally { setLoadingOverspill(false); }
+  }, [slotUsername]);
+
   // Auto-refresh the followed list every 5 s while the panel is open so
   // users followed during a running cycle appear without manual re-toggle.
   React.useEffect(() => {
@@ -3628,6 +3645,14 @@ function AutomationSettingsPanel({
     const id = setInterval(loadFollowedUsers, 5000);
     return () => clearInterval(id);
   }, [showFollowedUsers, loadFollowedUsers]);
+
+  // Auto-refresh surplus every 5 s while the panel is open.
+  React.useEffect(() => {
+    if (!showSurplus) return;
+    loadSurplus();
+    const id = setInterval(loadSurplus, 5000);
+    return () => clearInterval(id);
+  }, [showSurplus, loadSurplus]);
 
   if (!phone) {
     return (
@@ -4303,6 +4328,16 @@ function AutomationSettingsPanel({
           >{showSources ? 'Hide' : 'Sources'}</Button>
           <Button
             variant="outline" size="sm" className="h-7 text-xs px-3"
+            disabled={loadingOverspill}
+            onClick={() => { setShowSurplus(v => !v); if (!showSurplus) loadSurplus(); }}
+          >
+            {showSurplus ? 'Hide' : 'Surplus'}
+            {mobileOverspillList.length > 0 && !showSurplus && (
+              <span className="ml-1 text-[10px] text-muted-foreground">({mobileOverspillList.length})</span>
+            )}
+          </Button>
+          <Button
+            variant="outline" size="sm" className="h-7 text-xs px-3"
             disabled={loadingFollowed}
             onClick={() => { setShowFollowedUsers(v => !v); if (!showFollowedUsers) loadFollowedUsers(); }}
           >{showFollowedUsers ? 'Hide' : 'Followed'}</Button>
@@ -4342,6 +4377,40 @@ function AutomationSettingsPanel({
           </div>
 
         </div>}
+
+        {/* ── Surplus panel (toggled via the Surplus button above) ────── */}
+        <div className="space-y-2">
+          {showSurplus && (
+            <div className="border border-border rounded-lg overflow-hidden">
+              {loadingOverspill && mobileOverspillList.length === 0 ? (
+                <p className="text-xs text-muted-foreground p-3">Loading…</p>
+              ) : mobileOverspillList.length === 0 ? (
+                <p className="text-xs text-muted-foreground p-3">No surplus candidates yet — leftover HikerAPI candidates will appear here after the first Follow cycle.</p>
+              ) : (
+                <div className="max-h-40 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-muted">
+                      <tr>
+                        <th className="text-left px-3 py-1.5 text-muted-foreground font-medium">Username</th>
+                        <th className="text-left px-3 py-1.5 text-muted-foreground font-medium">Source</th>
+                        <th className="text-left px-3 py-1.5 text-muted-foreground font-medium">Scraped at</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mobileOverspillList.map((u) => (
+                        <tr key={u.id} className="border-t border-border">
+                          <td className="px-3 py-1.5 text-foreground">@{u.instagramUsername}</td>
+                          <td className="px-3 py-1.5 text-muted-foreground">{u.sourceValue || '—'}</td>
+                          <td className="px-3 py-1.5 text-muted-foreground">{new Date(u.scrapedAt).toLocaleTimeString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* ── Followed Users panel (toggled via the Followed button above) */}
         <div className="space-y-2">
