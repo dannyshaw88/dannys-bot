@@ -116,6 +116,16 @@ sqlite.exec(`
     followed_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS overspill_users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_id INTEGER NOT NULL,
+    instagram_username TEXT NOT NULL,
+    instagram_user_id TEXT NOT NULL DEFAULT '',
+    source_value TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT '',
+    scraped_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS session_actions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     profile_id INTEGER NOT NULL,

@@ -12,7 +12,7 @@ import { NumField } from "@/components/ui/num-field";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2, Hash, Users, ChevronRight, ArrowLeft, Copy, X, Upload, Download, ListFilter, UserPlus, Clock, ExternalLink, Activity, Heart, PlaySquare, BookOpen, Star, UserCheck, Ban, AlertCircle, MessageSquare, Bell, User, RefreshCw, Settings, Repeat2, Image, AtSign, TrendingUp, Search } from "lucide-react";
 import { useRef } from "react";
-import { type Tool, type Profile, type FollowedUser, type SessionAction } from "@shared/schema";
+import { type Tool, type Profile, type FollowedUser, type OverspillUser, type SessionAction } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
@@ -225,6 +225,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
   const [hashtagSectionOpen, setHashtagSectionOpen] = useState(true);
   const [followerSectionOpen, setFollowerSectionOpen] = useState(true);
   const [showFollowedUsers, setShowFollowedUsers] = useState(false);
+  const [showOverspill, setShowOverspill] = useState(false);
   const [, startSourcesTransition] = useTransition();
 
   const { data: followedUsersList, isLoading: followedUsersLoading } = useQuery<FollowedUser[]>({
@@ -232,6 +233,13 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
     refetchInterval: showFollowedUsers ? 5000 : 30000,
     staleTime: 0,
     enabled: true,
+  });
+
+  const { data: overspillList, isLoading: overspillLoading } = useQuery<OverspillUser[]>({
+    queryKey: [`/api/profiles/${tool.profileId}/overspill-users`],
+    refetchInterval: showOverspill ? 5000 : 30000,
+    staleTime: 0,
+    enabled: tool.type === 'follow',
   });
 
   const { data: sessionActions } = useQuery<SessionAction[]>({
@@ -764,6 +772,94 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
   }
 
 
+  // ── Overspill sub-page ───────────────────────────────────────────────────────
+  if (tool.type === 'follow' && showOverspill) {
+    return (
+      <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-5">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={() => setShowOverspill(false)}
+            className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground -ml-2">
+            <ArrowLeft className="w-4 h-4" /> Back to Follow Tool
+          </Button>
+        </div>
+
+        <div className="desktop-card overflow-hidden">
+          <div className="flex items-center gap-3 px-6 py-4 border-b border-border">
+            <div className="p-2 rounded-lg bg-primary/10 text-primary">
+              <Users className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold">Overspill</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Scraped users that were never used · {overspillList?.length ?? 0} queued · exhausted before each new HikerAPI scrape
+              </p>
+            </div>
+          </div>
+          <div className="overflow-x-auto max-h-[60vh]">
+            <table className="w-full text-sm text-left">
+              <thead className="text-xs uppercase bg-muted/30 text-muted-foreground font-bold border-b border-border/50 sticky top-0 z-10">
+                <tr>
+                  <th className="px-5 py-3 font-bold bg-muted/30 whitespace-nowrap">Scraped At</th>
+                  <th className="px-5 py-3 font-bold bg-muted/30 whitespace-nowrap">Username</th>
+                  <th className="px-5 py-3 font-bold bg-muted/30 whitespace-nowrap">Source</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/50">
+                {overspillLoading ? (
+                  Array.from({ length: 8 }).map((_, i) => (
+                    <tr key={i} className="animate-pulse">
+                      <td colSpan={3} className="px-5 py-3.5 bg-muted/10 h-11" />
+                    </tr>
+                  ))
+                ) : !overspillList || overspillList.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="px-5 py-20 text-center text-muted-foreground">
+                      <Users className="w-8 h-8 mx-auto mb-3 text-muted-foreground/30" />
+                      <p className="text-sm font-medium">No overspill yet</p>
+                      <p className="text-xs mt-1">Unused scraped users will appear here after the follow tool runs.</p>
+                    </td>
+                  </tr>
+                ) : (
+                  overspillList.map(ou => (
+                    <tr key={ou.id} className="hover:bg-accent/5 transition-colors">
+                      <td className="px-5 py-3 whitespace-nowrap text-muted-foreground text-xs font-mono">
+                        <span className="flex items-center gap-1.5">
+                          <Clock className="w-3 h-3 shrink-0" />
+                          {format(new Date(ou.scrapedAt), "MMM d, yyyy HH:mm")}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 whitespace-nowrap font-medium text-foreground">
+                        <button
+                          onClick={() => navigateTo(profile.id, profile.username, profile.userAgentEmbedded || "", `https://www.instagram.com/${ou.instagramUsername}/`)}
+                          className="flex items-center gap-1.5 text-primary hover:text-primary/70 hover:underline transition-colors group"
+                          title={`Open @${ou.instagramUsername} in browser`}
+                        >
+                          @{ou.instagramUsername}
+                          <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </button>
+                      </td>
+                      <td className="px-5 py-3 whitespace-nowrap">
+                        {ou.sourceValue ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 text-primary text-[11px] font-medium">
+                            {ou.sourceType === 'hashtag' ? <Hash className="w-3 h-3" /> : <Users className="w-3 h-3" />}
+                            {ou.sourceValue}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground text-xs"> </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+
   // ── Followed Users sub-page ──────────────────────────────────────────────────
   if (tool.type === 'follow' && showFollowedUsers) {
     return (
@@ -937,6 +1033,16 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                   Followed Users
                   <span className="ml-0.5 text-[10px] text-muted-foreground">
                     ({followedUsersLoading && !followedUsersList ? '…' : followedUsersList?.length ?? 0})
+                  </span>
+                </button>
+                <button
+                  onClick={() => setShowOverspill(true)}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-border bg-background hover:bg-accent/50 hover:border-primary/40 transition-colors text-xs font-medium text-foreground"
+                >
+                  <Users className="w-3.5 h-3.5 text-primary" />
+                  Overspill
+                  <span className="ml-0.5 text-[10px] text-muted-foreground">
+                    ({overspillLoading && !overspillList ? '…' : overspillList?.length ?? 0})
                   </span>
                 </button>
                 {!hideEnableToggle && nextRunStatus && (

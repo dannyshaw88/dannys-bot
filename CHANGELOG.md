@@ -4,6 +4,88 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.70] — 2026-07-21
+
+### Fixed — Make a Post: false "Did not post" abort + hang + Posted Media tab not updating
+
+**Root cause — two UIAutomator dumps per poll iteration:**
+After tapping Share, the code polled every 1.5 s for the caption screen to
+disappear. But each round called `findMakeAPostSuccessSignal` (one dump, ~4–5 s)
+and then `findShareFooterButton` (a second dump, another ~4–5 s), so each
+"1.5 s" check actually took ~8–10 s. That is why "Share still visible after 6 s"
+fired at ~31 s in the debug log, and the 82-second abort message appeared at
+what should have been a 15-second window.
+
+**Root cause — disabled Share button not detected:**
+Instagram disables `share_footer_button` (`clickable="false"`) the moment it
+accepts the upload — this fires approximately 8 seconds before the visible
+"Posted!" overlay appears. The old code only watched for the button to disappear
+entirely or for the success overlay text, so it missed the earliest and most
+reliable signal completely.
+
+**Root cause — Posted Media tab never updated:**
+Because `shareConfirmed` stayed `false` (the loop ran until the 82 s abort),
+`recordPostedLocalFile` was never called even though the post had gone through.
+
+**Fix — new `checkMakeAPostUploadState` (one dump, three checks):**
+- `androidManager.ts`: New function that does a single `_uiDump` call and
+  returns `{ successSignal, shareGone, shareDisabled }`. The disabled-button
+  check reads the `clickable` attribute from the node fragment, requiring no
+  extra XML parsing library.
+- `mobile.ts`: The poll loop now calls `checkMakeAPostUploadState` once per
+  iteration. It exits `shareConfirmed = true` on any of the three states.
+  The retry tap (attempt 3) only fires when the button is still present AND
+  still clickable — i.e. genuinely stuck, not just uploading.
+
+**Impact:** Post is now confirmed within ~1.5–3 s of Instagram accepting the
+upload (instead of up to 82 s later). Posted Media tab is updated correctly.
+The false "Did not post. Aborting." log message is eliminated.
+
+**Files changed:**
+- `artifacts/api-server/src/mobile/androidManager.ts` — added `checkMakeAPostUploadState`
+- `artifacts/api-server/src/routes/mobile.ts` — poll loop rewired to use single-dump check
+
+---
+
+### Added — Follow Tool: Overspill tab (save unused HikerAPI scrape targets)
+
+**Problem:** Each HikerAPI scrape fetches far more candidates than a single
+session can consume (e.g. 20 scraped, 1 followed, 5 skipped = 14 discarded).
+Since HikerAPI costs per scrape, throwing away unused results burns quota
+unnecessarily.
+
+**Solution — Overspill queue:**
+Unused scraped candidates are now stored in an `overspill_users` table, isolated
+per account. On each follow session the engine checks the overspill queue first
+and exhausts it before making a new HikerAPI scrape. Only when the queue is
+empty does it hit HikerAPI again, saving any unused remainder back to overspill
+afterward.
+
+**Rules:**
+- Overspill users are **not** counted as followed until actually followed.
+  The "Skip Followed Users" setting only marks them followed when the follow
+  action fires, not when they are scraped and saved to overspill.
+- Overspill is isolated per account — no cross-account contamination.
+- Consumed entries (attempted in the follow loop, whatever the outcome) are
+  pruned from the queue automatically after each session.
+
+**UI — new Overspill tab:**
+A new "Overspill" button sits alongside the existing "Followed Users" button
+in the Follow Tool header. Clicking it opens a sub-page with the same
+username / source / date table layout as Followed Users. The header description
+reads: "Scraped users that were never used".
+
+**Files changed:**
+- `lib/db/src/schema/instagram.ts` — `overspillUsers` table schema + types
+- `lib/db/src/index.ts` — `CREATE TABLE IF NOT EXISTS overspill_users` DDL
+- `artifacts/api-server/src/storage.ts` — `getOverspillUsersByProfile`, `addOverspillUsers`, `deleteOverspillUsers`, `clearOverspillByProfile`
+- `artifacts/api-server/src/routes/instagram.ts` — GET + DELETE `/api/profiles/:profileId/overspill-users`
+- `artifacts/api-server/src/instagram/automationEngine.ts` — drain overspill first; save unused candidates after session
+- `artifacts/dannys-bot/src/shared/schema.ts` — `OverspillUser` type
+- `artifacts/dannys-bot/src/components/tools/ToolConfigPanel.tsx` — Overspill button + sub-page
+
+---
+
 ## [1.2.69] — 2026-07-21
 
 ### Fixed — GitHub Actions: Windows installer artifact named incorrectly

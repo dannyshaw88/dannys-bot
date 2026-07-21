@@ -3217,6 +3217,16 @@ export async function registerInstagramRoutes(
     res.json(data);
   });
 
+  app.get("/api/profiles/:profileId/overspill-users", async (req, res) => {
+    const data = await storage.getOverspillUsersByProfile(Number(req.params.profileId));
+    res.json(data);
+  });
+
+  app.delete("/api/profiles/:profileId/overspill-users", async (req, res) => {
+    await storage.clearOverspillByProfile(Number(req.params.profileId));
+    res.json({ ok: true });
+  });
+
   app.post("/api/profiles/:profileId/followed-users", async (req, res) => {
     const profileId = Number(req.params.profileId);
     const { instagramUsername, sourceValue, sourceType } = req.body;

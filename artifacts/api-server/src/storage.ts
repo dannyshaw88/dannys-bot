@@ -11,13 +11,14 @@ import {
   proxies, profiles, tools, sources, stats, instagramApiCalls, followedUsers, sessionActions,
   globalSettings, skippedUsers, repostedPosts, contactDmSent, contactPendingMessages,
   hashtagCursors, scrapedUsersGlobal, apiCreatedAccounts, bannedAccountsAnalytics,
-  automatedBehaviourAnalytics, captchaAnalytics, lockedAccountsAnalytics,
+  automatedBehaviourAnalytics, captchaAnalytics, lockedAccountsAnalytics, overspillUsers,
   type AutomatedBehaviourAnalytics, type CaptchaAnalytics, type LockedAccountAnalytics,
   type Proxy, type InsertProxy,
   type Profile, type InsertProfile,
   type Tool, type InsertTool,
   type Source, type InsertSource,
   type FollowedUser, type InsertFollowedUser,
+  type OverspillUser, type InsertOverspillUser,
   type SessionAction, type InsertSessionAction,
   type SkippedUser,
   type RepostedPost, type InsertRepostedPost,
@@ -26,7 +27,7 @@ import {
   type ApiCreatedAccount, type InsertApiCreatedAccount,
   type BannedAccountAnalytics,
 } from "./shared/schema";
-import { eq, desc, and, sql, like, gt, ne, or, isNull, isNotNull, not } from "drizzle-orm";
+import { eq, desc, and, sql, like, gt, ne, or, isNull, isNotNull, not, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // Proxies
@@ -93,6 +94,12 @@ export interface IStorage {
   countFollowsToday(profileId: number, todayPrefix: string): Promise<number>;
   countFollowsThisHour(profileId: number, hourPrefix: string): Promise<number>;
   bulkImportFollowedUsers(profileId: number, entries: { username: string; userId: string; followedAt: string; sourceType?: string }[]): Promise<{ imported: number; skipped: number }>;
+
+  // Overspill Users
+  getOverspillUsersByProfile(profileId: number): Promise<OverspillUser[]>;
+  addOverspillUsers(entries: InsertOverspillUser[]): Promise<void>;
+  deleteOverspillUsers(ids: number[]): Promise<void>;
+  clearOverspillByProfile(profileId: number): Promise<void>;
 
   // Session Actions
   getSessionActionsByProfile(profileId: number, limit?: number): Promise<SessionAction[]>;
@@ -808,6 +815,36 @@ export class DatabaseStorage implements IStorage {
         like(followedUsers.followedAt, `${hourPrefix}%`),
       ));
     return rows[0]?.count ?? 0;
+  }
+
+  // ── Overspill Users ────────────────────────────────────────────────────────
+
+  async getOverspillUsersByProfile(profileId: number): Promise<OverspillUser[]> {
+    return await db.select().from(overspillUsers)
+      .where(eq(overspillUsers.profileId, profileId))
+      .orderBy(overspillUsers.id);
+  }
+
+  async addOverspillUsers(entries: InsertOverspillUser[]): Promise<void> {
+    if (!entries.length) return;
+    const BATCH = 500;
+    for (let i = 0; i < entries.length; i += BATCH) {
+      await db.insert(overspillUsers).values(entries.slice(i, i + BATCH));
+    }
+  }
+
+  async deleteOverspillUsers(ids: number[]): Promise<void> {
+    if (!ids.length) return;
+    // SQLite IN list limit safety — process in chunks of 500
+    const BATCH = 500;
+    for (let i = 0; i < ids.length; i += BATCH) {
+      const chunk = ids.slice(i, i + BATCH);
+      await db.delete(overspillUsers).where(inArray(overspillUsers.id, chunk));
+    }
+  }
+
+  async clearOverspillByProfile(profileId: number): Promise<void> {
+    await db.delete(overspillUsers).where(eq(overspillUsers.profileId, profileId));
   }
 
   async getSessionActionsByProfile(profileId: number, limit: number = 500): Promise<SessionAction[]> {

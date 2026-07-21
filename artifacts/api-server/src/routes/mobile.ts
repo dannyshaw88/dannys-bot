@@ -4170,32 +4170,43 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Strategy: check every 1.5 s for up to ~15 s total. If Share is still
     // visible after 6 s (4 polls) we assume the first tap was swallowed and
     // retry it once. If Share never disappears, abort and surface the failure.
+    // Poll for the post to be accepted. Each iteration does ONE UIAutomator
+    // dump (checkMakeAPostUploadState) instead of two back-to-back calls
+    // (findMakeAPostSuccessSignal + findShareFooterButton = ~8-10 s/round).
+    // Three success states are detected from the single dump:
+    //   1. successSignal — explicit "Posted!" overlay visible.
+    //   2. shareGone     — share button disappeared entirely.
+    //   3. shareDisabled — button present but clickable="false" (upload in
+    //      progress, Instagram disables it the moment it accepts the upload —
+    //      this fires ~8 s before the success overlay).
+    // Retry tap ONLY fires when the button is still present AND still
+    // clickable after 6 s — i.e. genuinely stuck, not just uploading.
     let shareConfirmed = false;
     for (let attempt = 0; attempt < 10; attempt++) {
       await sleepOrAbort(serial, 1500);
-      // Check for Instagram's "Posted! All set." success overlay FIRST.
-      // After a post submits, IG keeps the caption screen's view hierarchy
-      // alive while it tears down — share_footer_button and any "Share" text
-      // node stay in the a11y tree during this window even though the post
-      // already went through. Detecting the success overlay here lets us exit
-      // immediately instead of mis-reading the lingering Share node as a
-      // failure. Also prevents the retry tap (attempt 3) from landing on the
-      // "Want to send it to friends?" prompt that IG shows on success, which
-      // would open a DM share sheet whose own "Share" element would then keep
-      // the poll loop spinning until abort.
-      if (await android.findMakeAPostSuccessSignal(serial).catch(() => false)) {
+      const uploadState = await android.checkMakeAPostUploadState(serial).catch(() => null);
+      if (!uploadState) continue; // dump failed — wait and retry
+      const { successSignal, shareGone, shareDisabled } = uploadState;
+      if (successSignal) {
         onLog?.("Make a Post: detected Instagram success signal — post submitted ✓");
         shareConfirmed = true;
         break;
       }
-      const shareStillVisible = await android.findShareFooterButton(serial).catch(() => null);
-      if (!shareStillVisible) {
+      if (shareGone) {
+        onLog?.("Make a Post: Share button gone — post submitted ✓");
         shareConfirmed = true;
         break;
       }
+      if (shareDisabled) {
+        onLog?.("Make a Post: Share button disabled — upload in progress, post submitted ✓");
+        shareConfirmed = true;
+        break;
+      }
+      // Share button still visible and clickable — genuinely stuck.
       if (attempt === 3) {
-        // Still on caption screen after ~6 s — retry the Share tap once.
         onLog?.("Make a Post: Share still visible after 6 s — retrying tap…");
+        // Re-locate the button from the same cached state if possible,
+        // fall back to the pre-tap reference.
         const retryShareBtn = await android.findShareFooterButton(serial).catch(() => null) ?? finalShareBtn;
         await android.tap(serial, retryShareBtn.x, retryShareBtn.y);
       }

@@ -2749,6 +2749,70 @@ export async function findMakeAPostSuccessSignal(serial: string): Promise<boolea
 }
 
 /**
+ * Single-dump post-upload state check — replaces calling findMakeAPostSuccessSignal
+ * and findShareFooterButton back-to-back (two dumps, ~8-10 s per poll round).
+ *
+ * Does ONE _uiDump and returns three flags so the poll loop can act on any of:
+ *   successSignal — explicit "Posted!" / "Post shared" / etc. overlay is visible.
+ *   shareGone     — share_footer_button is no longer in the tree at all.
+ *   shareDisabled — share_footer_button is present but clickable="false" —
+ *                   Instagram disables the button the moment it accepts the
+ *                   upload (upload in progress). This fires ~8 s BEFORE the
+ *                   success overlay appears and was completely missed before.
+ *
+ * Returns null on a dump failure so callers can treat it as "nothing known yet".
+ */
+export async function checkMakeAPostUploadState(
+  serial: string,
+): Promise<{ successSignal: boolean; shareGone: boolean; shareDisabled: boolean } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+
+  const successSignal =
+    xml.includes("Posted! All set.") ||
+    xml.includes("Post shared") ||
+    xml.includes("Video shared") ||
+    xml.includes("Reel shared") ||
+    xml.includes("Your post is now shared");
+
+  // Check for the share footer button — present OR absent.
+  // Prefer the share_footer_button resource-id; fall back to the container
+  // and then the generic "Share" text node (same priority as findShareFooterButton).
+  const shareNodeMatch =
+    xml.includes(':id/share_footer_button') ||
+    xml.includes(':id/footer_button_container') ||
+    (xml.includes('>Share<') || xml.includes('"Share"'));
+  const shareGone = !shareNodeMatch;
+
+  // Detect disabled state: the share_footer_button (or container) node exists
+  // but has clickable="false" — Instagram sets this during upload.
+  let shareDisabled = false;
+  if (!shareGone) {
+    // Extract the XML fragment containing the share footer button and check
+    // whether its clickable attribute is "false".
+    const shareResIds = [':id/share_footer_button', ':id/footer_button_container'];
+    for (const rid of shareResIds) {
+      const idx = xml.indexOf(rid);
+      if (idx === -1) continue;
+      // Walk back to the opening < of this node to read its attributes.
+      const nodeStart = xml.lastIndexOf('<', idx);
+      const nodeEnd   = xml.indexOf('>', idx);
+      if (nodeStart !== -1 && nodeEnd !== -1) {
+        const nodeStr = xml.slice(nodeStart, nodeEnd + 1);
+        if (nodeStr.includes('clickable="false"')) {
+          shareDisabled = true;
+        }
+        break;
+      }
+    }
+  }
+
+  return { successSignal, shareGone, shareDisabled };
+}
+
+/**
  * Scans the accessibility tree for tappable recipient items inside Instagram's
  * DM share sheet.
  *

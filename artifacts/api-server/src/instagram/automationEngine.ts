@@ -4320,42 +4320,71 @@ class AutomationEngine {
       return;
     }
 
-    let candidates: { pk: string; username: string }[] = [];
-    try {
-      if (source.type === "hashtag") {
-        const cursor = await storage.getHashtagCursor(source.value);
-        const result = await hikerClient.getHashtagUsers(source.value, processCount * 3, cursor);
-        candidates = result.users;
-        if (result.nextCursor) await storage.setHashtagCursor(source.value, result.nextCursor).catch(() => {});
-      } else if (source.type === "account") {
-        const result = await hikerClient.getFollowers(source.value, processCount * 3);
-        candidates = result.users;
-      } else {
-        console.log(`[engine] @${profile.username}: [EB-only] follow — unsupported source type: ${source.type}`);
-        return;
-      }
-    } catch (e: any) {
-      console.warn(`[engine] @${profile.username}: [EB-only] follow scrape error: ${e?.message}`);
-      return;
-    }
+    // ── Overspill-first candidate selection ────────────────────────────────
+    // Before hitting HikerAPI, drain any leftover candidates saved from the
+    // previous session's overspill. This avoids burning HikerAPI quota when
+    // there are already plenty of pre-vetted targets waiting.
+    type Candidate = { pk: string; username: string; _overspillId?: number };
+    let candidates: Candidate[] = [];
+    let fromOverspill = false;
 
-    // Dedup against already-followed users. NOTE: candidates are intentionally
-    // NOT sliced to processCount here — the full scraped pool is kept as a
-    // queue so that when a candidate is skipped (already following on IG,
-    // private/requested, or a genuine render issue) the loop below simply
-    // moves on to the next candidate instead of ending the session short.
-    // This is what makes a skip get "replaced" by an actual follow whenever
-    // there are more candidates left in the pool.
     const alreadyFollowed = await storage.getFollowedUsersByProfile(profile.id, 100_000);
     const followedSet = new Set(alreadyFollowed.map((u: any) => u.instagramUsername.toLowerCase()));
-    candidates = candidates.filter((c: any) => !followedSet.has(c.username.toLowerCase()));
-    console.log(`[engine] @${profile.username}: [EB-only] follow — ${candidates.length} candidates from ${source.type}:${source.value} (target ${processCount})`);
+
+    const overspillRows = await storage.getOverspillUsersByProfile(profile.id).catch(() => [] as any[]);
+    // Filter overspill against already-followed to keep it clean
+    const validOverspill = overspillRows.filter((o: any) => !followedSet.has(o.instagramUsername.toLowerCase()));
+
+    if (validOverspill.length > 0) {
+      candidates = validOverspill.map((o: any) => ({
+        pk: o.instagramUserId,
+        username: o.instagramUsername,
+        _overspillId: o.id,
+      }));
+      fromOverspill = true;
+      console.log(`[engine] @${profile.username}: [EB-only] follow — draining ${candidates.length} overspill candidate(s) (skipping HikerAPI scrape)`);
+    } else {
+      // Overspill empty — scrape HikerAPI as normal.
+      try {
+        if (source.type === "hashtag") {
+          const cursor = await storage.getHashtagCursor(source.value);
+          const result = await hikerClient.getHashtagUsers(source.value, processCount * 3, cursor);
+          candidates = result.users;
+          if (result.nextCursor) await storage.setHashtagCursor(source.value, result.nextCursor).catch(() => {});
+        } else if (source.type === "account") {
+          const result = await hikerClient.getFollowers(source.value, processCount * 3);
+          candidates = result.users;
+        } else {
+          console.log(`[engine] @${profile.username}: [EB-only] follow — unsupported source type: ${source.type}`);
+          return;
+        }
+      } catch (e: any) {
+        console.warn(`[engine] @${profile.username}: [EB-only] follow scrape error: ${e?.message}`);
+        return;
+      }
+
+      // Dedup against already-followed users. NOTE: candidates are intentionally
+      // NOT sliced to processCount here — the full scraped pool is kept as a
+      // queue so that when a candidate is skipped (already following on IG,
+      // private/requested, or a genuine render issue) the loop below simply
+      // moves on to the next candidate instead of ending the session short.
+      // This is what makes a skip get "replaced" by an actual follow whenever
+      // there are more candidates left in the pool.
+      candidates = candidates.filter((c: any) => !followedSet.has(c.username.toLowerCase()));
+      console.log(`[engine] @${profile.username}: [EB-only] follow — ${candidates.length} candidates from ${source.type}:${source.value} (target ${processCount})`);
+    }
 
     let followed = 0;
+    let loopedCount = 0;
+    const consumedOverspillIds: number[] = [];
+
     for (const candidate of candidates) {
       if (followed >= processCount) break;
       if (state.stop.stopped || (maxPerDay > 0 && this.daily(state) >= maxPerDay)) break;
       if (maxPerHour > 0 && this.hourly(state) >= maxPerHour) break;
+      loopedCount++;
+      // Track which overspill rows we've attempted so they can be pruned afterward.
+      if ((candidate as any)._overspillId) consumedOverspillIds.push((candidate as any)._overspillId);
       try {
         await page.goto(`https://www.instagram.com/${candidate.username}/`, { waitUntil: "domcontentloaded", timeout: 25_000 });
         await sleep(randInt(1500, 3000));
@@ -4522,6 +4551,34 @@ class AutomationEngine {
         this.logGhostBrowserCall(profile.id, profile.username, "follow", e?.message ?? "error", true);
       }
     }
+
+    // ── Post-loop overspill management ────────────────────────────────────────
+    // 1. Delete all overspill rows we attempted in this session (whether the
+    //    follow succeeded, was skipped, or errored — all are "consumed").
+    if (consumedOverspillIds.length > 0) {
+      await storage.deleteOverspillUsers(consumedOverspillIds).catch(() => {});
+      console.log(`[engine] @${profile.username}: [EB-only] follow — pruned ${consumedOverspillIds.length} consumed overspill row(s)`);
+    }
+
+    // 2. Save candidates we never reached (processCount hit before exhausting
+    //    the candidate pool) to overspill so they're tried next session.
+    //    Only applies to freshly-scraped candidates — overspill rows that were
+    //    never reached simply stay in the DB unchanged.
+    if (!fromOverspill && loopedCount < candidates.length) {
+      const unused = candidates.slice(loopedCount);
+      await storage.addOverspillUsers(
+        unused.map(c => ({
+          profileId: profile.id,
+          instagramUsername: c.username,
+          instagramUserId: String((c as any).pk ?? ""),
+          sourceValue: source.value,
+          sourceType: source.type,
+          scrapedAt: new Date().toISOString(),
+        }))
+      ).catch(() => {});
+      console.log(`[engine] @${profile.username}: [EB-only] follow — saved ${unused.length} unused scraped candidate(s) to overspill`);
+    }
+
     console.log(`[engine] @${profile.username}: [EB-only] follow session done — ${followed}/${candidates.length} followed`);
   }
 

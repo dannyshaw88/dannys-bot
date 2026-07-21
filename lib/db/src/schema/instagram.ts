@@ -218,6 +218,31 @@ export const insertFollowedUserSchema = createInsertSchema(followedUsers).omit({
 export type FollowedUser = typeof followedUsers.$inferSelect;
 export type InsertFollowedUser = z.infer<typeof insertFollowedUserSchema>;
 
+// ── Overspill Users — scraped HikerAPI targets that were never consumed ──────
+// When a follow session scrapes more candidates than it can use in one run,
+// the unused remainder is stored here per profile so it is exhausted before
+// the next HikerAPI scrape fires. Saves HikerAPI quota.
+export const overspillUsers = sqliteTable("overspill_users", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  profileId: integer("profile_id").notNull(),
+  instagramUsername: text("instagram_username").notNull(),
+  instagramUserId: text("instagram_user_id").notNull().default(""),
+  sourceValue: text("source_value").notNull().default(""),
+  sourceType: text("source_type").notNull().default(""),
+  scrapedAt: text("scraped_at").notNull(),
+});
+
+export const overspillUsersRelations = relations(overspillUsers, ({ one }) => ({
+  profile: one(profiles, {
+    fields: [overspillUsers.profileId],
+    references: [profiles.id],
+  }),
+}));
+
+export const insertOverspillUserSchema = createInsertSchema(overspillUsers).omit({ id: true });
+export type OverspillUser = typeof overspillUsers.$inferSelect;
+export type InsertOverspillUser = z.infer<typeof insertOverspillUserSchema>;
+
 export const sessionActions = sqliteTable("session_actions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   profileId: integer("profile_id").notNull(),

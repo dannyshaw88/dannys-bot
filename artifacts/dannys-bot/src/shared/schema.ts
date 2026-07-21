@@ -267,6 +267,16 @@ export type SkippedUser = {
   skippedAt: string;
 };
 
+export type OverspillUser = {
+  id: number;
+  profileId: number;
+  instagramUsername: string;
+  instagramUserId: string;
+  sourceValue: string;
+  sourceType: string;
+  scrapedAt: string;
+};
+
 export type GlobalSettings = {
   skipFollowedUsers: boolean;
   skipAlreadySkippedUsers: boolean;
