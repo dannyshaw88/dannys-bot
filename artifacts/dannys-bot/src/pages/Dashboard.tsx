@@ -11466,7 +11466,7 @@ export function Dashboard() {
   const fmtTs = (ts: number, forExport = false): string => {
     const d = new Date(ts);
     if (_useLocal) {
-      return forExport ? format(d, "yyyy-MM-dd HH:mm:ss") : format(d, "MMM d yyyy, HH:mm:ss");
+      return forExport ? format(d, "yyyy-MM-dd HH:mm:ss") : format(d, "HH:mm:ss, MMM d yyyy");
     }
     const Y = d.getUTCFullYear();
     const Mo = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getUTCMonth()];
