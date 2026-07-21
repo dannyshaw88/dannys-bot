@@ -29,6 +29,7 @@ import { randomBytes } from "crypto";
 import { readFile, unlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
+import { makeUniqueImage } from "./makeUnique";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Binary C2PA / JUMBF strippers
@@ -273,12 +274,26 @@ export async function fixAiSlop(inputPath: string): Promise<string> {
     }
 
     const quality = 85 + Math.floor(Math.random() * 8); // 85–92
-    await sharp(stripped)
+
+    // Step 2a: Sharp pass — strip residual EXIF / XMP / IPTC / ICC + JPEG encode.
+    // Produce a Buffer so Step 2b can consume it without a disk round-trip.
+    const metaStripped: Buffer = await sharp(stripped)
       .withMetadata(false)
       .jpeg({ quality, chromaSubsampling: "4:2:0", force: true })
-      .toFile(tmp);
+      .toBuffer();
 
-    console.log(`[fixAiSlop] done — format=${fmt} jpegQuality=${quality}`);
+    // Step 2b: Pixel-level perturbation — defeats Instagram's perceptual / neural
+    // AI-image detection which operates on pixel patterns rather than metadata.
+    // C2PA/metadata stripping alone was sufficient until ~Jul 2026 when Instagram
+    // updated their detection pipeline to include CNN-based perceptual hashing.
+    // makeUniqueImage applies 7 layers: sub-pixel crop, micro-rotation,
+    // per-channel gain, hue shift, brightness jitter, Gaussian noise, and a
+    // final JPEG re-encode — all imperceptible to the eye but enough to break
+    // the perceptual fingerprint the detector keyed on.
+    const finalBuf = await makeUniqueImage(metaStripped);
+    await writeFile(tmp, finalBuf);
+
+    console.log(`[fixAiSlop] done — format=${fmt} jpegQuality=${quality} (+pixel perturbation)`);
     return tmp;
   } catch (err) {
     console.error("[fixAiSlop] failed:", err);
