@@ -4,6 +4,90 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.78] — 2026-07-21
+
+### Diagnostic — Human Session Tool scheduling: full execution-path tracing added to Action Log
+
+**Background:** Users reported that the Human Session Tool (mobile phone farm automation) timer
+would count down to zero, immediately display a new future timestamp, and nothing would visibly
+happen on the phone. No error appeared in the Action Log, no cycle ran, and the pattern repeated
+indefinitely. The root cause could not be determined from code reading alone because multiple
+silent exit paths exist in the React run-loop (`cancelled = true` returns without any log entry,
+server errors reschedule before they are visible, collision-preventer queuing can delay execution
+by minutes with no feedback).
+
+**What was added:** Detailed `[HST-DBG]` diagnostic log lines are now injected into the Action Log
+tab at every key branch point inside `runCycle` and the effect cleanup. These are visible without
+opening DevTools or the browser console. The new log points are:
+
+1. **Timer fired (before the `cancelled` guard)** — `[HST-DBG] @username — timer fired
+   (cancelled=false/true)`. This is the most important entry: it fires unconditionally as soon as
+   the `setTimeout` callback is invoked. If `cancelled=true`, it means the `useEffect` was torn
+   down and restarted (dependency changed) while the timer was already running. The old timer still
+   fires, but the new effect has already registered its own fresh timer — hence the timer appears
+   to "reset" with a new timestamp while nothing runs.
+
+2. **Effect-was-reset path** — if `cancelled=true` at entry, logs
+   `[HST-DBG] @username — effect was reset mid-wait; skipping this fire (new timer already
+   running)` then returns. Previously this path was completely silent.
+
+3. **Collision-preventer wait** — `[HST-DBG] @username — awaiting collision-preventer slot…`
+   appears when the collision preventer is enabled and the scheduler is waiting for the device's
+   rest period to expire. Long rest periods (configured in minutes) can block execution silently
+   for the full rest duration.
+
+4. **Cancelled while queued in collision preventer** — `[HST-DBG] @username — cancelled while
+   waiting for collision-preventer; releasing slot`. If the effect re-runs while `runCycle` is
+   blocked awaiting the collision-preventer slot, this fires and releases the slot back.
+
+5. **Slot acquired** — `[HST-DBG] @username — slot acquired (collisionPrevented=true/false)`.
+   Confirms the scheduler passed the collision gate; `collisionPrevented=true` means another device
+   was running when this one requested a slot and it had to wait (its turn was held until the other
+   device's rest period expired).
+
+6. **Sending cycle to server** — `[HST-DBG] @username — sending cycle to server
+   (serial=ABC123, count=7)`. Confirms the HTTP POST to `/api/mobile/devices/:serial/automation-cycle`
+   was actually dispatched. If this line is absent but the timer fired, the failure occurred
+   between slot-acquire and fetch (unexpected).
+
+7. **Fetch threw** — `[HST-DBG] @username — fetch/cycle threw: name=TypeError
+   message=fetch failed`. Previously only the user-facing `Cycle failed — …` line appeared; the
+   new entry adds the raw exception class and message for disambiguation (network error vs.
+   AbortError vs. device-offline error vs. schema parse rejection).
+
+8. **Post-finally gate** — `[HST-DBG] @username — post-finally gate (cancelled=false); will
+   reschedule` or `will NOT reschedule (new effect already running)`. Fires after the
+   `try/catch/finally` block, before the `if (cancelled) return` reschedule guard. Shows whether
+   the cycle ran to completion and will schedule the next timer, or whether a concurrent effect
+   cleanup fired mid-cycle and the new effect owns the timer instead.
+
+9. **Effect cleanup** — `[HST-DBG] @username — effect cleanup (serial=XXX, enabled=true,
+   rescheduleKey=3)`. Fires every time React's `useEffect` cleanup runs for the run-loop (i.e.,
+   every time the effect re-runs due to a dependency change, or the component unmounts). The
+   `enabled` and `rescheduleKey` values shown are the stale closure values from when this
+   particular effect instance was created — not the current values. This lets you see exactly
+   which "generation" of the effect just died and why (e.g. `rescheduleKey` incrementing = the
+   clamp effect fired because `cycleIntervalMax` was reduced mid-wait; `enabled=false` in cleanup
+   = the toggle was turned off; serial changing = phone was disconnected/reconnected).
+
+**How to read the logs:** Open the **Action Log** tab for the affected slot. Wait for the timer to
+reach zero. The `[HST-DBG]` lines tell you which path was taken:
+- `timer fired (cancelled=true)` → the effect re-ran while waiting (look at the cleanup entry
+  immediately before it to see which dependency changed).
+- `timer fired (cancelled=false)` → `awaiting collision-preventer slot…` with no further lines →
+  the collision preventer is holding the slot; wait for its rest period.
+- `timer fired (cancelled=false)` → `sending cycle to server` → `Cycle failed — …` → server
+  error; check the API server logs for the detail.
+- `timer fired (cancelled=false)` → `sending cycle to server` → nothing → network error or the
+  Electron process lost connectivity to the local API server.
+
+**Files changed:** `artifacts/dannys-bot/src/pages/MobilePage.tsx`
+
+**Note:** The `[HST-DBG]` lines are temporary diagnostic instrumentation. They will be removed in
+a future release once the root cause of the silent-reschedule bug is identified and fixed.
+
+---
+
 ## [1.2.77] — 2026-07-21
 
 ### Fixed — Mobile automation cycle timer fires correctly when configured interval is reached
