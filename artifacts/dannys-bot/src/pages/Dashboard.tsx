@@ -11696,7 +11696,7 @@ export function Dashboard() {
         {serverInfo?.startedAt && (
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground/70 border border-border/40 rounded px-2 py-0.5 bg-muted/20">
             <RefreshCw className="w-3 h-3" />
-            Aura Farming started at: {format(new Date(serverInfo.startedAt), "MMM d yyyy HH:mm:ss")}
+            Aura Farming started at: {format(new Date(serverInfo.startedAt), "HH:mm:ss, MMM d yyyy")}
           </span>
         )}
       </div>
