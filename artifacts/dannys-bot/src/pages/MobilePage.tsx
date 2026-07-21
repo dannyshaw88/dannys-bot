@@ -2436,7 +2436,7 @@ interface AutomationSettingsData {
   followFiltersEnabled: boolean;
   followFilterPrivateUsers: boolean;
   followFilterEnglishSpeaking: boolean;
-  followFilterMinFollowers250: boolean;
+  followFilterMinFollowers50: boolean;
   followFilterVerifiedUsers: boolean;
   followFilterMaxFollowers25k: boolean;
   // Random Jitter — human-like interstitial actions fired probabilistically
@@ -2532,7 +2532,7 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   followFiltersEnabled: false,
   followFilterPrivateUsers: false,
   followFilterEnglishSpeaking: false,
-  followFilterMinFollowers250: false,
+  followFilterMinFollowers50: false,
   followFilterVerifiedUsers: false,
   followFilterMaxFollowers25k: false,
   randomJitterEnabled: false,
@@ -2846,7 +2846,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             followFiltersEnabled: s.followFiltersEnabled,
             followFilterPrivateUsers: s.followFilterPrivateUsers,
             followFilterEnglishSpeaking: s.followFilterEnglishSpeaking,
-            followFilterMinFollowers250: s.followFilterMinFollowers250,
+            followFilterMinFollowers50: s.followFilterMinFollowers50,
             followFilterVerifiedUsers: s.followFilterVerifiedUsers,
             followFilterMaxFollowers25k: s.followFilterMaxFollowers25k,
             feedActivatePctMin: s.feedActivatePctMin,
@@ -3121,7 +3121,7 @@ const COPY_SECTIONS: CopySection[] = [
     { key: 'filtersEnabled',    label: 'Master toggle',                 fields: ['followFiltersEnabled'] },
     { key: 'filterPrivate',     label: 'Skip Private users',            fields: ['followFilterPrivateUsers'] },
     { key: 'filterEnglish',     label: 'English Speaking only',         fields: ['followFilterEnglishSpeaking'] },
-    { key: 'filterMin250',      label: '250+ Followers min',            fields: ['followFilterMinFollowers250'] },
+    { key: 'filterMin50',       label: '50+ Followers min',             fields: ['followFilterMinFollowers50'] },
     { key: 'filterVerified',    label: 'Skip Verified users',           fields: ['followFilterVerifiedUsers'] },
     { key: 'filterMax25k',      label: 'Skip 25K+ Followers',           fields: ['followFilterMaxFollowers25k'] },
   ]},
@@ -3137,7 +3137,7 @@ const COPY_SECTIONS: CopySection[] = [
     { key: 'injectSavePost',    label: 'Save Post %',                   fields: ['injectBrowsingSavePostPctMin','injectBrowsingSavePostPctMax'] },
     { key: 'injectAbandon',     label: 'Abandon Follow %',              fields: ['injectBrowsingAbandonFollowPctMin','injectBrowsingAbandonFollowPctMax'] },
   ]},
-  { key: 'randomJitter',  label: 'Random Jitter', sub: [
+  { key: 'randomJitter',  label: 'Random Actions', sub: [
     { key: 'jitterEnabled',     label: 'Enabled',                       fields: ['randomJitterEnabled'] },
     { key: 'jitterActivate',    label: 'Activate Percentage',           fields: ['randomJitterActivatePctMin','randomJitterActivatePctMax'] },
     { key: 'jitterNotifPct',    label: 'Check Notifications %',         fields: ['checkNotificationsPctMin','checkNotificationsPctMax'] },
@@ -4608,12 +4608,12 @@ function AutomationSettingsPanel({
                 <input
                   type="checkbox"
                   id={`filter-min-followers-250-${slotIdx ?? 0}`}
-                  checked={settings.followFilterMinFollowers250}
-                  onChange={e => setSettings(s => ({ ...s, followFilterMinFollowers250: e.target.checked }))}
+                  checked={settings.followFilterMinFollowers50}
+                  onChange={e => setSettings(s => ({ ...s, followFilterMinFollowers50: e.target.checked }))}
                   disabled={loading}
                   className="w-4 h-4 accent-primary cursor-pointer"
                 />
-                <label htmlFor={`filter-min-followers-250-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">250 Followers+</label>
+                <label htmlFor={`filter-min-followers-250-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">50 Followers+</label>
               </div>
               <div className="flex items-center gap-2">
                 <input
@@ -4641,7 +4641,7 @@ function AutomationSettingsPanel({
           )}
         </div>}
 
-        {/* ── Random Jitter — probabilistic human-like actions each cycle ─ */}
+        {/* ── Random Actions — probabilistic human-like actions each cycle ─ */}
         <div className="border-t border-border" />
 
         <div className="space-y-3">
@@ -4654,7 +4654,7 @@ function AutomationSettingsPanel({
               disabled={loading}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
-            <label htmlFor={`random-jitter-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">Random Jitter</label>
+            <label htmlFor={`random-jitter-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">Random Actions</label>
           </div>
 
           {settings.randomJitterEnabled && (

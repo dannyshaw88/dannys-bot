@@ -213,7 +213,7 @@ type AutomationSettings = {
   followFiltersEnabled?: boolean;
   followFilterPrivateUsers?: boolean;
   followFilterEnglishSpeaking?: boolean;
-  followFilterMinFollowers250?: boolean;
+  followFilterMinFollowers50?: boolean;
   followFilterVerifiedUsers?: boolean;
   followFilterMaxFollowers25k?: boolean;
   // Follow Users — HikerAPI-driven follow flow (persisted here too; this
@@ -1176,7 +1176,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     followFiltersEnabled: z.boolean().default(false),
     followFilterPrivateUsers: z.boolean().default(false),
     followFilterEnglishSpeaking: z.boolean().default(false),
-    followFilterMinFollowers250: z.boolean().default(false),
+    followFilterMinFollowers50: z.boolean().default(false),
     followFilterVerifiedUsers: z.boolean().default(false),
     followFilterMaxFollowers25k: z.boolean().default(false),
     // ── Random Jitter fields — were missing from this persistence schema,
@@ -1386,7 +1386,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         followFiltersEnabled: false,
         followFilterPrivateUsers: false,
         followFilterEnglishSpeaking: false,
-        followFilterMinFollowers250: false,
+        followFilterMinFollowers50: false,
         followFilterVerifiedUsers: false,
         followFilterMaxFollowers25k: false,
         randomJitterEnabled: false,
@@ -3678,7 +3678,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     followFilterMaxFollowers25k: z.boolean().default(false),
     followFilterPrivateUsers: z.boolean().default(false),
     followFilterEnglishSpeaking: z.boolean().default(false),
-    followFilterMinFollowers250: z.boolean().default(false),
+    followFilterMinFollowers50: z.boolean().default(false),
     // ── Random Jitter — human-like interstitial actions fired on each cycle
     // at a random percentage chance.  Master gate: randomJitterEnabled.
     randomJitterEnabled: z.boolean().default(false),
@@ -5170,7 +5170,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     continue;
                   }
                   if (filters.minFollowers !== undefined && count < filters.minFollowers) {
-                    onLog?.(`Follow: @${username} has ${count.toLocaleString()} followers (<${filters.minFollowers}) — skipping (250 Followers+ filter)`);
+                    onLog?.(`Follow: @${username} has ${count.toLocaleString()} followers (<${filters.minFollowers}) — skipping (50 Followers+ filter)`);
                     storage.addSkippedUser(username, "too-few-followers").catch(() => {});
                     await android.pressBack(serial);
                     await sleepOrAbort(serial, 500);
@@ -5445,7 +5445,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewExploreSavePercentMin, viewExploreSavePercentMax,
         followEnabled, followUsersMin, followUsersMax, followSources,
         followFiltersEnabled, followFilterVerifiedUsers, followFilterMaxFollowers25k,
-        followFilterPrivateUsers, followFilterEnglishSpeaking, followFilterMinFollowers250,
+        followFilterPrivateUsers, followFilterEnglishSpeaking, followFilterMinFollowers50,
         injectBrowsingEnabled,
         injectBrowsingActivatePctMin, injectBrowsingActivatePctMax,
         injectBrowsingBeforeFollowPctMin, injectBrowsingBeforeFollowPctMax,
@@ -5899,7 +5899,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                       skipVerified:  followFilterVerifiedUsers,
                       maxFollowers:  followFilterMaxFollowers25k ? 25_000 : undefined,
                       skipPrivate:   followFilterPrivateUsers,
-                      minFollowers:  followFilterMinFollowers250 ? 250 : undefined,
+                      minFollowers:  followFilterMinFollowers50 ? 50 : undefined,
                       requireEnglish: followFilterEnglishSpeaking,
                     }
                   : undefined,
