@@ -6,11 +6,53 @@ All notable changes to Aura Farming are documented here.
 
 ## [1.2.93] — 2026-07-22
 
-**Fix: HST run-loop permanently dead after phone oscillation (one-way latch)**
+### Fix — HST run-loop permanently dead on 2-phone farm (hydrated one-way latch)
 
-Root cause (confirmed across four test runs): `hydrated` was used as a bidirectional gate — set to `false` on every `connectedKey` increment, then back to `true` after fetch. On a 2-phone farm the USB enumeration returns phones in alternating order every 2 s. Each swap incremented `connectedKey`, which set `hydrated=false` (a run-loop dep), which fired CLEANUP, which reset the random timer. Three rapid oscillations could cancel the in-flight fetch (via `active=false`) before `setHydrated(true)` ran — leaving `hydrated` permanently stuck at `false` and the run-loop silently dead forever.
+**The symptom:** On any farm with two phones connected, automation would appear to start (slots logged "effect started, timer set for X min") then CLEANUP 2 seconds later, repeat once more for the second phone, then go completely silent. No timers ever fired. Slot toggles showed as on, no errors in the UI, but nothing was running.
 
-Fix: make `hydrated` a one-way latch. It starts `false`, goes `true` after the first successful settings load, and is never reset. The run-loop already re-runs on `connectedKey` changes (it's in the run-loop dep array directly), so `hydrated` does not need to flip back to gate subsequent reconnects. Its only job is to block the very first run before initial settings are fetched.
+**Server log pattern confirming the bug (from v1.2.92 run at 13:58):**
+```
+13:58:56  [HST-DBG] slot0 — effect started, timer set for 32.8min  (phone: e38a197f3d22)
+13:58:56  [HST-DBG] slot2 — effect started, timer set for 63.6min
+13:58:56  [HST-DBG] slot3 — effect started, timer set for 2.6min
+13:58:56  [HST-DBG] slot4 — effect started, timer set for 60.4min
+13:58:58  [HST-DBG] slot0 — CLEANUP   ← 2 seconds later, all dead
+13:58:58  [HST-DBG] slot2 — CLEANUP
+13:58:58  [HST-DBG] slot3 — CLEANUP
+13:58:58  [HST-DBG] slot4 — CLEANUP
+13:58:59  [HST-DBG] slot0 — effect started, timer set for 71.4min  (phone: 863d0058)
+13:58:59  [HST-DBG] slot1 — effect started, timer set for 55.1min
+13:59:01  [HST-DBG] slot0 — CLEANUP   ← 2 seconds later, dead again
+13:59:01  [HST-DBG] slot1 — CLEANUP
+(no further HST-DBG logs for the rest of the session — permanently silent)
+```
+
+**Root cause — the `hydrated` feedback loop:**
+
+Windows USB enumeration on a 2-phone farm returns the phones in alternating order every 2–4 seconds (`[serialA, serialB]` → `[serialB, serialA]` → repeat). Each list reorder contained a brief null gap, which the serial-watcher interpreted as a new device → `connectedKey++`. Every `connectedKey` increment triggered the settings-load effect, which called `setHydrated(false)`. Since `hydrated` was in the run-loop dep array, `setHydrated(false)` caused run-loop CLEANUP → new random timer → new oscillation could cancel the in-flight fetch (`active = false`) before `setHydrated(true)` executed → `hydrated` permanently stuck at `false` → run-loop re-fired but exited immediately on `if (!hydrated)` → completely silent forever.
+
+**History of fixes attempted before v1.2.93:**
+
+- **v1.2.89** — targeted null-flicker (phone → null → phone). Did not help; the 2-phone pattern was a direct serial swap, not a null flicker.
+- **v1.2.91** — changed settings-load dep from `[phone?.serial, slotIdx, refreshKey]` to `[connectedKey, slotIdx, refreshKey]`. Rationale: `connectedKey` only increments on genuine new-device connects (null→newSerial), not on list reorders (serialA→serialB). Did not help — the oscillation still produced rapid `connectedKey` increments because each phone had a null gap between appearances.
+- **v1.2.92** — moved `if (!phone) { return; }` null guard to before `setHydrated(false)`, so a null-phone effect run would not reset `hydrated`. Did not help — the null-phone guard only protected one specific race. `setHydrated(false)` still fired on every non-null `connectedKey` increment, which was enough to keep the feedback loop alive and eventually land in a state where `hydrated` was permanently false.
+
+**The fix (v1.2.93) — make `hydrated` a one-way latch:**
+
+Removed `setHydrated(false)` and `hydratedRef.current = false` from the settings-load effect entirely. `hydrated` now starts `false`, goes `true` after the first successful settings fetch, and **never resets**. With no `setHydrated(false)` call, there is no dep change to trigger run-loop CLEANUP. The run-loop already restarts on `connectedKey` changes (it is in its own dep array directly) — it does not need `hydrated` to flip back to gate subsequent reconnects. `hydrated`'s only job is to block the very first run until initial settings are loaded.
+
+```ts
+// Before (every version up to v1.2.92):
+if (!phone) { return; }
+hydratedRef.current = false;
+setHydrated(false);        // ← caused the dep-array feedback loop
+
+// After (v1.2.93):
+if (!phone) { return; }
+// hydrated is NOT reset — one-way latch, stays true after first load
+```
+
+**File changed:** `artifacts/dannys-bot/src/pages/MobilePage.tsx` (settings-load effect, ~line 2719)
 
 ## [1.2.92] — 2026-07-22
 
