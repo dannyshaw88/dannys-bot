@@ -4,6 +4,14 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.85] — 2026-07-22
+
+### UI — Statistics page: Slot labels now render in blue
+
+The **Slot 1 / Slot 2 / …** label shown beside each account row in the **Statistics → Tool Performance** table is now rendered in blue (`text-blue-500`) instead of the previous muted-grey, making it easier to visually separate the slot identifier from the account username next to it.
+
+---
+
 ## [1.2.84] — 2026-07-22
 
 ### Fix — Statistics page Manage Columns: narrowing a column no longer causes others to expand

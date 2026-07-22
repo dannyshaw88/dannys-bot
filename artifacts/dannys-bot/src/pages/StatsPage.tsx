@@ -296,7 +296,7 @@ function PhoneFarmPhoneSection({
         sortedSlots.map(slot => (
           <tr key={slot.idx} className="border-b border-border/50 hover:bg-muted/10 transition-colors">
             <td className="py-2.5 px-4 text-[12px]">
-              <span className="text-muted-foreground text-[10px] mr-1.5">Slot {slot.idx + 1}</span>
+              <span className="text-blue-500 text-[10px] mr-1.5">Slot {slot.idx + 1}</span>
               <span className="font-medium text-foreground">@{slot.username}</span>
             </td>
             {orderedLabels.map(s => {
