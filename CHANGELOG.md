@@ -4,6 +4,62 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.80] — 2026-07-22
+
+### Fix — Human Session Tool timers reset every ~17 seconds due to USB phone list reordering
+
+**Root cause (confirmed from diagnostic log):**
+
+The scheduling effect inside `useAutomationSettings` had `phone?.serial` in its React
+dependency array. The `AccountSettingsPanel` always receives `slots[0]` — the first phone
+returned by the `/mobile/usb-phones` poll (every 2 seconds). During an automation cycle, the
+phone's USB connection changes state (airplane-mode toggle, IG close, screen lock). ADB
+re-enumerates the USB bus and occasionally returns the two connected phones in the opposite
+order. This made `slots[0]` flip from phone A (`e38a...`) to phone B (`863d...`) and back,
+every 17–30 seconds.
+
+Every time `phone?.serial` changed, React tore down the scheduling effect and rebuilt it with
+a fresh random timer (25–99 min). Because the oscillation repeated every 17 seconds, a 25–99
+minute timer could **mathematically never fire**. This is why the countdown reset indefinitely
+without the cycle running. (Slot 2, which had a 2–3 min interval, happened to fire before the
+first reorder at +2.7 min — which is why it appeared to "work" while the others never ran.)
+
+**Evidence from the log (v1.2.79 HST-DBG output):**
+
+```
+07:20:20  slot3 — effect started, timer set for 45.4min   ← timer begins
+07:23:33  slot3 — CLEANUP (serial=e38a..., enabled=true)  ← USB reorder #1, timer cancelled
+07:23:42  slot3 — effect started, timer set for 27.6min   ← new random delay
+07:24:00  slot3 — CLEANUP (serial=863d..., enabled=true)  ← USB reorder #2, cancelled again
+07:24:09  slot3 — CLEANUP (...)                           ← reorder #3
+07:24:12  slot3 — effect started, timer set for 79.6min   ← yet another new delay
+07:25:06  slot3 — CLEANUP (...)                           ← reorder #4
+07:25:12  slot3 — effect started, timer set for 27.9min   ← reset again
+07:25:22  slot3 — CLEANUP (...)                           ← reorder #5  [log ends]
+```
+
+Five complete resets in 5 minutes. The cycle never got within 25 minutes of firing.
+
+**The fix — USB-reorder guard (`connectedKey`):**
+
+A new `prevSerialRef` + `connectedKey` state value is added to `useAutomationSettings`. A
+dedicated serial-watcher effect classifies every `phone?.serial` change into one of three
+cases and acts accordingly:
+
+| Change | Meaning | Action |
+|--------|---------|--------|
+| `null → serial` | Phone connected / first mount | Increment `connectedKey` → scheduling effect starts fresh |
+| `serial → null` | Phone genuinely disconnected | `setRunning(false)` immediately |
+| `serialA → serialB` | USB list reorder (both still connected) | **Do nothing** — existing timer keeps running |
+
+The scheduling effect's dependency array changes from `[phone?.serial, settings.enabled,
+rescheduleKey]` to `[connectedKey, settings.enabled, rescheduleKey]`. `connectedKey` only
+increments on genuine connect events — not on reorders — so the timer is immune to USB list
+oscillations. A 45-minute timer set at startup now stays set for 45 minutes regardless of
+how many times ADB reorders the phone list in between.
+
+---
+
 ## [1.2.79] — 2026-07-21
 
 ### Diagnostic — Human Session Tool: scheduling events now appear in equinox-debug.log

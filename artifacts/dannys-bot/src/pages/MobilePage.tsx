@@ -2632,6 +2632,22 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // running cycle from being killed just because the user switched tabs.
   const explicitToggleOffRef = useRef(false);
 
+  // ── USB-reorder guard ────────────────────────────────────────────────────
+  // The scheduling effect must NOT restart when the /usb-phones poll returns
+  // phones in a different order (which happens every ~2 s, especially during
+  // airplane-mode recycling).  If we used `phone?.serial` directly in the
+  // effect dep array, every reorder would cancel the pending 25-99 min timer
+  // and reset it — so it could never fire.
+  //
+  // Solution: track connect vs. reorder separately.
+  //   • null → serial  : genuine connect  → increment connectedKey so the
+  //                       scheduling effect starts fresh for the new phone.
+  //   • serial → null  : genuine disconnect → setRunning(false) immediately.
+  //   • serialA → serialB : USB list reorder → do nothing; let the existing
+  //                          timer keep running for the phone it was set up for.
+  const prevSerialRef  = useRef<string | null>(phone?.serial ?? null);
+  const [connectedKey, setConnectedKey] = useState(0);
+
   const setEnabledByUser = useCallback((enabled: boolean) => {
     if (enabled) {
       manualToggleOnRef.current = true;
@@ -2701,6 +2717,23 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     poll();
     return () => { active = false; setServerCycleRunning(false); };
   }, [phone?.serial, slotIdx, settings.enabled]);
+
+  // Serial-watcher: translates raw phone?.serial changes into the three
+  // meaningful cases above so the scheduling effect can ignore reorders.
+  useEffect(() => {
+    const prev = prevSerialRef.current;
+    const curr = phone?.serial ?? null;
+    if (curr === prev) return;
+    prevSerialRef.current = curr;
+    if (!curr) {
+      // Phone disconnected — stop scheduling immediately.
+      setRunning(false);
+    } else if (!prev) {
+      // Phone connected after being absent — let scheduling start fresh.
+      setConnectedKey(k => k + 1);
+    }
+    // else: serialA → serialB (USB list reorder) — do nothing.
+  }, [phone?.serial]);
 
   // Save on the fly: every settings change (including the master toggle)
   // is persisted automatically, debounced so rapid typing doesn't fire a
@@ -3047,7 +3080,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phone?.serial, settings.enabled, rescheduleKey]);
+  }, [connectedKey, settings.enabled, rescheduleKey]);
 
   // Clamp: if cycleIntervalMax was reduced mid-wait (or was stale at startup),
   // the existing setTimeout will fire too late. Detect this every time the
