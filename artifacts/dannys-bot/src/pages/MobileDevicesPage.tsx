@@ -754,7 +754,6 @@ function DeviceCard({
   phone,
   online,
   active,
-  isStreaming,
   onClick,
   onRemove,
   custom,
@@ -764,7 +763,6 @@ function DeviceCard({
   phone?:      UsbPhone;
   online:      boolean;
   active:      boolean;
-  isStreaming: boolean;
   onClick:     () => void;
   onRemove:    () => void;
   custom:      SlotCustomization;
@@ -773,16 +771,16 @@ function DeviceCard({
   const [panelOpen, setPanelOpen] = useState(false);
 
   // ── Live mirror thumbnail ─────────────────────────────────────────────────
-  // When the phone mirror is open (isStreaming), poll the screencap.png
-  // endpoint every 1.5 s and show the result inside the phone shell SVG.
+  // When the phone is online, poll screencap.png every 1.5 s and show the
+  // live screen inside the phone shell SVG, replacing the static wallpaper.
   const [mirrorTs, setMirrorTs] = useState<number | null>(null);
   const mirrorSerial = phone?.serial;
   useEffect(() => {
-    if (!isStreaming || !mirrorSerial) { setMirrorTs(null); return; }
+    if (!online || !mirrorSerial) { setMirrorTs(null); return; }
     setMirrorTs(Date.now());
     const id = setInterval(() => setMirrorTs(Date.now()), 1_500);
     return () => clearInterval(id);
-  }, [isStreaming, mirrorSerial]);
+  }, [online, mirrorSerial]);
   const mirrorUrl = mirrorTs && mirrorSerial
     ? `/api/mobile/devices/${encodeURIComponent(mirrorSerial)}/screencap.png?t=${mirrorTs}`
     : null;
@@ -907,9 +905,6 @@ export function MobileDevicesPage() {
   // Serials with an active automation cycle — polled every 2 s.
   const [activeCycleSerials, setActiveCycleSerials] = useState<Set<string>>(new Set());
 
-  // Serials with an active phone mirror (video WS) — polled every 2 s.
-  const [streamingSerials, setStreamingSerials] = useState<Set<string>>(new Set());
-
   const refreshDevices = useCallback(async () => {
     try {
       const d = await fetchFarmDevices();
@@ -933,26 +928,14 @@ export function MobileDevicesPage() {
     } catch { /* ignore — API server may be starting up */ }
   }, []);
 
-  const refreshStreamActive = useCallback(async () => {
-    try {
-      const r = await fetch("/api/mobile/stream-active");
-      if (r.ok) {
-        const d = await r.json();
-        setStreamingSerials(new Set(d.serials as string[]));
-      }
-    } catch { /* ignore */ }
-  }, []);
-
   useEffect(() => {
     refreshDevices();
     refreshUsb();
     refreshCycleActive();
-    refreshStreamActive();
-    const usbId      = setInterval(refreshUsb,          2_000);
-    const cycleId    = setInterval(refreshCycleActive,  2_000);
-    const streamId   = setInterval(refreshStreamActive, 2_000);
-    return () => { clearInterval(usbId); clearInterval(cycleId); clearInterval(streamId); };
-  }, [refreshDevices, refreshUsb, refreshCycleActive, refreshStreamActive]);
+    const usbId   = setInterval(refreshUsb,         2_000);
+    const cycleId = setInterval(refreshCycleActive, 2_000);
+    return () => { clearInterval(usbId); clearInterval(cycleId); };
+  }, [refreshDevices, refreshUsb, refreshCycleActive]);
 
   const onlineSerials = new Set(
     usbPhones.filter(p => p.state === "device").map(p => p.serial)
@@ -1031,7 +1014,6 @@ export function MobileDevicesPage() {
                       phone={livePhone}
                       online={onlineSerials.has(device.serial)}
                       active={activeCycleSerials.has(device.serial) && onlineSerials.has(device.serial)}
-                      isStreaming={streamingSerials.has(device.serial)}
                       onClick={() => setLocation(`/mobile/farm/${encodeURIComponent(device.serial)}`)}
                       onRemove={() => handleRemove(device.slotIndex)}
                       custom={slotCustom[device.slotIndex] ?? DEFAULT_SLOT_CUSTOM}
