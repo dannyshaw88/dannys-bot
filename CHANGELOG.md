@@ -4,6 +4,30 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.87] — 2026-07-22
+
+### Fix — Human Session Tool timer reset on every USB poll cycle, preventing it from ever firing
+
+The **Human Session Tool** timer (the "Run every X–Y minutes" scheduling loop on the Phone Farm page) was being destroyed approximately every 9–12 seconds and immediately restarted with a brand-new random delay, so it could never actually count down and fire.
+
+**Root cause:** The automation settings load effect contained the line `if (!phone) { setSettings(AUTOMATION_DEFAULTS); return; }`. Windows enumerates USB devices every 9–12 seconds; during each enumeration the connected phone briefly disappears from the USB device list (the `phone` prop goes `null` for one React render cycle). When `phone` became `null`:
+
+1. `setSettings(AUTOMATION_DEFAULTS)` was called, resetting `enabled` from `true` to `false`.
+2. `settings.enabled` is in the run-loop effect's dependency array (`[connectedKey, settings.enabled, rescheduleKey]`).
+3. React detected `enabled` changed (`true → false`) and ran the effect's cleanup function — cancelling the pending `setTimeout` and discarding the scheduled next-run timestamp.
+4. An instant later the phone reappeared, `enabled` was reloaded as `true` from the server, and the run-loop restarted — with a fresh random delay from scratch.
+
+This repeated on every USB poll cycle. A 47-minute timer set at startup would be torn down after 11 seconds, reset to 71 minutes, torn down again 11 seconds later, and so on indefinitely. The timer never reached zero, so the Human Session Tool never executed.
+
+The previous `connectedKey` fix (v1.2.78) correctly handled USB *list reorders* (SerialA → SerialB while both devices stay connected) but did **not** guard against the phone briefly going `null` — a distinct code path that hit the `setSettings(AUTOMATION_DEFAULTS)` branch directly.
+
+**The fix:** removed the `setSettings(AUTOMATION_DEFAULTS)` call from the `!phone` early-return branch of the load effect (`MobilePage.tsx`). When `phone` is momentarily `null` the effect now simply returns early without touching the settings state, so `settings.enabled` stays `true` and the run-loop dependency array does not change — the pending timer survives the USB flicker untouched.
+
+- When the phone comes back, the serial-watcher effect increments `connectedKey` (null → serial transition), causing the run-loop to cleanly restart with a single fresh random delay within the configured interval, and the load effect re-fetches the authoritative settings from the server.
+- If no phone was ever connected (fresh slot mount), `settings` starts at `AUTOMATION_DEFAULTS` (the `useState` initial value), so `enabled` is correctly `false` by default — behaviour unchanged for the never-connected case.
+
+---
+
 ## [1.2.86] — 2026-07-22
 
 ### UI — Startup event wording changed from "Started" to "Booted Up"

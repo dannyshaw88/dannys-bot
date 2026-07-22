@@ -2675,7 +2675,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
 
   useEffect(() => {
     hydratedRef.current = false;
-    if (!phone) { setSettings(AUTOMATION_DEFAULTS); return; }
+    if (!phone) { return; }
     let active = true;
     setLoading(true);
     const settingsUrl = slotIdx !== undefined
