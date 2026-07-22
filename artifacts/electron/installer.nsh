@@ -24,7 +24,15 @@
   ; This preserves the user's desktop icon position across updates.
   IfFileExists "$DESKTOP\Aura Farming.lnk" desktop_shortcut_done desktop_shortcut_create
   desktop_shortcut_create:
-    CreateShortcut "$DESKTOP\Aura Farming.lnk" "$INSTDIR\Aura Farming.exe" "" "$INSTDIR\resources\icon.ico" 0
+    ; Use the exe's own embedded icon rather than a separate .ico file.
+    ; The .ico file is written to disk after this shortcut is created, which
+    ; causes Windows to cache a blank icon on first install (the "blank white
+    ; desktop icon" bug). The exe already has the icon embedded by electron-
+    ; builder, so it is always present and the cache is always populated correctly.
+    CreateShortcut "$DESKTOP\Aura Farming.lnk" "$INSTDIR\Aura Farming.exe" "" "$INSTDIR\Aura Farming.exe" 0
+    ; Force Windows to refresh its icon cache so the desktop icon appears
+    ; immediately without requiring the user to move the shortcut or log out.
+    System::Call 'Shell32::SHChangeNotify(l 0x8000000, l 0, i 0, i 0)'
   desktop_shortcut_done:
   ; Clear the update-in-progress flag now that install is complete.
   DeleteRegValue HKCU "Software\AuraFarming" "UpdatingNow"

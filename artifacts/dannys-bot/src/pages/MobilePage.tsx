@@ -3241,17 +3241,27 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   //   1. Max was reduced  — remaining > new max  → timer would fire too late.
   //   2. Min was increased — remaining < new min  → timer would fire too early.
   //
-  // rescheduleFnRef is populated by the run-loop effect. Calling it clears the
-  // old module-level timer and starts a fresh one — no React state update needed.
+  // IMPORTANT: debounced 800 ms.  Without the debounce the clamp fires on
+  // every single keystroke while the user is editing the "Run every" fields.
+  // Mid-type intermediate values (e.g. clearing "99" before typing "50" leaves
+  // cycleIntervalMax = 1 for one render) can satisfy the "remaining > max"
+  // condition and reschedule the timer to fire in ≈ 1 minute instead of the
+  // intended 25-99 min window — causing the cycle to run immediately and
+  // setNextRunAt(null), which blanks every timestamp display for that slot.
+  // The debounce ensures the clamp only evaluates after the user has finished
+  // editing (i.e. the value has settled), not on transient intermediate states.
   useEffect(() => {
-    if (!settings.enabled || running || !nextRunAtRef.current) return;
-    const safeMin = Math.max(1, Math.min(settings.cycleIntervalMin, settings.cycleIntervalMax));
-    const safeMax = Math.max(1, Math.max(settings.cycleIntervalMin, settings.cycleIntervalMax));
-    const remainingMs = nextRunAtRef.current - Date.now();
-    if (remainingMs > safeMax * 60_000 || remainingMs < safeMin * 60_000) {
-      const newDelay = (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
-      rescheduleFnRef.current?.(newDelay);
-    }
+    const t = setTimeout(() => {
+      if (!settings.enabled || running || !nextRunAtRef.current) return;
+      const safeMin = Math.max(1, Math.min(settings.cycleIntervalMin, settings.cycleIntervalMax));
+      const safeMax = Math.max(1, Math.max(settings.cycleIntervalMin, settings.cycleIntervalMax));
+      const remainingMs = nextRunAtRef.current - Date.now();
+      if (remainingMs > safeMax * 60_000 || remainingMs < safeMin * 60_000) {
+        const newDelay = (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
+        rescheduleFnRef.current?.(newDelay);
+      }
+    }, 800);
+    return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.cycleIntervalMin, settings.cycleIntervalMax]);
 

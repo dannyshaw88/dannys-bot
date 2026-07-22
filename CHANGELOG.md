@@ -4,6 +4,24 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.100] — 2026-07-22
+
+### Fix — Editing "Run every" fields blanks all timestamps; Windows desktop icon blank white
+
+**Bug 1 — All timestamps blank when editing "Run every X–Y minutes"**
+
+The clamp effect (which corrects the HST timer when the configured interval changes) fired on every single keystroke to the cycleIntervalMin / cycleIntervalMax input fields. The root cause: when the user clears a field to retype a number (e.g. deletes `99` before typing `50`), the intermediate empty-field state is converted to `Math.max(1, clamp4(NaN)) = 1`. With cycleIntervalMax temporarily at `1`, the clamp condition `remainingMs (80 min) > safeMax * 60_000 (1 min)` was immediately true. The clamp called `rescheduleFnRef.current?.(60_000)` — rescheduling the automation timer to fire in **60 seconds** instead of 25–99 minutes. That timer fired, `runCycle` started, `setNextRunAt(null)` ran (line: cycle started), and every timestamp display for that slot went blank. The slot would also immediately burn through an automation cycle that wasn't scheduled.
+
+**Fix:** Wrapped the clamp effect body in an 800 ms `setTimeout` debounce. The clamp logic only evaluates after the user has stopped typing for 800 ms — intermediate keystroke values never trigger a reschedule. The `clearTimeout` in the cleanup cancels any pending evaluation whenever a new keystroke arrives.
+
+**Bug 2 — Windows desktop icon shows as blank white square**
+
+The NSIS desktop shortcut (`installer.nsh`) was passing `"$INSTDIR\resources\icon.ico"` as the icon source. That `.ico` file is copied to disk by the installer's `extraResources` step, but that step runs **after** `customInstall` (which creates the shortcut). Windows immediately caches the shortcut's icon on creation — when the `.ico` file doesn't exist yet, it caches a blank white image. Moving the shortcut elsewhere forces a re-render from the now-present file, which is why the logo appeared anywhere other than the desktop.
+
+**Fix:** Changed the shortcut to use `"$INSTDIR\Aura Farming.exe"` as the icon source (index 0). The exe has the icon embedded directly by electron-builder (`"win": { "icon": ... }`) and is guaranteed to be present when the shortcut is created. Added a `SHChangeNotify` call after shortcut creation to force Windows to flush its icon cache immediately, so the correct icon appears on the desktop without requiring the user to move the shortcut or log out.
+
+---
+
 ## [1.2.99] — 2026-07-22
 
 ### Fix — HST run-loop permanently dead (architectural fix: module-level timer registry)
