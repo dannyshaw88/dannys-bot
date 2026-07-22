@@ -450,10 +450,11 @@ function PhoneFarmIcon({ className, style }: { className?: string; style?: React
 
 /** Generic phone silhouette — brand-neutral */
 function PhoneShell({
-  className, online, active, wallpaperUrl, texts, uid = 'default',
+  className, online, active, wallpaperUrl, texts, uid = 'default', mirrorUrl,
 }: {
   className?: string; online?: boolean; active?: boolean;
   wallpaperUrl?: string | null; texts?: TextLayer[]; uid?: string;
+  mirrorUrl?: string | null;
 }) {
   const glowId   = `glow-${uid}`;
   const sheenId  = `sheen-${uid}`;
@@ -517,6 +518,16 @@ function PhoneShell({
           >{layer.text}</text>
         );
       })}
+
+      {/* Live mirror thumbnail — replaces wallpaper when phone mirror is open */}
+      {mirrorUrl && (
+        <image
+          href={mirrorUrl}
+          x="12" y="14" width="196" height="412"
+          preserveAspectRatio="xMidYMid slice"
+          clipPath={`url(#${clipId})`}
+        />
+      )}
 
       {/* Sheen / glass reflection over wallpaper */}
       <rect x="12" y="14" width="196" height="120" rx="26" fill={`url(#${sheenId})`} opacity="0.05"/>
@@ -743,6 +754,7 @@ function DeviceCard({
   phone,
   online,
   active,
+  isStreaming,
   onClick,
   onRemove,
   custom,
@@ -752,12 +764,28 @@ function DeviceCard({
   phone?:      UsbPhone;
   online:      boolean;
   active:      boolean;
+  isStreaming: boolean;
   onClick:     () => void;
   onRemove:    () => void;
   custom:      SlotCustomization;
   onCustomize: (c: SlotCustomization) => void;
 }) {
   const [panelOpen, setPanelOpen] = useState(false);
+
+  // ── Live mirror thumbnail ─────────────────────────────────────────────────
+  // When the phone mirror is open (isStreaming), poll the screencap.png
+  // endpoint every 1.5 s and show the result inside the phone shell SVG.
+  const [mirrorTs, setMirrorTs] = useState<number | null>(null);
+  const mirrorSerial = phone?.serial;
+  useEffect(() => {
+    if (!isStreaming || !mirrorSerial) { setMirrorTs(null); return; }
+    setMirrorTs(Date.now());
+    const id = setInterval(() => setMirrorTs(Date.now()), 1_500);
+    return () => clearInterval(id);
+  }, [isStreaming, mirrorSerial]);
+  const mirrorUrl = mirrorTs && mirrorSerial
+    ? `/api/mobile/devices/${encodeURIComponent(mirrorSerial)}/screencap.png?t=${mirrorTs}`
+    : null;
 
   return (
     <div className="group h-full relative flex flex-col">
@@ -773,6 +801,7 @@ function DeviceCard({
           wallpaperUrl={custom.wallpaper ? `/wallpapers/${custom.wallpaper}` : null}
           texts={custom.texts}
           uid={String(device.slotIndex)}
+          mirrorUrl={mirrorUrl}
         />
 
         <div className="shrink-0 text-center space-y-0.5">
@@ -878,6 +907,9 @@ export function MobileDevicesPage() {
   // Serials with an active automation cycle — polled every 2 s.
   const [activeCycleSerials, setActiveCycleSerials] = useState<Set<string>>(new Set());
 
+  // Serials with an active phone mirror (video WS) — polled every 2 s.
+  const [streamingSerials, setStreamingSerials] = useState<Set<string>>(new Set());
+
   const refreshDevices = useCallback(async () => {
     try {
       const d = await fetchFarmDevices();
@@ -901,14 +933,26 @@ export function MobileDevicesPage() {
     } catch { /* ignore — API server may be starting up */ }
   }, []);
 
+  const refreshStreamActive = useCallback(async () => {
+    try {
+      const r = await fetch("/api/mobile/stream-active");
+      if (r.ok) {
+        const d = await r.json();
+        setStreamingSerials(new Set(d.serials as string[]));
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     refreshDevices();
     refreshUsb();
     refreshCycleActive();
-    const usbId   = setInterval(refreshUsb,         2_000);
-    const cycleId = setInterval(refreshCycleActive, 2_000);
-    return () => { clearInterval(usbId); clearInterval(cycleId); };
-  }, [refreshDevices, refreshUsb, refreshCycleActive]);
+    refreshStreamActive();
+    const usbId      = setInterval(refreshUsb,          2_000);
+    const cycleId    = setInterval(refreshCycleActive,  2_000);
+    const streamId   = setInterval(refreshStreamActive, 2_000);
+    return () => { clearInterval(usbId); clearInterval(cycleId); clearInterval(streamId); };
+  }, [refreshDevices, refreshUsb, refreshCycleActive, refreshStreamActive]);
 
   const onlineSerials = new Set(
     usbPhones.filter(p => p.state === "device").map(p => p.serial)
@@ -955,7 +999,7 @@ export function MobileDevicesPage() {
         {/* Header */}
         <div className="shrink-0 z-10 bg-background/95 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-center gap-3">
           <PhoneFarmIcon className="w-5 h-5" style={{ color: "#1AD2F2" }} />
-          <h1 className="text-lg font-bold text-foreground">Phone Farm</h1>
+          <h1 className="text-lg font-bold text-foreground">Phone Farm - Manage Your Devices</h1>
         </div>
 
         {loadingDb ? (
@@ -987,6 +1031,7 @@ export function MobileDevicesPage() {
                       phone={livePhone}
                       online={onlineSerials.has(device.serial)}
                       active={activeCycleSerials.has(device.serial) && onlineSerials.has(device.serial)}
+                      isStreaming={streamingSerials.has(device.serial)}
                       onClick={() => setLocation(`/mobile/farm/${encodeURIComponent(device.serial)}`)}
                       onRemove={() => handleRemove(device.slotIndex)}
                       custom={slotCustom[device.slotIndex] ?? DEFAULT_SLOT_CUSTOM}

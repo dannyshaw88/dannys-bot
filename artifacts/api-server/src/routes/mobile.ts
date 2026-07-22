@@ -6968,6 +6968,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch { res.status(500).end(); }
   });
 
+  // ── Active mirror streams ─────────────────────────────────────────────────
+  // Returns the set of device serials that currently have an active video
+  // WebSocket stream open (i.e. someone has the phone mirror tab open).
+  // The farm grid polls this every 2 s to show the live thumbnail overlay.
+  app.get("/api/mobile/stream-active", (_req: Request, res: Response) => {
+    res.json({ serials: [...videoSessionActive] });
+  });
+
   // Returns the set of device serials that currently have an automation cycle
   // running, plus the specific slot index that is active on each device.
   // The farm page polls this every 2 s to:
