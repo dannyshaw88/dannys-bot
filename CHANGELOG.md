@@ -4,6 +4,30 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.88] — 2026-07-22
+
+### Fix — Human Session Tool timer reset every 6–9 seconds by two separate USB-enumeration bugs
+
+The **Human Session Tool** timer was still being destroyed and restarted every 6–9 seconds, preventing it from ever firing. v1.2.87 fixed one of three root causes but two remained.
+
+**Bug 1 (v1.2.87 — resolved):** `setSettings(AUTOMATION_DEFAULTS)` when `phone` went null reset `settings.enabled → false`, which was in the run-loop dep array, killing the timer. Fixed: removed the reset from the null early-return path.
+
+**Bug 2 (this release) — PhoneSlot unmount/remount on USB flicker:**
+The `<PhoneSlot key={phone?.serial ?? 'empty-N'}>` key at the render site meant that every time the USB phone list briefly stopped seeing the device during Windows USB enumeration (phone → null → phone), React interpreted the `key` change (`serial → "empty-0" → serial`) as a completely different component. React **unmounted** the old PhoneSlot and **mounted** a brand-new one. This destroyed all component state — including `connectedKey`, the pending `setTimeout`, and `nextRunAt` — regardless of what the settings contained. Every USB poll cycle caused a full state wipe and timer restart. The previous two fixes (`connectedKey`, `setSettings` guard) operated on state *inside* the component and were simply never reached because the component was being discarded before they could take effect.
+
+**Fix:** changed `key={phone?.serial ?? 'empty-${i}'}` to `key={i}`. React now reuses the same PhoneSlot instance across phone changes, and the existing internal serial-watcher handles connect/disconnect/reorder correctly.
+
+**Bug 3 (this release) — same-device reconnect incremented `connectedKey`:**
+Even with a stable `key`, when the phone came back after a brief null gap, the serial-watcher saw `null → serialA` and entered the `else if (!prev)` branch, which unconditionally called `setConnectedKey(k => k + 1)`. Incrementing `connectedKey` triggers the run-loop cleanup → cancels the timer → starts fresh with a new random delay. So even though the component survived (Bug 2 fixed), the timer was still reset on every reconnect.
+
+**Fix:** added `prevNonNullSerialRef` — a ref that tracks the last non-null serial seen. When the phone reappears after a null gap, the serial-watcher now compares the incoming serial against `prevNonNullSerialRef`:
+- **Same serial** (USB flicker / brief disconnect): do **not** increment `connectedKey` — the existing timer keeps counting down.
+- **Different serial** (a genuinely new device at this slot): increment `connectedKey` as before — scheduling restarts fresh for the new phone.
+
+**Net result of all three fixes combined:** the pending `setTimeout` now survives USB enumeration cycles intact. A 47-minute timer set at startup continues counting toward zero instead of being reset to a new random value every few seconds.
+
+---
+
 ## [1.2.87] — 2026-07-22
 
 ### Fix — Human Session Tool timer reset on every USB poll cycle, preventing it from ever firing

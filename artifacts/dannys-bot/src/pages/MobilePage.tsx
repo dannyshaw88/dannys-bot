@@ -2661,7 +2661,11 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   //   • serial → null  : genuine disconnect → setRunning(false) immediately.
   //   • serialA → serialB : USB list reorder → do nothing; let the existing
   //                          timer keep running for the phone it was set up for.
-  const prevSerialRef  = useRef<string | null>(phone?.serial ?? null);
+  const prevSerialRef        = useRef<string | null>(phone?.serial ?? null);
+  // Tracks the last NON-NULL serial seen — used to distinguish a same-device
+  // reconnect (null → serialA after serialA was last seen) from a genuinely
+  // new device appearing (null → serialB after serialA was last seen).
+  const prevNonNullSerialRef = useRef<string | null>(phone?.serial ?? null);
   const [connectedKey, setConnectedKey] = useState(0);
 
   const setEnabledByUser = useCallback((enabled: boolean) => {
@@ -2734,7 +2738,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     return () => { active = false; setServerCycleRunning(false); };
   }, [phone?.serial, slotIdx, settings.enabled]);
 
-  // Serial-watcher: translates raw phone?.serial changes into the three
+  // Serial-watcher: translates raw phone?.serial changes into the four
   // meaningful cases above so the scheduling effect can ignore reorders.
   useEffect(() => {
     const prev = prevSerialRef.current;
@@ -2745,10 +2749,19 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       // Phone disconnected — stop scheduling immediately.
       setRunning(false);
     } else if (!prev) {
-      // Phone connected after being absent — let scheduling start fresh.
-      setConnectedKey(k => k + 1);
+      // Phone appeared after a null gap.
+      // Only restart the scheduling loop if it's a DIFFERENT device than the
+      // one that was connected before the null gap — i.e. a genuine new phone,
+      // not the same phone briefly dropping off the USB list (flicker).
+      if (curr !== prevNonNullSerialRef.current) {
+        setConnectedKey(k => k + 1);
+      }
+      // Always update so the next gap comparison is against the current serial.
+      prevNonNullSerialRef.current = curr;
+    } else {
+      // serialA → serialB (USB list reorder) — do nothing; update prevNonNull.
+      prevNonNullSerialRef.current = curr;
     }
-    // else: serialA → serialB (USB list reorder) — do nothing.
   }, [phone?.serial]);
 
   // Save on the fly: every settings change (including the master toggle)
@@ -7236,7 +7249,7 @@ export function MobilePage() {
                   canvas to pillarbox/letterbox — the "dead space" bug). */}
               {slots.map((phone, i) => (
                 <PhoneSlot
-                  key={phone?.serial ?? `empty-${i}`}
+                  key={i}
                   phone={phone}
                   idx={i}
                   onLog={addLog}
