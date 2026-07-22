@@ -4,6 +4,46 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.104
+
+### Fix — Clicking a device no longer wakes the phone screen
+
+**Root cause:** The mirror had three conditions that could force `live = true`:
+
+1. `liveOn[serial]` — manual Power button click  
+2. `hstEnabled` — derived from slot automation state  
+3. `anyCycleRunning` — polling `/api/mobile/cycle-active` every 2 seconds
+
+`hstEnabled` was being set from `s.running || s.nextRunAt !== null`. The `nextRunAt`
+field is non-null as soon as a next-run timer is queued — even before the cycle
+actually starts executing. This meant the mirror (and therefore scrcpy on the phone,
+which lights the screen) would activate the moment a schedule was set, not when
+the cycle actually began. Additionally, `anyCycleRunning` was a parallel pathway
+that could independently activate the mirror regardless of per-slot state.
+
+**Fix:** The mirror now has exactly two on-conditions, with zero exceptions:
+
+1. **Manual Power button** (`liveOn[serial]`) — user explicitly pressed Power.
+2. **HST cycle actively executing** (`hstEnabled` via `s.running` only).
+
+Changes made:
+- `AccountSettingsPanel` — `anyEnabled` condition reduced to `s.running` only.
+  `s.nextRunAt !== null` and `s.enabled` are both excluded — a scheduled-but-not-
+  started run must not wake the mirror.
+- `MobilePage` — `anyCycleRunning` state and its 2-second polling `useEffect`
+  removed entirely. The `live` gate simplified to
+  `liveOn[phone.serial] || hstEnabled` with no other terms.
+
+**Behaviour after fix:**
+- Clicking a device in the Phone Farm → no screen wake, no mirror.
+- HST cycle starts executing → mirror connects automatically.
+- HST cycle finishes → mirror disconnects, wallpaper/text returns.
+- Power button clicked → mirror connects as manual override.
+
+**Files changed:** `artifacts/dannys-bot/src/pages/MobilePage.tsx`
+
+---
+
 ## v1.2.103
 
 ### Fix — Farm page SVG mirror blank screen and premature mirror activation

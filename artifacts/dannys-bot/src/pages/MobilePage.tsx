@@ -5745,14 +5745,12 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   const onAnyEnabledRef = useRef(onAnyEnabled);
   onAnyEnabledRef.current = onAnyEnabled;
   useEffect(() => {
-    // Use running || nextRunAt to mean "actively scheduled or executing" —
-    // NOT s.enabled, which is true the moment saved settings are loaded from
-    // disk (toggle previously saved on), which would fire hstEnabled=true
-    // immediately on mount and keep live=true even when nothing is running,
-    // leaving the canvas blank (no frames) and hiding the wallpaper/text.
-    const anyEnabled = Object.values(slotAutomationStates).some(
-      s => s.running || s.nextRunAt !== null
-    );
+    // ONLY true while a cycle is actively executing (s.running).
+    // s.nextRunAt and s.enabled are intentionally excluded — a scheduled-but-
+    // not-yet-started run or a saved-on toggle must NOT wake the mirror.
+    // The mirror has exactly two on-conditions: HST actively running, or the
+    // manual Power button. Nothing else.
+    const anyEnabled = Object.values(slotAutomationStates).some(s => s.running);
     onAnyEnabledRef.current?.(anyEnabled);
   }, [slotAutomationStates]);
 
@@ -7324,34 +7322,12 @@ export function MobilePage() {
     }
   }, [_ctxAddLog]);
 
-  // True when any account slot's HST toggle is on — bubbled up from
-  // AccountSettingsPanel via onAnyEnabled. Keeps live=true between cycles
-  // so the mirror stays connected during idle waits, and drops live=false
-  // (wallpaper returns) the moment all toggles are turned off.
+  // True only while a slot's HST cycle is actively executing — bubbled up from
+  // AccountSettingsPanel via onAnyEnabled (which checks s.running only).
+  // Drops to false the moment all cycles stop → wallpaper/text returns.
+  // This is one of exactly two conditions that turn the mirror on; the other
+  // is the manual Power button (liveOn). Nothing else may activate the mirror.
   const [hstEnabled, setHstEnabled] = useState(false);
-
-  // Poll /api/mobile/cycle-active every 2 s so the mirror auto-connects
-  // whenever any slot's automation is running, without needing a device-level
-  // useAutomationSettings hook here. Per-slot hooks live inside each slot's
-  // SlotHumanSessionView (always mounted in AccountSettingsPanel).
-  const [anyCycleRunning, setAnyCycleRunning] = useState(false);
-  useEffect(() => {
-    const serial = activeSerial;
-    if (!serial) { setAnyCycleRunning(false); return; }
-    let active = true;
-    const poll = async () => {
-      if (!active) return;
-      try {
-        const r = await fetch('/api/mobile/cycle-active');
-        const b: { serials: string[] } = await r.json().catch(() => ({ serials: [] }));
-        if (!active) return;
-        setAnyCycleRunning(b.serials.includes(serial));
-      } catch { /* ignore */ }
-      if (active) setTimeout(poll, 2_000);
-    };
-    poll();
-    return () => { active = false; setAnyCycleRunning(false); };
-  }, [activeSerial]);
 
   // Drop any previously-learned aspect ratio when the connected device
   // changes (or disconnects) — otherwise a stale ratio from the last phone
@@ -7485,15 +7461,10 @@ export function MobilePage() {
                   onDimensions={(w, h) => setPhoneDims({ w, h })}
                   phoneDims={phoneDims}
                   paneSize={paneSize}
-                  // Mirror is live when:
-                  //   • user clicked Power (liveOn) — manual override
-                  //   • any account slot's HST toggle is on (hstEnabled)
-                  //     keeps the mirror connected between cycles so it
-                  //     never goes blank mid-session; reverts to wallpaper
-                  //     automatically when all toggles are turned off
-                  //   • a server-side cycle is executing (anyCycleRunning)
-                  //     as a belt-and-suspenders fallback
-                  live={!!(phone && (liveOn[phone.serial] || hstEnabled || anyCycleRunning))}
+                  // Mirror activates under exactly two conditions — nothing else:
+                  //   • user clicked the Power button (liveOn) — manual override
+                  //   • a HST cycle is actively executing right now (hstEnabled)
+                  live={!!(phone && (liveOn[phone.serial] || hstEnabled))}
                   onPower={() => { if (phone) setLiveOn(s => ({ ...s, [phone.serial]: true })); }}
                   ref={phone?.serial === activeSerial ? activeSlotRef : undefined}
                   inspectMode={inspectMode}
