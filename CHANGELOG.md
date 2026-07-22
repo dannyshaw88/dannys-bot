@@ -4,6 +4,16 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.101
+
+**Fix — Timestamps blank after switching phones**
+
+When switching between phones, the `SlotHumanSessionView` components unmount and remount. The module-level `_hstTimers` map kept the timer running, but its callbacks pointed at the dead component's state setters — so `nextRunAt` never got written on the new instance, leaving every timestamp blank. The bail-out guard (`if (_hstTimers.has(key)) return`) made this permanent.
+
+Fix: added a module-level `_hstNextRunAt` map that mirrors every `setNextRunAt` call. On remount (detected by `rescheduleFnRef.current === null`), the stale timer is cancelled, `nextRunAt` is restored from `_hstNextRunAt`, and the timer is rescheduled with the remaining time under fresh closures. Spurious same-instance re-runs (USB poll oscillations) still bail out immediately as before.
+
+---
+
 ## [1.2.100] — 2026-07-22
 
 ### Fix — Editing "Run every" fields blanks all timestamps; Windows desktop icon blank white

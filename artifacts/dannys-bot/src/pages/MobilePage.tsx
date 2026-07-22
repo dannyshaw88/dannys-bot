@@ -2611,6 +2611,11 @@ const _hstTimers = new Map<string, ReturnType<typeof setTimeout>>();
 // runCycle checks this set before rescheduling so it exits cleanly even if
 // the abort/cleanup races with a timer that is already mid-fire.
 const _hstStop = new Set<string>();
+// Tracks the wall-clock time the next cycle is scheduled to fire, mirrored
+// from React state so it survives component unmount/remount (phone switches).
+// On remount the effect reads this to restore nextRunAt and recover remaining
+// delay instead of starting a fresh random timer.
+const _hstNextRunAt = new Map<string, number>();
 
 // Owns settings load/autosave and the continuous run-loop. Called once from
 // `MobilePage` (not from the tab-conditional panel) so switching away from
@@ -2891,11 +2896,38 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     const serial = _phone.serial;
     const key = `${serial}:${slotIdx ?? 0}`;
 
-    // ── Safety: never double-schedule ────────────────────────────────────────
-    // If a timer is already ticking for this key (e.g. this effect re-ran due
-    // to a spurious dep change while a 30-min wait was in progress), bail out
-    // immediately and leave the existing timer untouched.
-    if (_hstTimers.has(key)) return;
+    // ── Safety: never double-schedule / remount recovery ─────────────────────
+    // There are two cases where _hstTimers already has this key:
+    //   A) Spurious dep re-run on the SAME component instance (USB poll, etc.)
+    //      → the timer's closures are still valid; bail out untouched.
+    //   B) Component REMOUNTED for the same phone (e.g. user switched phones
+    //      and switched back). The old timer's closures point at the dead
+    //      component's state setters — nextRunAt will never update on screen.
+    //      → cancel the stale timer, restore nextRunAt, fall through to
+    //        reschedule under fresh closures with the remaining time.
+    //
+    // We distinguish A from B by checking whether this is a fresh mount: on a
+    // fresh mount rescheduleFnRef.current is null (cleanup nulled it).
+    let recoveredFireAt: number | null = null;
+    if (_hstTimers.has(key)) {
+      if (rescheduleFnRef.current !== null) {
+        // Case A — same instance, valid closures, leave the timer alone.
+        return;
+      }
+      // Case B — remount. Cancel the stale timer.
+      const staleHandle = _hstTimers.get(key)!;
+      clearTimeout(staleHandle);
+      _hstTimers.delete(key);
+      // Restore nextRunAt from the module-level mirror so the timestamp
+      // reappears immediately on screen.
+      const savedFireAt = _hstNextRunAt.get(key);
+      if (savedFireAt && savedFireAt > Date.now()) {
+        setNextRunAt(savedFireAt);
+        recoveredFireAt = savedFireAt;
+      }
+      // Fall through — the rest of the effect sets up fresh closures and
+      // reschedules with the remaining time (or a fresh delay if expired).
+    }
 
     // Clear any stale stop flag left from a previous disable cycle.
     _hstStop.delete(key);
@@ -2929,6 +2961,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       if (_hstStop.has(key)) {
         _hstStop.delete(key);
         setRunning(false);
+        _hstNextRunAt.delete(key);
         setNextRunAt(null);
         return;
       }
@@ -2941,6 +2974,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         srvLog(`${_dbgTag} — phone changed/disconnected mid-wait; skipping cycle`);
         return;
       }
+      _hstNextRunAt.delete(key);
       setNextRunAt(null);
       // Collision preventer: wait for device to be free before running.
       if (requestSlot && slotIdx !== undefined) {
@@ -3151,13 +3185,15 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       }
 
       // Post-cycle: check stop flag, then reschedule.
-      if (_hstStop.has(key)) { _hstStop.delete(key); setRunning(false); setNextRunAt(null); return; }
+      if (_hstStop.has(key)) { _hstStop.delete(key); setRunning(false); _hstNextRunAt.delete(key); setNextRunAt(null); return; }
       setRunning(false);
       const s2 = settingsRef.current;
       const safeMin = Math.max(1, Math.min(s2.cycleIntervalMin, s2.cycleIntervalMax));
       const safeMax = Math.max(1, Math.max(s2.cycleIntervalMin, s2.cycleIntervalMax));
       const gapMs = (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
-      setNextRunAt(Date.now() + Math.round(gapMs));
+      const nextFireAt2 = Date.now() + Math.round(gapMs);
+      _hstNextRunAt.set(key, nextFireAt2);
+      setNextRunAt(nextFireAt2);
       scheduleNext(gapMs);
     };
 
@@ -3167,7 +3203,9 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     rescheduleFnRef.current = (newDelayMs: number) => {
       const t = _hstTimers.get(key);
       if (t !== undefined) { clearTimeout(t); _hstTimers.delete(key); }
-      setNextRunAt(Date.now() + Math.round(newDelayMs));
+      const nextFireAtR = Date.now() + Math.round(newDelayMs);
+      _hstNextRunAt.set(key, nextFireAtR);
+      setNextRunAt(nextFireAtR);
       scheduleNext(newDelayMs);
     };
 
@@ -3181,12 +3219,20 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     if (wasManualToggleOn) {
       srvLog(`${_startTag} — effect started, firing immediately (manual toggle-on)`);
       scheduleNext(0);
+    } else if (recoveredFireAt !== null) {
+      // Remount recovery: reuse the remaining time under fresh closures.
+      // nextRunAt was already restored above; just schedule the timer.
+      const remainingMs = Math.max(1000, recoveredFireAt - Date.now());
+      scheduleNext(remainingMs);
+      srvLog(`${_startTag} — remounted, recovering timer (${(remainingMs / 60_000).toFixed(1)}min remaining)`);
     } else {
       const s0 = settingsRef.current;
       const safeMin = Math.max(1, Math.min(s0.cycleIntervalMin, s0.cycleIntervalMax));
       const safeMax = Math.max(1, Math.max(s0.cycleIntervalMin, s0.cycleIntervalMax));
       const startDelayMs = (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
-      setNextRunAt(Date.now() + Math.round(startDelayMs));
+      const nextFireAt0 = Date.now() + Math.round(startDelayMs);
+      _hstNextRunAt.set(key, nextFireAt0);
+      setNextRunAt(nextFireAt0);
       scheduleNext(startDelayMs);
       srvLog(`${_startTag} — effect started, timer set for ${(startDelayMs / 60_000).toFixed(1)}min (interval ${safeMin}-${safeMax}min)`);
     }
@@ -3222,6 +3268,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           }).catch(() => {});
         }
         setRunning(false);
+        _hstNextRunAt.delete(key);
         setNextRunAt(null);
       }
       // If NOT an explicit user stop: leave the timer in _hstTimers untouched.
