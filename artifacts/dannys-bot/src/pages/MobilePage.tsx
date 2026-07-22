@@ -2596,6 +2596,22 @@ const NUM_INPUT_CLASS = "w-16 text-center";
 // values to 4 digits (0-9999) in code as well.
 const clamp4 = (n: number) => Math.min(9999, Math.max(0, Math.trunc(Number.isFinite(n) ? n : 0)));
 
+// ── Module-level HST timer registry ─────────────────────────────────────────
+// Timers live here, OUTSIDE React, so component cleanup, dep changes, and
+// USB-poll flickers cannot cancel them. Keyed by `${serial}:${slotIdx}`.
+//
+// Why module-level and not useRef?
+//   useRef lives inside the component instance. React cleanup runs whenever
+//   declared deps change — even for spurious dep changes caused by USB poll
+//   oscillation. A `clearTimeout(timerRef.current)` in cleanup then kills the
+//   25-99 min wait every 3 seconds. Moving the timer here makes it completely
+//   invisible to React's lifecycle machinery.
+const _hstTimers = new Map<string, ReturnType<typeof setTimeout>>();
+// When the user explicitly turns the master toggle OFF, the key is added here.
+// runCycle checks this set before rescheduling so it exits cleanly even if
+// the abort/cleanup races with a timer that is already mid-fire.
+const _hstStop = new Set<string>();
+
 // Owns settings load/autosave and the continuous run-loop. Called once from
 // `MobilePage` (not from the tab-conditional panel) so switching away from
 // the Human Session Tool tab never unmounts this and interrupts an
@@ -2607,12 +2623,12 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   const [saveError, setSaveError] = useState<string | null>(null);
   const [running,  setRunning]  = useState(false);
   const [nextRunAt, setNextRunAt] = useState<number | null>(null);
-  // Incremented by the clamp effect to force the run-loop to restart its wait
-  // timer when cycleIntervalMax is reduced mid-wait (prevents the next run
-  // staying scheduled beyond the newly configured maximum).
-  const [rescheduleKey, setRescheduleKey] = useState(0);
   const nextRunAtRef = useRef<number | null>(null);
   nextRunAtRef.current = nextRunAt;
+  // Populated by the run-loop effect; the clamp effect calls this directly to
+  // clear the module-level timer and restart with a corrected delay, without
+  // needing a React state update or dep-array change.
+  const rescheduleFnRef = useRef<((delayMs: number) => void) | null>(null);
   // Reflects server-side cycle state independently of the client fetch.
   // Keeps running=true even right after remount, before runCycle() fires.
   const [serverCycleRunning, setServerCycleRunning] = useState(false);
@@ -2851,22 +2867,40 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // cycle (power on → open Instagram → scroll/like with the configured
   // settings → close Instagram → recycle airplane mode → power off)
   // back-to-back until the toggle is switched off or the phone disconnects.
+  //
+  // ── Architectural note ────────────────────────────────────────────────────
+  // Previous versions stored the setTimeout handle in a local `let timer`
+  // variable and cleared it in the effect cleanup function. React's cleanup
+  // fires whenever ANY declared dependency changes — including spurious dep
+  // changes caused by USB-poll oscillation (~every 3 s on a multi-phone farm).
+  // Every cleanup cancelled the 25-99 min wait timer, so it could never fire.
+  //
+  // Fix: the timer handle lives in the module-level `_hstTimers` Map (defined
+  // above this hook) so React's cleanup cannot reach it. The cleanup function
+  // only touches the timer when the user EXPLICITLY turned the toggle off
+  // (explicitToggleOffRef.current = true). USB flickers, dep oscillations, and
+  // any other spurious re-runs are harmless — the timer keeps ticking.
   useEffect(() => {
     // Do not start the timer until server settings have been loaded for this
-    // phone.  Without this gate the run-loop fires immediately on mount with
+    // phone. Without this gate the run-loop fires immediately on mount with
     // AUTOMATION_DEFAULTS, sets a timer using the default cycleInterval values,
-    // and then the clamp effect fires seconds later when real settings arrive
-    // and sees the timer is out of the loaded bounds — causing a spurious
-    // rescheduleKey increment and a full timer reset on every app launch.
+    // and then the clamp effect fires seconds later when real settings arrive —
+    // causing a spurious reschedule on every app launch.
     const _phone = phoneRef.current;
     if (!_phone || !settings.enabled || !hydrated) { setRunning(false); return; }
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
     const serial = _phone.serial;
+    const key = `${serial}:${slotIdx ?? 0}`;
 
-    // ── Server-side diagnostic log ─────────────────────────────────────────
-    // Posts key scheduling events to /api/hst-dbg so they appear in
-    // equinox-debug.log, not just the in-app Action Log.
+    // ── Safety: never double-schedule ────────────────────────────────────────
+    // If a timer is already ticking for this key (e.g. this effect re-ran due
+    // to a spurious dep change while a 30-min wait was in progress), bail out
+    // immediately and leave the existing timer untouched.
+    if (_hstTimers.has(key)) return;
+
+    // Clear any stale stop flag left from a previous disable cycle.
+    _hstStop.delete(key);
+
+    // ── Server-side diagnostic log ────────────────────────────────────────
     const srvLog = (msg: string) => {
       fetch('/api/hst-dbg', {
         method: 'POST',
@@ -2875,21 +2909,33 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       }).catch(() => {});
     };
 
+    // Stores the next timer handle in the module-level map and returns it.
+    const scheduleNext = (delayMs: number) => {
+      const t = setTimeout(runCycle, Math.round(delayMs));
+      _hstTimers.set(key, t);
+      return t;
+    };
+
     const runCycle = async () => {
-      // ── DIAGNOSTIC: log that the timer fired BEFORE the cancelled guard ──
-      // This appears in the Action Log even when cancelled=true so we can see
-      // whether the timer is firing correctly or the effect re-ran mid-wait.
+      // Timer fired — remove ourselves from the registry so a re-run of the
+      // effect (if it happens) can start a fresh timer rather than bailing out.
+      _hstTimers.delete(key);
+
       const _dbgTag = slotUsername ? `@${slotUsername}` : `slot${slotIdx ?? 0}`;
-      srvLog(`${_dbgTag} — timer fired (cancelled=${cancelled})`);
-      onLog?.(`[HST-DBG] ${_dbgTag} — timer fired (cancelled=${cancelled})`);
-      if (cancelled) {
-        onLog?.(`[HST-DBG] ${_dbgTag} — effect was reset mid-wait; skipping this fire (new timer already running)`);
+      srvLog(`${_dbgTag} — timer fired (stopped=${_hstStop.has(key)})`);
+      onLog?.(`[HST-DBG] ${_dbgTag} — timer fired (stopped=${_hstStop.has(key)})`);
+
+      // User turned off the toggle while the timer was waiting — exit cleanly.
+      if (_hstStop.has(key)) {
+        _hstStop.delete(key);
+        setRunning(false);
+        setNextRunAt(null);
         return;
       }
       // Guard: if the phone changed or disconnected while the timer was waiting,
       // skip this cycle entirely.  Do NOT reschedule — if the phone is gone the
-      // run-loop will self-terminate here; if it comes back, the effect will
-      // restart via settings.enabled or the user toggling on again.
+      // loop self-terminates here; when it reconnects the effect restarts via
+      // settings.enabled or the user toggling on again.
       if (!phoneRef.current || phoneRef.current.serial !== serial) {
         onLog?.(`[HST-DBG] ${_dbgTag} — phone changed/disconnected mid-wait; skipping cycle`);
         srvLog(`${_dbgTag} — phone changed/disconnected mid-wait; skipping cycle`);
@@ -2900,8 +2946,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       if (requestSlot && slotIdx !== undefined) {
         onLog?.(`[HST-DBG] ${_dbgTag} — awaiting collision-preventer slot…`);
         const collisionPrevented = await requestSlot(slotIdx, Date.now());
-        if (cancelled) {
-          onLog?.(`[HST-DBG] ${_dbgTag} — cancelled while waiting for collision-preventer; releasing slot`);
+        if (_hstStop.has(key)) {
+          onLog?.(`[HST-DBG] ${_dbgTag} — stopped while waiting for collision-preventer; releasing slot`);
           releaseSlot?.(slotIdx); return;
         }
         if (collisionPrevented && phoneRef.current?.serial && slotUsername) {
@@ -2917,18 +2963,14 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       const max = Math.max(s.feedScrollMin, s.feedScrollMax);
       const count = Math.floor(Math.random() * (max - min + 1)) + min;
       setRunning(true);
-      // Full lifecycle per cycle: power on → open Instagram → run the tools
-      // → close Instagram → cycle airplane mode → power off. The whole
-      // sequence recycles every time this fires, for as long as the master
-      // toggle stays on.
       onLog?.(`Cycle starting → power on, open Instagram, ${count} downward scrolls`);
       // Generate a unique ID for this cycle.  Both the cycle POST and the abort
-      // POST carry it so the server can ignore stale aborts from the previous
+      // POST carry it so the server can ignore stale aborts from a previous
       // cycle that race with the start of this new one.
       const cycleId = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
       const ctrl = new AbortController();
       cycleAbortRef.current = ctrl;
-      cycleIdRef.current = cycleId; // expose to cleanup closure for the abort POST
+      cycleIdRef.current = cycleId;
       onLog?.(`[HST-DBG] ${_dbgTag} — sending cycle to server (serial=${serial}, count=${count})`);
       srvLog(`${_dbgTag} — sending POST /automation-cycle (serial=${serial}, count=${count})`);
       try {
@@ -3104,18 +3146,29 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       } finally {
         cycleAbortRef.current = null;
         cycleIdRef.current = null;
-        // Release the collision scheduler slot regardless of outcome (success / error / abort).
+        // Release the collision scheduler slot regardless of outcome.
         if (releaseSlot && slotIdx !== undefined) releaseSlot(slotIdx);
       }
-      onLog?.(`[HST-DBG] ${_dbgTag} — post-finally gate (cancelled=${cancelled}); will ${cancelled ? "NOT reschedule (new effect already running)" : "reschedule"}`);
-      if (cancelled) return;
+
+      // Post-cycle: check stop flag, then reschedule.
+      if (_hstStop.has(key)) { _hstStop.delete(key); setRunning(false); setNextRunAt(null); return; }
       setRunning(false);
       const s2 = settingsRef.current;
       const safeMin = Math.max(1, Math.min(s2.cycleIntervalMin, s2.cycleIntervalMax));
       const safeMax = Math.max(1, Math.max(s2.cycleIntervalMin, s2.cycleIntervalMax));
       const gapMs = (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
       setNextRunAt(Date.now() + Math.round(gapMs));
-      timer = setTimeout(runCycle, Math.round(gapMs));
+      scheduleNext(gapMs);
+    };
+
+    // Expose a reschedule function for the clamp effect below — it can clear
+    // the existing module-level timer and start a corrected one directly,
+    // without needing to touch React state or trigger a dep-array re-run.
+    rescheduleFnRef.current = (newDelayMs: number) => {
+      const t = _hstTimers.get(key);
+      if (t !== undefined) { clearTimeout(t); _hstTimers.delete(key); }
+      setNextRunAt(Date.now() + Math.round(newDelayMs));
+      scheduleNext(newDelayMs);
     };
 
     // Manual toggle-on → fire immediately (user asked for it right now).
@@ -3127,48 +3180,40 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     const _startTag = slotUsername ? `@${slotUsername}` : `slot${slotIdx ?? 0}`;
     if (wasManualToggleOn) {
       srvLog(`${_startTag} — effect started, firing immediately (manual toggle-on)`);
-      runCycle();
+      scheduleNext(0);
     } else {
       const s0 = settingsRef.current;
       const safeMin = Math.max(1, Math.min(s0.cycleIntervalMin, s0.cycleIntervalMax));
       const safeMax = Math.max(1, Math.max(s0.cycleIntervalMin, s0.cycleIntervalMax));
       const startDelayMs = (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
       setNextRunAt(Date.now() + Math.round(startDelayMs));
-      timer = setTimeout(runCycle, Math.round(startDelayMs));
-      srvLog(`${_startTag} — effect started, timer set for ${(startDelayMs / 60_000).toFixed(1)}min (interval ${safeMin}-${safeMax}min, rKey=${rescheduleKey})`);
+      scheduleNext(startDelayMs);
+      srvLog(`${_startTag} — effect started, timer set for ${(startDelayMs / 60_000).toFixed(1)}min (interval ${safeMin}-${safeMax}min)`);
     }
+
     return () => {
-      // ── DIAGNOSTIC: log WHY the effect is cleaning up ───────────────────
-      // Visible in the Action Log so we can tell whether a dependency changed
-      // (effect re-ran) or the component unmounted / toggle turned off.
+      // ── DIAGNOSTIC ─────────────────────────────────────────────────────────
       const _cleanTag = slotUsername ? `@${slotUsername}` : `slot${slotIdx ?? 0}`;
-      srvLog(`${_cleanTag} — CLEANUP (serial=${serial}, enabled=${settings.enabled}, rKey=${rescheduleKey})`);
-      onLog?.(`[HST-DBG] ${_cleanTag} — effect cleanup (serial=${serial}, enabled=${settings.enabled}, rescheduleKey=${rescheduleKey})`);
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-      setRunning(false);
-      setNextRunAt(null);
-      // Only abort the server-side cycle when the user explicitly turned the
-      // toggle off.  If the cleanup fires because the component unmounted
-      // (user navigated away) or the serial changed, leave the current cycle
-      // running on the server — `cancelled = true` already prevents the
-      // client from scheduling the next cycle.
-      const shouldAbortServer = explicitToggleOffRef.current;
-      explicitToggleOffRef.current = false; // reset for next toggle
-      const ctrl = cycleAbortRef.current;
-      const abortingId = cycleIdRef.current;
-      cycleAbortRef.current = null;
-      cycleIdRef.current = null;
-      if (shouldAbortServer) {
-        // Abort the in-flight client-side fetch if one is running.
+      const shouldStop = explicitToggleOffRef.current;
+      explicitToggleOffRef.current = false;
+      srvLog(`${_cleanTag} — effect cleanup (serial=${serial}, enabled=${settings.enabled}, explicit=${shouldStop})`);
+      onLog?.(`[HST-DBG] ${_cleanTag} — effect cleanup (serial=${serial}, enabled=${settings.enabled}, explicit=${shouldStop})`);
+
+      if (shouldStop) {
+        // User explicitly turned the toggle off — kill the timer NOW.
+        const t = _hstTimers.get(key);
+        if (t !== undefined) { clearTimeout(t); _hstTimers.delete(key); }
+        // Belt-and-suspenders: if runCycle is mid-flight, the stop flag will
+        // prevent it from rescheduling when the cycle completes.
+        _hstStop.add(key);
+        // Abort any in-flight cycle fetch.
+        const ctrl = cycleAbortRef.current;
+        const abortingId = cycleIdRef.current;
+        cycleAbortRef.current = null;
+        cycleIdRef.current = null;
         ctrl?.abort();
         // Only send the server-side abort POST when we have a real cycleId.
-        // If abortingId is null the client had no cycle in-flight, so there
-        // is nothing on the server to abort.  Sending a null cycleId was the
-        // root cause of the "toggle dead after first run" bug: the abort POST
-        // could arrive after a new cycle had already registered its ID on the
-        // server, causing the server to match the null guard and kill the new
-        // cycle immediately (fixed server-side too, but defence-in-depth here).
+        // If abortingId is null the client had no cycle in-flight.
         if (abortingId) {
           fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle/abort`, {
             method: "POST",
@@ -3176,26 +3221,36 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             body: JSON.stringify({ cycleId: abortingId }),
           }).catch(() => {});
         }
+        setRunning(false);
+        setNextRunAt(null);
       }
+      // If NOT an explicit user stop: leave the timer in _hstTimers untouched.
+      // This is the key invariant: React cleanup fires on every dep change
+      // (including spurious USB-poll oscillations every 3 s), but the module-
+      // level timer keeps ticking regardless. The next effect run will see
+      // _hstTimers.has(key) = true and bail out without starting a second timer.
+      rescheduleFnRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.enabled, rescheduleKey, hydrated]);
+  }, [settings.enabled, hydrated]);
 
   // Clamp: if the existing timer no longer fits within the new [min, max]
-  // bounds, force the run-loop to restart its timer by incrementing
-  // rescheduleKey — the run-loop cleanup cancels the stale timer and the new
-  // run picks a fresh delay within the current bounds.
+  // bounds, directly reschedule the module-level timer with a corrected delay.
   //
   // Two cases that need a reschedule:
   //   1. Max was reduced  — remaining > new max  → timer would fire too late.
   //   2. Min was increased — remaining < new min  → timer would fire too early.
+  //
+  // rescheduleFnRef is populated by the run-loop effect. Calling it clears the
+  // old module-level timer and starts a fresh one — no React state update needed.
   useEffect(() => {
     if (!settings.enabled || running || !nextRunAtRef.current) return;
     const safeMin = Math.max(1, Math.min(settings.cycleIntervalMin, settings.cycleIntervalMax));
     const safeMax = Math.max(1, Math.max(settings.cycleIntervalMin, settings.cycleIntervalMax));
     const remainingMs = nextRunAtRef.current - Date.now();
     if (remainingMs > safeMax * 60_000 || remainingMs < safeMin * 60_000) {
-      setRescheduleKey(k => k + 1);
+      const newDelay = (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
+      rescheduleFnRef.current?.(newDelay);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.cycleIntervalMin, settings.cycleIntervalMax]);
@@ -7147,9 +7202,12 @@ export function MobilePage() {
 
   const allPhones = data?.phones ?? [];
   // When a specific serial is requested (from Phone Farm grid), show only that phone.
+  // Sort by serial so USB enumeration reorders never change which phone lands
+  // at index 0 — a reorder would otherwise oscillate the phone prop seen by
+  // AccountSettingsPanel and trigger connectedKey increments / hydration restarts.
   const phones = targetSerial
     ? allPhones.filter(p => p.serial === targetSerial)
-    : allPhones;
+    : [...allPhones].sort((a, b) => a.serial.localeCompare(b.serial));
   const slots: (UsbPhone | null)[] = Array.from({ length: TOTAL_SLOTS }, (_, i) => phones[i] ?? null);
   const activeSerial = slots[0]?.serial ?? null;
   // Points at whichever rendered PhoneSlot corresponds to activeSerial, so

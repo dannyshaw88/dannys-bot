@@ -4,6 +4,32 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.99] — 2026-07-22
+
+### Fix — HST run-loop permanently dead (architectural fix: module-level timer registry)
+
+**The symptom (every version v1.2.93 through v1.2.98):** Enable the Human Session Tool for any slot. Within 2–3 seconds ALL slots fire a CLEANUP log entry simultaneously — `enabled=true, explicit=false` — and then silence forever. The 25–99 min automation timer never fires.
+
+**Why every previous fix failed:**
+
+Every fix from v1.2.93 through v1.2.98 addressed a different *cause* of a spurious dep change, but left the root architectural flaw intact: the `setTimeout` handle was stored in a local `let timer` variable inside the React `useEffect`. React's cleanup function runs whenever **any declared dependency changes** — including completely spurious changes caused by USB-poll oscillation every 3 seconds on a multi-phone farm. Every cleanup called `clearTimeout(timer)`, killing the wait. The timer could never survive more than one USB-poll cycle.
+
+**The real fix — move the timer outside React entirely:**
+
+A module-level `Map<string, ReturnType<typeof setTimeout>>` called `_hstTimers` (keyed by `${serial}:${slotIdx}`) now owns every slot's timer handle. React's cleanup function no longer touches the timer at all — it only clears the timer when `explicitToggleOffRef.current` is `true`, which is only set when the user physically flips the master toggle off. USB-poll flickers, dep oscillations, and any other spurious effect re-runs leave the timer completely untouched.
+
+**Supporting changes in the same release:**
+
+- **`_hstStop` set** — module-level stop signal so `runCycle` (which may be mid-flight when the toggle is turned off) exits cleanly without rescheduling, even if `clearTimeout` already fired before the async function could check a local `cancelled` flag.
+- **Double-start guard** — the run-loop effect checks `_hstTimers.has(key)` on entry; if a timer is already ticking for this slot it returns immediately. This is the safety net that makes spurious effect re-runs truly harmless.
+- **`rescheduleFnRef`** — replaces `rescheduleKey` state. The clamp effect (which corrects the timer when the user changes Run-every interval mid-wait) now calls a ref callback that directly manipulates `_hstTimers`, instead of incrementing a React state value that would trigger another cleanup/re-run cycle.
+- **Phone sorting by serial** — `allPhones` is now sorted by `serial` before being passed down, so USB enumeration reordering on a multi-phone farm can never change which phone lands at `slots[0]`. This eliminates the last remaining source of `phone?.serial` oscillation that was feeding `connectedKey` increments.
+- **Run-loop deps simplified** — reduced from `[settings.enabled, rescheduleKey, hydrated]` to `[settings.enabled, hydrated]`. `rescheduleKey` is eliminated entirely. `hydrated` remains as the one-time gate that prevents the timer from starting before server settings load — it only ever transitions `false → true` once per slot instance, so it causes exactly one effect re-run (the first start) and never again.
+
+**Result:** The timer fires once at the configured interval after app launch, runs the automation cycle, and reschedules itself. USB polls, component re-renders, and dep changes have zero effect on it.
+
+---
+
 ## [1.2.98] — 2026-07-22
 
 ### Fix — HST run-loop permanently dead after USB poll flicker (sticky phone prop)
