@@ -5522,6 +5522,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // even when the cycle is aborted or errors mid-run.
     let likes = 0, likeFailures = 0, sharesFeed = 0, sharesDm = 0, saves = 0, strayNavRecoveries = 0;
     let feedScrolled = 0; // number of feed posts requested to scroll this cycle
+    let exploreScrolled = 0; // number of explore scrolls this cycle
     let _slotUsername = "";       // captured from schema parse for catch-block use
     let _mobileProfileId: number | null = null; // same
     const cycleStart = Date.now();
@@ -5899,6 +5900,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               savePercentMax: viewExploreSavePercentMax ?? 0,
               onLog: (msg) => tLog(`  ${msg}`),
             });
+            exploreScrolled = exploreResult.postsScrolled;
             steps.push(`explore(${exploreResult.postsScrolled} scrolls, ${exploreResult.postsClicked} clicked, ${exploreResult.likes} likes, ${exploreResult.sharesFeed} feed-shares, ${exploreResult.sharesDm} dm-shares, ${exploreResult.saves} saves)`);
             tLog(`▶ View Explore Page done — ${exploreResult.postsScrolled} scrolls, ${exploreResult.postsClicked} clicked, ${exploreResult.likes} likes`);
           } else if (!viewExploreEnabled) {
@@ -6182,6 +6184,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           dms: sharesDm,
           feedShares: sharesFeed,
           cycles: 1,
+          reelScrolls: reelsViewed,
+          feedScrolls: feedScrolled,
+          exploreScrolls: exploreScrolled,
         }).catch((e: any) => logger.warn({ err: e }, "[mobile-cycle] stat persist error"));
       }
       // Log cycle completion to Dashboard activity feed.

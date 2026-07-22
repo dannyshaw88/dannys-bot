@@ -186,24 +186,30 @@ function ProfileStatsRow({
 // ─── Phone Farm tab ───────────────────────────────────────────────────────────
 
 const FARM_STAT_LABELS: { key: string; label: string; icon: React.ReactNode; color: string }[] = [
-  { key: "cycles",      label: "Cycles",       icon: <Activity className="w-3 h-3" />,   color: "text-cyan-500" },
-  { key: "likes",       label: "Likes",        icon: <Heart className="w-3 h-3" />,       color: "text-rose-500" },
-  { key: "follows",     label: "Follows",      icon: <UserPlus className="w-3 h-3" />,    color: "text-blue-500" },
-  { key: "stories",     label: "Stories",      icon: <Eye className="w-3 h-3" />,         color: "text-emerald-500" },
-  { key: "reels",       label: "Reels",        icon: <Repeat2 className="w-3 h-3" />,     color: "text-sky-500" },
-  { key: "dms",         label: "DMs",          icon: <Mail className="w-3 h-3" />,        color: "text-violet-500" },
-  { key: "feed_shares", label: "Feed Shares",  icon: <Zap className="w-3 h-3" />,         color: "text-amber-500" },
+  { key: "cycles",          label: "Cycles",         icon: <Activity className="w-3 h-3" />,   color: "text-cyan-500" },
+  { key: "likes",           label: "Likes",          icon: <Heart className="w-3 h-3" />,       color: "text-rose-500" },
+  { key: "follows",         label: "Follows",        icon: <UserPlus className="w-3 h-3" />,    color: "text-blue-500" },
+  { key: "stories",         label: "Stories",        icon: <Eye className="w-3 h-3" />,         color: "text-emerald-500" },
+  { key: "reels",           label: "Reels",          icon: <Repeat2 className="w-3 h-3" />,     color: "text-sky-500" },
+  { key: "dms",             label: "DMs",            icon: <Mail className="w-3 h-3" />,        color: "text-violet-500" },
+  { key: "feed_shares",     label: "Feed Shares",    icon: <Zap className="w-3 h-3" />,         color: "text-amber-500" },
+  { key: "reel_scrolls",   label: "Reel Scrolls",   icon: <Repeat2 className="w-3 h-3" />,     color: "text-purple-500" },
+  { key: "feed_scrolls",   label: "Feed Scrolls",   icon: <BarChart2 className="w-3 h-3" />,   color: "text-teal-500" },
+  { key: "explore_scrolls", label: "Explore Scrolls", icon: <Activity className="w-3 h-3" />,  color: "text-orange-500" },
 ];
 
 const FARM_DEFAULT_COL_WIDTHS: Record<string, number> = {
-  account:     224,
-  cycles:       80,
-  likes:        80,
-  follows:      80,
-  stories:      80,
-  reels:        80,
-  dms:          80,
-  feed_shares: 100,
+  account:          224,
+  cycles:            80,
+  likes:             80,
+  follows:           80,
+  stories:           80,
+  reels:             80,
+  dms:               80,
+  feed_shares:      100,
+  reel_scrolls:      95,
+  feed_scrolls:      95,
+  explore_scrolls:  110,
 };
 
 interface FarmPhone {
@@ -1114,7 +1120,7 @@ function PhoneFarmTab() {
   );
 
   const nudgeFarmColWidth = (key: string, delta: number) => {
-    const v = Math.max(40, Math.min(600, (farmColWidths[key] ?? FARM_DEFAULT_COL_WIDTHS[key] ?? 80) + delta));
+    const v = Math.max(1, Math.min(600, (farmColWidths[key] ?? FARM_DEFAULT_COL_WIDTHS[key] ?? 80) + delta));
     const next = { ...farmColWidths, [key]: v };
     setFarmColWidths(next);
     localStorage.setItem("farm_col_widths_px", JSON.stringify(next));
@@ -1151,7 +1157,7 @@ function PhoneFarmTab() {
         <div className="relative">
           <button
             onClick={() => setFarmManageColsOpen(o => !o)}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1.5 rounded hover:bg-muted/40"
+            className="flex items-center gap-1.5 text-xs text-foreground hover:text-foreground transition-colors px-2 py-1.5 rounded hover:bg-muted/40"
           >
             <Settings2 className="w-3.5 h-3.5" /> MANAGE COLUMNS
           </button>
@@ -1176,10 +1182,10 @@ function PhoneFarmTab() {
                         <label className="text-xs w-16 text-muted-foreground shrink-0 truncate" title={label}>{label}</label>
                         <button onClick={() => nudgeFarmColWidth(key, -10)} title="Narrow column" className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronLeft className="w-3 h-3" /></button>
                         <input
-                          type="number" min={40} max={600}
+                          type="number" min={1} max={600}
                           value={farmColWidths[key] ?? FARM_DEFAULT_COL_WIDTHS[key]}
                           onChange={e => {
-                            const v = Math.max(40, Math.min(600, Number(e.target.value)));
+                            const v = Math.max(1, Math.min(600, Number(e.target.value)));
                             const next = { ...farmColWidths, [key]: v };
                             setFarmColWidths(next);
                             localStorage.setItem("farm_col_widths_px", JSON.stringify(next));
@@ -1229,10 +1235,10 @@ function PhoneFarmTab() {
                         </label>
                         <button onClick={() => nudgeFarmColWidth(key, -10)} title="Narrow column" className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronLeft className="w-3 h-3" /></button>
                         <input
-                          type="number" min={40} max={600}
+                          type="number" min={1} max={600}
                           value={farmColWidths[key] ?? FARM_DEFAULT_COL_WIDTHS[key] ?? 80}
                           onChange={e => {
-                            const v = Math.max(40, Math.min(600, Number(e.target.value)));
+                            const v = Math.max(1, Math.min(600, Number(e.target.value)));
                             const next = { ...farmColWidths, [key]: v };
                             setFarmColWidths(next);
                             localStorage.setItem("farm_col_widths_px", JSON.stringify(next));
