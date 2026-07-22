@@ -4,6 +4,29 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.86] — 2026-07-22
+
+### UI — Startup event wording changed from "Started" to "Booted Up"
+
+Every place in the app that previously said "Started" for the system startup event now reads **"Booted Up"**:
+
+- **Dashboard Activity Log action badge** — the `⚡` badge in the Action column now reads `Booted Up` instead of `Started`.
+- **Dashboard log detail text** — the entry written to the database on each server start now reads `Aura Farming booted up: HH:MM:SS DD Mon YYYY` instead of `Aura Farming started: …`.
+- **Dashboard header subtitle** — the small timestamp pill beneath the "Dashboard" heading now reads `Aura Farming booted up at: …` instead of `Aura Farming started at: …`.
+- **Live Activity Ticker fallback** — the top-of-screen ticker shows `Aura Farming booted up — no recent activity` until the first automation event arrives, instead of `Aura Farming started — no recent activity`.
+
+### Fix — Phone Farm Step 1 "Run every" timer could fire too early after raising the minimum interval
+
+The Phone Farm **Step 1 (STEP1)** panel has two fields: **Run every [Min] to [Max] minutes**. These control how long the automation waits between full device cycles (power on → Instagram → scroll/like → close → airplane-mode recycle → power off).
+
+**The bug:** when you *increased* the minimum interval mid-wait (e.g. changed from 5–10 min up to 25–99 min), the already-running countdown timer was not rescheduled. The cycle would still fire at the original short time, violating the new minimum you set. Only *reducing* the maximum triggered a reschedule.
+
+**The fix:** the reschedule guard now checks both directions — it reschedules whenever the current remaining wait falls *outside* the new [min, max] range, either because the max was reduced (timer would fire too late) or because the min was raised (timer would fire too early). After the fix, changing either boundary always snaps the next cycle back into the configured window immediately.
+
+No settings are affected — `cycleIntervalMin` and `cycleIntervalMax` are correctly saved to disk and loaded on startup. This was purely a runtime scheduling gap for mid-session edits.
+
+---
+
 ## [1.2.85] — 2026-07-22
 
 ### UI — Statistics page: Slot labels now render in blue
