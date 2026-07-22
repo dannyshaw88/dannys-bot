@@ -3098,16 +3098,20 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectedKey, settings.enabled, rescheduleKey]);
 
-  // Clamp: if cycleIntervalMax was reduced mid-wait (or was stale at startup),
-  // the existing setTimeout will fire too late. Detect this every time the
-  // interval settings change and force the run-loop to restart its timer by
-  // incrementing rescheduleKey — the run-loop cleanup cancels the stale timer
-  // and the new run picks a fresh delay within the current [min, max] bounds.
+  // Clamp: if the existing timer no longer fits within the new [min, max]
+  // bounds, force the run-loop to restart its timer by incrementing
+  // rescheduleKey — the run-loop cleanup cancels the stale timer and the new
+  // run picks a fresh delay within the current bounds.
+  //
+  // Two cases that need a reschedule:
+  //   1. Max was reduced  — remaining > new max  → timer would fire too late.
+  //   2. Min was increased — remaining < new min  → timer would fire too early.
   useEffect(() => {
     if (!settings.enabled || running || !nextRunAtRef.current) return;
+    const safeMin = Math.max(1, Math.min(settings.cycleIntervalMin, settings.cycleIntervalMax));
     const safeMax = Math.max(1, Math.max(settings.cycleIntervalMin, settings.cycleIntervalMax));
     const remainingMs = nextRunAtRef.current - Date.now();
-    if (remainingMs > safeMax * 60_000) {
+    if (remainingMs > safeMax * 60_000 || remainingMs < safeMin * 60_000) {
       setRescheduleKey(k => k + 1);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
