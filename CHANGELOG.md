@@ -4,6 +4,56 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.94] — 2026-07-22
+
+### Fix — HST run-loop permanently dead on 2-phone farm (connectedKey race with React 18 batching)
+
+**The symptom (v1.2.93):** Same start→CLEANUP→silence pattern as v1.2.92. All slots start their timers, then CLEANUP fires ~2 seconds later for every slot, and nothing ever restarts. From the logs uploaded alongside this fix:
+
+```
+14:30:16  slot0 — effect started, timer set for 40.3min  (phone: e38a197f3d22)
+14:30:16  slot2 — effect started, timer set for 28.7min
+14:30:16  slot3 — effect started, timer set for 2.0min
+14:30:16  slot4 — effect started, timer set for 74.5min
+14:30:18  slot0 — CLEANUP (serial=e38a197f3d22, enabled=true, rKey=0)   ← 2s later
+14:30:18  slot2 — CLEANUP
+14:30:18  slot3 — CLEANUP
+14:30:18  slot4 — CLEANUP
+14:30:19  slot0 — effect started, timer set for 35.4min  (phone: 863d0058...)
+14:30:21  slot0 — CLEANUP (serial=863d0058..., enabled=true, rKey=0)    ← 2s later
+(permanently silent after that)
+```
+
+**Why v1.2.93 didn't fix it:**
+
+v1.2.93 made `hydrated` a one-way latch (never resets to false). That removed the `hydrated`-flip feedback loop — but the run-loop dep array still contained `connectedKey`. The CLEANUP at 2 seconds was being caused by `connectedKey` incrementing, not by `hydrated` flipping.
+
+**The actual root cause — React 18 batching `connectedKey++` with `phone=null`:**
+
+The USB poll returns phones every ~2 seconds. When a phone first appears (null → serial), the serial-watcher fires `setConnectedKey(k => k + 1)`. React 18 automatic batching can combine this state update with the *next* USB poll response — which may return `phone=null` — into a single render.
+
+That batched render has `connectedKey=new` (run-loop dep changed) **and** `phone=null`. The run-loop effect fires, hits the `if (!phone …) { return; }` guard, calls `setRunning(false)`, and exits. The timer is never set.
+
+`prevNonNullSerialRef` was already updated to the new serial when the serial-watcher ran. So when the phone comes back as the same serial, `curr !== prevNonNullSerialRef.current` is **false** → no `connectedKey++` → settings-load doesn't re-fire → run-loop never gets another chance → **permanently dead**.
+
+**The fix (v1.2.94):**
+
+1. **Remove `connectedKey` from the run-loop dep array** (still in settings-load deps — untouched). The run-loop now only restarts when `settings.enabled`, `rescheduleKey`, or `hydrated` changes. It is never triggered by USB enumeration events and is immune to the React 18 batching race.
+
+2. **Add `phoneRef`** (`useRef`, updated every render). The async `runCycle` callback (which fires 25–99 minutes after the timer is set) reads `phoneRef.current` at fire-time rather than the stale closure value captured at effect-setup time. This prevents running a cycle for a phone that disconnected during the wait.
+
+3. **Phone-mismatch guard in `runCycle`**: if `phoneRef.current?.serial !== serial` when the timer fires, skip the cycle and do **not** reschedule. The run-loop self-terminates cleanly if the phone is gone.
+
+**Why the run-loop still restarts correctly on new phone:**
+- First connect on any hook instance: `hydrated` goes false → true after settings load → run-loop starts. ✓
+- Brief disconnect (same serial): timer keeps counting uninterrupted — `connectedKey` is no longer in the dep array so USB enumeration can't kill it. ✓
+- User toggles off then on: `settings.enabled` false → true → run-loop starts. ✓
+
+**Files changed:**
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — added `phoneRef`, changed run-loop guard + serial capture to use `phoneRef.current`, added phone-mismatch guard in `runCycle`, removed `connectedKey` from run-loop dep array
+
+---
+
 ## [1.2.93] — 2026-07-22
 
 ### Fix — HST run-loop permanently dead on 2-phone farm (hydrated one-way latch)

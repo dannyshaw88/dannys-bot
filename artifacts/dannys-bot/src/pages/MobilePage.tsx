@@ -2627,6 +2627,12 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // used to detect real user edits vs. the initial load, so autosave never
   // fires before the fetch resolves.
   const hydratedRef = useRef(false);
+  // Always tracks the current phone prop — updated every render.  Used inside
+  // the async runCycle callback so the timer reads the *actual* current phone
+  // at fire-time (25-99 min later) rather than the stale closure value
+  // captured when the run-loop effect was last set up.
+  const phoneRef = useRef<UsbPhone | null>(phone);
+  phoneRef.current = phone;
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   // Abort controller for the currently in-flight automation-cycle fetch.
@@ -2852,10 +2858,11 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     // and then the clamp effect fires seconds later when real settings arrive
     // and sees the timer is out of the loaded bounds — causing a spurious
     // rescheduleKey increment and a full timer reset on every app launch.
-    if (!phone || !settings.enabled || !hydrated) { setRunning(false); return; }
+    const _phone = phoneRef.current;
+    if (!_phone || !settings.enabled || !hydrated) { setRunning(false); return; }
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const serial = phone.serial;
+    const serial = _phone.serial;
 
     // ── Server-side diagnostic log ─────────────────────────────────────────
     // Posts key scheduling events to /api/hst-dbg so they appear in
@@ -2879,6 +2886,15 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         onLog?.(`[HST-DBG] ${_dbgTag} — effect was reset mid-wait; skipping this fire (new timer already running)`);
         return;
       }
+      // Guard: if the phone changed or disconnected while the timer was waiting,
+      // skip this cycle entirely.  Do NOT reschedule — if the phone is gone the
+      // run-loop will self-terminate here; if it comes back, the effect will
+      // restart via settings.enabled or the user toggling on again.
+      if (!phoneRef.current || phoneRef.current.serial !== serial) {
+        onLog?.(`[HST-DBG] ${_dbgTag} — phone changed/disconnected mid-wait; skipping cycle`);
+        srvLog(`${_dbgTag} — phone changed/disconnected mid-wait; skipping cycle`);
+        return;
+      }
       setNextRunAt(null);
       // Collision preventer: wait for device to be free before running.
       if (requestSlot && slotIdx !== undefined) {
@@ -2888,8 +2904,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           onLog?.(`[HST-DBG] ${_dbgTag} — cancelled while waiting for collision-preventer; releasing slot`);
           releaseSlot?.(slotIdx); return;
         }
-        if (collisionPrevented && phone?.serial && slotUsername) {
-          fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/log-event`, {
+        if (collisionPrevented && phoneRef.current?.serial && slotUsername) {
+          fetch(`/api/mobile/devices/${encodeURIComponent(phoneRef.current.serial)}/log-event`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ slotUsername, slotIdx, action: 'collision_prevented', detail: 'Collision Prevented' }),
           }).catch(() => {});
@@ -3163,7 +3179,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectedKey, settings.enabled, rescheduleKey, hydrated]);
+  }, [settings.enabled, rescheduleKey, hydrated]);
 
   // Clamp: if the existing timer no longer fits within the new [min, max]
   // bounds, force the run-loop to restart its timer by incrementing
