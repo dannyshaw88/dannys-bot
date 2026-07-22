@@ -4,6 +4,26 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.91] — 2026-07-22
+
+### Fix — HST timer reset every 4–8 seconds on a 2-phone farm (USB reorder root cause)
+
+**Root cause — finally confirmed from logs:** The farm has two physical phones. Windows' USB enumeration returns them in varying order every 2–4 seconds (e38a197f3d22 ↔ 863d0058). With `key={i}` (stable slot index, added in v1.2.88), each PhoneSlot component instance survives but its `phone` prop oscillates between the two serials every few seconds. Because `phone?.serial` was in the settings-load effect's dependency array, every oscillation triggered the effect → `setHydrated(false)` → `hydrated` is in the run-loop dep array → CLEANUP → brand-new random timer. The timer never had a chance to reach zero.
+
+The v1.2.89 hydration gate and the v1.2.90 `hydratedForSerialRef` guard both targeted null-flicker scenarios. The actual pattern here is serialA→serialB→serialA — no null involved. Neither guard fires on a direct serial swap, so neither helped.
+
+**Fix:** Removed `phone?.serial` from the settings-load effect's dependency array. The effect now depends on `[connectedKey, slotIdx, refreshKey]`:
+
+- **`connectedKey`** increments only when the serial-watcher's `null → serialX` path detects a *genuinely new device* (serialX ≠ the last non-null serial seen). USB list reorders take the `serialA → serialB` else-branch and leave `connectedKey` unchanged.
+- **`refreshKey`** handles user-triggered force-refresh.
+- **`phone?.serial`** is intentionally excluded — reorders must not trigger the effect at all.
+
+**Result:** USB reorders produce zero effect runs, zero `setHydrated` calls, and zero run-loop dep changes. The timer counts uninterrupted regardless of how often the USB list reorders. A CLEANUP only happens when `connectedKey` increments (genuine new device) or when `settings.enabled` / `rescheduleKey` changes — all of which are intentional restarts.
+
+Also removed `hydratedForSerialRef` (added in v1.2.90) — no longer needed since the effect simply doesn't run on reorders.
+
+---
+
 ## [1.2.90] — 2026-07-22
 
 ### Fix — HST timer still resetting on USB null-flicker despite hydration gate

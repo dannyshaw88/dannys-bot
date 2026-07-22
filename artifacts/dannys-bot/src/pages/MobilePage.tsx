@@ -2627,12 +2627,6 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // used to detect real user edits vs. the initial load, so autosave never
   // fires before the fetch resolves.
   const hydratedRef = useRef(false);
-  // Tracks which {serial, refreshKey} pair has already had settings fetched and
-  // hydrated the run-loop.  The settings-load effect uses this to skip the
-  // setHydrated(false) reset on a transient USB null-flicker (phone briefly
-  // disappears then comes back as the same serial — no re-fetch needed, the
-  // timer should keep running uninterrupted).
-  const hydratedForSerialRef = useRef<{ serial: string; refreshKey: number } | null>(null);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   // Abort controller for the currently in-flight automation-cycle fetch.
@@ -2690,25 +2684,31 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   }, [phone?.serial, slotIdx]);
 
   useEffect(() => {
-    // Null flicker — phone briefly dropped off the USB list.  Don't reset
-    // hydrated; the run-loop timer must keep counting from where it was.
-    if (!phone) { return; }
-    // Same serial + same refreshKey — already hydrated for this device/refresh
-    // cycle.  Skip re-fetch entirely so no setHydrated(false) is ever called
-    // and the run-loop dep array never sees a change.
-    if (
-      hydratedForSerialRef.current?.serial === phone.serial &&
-      hydratedForSerialRef.current?.refreshKey === refreshKey
-    ) { return; }
-    // Genuinely different serial (new phone) or forced refresh — reset and re-fetch.
-    hydratedForSerialRef.current = null;
+    // Re-fetch settings only when a genuinely new device connects (connectedKey
+    // increments via the serial-watcher) or the user forces a refresh
+    // (refreshKey increments).
+    //
+    // phone?.serial is intentionally NOT in this dep array.  The USB poll on a
+    // multi-phone farm returns phones in varying order every 2–4 s, which
+    // previously caused phone?.serial to oscillate between two real serials
+    // (e.g. e38a197f3d22 ↔ 863d0058) continuously.  With phone?.serial as a
+    // dep, every oscillation triggered this effect → setHydrated(false) → the
+    // run-loop dep changed → CLEANUP → new random timer → the timer never fired.
+    //
+    // connectedKey only increments when a GENUINELY new device appears (the
+    // serial-watcher takes the null→serialX path with a new serial).  USB
+    // reorders go through the serialA→serialB else-branch and leave connectedKey
+    // unchanged, so this effect does not run, hydrated stays true, and the
+    // run-loop timer keeps counting uninterrupted through any number of reorders.
     hydratedRef.current = false;
     setHydrated(false);        // gate the run-loop until this fetch resolves
+    if (!phone) { return; }
     let active = true;
     setLoading(true);
+    const serial = phone.serial; // capture at effect-run time
     const settingsUrl = slotIdx !== undefined
-      ? `/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/automation-settings`
-      : `/api/mobile/devices/${encodeURIComponent(phone.serial)}/automation-settings`;
+      ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings`
+      : `/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings`;
     fetch(settingsUrl)
       .then(r => r.json())
       .then(d => {
@@ -2720,7 +2720,6 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         // .then() (not .finally()) ensures setHydrated(true) is never called
         // without the real settings also being in place.
         setSettings(merged);
-        hydratedForSerialRef.current = { serial: phone.serial, refreshKey };
         setHydrated(true);
         hydratedRef.current = true;
         // Do NOT set manualToggleOnRef here. On restart the toggle is already
@@ -2732,7 +2731,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       .finally(() => { if (active) { setLoading(false); } });
     return () => { active = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phone?.serial, slotIdx, refreshKey]);
+  }, [connectedKey, slotIdx, refreshKey]);
 
   // Poll /api/mobile/cycle-active every 2 s while the toggle is on.
   // This keeps `serverCycleRunning` accurate so:
