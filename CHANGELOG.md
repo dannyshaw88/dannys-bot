@@ -6,27 +6,76 @@ All notable changes to Aura Farming are documented here.
 
 ## v1.2.102
 
-**Fix — Farm page mirror doesn't stay on between automation cycles**
+### Fix — Farm page mirror doesn't stay on between automation cycles
 
-When the HST toggle was on but no cycle was actively executing (the 25–99 min idle wait), `anyCycleRunning` went false, `live` dropped to false, and the WebSocket stream closed — leaving the phone SVG blank until the next cycle started. The mirror also never auto-connected when first navigating to the farm page with the toggle already on.
+**Root cause:** The `live` prop on `PhoneSlot` was gated on `liveOn[phone.serial] || anyCycleRunning`. `anyCycleRunning` polls `/api/mobile/cycle-active` every 2 s and is only `true` while the server's automation-cycle HTTP handler is actively running (typically 2–5 minutes per cycle). During the 25–99 minute idle wait between cycles it returns `false`, collapsing `live` to `false` and closing the WebSocket stream — leaving the phone SVG blank or showing the wallpaper mid-session even with the HST toggle fully on.
 
-Fix: `AccountSettingsPanel` now reports `onAnyEnabled(bool)` to `MobilePage` whenever any slot's HST toggle changes. `MobilePage` tracks this as `hstEnabled` and includes it in the `live` gate — so the mirror stays connected for the full session and the wallpaper returns automatically when all toggles are turned off.
+**How it manifested:** The mirror worked during a cycle, went blank for the inter-cycle wait, sometimes flickered back on at the start of the next cycle (if the 2-second poll happened to land during the brief cycle-active window), and sometimes stayed blank for the entire wait. Navigating into the device detail view and back set `liveOn[phone.serial] = true`, which made the mirror sticky for that session — but required an extra navigation step and still didn't survive an app restart.
 
-**Fix — Mirror stalls after "10s timeout — no frames received"**
+**Fix:** `AccountSettingsPanel` now accepts an `onAnyEnabled(anyEnabled: boolean)` callback prop. A `useEffect` inside `AccountSettingsPanel` fires whenever `slotAutomationStates` changes (populated per-slot by `SlotHumanSessionView` via the existing `onAutomationState` callback). It computes `Object.values(slotAutomationStates).some(s => s.enabled)` and emits the boolean upward. `MobilePage` stores this as `hstEnabled` state and passes `onAnyEnabled={setHstEnabled}`. The `live` gate is now:
 
-The 10-second no-frame watchdog set status to `"error"` but left the WebSocket open and never reconnected — freezing the mirror permanently until the user manually navigated away and back.
+```
+live = liveOn[phone.serial] || hstEnabled || anyCycleRunning
+```
 
-Fix: the watchdog now calls `ws.close()`, which triggers the existing `onclose` reconnect handler (2 s retry).
+Behaviour after fix:
+- **Toggle ON** → mirror connects immediately and stays connected for the full session (idle waits included)
+- **All toggles OFF** → `hstEnabled` goes `false`, `live` drops to `false`, wallpaper/text returns automatically
+- **Manual Power click** → `liveOn` stays `true` indefinitely as a manual override
+- **Server-detected cycle** → `anyCycleRunning` remains as belt-and-suspenders fallback
+
+**Files changed:** `artifacts/dannys-bot/src/pages/MobilePage.tsx`
+- `AccountSettingsPanelProps` type — added `onAnyEnabled?: (anyEnabled: boolean) => void`
+- `AccountSettingsPanel` function — accepts `onAnyEnabled`, adds `useEffect` on `slotAutomationStates` to emit the summary
+- `MobilePage` — adds `const [hstEnabled, setHstEnabled] = useState(false)`, passes `onAnyEnabled={setHstEnabled}`, updates `live` gate
+
+---
+
+### Fix — Mirror freezes permanently after "10s timeout — no frames received"
+
+**Root cause:** `LiveCanvas` installs a `noFrameTimer` (`setTimeout`, 10 s) on `ws.onopen`. If no binary frame arrives within 10 seconds (phone screen locked, scrcpy not ready, screenrecord not yet streaming), the callback set `setStatus("error")` but left the WebSocket object alive and its `readyState` as `OPEN`. Because the socket was still open, `ws.onclose` never fired, the 2-second reconnect timer was never scheduled, and the mirror remained permanently stuck on the error/blank state.
+
+**How it manifested:** Opening the farm page while a phone's screen was off (or scrcpy was still initialising) left the mirror frozen on a blank/error state indefinitely. Unlocking the phone had no effect. Only a full page reload or navigating away and back initiated a fresh connect attempt.
+
+**Fix:** The `noFrameTimer` callback now calls `ws.close()` immediately after setting the error status. This tears down the open-but-idle socket, which fires `ws.onclose`, which schedules `setTimeout(connect, 2_000)` — the same 2-second reconnect path used for all other disconnections. The log message is updated from `"10s timeout — no frames received. Unlock screen?"` (which implied manual action was required) to `"10s timeout — no frames received. Reconnecting…"` (accurate — recovery is fully automatic).
+
+**Files changed:** `artifacts/dannys-bot/src/pages/MobilePage.tsx`
+- `LiveCanvas` `ws.onopen` — `noFrameTimer` callback adds `ws.close()` + updates log text
 
 ---
 
 ## v1.2.101
 
-**Fix — Timestamps blank after switching phones**
+### Fix — All timestamps blank after switching between phones
 
-When switching between phones, the `SlotHumanSessionView` components unmount and remount. The module-level `_hstTimers` map kept the timer running, but its callbacks pointed at the dead component's state setters — so `nextRunAt` never got written on the new instance, leaving every timestamp blank. The bail-out guard (`if (_hstTimers.has(key)) return`) made this permanent.
+**Root cause:** When the user switched from phone A → phone B → phone A, the `SlotHumanSessionView` components for phone A's slots unmounted (cleanup ran) and then remounted. The module-level `_hstTimers: Map<string, ReturnType<typeof setTimeout>>` still held the live timer handle under key `"<serial>:<slotIdx>"` from the first mount, so the run-loop `useEffect` hit `if (_hstTimers.has(key)) return` on line ~2898 and bailed out immediately. Consequences:
 
-Fix: added a module-level `_hstNextRunAt` map that mirrors every `setNextRunAt` call. On remount (detected by `rescheduleFnRef.current === null`), the stale timer is cancelled, `nextRunAt` is restored from `_hstNextRunAt`, and the timer is rescheduled with the remaining time under fresh closures. Spurious same-instance re-runs (USB poll oscillations) still bail out immediately as before.
+1. `nextRunAt` React state was `null` (fresh component mount) → every "Next run at" timestamp display went blank
+2. `rescheduleFnRef.current` was `null` (set to `null` in cleanup) → the clamp effect could never reschedule
+3. The stale timer kept ticking with closures over the *dead* component's state setters → `setNextRunAt` calls in the timer callback updated nothing visible
+
+Timestamps remained blank until the user manually toggled the switch off and then on again, which killed the old timer and started a fresh one under live closures.
+
+**How to distinguish from spurious re-runs:** The bail-out was originally added for Case A (same component instance, USB poll oscillation re-triggering the effect every 3 s with a valid timer still running). Case B (remount after phone switch) is distinguishable by `rescheduleFnRef.current === null` — cleanup always nulls this ref, so on a fresh mount it's `null`, while on a same-instance re-run it still points to the valid reschedule function.
+
+**Fix:** Added module-level `_hstNextRunAt: Map<string, number>` that mirrors every `setNextRunAt(value)` call synchronously (set on schedule, deleted on null). Replaced the single `if (_hstTimers.has(key)) return` with:
+
+- **Case A** (`rescheduleFnRef.current !== null`): same instance, valid closures → bail immediately as before
+- **Case B** (`rescheduleFnRef.current === null`): remount → cancel the stale timer via `clearTimeout`, read `_hstNextRunAt.get(key)` to recover the scheduled fire time, call `setNextRunAt(savedFireAt)` to restore the display immediately, set `recoveredFireAt` local variable, fall through to the rest of the effect. The initial-start block reads `recoveredFireAt` and calls `scheduleNext(remainingMs)` with the remaining time instead of picking a fresh random delay — preserving the original schedule precisely.
+
+All `setNextRunAt(...)` calls inside the effect now also update `_hstNextRunAt` (set for non-null values, `delete` for null), so the map stays accurate across cycles, explicit stops, and cleanup.
+
+**Files changed:** `artifacts/dannys-bot/src/pages/MobilePage.tsx`
+- Added `_hstNextRunAt: Map<string, number>` after `_hstStop` declaration
+- Run-loop `useEffect` bail-out replaced with Case A / Case B detection + remount recovery
+- `runCycle` — all `setNextRunAt(...)` calls paired with `_hstNextRunAt.set/delete`
+- `rescheduleFnRef.current` closure — paired with `_hstNextRunAt.set`
+- Initial-start block — added `recoveredFireAt` branch for remount reuse
+- Cleanup return — explicit-stop `setNextRunAt(null)` paired with `_hstNextRunAt.delete`
+
+`artifacts/electron/installer.nsh`
+- Desktop shortcut icon source changed from `$INSTDIR\resources\icon.ico` (written by `extraResources` *after* the shortcut is created → Windows caches a blank image on first install) to `$INSTDIR\Aura Farming.exe` (icon embedded by electron-builder, guaranteed present at shortcut creation time)
+- Added `SHChangeNotify` call immediately after shortcut creation to flush Windows' shell icon cache, so the correct logo appears on the desktop without the user having to move the shortcut
 
 ---
 
