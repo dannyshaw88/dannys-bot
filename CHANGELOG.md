@@ -4,6 +4,29 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.97] — 2026-07-22
+
+### Fix — CI build broken by JSX div mismatch introduced in v1.2.96
+
+The `{showSplitView && (...)}` → always-mounted `<div>` conversion in v1.2.96 left a stray extra `</div>` in `MobilePage.tsx`. The original JSX had the structure:
+
+```jsx
+{showSplitView && (          ← JS expression wrapper (not a JSX element)
+  <div className="flex-1..."> ← the actual div
+    ...
+  </div>                      ← closes the div
+)}                            ← closes the JS expression
+```
+
+The opening-edit correctly replaced the two lines with one `<div className={...}>`. The closing-edit incorrectly converted `)}` to `</div>`, adding an extra closing tag on top of the `</div>` that was already there. Vite/esbuild reported "Unexpected closing div tag does not match opening main tag" and exited 1.
+
+**Fix:** removed the extra `</div>`. Build now passes locally (`✓ 2826 modules transformed`).
+
+**Files changed:**
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — removed stray extra `</div>` near EOF
+
+---
+
 ## [1.2.96] — 2026-07-22
 
 ### Fix — HST run-loop permanently dead after first USB poll on any farm (outer showSplitView unmounts AccountSettingsPanel)

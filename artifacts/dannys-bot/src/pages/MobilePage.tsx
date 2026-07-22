@@ -7433,7 +7433,6 @@ export function MobilePage() {
               </div>
             </div>
           </div>
-        </div>
       </main>
     </div>
   );
