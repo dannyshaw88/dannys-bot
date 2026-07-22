@@ -4,6 +4,22 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.102
+
+**Fix — Farm page mirror doesn't stay on between automation cycles**
+
+When the HST toggle was on but no cycle was actively executing (the 25–99 min idle wait), `anyCycleRunning` went false, `live` dropped to false, and the WebSocket stream closed — leaving the phone SVG blank until the next cycle started. The mirror also never auto-connected when first navigating to the farm page with the toggle already on.
+
+Fix: `AccountSettingsPanel` now reports `onAnyEnabled(bool)` to `MobilePage` whenever any slot's HST toggle changes. `MobilePage` tracks this as `hstEnabled` and includes it in the `live` gate — so the mirror stays connected for the full session and the wallpaper returns automatically when all toggles are turned off.
+
+**Fix — Mirror stalls after "10s timeout — no frames received"**
+
+The 10-second no-frame watchdog set status to `"error"` but left the WebSocket open and never reconnected — freezing the mirror permanently until the user manually navigated away and back.
+
+Fix: the watchdog now calls `ws.close()`, which triggers the existing `onclose` reconnect handler (2 s retry).
+
+---
+
 ## v1.2.101
 
 **Fix — Timestamps blank after switching phones**

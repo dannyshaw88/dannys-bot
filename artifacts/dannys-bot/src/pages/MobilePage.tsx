@@ -507,8 +507,12 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         setStatus("waiting");
         noFrameTimer = setTimeout(() => {
           if (!frameSeenRef.current && active) {
-            addLog("10s timeout — no frames received. Unlock screen?");
+            addLog("10s timeout — no frames received. Reconnecting…");
             setStatus("error");
+            // Force a fresh connection — the WS is live but sending nothing
+            // (phone screen off, scrcpy not ready, etc.).  Close it so the
+            // onclose handler fires and schedules the normal 2 s reconnect.
+            ws.close();
           }
         }, 10_000);
       };
@@ -5717,10 +5721,10 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
 });
 
 type AccountSettingsPanelHandle = { backToSlots: () => void };
-type AccountSettingsPanelProps  = { phone: UsbPhone | null; addLog: (msg: string) => void; onSlotChange?: (slotIdx: number | null) => void; initialSlot?: number | null };
+type AccountSettingsPanelProps  = { phone: UsbPhone | null; addLog: (msg: string) => void; onSlotChange?: (slotIdx: number | null) => void; initialSlot?: number | null; onAnyEnabled?: (anyEnabled: boolean) => void };
 
 const AccountSettingsPanel = React.forwardRef<AccountSettingsPanelHandle, AccountSettingsPanelProps>(
-function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot }, ref) {
+function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyEnabled }, ref) {
   const [slotRefreshKeys, setSlotRefreshKeys] = useState<Record<number, number>>({});
   const handleCopied = useCallback((targetSlotIdxs: number[]) => {
     setSlotRefreshKeys(prev => {
@@ -5736,6 +5740,14 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot }, ref)
   const handleSlotAutomationState = useCallback((slotIdx: number, state: SlotAutomationState) => {
     setSlotAutomationStates(prev => ({ ...prev, [slotIdx]: state }));
   }, []);
+
+  // Notify parent whenever the "any slot enabled" summary changes.
+  const onAnyEnabledRef = useRef(onAnyEnabled);
+  onAnyEnabledRef.current = onAnyEnabled;
+  useEffect(() => {
+    const anyEnabled = Object.values(slotAutomationStates).some(s => s.enabled);
+    onAnyEnabledRef.current?.(anyEnabled);
+  }, [slotAutomationStates]);
 
   // One ref per slot — each points to that slot's SlotHumanSessionView handle.
   // The mirror toggle calls slotHandleRefs.current[i]?.setEnabled(v) directly,
@@ -7305,6 +7317,12 @@ export function MobilePage() {
     }
   }, [_ctxAddLog]);
 
+  // True when any account slot's HST toggle is on — bubbled up from
+  // AccountSettingsPanel via onAnyEnabled. Keeps live=true between cycles
+  // so the mirror stays connected during idle waits, and drops live=false
+  // (wallpaper returns) the moment all toggles are turned off.
+  const [hstEnabled, setHstEnabled] = useState(false);
+
   // Poll /api/mobile/cycle-active every 2 s so the mirror auto-connects
   // whenever any slot's automation is running, without needing a device-level
   // useAutomationSettings hook here. Per-slot hooks live inside each slot's
@@ -7460,18 +7478,15 @@ export function MobilePage() {
                   onDimensions={(w, h) => setPhoneDims({ w, h })}
                   phoneDims={phoneDims}
                   paneSize={paneSize}
-                  // Only auto-connect the live feed while a cycle is
-                  // actually executing (automation.running) — NOT merely
-                  // because the master toggle is enabled. Previously this
-                  // used `automation.settings.enabled`, so after a
-                  // restart/update with the toggle left on, opening this
-                  // tab reconnected the phone's video feed immediately
-                  // just to "check if it's alive" even though the
-                  // automation loop was idle, waiting for its next
-                  // scheduled run — an unnecessary connection. Clicking
-                  // Power (liveOn) is still a deliberate manual-view
-                  // action and always connects regardless of execution.
-                  live={!!(phone && (liveOn[phone.serial] || anyCycleRunning))}
+                  // Mirror is live when:
+                  //   • user clicked Power (liveOn) — manual override
+                  //   • any account slot's HST toggle is on (hstEnabled)
+                  //     keeps the mirror connected between cycles so it
+                  //     never goes blank mid-session; reverts to wallpaper
+                  //     automatically when all toggles are turned off
+                  //   • a server-side cycle is executing (anyCycleRunning)
+                  //     as a belt-and-suspenders fallback
+                  live={!!(phone && (liveOn[phone.serial] || hstEnabled || anyCycleRunning))}
                   onPower={() => { if (phone) setLiveOn(s => ({ ...s, [phone.serial]: true })); }}
                   ref={phone?.serial === activeSerial ? activeSlotRef : undefined}
                   inspectMode={inspectMode}
@@ -7504,7 +7519,7 @@ export function MobilePage() {
                 {/* Accounts panel: always mounted so each slot's automation
                     hook persists across tab switches and navigation. */}
                 <div className={activeTab === "account" ? "h-full" : "hidden"}>
-                  <AccountSettingsPanel ref={accountPanelRef} phone={stickySlot0Ref.current} addLog={addLog} onSlotChange={setOpenAccountSlot} initialSlot={initialSlot} />
+                  <AccountSettingsPanel ref={accountPanelRef} phone={stickySlot0Ref.current} addLog={addLog} onSlotChange={setOpenAccountSlot} initialSlot={initialSlot} onAnyEnabled={setHstEnabled} />
                 </div>
                 {activeTab === "phonesettings" && (
                   <PhoneSettingsPanel serial={activeSerial} />
