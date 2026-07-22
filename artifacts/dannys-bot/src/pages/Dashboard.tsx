@@ -62,7 +62,7 @@ const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string |
   refresh_own_profile:     { label: "Refresh Profile", cls: "text-indigo-600",    icon: "↺" },
   visit_settings_activity: { label: "Settings",        cls: "text-slate-600",     icon: "⚙" },
   save_media:              { label: "Save Media",      cls: "text-emerald-600",   icon: "⊙" },
-  server_started:          { label: "Started",         cls: "text-cyan-600",      icon: "⚡" },
+  server_started:          { label: "Booted Up",       cls: "text-cyan-600",      icon: "⚡" },
   repost:                  { label: "Repost",          cls: "text-pink-600",      icon: "↻" },
   check_dm:                { label: "Check DM",        cls: "text-purple-600",    icon: "✉" },
   view_post:               { label: "View Post",       cls: "text-teal-600",      icon: "◈" },
@@ -11696,7 +11696,7 @@ export function Dashboard() {
         {serverInfo?.startedAt && (
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground/70 border border-border/40 rounded px-2 py-0.5 bg-muted/20">
             <RefreshCw className="w-3 h-3" />
-            Aura Farming started at: {format(new Date(serverInfo.startedAt), "HH:mm:ss, MMM d yyyy")}
+            Aura Farming booted up at: {format(new Date(serverInfo.startedAt), "HH:mm:ss, MMM d yyyy")}
           </span>
         )}
       </div>
