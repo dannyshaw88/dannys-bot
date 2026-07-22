@@ -5776,28 +5776,24 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot }, ref)
     }
   };
 
-  if (!phone) {
-    return (
-      <div className="h-full flex flex-col items-center justify-center text-center px-6 gap-2">
-        <Smartphone className="w-8 h-8 text-muted-foreground/40" />
-        <p className="text-sm text-muted-foreground max-w-xs">
-          Connect a phone via USB to link an Instagram account to it.
-        </p>
-      </div>
-    );
-  }
-
-  const deviceName = [
-    phone.manufacturer,
-    phone.marketName || phone.model,
-  ].filter(Boolean).join(" ") || phone.serial;
+  // IMPORTANT: do NOT early-return when phone is null.  On a multi-phone
+  // farm the USB poll may transiently return an empty list for the targeted
+  // serial (a brief flicker between two poll responses).  An early return
+  // here would unmount every SlotHumanSessionView and destroy its
+  // useAutomationSettings hooks — cancelling all in-flight timers.  Instead,
+  // always render the hooks and show the "no phone" message inline.
+  const deviceName = phone
+    ? ([phone.manufacturer, phone.marketName || phone.model].filter(Boolean).join(" ") || phone.serial)
+    : "";
 
   return (
     <div className="h-full flex flex-col">
-      {/* Always-mounted slot Human Session Tool views — hidden when not active
-          so each slot's automation hook keeps running in the background. */}
+      {/* Always-mounted slot Human Session Tool views — hidden when phone is
+          null or when a different slot's tool is open.  Keeping these mounted
+          means automation run-loop timers survive transient USB poll flickers
+          where the targeted serial temporarily disappears from the device list. */}
       {slots.map((_, i) => (
-        <div key={`hst-${i}`} className={openSlotTool === i ? "h-full" : "hidden"}>
+        <div key={`hst-${i}`} className={phone && openSlotTool === i ? "h-full" : "hidden"}>
           <SlotHumanSessionView
             ref={el => { slotHandleRefs.current[i] = el; }}
             phone={phone}
@@ -5818,8 +5814,19 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot }, ref)
         </div>
       ))}
 
-      {/* Slot list — hidden when a slot tool view is open */}
-      <div className={openSlotTool === null ? "h-full overflow-y-auto p-6 space-y-6" : "hidden"}>
+      {/* No-phone placeholder — shown while the USB poll hasn't returned the
+          targeted serial yet (transient flicker).  Hidden once phone connects. */}
+      {!phone && (
+        <div className="h-full flex flex-col items-center justify-center text-center px-6 gap-2">
+          <Smartphone className="w-8 h-8 text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground max-w-xs">
+            Connect a phone via USB to link an Instagram account to it.
+          </p>
+        </div>
+      )}
+
+      {/* Slot list — hidden when a slot tool view is open or phone is null */}
+      <div className={phone && openSlotTool === null ? "h-full overflow-y-auto p-6 space-y-6" : "hidden"}>
         <div className="flex items-start justify-between gap-4">
           <h2 className="text-lg font-bold text-foreground">Accounts</h2>
           <span className="text-xs text-muted-foreground text-right shrink-0 pt-1">{deviceName}</span>

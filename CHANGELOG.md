@@ -4,6 +4,72 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.95] — 2026-07-22
+
+### Fix — HST run-loop permanently dead after ~8s on multi-phone farm (AccountSettingsPanel early-return unmounts all slot hooks on USB poll flicker)
+
+**The symptom (v1.2.94):** Slots start timers, then ALL simultaneously CLEANUP ~8 seconds later. The UI switches to the second phone, slots start again, ALL CLEANUP again ~3 seconds later. After visiting both phones the run-loops never restart. From the uploaded logs:
+
+```
+15:14:47  slot0 — effect started, timer set for 42.2min  (e38a197f3d22, rKey=0)
+15:14:47  slot2 — effect started, timer set for 90.0min
+15:14:47  slot3 — effect started, timer set for 39.1min
+15:14:47  slot4 — effect started, timer set for 60.9min
+15:14:54  slot4 — CLEANUP (rKey=0)  →  @redmaynechalicetmhb starts (rKey=1, 2-2min)
+15:14:55  slot0 — CLEANUP (rKey=0)   ← ALL slots kill at once, different rKey values
+15:14:55  slot2 — CLEANUP (rKey=0)
+15:14:55  slot3 — CLEANUP (rKey=0)
+15:14:55  @redmaynechalicetmhb — CLEANUP (rKey=1)
+15:14:57  [phone switches to 863d0058, slots restart]
+15:15:00  [ALL slots CLEANUP again for 863d0058]
+(permanently silent after that)
+```
+
+**Why v1.2.94 didn't fix it:**
+
+v1.2.94 removed `connectedKey` from the run-loop dep array. That fix addressed the "run-loop fires with connectedKey=new + phone=null → exits silently" race. But the logs show a completely different failure mode: ALL slots CLEANUP simultaneously even though their `rescheduleKey` values differ (rKey=0 for slots 0/2/3, rKey=1 for @redmaynechalicetmhb). A single dep-array change cannot cause effects with different dep values to CLEANUP at the same time. The only thing that can is **component unmount**.
+
+**Root cause — `AccountSettingsPanel` early-returns on `phone=null`, unmounting all `SlotHumanSessionView` components:**
+
+`AccountSettingsPanel` had:
+```js
+if (!phone) {
+  return <div>Connect a phone via USB…</div>;
+}
+```
+
+When this early return fires, `SlotHumanSessionView` components (which live below it in the render tree) do not render at all — React unmounts them. All `useAutomationSettings` hooks inside them are destroyed. All timers are cancelled. ALL slots CLEANUP simultaneously.
+
+`phone` = `slots[0]` = `phones[0]` where `phones` is filtered by `targetSerial`. On a multi-phone farm, the USB poll (every 3s) returns the targeted serial in its list — but not on every poll. When the serial is absent from a single poll response (a common transient flicker on multi-phone USB farms), `phones = []`, `slots[0] = null`, `phone = null`. The early return fires. Every slot's hook unmounts.
+
+Timeline:
+1. Poll at T+0: phone = e38a → slots mount → timers start ✓
+2. Poll at T+8s: phone = null (flicker) → early return → ALL unmount → ALL CLEANUP
+3. Poll at T+11s: phone = 863d (USB list returns different serial first) → slots remount → timers start ✓
+4. Poll at T+14s: phone = null → ALL unmount → ALL CLEANUP → permanently dead
+
+The pattern of visiting both phones once then stopping matches the 2-phone USB list oscillating (e38a first, then 863d first, then neither or stable). After both phones have been visited once and cleaned up, no further slot activity appears.
+
+**The fix (v1.2.95):**
+
+Remove the early return. Keep `SlotHumanSessionView` components **always mounted** regardless of whether `phone` is null. Show the "no phone" message inline (as a sibling to the always-mounted slot hook divs) rather than returning early.
+
+The slot hook divs now use `className={phone && openSlotTool === i ? "h-full" : "hidden"}` — they are visually hidden when phone is null, but they stay **mounted**. Their internal `!phone` guards (in every `useEffect`) prevent any work from actually running. When phone returns (next poll, ~3s), the hooks are already alive, `phoneRef.current` updates, and the existing timer resumes counting uninterrupted.
+
+`deviceName` is guarded for `phone = null` (returns `""` instead of crashing).
+
+**Why this is safe:**
+
+- All effects inside `useAutomationSettings` already guard on `!phone` — no automation fires when phone is null.
+- The serial-watcher sets `setRunning(false)` when phone goes null, but does NOT cancel the timer (timer is a local `setTimeout` variable inside the run-loop closure — not exposed to other effects).
+- When phone returns with the same serial: `prevNonNullSerialRef.current` still holds that serial → `connectedKey` does NOT increment → no hydration re-run → settings stay loaded → timer keeps counting.
+- When the timer fires during an extended null gap (unlikely — timers are 25–99 min; flickers are 1–3s): `phoneRef.current?.serial ≠ serial` guard fires → skips the cycle and does NOT reschedule → slot goes quiet. This is the correct safe behaviour for a genuinely disconnected phone.
+
+**Files changed:**
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — `AccountSettingsPanel`: removed `if (!phone) return` early exit; always render `SlotHumanSessionView` loop; added inline "no phone" placeholder; guarded `deviceName` for null phone; changed slot-tool visibility condition to `phone && openSlotTool === i`.
+
+---
+
 ## [1.2.94] — 2026-07-22
 
 ### Fix — HST run-loop permanently dead on 2-phone farm (connectedKey race with React 18 batching)
