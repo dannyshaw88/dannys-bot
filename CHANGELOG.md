@@ -4,6 +4,34 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.83] — 2026-07-22
+
+### Fix — "live is not defined" crash on startup
+
+The app crashed immediately on launch with the error **`ReferenceError: live is not defined`**. This was caused by the `LiveCanvas` component (the phone mirror video renderer) referencing a variable called `live` inside a `useEffect` that signals the server whether the mirror stream is active — but `live` was never declared as a prop of `LiveCanvas`. It only existed on the parent `PhoneSlot` component and was never passed down. In the built/bundled JavaScript this became a bare reference to an undeclared variable, which crashes at runtime before the app can render anything.
+
+**Fix:** added `live: boolean` to `LiveCanvas`'s prop type and destructured it in the component. `PhoneSlot` now passes `live={live}` through when it renders `<LiveCanvas>`, so the mirror-live server signal correctly reflects whether the phone stream is on or off.
+
+### Feature — Statistics page: Reel Scrolls, Feed Scrolls, Explore Scrolls columns
+
+Three new columns are now available in the **Statistics → Phone Farm** tab. Each shows a **daily / lifetime** count for the current slot, pulled from the same persistent stats store as all other farm metrics:
+
+- **Reel Scrolls** — how many reels were scrolled through during the Reels viewer tool each cycle.
+- **Feed Scrolls** — how many feed posts were scrolled through during the View Feed tool each cycle.
+- **Explore Scrolls** — how many items were scrolled through on the Explore/Search page each cycle.
+
+All three are recorded automatically at the end of every automation cycle alongside the existing Likes, Follows, Stories, etc. counts. They appear in the column list inside **Manage Columns** and can be shown, hidden, reordered, and resized like any other column.
+
+### Fix — "Manage Columns" button text is now black
+
+The **MANAGE COLUMNS** button in the Phone Farm tab header was rendering in a grey muted colour, making it easy to miss. It now uses the standard foreground (black/white depending on theme) colour, consistent with other actionable buttons in the UI.
+
+### Fix — Column width inputs: minimum value removed
+
+Inside the **Manage Columns** panel, the column width number input had a hard minimum of **40 px**, which prevented narrowing columns below that threshold even when a smaller value was useful. The minimum has been removed (now **1 px**), so columns can be made as narrow as needed.
+
+---
+
 ## [1.2.82] — 2026-07-22
 
 ### Fix — Farm page mini mirror now appears only when the mirror is deliberately powered on
