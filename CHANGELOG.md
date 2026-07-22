@@ -4,6 +4,55 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.105
+
+### Fix — Follow Users: correct user skipped ("not found") + old username not cleared
+
+**Bug 1 — User visible in search results but logged as "not found"**
+
+`findAndTapUserInSearch` did a single UIAutomator dump after a fixed 1500 ms
+wait. Instagram's search is a network round-trip — on a slower connection or
+under load, results appear on screen but haven't rendered into the accessibility
+tree yet by the time that one dump fires. The function returned `false`
+immediately, the correct candidate was skipped, and the follow count was silently
+wasted.
+
+Fix: the function now waits 2500 ms for the initial settle, then polls the dump
+up to 4 times with 1.5 s gaps (up to ~8.5 s total). Each poll is a read-only
+state check — no action is retried. As soon as the matching node appears in any
+dump, it is tapped and the function returns. If all 4 polls miss, the candidate
+is skipped as before.
+
+**Bug 2 — X (clear) button not pressed between candidates**
+
+The clear logic searched for `content-desc="Clear Text"` exactly. On Xiaomi
+MIUI and some IG builds the × button uses `content-desc="Clear"`,
+`content-desc="Clear query"`, or has an empty content-desc with only a
+resource-id (`search_clear_btn`, `clear_button`, etc.). None of those matched,
+so the clear was silently skipped and the next username was appended to the
+previous one in the search bar (e.g. `@prev_user@next_user`), causing every
+subsequent search to return no results.
+
+The keyboard-fallback (Home → Shift+End → Del) also failed silently because
+that sequence is unreliable when the bar isn't confirmed focused.
+
+Fix:
+- Clear-button detection now matches any node in the top 20 % of the screen
+  whose content-desc contains "Clear" (case-insensitive, any suffix) OR whose
+  resource-id contains a known clear-button fragment
+  (`search_clear_btn`, `clear_button`, `clear_text`, `clear`).
+- If no clear button is found: move cursor to end then fire 60 × KEYCODE_DEL —
+  guaranteed to drain any text regardless of field focus state, since DEL
+  operates on whatever is currently focused in the active window.
+
+**Files changed:**
+- `artifacts/api-server/src/mobile/androidManager.ts` — `findAndTapUserInSearch`
+  rewritten with polling; `getScreenSize` exported for use in route layer.
+- `artifacts/api-server/src/routes/mobile.ts` — clear-button detection broadened,
+  hard-clear DEL fallback added, pre-search wait reduced (polling now internal).
+
+---
+
 ## v1.2.104
 
 ### Fix — Clicking a device no longer wakes the phone screen

@@ -5127,56 +5127,59 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         await android.tap(serial, searchBar.x, searchBar.y);
         await sleepOrAbort(serial, 1000 + Math.floor(Math.random() * 4000));
 
-        // Clear any existing text from the search bar.
+        // Clear any existing text from the search bar before typing the next
+        // username.  Without this, a previous candidate's text stays in the
+        // bar and the new username is appended to it
+        // (e.g. "@prev_user@next_user"), causing the search to find nothing.
         //
-        // Context: when a previous candidate was visited for profile-quality
-        // filter checks and was rejected, the code presses Back (profile →
-        // search results page), which leaves the prior username still in the
-        // search bar.  The next iteration then taps the bar — which already
-        // has "@prev_username" in it — and without a reliable clear, types the
-        // new username directly appended to the old one (e.g.
-        // "@lima_martial_art@thevikassahanii"), causing the search to find
-        // nothing and the follow to silently fail.
-        //
-        // Fix: dump the UI immediately after the search-bar tap to look for
-        // Instagram's native "Clear Text" (×) button (content-desc="Clear Text"
-        // — reliably present whenever the bar has content).  Tap it if found.
-        // This is more reliable than KEYCODE_CTRL_A (which Android ignores in
-        // text fields) or KEYCODE_DEL (which only deletes one character at a
-        // time when no selection is active).
+        // Strategy 1: look for Instagram's native × clear button.
+        //   The content-desc varies by IG version and OEM:
+        //     • "Clear Text"  — stock Android / most IG builds
+        //     • "Clear query" — some IG versions
+        //     • "Clear"       — Xiaomi MIUI / GBoard variants
+        //   Also match by resource-id fragment ":id/search_clear_btn" /
+        //   ":id/clear_button" / ":id/clear" as a safety net for buttons
+        //   whose content-desc is empty on this device.
+        //   Only accept nodes in the top 20 % of the screen so we never
+        //   accidentally tap a keyboard delete key.
         {
           const _clearXml = await android.dumpUi(serial).catch(() => "");
           let _clearTapped = false;
           if (_clearXml) {
+            const { h: _sh } = android.getScreenSize(serial);
+            const _topLimit = Math.round(_sh * 0.20);
             const _nodeRe = /<node\s[^>]+?\/>/g;
             let _nm: RegExpExecArray | null;
             while ((_nm = _nodeRe.exec(_clearXml)) !== null) {
-              if (_nm[0].includes('content-desc="Clear Text"')) {
-                const _bm = _nm[0].match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-                if (_bm) {
-                  const _cx = Math.round((Number(_bm[1]) + Number(_bm[3])) / 2);
-                  const _cy = Math.round((Number(_bm[2]) + Number(_bm[4])) / 2);
-                  await android.tap(serial, _cx, _cy);
-                  onLog?.(`Follow: tapped "Clear Text" (×) button at (${_cx},${_cy}) — search bar cleared`);
-                  _clearTapped = true;
-                  await sleepOrAbort(serial, 300);
-                  break;
-                }
-              }
+              const _node = _nm[0];
+              const _bm = _node.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+              if (!_bm) continue;
+              const _cy = Math.round((Number(_bm[2]) + Number(_bm[4])) / 2);
+              if (_cy > _topLimit) continue; // skip keyboard area
+              const _isClearBtn =
+                /content-desc="Clear(?:\s+(?:Text|query))?"/i.test(_node) ||
+                /\/(search_clear_btn|clear_button|clear_text|clear)\b/.test(_node);
+              if (!_isClearBtn) continue;
+              const _cx = Math.round((Number(_bm[1]) + Number(_bm[3])) / 2);
+              await android.tap(serial, _cx, _cy);
+              onLog?.(`Follow: tapped clear (×) button at (${_cx},${_cy}) — search bar cleared`);
+              _clearTapped = true;
+              await sleepOrAbort(serial, 300);
+              break;
             }
           }
           if (!_clearTapped) {
-            // Keyboard fallback: select-all via Home→Shift+End→Del sequence —
-            // KEYCODE_CTRL_A is silently ignored in Android EditText fields.
+            // Strategy 2: hard-clear via keyevents — move cursor to end then
+            // fire 60 DEL presses (covers any username length up to ~60 chars).
+            // KEYCODE_CTRL_A is silently ignored on Android; the Home→Shift+End
+            // combo is unreliable when the bar isn't confirmed focused.  Sending
+            // repeated DEL is guaranteed to drain whatever text is present.
+            onLog?.(`Follow: clear-button not found — using keyevent hard-clear`);
             await android.keyevent(serial, "KEYCODE_MOVE_END");
-            await sleepOrAbort(serial, 100);
-            await android.keyevent(serial, "KEYCODE_MOVE_HOME");
-            await sleepOrAbort(serial, 100);
-            await android.keyevent(serial, "KEYCODE_SHIFT_LEFT");
-            await sleepOrAbort(serial, 100);
-            await android.keyevent(serial, "KEYCODE_MOVE_END");
-            await sleepOrAbort(serial, 100);
-            await android.keyevent(serial, "KEYCODE_DEL");
+            await sleepOrAbort(serial, 150);
+            for (let _di = 0; _di < 60; _di++) {
+              await android.keyevent(serial, "KEYCODE_DEL");
+            }
             await sleepOrAbort(serial, 200);
           }
         }
@@ -5184,10 +5187,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // Type @username character by character on the on-screen keyboard
         // (fixes the d→f / a→s coordinate-offset bug via UIAutomator key detection)
         await android.typeViaOnscreenKeyboard(serial, `@${username}`, onLog);
-        await sleepOrAbort(serial, 1200);
+        // Small settle before handing off to findAndTapUserInSearch, which
+        // now polls the dump internally (up to 4 attempts × 1.5 s) so the
+        // results have time to load from Instagram's network.
+        await sleepOrAbort(serial, 500);
 
         // Tap the matched user in results
-        const found = await android.findAndTapUserInSearch(serial, username).catch(() => false);
+        const found = await android.findAndTapUserInSearch(serial, username, onLog).catch(() => false);
         if (!found) {
           onLog?.(`Follow: @${username} not found in results — skipping`);
           await android.pressBack(serial);

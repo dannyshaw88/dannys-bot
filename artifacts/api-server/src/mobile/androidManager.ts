@@ -977,7 +977,7 @@ export async function keyevent(serial: string, code: string | number): Promise<v
 // and (per user instruction) cycled airplane mode before locking it again,
 // not like a script silently force-stopping a process in the background.
 
-function getScreenSize(serial: string): { w: number; h: number } {
+export function getScreenSize(serial: string): { w: number; h: number } {
   let w = 1080, h = 2400;
   try {
     const tools = detectToolset();
@@ -5536,21 +5536,40 @@ export async function typeViaOnscreenKeyboard(
 /**
  * After typing a username in Instagram's search bar, wait for results and
  * tap the first result matching that username. Returns true if tapped.
+ *
+ * Instagram's search is a network round-trip — results can take 1–5 s to
+ * appear in the accessibility tree even when they are visually visible.
+ * A single 1500 ms dump reliably misses slow responses.  Poll up to 4 times
+ * with 1.5 s gaps (up to ~8 s total) so the results have time to load.
+ * This is UI-state polling, not action-retrying — no tap is repeated.
  */
 export async function findAndTapUserInSearch(
   serial: string,
   username: string,
+  onLog?: (msg: string) => void,
 ): Promise<boolean> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  await _sleep(1500);
-  const xml = await _uiDump(adb, serial);
-  if (!xml) return false;
   const clean = username.replace(/^@/, "");
-  const pos = _findElem(xml, clean, `@${clean}`);
-  if (!pos) return false;
-  _adbTap(adb, serial, pos.x, pos.y);
-  return true;
+
+  // Initial settle — give Instagram time to fire the search query and begin
+  // rendering results before the first dump.
+  await _sleep(2500);
+
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    if (attempt > 1) {
+      onLog?.(`Follow: results not in tree yet — waiting (attempt ${attempt}/4)…`);
+      await _sleep(1500);
+    }
+    const xml = await _uiDump(adb, serial);
+    if (!xml) continue;
+    const pos = _findElem(xml, clean, `@${clean}`);
+    if (pos) {
+      _adbTap(adb, serial, pos.x, pos.y);
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
