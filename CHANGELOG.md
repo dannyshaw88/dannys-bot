@@ -4,6 +4,55 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.98] — 2026-07-22
+
+### Fix — HST run-loop permanently dead after USB poll flicker (sticky phone prop)
+
+**The symptom (v1.2.93 through v1.2.97):** Every slot starts its automation timer correctly, then ALL slots simultaneously fire CLEANUP ~3 seconds later with `enabled=true, rKey=0` — meaning none of the declared run-loop deps changed. After that, silence forever.
+
+**Why every previous fix missed it:**
+
+Each previous fix addressed a different level of the component tree:
+- v1.2.93–94: fixed `connectedKey` being in the run-loop dep array
+- v1.2.95: removed early `if (!phone) return` inside `AccountSettingsPanel`
+- v1.2.96: changed the outer `{showSplitView && (...)}` to a CSS-hidden `<div>` so `AccountSettingsPanel` stays mounted
+
+v1.2.96 was correct — `AccountSettingsPanel` and its `SlotHumanSessionView` hooks stayed mounted. But the run-loop was STILL dying. The cleanup fired with `enabled=true, rKey=0`, which means the run-loop dep array `[settings.enabled, rescheduleKey, hydrated]` had a dep changing. Only `hydrated` could flip — and it does, because the hydration effect dep array is `[connectedKey, slotIdx, refreshKey]`, and `connectedKey` was still incrementing.
+
+**The real root cause (in `MobilePage.tsx`):**
+
+```tsx
+// Line 7153 — recreated on every render:
+const slots: (UsbPhone | null)[] = Array.from({ length: TOTAL_SLOTS }, (_, i) => phones[i] ?? null);
+...
+// Line 7385 — phone prop passed to AccountSettingsPanel:
+<AccountSettingsPanel phone={slots[0]} ... />
+```
+
+`phones` comes from the USB poll response. Every ~3 seconds the poll fires. If the poll response transiently returns an empty list (one flicker in the USB enumeration), `phones` becomes `[]`, so `slots[0]` becomes `null`. AccountSettingsPanel receives `phone=null`.
+
+Inside `useAutomationSettings`, the serial-watcher effect has dep `[phone?.serial]`. When `phone` goes null, `phone?.serial` goes `undefined`. When the phone comes back on the next poll, `phone?.serial` is `"FAKE_001"` again. This `undefined → "FAKE_001"` transition fires the serial-watcher → `setConnectedKey(k+1)` → hydration effect re-runs → `setHydrated(false)` then `setHydrated(true)` → run-loop cleanup fires with `enabled=true, rKey=0` → timer is destroyed → permanently dead.
+
+The CSS-hide fix (v1.2.96) prevented the component from unmounting, but didn't prevent the prop from oscillating. The prop oscillation was the actual trigger.
+
+**The fix — sticky phone ref in `MobilePage`:**
+
+```tsx
+// After slots[] is derived:
+const stickySlot0Ref = useRef<UsbPhone | null>(null);
+if (slots[0] !== null) stickySlot0Ref.current = slots[0];
+
+// AccountSettingsPanel gets the sticky ref, never null:
+<AccountSettingsPanel phone={stickySlot0Ref.current} ... />
+```
+
+When `phones[]` transiently empties, `stickySlot0Ref.current` holds the last seen phone. The serial seen by `useAutomationSettings` stays `"FAKE_001"` throughout the flicker. `connectedKey` never increments spuriously. Hydration never re-fires. The run-loop timer runs to completion undisturbed.
+
+**Files changed:**
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — added `stickySlot0Ref`, changed `AccountSettingsPanel phone` prop
+
+---
+
 ## [1.2.97] — 2026-07-22
 
 ### Fix — CI build broken by JSX div mismatch introduced in v1.2.96

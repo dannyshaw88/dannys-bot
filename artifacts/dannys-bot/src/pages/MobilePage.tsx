@@ -7157,6 +7157,13 @@ export function MobilePage() {
   // decoded video frame size for Check Screen Info.
   const activeSlotRef = useRef<PhoneSlotHandle>(null);
 
+  // Sticky phone: never pass null to AccountSettingsPanel due to transient USB
+  // poll flickers. When phones[] empties briefly, keep the last seen phone so
+  // phone?.serial stays stable → connectedKey doesn't increment → hydration
+  // doesn't re-fire → run-loop timers stay alive.
+  const stickySlot0Ref = useRef<UsbPhone | null>(null);
+  if (slots[0] !== null) stickySlot0Ref.current = slots[0];
+
   // ── Global log state (persists regardless of which page is open) ────────────
   const {
     logLines,
@@ -7382,7 +7389,7 @@ export function MobilePage() {
                 {/* Accounts panel: always mounted so each slot's automation
                     hook persists across tab switches and navigation. */}
                 <div className={activeTab === "account" ? "h-full" : "hidden"}>
-                  <AccountSettingsPanel ref={accountPanelRef} phone={slots[0]} addLog={addLog} onSlotChange={setOpenAccountSlot} initialSlot={initialSlot} />
+                  <AccountSettingsPanel ref={accountPanelRef} phone={stickySlot0Ref.current} addLog={addLog} onSlotChange={setOpenAccountSlot} initialSlot={initialSlot} />
                 </div>
                 {activeTab === "phonesettings" && (
                   <PhoneSettingsPanel serial={activeSerial} />
