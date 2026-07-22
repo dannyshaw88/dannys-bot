@@ -4,6 +4,34 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.81] — 2026-07-22
+
+### Feature — Live phone mirror thumbnail on Phone Farm device cards
+
+When you have a phone's mirror screen open (the Mirror tab inside a device's control page),
+the Phone Farm grid now shows a live thumbnail of that phone's screen **directly on its card**
+— overlaid inside the phone SVG graphic, replacing the static wallpaper for as long as the
+mirror is active. The moment you close the mirror tab the card reverts to the normal wallpaper
+and text display. No action required — it activates automatically.
+
+**How it works:**
+- A new `/api/mobile/stream-active` server endpoint returns the list of device serials that
+  currently have an active video WebSocket connection (i.e. the mirror is open in a browser tab).
+- The Phone Farm page polls this endpoint every 2 seconds alongside the existing USB and
+  cycle-active polls.
+- Each device card that is streaming polls `/api/mobile/devices/:serial/screencap.png` every
+  1.5 seconds (with a cache-busting timestamp) and renders the result inside the phone shell
+  SVG, clipped to the screen's rounded corners.
+- Polling starts the moment the mirror is detected as active and stops immediately when it
+  closes — no unnecessary network traffic when the mirror is idle.
+
+### Change — Phone Farm page header renamed
+
+The header on the device grid page now reads **"Phone Farm - Manage Your Devices"** instead
+of just "Phone Farm".
+
+---
+
 ## [1.2.80] — 2026-07-22
 
 ### Fix — Human Session Tool timers reset every ~17 seconds due to USB phone list reordering
