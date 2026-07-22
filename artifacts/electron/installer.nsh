@@ -24,8 +24,7 @@
   ; This preserves the user's desktop icon position across updates.
   IfFileExists "$DESKTOP\Aura Farming.lnk" desktop_shortcut_done desktop_shortcut_create
   desktop_shortcut_create:
-    CreateShortcut "$DESKTOP\Aura Farming.lnk" "$INSTDIR\Aura Farming.exe" \
-      "" "$INSTDIR\Aura Farming.exe" 0
+    CreateShortcut "$DESKTOP\Aura Farming.lnk" "$INSTDIR\Aura Farming.exe" "" "$INSTDIR\resources\icon.ico" 0
   desktop_shortcut_done:
   ; Clear the update-in-progress flag now that install is complete.
   DeleteRegValue HKCU "Software\AuraFarming" "UpdatingNow"
