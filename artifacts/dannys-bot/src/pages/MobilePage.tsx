@@ -5745,7 +5745,14 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   const onAnyEnabledRef = useRef(onAnyEnabled);
   onAnyEnabledRef.current = onAnyEnabled;
   useEffect(() => {
-    const anyEnabled = Object.values(slotAutomationStates).some(s => s.enabled);
+    // Use running || nextRunAt to mean "actively scheduled or executing" —
+    // NOT s.enabled, which is true the moment saved settings are loaded from
+    // disk (toggle previously saved on), which would fire hstEnabled=true
+    // immediately on mount and keep live=true even when nothing is running,
+    // leaving the canvas blank (no frames) and hiding the wallpaper/text.
+    const anyEnabled = Object.values(slotAutomationStates).some(
+      s => s.running || s.nextRunAt !== null
+    );
     onAnyEnabledRef.current?.(anyEnabled);
   }, [slotAutomationStates]);
 

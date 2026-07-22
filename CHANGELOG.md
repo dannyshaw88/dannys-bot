@@ -4,6 +4,56 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.103
+
+### Fix — Farm page SVG mirror blank screen and premature mirror activation
+
+**Root cause:** The `onAnyEnabled` callback inside `AccountSettingsPanel` computed
+`Object.values(slotAutomationStates).some(s => s.enabled)`. The `enabled` flag on
+`SlotAutomationState` is set to `true` the moment a slot reads its saved settings from
+disk — not only when automation is actually running. This meant that any device whose
+HST toggle had ever been saved as "on" would immediately set `hstEnabled = true` in
+`MobilePage` on page load, which made `live = true` for the `PhoneSlot` with no
+automation actually running.
+
+**How it manifested (two visible symptoms):**
+
+1. **Mirror appeared in the SVG when it shouldn't.** With `live = true` from the start,
+   `LiveCanvas` would connect and render in the phone shell, even while the phone was
+   idle, IG wasn't open, and no cycle was running. The canvas received no video frames
+   and sat black/blank inside the SVG — where the wallpaper and text overlay should have
+   been. Users saw what looked like a second (blank) mirror in the slot.
+
+2. **SVG went blank after the mirror had been active.** Because `live` was `true` from
+   the moment the page loaded (not from when automation started), the condition that
+   renders the wallpaper/text overlay — `{!live && (custom.wallpaper || custom.texts.length > 0)}` —
+   was always `false`. The wallpaper and any text layers assigned to the slot could never
+   display. After a real mirror session ended, the slot reverted to a blank dark box
+   instead of showing the configured wallpaper.
+
+**Fix:** Changed the `anyEnabled` calculation to use
+`s.running || s.nextRunAt !== null` instead of `s.enabled`. This means `hstEnabled`
+only becomes `true` when automation is actively executing **or** has a scheduled next
+run already queued — never just because a toggle was previously saved as on.
+
+Correct post-fix behaviour:
+- **Idle (toggle saved on, nothing scheduled):** `hstEnabled = false` → `live = false`
+  → wallpaper and text display normally in the SVG slot.
+- **Cycle starts or next-run timer fires:** `s.running = true` or `s.nextRunAt ≠ null`
+  → `hstEnabled = true` → `live = true` → mirror connects and streams automatically.
+- **Cycle finishes, no next run scheduled:** both fields reset → `hstEnabled = false`
+  → `live = false` → wallpaper returns.
+- **Manual Power click:** `liveOn[serial]` stays `true` as an independent override,
+  unaffected by this change.
+- **Server-side cycle poll:** `anyCycleRunning` remains as a belt-and-suspenders
+  fallback, also unaffected.
+
+**Files changed:** `artifacts/dannys-bot/src/pages/MobilePage.tsx`
+- `AccountSettingsPanel` — `anyEnabled` condition changed from `s.enabled` to
+  `s.running || s.nextRunAt !== null`, with an explanatory comment.
+
+---
+
 ## v1.2.102
 
 ### Fix — Farm page mirror doesn't stay on between automation cycles
