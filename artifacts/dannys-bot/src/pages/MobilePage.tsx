@@ -2701,24 +2701,26 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     // unchanged, so this effect does not run, hydrated stays true, and the
     // run-loop timer keeps counting uninterrupted through any number of reorders.
     //
-    // IMPORTANT: the null-phone guard must come BEFORE setHydrated(false).
-    // On a 2-phone farm the USB poll oscillates.  The race is:
-    //   1. null→serialA  → connectedKey++ → React schedules this effect
-    //   2. serialA→null  → phone prop becomes null before React runs the effect
-    //   3. null→serialB  → connectedKey++ again → the previous effect run
-    //      is cancelled (active=false) before its fetch calls setHydrated(true)
-    //   4. This effect now runs with phone===null — if setHydrated(false) fires
-    //      unconditionally here, hydrated is stuck false forever (no fetch
-    //      means setHydrated(true) is never called, and connectedKey won't
-    //      increment again for the same serial).
-    // Leaving hydrated at its current value when phone===null is safe: the
-    // run-loop independently guards on !phone, so it won't fire while the
-    // device is absent.  When the real device reconnects (null→newSerial),
-    // connectedKey increments, this effect re-runs with a non-null phone,
-    // and the normal setHydrated(false) → fetch → setHydrated(true) path runs.
+    // hydrated is a ONE-WAY LATCH: it starts false, goes true after the first
+    // successful settings fetch, and is NEVER reset to false again.
+    //
+    // Why one-way?  Every connectedKey increment used to call setHydrated(false),
+    // which is a dep of the run-loop effect.  That dep change caused a CLEANUP →
+    // new random timer → new connectedKey could cancel the in-flight fetch before
+    // setHydrated(true) fired → hydrated permanently stuck false → run-loop
+    // silently dead forever.  On a 2-phone farm with USB enumeration oscillating
+    // every 2 s the cascade happened within 4 s of every launch.
+    //
+    // The run-loop already re-runs on connectedKey changes (connectedKey is in its
+    // own dep array), so hydrated does NOT need to flip back to false to gate
+    // subsequent reconnects.  Its only job is to block the very first run until
+    // the initial settings load completes.  After that it stays true permanently.
+    //
+    // null-phone guard: if phone is null, leave hydrated alone.  The run-loop
+    // guards on !phone independently.  When the real device reconnects
+    // (null→newSerial), connectedKey increments, this effect re-runs with a
+    // non-null phone, and the normal fetch → setHydrated(true) path executes.
     if (!phone) { return; }
-    hydratedRef.current = false;
-    setHydrated(false);        // gate the run-loop until this fetch resolves
     let active = true;
     setLoading(true);
     const serial = phone.serial; // capture at effect-run time

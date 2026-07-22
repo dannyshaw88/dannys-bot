@@ -4,6 +4,14 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.93] — 2026-07-22
+
+**Fix: HST run-loop permanently dead after phone oscillation (one-way latch)**
+
+Root cause (confirmed across four test runs): `hydrated` was used as a bidirectional gate — set to `false` on every `connectedKey` increment, then back to `true` after fetch. On a 2-phone farm the USB enumeration returns phones in alternating order every 2 s. Each swap incremented `connectedKey`, which set `hydrated=false` (a run-loop dep), which fired CLEANUP, which reset the random timer. Three rapid oscillations could cancel the in-flight fetch (via `active=false`) before `setHydrated(true)` ran — leaving `hydrated` permanently stuck at `false` and the run-loop silently dead forever.
+
+Fix: make `hydrated` a one-way latch. It starts `false`, goes `true` after the first successful settings load, and is never reset. The run-loop already re-runs on `connectedKey` changes (it's in the run-loop dep array directly), so `hydrated` does not need to flip back to gate subsequent reconnects. Its only job is to block the very first run before initial settings are fetched.
+
 ## [1.2.92] — 2026-07-22
 
 ### Fix — HST timer permanently stuck after phone-null race in settings-load effect
