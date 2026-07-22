@@ -4,6 +4,18 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.89] — 2026-07-22
+
+### Fix — HST timer reset on every app launch by clamp-effect false reschedule
+
+**Root cause:** The run-loop effect fired immediately on component mount using `AUTOMATION_DEFAULTS` values for `cycleIntervalMin`/`cycleIntervalMax` (before the server settings fetch completed). Seconds later when the fetch resolved with the user's real settings, `setSettings(merged)` triggered the **clamp effect** (`[settings.cycleIntervalMin, settings.cycleIntervalMax]` deps). The clamp effect found the running timer was outside the new (correct) bounds — because it had been started with default values — and called `setRescheduleKey(k+1)`. This incremented `rescheduleKey` → run-loop CLEANUP → new timer with fresh random delay. Every app launch produced exactly one spurious reset, visible in logs as a CLEANUP ~4–6 seconds after "effect started".
+
+**Fix:** Added a `hydrated` state (distinct from `hydratedRef` which only guards autosave). `hydrated` is set to `false` at the start of every settings fetch and to `true` inside `.then()` at the same time as `setSettings(merged)` — React batches these into one render so the run-loop always sees both the real settings and `hydrated=true` simultaneously. The run-loop now returns early (`setRunning(false)`) when `!hydrated`, so it never sets a timer with default values. `hydrated` is added to the run-loop dep array so it re-fires immediately when settings load.
+
+**Why this eliminates the clamp false-positive:** When the run-loop finally fires (with `hydrated=true`), the timer is set using the already-loaded correct interval values. The clamp effect then fires (triggered by `cycleIntervalMin/Max` changing from defaults to loaded values), but `nextRunAtRef.current` is either `null` (no timer set yet in this render cycle — effects fire sequentially) or the timer is already within bounds. No reschedule occurs.
+
+---
+
 ## [1.2.88] — 2026-07-22
 
 ### Fix — Human Session Tool timer reset every 6–9 seconds by two separate USB-enumeration bugs

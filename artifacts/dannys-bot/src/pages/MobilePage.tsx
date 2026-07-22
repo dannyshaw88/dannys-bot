@@ -2617,6 +2617,12 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // Keeps running=true even right after remount, before runCycle() fires.
   const [serverCycleRunning, setServerCycleRunning] = useState(false);
 
+  // True once the first server settings fetch for the current phone has
+  // resolved.  The run-loop is gated on this so it never starts a timer with
+  // AUTOMATION_DEFAULTS (which would immediately be reschedule-clamped when
+  // the real server settings arrive and have different cycleInterval values).
+  const [hydrated, setHydrated] = useState(false);
+
   // Loaded settings (including `enabled`) come from the server per phone —
   // used to detect real user edits vs. the initial load, so autosave never
   // fires before the fetch resolves.
@@ -2679,6 +2685,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
 
   useEffect(() => {
     hydratedRef.current = false;
+    setHydrated(false);        // gate the run-loop until this fetch resolves
     if (!phone) { return; }
     let active = true;
     setLoading(true);
@@ -2691,14 +2698,20 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         if (!active) return;
         const merged = { ...AUTOMATION_DEFAULTS, ...d };
         lastSavedRef.current = JSON.stringify(merged);
+        // Set settings AND hydrated in the same React batch so the run-loop
+        // fires exactly once with the correct loaded values.  Doing this in
+        // .then() (not .finally()) ensures setHydrated(true) is never called
+        // without the real settings also being in place.
         setSettings(merged);
+        setHydrated(true);
+        hydratedRef.current = true;
         // Do NOT set manualToggleOnRef here. On restart the toggle is already
         // on, but accounts must NOT fire immediately — each slot schedules its
         // own random first-run delay within the configured interval instead.
         // manualToggleOnRef is only set by explicit user action (setEnabledByUser).
       })
       .catch(() => { /* keep defaults */ })
-      .finally(() => { if (active) { setLoading(false); hydratedRef.current = true; } });
+      .finally(() => { if (active) { setLoading(false); } });
     return () => { active = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phone?.serial, slotIdx, refreshKey]);
@@ -2798,7 +2811,13 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // settings → close Instagram → recycle airplane mode → power off)
   // back-to-back until the toggle is switched off or the phone disconnects.
   useEffect(() => {
-    if (!phone || !settings.enabled) { setRunning(false); return; }
+    // Do not start the timer until server settings have been loaded for this
+    // phone.  Without this gate the run-loop fires immediately on mount with
+    // AUTOMATION_DEFAULTS, sets a timer using the default cycleInterval values,
+    // and then the clamp effect fires seconds later when real settings arrive
+    // and sees the timer is out of the loaded bounds — causing a spurious
+    // rescheduleKey increment and a full timer reset on every app launch.
+    if (!phone || !settings.enabled || !hydrated) { setRunning(false); return; }
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const serial = phone.serial;
@@ -3109,7 +3128,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectedKey, settings.enabled, rescheduleKey]);
+  }, [connectedKey, settings.enabled, rescheduleKey, hydrated]);
 
   // Clamp: if the existing timer no longer fits within the new [min, max]
   // bounds, force the run-loop to restart its timer by incrementing
