@@ -4,6 +4,24 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.90] — 2026-07-22
+
+### Fix — HST timer still resetting on USB null-flicker despite hydration gate
+
+**Root cause (the one v1.2.89 missed):** The settings-load effect called `setHydrated(false)` unconditionally at the very top — before the `if (!phone) return` guard. So whenever Windows briefly null-flickered the phone during USB enumeration (~every 9 s), the effect fired, reset `hydrated` to `false`, the run-loop saw a dep-array change, and the CLEANUP fired. The hydration gate added in v1.2.89 was correct in principle but was being bypassed by its own reset code on every flicker.
+
+**Fix:** Added `hydratedForSerialRef` — a ref that stores `{ serial, refreshKey }` for the most recently hydrated fetch. The settings-load effect now has three distinct paths at the top:
+
+1. `phone === null` → **return immediately, touch nothing.** The run-loop timer keeps counting.
+2. `phone.serial === hydratedForSerialRef.serial && refreshKey unchanged` → **return immediately** — already hydrated for this exact device and refresh cycle, no re-fetch needed.
+3. Everything else (new serial, or user-triggered force-refresh) → clear `hydratedForSerialRef`, call `setHydrated(false)`, and fetch.
+
+On a successful fetch, `hydratedForSerialRef` is set to `{ serial: phone.serial, refreshKey }` in the same `.then()` batch as `setHydrated(true)`, so the next reconnect-flicker hits path 2 instead of path 3.
+
+**Result:** USB null-flickers produce zero state changes anywhere in the component. The run-loop dep array never sees a change from a flicker. The timer runs uninterrupted until an account actually executes.
+
+---
+
 ## [1.2.89] — 2026-07-22
 
 ### Fix — HST timer reset on every app launch by clamp-effect false reschedule

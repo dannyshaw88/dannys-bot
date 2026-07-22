@@ -2627,6 +2627,12 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // used to detect real user edits vs. the initial load, so autosave never
   // fires before the fetch resolves.
   const hydratedRef = useRef(false);
+  // Tracks which {serial, refreshKey} pair has already had settings fetched and
+  // hydrated the run-loop.  The settings-load effect uses this to skip the
+  // setHydrated(false) reset on a transient USB null-flicker (phone briefly
+  // disappears then comes back as the same serial — no re-fetch needed, the
+  // timer should keep running uninterrupted).
+  const hydratedForSerialRef = useRef<{ serial: string; refreshKey: number } | null>(null);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   // Abort controller for the currently in-flight automation-cycle fetch.
@@ -2684,9 +2690,20 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   }, [phone?.serial, slotIdx]);
 
   useEffect(() => {
+    // Null flicker — phone briefly dropped off the USB list.  Don't reset
+    // hydrated; the run-loop timer must keep counting from where it was.
+    if (!phone) { return; }
+    // Same serial + same refreshKey — already hydrated for this device/refresh
+    // cycle.  Skip re-fetch entirely so no setHydrated(false) is ever called
+    // and the run-loop dep array never sees a change.
+    if (
+      hydratedForSerialRef.current?.serial === phone.serial &&
+      hydratedForSerialRef.current?.refreshKey === refreshKey
+    ) { return; }
+    // Genuinely different serial (new phone) or forced refresh — reset and re-fetch.
+    hydratedForSerialRef.current = null;
     hydratedRef.current = false;
     setHydrated(false);        // gate the run-loop until this fetch resolves
-    if (!phone) { return; }
     let active = true;
     setLoading(true);
     const settingsUrl = slotIdx !== undefined
@@ -2703,6 +2720,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         // .then() (not .finally()) ensures setHydrated(true) is never called
         // without the real settings also being in place.
         setSettings(merged);
+        hydratedForSerialRef.current = { serial: phone.serial, refreshKey };
         setHydrated(true);
         hydratedRef.current = true;
         // Do NOT set manualToggleOnRef here. On restart the toggle is already
