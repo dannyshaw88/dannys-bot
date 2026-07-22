@@ -7,7 +7,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Activity, Clock, User, Zap, Sparkles, Bell, Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, RefreshCw, Settings2, Upload, Download,
-  Fingerprint, ThumbsUp,
+  Fingerprint, ThumbsUp, Power,
 } from "lucide-react";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { TrustScoreBadge, getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
@@ -24,9 +24,9 @@ const ERROR_ACTIONS = new Set([
 ]);
 
 const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string | React.ReactNode }> = {
-  human_session_start:     { label: "Started",         cls: "text-blue-600",      icon: <ThumbsUp size={11} /> },
-  tool_start:              { label: "Started",         cls: "text-blue-700",      icon: <ThumbsUp size={11} /> },
-  tool_complete:           { label: "Complete",        cls: "text-emerald-700",   icon: "✓" },
+  human_session_start:     { label: "Started",         cls: "text-black",         icon: <Power size={11} className="text-red-500" /> },
+  tool_start:              { label: "Started",         cls: "text-black",         icon: <Power size={11} className="text-red-500" /> },
+  tool_complete:           { label: "Complete",        cls: "text-black",         icon: <span className="text-emerald-600">✓</span> },
   verified:                { label: "Verified",        cls: "text-green-700",     icon: "✓" },
   verification_failed:     { label: "Verify Fail",     cls: "text-red-700",       icon: "✗" },
   follow:                  { label: "Follow",          cls: "text-sky-700",       icon: "+" },
