@@ -656,6 +656,21 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serial]);
 
+  // ── Mirror-live signal ───────────────────────────────────────────────────
+  // When `live` goes true (Power pressed or cycle starts) tell the server so
+  // the farm grid can show a thumbnail overlay on this device's card.
+  // When `live` goes false, clear it. Intentionally does NOT fire on unmount
+  // so the farm grid keeps the thumbnail after navigating away from this page.
+  useEffect(() => {
+    if (!serial) return;
+    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/mirror-live`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ on: live }),
+    }).catch(() => {});
+    // No cleanup — leaving mirror-live set on unmount is intentional.
+  }, [serial, live]);
+
   // Sends an immediate wake keyevent — used when the phone is asleep so the
   // very first tap doesn't have to wait for the backend's own poll loop
   // (which was the "clicks don't register, feedback is slow" bug: the

@@ -563,6 +563,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // processes left behind by something outside this server's tracking
   // (a crashed tab, a previous server run, etc).
   const videoSessionActive = new Set<string>();
+  // Tracks serials where the user has explicitly powered on the phone mirror
+  // (pressed the Power button in the Mirror tab). Persists across navigation —
+  // intentionally NOT cleared when the mirror page unmounts so the farm grid
+  // can keep showing the thumbnail after the user navigates away.
+  // Resets to empty on server restart.
+  const mirrorLive = new Set<string>();
   // Maps serial → the currently-connected video WebSocket for that device.
   // Populated when a video WS client connects, cleared on disconnect.
   // Used by the automation cycle to push real-time progress messages into
@@ -6968,12 +6974,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch { res.status(500).end(); }
   });
 
-  // ── Active mirror streams ─────────────────────────────────────────────────
-  // Returns the set of device serials that currently have an active video
-  // WebSocket stream open (i.e. someone has the phone mirror tab open).
-  // The farm grid polls this every 2 s to show the live thumbnail overlay.
+  // ── Mirror live state ─────────────────────────────────────────────────────
+  // Called by the client when the user presses Power (live → true) or the
+  // mirror stops (live → false). Persists across navigation so the farm grid
+  // can show the thumbnail even after the user leaves the mirror page.
+  app.post("/api/mobile/devices/:serial/mirror-live", (req: Request, res: Response) => {
+    const serial = p(req, "serial");
+    const { on } = req.body as { on: boolean };
+    if (on) mirrorLive.add(serial);
+    else    mirrorLive.delete(serial);
+    res.json({ ok: true });
+  });
+
+  // Returns the set of device serials where the phone mirror is powered on.
+  // The farm grid polls this every 2 s to show/hide the live thumbnail overlay.
   app.get("/api/mobile/stream-active", (_req: Request, res: Response) => {
-    res.json({ serials: [...videoSessionActive] });
+    res.json({ serials: [...mirrorLive] });
   });
 
   // Returns the set of device serials that currently have an automation cycle
