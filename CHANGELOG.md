@@ -4,6 +4,26 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.92] — 2026-07-22
+
+### Fix — HST timer permanently stuck after phone-null race in settings-load effect
+
+**Root cause — confirmed from v1.2.91 logs:** On startup with a 2-phone farm, the USB poll oscillates rapidly between the two devices. When the poll returns only one phone at a time (not both simultaneously), this sequence occurs:
+
+1. `null → serialA` → `connectedKey++` → settings-load effect is scheduled by React
+2. Before React runs the effect, USB flickers again: `serialA → null → serialB`
+3. `null → serialB` (new serial) → `connectedKey++` again → the first effect instance is cancelled (`active = false`) before its fetch can call `setHydrated(true)`
+4. A new settings-load effect runs for the latest `connectedKey`, but at this moment `phone === null` (the USB hasn't stabilised yet)
+5. The old code called `setHydrated(false)` **unconditionally** before checking `if (!phone)`, so hydrated was set to `false` and the early return left it there permanently — no fetch, no `setHydrated(true)`, no recovery
+
+Result: all slots silently stuck with `hydrated === false`. Run-loop re-ran on every dep change but exited immediately via `if (!hydrated)`, so no timer was ever set and no CLEANUP logs appeared either. This is exactly what the v1.2.91 logs show: two rounds of timer starts + CLEANUPs at 13:44:58 and 13:45:02, then total silence for the remaining 2+ minutes of the log.
+
+**Fix:** Moved the `if (!phone) return` guard to **before** `setHydrated(false)`. When the effect fires with a null phone, `hydrated` is left at its current value. This is safe because:
+- The run-loop independently guards on `!phone`, so it won't fire while the device is absent
+- When the device reconnects (`null → newSerial`), `connectedKey` increments, the effect re-runs with a non-null phone, and the normal `setHydrated(false) → fetch → setHydrated(true)` path executes correctly
+
+---
+
 ## [1.2.91] — 2026-07-22
 
 ### Fix — HST timer reset every 4–8 seconds on a 2-phone farm (USB reorder root cause)
