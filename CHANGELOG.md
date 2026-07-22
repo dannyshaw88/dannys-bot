@@ -4,6 +4,41 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.82] — 2026-07-22
+
+### Fix — Farm page mini mirror now appears only when the mirror is deliberately powered on
+
+The mini mirror thumbnail on the Phone Farm device cards now behaves exactly as designed:
+it appears **only when you have pressed the Power button** to activate the phone mirror,
+and disappears when the mirror is turned off. Previously it was incorrectly tied to USB
+connection state (showing for all connected phones 24/7, which was not the intent).
+
+**How it works now:**
+- When you press **Power** on a phone's mirror page, the app immediately signals the server
+  that the mirror is active for that device's serial number.
+- When you navigate back to the Phone Farm page, the server still holds that "mirror active"
+  state — navigating away no longer clears it, so the thumbnail stays visible on the card.
+- The farm page polls the server every 2 s; as soon as it sees the serial marked as
+  mirror-active, the card starts polling `screencap.png` every 1.5 s and shows the live
+  screen inside the phone shell graphic.
+- Turning the mirror off (or the automation cycle ending) signals the server to clear the
+  state, and the card reverts to the wallpaper/text display immediately.
+- The mirror-active state resets automatically when the server restarts — no stale
+  thumbnails across sessions.
+
+### Fix — Desktop shortcut icon now shows the app icon correctly
+
+The Windows installer now copies `icon.ico` into the installation directory
+(`resources\icon.ico`) and points the desktop shortcut's icon directly at that file,
+instead of trying to extract it from inside the executable. Extracting from an Electron
+exe at index 0 silently fails on some Windows configurations, leaving a generic white
+file icon. Using the standalone `.ico` file is reliable across all Windows versions.
+
+> **Note for existing installs:** delete the old desktop shortcut and reinstall to get the
+> corrected one. The installer will recreate it pointing to the new icon path.
+
+---
+
 ## [1.2.81] — 2026-07-22
 
 ### Feature — Live phone mirror thumbnail on Phone Farm device cards
