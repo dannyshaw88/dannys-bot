@@ -4,6 +4,70 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.96] — 2026-07-22
+
+### Fix — HST run-loop permanently dead after first USB poll on any farm (outer showSplitView unmounts AccountSettingsPanel)
+
+**The symptom (v1.2.95):** Identical to all previous versions — slots start timers, ALL simultaneously CLEANUP ~3 seconds later (one USB poll cycle), then silence. v1.2.95 confirmed the fix was insufficient; the exact same log pattern continued.
+
+**Why v1.2.95 didn't fix it:**
+
+v1.2.95 removed the `if (!phone) return` early return INSIDE `AccountSettingsPanel`, keeping `SlotHumanSessionView` mounted when `phone=null`. That was the right idea — but it was one level too deep. There is an OUTER conditional in `MobilePage` that wraps the entire split view:
+
+```jsx
+{showSplitView && (
+  <div className="flex-1 min-h-0 flex">
+    ...
+    <AccountSettingsPanel ... />   ← inside here
+    ...
+  </div>
+)}
+```
+
+When `showSplitView` becomes `false`, React unmounts the **entire subtree** — including `AccountSettingsPanel` and every `SlotHumanSessionView` inside it. The v1.2.95 fix only prevented unmounting within `AccountSettingsPanel`; it had no effect on `AccountSettingsPanel` itself being unmounted by its parent.
+
+**When does `showSplitView` become false?**
+
+```js
+const showSplitView = !!(data && data.adbFound && !error && (phones.length > 0 || loading));
+```
+
+`loading` is `false` immediately after each USB poll response. `phones.length` is 0 whenever the poll response doesn't include the targeted serial. On a multi-phone farm the USB enumeration is unstable — one poll in every few may return an empty list or list only the other phone. The first such poll (at T+3 s) set `phones.length = 0`, `loading = false`, `showSplitView = false` → React unmounts the whole `<div className="flex-1 min-h-0 flex">` → ALL `SlotHumanSessionView` hooks are destroyed → ALL timers CLEANUP simultaneously → permanently dead.
+
+The 3-second CLEANUP gap in the logs exactly equals the USB poll interval, confirming this is a poll-response-triggered unmount.
+
+**The fix (v1.2.96):**
+
+Replace the `{showSplitView && (...)}` conditional render with an always-mounted `<div>` whose `className` toggles between visible and `"hidden"`:
+
+```jsx
+// Before (unmounts on USB flicker):
+{showSplitView && (
+  <div className="flex-1 min-h-0 flex">
+    ...
+  </div>
+)}
+
+// After (always mounted, CSS-hidden during flicker):
+<div className={showSplitView ? "flex-1 min-h-0 flex" : "hidden"}>
+  ...
+</div>
+```
+
+With `display: none`, the div and everything inside it stays in the React component tree. `AccountSettingsPanel` never unmounts. Every `SlotHumanSessionView` hook (and its `useAutomationSettings` timer) survives any USB poll that returns empty. When `showSplitView` goes back to `true` (next poll, ~3 s), the hooks are already alive with their timers counting — no restart needed.
+
+**Why this is safe:**
+
+- All effects inside `useAutomationSettings` already guard on `!phone` (serial-watcher sets `running=false`, run-loop exits early). No automation fires during a USB gap.
+- When phone returns with the same serial: `prevNonNullSerialRef` still holds that serial → `connectedKey` does NOT increment → hydration not re-triggered → settings stay loaded → timer keeps counting uninterrupted.
+- `PhoneSlot` components (left panel) also stay mounted; they already handle `phone=null` gracefully.
+
+**Files changed:**
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — changed outer `{showSplitView && (<div ...>)}` to `<div className={showSplitView ? ... : "hidden"}>` (always mounted)
+- `artifacts/electron/package.json` — version bump 1.2.95 → 1.2.96
+
+---
+
 ## [1.2.95] — 2026-07-22
 
 ### Fix — HST run-loop permanently dead after ~8s on multi-phone farm (AccountSettingsPanel early-return unmounts all slot hooks on USB poll flicker)

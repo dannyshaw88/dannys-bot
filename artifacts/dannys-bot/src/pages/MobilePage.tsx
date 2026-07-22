@@ -7314,8 +7314,13 @@ export function MobilePage() {
         )}
 
         {/* Phone (left half, full height) + automation settings (right half) */}
-        {showSplitView && (
-          <div className="flex-1 min-h-0 flex">
+        {/* ALWAYS MOUNTED — never use {showSplitView && ...} here.  The outer
+            conditional would unmount AccountSettingsPanel (and every
+            SlotHumanSessionView inside it) whenever the USB poll transiently
+            returns 0 phones for the targeted serial.  That destroyed all
+            automation run-loop timers on every 3-second USB poll flicker.
+            Use CSS hiding instead so the hooks stay alive through any gap. */}
+        <div className={showSplitView ? "flex-1 min-h-0 flex" : "hidden"}>
             <div ref={setPaneEl} className="w-1/2 h-full flex items-center justify-center p-4 min-h-0">
               {/* PhoneSlot sizes its own shell exactly to the phone's real
                   reported resolution using the measured pane size below —
@@ -7428,7 +7433,7 @@ export function MobilePage() {
               </div>
             </div>
           </div>
-        )}
+        </div>
       </main>
     </div>
   );
