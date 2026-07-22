@@ -6272,6 +6272,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       checkFeedInProgress.delete(serial);
       automationCycleCurrentId.delete(serial);
       automationCycleAbortedId.delete(serial);
+      // Clear mirror-live when the cycle ends so the farm grid restores the
+      // slot wallpaper instead of continuing to poll a stale screencap stream.
+      mirrorLive.delete(serial);
     }
   });
 
@@ -6927,7 +6930,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.get("/api/mobile/devices/:serial/screencap-base64", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
-      const adbPath = (await android.getTools()).adb.path;
+      const tools = android.detectToolset();
+      if (!tools.adb.found || !tools.adb.path) { res.status(503).json({ ok: false, error: "adb not found" }); return; }
+      const adbPath = tools.adb.path;
       const chunks: Buffer[] = [];
       let stderrOut = "";
       await new Promise<void>((resolve, reject) => {
@@ -6959,7 +6964,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.get("/api/mobile/devices/:serial/screencap.png", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
-      const adbPath = (await android.getTools()).adb.path;
+      const tools = android.detectToolset();
+      if (!tools.adb.found || !tools.adb.path) { res.status(503).end(); return; }
+      const adbPath = tools.adb.path;
       const chunks: Buffer[] = [];
       await new Promise<void>((resolve, reject) => {
         const child = spawn(adbPath, ["-s", serial, "exec-out", "screencap", "-p"]);

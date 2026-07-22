@@ -4,6 +4,22 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.84] — 2026-07-22
+
+### Fix — Statistics page Manage Columns: narrowing a column no longer causes others to expand
+
+Clicking the **‹** (narrow) button in the **Statistics → Tool Performance → Manage Columns** panel was causing other columns to visually widen rather than the selected column getting narrower. This happened because the column-width state was being read from a stale snapshot inside the updater function — if you edited multiple columns in quick succession before the component fully re-rendered, each edit would compute its new width from the same outdated base and the last write would silently undo the previous ones. The fix switches to a **functional state update** (`prev => ({ ...prev, [key]: newValue })`) so every click always reads the latest committed widths, matching the pattern that already works correctly in the Dashboard Manage Columns panel.
+
+### Fix — Phone Farm live mirror thumbnail was always broken (screencap 500 error)
+
+The farm grid's per-device screencap polling (`/api/mobile/devices/:serial/screencap.png`) was calling `android.getTools()` to resolve the ADB binary path — but `getTools` was never exported from `androidManager.ts`, so the call always threw a `TypeError` that the server caught and silently turned into a **HTTP 500**. Every screencap request failed instantly, so the SVG phone shell could never load the live thumbnail and the slot wallpaper always showed through instead. The fix replaces both occurrences of `android.getTools()` (screencap.png and screencap-base64 endpoints) with the correct `android.detectToolset()` call, which is exported and returns the ADB path synchronously. As a side-effect the long-standing build warning `Import "getTools" will always be undefined` is also eliminated.
+
+### Fix — Phone Farm: slot wallpaper/text not restored after automation cycle ends
+
+When an automation cycle finished (Human Session tool complete, cycle timed out, etc.), the **mirrorLive** server-side set was not being cleared for that device serial. The farm grid polls `/api/mobile/stream-active` every 2 s to decide whether to show the live screencap overlay or the slot's custom wallpaper and text — because `mirrorLive` still held the serial, `isStreaming` stayed `true`, the screencap polling interval kept running, and the default wallpaper + text layers were never restored. The fix adds `mirrorLive.delete(serial)` to the automation cycle `finally` block alongside the existing cleanup for `automationCycleInProgress`, so the farm grid immediately detects the stream has ended and reverts to the wallpaper on the next 2 s poll.
+
+---
+
 ## [1.2.83] — 2026-07-22
 
 ### Fix — "live is not defined" crash on startup

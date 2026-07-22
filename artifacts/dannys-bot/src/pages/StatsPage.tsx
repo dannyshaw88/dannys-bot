@@ -1120,10 +1120,10 @@ function PhoneFarmTab() {
   );
 
   const nudgeFarmColWidth = (key: string, delta: number) => {
-    const v = Math.max(1, Math.min(600, (farmColWidths[key] ?? FARM_DEFAULT_COL_WIDTHS[key] ?? 80) + delta));
-    const next = { ...farmColWidths, [key]: v };
-    setFarmColWidths(next);
-    localStorage.setItem("farm_col_widths_px", JSON.stringify(next));
+    setFarmColWidths(prev => {
+      const v = Math.max(1, Math.min(600, (prev[key] ?? FARM_DEFAULT_COL_WIDTHS[key] ?? 80) + delta));
+      return { ...prev, [key]: v };
+    });
   };
 
   const [farmVisibleCols, setFarmVisibleCols] = usePersistentSetting<Record<string, boolean>>(
