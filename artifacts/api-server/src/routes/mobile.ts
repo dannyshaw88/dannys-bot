@@ -6021,13 +6021,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   tLog(`  Spread Follows: saved ${_surplus.length} unused candidate(s) to Surplus`);
                 }
 
-                // Interleave: after each non-follow tool, inject one follow slot.
-                // Any remaining follow slots are appended at the end.
+                // Interleave: replace 'follow' with the first follow_spread slot at its
+                // original shuffle position, then inject one more follow_spread after each
+                // subsequent non-follow tool.  Any remaining slots are appended at the end.
                 const _spreadSeq: string[] = [];
                 let _sfi = 0;
-                for (const _nt of _nonFollowTools) {
-                  _spreadSeq.push(_nt);
-                  if (_sfi < _sfPool.length) _spreadSeq.push(`follow_spread:${_sfPool[_sfi++]}`);
+                let _followInserted = false;
+                for (const _nt of _toolSeq) {
+                  if (_nt === 'follow') {
+                    if (_sfi < _sfPool.length) _spreadSeq.push(`follow_spread:${_sfPool[_sfi++]}`);
+                    _followInserted = true;
+                  } else {
+                    _spreadSeq.push(_nt);
+                    if (_followInserted && _sfi < _sfPool.length) _spreadSeq.push(`follow_spread:${_sfPool[_sfi++]}`);
+                  }
                 }
                 while (_sfi < _sfPool.length) _spreadSeq.push(`follow_spread:${_sfPool[_sfi++]}`);
 
