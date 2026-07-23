@@ -4,6 +4,135 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.114
+
+### Fix — Reels: 2-minute wasted poll on devices where IG hides player node IDs
+
+**Problem:** After watching each reel, the automation ran a "is the player ready?"
+poll before attempting to like / share / save. That poll checked the UIAutomator
+accessibility tree for three specific resource IDs:
+
+- `com.instagram.android:id/like_count`
+- `com.instagram.android:id/comment_button`
+- `com.instagram.android:id/direct_share_button`
+
+On the Xiaomi Redmi A5 (25028RN03Y) — and likely other devices on recent
+Instagram builds — these resource IDs do not appear in the tree even when the
+reel is visibly and fully playing. The poll ran all six 2-second retries
+(up to 12 seconds per reel) before timing out and proceeding anyway, adding
+roughly 1–2 minutes of dead time per automation cycle.
+
+**Root cause:** The node IDs chosen for the poll did not match what the follow-on
+action scanner (`findReelActionIcons`) actually anchors on. That function uses
+`content-desc="Like"` and `content-desc="Unlike"` as its primary anchor, not
+resource IDs — so the poll was checking for nodes that were never going to appear.
+
+**Fix:** The poll now checks for `content-desc="Like"` and `content-desc="Unlike"`,
+exactly mirroring the anchor that `findReelActionIcons` uses. The moment the Like
+icon appears in the tree (which it does as soon as the reel is ready to interact
+with), the poll exits immediately. No wasted retries, no dead time.
+
+This change is isolated to the View Reels loop and has no effect on any other tool.
+
+---
+
+### Fix — Follow Users: candidates skipped when search results not in a11y tree
+
+**Problem:** On the Xiaomi Redmi 12 5G (23076RN8DY), Instagram's search results
+list is not exposed in the UIAutomator accessibility tree. The search bar and
+on-screen keyboard were also absent from the tree on this device — the follow
+flow had already been falling back to positional tap for the search bar and IME
+text injection for the keyboard, both of which work correctly. However, the
+result-finding step (`findAndTapUserInSearch`) had no fallback: it polled the
+tree four times, found nothing each time, logged "results not in tree yet", and
+ultimately skipped every single candidate — even when the results were clearly
+visible on screen.
+
+The logs showed `@joey_biasotto not found in results — skipping` and
+`@musclemax.ma not found in results — skipping` back-to-back, with full results
+rendering confirmed via the live phone mirror.
+
+**Root cause:** `findAndTapUserInSearch` relies on `_findElem`, which searches
+the a11y tree's `text`, `content-desc`, `hint`, and `resource-id` attributes for
+the target username. When the Instagram build on this device does not expose
+search result rows to UIAutomator, all four polling attempts return null and the
+function returns `false` with no further recourse.
+
+**Fix:** Added a positional fallback at the end of `findAndTapUserInSearch`,
+activated only after all four a11y attempts have failed:
+
+1. A fresh dump verifies Instagram is still the foreground app
+   (`com.instagram.android` present). If not, the function returns `false`
+   cleanly — no blind tap.
+2. The first search result row is tapped at `(screenW × 50%, screenH × 22%)`.
+   This ratio is calibrated against the devices observed so far:
+   - 720 × 1280 → approx. (360, 282)
+   - 1080 × 2400 → approx. (540, 528)
+   - 1080 × 2460 → approx. (540, 541)
+3. The tap coordinate and reason are logged so every positional fallback is
+   traceable in the Debugging Log.
+
+Since the exact username was typed into the search bar before this point,
+Instagram always ranks the exact matching account first in results, making a
+tap on the first row unambiguous. The subsequent steps (profile page load →
+Follow button tap → confirmation) verify the correct account was opened before
+any follow action is recorded.
+
+This change is isolated entirely to `findAndTapUserInSearch` in androidManager.ts
+and has no effect on any other tool or shared utility.
+
+---
+
+### Change — Trust Score settings page rebuilt for Mobile Engine
+
+The Settings → Trust Scores per-level settings page has been completely replaced.
+The previous implementation stored Human Session Tool settings from the old
+browser/API engine (fields like `viewTimelineFeedEnabled`, `webBrowsingEnabled`,
+`repostEnabled`, `forceEmulationEnabled`, `checkDmEnabled`, and related ranges).
+Those fields do not apply to the Phone Farm Mobile Engine.
+
+**What changed:**
+
+- All browser/API engine fields have been removed from the page and from
+  localStorage. The old storage key (`ts_hs_settings_v1_<id>`) is no longer
+  read or written; previously stored values are silently ignored.
+
+- The page now stores and exposes the full set of Mobile Engine Human Session
+  Tool settings under a new key (`ts_mobile_hs_v1_<id>`), matching the
+  `AutomationSettingsData` interface used by the Phone Farm device slots.
+
+**Settings sections now available per trust score level:**
+
+- **General** — Cycle interval (min / max minutes), shuffle tool order
+- **View Feed** — Enabled, Activate Percentage, action delay, posts to scroll,
+  like %, share to feed %, share via DM %, save %
+- **View Stories from Feed** — Enabled, Activate Percentage, stories to watch,
+  % of each story to watch, like %, share via DM %
+- **View Explore Page** — Enabled, Activate Percentage, posts to scroll, action
+  delay, click posts %, like %, share to feed %, share via DM %, save %
+- **View Reels** — Enabled, Activate Percentage, reels to scroll, watch %,
+  like %, share to feed %, share via DM %, save %
+- **Follow Users** — Enabled, Activate Percentage, users per session,
+  spread follows toggle
+- **Inject Browsing (within Follow)** — Enabled, Activate Percentage,
+  browse before follow %, feed posts to scroll, click post %, like %, share to
+  feed %, share via DM %, save post %, abandon follow %
+- **Follow Filters** — Enabled, skip private accounts, skip non-English,
+  skip < 50 followers, skip verified, skip > 25k followers
+- **Random Jitter** — Enabled, Activate Percentage, check notifications %,
+  notification scrolls, notification click %, visit profile %
+- **Make a Post** — Enabled, Activate Percentage, posts per session,
+  Instagram account source, HikerAPI toggle, local folder source (path, no
+  repeat, random, delete after upload), ChatGPT caption, fix AI slop, make
+  unique, caption text, alteration level, image settings (contrast, brightness,
+  noise, sharpen, pixelate), disable at post count, disable when exhausted
+
+Slot-specific fields that belong to an individual device slot — `enabled`,
+`followSources`, and `dismissDirection` — are intentionally excluded from the
+trust score template.
+
+---
+
 ## v1.2.113
 
 ### Change — Metrics no longer exposes raw API endpoint data
