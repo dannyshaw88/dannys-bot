@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Fingerprint } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
 import { getTrustLevels, type TrustLevelEntry } from "./TrustScoreBadge";
 import {
   loadSlotTrustScore,
@@ -13,8 +11,6 @@ import {
 const ROW_HEIGHT = 30;
 const MAX_VISIBLE_ROWS = 5;
 
-type SlotAutomationResponse = { enabled?: boolean };
-
 interface MetricsSlotTrustScoreBadgeProps {
   serial: string;
   slotIdx: number;
@@ -24,15 +20,11 @@ interface MetricsSlotTrustScoreBadgeProps {
  * Metrics-only slot badge.
  *
  * This intentionally does not use TrustScoreBadge or DashboardSlotTrustScoreBadge
- * as a component. Metrics needs the device-slot trust score and the slot's
- * Human Session setting, while the other badge instances must remain isolated
- * from any future Metrics-specific changes.
+ * as a component. Metrics needs the device-slot trust score, while the other
+ * badge instances must remain isolated from any future Metrics-specific changes.
  */
 export function MetricsSlotTrustScoreBadge({ serial, slotIdx }: MetricsSlotTrustScoreBadgeProps) {
   const [scoreId, setScoreId] = useState<string | null>(() => readLocalSlotTrustScore(serial, slotIdx));
-  const [humanSessionEnabled, setHumanSessionEnabled] = useState(false);
-  const [humanSessionLoading, setHumanSessionLoading] = useState(true);
-  const [humanSessionSaving, setHumanSessionSaving] = useState(false);
   const [open, setOpen] = useState(false);
   const [levels, setLevels] = useState<TrustLevelEntry[]>(() => getTrustLevels());
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -40,23 +32,11 @@ export function MetricsSlotTrustScoreBadge({ serial, slotIdx }: MetricsSlotTrust
 
   useEffect(() => {
     let active = true;
-    setHumanSessionLoading(true);
-
-    Promise.all([
-      loadSlotTrustScore(serial, slotIdx),
-      fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings`, {
-        credentials: "include",
-      }).then(async response => (
-        response.ok ? await response.json() as SlotAutomationResponse : {} as SlotAutomationResponse
-      )),
-    ]).then(([loadedScore, automation]) => {
+    loadSlotTrustScore(serial, slotIdx).then(loadedScore => {
       if (!active) return;
       setScoreId(loadedScore);
-      setHumanSessionEnabled(automation.enabled === true);
     }).catch(() => {
-      // Keep the locally cached score and current toggle state on transient errors.
-    }).finally(() => {
-      if (active) setHumanSessionLoading(false);
+      // Keep the locally cached score on transient errors.
     });
 
     return () => { active = false; };
@@ -127,27 +107,6 @@ export function MetricsSlotTrustScoreBadge({ serial, slotIdx }: MetricsSlotTrust
       await saveSlotTrustScore(serial, slotIdx, nextScoreId);
     } catch {
       // Keep the optimistic value; the next hydration can retry the server read.
-    }
-  };
-
-  const toggleHumanSession = async (enabled: boolean) => {
-    setHumanSessionEnabled(enabled);
-    setHumanSessionSaving(true);
-    try {
-      const response = await fetch(
-        `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ enabled }),
-        },
-      );
-      if (!response.ok) throw new Error(`Human Session save failed (${response.status})`);
-    } catch {
-      setHumanSessionEnabled(!enabled);
-    } finally {
-      setHumanSessionSaving(false);
     }
   };
 
@@ -242,16 +201,6 @@ export function MetricsSlotTrustScoreBadge({ serial, slotIdx }: MetricsSlotTrust
         )}
       </div>
 
-      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground whitespace-nowrap" title="Human Session for this device account slot">
-        <Fingerprint className="w-3.5 h-3.5 text-cyan-500" />
-        <span>Human Session</span>
-        <Switch
-          checked={humanSessionEnabled}
-          disabled={humanSessionLoading || humanSessionSaving}
-          onCheckedChange={toggleHumanSession}
-          className="scale-75 origin-center"
-        />
-      </div>
     </div>
   );
 }
