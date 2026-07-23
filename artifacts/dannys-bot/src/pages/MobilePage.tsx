@@ -3514,10 +3514,10 @@ function useCollisionPreventer(serial: string | null) {
 // or more account slots on any connected device. The left panel groups slots by
 // device so you can copy from Device 1 Slot 1 to Device 3 Slot 3, etc.
 // Both sides (target slots and setting sections) support Select All / Select None.
-type CopySubSetting = { key: string; label: string; fields: string[] };
-type CopySection    = { key: string; label: string; sub: CopySubSetting[] };
+export type CopySubSetting = { key: string; label: string; fields: string[] };
+export type CopySection    = { key: string; label: string; sub: CopySubSetting[] };
 
-const COPY_SECTIONS: CopySection[] = [
+export const COPY_SECTIONS: CopySection[] = [
   { key: 'runInterval',   label: 'Human Session Tool', sub: [
     { key: 'cycleInterval',     label: 'Run every X - Y minutes',      fields: ['cycleIntervalMin','cycleIntervalMax'] },
     { key: 'shuffleToolOrder',  label: 'Shuffle tool order',           fields: ['shuffleToolOrder'] },
@@ -3614,7 +3614,7 @@ const COPY_SECTIONS: CopySection[] = [
   ]},
 ];
 
-const ALL_SUB_KEYS = COPY_SECTIONS.flatMap(s => s.sub.map(sub => sub.key));
+export const ALL_SUB_KEYS = COPY_SECTIONS.flatMap(s => s.sub.map(sub => sub.key));
 
 type CopyTarget = { serial: string; slotIdx: number };
 type DeviceSlots = { phone: UsbPhone; slots: string[] /* username per slot index */ };

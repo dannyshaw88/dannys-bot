@@ -4,6 +4,30 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.117
+
+### Fix — Trust Score Copy Settings now has the full two-panel UI
+
+**What changed:** The Copy Settings dialog on the Trust Score detail page now matches
+the Phone Farm slot Copy Settings UI exactly — two-panel layout with targets on the left
+and a settings section picker on the right.
+
+**Left panel — Copy to:** All other trust score tiers listed with their colour badges.
+Source tier is dimmed and labelled "(source)". All / None quick-select buttons.
+Remembers your last target selection per session.
+
+**Right panel — Settings:** Every Human Session Tool section (Human Session Tool,
+View Feed, View Stories, View Explore Page, View Reels, Follow Users, Follow Filters,
+Inject Browsing, Random Actions, Make a Post) with collapsible sub-settings and
+indeterminate parent checkboxes. All / None quick-select buttons. Remembers your last
+settings selection per session.
+
+**Copy logic:** For each selected target tier, fetches that tier's current settings,
+merges in only the selected fields, and saves back — so unselected settings on the
+target tier are never overwritten.
+
+---
+
 ## v1.2.116
 
 ### Feature — Copy Settings for Trust Score tiers + Settings back-navigation fix

@@ -1,24 +1,29 @@
 import { useParams, useLocation } from "wouter";
 import { useEffect, useRef, useState } from "react";
 import { getTrustLevels, type TrustLevelEntry } from "@/components/TrustScoreBadge";
-import { ChevronLeft, Copy, CheckCircle2, Loader2 } from "lucide-react";
+import { ChevronLeft, Copy, CheckCircle2 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
   AUTOMATION_DEFAULTS,
   AutomationSettingsPanel,
+  COPY_SECTIONS,
+  ALL_SUB_KEYS,
   type AutomationSettingsData,
   type UsbPhone,
+  type CopySection,
 } from "@/pages/MobilePage";
 
 // ── CopyTrustScoreDialog ──────────────────────────────────────────────────────
-// Copies the current tier's mobile settings to one or more other tiers.
+// Exact same two-panel layout as the mobile slot CopySettingsDialog.
+// Left: trust score tiers to copy TO (except the source tier).
+// Right: setting sections / sub-items to pick WHAT to copy.
 
-const COPY_TS_TARGETS_KEY = "copyTrustScore_targets";
+const COPY_TS_TARGETS_KEY  = "copyTrustScore_targets";
+const COPY_TS_SUBKEYS_KEY  = "copyTrustScore_subKeys";
 
 function CopyTrustScoreDialog({
   open,
@@ -31,152 +36,254 @@ function CopyTrustScoreDialog({
   sourceTrustScoreId: string;
   sourceSettings: AutomationSettingsData;
 }) {
-  const allLevels = getTrustLevels();
-  const targets = allLevels.filter(l => l.id !== sourceTrustScoreId);
+  const allLevels   = getTrustLevels();
+  const tierTargets = allLevels.filter(l => l.id !== sourceTrustScoreId);
   const sourceLevel = allLevels.find(l => l.id === sourceTrustScoreId);
 
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [status, setStatus] = useState<"idle" | "copying" | "done">("idle");
+  const [selectedTiers,   setSelectedTiers]   = useState<Set<string>>(new Set());
+  const [selectedSubKeys, setSelectedSubKeys] = useState<Set<string>>(new Set());
+  const [copying,  setCopying]  = useState(false);
+  const [result,   setResult]   = useState<"ok" | string | null>(null);
 
-  // Restore last selection from sessionStorage when dialog opens
+  // Restore saved selections when dialog opens
   useEffect(() => {
     if (!open) return;
+    setResult(null);
+    setCopying(false);
     try {
-      const raw = sessionStorage.getItem(COPY_TS_TARGETS_KEY);
-      if (raw) {
-        const ids: string[] = JSON.parse(raw);
-        // Only keep IDs that still exist and aren't the source
-        setSelected(new Set(ids.filter(id => targets.some(t => t.id === id))));
+      const rawT = sessionStorage.getItem(COPY_TS_TARGETS_KEY);
+      if (rawT) {
+        const ids: string[] = JSON.parse(rawT);
+        setSelectedTiers(new Set(ids.filter(id => tierTargets.some(t => t.id === id))));
       } else {
-        setSelected(new Set());
+        setSelectedTiers(new Set());
       }
-    } catch {
-      setSelected(new Set());
-    }
-    setStatus("idle");
+    } catch { setSelectedTiers(new Set()); }
+    try {
+      const rawS = sessionStorage.getItem(COPY_TS_SUBKEYS_KEY);
+      if (rawS) {
+        setSelectedSubKeys(new Set(JSON.parse(rawS) as string[]));
+      } else {
+        setSelectedSubKeys(new Set());
+      }
+    } catch { setSelectedSubKeys(new Set()); }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const toggle = (id: string) => setSelected(prev => {
+  // ── Left panel helpers ──
+  const toggleTier = (id: string) => setSelectedTiers(prev => {
     const next = new Set(prev);
     if (next.has(id)) next.delete(id); else next.add(id);
+    sessionStorage.setItem(COPY_TS_TARGETS_KEY, JSON.stringify([...next]));
     return next;
   });
+  const selectAllTiers  = () => { const s = new Set(tierTargets.map(t => t.id)); sessionStorage.setItem(COPY_TS_TARGETS_KEY, JSON.stringify([...s])); setSelectedTiers(s); };
+  const selectNoneTiers = () => { sessionStorage.removeItem(COPY_TS_TARGETS_KEY); setSelectedTiers(new Set()); };
 
+  // ── Right panel helpers ──
+  const toggleSub = (key: string, checked: boolean) => setSelectedSubKeys(prev => {
+    const n = new Set(prev);
+    checked ? n.add(key) : n.delete(key);
+    sessionStorage.setItem(COPY_TS_SUBKEYS_KEY, JSON.stringify([...n]));
+    return n;
+  });
+  const toggleSection = (section: CopySection, checked: boolean) => setSelectedSubKeys(prev => {
+    const n = new Set(prev);
+    section.sub.forEach(sub => checked ? n.add(sub.key) : n.delete(sub.key));
+    sessionStorage.setItem(COPY_TS_SUBKEYS_KEY, JSON.stringify([...n]));
+    return n;
+  });
+  const sectionState = (section: CopySection): "all" | "some" | "none" => {
+    const sel = section.sub.filter(sub => selectedSubKeys.has(sub.key)).length;
+    if (sel === 0) return "none";
+    if (sel === section.sub.length) return "all";
+    return "some";
+  };
+  const selectAllSubs  = () => { const s = new Set(ALL_SUB_KEYS); sessionStorage.setItem(COPY_TS_SUBKEYS_KEY, JSON.stringify([...s])); setSelectedSubKeys(s); };
+  const selectNoneSubs = () => { sessionStorage.removeItem(COPY_TS_SUBKEYS_KEY); setSelectedSubKeys(new Set()); };
+
+  // ── Copy action ──
   const handleCopy = async () => {
-    if (!selected.size || status !== "idle") return;
-    // Persist selection
-    try { sessionStorage.setItem(COPY_TS_TARGETS_KEY, JSON.stringify([...selected])); } catch {}
-    setStatus("copying");
-    try {
-      await Promise.all([...selected].map(id =>
-        fetch(`/api/trust-score-templates/${encodeURIComponent(id)}/mobile-settings`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(sourceSettings),
-        }).then(async r => {
-          if (!r.ok) throw new Error(`Server error (${r.status}) for tier ${id}`);
-        })
-      ));
-      setStatus("done");
-      setTimeout(() => { setStatus("idle"); onOpenChange(false); }, 1200);
-    } catch {
-      setStatus("idle");
+    if (!selectedTiers.size || !selectedSubKeys.size) return;
+    setCopying(true);
+    setResult(null);
+
+    // Build the partial settings object from selected sub-keys
+    const partial: Record<string, unknown> = {};
+    for (const section of COPY_SECTIONS) {
+      for (const sub of section.sub) {
+        if (selectedSubKeys.has(sub.key)) {
+          for (const field of sub.fields) {
+            partial[field] = (sourceSettings as Record<string, unknown>)[field];
+          }
+        }
+      }
+    }
+
+    let ok = 0, fail = 0;
+    await Promise.all([...selectedTiers].map(async id => {
+      try {
+        // Fetch current settings for the target tier, merge in the partial, save back
+        const getRes = await fetch(
+          `/api/trust-score-templates/${encodeURIComponent(id)}/mobile-settings`,
+          { credentials: "include" }
+        );
+        const current: AutomationSettingsData = getRes.ok
+          ? { ...AUTOMATION_DEFAULTS, ...(await getRes.json()) }
+          : { ...AUTOMATION_DEFAULTS };
+        const merged = { ...current, ...partial };
+        const postRes = await fetch(
+          `/api/trust-score-templates/${encodeURIComponent(id)}/mobile-settings`,
+          { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(merged) }
+        );
+        if (postRes.ok) ok++; else fail++;
+      } catch { fail++; }
+    }));
+
+    if (fail === 0) {
+      setResult("ok");
+      setTimeout(() => { onOpenChange(false); }, 500);
+    } else {
+      setResult(`${fail} tier${fail !== 1 ? "s" : ""} failed`);
+      setCopying(false);
+      setTimeout(() => { onOpenChange(false); }, 1200);
     }
   };
 
-  const allSelected = selected.size === targets.length;
-
   return (
-    <Dialog open={open} onOpenChange={v => { if (!v) setStatus("idle"); onOpenChange(v); }}>
-      <DialogContent className="max-w-sm p-0 overflow-hidden">
-        <DialogHeader className="px-5 pt-5 pb-4 border-b border-border">
-          <DialogTitle className="flex items-center gap-2 text-sm">
-            <Copy className="w-4 h-4 text-primary shrink-0" />
-            Copy Settings
-            {sourceLevel && (
-              <span
-                className="flex items-center gap-1 rounded-full px-2 py-0.5 ml-1"
-                style={{ background: sourceLevel.bg, border: `1px solid ${sourceLevel.border}` }}
-              >
-                <sourceLevel.icon size={10} color={sourceLevel.text} fill={sourceLevel.text} strokeWidth={2} />
-                <span style={{ fontSize: 10, fontWeight: 700, color: sourceLevel.text, letterSpacing: "0.05em" }}>
-                  {sourceLevel.label}
-                </span>
-              </span>
-            )}
-            <span className="text-xs font-normal text-muted-foreground ml-0.5">→ other tiers</span>
-          </DialogTitle>
+    <Dialog open={open} onOpenChange={v => { if (!v && !copying) onOpenChange(v); }}>
+      <DialogContent className="max-w-[52.8rem] max-h-[65vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Copy Settings to Other Tiers</DialogTitle>
         </DialogHeader>
 
-        {/* Target list */}
-        <div className="px-4 py-3 border-b border-border flex items-center gap-3">
-          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Copy To</span>
-          <button
-            className="text-[11px] text-primary hover:underline font-bold uppercase tracking-wide"
-            onClick={() => setSelected(new Set(targets.map(t => t.id)))}
-          >All</button>
-          <button
-            className="text-[11px] text-primary hover:underline font-bold uppercase tracking-wide"
-            onClick={() => setSelected(new Set())}
-          >None</button>
-          {selected.size > 0 && (
-            <span className="text-[11px] text-primary font-bold">({selected.size} selected)</span>
+        <div className="flex gap-8 mt-2 flex-1 min-h-0">
+
+          {/* LEFT: trust score tier targets */}
+          <div className="w-[22rem] shrink-0 flex flex-col min-h-0">
+            <div className="flex items-center justify-between mb-2 shrink-0">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Copy to</span>
+              <div className="flex gap-1">
+                <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5" onClick={selectAllTiers}>All</Button>
+                <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5" onClick={selectNoneTiers}>None</Button>
+              </div>
+            </div>
+
+            <div className="overflow-y-auto flex-1 space-y-1 pr-1">
+              <div className="rounded-md border border-border/50 overflow-hidden">
+                {/* Source row (dimmed, non-interactive) */}
+                {sourceLevel && (() => {
+                  const SrcIcon = sourceLevel.icon;
+                  return (
+                    <div className="flex items-center gap-2 px-2.5 py-1.5 opacity-40 cursor-default select-none border-b border-border/30">
+                      <input type="checkbox" className="w-3.5 h-3.5 accent-primary shrink-0" checked={false} disabled readOnly />
+                      <span
+                        className="flex items-center gap-1 rounded-full px-2 py-0.5"
+                        style={{ background: sourceLevel.bg, border: `1px solid ${sourceLevel.border}` }}
+                      >
+                        <SrcIcon size={10} color={sourceLevel.text} fill={sourceLevel.text} strokeWidth={2} />
+                        <span style={{ fontSize: 10, fontWeight: 700, color: sourceLevel.text, letterSpacing: "0.05em" }}>
+                          {sourceLevel.label}
+                        </span>
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">(source)</span>
+                    </div>
+                  );
+                })()}
+                {/* Target tier rows */}
+                <div className="divide-y divide-border/30">
+                  {tierTargets.map(t => {
+                    const TIcon = t.icon;
+                    const checked = selectedTiers.has(t.id);
+                    return (
+                      <label
+                        key={t.id}
+                        className="flex items-center gap-2 px-2.5 py-1.5 cursor-pointer select-none hover:bg-muted/20 transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          className="w-3.5 h-3.5 accent-primary shrink-0"
+                          checked={checked}
+                          onChange={e => toggleTier(t.id)}
+                        />
+                        <span
+                          className="flex items-center gap-1 rounded-full px-2 py-0.5"
+                          style={{ background: t.bg, border: `1px solid ${t.border}` }}
+                        >
+                          <TIcon size={10} color={t.text} fill={t.text} strokeWidth={2} />
+                          <span style={{ fontSize: 10, fontWeight: 700, color: t.text, letterSpacing: "0.05em" }}>
+                            {t.label}
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT: settings sections with sub-items */}
+          <div className="flex-1 min-w-0 flex flex-col min-h-0">
+            <div className="flex items-center justify-between mb-2 shrink-0">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Settings</span>
+              <div className="flex gap-1">
+                <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5" onClick={selectAllSubs}>All</Button>
+                <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5" onClick={selectNoneSubs}>None</Button>
+              </div>
+            </div>
+            <div className="overflow-y-auto flex-1 space-y-1 pr-1">
+              {COPY_SECTIONS.map(section => {
+                const state = sectionState(section);
+                return (
+                  <div key={section.key} className="rounded-md border border-border/50 overflow-hidden">
+                    <label className="flex items-center gap-2 px-2.5 py-1.5 bg-muted/40 cursor-pointer select-none hover:bg-muted/60 transition-colors">
+                      <input
+                        type="checkbox"
+                        className="w-3.5 h-3.5 accent-primary shrink-0"
+                        checked={state === "all"}
+                        ref={el => { if (el) el.indeterminate = state === "some"; }}
+                        onChange={e => toggleSection(section, e.target.checked)}
+                      />
+                      <span className="text-xs font-bold text-foreground">{section.label}</span>
+                    </label>
+                    {section.sub.length > 1 && (
+                      <div className="divide-y divide-border/30">
+                        {section.sub.map(sub => (
+                          <label key={sub.key} className="flex items-center gap-2 px-3 pl-6 py-1 cursor-pointer select-none hover:bg-muted/20 transition-colors">
+                            <input
+                              type="checkbox"
+                              className="w-3 h-3 accent-primary shrink-0"
+                              checked={selectedSubKeys.has(sub.key)}
+                              onChange={e => toggleSub(sub.key, e.target.checked)}
+                            />
+                            <span className="text-xs text-muted-foreground">{sub.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+        </div>
+
+        <div className="flex items-center justify-end gap-3 mt-4 pt-4 border-t border-border shrink-0">
+          {result && result !== "ok" && (
+            <span className="text-xs mr-auto text-destructive">{result}</span>
           )}
-        </div>
-
-        <div className="overflow-y-auto divide-y divide-border/40" style={{ maxHeight: 340 }}>
-          {targets.map(t => {
-            const Icon = t.icon;
-            const checked = selected.has(t.id);
-            return (
-              <label
-                key={t.id}
-                className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors select-none"
-              >
-                <Checkbox
-                  checked={checked}
-                  onCheckedChange={() => toggle(t.id)}
-                  className="shrink-0 w-4 h-4"
-                />
-                <span
-                  className="flex items-center gap-1 rounded-full px-2 py-0.5"
-                  style={{ background: t.bg, border: `1px solid ${t.border}` }}
-                >
-                  <Icon size={10} color={t.text} fill={t.text} strokeWidth={2} />
-                  <span style={{ fontSize: 10, fontWeight: 700, color: t.text, letterSpacing: "0.05em" }}>
-                    {t.label}
-                  </span>
-                </span>
-              </label>
-            );
-          })}
-        </div>
-
-        <DialogFooter className="px-5 py-3 border-t border-border flex items-center gap-2">
+          <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={copying}>Cancel</Button>
           <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={status === "copying"}
-          >
-            Cancel
-          </Button>
-          <Button
-            size="sm"
             onClick={handleCopy}
-            disabled={!selected.size || status !== "idle"}
-            className="gap-1.5"
+            disabled={copying || !selectedTiers.size || !selectedSubKeys.size}
+            style={result === "ok" ? { background: "#16a34a", borderColor: "#16a34a" } : undefined}
           >
-            {status === "copying" ? (
-              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Copying…</>
-            ) : status === "done" ? (
-              <><CheckCircle2 className="w-3.5 h-3.5" /> Done</>
-            ) : (
-              <><Copy className="w-3.5 h-3.5" /> Copy to {selected.size || ""} tier{selected.size !== 1 ? "s" : ""}</>
-            )}
+            {result === "ok"
+              ? <CheckCircle2 className="w-4 h-4 text-white" />
+              : copying ? "Copying…" : "Copy Settings"}
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
