@@ -1,7 +1,6 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { BanAnalyticsPage } from "@/pages/BanAnalyticsPage";
 import { useState, useRef, useCallback } from "react";
-import { useLocation } from "wouter";
 import { useQueryClient, useQuery, useQueries } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -22,7 +21,6 @@ import { getIconByKey } from "@/components/trustscore/iconRegistry";
 
 // ─── Trust Scores Tab ─────────────────────────────────────────────────────────
 
-interface TsTemplate { trustScoreId: string; profileId: number | null; }
 
 function resolveTsIcon(
   base: TrustLevelEntry["icon"],
@@ -54,7 +52,6 @@ interface TsEditState {
 }
 
 export function TrustScoresTabContent() {
-  const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
 
   const [levels, setLevels] = useState<TrustLevelEntry[]>(() => getTrustLevels());
@@ -68,32 +65,11 @@ export function TrustScoresTabContent() {
   const dragIdxRef = useRef<number | null>(null);
   const dragOverIdxRef = useRef<number | null>(null);
 
-  const { data: templates } = useQuery<TsTemplate[]>({
-    queryKey: ["/api/trust-score-templates"],
-    queryFn: async () => {
-      const r = await fetch("/api/trust-score-templates", { credentials: "include" });
-      if (!r.ok) throw new Error("failed");
-      return r.json();
-    },
-  });
-
-  const templateMap = new Map<string, number>();
-  templates?.forEach(t => { if (t.profileId) templateMap.set(t.trustScoreId, t.profileId); });
-
   const refreshLevels = () => setLevels(getTrustLevels());
 
   const handleNoteChange = (id: string, val: string) => {
     setNotes(prev => ({ ...prev, [id]: val }));
     saveTsNote(id, val);
-  };
-
-  const handleBadgeClick = (level: TrustLevelEntry) => {
-    const profileId = templateMap.get(level.id);
-    if (profileId) {
-      setLocation(`/profiles/${profileId}?fromTrustScore=${level.id}`);
-    } else {
-      setLocation(`/trust-scores/${level.id}`);
-    }
   };
 
   const handleDeleteClick = (e: React.MouseEvent, level: TrustLevelEntry) => {
@@ -202,16 +178,13 @@ export function TrustScoresTabContent() {
               >
                 <GripVertical className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
                 <span className="w-5 text-[11px] font-bold text-muted-foreground text-left">{idx + 1}</span>
-                <button
-                  onClick={() => handleBadgeClick(level)}
-                  onMouseDown={e => e.stopPropagation()}
-                  className="flex items-center justify-center gap-1.5 rounded-full px-3.5 py-1.5 hover:opacity-80 active:scale-95 transition-all"
+                <span
+                  className="flex items-center justify-center gap-1.5 rounded-full px-3.5 py-1.5"
                   style={{ background: level.bg, border: `1px solid ${level.border}`, width: 130, minWidth: 130, maxWidth: 130, overflow: "hidden" }}
-                  title="Open account settings for this trust score"
                 >
                   <span style={{ fontSize: 13, fontWeight: 700, color: level.text, letterSpacing: "0.05em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{level.label}</span>
                   <Icon size={13} color={level.text} fill={level.text} strokeWidth={2} className="shrink-0" />
-                </button>
+                </span>
               </div>
               <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                 <button onClick={e => openEdit(e, level)} onMouseDown={e => e.stopPropagation()} className="p-0.5 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors" title="Edit badge style">
