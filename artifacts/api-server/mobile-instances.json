@@ -103,7 +103,7 @@
         "viewExploreShareDmPercentMax": 0,
         "viewExploreSavePercentMin": 0,
         "viewExploreSavePercentMax": 0,
-        "followEnabled": true,
+        "followEnabled": false,
         "followUsersMin": 1,
         "followUsersMax": 3,
         "followSpreadFollows": true,
