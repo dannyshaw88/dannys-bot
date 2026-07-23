@@ -203,7 +203,7 @@ export function TrustScoresTabContent() {
                 placeholder="Add a note…"
                 rows={1}
                 className="ml-2 px-2 py-1 text-xs bg-background border border-border rounded resize-none focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/40 cursor-text"
-                style={{ minHeight: 28, maxHeight: 72, flex: "1 1 0", minWidth: 0, textAlign: "left", direction: "ltr" }}
+                style={{ minHeight: 28, maxHeight: 72, width: "50ch", maxWidth: "50ch", flexShrink: 0, textAlign: "left", direction: "ltr" }}
                 onInput={e => {
                   const t = e.currentTarget;
                   t.style.height = "auto";
