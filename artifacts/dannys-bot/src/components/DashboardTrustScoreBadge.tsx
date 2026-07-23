@@ -1,9 +1,8 @@
 /**
  * DashboardTrustScoreBadge
  *
- * Reads the trust score from the Device → Account Slot → Human Session Tool
- * store (localStorage key `mobile_ts_{serial}_{slotIdx}`), exactly matching
- * what SlotTrustScoreBadge in MobilePage reads.
+ * Reads the trust score from the Device → Account Slot store, backed by the
+ * local database and shared with SlotTrustScoreBadge in MobilePage.
  *
  * Style overrides (bg / text / border / icon per level) are stored under a
  * SEPARATE key `dashboard_trustlevels_v1` so customising this badge's
@@ -15,6 +14,12 @@ import { createPortal } from "react-dom";
 import { getTrustLevels, type TrustLevelEntry } from "./TrustScoreBadge";
 import { getIconByKey } from "./trustscore/iconRegistry";
 import { CUSTOM_ICONS } from "./TrustScoreBadge";
+import {
+  loadSlotTrustScore,
+  readLocalSlotTrustScore,
+  saveSlotTrustScore,
+  slotTrustScoreKey,
+} from "./slotTrustScoreStorage";
 
 // ── Dashboard-specific style overrides ───────────────────────────────────────
 
@@ -78,23 +83,6 @@ function getDashboardTrustLevels(): TrustLevelEntry[] {
   });
 }
 
-// ── Score storage (shared with MobilePage SlotTrustScoreBadge) ───────────────
-
-function slotLsKey(serial: string, slotIdx: number) {
-  return `mobile_ts_${serial}_${slotIdx}`;
-}
-
-function readSlotScore(serial: string, slotIdx: number): string | null {
-  try { return localStorage.getItem(slotLsKey(serial, slotIdx)) ?? null; } catch { return null; }
-}
-
-function writeSlotScore(serial: string, slotIdx: number, id: string | null) {
-  try {
-    if (id) localStorage.setItem(slotLsKey(serial, slotIdx), id);
-    else     localStorage.removeItem(slotLsKey(serial, slotIdx));
-  } catch {}
-}
-
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const ROW_H = 30;
@@ -116,7 +104,7 @@ export function DashboardSlotTrustScoreBadge({
   height = 25,
 }: DashboardSlotTrustScoreBadgeProps) {
   const [scoreId, setScoreId] = useState<string | null>(
-    () => readSlotScore(serial, slotIdx),
+    () => readLocalSlotTrustScore(serial, slotIdx),
   );
   const [open, setOpen] = useState(false);
   const [levels, setLevels] = useState<TrustLevelEntry[]>(() => getDashboardTrustLevels());
@@ -124,27 +112,41 @@ export function DashboardSlotTrustScoreBadge({
   const btnRef = useRef<HTMLButtonElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
 
-  // Re-read score when serial/slotIdx changes or storage is updated cross-tab.
+  // Hydrate from the database when serial/slotIdx changes. Existing
+  // localStorage values are migrated by the shared loader.
   useEffect(() => {
-    setScoreId(readSlotScore(serial, slotIdx));
+    let active = true;
+    loadSlotTrustScore(serial, slotIdx).then(id => {
+      if (active) setScoreId(id);
+    });
+    return () => { active = false; };
   }, [serial, slotIdx]);
 
   useEffect(() => {
+    const key = slotTrustScoreKey(serial, slotIdx);
     const onStorage = (e: StorageEvent) => {
-      if (e.key === slotLsKey(serial, slotIdx)) {
+      if (e.key === key) {
         setScoreId(e.newValue ?? null);
       }
       if (e.key === DASHBOARD_LS_KEY || e.key === "trustlevels_v1") {
         setLevels(getDashboardTrustLevels());
       }
     };
+    const onChanged = (e: Event) => {
+      const detail = (e as CustomEvent<{ serial?: string; slotIdx?: number; scoreId?: string | null }>).detail;
+      if (detail?.serial === serial && detail.slotIdx === slotIdx) {
+        setScoreId(detail.scoreId ?? null);
+      }
+    };
     const onDashboardChanged = () => setLevels(getDashboardTrustLevels());
     const onGlobalChanged   = () => setLevels(getDashboardTrustLevels());
     window.addEventListener("storage", onStorage);
+    window.addEventListener("mobile_trustscore_changed", onChanged);
     window.addEventListener("dashboard_trustlevels_changed", onDashboardChanged);
     window.addEventListener("trustscore_changed", onGlobalChanged);
     return () => {
       window.removeEventListener("storage", onStorage);
+      window.removeEventListener("mobile_trustscore_changed", onChanged);
       window.removeEventListener("dashboard_trustlevels_changed", onDashboardChanged);
       window.removeEventListener("trustscore_changed", onGlobalChanged);
     };
@@ -191,10 +193,14 @@ export function DashboardSlotTrustScoreBadge({
     });
   }, [open, levels.length, scoreId]);
 
-  const save = (id: string | null) => {
-    writeSlotScore(serial, slotIdx, id);
+  const save = async (id: string | null) => {
     setScoreId(id);
     setOpen(false);
+    try {
+      await saveSlotTrustScore(serial, slotIdx, id);
+    } catch {
+      // Keep the optimistic UI/cache value while the API is unavailable.
+    }
   };
 
   const current = levels.find(l => l.id === scoreId) ?? null;
@@ -251,7 +257,7 @@ export function DashboardSlotTrustScoreBadge({
               <button
                 key={lvl.id}
                 type="button"
-                onClick={e => { e.stopPropagation(); save(lvl.id); }}
+                onClick={e => { e.stopPropagation(); void save(lvl.id); }}
                 style={{
                   width: "100%", display: "flex", alignItems: "center", gap: 8,
                   padding: "5px 12px", height: ROW_H,
@@ -271,7 +277,7 @@ export function DashboardSlotTrustScoreBadge({
           {scoreId && (
             <button
               type="button"
-              onClick={e => { e.stopPropagation(); save(null); }}
+              onClick={e => { e.stopPropagation(); void save(null); }}
               style={{
                 width: "100%", display: "flex", alignItems: "center",
                 padding: "5px 12px", height: ROW_H,

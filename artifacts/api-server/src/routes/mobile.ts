@@ -1487,6 +1487,54 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
+  // ── Per-slot trust score ────────────────────────────────────────────────────
+  // Trust scores used to live only in browser localStorage, so navigating away
+  // from Phone Farm (or using another browser) made the badge appear to reset.
+  // Keep them in the existing SQLite global_settings store, keyed by device and
+  // slot. `configured` distinguishes an explicit "clear score" from a first load.
+  app.get("/api/mobile/devices/:serial/slots/:slotIdx/trust-score", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const slotIdx = parseInt(req.params.slotIdx, 10);
+      if (isNaN(slotIdx) || slotIdx < 0) {
+        res.status(400).json({ error: "Invalid slot index" });
+        return;
+      }
+      const key = `mobile_trust_score_${serial}_${slotIdx}`;
+      const all = await storage.getGlobalSettings();
+      const configured = Object.prototype.hasOwnProperty.call(all, key);
+      let scoreId: string | null = null;
+      if (configured) {
+        const parsed = JSON.parse(all[key]);
+        scoreId = typeof parsed === "string" ? parsed : null;
+      }
+      res.json({ configured, scoreId });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message ?? "Failed to load trust score" });
+    }
+  });
+
+  app.post("/api/mobile/devices/:serial/slots/:slotIdx/trust-score", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const slotIdx = parseInt(req.params.slotIdx, 10);
+      if (isNaN(slotIdx) || slotIdx < 0) {
+        res.status(400).json({ error: "Invalid slot index" });
+        return;
+      }
+      const { scoreId } = z.object({
+        scoreId: z.string().min(1).max(100).nullable(),
+      }).parse(req.body);
+      await storage.setGlobalSetting(
+        `mobile_trust_score_${serial}_${slotIdx}`,
+        JSON.stringify(scoreId),
+      );
+      res.json({ ok: true, scoreId });
+    } catch (e: any) {
+      res.status(400).json({ error: e?.message ?? "Failed to save trust score" });
+    }
+  });
+
   // ── Per-device linked Instagram account (Account Settings tab) ──────────────
   const SLOT_COUNT = 1;
   const deviceSlotSchema = z.object({

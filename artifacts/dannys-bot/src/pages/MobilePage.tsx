@@ -25,6 +25,12 @@ import {
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
 import { ImageSettingsDialog, type ImageFilterSettings } from "@/components/tools/ImageSettingsDialog";
 import { getTrustLevels, type TrustLevelEntry } from "@/components/TrustScoreBadge";
+import {
+  loadSlotTrustScore,
+  readLocalSlotTrustScore,
+  saveSlotTrustScore,
+  slotTrustScoreKey,
+} from "@/components/slotTrustScoreStorage";
 
 declare const __API_PORT__: string;
 
@@ -5515,15 +5521,15 @@ function AutomationSettingsPanel({
 }
 
 // ── Slot-level Trust Score badge ─────────────────────────────────────────────
-// Stored in localStorage under key mobile_ts_{serial}_{slotIdx}, completely
-// independent of the Profiles trust score system.
+// Stored in the local database per device/slot. localStorage remains a small
+// compatibility cache for offline rendering and migration from older builds.
 const ROW_H = 30; // px per dropdown row
 const MAX_VISIBLE_ROWS = 5;
 
 function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 142, hideIcon = false }: { serial: string; slotIdx: number; width?: number; hideIcon?: boolean }) {
-  const lsKey = `mobile_ts_${serial}_${slotIdx}`;
+  const lsKey = slotTrustScoreKey(serial, slotIdx);
   const [scoreId, setScoreId] = useState<string | null>(() => {
-    try { return localStorage.getItem(lsKey) ?? null; } catch { return null; }
+    return readLocalSlotTrustScore(serial, slotIdx);
   });
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -5532,14 +5538,40 @@ function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 142, hideIco
   const levels: TrustLevelEntry[] = getTrustLevels();
   const current = levels.find(l => l.id === scoreId) ?? null;
 
-  const save = (id: string | null) => {
-    try {
-      if (id) localStorage.setItem(lsKey, id);
-      else localStorage.removeItem(lsKey);
-    } catch {}
+  useEffect(() => {
+    let active = true;
+    loadSlotTrustScore(serial, slotIdx).then(id => {
+      if (active) setScoreId(id);
+    });
+    return () => { active = false; };
+  }, [serial, slotIdx]);
+
+  const save = async (id: string | null) => {
     setScoreId(id);
     setOpen(false);
+    try {
+      await saveSlotTrustScore(serial, slotIdx, id);
+    } catch {
+      // Keep the optimistic UI/cache value. The next hydration will retry the
+      // server read and the user can choose the value again if needed.
+    }
   };
+
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === lsKey) setScoreId(e.newValue ?? null);
+    };
+    const onChanged = (e: Event) => {
+      const detail = (e as CustomEvent<{ serial?: string; slotIdx?: number; scoreId?: string | null }>).detail;
+      if (detail?.serial === serial && detail.slotIdx === slotIdx) setScoreId(detail.scoreId ?? null);
+    };
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("mobile_trustscore_changed", onChanged);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("mobile_trustscore_changed", onChanged);
+    };
+  }, [lsKey, serial, slotIdx]);
 
   // Close on outside click
   useEffect(() => {
@@ -5615,7 +5647,7 @@ function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 142, hideIco
               <button
                 key={lvl.id}
                 type="button"
-                onClick={e => { e.stopPropagation(); save(lvl.id); }}
+                onClick={e => { e.stopPropagation(); void save(lvl.id); }}
                 style={{
                   width: "100%", display: "flex", alignItems: "center", gap: 8,
                   padding: "5px 12px", height: ROW_H,
@@ -5632,7 +5664,7 @@ function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 142, hideIco
           {scoreId && (
             <button
               type="button"
-              onClick={e => { e.stopPropagation(); save(null); }}
+              onClick={e => { e.stopPropagation(); void save(null); }}
               style={{
                 width: "100%", display: "flex", alignItems: "center",
                 padding: "5px 12px", height: ROW_H,
@@ -6240,7 +6272,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const [csMinMin,     setCsMinMin]     = React.useState(5);
   const [csMinMax,     setCsMinMax]     = React.useState(10);
   const csSaveRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const csInitRef = React.useRef(false);
+  const csHydratedSerialRef = React.useRef<string | null>(null);
 
   // SIM phone number manual inputs (keyed by slot index)
   const [simPhoneInputs, setSimPhoneInputs] = React.useState<Record<number, string>>({});
@@ -6327,6 +6359,10 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
 
   // Load collision preventer settings
   React.useEffect(() => {
+    // A PhoneSettingsPanel instance can be reused while the active serial
+    // changes. Do not let the autosave effect treat the new device's initial
+    // state as a user edit before this device has hydrated.
+    csHydratedSerialRef.current = null;
     if (!serial) return;
     fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/collision-preventer`)
       .then(r => r.json()).then(d => {
@@ -6342,6 +6378,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
             body: JSON.stringify({ enabled: true, restMinMin: 5, restMinMax: 10 }),
           }).catch(() => {});
         }
+        csHydratedSerialRef.current = serial;
       }).catch(() => {});
   }, [serial]);
 
@@ -6419,7 +6456,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   // Auto-save collision preventer whenever any value changes (debounced 600 ms)
   React.useEffect(() => {
     if (!serial) return;
-    if (!csInitRef.current) { csInitRef.current = true; return; }
+    if (csHydratedSerialRef.current !== serial) return;
     if (csSaveRef.current) clearTimeout(csSaveRef.current);
     csSaveRef.current = setTimeout(() => {
       fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/collision-preventer`, {
@@ -6427,7 +6464,9 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
         body: JSON.stringify({ enabled: csEnabled, restMinMin: csMinMin, restMinMax: csMinMax }),
       }).catch(() => {});
     }, 600);
-    return () => { if (csSaveRef.current) clearTimeout(csSaveRef.current); };
+    // Do not cancel this timer on unmount. PhoneSettingsPanel is intentionally
+    // tab-scoped, so cancelling here loses edits when the user clicks away
+    // during the debounce window.
   }, [serial, csEnabled, csMinMin, csMinMax]);
   // Auto-save Google Play credentials (debounced 800 ms)
   const gpSaveRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);

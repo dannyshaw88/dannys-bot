@@ -11,3 +11,11 @@ The mobile Follow Users flow (`artifacts/api-server/src/routes/mobile.ts`) has T
 **Why this breaks silently:** zod's `z.object({...}).parse()` strips any key not declared in the schema, with no error. If a new setting field is added to the frontend (`AutomationSettingsData`) and to `automationCycleSchema`, but NOT added to `automationSchema`, autosave POSTs that field, zod silently drops it before it's written to disk, and the next page load/restart falls back to the frontend default — looking exactly like "the tool keeps forgetting entries."
 
 **How to apply:** Any time a new persisted mobile automation setting is added, add it to ALL THREE places: the frontend `AutomationSettingsData` type + `AUTOMATION_DEFAULTS`, `automationCycleSchema` (execution), and `automationSchema` + its GET-handler `defaults` object (persistence). Missing the third one is the easy mistake — it doesn't error, it just quietly never persists.
+
+## Tab-scoped autosave
+
+Any debounced save owned by a panel that unmounts when the user changes tabs must not cancel its pending timer during unmount. Gate the save on a per-device hydration marker instead, so initial values do not overwrite another device while still allowing the final user edit to flush after navigation.
+
+**Why:** The Phone Settings panel is tab-scoped. Its cleanup used to cancel a pending collision-preventer save, making edits disappear specifically when the user clicked to another tab.
+
+**How to apply:** Keep the timer in a ref, clear it only when a newer edit for the same device arrives, and track the hydrated serial separately from the panel lifecycle.
