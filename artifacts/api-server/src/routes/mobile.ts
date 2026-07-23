@@ -4508,9 +4508,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Activation already decided by rollInjectBrowsingDecision — no second
     // gate here. If we were called, the grid scroll is guaranteed to run;
     // only the number of rows is random.
-    const rows = Math.max(0, Math.round(rollRange(browsing.feedMin, browsing.feedMax)));
+
+    // Read the profile's post count so we never scroll past content that
+    // doesn't exist.  12 posts fit on screen without scrolling (4 rows × 3
+    // per row); every additional 12 posts allows one more scroll row.
+    // If the count can't be parsed, fall back to the configured max.
+    const profilePostCount = await android.getProfilePostCount(serial).catch(() => null);
+    let maxScrollsByPostCount = Infinity;
+    if (profilePostCount !== null) {
+      maxScrollsByPostCount = Math.max(0, Math.floor((profilePostCount - 12) / 12));
+      onLog?.(`Inject Browsing: profile has ${profilePostCount} post(s) — max useful scroll: ${maxScrollsByPostCount} row(s)`);
+    }
+
+    const rolledRows = Math.max(0, Math.round(rollRange(browsing.feedMin, browsing.feedMax)));
+    const rows = Math.min(rolledRows, maxScrollsByPostCount);
     if (rows === 0) {
-      onLog?.("Inject Browsing: feed posts rolled to 0 — skipping grid scroll");
+      onLog?.("Inject Browsing: feed posts rolled to 0 (or post count too low to need scrolling) — skipping grid scroll");
       return 0;
     }
     onLog?.(`Inject Browsing: scrolling profile grid — ${rows} row(s)`);
@@ -4520,7 +4533,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     for (let i = 0; i < rows; i++) {
       if (isCycleAborted(serial)) throw new Error("cycle-aborted");
       await android.swipe(serial, x, y1, x, y2, 500 + Math.round(Math.random() * 200));
-      await sleepOrAbort(serial, 800 + Math.round(Math.random() * 400));
+      // Wait 5–15 seconds so images fully render before the next scroll.
+      const renderWait = 5000 + Math.round(Math.random() * 10000);
+      onLog?.(`Inject Browsing: waiting ${(renderWait / 1000).toFixed(1)}s for media to render…`);
+      await sleepOrAbort(serial, renderWait);
     }
 
     const clickChance = rollRange(browsing.clickPostPctMin, browsing.clickPostPctMax) / 100;

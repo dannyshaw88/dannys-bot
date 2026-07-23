@@ -4014,6 +4014,56 @@ export async function findStoryFollowButton(serial: string): Promise<{ x: number
  * centre falls within the visible scrollable band (y ∈ [minY, maxY]) are
  * returned so we never try to tap a partially-offscreen thumbnail.
  */
+
+/**
+ * Reads the post count shown in the profile header stats row (the "482 posts"
+ * figure that sits beside Followers and Following).  Returns null when the
+ * count cannot be found — callers should treat null as "no cap on scrolls".
+ *
+ * Strategies tried in order:
+ *   1. Node whose content-desc matches /^\d[\d,.]+ posts?$/i  (most specific)
+ *   2. content-desc of any node that contains "N posts," (stats summary row)
+ *   3. Text node whose resource-id contains "post_count" or "post_num"
+ *   4. Number text-node that immediately precedes a "posts" label text-node
+ *      in the XML document (last-resort proximity heuristic)
+ */
+export async function getProfilePostCount(serial: string): Promise<number | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+
+  const parseCount = (s: string): number | null => {
+    const n = parseInt(s.replace(/[,.\s]/g, ""), 10);
+    return isNaN(n) || n < 0 ? null : n;
+  };
+
+  // Strategy 1: content-desc that IS the post count label, e.g. "482 posts"
+  const s1 = xml.match(/content-desc="(\d[\d,.]*)\s+[Pp]osts?"[^>]*\/>/);
+  if (s1) { const n = parseCount(s1[1]); if (n !== null) return n; }
+
+  // Strategy 2: stats summary node, e.g. "482 posts, 11.1K followers, 31 following"
+  const s2 = xml.match(/content-desc="(\d[\d,.]*)\s+[Pp]osts?[,\s]/);
+  if (s2) { const n = parseCount(s2[1]); if (n !== null) return n; }
+
+  // Strategy 3: resource-id containing "post_count" or "post_num"
+  const s3 = xml.match(/resource-id="[^"]*(?:post_count|post_num|postcount)[^"]*"[^>]*text="(\d[\d,.]*)"/);
+  if (s3) { const n = parseCount(s3[1]); if (n !== null) return n; }
+
+  // Strategy 4: text="NNN" node that is followed within 600 chars by text="Posts" / text="posts"
+  const postsLabelIdx = xml.search(/text="[Pp]osts?"[^>]*\/>/);
+  if (postsLabelIdx > 0) {
+    const window = xml.slice(Math.max(0, postsLabelIdx - 600), postsLabelIdx);
+    const allNums = [...window.matchAll(/text="(\d[\d,.]*)"/g)];
+    if (allNums.length) {
+      const n = parseCount(allNums[allNums.length - 1][1]);
+      if (n !== null) return n;
+    }
+  }
+
+  return null;
+}
+
 export async function findProfileGridPosts(
   serial: string,
   onLog?: (line: string) => void,

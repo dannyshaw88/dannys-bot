@@ -4,6 +4,77 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.111
+
+### Fix — Inject Browsing profile-grid scrolls now wait 5–15 seconds between each row
+
+Previously the profile grid scrolled through rows at 0.8–1.2 s per row — far
+too fast for images to render, so the bot was effectively scrolling through
+blank placeholders. Each scroll now pauses for a random **5–15 seconds** so
+every row of posts has time to fully load before the next swipe. The exact
+pause is logged: `Inject Browsing: waiting 8.3s for media to render…`
+
+### Fix — Inject Browsing scroll count is now capped by the profile's actual post count
+
+Before this change the bot would happily scroll 6 rows down a profile that
+only had 3 posts, spending time scrolling blank whitespace. Now:
+
+1. The bot reads the post count from the profile header (the "482 posts" figure
+   next to Followers / Following) using the UIAutomator accessibility tree.
+2. It calculates the maximum number of **meaningful** scroll rows:
+   12 posts fit on screen without scrolling; every additional 12 posts allows
+   one more row of scrolling.
+   - 3–12 posts → 0 scrolls (everything visible already)
+   - 13–24 posts → max 1 scroll
+   - 25–36 posts → max 2 scrolls, and so on.
+3. The rolled row count (from your configured Min/Max) is capped at this
+   calculated maximum — you can never scroll past the end of the grid.
+   The cap is logged: `Inject Browsing: profile has 482 post(s) — max useful scroll: 39 row(s)`.
+
+### Fix — Spread Follows: first follow slot now fires at follow's original shuffle position
+
+The interleaving algorithm previously always placed the first follow-spread
+slot **after** the first non-follow tool, ignoring where Follow actually landed
+in the shuffle. With shuffle `follow → feed → jitter` and 3 users the sequence
+was incorrectly `feed → follow:1 → jitter → follow:2 → follow:3` instead of
+the correct `follow:1 → feed → follow:2 → jitter → follow:3`. Fixed: the
+algorithm now walks the original shuffled sequence, replaces the Follow entry
+in-place with the first spread slot, then injects one slot after each
+subsequent non-follow tool.
+
+### Fix — Spread Follows: filtered candidates are replaced, not silently abandoned
+
+When a pre-fetched spread candidate is rejected by a filter at follow-time
+(e.g. the -25K follower cap revealing a 184,000-follower account that slipped
+through without metadata), the slot is no longer abandoned. Three-stage
+fallback:
+
+1. **Backup queue** — the excess candidates from the 3× pre-fetch (previously
+   flushed straight to Surplus) are now kept as an in-memory backup queue.
+   The next candidate is popped and tried immediately.
+2. **HikerAPI re-scrape** — if the backup queue is also exhausted, one fresh
+   HikerAPI scrape round fetches new candidates and the retry loop continues.
+3. **Surplus flush** — any backup candidates still unused after all spread
+   slots have run are flushed to Surplus for the next cycle.
+
+### Fix — Spread Follows: backup candidates no longer lost to Surplus immediately
+
+The 3× pre-fetch buffer previously saved all extras to Surplus at the start of
+the cycle before any slots had a chance to use them as fallbacks. Extras are
+now held in memory as the backup queue and only flushed to Surplus after the
+full tool loop completes.
+
+### Fix — Random Jitter no longer silently disappears when both action rolls miss
+
+Jitter's activate-percentage gate was passing (putting it in the logged tool
+sequence) but when both inner rolls — Check Notifications and Visit Own Profile
+— missed their individual chance rolls, the tool produced zero log output. It
+looked identical to being skipped entirely. Now logs:
+`▶ Random Jitter: activated — both action rolls missed this cycle` and records
+`jitter(activated,no-actions-rolled)` in the cycle step list.
+
+---
+
 ## v1.2.110
 
 ### Feature — Spread Follows: distribute follows evenly across tool sessions
