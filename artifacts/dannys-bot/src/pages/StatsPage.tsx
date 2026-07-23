@@ -4,6 +4,7 @@ import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { TrustScoreBadge } from "@/components/TrustScoreBadge";
+import { MetricsSlotTrustScoreBadge } from "@/components/MetricsSlotTrustScoreBadge";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -892,8 +893,15 @@ export function StatsPage() {
                   )}
                 </SelectContent>
               </Select>
-              {selectedProfile && (
-                <TrustScoreBadge profileId={selectedProfile.id} />
+              {selectedMetricAccount?.serial !== undefined && selectedMetricAccount.slotIndex !== undefined ? (
+                <MetricsSlotTrustScoreBadge
+                  serial={selectedMetricAccount.serial}
+                  slotIdx={selectedMetricAccount.slotIndex}
+                />
+              ) : (
+                <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                  No device slot
+                </span>
               )}
             </div>
 
