@@ -17,6 +17,7 @@ import { MobilePage } from "@/pages/MobilePage";
 import { MobileDevicesPage } from "@/pages/MobileDevicesPage";
 import { TrustScoresPage } from "@/pages/TrustScoresPage";
 import { TrustScoreDetailPage } from "@/pages/TrustScoreDetailPage";
+import { TrustScoreSettingsPage } from "@/pages/TrustScoreSettingsPage";
 import { ToolsPage } from "@/pages/ToolsPage";
 import { EbAuditPage } from "@/pages/EbAuditPage";
 import { BrowserWindowsProvider, useBrowserWindows } from "@/contexts/BrowserWindowsContext";
@@ -119,6 +120,7 @@ function Router() {
       <Route path="/mobile/farm" component={MobilePage} />
       <Route path="/trust-scores" component={TrustScoresPage} />
       <Route path="/trust-scores/:trustScoreId" component={TrustScoreDetailPage} />
+      <Route path="/trust-score-settings/:id" component={TrustScoreSettingsPage} />
       <Route path="/tools" component={ToolsPage} />
       <Route path="/eb-audit" component={EbAuditPage} />
       <Route path="/ban-analytics"><Redirect to="/tools" /></Route>

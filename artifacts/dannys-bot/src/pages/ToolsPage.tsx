@@ -1,6 +1,7 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { BanAnalyticsPage } from "@/pages/BanAnalyticsPage";
 import { useState, useRef, useCallback } from "react";
+import { useLocation } from "wouter";
 import { useQueryClient, useQuery, useQueries } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,7 @@ interface TsEditState {
 }
 
 export function TrustScoresTabContent() {
+  const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
 
   const [levels, setLevels] = useState<TrustLevelEntry[]>(() => getTrustLevels());
@@ -178,13 +180,16 @@ export function TrustScoresTabContent() {
               >
                 <GripVertical className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
                 <span className="w-5 text-[11px] font-bold text-muted-foreground text-left">{idx + 1}</span>
-                <span
-                  className="flex items-center justify-center gap-1.5 rounded-full px-3.5 py-1.5"
+                <button
+                  onClick={() => setLocation(`/trust-score-settings/${level.id}`)}
+                  onMouseDown={e => e.stopPropagation()}
+                  className="flex items-center justify-center gap-1.5 rounded-full px-3.5 py-1.5 hover:opacity-80 active:scale-95 transition-all"
                   style={{ background: level.bg, border: `1px solid ${level.border}`, width: 130, minWidth: 130, maxWidth: 130, overflow: "hidden" }}
+                  title="Open Human Session settings for this trust score"
                 >
                   <span style={{ fontSize: 13, fontWeight: 700, color: level.text, letterSpacing: "0.05em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{level.label}</span>
                   <Icon size={13} color={level.text} fill={level.text} strokeWidth={2} className="shrink-0" />
-                </span>
+                </button>
               </div>
               <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                 <button onClick={e => openEdit(e, level)} onMouseDown={e => e.stopPropagation()} className="p-0.5 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors" title="Edit badge style">
