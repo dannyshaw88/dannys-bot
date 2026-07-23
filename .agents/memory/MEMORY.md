@@ -41,3 +41,4 @@
 - [Reels action-icon column detection](reels-action-icon-detection.md) — Reels' Like/Comment/Share/Send render as a vertical right-edge column, not the feed's horizontal bar; unvalidated on real device, read its diagnostic log before "fixing" labels.
 - [Share-sheet confirm+recipient-scan dump timing](share-sheet-dump-timing.md) — two sequential ~9s uiautomator dumps left the DM share sheet idle long enough to close before recipient pick; combine confirm+scan into one dump.
 - [Your Story same resource-id as DM contacts](share-sheet-your-story-rid.md) — grid_view_pog_avatar_view is used for BOTH Your Story/Close Friends AND real DM contact avatars; must XML-lookback-filter parent content-desc before picking.
+- [Collision Preventer turn priority](collision-preventer-turn-priority.md) — preserve each HST due time through collision rest; queued slots run next, then receive a fresh interval only after completion.

@@ -4,6 +4,40 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.109
+
+### Fix — Collision Preventer honors Human Session turn priority
+
+Collision Preventer could make an account slot wait correctly for the device to
+become free, but then the released slot lost its original Human Session Tool
+turn. After the collision rest ended, its normal `Run every X–Y minutes`
+interval was started again, delaying an account that was already overdue and
+allowing scheduling order to drift away from the configured account order.
+
+The scheduler now:
+
+- Captures the original Human Session Tool due timestamp when a slot becomes
+  ready.
+- Keeps queued slots ordered by that timestamp, with slot index as a stable
+  tie-breaker.
+- Waits only the configured Collision Preventer rest interval after the active
+  slot finishes.
+- Resumes the oldest queued slot immediately when that rest interval ends,
+  rather than assigning it another full Human Session Tool interval.
+- Starts a new Human Session Tool interval only after the released slot's
+  automation cycle completes.
+- Safely cancels a slot that is disabled while queued, without leaving a
+  pending promise or delaying other accounts.
+- Refreshes Collision Preventer settings while the Account panel remains
+  mounted, so edits made from the device settings tab affect the live queue.
+- Avoids overlapping cycles when Collision Preventer is disabled during a
+  running cycle; queued slots are drained only when the device is free.
+
+The existing persistent Human Session timers, per-device/per-slot scoping,
+hydration behavior, and automation abort rules remain unchanged.
+
+---
+
 ## v1.2.108
 
 ### Fix — Active device mirrors appear on the Phone Farm card again
