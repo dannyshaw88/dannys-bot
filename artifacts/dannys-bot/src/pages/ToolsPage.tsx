@@ -205,12 +205,12 @@ export function TrustScoresTabContent() {
                 <button
                   onClick={() => handleBadgeClick(level)}
                   onMouseDown={e => e.stopPropagation()}
-                  className="flex items-center gap-1.5 rounded-full px-3.5 py-1.5 hover:opacity-80 active:scale-95 transition-all"
+                  className="flex items-center justify-center gap-1.5 rounded-full px-3.5 py-1.5 hover:opacity-80 active:scale-95 transition-all"
                   style={{ background: level.bg, border: `1px solid ${level.border}`, width: 130, minWidth: 130, maxWidth: 130, overflow: "hidden" }}
                   title="Open account settings for this trust score"
                 >
-                  <Icon size={13} color={level.text} fill={level.text} strokeWidth={2} className="shrink-0" />
                   <span style={{ fontSize: 13, fontWeight: 700, color: level.text, letterSpacing: "0.05em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{level.label}</span>
+                  <Icon size={13} color={level.text} fill={level.text} strokeWidth={2} className="shrink-0" />
                 </button>
               </div>
               <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
@@ -261,9 +261,9 @@ export function TrustScoresTabContent() {
               {(() => {
                 const PreviewIcon = resolveTsIcon(editState.level.icon, editState.iconKey);
                 return (
-                  <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1" style={{ background: editState.bg, border: `1px solid ${editState.border}` }}>
-                    <PreviewIcon size={13} color={editState.text} fill={editState.text} strokeWidth={2} />
+                  <span className="inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1" style={{ background: editState.bg, border: `1px solid ${editState.border}` }}>
                     <span style={{ fontSize: 12, fontWeight: 700, color: editState.text, letterSpacing: "0.05em" }}>{editState.level.label}</span>
+                    <PreviewIcon size={13} color={editState.text} fill={editState.text} strokeWidth={2} />
                   </span>
                 );
               })()}
@@ -326,9 +326,9 @@ export function TrustScoresTabContent() {
             <h2 className="text-base font-bold text-red-600 mb-2">⚠ WARNING</h2>
             <p className="text-sm text-foreground mb-1">
               This will stop all accounts assigned to{" "}
-              <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold" style={{ background: deleteTarget.bg, color: deleteTarget.text, border: `1px solid ${deleteTarget.border}` }}>
-                {(() => { const Icon = deleteTarget.icon; return <Icon size={10} color={deleteTarget.text} fill={deleteTarget.text} strokeWidth={2} />; })()}
+              <span className="inline-flex items-center justify-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold" style={{ background: deleteTarget.bg, color: deleteTarget.text, border: `1px solid ${deleteTarget.border}` }}>
                 {deleteTarget.label}
+                {(() => { const Icon = deleteTarget.icon; return <Icon size={10} color={deleteTarget.text} fill={deleteTarget.text} strokeWidth={2} />; })()}
               </span>.
             </p>
             <p className="text-xs text-muted-foreground mt-2 mb-5">Their trust score will be cleared and they will be set to <span className="font-semibold">Stopped</span>. This cannot be undone automatically.</p>
