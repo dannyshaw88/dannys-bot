@@ -321,7 +321,18 @@ export function SettingsPage() {
   const [geminiTestResult, setGeminiTestResult] = useState<string>("");
   const [openaiKeyDraft, setOpenaiKeyDraft] = useState<string | null>(null);
   const [openaiKeyInitialized, setOpenaiKeyInitialized] = useState(false);
-  const [settingsTab, setSettingsTab] = useState("my account");
+  const [settingsTab, setSettingsTab] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get("tab");
+      if (tab) return tab;
+    } catch {}
+    return "my account";
+  });
+  const setTab = (slug: string) => {
+    setSettingsTab(slug);
+    try { window.history.replaceState(null, "", `?tab=${encodeURIComponent(slug)}`); } catch {}
+  };
 
   // ─── Backup state ────────────────────────────────────────────────────────────
   const [backupList, setBackupList] = useState<BackupEntry[]>([]);
@@ -430,7 +441,7 @@ export function SettingsPage() {
         {(["My Account", "General", "Evasion Stats", "Trust Scores", "Import", "Scraping", "Automation", "Security", "Data"] as const).map(tab => (
           <button
             key={tab}
-            onClick={() => setSettingsTab(tab.toLowerCase())}
+            onClick={() => setTab(tab.toLowerCase())}
             className={`px-5 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${settingsTab === tab.toLowerCase() ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           >
             {tab}

@@ -4,6 +4,46 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.116
+
+### Feature — Copy Settings for Trust Score tiers + Settings back-navigation fix
+
+**What changed:** Three improvements to the Trust Score settings flow.
+
+**1. Copy Settings button on Trust Score detail page**
+
+Opening any Trust Score tier now shows a **Copy Settings** button in the header bar (next
+to the tier badge). Clicking it opens a dialog that lets you copy that tier's complete
+Human Session Tool settings to one or more other tiers in one click.
+
+- Shows all other tiers as checkboxes with their colour badges
+- All / None quick-select buttons
+- Remembers your last target selection (per session, via sessionStorage)
+- Fully isolated from the phone-slot Copy Settings dialog — selecting targets in one
+  has no effect on the other
+- Copies every field of the Human Session Tool panel (all tools, percentages, intervals,
+  etc.) to each selected target tier simultaneously
+
+**2. Back button always returns to where you came from**
+
+The ← TrustScores back button in the Trust Score detail page now uses
+`window.history.back()` instead of a hardcoded `/trust-scores` route. Whether you
+arrived from Settings → Trust Scores or from the standalone Trust Scores page, clicking
+back takes you exactly where you came from.
+
+**3. Settings tab is now preserved in the URL**
+
+The active Settings tab is now synced to the URL as a `?tab=` query parameter using
+`replaceState` (no extra history entries). This means:
+
+- Clicking a Trust Score tier pushes the current Settings URL (e.g.
+  `/settings?tab=trust+scores`) onto the browser history stack
+- Clicking ← TrustScores calls `history.back()`, which returns to
+  `/settings?tab=trust+scores`
+- SettingsPage reads the `tab` param on mount and opens straight to Trust Scores
+
+---
+
 ## v1.2.115
 
 ### Feature — Trust Score tiers now use the full mobile Human Session Tool settings panel
