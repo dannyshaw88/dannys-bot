@@ -675,24 +675,20 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   // ── Mirror-live signal ───────────────────────────────────────────────────
   // When `live` goes true (Power pressed or cycle starts) tell the server so
   // the farm grid can show a thumbnail overlay on this device's card.
-  // Clear it when the mirror stops OR this detail page unmounts. A mounted
-  // LiveCanvas is the source of truth for an actually active mirror; leaving
-  // the page must not leave the farm SVG stuck polling a black/off-device
-  // screencap forever.
+  // When `live` goes false, clear it. Do not clear it on unmount: navigating
+  // from the device detail page back to Account Farm must preserve the active
+  // mirror marker so the Farm card can show the live device thumbnail.
+  //
+  // The Farm card independently validates each screenshot before displaying
+  // it, so preserving this active marker cannot make a blank/black capture
+  // cover the configured wallpaper and text.
   useEffect(() => {
     if (!serial) return;
-    const signal = (on: boolean) => {
-      fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/mirror-live`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ on }),
-        keepalive: !on,
-      }).catch(() => {});
-    };
-    signal(live);
-    return () => {
-      if (live) signal(false);
-    };
+    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/mirror-live`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ on: live }),
+    }).catch(() => {});
   }, [serial, live]);
 
   // Sends an immediate wake keyevent — used when the phone is asleep so the

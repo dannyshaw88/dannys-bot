@@ -3,8 +3,8 @@ name: Farm mirror-live cleanup
 description: Lifecycle rule for the Phone Farm SVG thumbnail mirror state.
 ---
 
-The Farm page's SVG thumbnail uses a server-side per-serial mirror-live flag to decide whether to poll screencaps. That flag must be cleared when the detail-page mirror unmounts, not only when the user explicitly presses a stop control.
+The Farm page's SVG thumbnail uses a server-side per-serial mirror-live flag to decide whether to poll screencaps. That flag must remain set when an active detail mirror unmounts so the Farm card can continue showing the active device across navigation; it must be cleared when the mirror is explicitly turned off or an automation cycle finishes.
 
-**Why:** The detail mirror can be unmounted while the phone is asleep, disconnected, or otherwise producing no usable frame. Leaving the flag set makes the Farm card keep replacing its configured wallpaper/text with a black or stale screencap.
+**Why:** Clearing the marker on detail-page unmount made the Farm page lose a mirror that was still active. Keeping the marker alone is unsafe because an asleep/off device can return a black PNG, so the Farm client validates captures before displaying them.
 
-**How to apply:** Treat a mounted, active detail mirror as the source of truth. Signal `on: false` in the mirror-live effect cleanup when the current instance was live; use request keepalive for the cleanup POST so navigation can still deliver it. Automation-cycle cleanup should also clear the flag.
+**How to apply:** Signal the serial-level marker from the detail mirror's `live` transitions, without an unmount cleanup. On the Farm card, only replace wallpaper/text after a screenshot loads and has visible pixels; failed or fully black captures must leave the wallpaper visible. Automation-cycle cleanup should also clear the marker.

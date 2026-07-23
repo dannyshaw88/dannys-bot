@@ -4,6 +4,38 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.108
+
+### Fix — Active device mirrors appear on the Phone Farm card again
+
+The previous mirror cleanup change cleared the shared `mirror-live` marker when
+the device detail page unmounted. That stopped the Account Farm page from
+recognising a mirror that was still active, so its SVG phone reverted to the
+wallpaper even though the device mirror was running.
+
+Active mirror state now remains available to the Farm card across navigation
+and is still cleared when the mirror is explicitly turned off or an automation
+cycle finishes. The existing video mirror transport and tap coordinate
+rescaling were not changed.
+
+### Fix — Blank mirror captures no longer replace the Phone Farm wallpaper
+
+The Farm card now validates each screenshot before placing it over the SVG
+wallpaper and text. A capture must load successfully and contain visible
+pixels. Failed requests and completely black/off-screen PNGs leave the
+configured wallpaper and text visible instead of showing a blank black phone.
+
+This keeps a real active mirror visible while preventing an asleep, disconnected,
+or temporarily unavailable device from producing the black-screen regression.
+
+### Fix — Windows installer offers launch-after-install again
+
+The NSIS installer now explicitly enables the final “Launch Aura Farming”
+checkbox while retaining the assisted installation flow and installation-folder
+selection.
+
+---
+
 ## v1.2.107
 
 ### Fix — Phone Farm mirror now restores wallpaper after leaving the device page
