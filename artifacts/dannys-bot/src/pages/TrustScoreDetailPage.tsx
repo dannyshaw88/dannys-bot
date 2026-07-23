@@ -151,7 +151,7 @@ function CopyTrustScoreDialog({
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v && !copying) onOpenChange(v); }}>
-      <DialogContent className="max-w-[52.8rem] max-h-[65vh] flex flex-col">
+      <DialogContent style={{ maxWidth: "52.8rem", maxHeight: "65vh", display: "flex", flexDirection: "column", padding: 0, overflow: "hidden" }}>
         <DialogHeader>
           <DialogTitle>Copy Settings to Other Tiers</DialogTitle>
         </DialogHeader>

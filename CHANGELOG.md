@@ -4,6 +4,17 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.118
+
+### Fix — Trust Score Copy Settings dialog now shows both panels correctly
+
+**What changed:** The Copy Settings dialog was only showing the left panel (tier targets)
+because the `DialogContent` component's hardcoded `max-w-lg` and `grid` CSS classes were
+overriding the two-panel layout. Fixed by using inline `style` prop for width and flex
+layout, which always wins over CSS class definitions.
+
+---
+
 ## v1.2.117
 
 ### Fix — Trust Score Copy Settings now has the full two-panel UI
