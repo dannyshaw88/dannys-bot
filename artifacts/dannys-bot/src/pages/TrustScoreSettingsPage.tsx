@@ -2,121 +2,135 @@ import { useState, useCallback } from "react";
 import { useRoute, useLocation } from "wouter";
 import { Switch } from "@/components/ui/switch";
 import { getTrustLevels, type TrustLevelEntry } from "@/components/TrustScoreBadge";
+import { ImageSettingsDialog, type ImageFilterSettings } from "@/components/tools/ImageSettingsDialog";
 import {
-  ArrowLeft, Clock, PlaySquare, Compass, Film,
-  MessageSquare, Repeat2, Globe, Bell, Zap,
-  ChevronDown, ChevronUp, Settings, BookOpen,
+  ArrowLeft, ChevronDown, ChevronUp,
+  Rss, BookOpen, Compass, Film,
+  Users, Bell, ImagePlus,
 } from "lucide-react";
 
 // ── Storage ───────────────────────────────────────────────────────────────────
-// Completely isolated from device slots, profiles, and the Human Session Tool.
-// Each trust score ID has its own localStorage key.
+// Each trust score ID gets its own localStorage entry, keyed with the mobile
+// engine schema version. Old "ts_hs_settings_v1_*" entries (browser engine)
+// are deliberately not migrated — those fields are gone.
 
-const LS_KEY = (id: string) => `ts_hs_settings_v1_${id}`;
+const LS_KEY = (id: string) => `ts_mobile_hs_v1_${id}`;
 
-// All boolean fields default to true; all numeric fields default to 0.
+// Default image filter settings — mirrors AUTOMATION_DEFAULTS.makePostImageSettings
+const DEFAULT_IMAGE_SETTINGS: ImageFilterSettings = {
+  contrast:   { enabled: true, min: 5,   max: 250 },
+  brightness: { enabled: true, min: 5,   max: 250 },
+  noise:      { enabled: true, min: 5,   max: 15  },
+  sharpen:    { enabled: true, min: 1.0, max: 2.0 },
+  pixelate:   { enabled: true, min: 0.9, max: 2.1 },
+};
+
+// All fields mirror AutomationSettingsData in MobilePage.tsx, minus the
+// slot-specific fields: enabled, followSources, dismissDirection.
 const DEFAULTS = {
-  // General
-  randomiseTiming: true,
-  delayMin: 0, delayMax: 0,
-  // Timeline Feed
-  viewTimelineFeedEnabled: true,
-  viewTimelineFeedMin: 0, viewTimelineFeedMax: 0,
-  viewTimelineFeedOrderMin: 0, viewTimelineFeedOrderMax: 0,
-  viewTimelineFeedNotUsedMin: 0, viewTimelineFeedNotUsedMax: 0,
-  likeTimelinePostsPercentMin: 0, likeTimelinePostsPercentMax: 0,
-  likeTimelinePostsDelayMin: 0, likeTimelinePostsDelayMax: 0,
-  saveMediaEnabled: true, saveMediaPercent: 0,
-  sharePostPercentMin: 0, sharePostPercentMax: 0,
-  expandCaptionPercentMin: 0, expandCaptionPercentMax: 0,
-  viewPostProfilePercentMin: 0, viewPostProfilePercentMax: 0,
-  viewProfileFeedPercentMin: 0, viewProfileFeedPercentMax: 0,
-  viewProfileFeedCountMin: 0, viewProfileFeedCountMax: 0,
-  viewProfilePostsPercentMin: 0, viewProfilePostsPercentMax: 0,
-  viewProfilePostsCountMin: 0, viewProfilePostsCountMax: 0,
-  // Explore Page
-  followSuggestedUsersIfEmptyEnabled: true,
-  explorePageOrderMin: 0, explorePageOrderMax: 0,
-  explorePageSkipMin: 0, explorePageSkipMax: 0,
-  exploreScrollMin: 0, exploreScrollMax: 0,
-  exploreClickMin: 0, exploreClickMax: 0,
-  exploreLikePctMin: 0, exploreLikePctMax: 0,
-  exploreVisitProfilePctMin: 0, exploreVisitProfilePctMax: 0,
-  exploreProfileScrollMin: 0, exploreProfileScrollMax: 0,
-  exploreProfileClickMin: 0, exploreProfileClickMax: 0,
+  // Cycle timing
+  cycleIntervalMin: 20, cycleIntervalMax: 30,
+  shuffleToolOrder: false,
+
+  // View Feed
+  feedEnabled: true,
+  feedActivatePctMin: 100, feedActivatePctMax: 100,
+  actionDelayMin: 5, actionDelayMax: 10,
+  feedScrollMin: 5, feedScrollMax: 10,
+  likePercentMin: 3, likePercentMax: 5,
+  shareFeedPercentMin: 0, shareFeedPercentMax: 0,
+  shareDmPercentMin: 0, shareDmPercentMax: 0,
+  savePercentMin: 0, savePercentMax: 0,
+
+  // View Stories from Feed
+  storiesEnabled: true,
+  viewStoriesActivatePctMin: 100, viewStoriesActivatePctMax: 100,
+  viewStoriesSlidesMin: 0, viewStoriesSlidesMax: 0,
+  viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
+  viewStoriesLikePercentMin: 0, viewStoriesLikePercentMax: 0,
+  viewStoriesShareDmPercentMin: 0, viewStoriesShareDmPercentMax: 0,
+
+  // View Explore Page
+  viewExploreEnabled: false,
+  viewExploreActivatePctMin: 100, viewExploreActivatePctMax: 100,
+  viewExploreScrollMin: 0, viewExploreScrollMax: 0,
+  viewExploreActionDelayMin: 3, viewExploreActionDelayMax: 6,
+  viewExploreClickPostPctMin: 0, viewExploreClickPostPctMax: 0,
+  viewExploreLikePercentMin: 0, viewExploreLikePercentMax: 0,
+  viewExploreShareFeedPercentMin: 0, viewExploreShareFeedPercentMax: 0,
+  viewExploreShareDmPercentMin: 0, viewExploreShareDmPercentMax: 0,
+  viewExploreSavePercentMin: 0, viewExploreSavePercentMax: 0,
+
   // View Reels
-  viewReelsEnabled: true,
-  viewReelsOrderMin: 0, viewReelsOrderMax: 0,
-  reelWatchChanceMin: 0, reelWatchChanceMax: 0,
-  reelWatchCountMin: 0, reelWatchCountMax: 0,
-  reelWatchPercentMin: 0, reelWatchPercentMax: 0,
-  reelLikePercentMin: 0, reelLikePercentMax: 0,
-  viewReelsNotUsedMin: 0, viewReelsNotUsedMax: 0,
-  // Random Actions
-  humanSessionEnabled: true,
-  humanSessionOrderMin: 0, humanSessionOrderMax: 0,
-  humanSessionNotUsedMin: 0, humanSessionNotUsedMax: 0,
-  notificationsRunChanceMin: 0, notificationsRunChanceMax: 0,
-  ownProfileRunChanceMin: 0, ownProfileRunChanceMax: 0,
-  settingsActivityRunChanceMin: 0, settingsActivityRunChanceMax: 0,
-  viewActivityRunChanceMin: 0, viewActivityRunChanceMax: 0,
-  viewSavedRunChanceMin: 0, viewSavedRunChanceMax: 0,
-  // Check Stories
-  checkTimelineStoriesEnabled: true,
-  checkTimelineStoriesMin: 0, checkTimelineStoriesMax: 0,
-  checkTimelineStoriesOrderMin: 0, checkTimelineStoriesOrderMax: 0,
-  checkTimelineStoriesNotUsedMin: 0, checkTimelineStoriesNotUsedMax: 0,
-  storyLikePctMin: 0, storyLikePctMax: 0,
-  storySharePctMin: 0, storySharePctMax: 0,
-  // Check DMs
-  checkDmEnabled: true,
-  checkDmMin: 0, checkDmMax: 0,
-  checkDmOrderMin: 0, checkDmOrderMax: 0,
-  checkDmNotUsedMin: 0, checkDmNotUsedMax: 0,
-  // Repost
-  repostEnabled: true,
-  repostSourceUsername: "",
-  repostDisableUsernameSource: true,
-  repostUseHikerApi: true,
-  repostLocalFolderEnabled: true,
-  repostLocalFolderPath: "",
-  repostLocalFolderDeleteAfterUpload: true,
-  repostLocalFolderNoRepeat: true,
-  repostLocalFolderRandom: true,
-  repostMin: 0, repostMax: 0,
-  repostAlterationLevel: "small",
-  repostMakeUnique: true,
-  repostUseChatGpt: true,
-  repostCaptionText: "",
-  repostDisableComments: true,
-  repostOrderMin: 0, repostOrderMax: 0,
-  repostNotUsedMin: 0, repostNotUsedMax: 0,
-  repostDisableAtPostCount: 0,
-  repostDisableWhenExhausted: true,
-  // Force Emulation
-  forceEmulationEnabled: true,
-  forceEmulationRandomise: true,
-  // Web Browsing
-  webBrowsingEnabled: true,
-  webBrowsingOrderMin: 0, webBrowsingOrderMax: 0,
-  webBrowsingSkipMin: 0, webBrowsingSkipMax: 0,
-  webBrowsingVisitRandom: true,
-  webBrowsingSites: "",
-  webBrowsingSitesMin: 0, webBrowsingSitesMax: 0,
-  webBrowsingInternalLinksMin: 0, webBrowsingInternalLinksMax: 0,
-  webBrowsingTimeOnSiteMin: 0, webBrowsingTimeOnSiteMax: 0,
-  webBrowsingTimeOnLinksMin: 0, webBrowsingTimeOnLinksMax: 0,
-  // Embedded Tool Execution Order (where Follow/Unfollow/Contact run within a session)
-  followOrderMin: 0, followOrderMax: 0,
-  followSkipMin: 0, followSkipMax: 0,
-  unfollowOrderMin: 0, unfollowOrderMax: 0,
-  unfollowSkipMin: 0, unfollowSkipMax: 0,
-  contactOrderMin: 0, contactOrderMax: 0,
-  contactSkipMin: 0, contactSkipMax: 0,
+  viewReelsEnabled: false,
+  viewReelsActivatePctMin: 100, viewReelsActivatePctMax: 100,
+  viewReelsScrollMin: 0, viewReelsScrollMax: 0,
+  viewReelsWatchPctMin: 30, viewReelsWatchPctMax: 70,
+  viewReelsLikePercentMin: 0, viewReelsLikePercentMax: 0,
+  viewReelsShareFeedPercentMin: 0, viewReelsShareFeedPercentMax: 0,
+  viewReelsShareDmPercentMin: 0, viewReelsShareDmPercentMax: 0,
+  viewReelsSavePercentMin: 0, viewReelsSavePercentMax: 0,
+
+  // Follow Users
+  followEnabled: false,
+  followActivatePctMin: 100, followActivatePctMax: 100,
+  followUsersMin: 1, followUsersMax: 3,
+  followSpreadFollows: false,
+
+  // Inject Browsing (woven into Follow Users)
+  injectBrowsingEnabled: false,
+  injectBrowsingActivatePctMin: 0, injectBrowsingActivatePctMax: 0,
+  injectBrowsingBeforeFollowPctMin: 0, injectBrowsingBeforeFollowPctMax: 0,
+  injectBrowsingFeedMin: 3, injectBrowsingFeedMax: 6,
+  injectBrowsingClickPostPctMin: 0, injectBrowsingClickPostPctMax: 0,
+  injectBrowsingLikePctMin: 0, injectBrowsingLikePctMax: 0,
+  injectBrowsingShareFeedPctMin: 0, injectBrowsingShareFeedPctMax: 0,
+  injectBrowsingShareDmPctMin: 0, injectBrowsingShareDmPctMax: 0,
+  injectBrowsingSavePostPctMin: 0, injectBrowsingSavePostPctMax: 0,
+  injectBrowsingAbandonFollowPctMin: 0, injectBrowsingAbandonFollowPctMax: 0,
+
+  // Follow Filters
+  followFiltersEnabled: false,
+  followFilterPrivateUsers: false,
+  followFilterEnglishSpeaking: false,
+  followFilterMinFollowers50: false,
+  followFilterVerifiedUsers: false,
+  followFilterMaxFollowers25k: false,
+
+  // Random Jitter
+  randomJitterEnabled: false,
+  randomJitterActivatePctMin: 100, randomJitterActivatePctMax: 100,
+  checkNotificationsPctMin: 0, checkNotificationsPctMax: 0,
+  checkNotificationsScrollsMin: 2, checkNotificationsScrollsMax: 5,
+  checkNotificationsClickPctMin: 0, checkNotificationsClickPctMax: 0,
+  visitProfilePctMin: 0, visitProfilePctMax: 0,
+
+  // Make a Post
+  makePostEnabled: false,
+  makePostActivatePctMin: 100, makePostActivatePctMax: 100,
+  makePostPerSessionMin: 1, makePostPerSessionMax: 1,
+  makePostSourceUsername: "",
+  makePostDisableUsernameSource: false,
+  makePostAlterationEnabled: true,
+  makePostAlterationLevel: "small" as "small" | "medium" | "high",
+  makePostImageSettingsEnabled: true,
+  makePostUseHikerApi: false,
+  makePostDisableAtPostCount: 0,
+  makePostDisableWhenExhausted: true,
+  makePostLocalFolderEnabled: false,
+  makePostLocalFolderPath: "",
+  makePostLocalFolderNoRepeat: false,
+  makePostLocalFolderRandom: false,
+  makePostLocalFolderDeleteAfterUpload: true,
+  makePostUseChatGpt: false,
+  makePostFixAiSlop: false,
+  makePostMakeUnique: false,
+  makePostCaptionText: "",
+  makePostImageSettings: DEFAULT_IMAGE_SETTINGS as ImageFilterSettings,
 };
 
 type HsSettings = typeof DEFAULTS;
-type Setter = (key: keyof HsSettings, value: HsSettings[keyof HsSettings]) => void;
+type Setter = <K extends keyof HsSettings>(key: K, value: HsSettings[K]) => void;
 
 function loadSettings(id: string): HsSettings {
   try {
@@ -130,7 +144,7 @@ function saveSettings(id: string, s: HsSettings) {
   try { localStorage.setItem(LS_KEY(id), JSON.stringify(s)); } catch {}
 }
 
-// ── Shared row primitives ─────────────────────────────────────────────────────
+// ── Primitive row components ──────────────────────────────────────────────────
 
 function Row({ label, desc, right }: { label: string; desc?: string; right: React.ReactNode }) {
   return (
@@ -147,23 +161,38 @@ function Row({ label, desc, right }: { label: string; desc?: string; right: Reac
 function SRow({ label, desc, k, s, set }: { label: string; desc?: string; k: keyof HsSettings; s: HsSettings; set: Setter }) {
   return (
     <Row label={label} desc={desc} right={
-      <Switch checked={!!s[k]} onCheckedChange={v => set(k, v)} />
+      <Switch checked={!!s[k]} onCheckedChange={v => set(k, v as HsSettings[typeof k])} />
     } />
   );
 }
 
-function RRow({ label, minK, maxK, s, set, unit }: {
-  label: string; minK: keyof HsSettings; maxK: keyof HsSettings;
-  s: HsSettings; set: Setter; unit?: string;
+function CRow({ label, desc, k, s, set }: { label: string; desc?: string; k: keyof HsSettings; s: HsSettings; set: Setter }) {
+  return (
+    <Row label={label} desc={desc} right={
+      <input
+        type="checkbox"
+        checked={!!s[k]}
+        onChange={e => set(k, e.target.checked as HsSettings[typeof k])}
+        className="w-4 h-4 accent-primary cursor-pointer"
+      />
+    } />
+  );
+}
+
+function RRow({ label, desc, minK, maxK, s, set, unit, max }: {
+  label: string; desc?: string;
+  minK: keyof HsSettings; maxK: keyof HsSettings;
+  s: HsSettings; set: Setter; unit?: string; max?: number;
 }) {
   return (
-    <Row label={label} right={
+    <Row label={label} desc={desc} right={
       <div className="flex items-center gap-1.5">
         <input
           type="number"
           value={s[minK] as number}
           min={0}
-          onChange={e => set(minK, Math.max(0, Number(e.target.value)))}
+          max={max}
+          onChange={e => set(minK, Math.max(0, max !== undefined ? Math.min(max, Number(e.target.value)) : Number(e.target.value)) as HsSettings[typeof minK])}
           className="w-16 h-7 rounded-md border border-border bg-background px-2 text-xs text-center outline-none focus:ring-1 focus:ring-primary"
         />
         <span className="text-xs text-muted-foreground">–</span>
@@ -171,7 +200,8 @@ function RRow({ label, minK, maxK, s, set, unit }: {
           type="number"
           value={s[maxK] as number}
           min={0}
-          onChange={e => set(maxK, Math.max(0, Number(e.target.value)))}
+          max={max}
+          onChange={e => set(maxK, Math.max(0, max !== undefined ? Math.min(max, Number(e.target.value)) : Number(e.target.value)) as HsSettings[typeof maxK])}
           className="w-16 h-7 rounded-md border border-border bg-background px-2 text-xs text-center outline-none focus:ring-1 focus:ring-primary"
         />
         {unit && <span className="text-[11px] text-muted-foreground w-6">{unit}</span>}
@@ -180,15 +210,17 @@ function RRow({ label, minK, maxK, s, set, unit }: {
   );
 }
 
-function NRow({ label, k, s, set, unit }: { label: string; k: keyof HsSettings; s: HsSettings; set: Setter; unit?: string }) {
+function NRow({ label, desc, k, s, set, unit, min: minVal }: {
+  label: string; desc?: string; k: keyof HsSettings; s: HsSettings; set: Setter; unit?: string; min?: number;
+}) {
   return (
-    <Row label={label} right={
+    <Row label={label} desc={desc} right={
       <div className="flex items-center gap-1.5">
         <input
           type="number"
           value={s[k] as number}
-          min={0}
-          onChange={e => set(k, Math.max(0, Number(e.target.value)))}
+          min={minVal ?? 0}
+          onChange={e => set(k, Math.max(minVal ?? 0, Number(e.target.value)) as HsSettings[typeof k])}
           className="w-20 h-7 rounded-md border border-border bg-background px-2 text-xs text-center outline-none focus:ring-1 focus:ring-primary"
         />
         {unit && <span className="text-[11px] text-muted-foreground">{unit}</span>}
@@ -197,13 +229,15 @@ function NRow({ label, k, s, set, unit }: { label: string; k: keyof HsSettings; 
   );
 }
 
-function TRow({ label, k, s, set, placeholder }: { label: string; k: keyof HsSettings; s: HsSettings; set: Setter; placeholder?: string }) {
+function TRow({ label, desc, k, s, set, placeholder }: {
+  label: string; desc?: string; k: keyof HsSettings; s: HsSettings; set: Setter; placeholder?: string;
+}) {
   return (
-    <Row label={label} right={
+    <Row label={label} desc={desc} right={
       <input
         type="text"
         value={s[k] as string}
-        onChange={e => set(k, e.target.value)}
+        onChange={e => set(k, e.target.value as HsSettings[typeof k])}
         placeholder={placeholder}
         className="w-44 h-7 rounded-md border border-border bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-primary"
       />
@@ -250,15 +284,23 @@ export function TrustScoreSettingsPage() {
 
   const level: TrustLevelEntry | undefined = getTrustLevels().find(l => l.id === id);
   const [s, setS] = useState<HsSettings>(() => loadSettings(id));
+  const [imageSettingsOpen, setImageSettingsOpen] = useState(false);
 
   const [open, setOpen] = useState<Record<string, boolean>>({
-    general: true, feed: true, explore: false, reels: false,
-    actions: false, stories: false, dms: false, repost: false,
-    webBrowsing: false, forceEmulation: false, toolOrder: false,
+    general: true,
+    feed: true,
+    stories: false,
+    explore: false,
+    reels: false,
+    follow: false,
+    injectBrowsing: false,
+    followFilters: false,
+    jitter: false,
+    makePost: false,
   });
   const toggle = (key: string) => setOpen(prev => ({ ...prev, [key]: !prev[key] }));
 
-  const set: Setter = useCallback((key, value) => {
+  const set: Setter = useCallback(<K extends keyof HsSettings>(key: K, value: HsSettings[K]) => {
     setS(prev => {
       const next = { ...prev, [key]: value };
       saveSettings(id, next);
@@ -301,170 +343,190 @@ export function TrustScoreSettingsPage() {
           <BadgeIcon size={13} color={level.text} fill={level.text} strokeWidth={2} />
         </span>
         <div>
-          <h1 className="text-base font-bold leading-tight">Human Session Settings</h1>
-          <p className="text-xs text-muted-foreground">Isolated per trust score — not linked to any device slot, profile, or Human Session Tool.</p>
+          <h1 className="text-base font-bold leading-tight">Mobile Human Session Settings</h1>
+          <p className="text-xs text-muted-foreground">Applied to Phone Farm device slots assigned this trust score.</p>
         </div>
       </div>
 
-      {/* General */}
-      <Section icon={Clock} title="General" open={open.general} onToggle={() => toggle("general")}>
-        <SRow label="Randomise timing" desc="Stagger each account's start across the delay window" k="randomiseTiming" s={s} set={set} />
-        <RRow label="Session delay range" minK="delayMin" maxK="delayMax" s={s} set={set} unit="s" />
+      {/* General / Cycle timing */}
+      <Section icon={Bell} title="General" open={open.general} onToggle={() => toggle("general")}>
+        <RRow label="Run every (minutes)" desc="How often the automation cycle fires" minK="cycleIntervalMin" maxK="cycleIntervalMax" s={s} set={set} unit="min" />
+        <CRow label="Shuffle tool order" desc="Randomise which tool runs first each cycle" k="shuffleToolOrder" s={s} set={set} />
       </Section>
 
-      {/* Timeline Feed */}
-      <Section icon={PlaySquare} title="View Timeline Feed" open={open.feed} onToggle={() => toggle("feed")}>
-        <SRow label="Enabled" k="viewTimelineFeedEnabled" s={s} set={set} />
-        <RRow label="Posts per session" minK="viewTimelineFeedMin" maxK="viewTimelineFeedMax" s={s} set={set} />
-        <RRow label="Execution order" minK="viewTimelineFeedOrderMin" maxK="viewTimelineFeedOrderMax" s={s} set={set} />
-        <RRow label="Skip chance" minK="viewTimelineFeedNotUsedMin" maxK="viewTimelineFeedNotUsedMax" s={s} set={set} unit="%" />
-        <RRow label="% posts to like" minK="likeTimelinePostsPercentMin" maxK="likeTimelinePostsPercentMax" s={s} set={set} unit="%" />
-        <RRow label="Delay between likes" minK="likeTimelinePostsDelayMin" maxK="likeTimelinePostsDelayMax" s={s} set={set} unit="s" />
-        <SRow label="Save liked media" k="saveMediaEnabled" s={s} set={set} />
-        <NRow label="Save media %" k="saveMediaPercent" s={s} set={set} unit="%" />
-        <RRow label="Share post %" minK="sharePostPercentMin" maxK="sharePostPercentMax" s={s} set={set} unit="%" />
-        <RRow label="Expand caption %" minK="expandCaptionPercentMin" maxK="expandCaptionPercentMax" s={s} set={set} unit="%" />
-        <RRow label="Visit profile %" minK="viewPostProfilePercentMin" maxK="viewPostProfilePercentMax" s={s} set={set} unit="%" />
-        <RRow label="View profile feed %" minK="viewProfileFeedPercentMin" maxK="viewProfileFeedPercentMax" s={s} set={set} unit="%" />
-        <RRow label="View profile feed count" minK="viewProfileFeedCountMin" maxK="viewProfileFeedCountMax" s={s} set={set} />
-        <RRow label="Open profile posts %" minK="viewProfilePostsPercentMin" maxK="viewProfilePostsPercentMax" s={s} set={set} unit="%" />
-        <RRow label="Open profile posts count" minK="viewProfilePostsCountMin" maxK="viewProfilePostsCountMax" s={s} set={set} />
+      {/* View Feed */}
+      <Section icon={Rss} title="View Feed" open={open.feed} onToggle={() => toggle("feed")}>
+        <SRow label="Enabled" k="feedEnabled" s={s} set={set} />
+        <RRow label="Activate Percentage" desc="Per-cycle chance this tool runs at all" minK="feedActivatePctMin" maxK="feedActivatePctMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Delay between actions" minK="actionDelayMin" maxK="actionDelayMax" s={s} set={set} unit="s" />
+        <RRow label="Posts to scroll" minK="feedScrollMin" maxK="feedScrollMax" s={s} set={set} />
+        <RRow label="Like %" minK="likePercentMin" maxK="likePercentMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Share to Feed %" minK="shareFeedPercentMin" maxK="shareFeedPercentMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Share via DM %" minK="shareDmPercentMin" maxK="shareDmPercentMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Save %" minK="savePercentMin" maxK="savePercentMax" s={s} set={set} unit="%" max={100} />
       </Section>
 
-      {/* Explore */}
-      <Section icon={Compass} title="Visit Explore Page" open={open.explore} onToggle={() => toggle("explore")}>
-        <SRow label="Enabled" k="followSuggestedUsersIfEmptyEnabled" s={s} set={set} />
-        <RRow label="Execution order" minK="explorePageOrderMin" maxK="explorePageOrderMax" s={s} set={set} />
-        <RRow label="Skip chance" minK="explorePageSkipMin" maxK="explorePageSkipMax" s={s} set={set} unit="%" />
-        <RRow label="Posts to scroll" minK="exploreScrollMin" maxK="exploreScrollMax" s={s} set={set} />
-        <RRow label="Posts to click" minK="exploreClickMin" maxK="exploreClickMax" s={s} set={set} />
-        <RRow label="Like %" minK="exploreLikePctMin" maxK="exploreLikePctMax" s={s} set={set} unit="%" />
-        <RRow label="Visit author profile %" minK="exploreVisitProfilePctMin" maxK="exploreVisitProfilePctMax" s={s} set={set} unit="%" />
-        <RRow label="Posts to scroll on profile" minK="exploreProfileScrollMin" maxK="exploreProfileScrollMax" s={s} set={set} />
-        <RRow label="Posts to click on profile" minK="exploreProfileClickMin" maxK="exploreProfileClickMax" s={s} set={set} />
+      {/* View Stories from Feed */}
+      <Section icon={BookOpen} title="View Stories from Feed" open={open.stories} onToggle={() => toggle("stories")}>
+        <SRow label="Enabled" k="storiesEnabled" s={s} set={set} />
+        <RRow label="Activate Percentage" minK="viewStoriesActivatePctMin" maxK="viewStoriesActivatePctMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Stories to watch" minK="viewStoriesSlidesMin" maxK="viewStoriesSlidesMax" s={s} set={set} />
+        <RRow label="% to watch per story" minK="viewStoriesSlideWatchPctMin" maxK="viewStoriesSlideWatchPctMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Like %" minK="viewStoriesLikePercentMin" maxK="viewStoriesLikePercentMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Share via DM %" minK="viewStoriesShareDmPercentMin" maxK="viewStoriesShareDmPercentMax" s={s} set={set} unit="%" max={100} />
       </Section>
 
-      {/* Reels */}
+      {/* View Explore Page */}
+      <Section icon={Compass} title="View Explore Page" open={open.explore} onToggle={() => toggle("explore")}>
+        <SRow label="Enabled" k="viewExploreEnabled" s={s} set={set} />
+        <RRow label="Activate Percentage" minK="viewExploreActivatePctMin" maxK="viewExploreActivatePctMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Posts to scroll" minK="viewExploreScrollMin" maxK="viewExploreScrollMax" s={s} set={set} />
+        <RRow label="Delay between actions" minK="viewExploreActionDelayMin" maxK="viewExploreActionDelayMax" s={s} set={set} unit="s" />
+        <RRow label="Click posts %" minK="viewExploreClickPostPctMin" maxK="viewExploreClickPostPctMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Like % of posts" minK="viewExploreLikePercentMin" maxK="viewExploreLikePercentMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Share to Feed % of posts" minK="viewExploreShareFeedPercentMin" maxK="viewExploreShareFeedPercentMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Share via DM % of posts" minK="viewExploreShareDmPercentMin" maxK="viewExploreShareDmPercentMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Save % of posts" minK="viewExploreSavePercentMin" maxK="viewExploreSavePercentMax" s={s} set={set} unit="%" max={100} />
+      </Section>
+
+      {/* View Reels */}
       <Section icon={Film} title="View Reels" open={open.reels} onToggle={() => toggle("reels")}>
         <SRow label="Enabled" k="viewReelsEnabled" s={s} set={set} />
-        <RRow label="Execution order" minK="viewReelsOrderMin" maxK="viewReelsOrderMax" s={s} set={set} />
-        <RRow label="Run chance" minK="reelWatchChanceMin" maxK="reelWatchChanceMax" s={s} set={set} unit="%" />
-        <RRow label="Reels to watch" minK="reelWatchCountMin" maxK="reelWatchCountMax" s={s} set={set} />
-        <RRow label="% of each reel to watch" minK="reelWatchPercentMin" maxK="reelWatchPercentMax" s={s} set={set} unit="%" />
-        <RRow label="% of reels to like" minK="reelLikePercentMin" maxK="reelLikePercentMax" s={s} set={set} unit="%" />
-        <RRow label="Skip chance" minK="viewReelsNotUsedMin" maxK="viewReelsNotUsedMax" s={s} set={set} unit="%" />
+        <RRow label="Activate Percentage" minK="viewReelsActivatePctMin" maxK="viewReelsActivatePctMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Reels to scroll" minK="viewReelsScrollMin" maxK="viewReelsScrollMax" s={s} set={set} />
+        <RRow label="Watch %" minK="viewReelsWatchPctMin" maxK="viewReelsWatchPctMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Like %" minK="viewReelsLikePercentMin" maxK="viewReelsLikePercentMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Share to Feed %" minK="viewReelsShareFeedPercentMin" maxK="viewReelsShareFeedPercentMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Share via DM %" minK="viewReelsShareDmPercentMin" maxK="viewReelsShareDmPercentMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Save %" minK="viewReelsSavePercentMin" maxK="viewReelsSavePercentMax" s={s} set={set} unit="%" max={100} />
       </Section>
 
-      {/* Random Actions */}
-      <Section icon={Bell} title="Random Actions" open={open.actions} onToggle={() => toggle("actions")}>
-        <SRow label="Enabled" k="humanSessionEnabled" s={s} set={set} />
-        <RRow label="Execution order" minK="humanSessionOrderMin" maxK="humanSessionOrderMax" s={s} set={set} />
-        <RRow label="Skip chance" minK="humanSessionNotUsedMin" maxK="humanSessionNotUsedMax" s={s} set={set} unit="%" />
-        <RRow label="Notifications run chance" minK="notificationsRunChanceMin" maxK="notificationsRunChanceMax" s={s} set={set} unit="%" />
-        <RRow label="Own Profile run chance" minK="ownProfileRunChanceMin" maxK="ownProfileRunChanceMax" s={s} set={set} unit="%" />
-        <RRow label="Settings run chance" minK="settingsActivityRunChanceMin" maxK="settingsActivityRunChanceMax" s={s} set={set} unit="%" />
-        <RRow label="View Activity run chance" minK="viewActivityRunChanceMin" maxK="viewActivityRunChanceMax" s={s} set={set} unit="%" />
-        <RRow label="View Saved run chance" minK="viewSavedRunChanceMin" maxK="viewSavedRunChanceMax" s={s} set={set} unit="%" />
+      {/* Follow Users */}
+      <Section icon={Users} title="Follow Users" open={open.follow} onToggle={() => toggle("follow")}>
+        <SRow label="Enabled" k="followEnabled" s={s} set={set} />
+        <RRow label="Activate Percentage" minK="followActivatePctMin" maxK="followActivatePctMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Users to follow per session" minK="followUsersMin" maxK="followUsersMax" s={s} set={set} />
+        <CRow label="Spread follows" desc="Distribute follows across the cycle instead of back-to-back" k="followSpreadFollows" s={s} set={set} />
       </Section>
 
-      {/* Stories */}
-      <Section icon={BookOpen} title="Check Timeline Stories" open={open.stories} onToggle={() => toggle("stories")}>
-        <SRow label="Enabled" k="checkTimelineStoriesEnabled" s={s} set={set} />
-        <RRow label="Stories per session" minK="checkTimelineStoriesMin" maxK="checkTimelineStoriesMax" s={s} set={set} />
-        <RRow label="Execution order" minK="checkTimelineStoriesOrderMin" maxK="checkTimelineStoriesOrderMax" s={s} set={set} />
-        <RRow label="Skip chance" minK="checkTimelineStoriesNotUsedMin" maxK="checkTimelineStoriesNotUsedMax" s={s} set={set} unit="%" />
-        <RRow label="Like %" minK="storyLikePctMin" maxK="storyLikePctMax" s={s} set={set} unit="%" />
-        <RRow label="Share %" minK="storySharePctMin" maxK="storySharePctMax" s={s} set={set} unit="%" />
+      {/* Inject Browsing */}
+      <Section icon={Rss} title="Inject Browsing (within Follow)" open={open.injectBrowsing} onToggle={() => toggle("injectBrowsing")}>
+        <SRow label="Enabled" k="injectBrowsingEnabled" s={s} set={set} />
+        <RRow label="Activate Percentage" minK="injectBrowsingActivatePctMin" maxK="injectBrowsingActivatePctMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Browse before follow %" minK="injectBrowsingBeforeFollowPctMin" maxK="injectBrowsingBeforeFollowPctMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Feed posts to scroll" minK="injectBrowsingFeedMin" maxK="injectBrowsingFeedMax" s={s} set={set} />
+        <RRow label="Click post %" minK="injectBrowsingClickPostPctMin" maxK="injectBrowsingClickPostPctMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Like %" minK="injectBrowsingLikePctMin" maxK="injectBrowsingLikePctMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Share to Feed %" minK="injectBrowsingShareFeedPctMin" maxK="injectBrowsingShareFeedPctMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Share via DM %" minK="injectBrowsingShareDmPctMin" maxK="injectBrowsingShareDmPctMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Save post %" minK="injectBrowsingSavePostPctMin" maxK="injectBrowsingSavePostPctMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Abandon follow %" minK="injectBrowsingAbandonFollowPctMin" maxK="injectBrowsingAbandonFollowPctMax" s={s} set={set} unit="%" max={100} />
       </Section>
 
-      {/* DMs */}
-      <Section icon={MessageSquare} title="Check DMs" open={open.dms} onToggle={() => toggle("dms")}>
-        <SRow label="Enabled" k="checkDmEnabled" s={s} set={set} />
-        <RRow label="DMs per session" minK="checkDmMin" maxK="checkDmMax" s={s} set={set} />
-        <RRow label="Execution order" minK="checkDmOrderMin" maxK="checkDmOrderMax" s={s} set={set} />
-        <RRow label="Skip chance" minK="checkDmNotUsedMin" maxK="checkDmNotUsedMax" s={s} set={set} unit="%" />
+      {/* Follow Filters */}
+      <Section icon={Users} title="Follow Filters" open={open.followFilters} onToggle={() => toggle("followFilters")}>
+        <SRow label="Enabled" desc="Apply profile-quality gates before each follow" k="followFiltersEnabled" s={s} set={set} />
+        <CRow label="Skip private accounts" k="followFilterPrivateUsers" s={s} set={set} />
+        <CRow label="Skip non-English speaking" k="followFilterEnglishSpeaking" s={s} set={set} />
+        <CRow label="Skip accounts with &lt; 50 followers" k="followFilterMinFollowers50" s={s} set={set} />
+        <CRow label="Skip verified accounts" k="followFilterVerifiedUsers" s={s} set={set} />
+        <CRow label="Skip accounts with &gt; 25k followers" k="followFilterMaxFollowers25k" s={s} set={set} />
       </Section>
 
-      {/* Repost */}
-      <Section icon={Repeat2} title="Repost" open={open.repost} onToggle={() => toggle("repost")}>
-        <SRow label="Enabled" k="repostEnabled" s={s} set={set} />
-        <TRow label="Source account username" k="repostSourceUsername" s={s} set={set} placeholder="@username" />
-        <SRow label="Disable username source" k="repostDisableUsernameSource" s={s} set={set} />
-        <SRow label="Use HikerAPI" k="repostUseHikerApi" s={s} set={set} />
-        <SRow label="Local folder enabled" k="repostLocalFolderEnabled" s={s} set={set} />
-        <TRow label="Local folder path" k="repostLocalFolderPath" s={s} set={set} placeholder="C:\path\to\folder" />
-        <SRow label="Delete after upload" k="repostLocalFolderDeleteAfterUpload" s={s} set={set} />
-        <SRow label="No repeat" k="repostLocalFolderNoRepeat" s={s} set={set} />
-        <SRow label="Random from folder" k="repostLocalFolderRandom" s={s} set={set} />
-        <RRow label="Posts per session" minK="repostMin" maxK="repostMax" s={s} set={set} />
-        <Row label="Alteration level" right={
-          <select
-            value={s.repostAlterationLevel}
-            onChange={e => set("repostAlterationLevel", e.target.value)}
-            className="h-7 rounded-md border border-border bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-primary"
-          >
-            {["none", "small", "medium", "large", "extreme"].map(v => (
-              <option key={v} value={v}>{v}</option>
-            ))}
-          </select>
-        } />
-        <SRow label="Make it unique" k="repostMakeUnique" s={s} set={set} />
-        <SRow label="Use ChatGPT for caption" k="repostUseChatGpt" s={s} set={set} />
+      {/* Random Jitter */}
+      <Section icon={Bell} title="Random Jitter" open={open.jitter} onToggle={() => toggle("jitter")}>
+        <SRow label="Enabled" desc="Human-like interstitial actions fired probabilistically each cycle" k="randomJitterEnabled" s={s} set={set} />
+        <RRow label="Activate Percentage" minK="randomJitterActivatePctMin" maxK="randomJitterActivatePctMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Check Notifications %" minK="checkNotificationsPctMin" maxK="checkNotificationsPctMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Notification scrolls" minK="checkNotificationsScrollsMin" maxK="checkNotificationsScrollsMax" s={s} set={set} />
+        <RRow label="Notification click %" minK="checkNotificationsClickPctMin" maxK="checkNotificationsClickPctMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Visit Profile %" minK="visitProfilePctMin" maxK="visitProfilePctMax" s={s} set={set} unit="%" max={100} />
+      </Section>
+
+      {/* Make a Post */}
+      <Section icon={ImagePlus} title="Make a Post" open={open.makePost} onToggle={() => toggle("makePost")}>
+        <SRow label="Enabled" k="makePostEnabled" s={s} set={set} />
+        <RRow label="Activate Percentage" minK="makePostActivatePctMin" maxK="makePostActivatePctMax" s={s} set={set} unit="%" max={100} />
+        <RRow label="Posts per session" minK="makePostPerSessionMin" maxK="makePostPerSessionMax" s={s} set={set} />
+
+        {/* Source — Instagram Account */}
+        <CRow label="Source: Instagram account" desc="Pull posts from a username via HikerAPI" k="makePostDisableUsernameSource"
+          s={{ ...s, makePostDisableUsernameSource: !s.makePostDisableUsernameSource }}
+          set={(k, v) => set("makePostDisableUsernameSource", !(v as boolean))}
+        />
+        {!s.makePostDisableUsernameSource && (
+          <TRow label="Source username" k="makePostSourceUsername" s={s} set={set} placeholder="@username" />
+        )}
+        <SRow label="Use HikerAPI" k="makePostUseHikerApi" s={s} set={set} />
+
+        {/* Source — Local Folder */}
+        <SRow label="Source: local folder" k="makePostLocalFolderEnabled" s={s} set={set} />
+        {s.makePostLocalFolderEnabled && <>
+          <TRow label="Folder path" k="makePostLocalFolderPath" s={s} set={set} placeholder="C:\path\to\folder" />
+          <CRow label="No repeat" k="makePostLocalFolderNoRepeat" s={s} set={set} />
+          <CRow label="Pick at random" k="makePostLocalFolderRandom" s={s} set={set} />
+          <CRow label="Delete after upload" k="makePostLocalFolderDeleteAfterUpload" s={s} set={set} />
+        </>}
+
+        {/* Caption */}
+        <SRow label="Use ChatGPT for caption" k="makePostUseChatGpt" s={s} set={set} />
+        <SRow label="Fix AI slop" k="makePostFixAiSlop" s={s} set={set} />
+        <SRow label="Make it unique" k="makePostMakeUnique" s={s} set={set} />
         <Row label="Caption text" right={
           <textarea
-            value={s.repostCaptionText}
-            onChange={e => set("repostCaptionText", e.target.value)}
+            value={s.makePostCaptionText}
+            onChange={e => set("makePostCaptionText", e.target.value)}
             placeholder="Caption…"
             rows={2}
             className="w-48 rounded-md border border-border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary resize-none"
           />
         } />
-        <SRow label="Disable comments" k="repostDisableComments" s={s} set={set} />
-        <RRow label="Execution order" minK="repostOrderMin" maxK="repostOrderMax" s={s} set={set} />
-        <RRow label="Skip chance" minK="repostNotUsedMin" maxK="repostNotUsedMax" s={s} set={set} unit="%" />
-        <NRow label="Disable at post count" k="repostDisableAtPostCount" s={s} set={set} />
-        <SRow label="Disable when exhausted" k="repostDisableWhenExhausted" s={s} set={set} />
-      </Section>
 
-      {/* Force Emulation */}
-      <Section icon={Zap} title="Force Emulation" open={open.forceEmulation} onToggle={() => toggle("forceEmulation")}>
-        <SRow label="Enabled" k="forceEmulationEnabled" s={s} set={set} />
-        <SRow label="Randomise" k="forceEmulationRandomise" s={s} set={set} />
-      </Section>
-
-      {/* Web Browsing */}
-      <Section icon={Globe} title="Web Browsing" open={open.webBrowsing} onToggle={() => toggle("webBrowsing")}>
-        <SRow label="Enabled" k="webBrowsingEnabled" s={s} set={set} />
-        <RRow label="Execution order" minK="webBrowsingOrderMin" maxK="webBrowsingOrderMax" s={s} set={set} />
-        <RRow label="Skip chance" minK="webBrowsingSkipMin" maxK="webBrowsingSkipMax" s={s} set={set} unit="%" />
-        <SRow label="Visit websites at random" k="webBrowsingVisitRandom" s={s} set={set} />
-        <Row label="Website URLs" right={
-          <textarea
-            value={s.webBrowsingSites}
-            onChange={e => set("webBrowsingSites", e.target.value)}
-            placeholder={"https://example.com\nhttps://another.com"}
-            rows={3}
-            className="w-52 rounded-md border border-border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary resize-none font-mono"
-          />
+        {/* Alteration */}
+        <SRow label="Alteration enabled" k="makePostAlterationEnabled" s={s} set={set} />
+        <Row label="Alteration level" right={
+          <select
+            value={s.makePostAlterationLevel}
+            onChange={e => set("makePostAlterationLevel", e.target.value as "small" | "medium" | "high")}
+            className="h-7 rounded-md border border-border bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-primary"
+          >
+            {(["small", "medium", "high"] as const).map(v => (
+              <option key={v} value={v}>{v}</option>
+            ))}
+          </select>
         } />
-        <RRow label="Sites to visit" minK="webBrowsingSitesMin" maxK="webBrowsingSitesMax" s={s} set={set} />
-        <RRow label="Internal links" minK="webBrowsingInternalLinksMin" maxK="webBrowsingInternalLinksMax" s={s} set={set} />
-        <RRow label="Time on site" minK="webBrowsingTimeOnSiteMin" maxK="webBrowsingTimeOnSiteMax" s={s} set={set} unit="min" />
-        <RRow label="Time on internal links" minK="webBrowsingTimeOnLinksMin" maxK="webBrowsingTimeOnLinksMax" s={s} set={set} unit="min" />
+
+        {/* Image settings */}
+        <Row label="Image settings" right={
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={s.makePostImageSettingsEnabled}
+              onCheckedChange={v => set("makePostImageSettingsEnabled", v)}
+            />
+            <button
+              type="button"
+              disabled={!s.makePostImageSettingsEnabled}
+              onClick={() => setImageSettingsOpen(true)}
+              className="text-xs px-3 h-7 rounded-md border border-border bg-background hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Configure…
+            </button>
+          </div>
+        } />
+
+        {/* Limits */}
+        <NRow label="Disable at post count" desc="Stop posting once this many posts are published (0 = unlimited)" k="makePostDisableAtPostCount" s={s} set={set} />
+        <SRow label="Disable when source exhausted" k="makePostDisableWhenExhausted" s={s} set={set} />
       </Section>
 
-      {/* Embedded Tool Order */}
-      <Section icon={Settings} title="Embedded Tool Execution Order" open={open.toolOrder} onToggle={() => toggle("toolOrder")}>
-        <p className="text-xs text-muted-foreground py-2 border-b border-border/40">
-          Controls where Follow, Unfollow, and Contact tools run within a Human Session.
-        </p>
-        <RRow label="Follow — Execution order" minK="followOrderMin" maxK="followOrderMax" s={s} set={set} />
-        <RRow label="Follow — Skip chance" minK="followSkipMin" maxK="followSkipMax" s={s} set={set} unit="%" />
-        <RRow label="Unfollow — Execution order" minK="unfollowOrderMin" maxK="unfollowOrderMax" s={s} set={set} />
-        <RRow label="Unfollow — Skip chance" minK="unfollowSkipMin" maxK="unfollowSkipMax" s={s} set={set} unit="%" />
-        <RRow label="Contact — Execution order" minK="contactOrderMin" maxK="contactOrderMax" s={s} set={set} />
-        <RRow label="Contact — Skip chance" minK="contactSkipMin" maxK="contactSkipMax" s={s} set={set} unit="%" />
-      </Section>
+      {/* Image settings dialog */}
+      <ImageSettingsDialog
+        open={imageSettingsOpen}
+        onClose={() => setImageSettingsOpen(false)}
+        settings={s.makePostImageSettings}
+        alterationLevel={s.makePostAlterationLevel}
+        onSave={saved => set("makePostImageSettings", saved)}
+      />
 
     </div>
   );
