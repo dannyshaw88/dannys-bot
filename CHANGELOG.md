@@ -4,6 +4,69 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.107
+
+### Fix — Phone Farm mirror now restores wallpaper after leaving the device page
+
+The Phone Farm device-card mirror could remain black after a device had recently
+been active. The Farm page uses a server-side per-device `mirror-live` marker to
+decide whether the SVG card should keep polling live screenshots. The device
+detail page set that marker when the mirror started, but deliberately did not
+clear it when the detail page unmounted during navigation.
+
+As a result, returning to the Account Farm page could leave the card polling
+screenshots even though the detail mirror was no longer mounted, the phone was
+asleep, or the device had stopped producing usable frames. The black screenshot
+covered the configured wallpaper and text layers. This matched the reported
+difference between a device that had not recently been active and one that had
+recently been active.
+
+The mirror lifecycle now:
+
+- Marks the device live while the detail-page mirror is active.
+- Clears the marker when the mirror is turned off.
+- Clears the marker when the detail-page mirror unmounts during navigation.
+- Uses a keepalive request for unmount cleanup so the clear request can finish
+  while the browser is changing pages.
+- Continues clearing the marker when an automation cycle finishes.
+
+This lets the Farm SVG return to the configured wallpaper/text state instead of
+continuing to replace it with a stale or black screenshot.
+
+### Fix — Phone Farm trust scores persist across navigation and reloads
+
+Phone Farm account-slot TrustScore badges previously stored their selected value
+only in browser `localStorage`. Values could therefore appear to reset after
+navigation, reloads, or when viewed from another browser context.
+
+Trust scores are now stored in the existing SQLite-backed `global_settings`
+storage per device and slot. Existing `localStorage` values are migrated the
+first time they are loaded, and the local cache remains as a compatibility
+fallback. The Phone Farm and Dashboard badges now share the same load/save
+helpers and refresh when another badge changes the score.
+
+### Fix — Collision Preventer edits survive tab navigation
+
+Collision Preventer settings were already sent to the API, but the debounced
+save timer was cancelled when the Phone Settings panel unmounted during tab
+navigation. Edits made immediately before leaving the tab could therefore be
+lost.
+
+Pending saves now remain alive long enough to flush, while device-specific
+hydration guards prevent initial values from being mistaken for user edits or
+being written to the wrong device during a device switch.
+
+### GitHub Actions Windows installer
+
+The existing `.github/workflows/build-windows-installer.yml` remains the single
+canonical Windows installer workflow. It runs on pushes to `main` and `v*`
+tags, builds the API and frontend bundles, packages the Electron application
+with `electron-builder`, uploads the full `Equinox-Windows-Installer` artifact,
+and publishes tagged installer builds to GitHub Releases. The deprecated
+duplicate workflow files remain inert and were not reactivated.
+
+---
+
 ## v1.2.106
 
 ### Fix — Phone Farm: wallpaper/text shows for 2 seconds then disappears; blank black when mirror idle
