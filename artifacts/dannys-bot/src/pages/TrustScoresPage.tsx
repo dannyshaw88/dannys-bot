@@ -196,7 +196,7 @@ export function TrustScoresPage() {
                       {globalIdx + 1}
                     </span>
                     <button
-                      onClick={() => setLocation(`/trust-scores/${level.id}`)}
+                      onClick={() => setLocation(`/trust-scores/${level.id}?tab=human-session`)}
                       className="flex items-center gap-1.5 rounded-full px-4 py-1.5 shrink-0 hover:opacity-80 transition-opacity"
                       style={{ background: level.bg, border: `1px solid ${level.border}` }}
                       onMouseDown={e => e.stopPropagation()}

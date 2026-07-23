@@ -181,7 +181,7 @@ export function TrustScoresTabContent() {
                 <GripVertical className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
                 <span className="w-5 text-[11px] font-bold text-muted-foreground text-left">{idx + 1}</span>
                 <button
-                  onClick={() => setLocation(`/trust-score-settings/${level.id}`)}
+                  onClick={() => setLocation(`/trust-scores/${level.id}?tab=human-session`)}
                   onMouseDown={e => e.stopPropagation()}
                   className="flex items-center justify-center gap-1.5 rounded-full px-3.5 py-1.5 hover:opacity-80 active:scale-95 transition-all"
                   style={{ background: level.bg, border: `1px solid ${level.border}`, width: 130, minWidth: 130, maxWidth: 130, overflow: "hidden" }}
