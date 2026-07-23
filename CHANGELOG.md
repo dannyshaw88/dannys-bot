@@ -4,6 +4,56 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.110
+
+### Feature — Spread Follows: distribute follows evenly across tool sessions
+
+A new **Spread Follows** checkbox sits to the right of the Min field in the
+Follow Users settings panel. When ticked, the Follow tool no longer fires all
+its users back-to-back at the end of a tool cycle. Instead, it pre-fetches the
+full target pool from HikerAPI (or Surplus) once at the start of the cycle,
+then injects individual follows between each of the other active tools.
+
+**How it works:**
+
+- The tool scheduler rolls the follow count from the configured Min/Max range
+  as normal. If the roll lands on 1 the feature has no effect — spread only
+  activates when 2 or more users are targeted.
+- All candidates are fetched from Surplus (or HikerAPI) in a single batch
+  before any tools run, so only one API call is made per cycle regardless of
+  how many follows are spread.
+- The scheduler removes the Follow tool slot from the sequence and rebuilds it
+  so that exactly one follow fires after each non-follow tool in the cycle.
+  Extra follows (when the follow count exceeds the number of other active tools)
+  are appended at the end.
+
+**Example — 4 tools configured, 3 follows rolled:**
+
+Normal order: `Feed → View Stories → View Explore → Follow 3 users`
+
+Spread order: `Feed → Follow 1 → View Stories → Follow 1 → View Explore → Follow 1`
+
+This avoids a run of consecutive follows with no real cooldown between them,
+which carries higher trust-score risk than the same total follow count spread
+across natural browsing activity.
+
+**Behaviour details:**
+
+- All existing settings apply per slot: Inject Browsing percentages, profile
+  quality filters (Skip Verified / Private / Max Followers / English Speaking),
+  global Skip Followed, and global Skip Skipped lists are all enforced on each
+  individual spread follow exactly as they would be in a normal follow cycle.
+- Unused candidates fetched beyond the spread target are saved back to Surplus
+  for the next cycle, preserving the normal HikerAPI-quota-conservation logic.
+- If Spread Follows is ticked but only 1 user is targeted, or if no other
+  tools are active in the cycle, the follow runs normally without any sequence
+  changes.
+- Spread Follows is included in the copy/paste profile system under the
+  "Follow count per session" key, so it copies correctly when cloning slot
+  settings between accounts.
+
+---
+
 ## v1.2.109
 
 ### Fix — Collision Preventer honors Human Session turn priority
