@@ -5619,7 +5619,35 @@ export async function findAndTapUserInSearch(
       return true;
     }
   }
-  return false;
+
+  // ── Positional fallback (Follow tool only) ────────────────────────────────
+  // Some devices/IG builds don't expose search result rows in the a11y tree
+  // (confirmed on Xiaomi Redmi 12 5G: keyboard and results both absent from
+  // UIAutomator dump even while visibly rendered). Since we typed the exact
+  // username, Instagram always ranks the matching account first, so tapping
+  // the first result row is correct regardless of label visibility.
+  //
+  // Verify Instagram is still the foreground app before committing to a
+  // positional tap — if the dump has no IG nodes at all, something went
+  // wrong and we should not blindly tap.
+  {
+    const verifyXml = await _uiDump(adb, serial).catch(() => "");
+    if (!verifyXml.includes("com.instagram.android")) {
+      onLog?.(`Follow: positional fallback skipped — Instagram not in foreground`);
+      return false;
+    }
+    // First result sits just below the search bar. The search bar is at
+    // ~13–15 % of screen height; the first result row centre is at ~22 %.
+    // This ratio is consistent across 720×1280, 1080×2400, and 1080×2460
+    // devices observed so far.
+    const { w: fbW, h: fbH } = getScreenSize(serial);
+    const fbX = Math.round(fbW * 0.50);
+    const fbY = Math.round(fbH * 0.22);
+    onLog?.(`Follow: @${clean} not in a11y tree — positional fallback: tapping first result at (${fbX},${fbY})`);
+    _adbTap(adb, serial, fbX, fbY);
+    await _sleep(1500);
+    return true;
+  }
 }
 
 /**
