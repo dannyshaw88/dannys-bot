@@ -724,14 +724,15 @@ export class DatabaseStorage implements IStorage {
 
   async getMobileSlotStats(username: string): Promise<{ daily: Record<string, number>; lifetime: Record<string, number> }> {
     const today = new Date().toISOString().split('T')[0];
-    const prefix = `mob:${username}:`;
+    const normalizedUsername = username.toLowerCase();
     // profileId = 0 is the mobile sentinel; filter by username prefix in JS
     const rows = await db.select().from(stats).where(eq(stats.profileId, 0));
     const daily: Record<string, number> = {};
     const lifetime: Record<string, number> = {};
     for (const row of rows) {
-      if (!row.toolType.startsWith(prefix)) continue;
-      const key = row.toolType.slice(prefix.length);
+      const separator = row.toolType.indexOf(":", 4);
+      if (separator < 0 || row.toolType.slice(4, separator).toLowerCase() !== normalizedUsername) continue;
+      const key = row.toolType.slice(separator + 1);
       if (row.date === today) daily[key] = (daily[key] ?? 0) + row.count;
       else if (row.date === 'lifetime') lifetime[key] = (lifetime[key] ?? 0) + row.count;
     }

@@ -212,6 +212,25 @@ const FARM_DEFAULT_COL_WIDTHS: Record<string, number> = {
   explore_scrolls:  110,
 };
 
+const MOBILE_METRIC_DEFS: {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+  color: string;
+  pieColor: string;
+}[] = [
+  { key: "cycles",          label: "Cycles",          icon: <Activity className="w-3.5 h-3.5" />, color: "text-cyan-500",   pieColor: "#06b6d4" },
+  { key: "likes",           label: "Likes",           icon: <Heart className="w-3.5 h-3.5" />,    color: "text-rose-500",   pieColor: "#f43f5e" },
+  { key: "follows",         label: "Follows",         icon: <UserPlus className="w-3.5 h-3.5" />, color: "text-blue-500",   pieColor: "#3b82f6" },
+  { key: "stories",         label: "Story Views",     icon: <Eye className="w-3.5 h-3.5" />,      color: "text-emerald-500", pieColor: "#10b981" },
+  { key: "reels",            label: "Reels Viewed",    icon: <Repeat2 className="w-3.5 h-3.5" />,  color: "text-sky-500",    pieColor: "#0ea5e9" },
+  { key: "dms",              label: "DMs Sent",        icon: <Mail className="w-3.5 h-3.5" />,     color: "text-violet-500", pieColor: "#8b5cf6" },
+  { key: "feed_shares",      label: "Feed Shares",     icon: <Zap className="w-3.5 h-3.5" />,      color: "text-amber-500",  pieColor: "#f59e0b" },
+  { key: "reel_scrolls",     label: "Reel Scrolls",    icon: <Repeat2 className="w-3.5 h-3.5" />,  color: "text-purple-500", pieColor: "#a855f7" },
+  { key: "feed_scrolls",     label: "Feed Scrolls",    icon: <BarChart2 className="w-3.5 h-3.5" />, color: "text-teal-500",  pieColor: "#14b8a6" },
+  { key: "explore_scrolls",  label: "Explore Scrolls", icon: <Activity className="w-3.5 h-3.5" />, color: "text-orange-500", pieColor: "#f97316" },
+];
+
 interface FarmPhone {
   serial: string;
   state: string;
@@ -219,6 +238,15 @@ interface FarmPhone {
   manufacturer?: string;
   marketName?: string;
 }
+
+type MetricAccount = {
+  key: string;
+  username: string;
+  label: string;
+  profile: Profile | null;
+  serial?: string;
+  slotIndex?: number;
+};
 
 function PhoneFarmPhoneSection({
   phone,
@@ -548,43 +576,98 @@ export function StatsPage() {
   });
 
   const deviceGroups = useMemo(() => {
+    const profilesByUsername = new Map(
+      (profiles ?? []).map(profile => [profile.username.trim().toLowerCase(), profile] as const),
+    );
     return metricsPhoneList.map((phone, idx) => {
       const slots = (deviceSlotResults[idx]?.data as { slots: { username: string }[] } | undefined)?.slots ?? [];
-      const slotProfiles = slots
-        .map(s => (profiles ?? []).find(p => p.username === s.username?.trim()))
-        .filter(Boolean) as Profile[];
+      const seen = new Set<string>();
+      const slotAccounts = slots
+        .map((slot, slotIndex): MetricAccount | null => {
+          const username = slot.username?.trim() ?? "";
+          const normalizedUsername = username.toLowerCase();
+          if (!normalizedUsername || seen.has(normalizedUsername)) return null;
+          seen.add(normalizedUsername);
+          const profile = profilesByUsername.get(normalizedUsername) ?? null;
+          return {
+            key: `slot:${phone.serial}:${slotIndex}`,
+            username,
+            label: profile?.accountLabel || profile?.username || username,
+            profile,
+            serial: phone.serial,
+            slotIndex,
+          };
+        })
+        .filter((account): account is MetricAccount => account !== null);
       return {
         serial: phone.serial,
         label: phone.marketName || phone.model || phone.manufacturer || phone.serial,
-        profiles: slotProfiles,
+        accounts: slotAccounts,
       };
-    }).filter(g => g.profiles.length > 0);
+    }).filter(g => g.accounts.length > 0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [metricsPhoneList, deviceSlotResults.map(r => r.dataUpdatedAt).join(","), profiles]);
 
-  const assignedProfileIds = useMemo(
-    () => new Set(deviceGroups.flatMap(g => g.profiles.map(p => p.id))),
+  const slotMetricAccounts = useMemo(
+    () => deviceGroups.flatMap(group => group.accounts),
     [deviceGroups],
   );
-  const unassignedProfiles = useMemo(
-    () => [...(profiles ?? [])].filter(p => !assignedProfileIds.has(p.id))
-      .sort((a, b) => (a.accountLabel || a.username || "").localeCompare(b.accountLabel || b.username || "")),
-    [profiles, assignedProfileIds],
+  const unassignedProfiles = useMemo<MetricAccount[]>(
+    () => [...(profiles ?? [])]
+      .filter(p => !slotMetricAccounts.some(account => account.profile?.id === p.id))
+      .sort((a, b) => (a.accountLabel || a.username || "").localeCompare(b.accountLabel || b.username || ""))
+      .map(profile => ({
+        key: `profile:${profile.id}`,
+        username: profile.username,
+        label: profile.accountLabel || profile.username,
+        profile,
+      })),
+    [profiles, slotMetricAccounts],
   );
 
-  const selectedProfile = useMemo(() => {
-    if (!selectedAccountId || !profiles) return profiles?.[0] ?? null;
-    return profiles.find(p => String(p.id) === selectedAccountId) ?? profiles[0] ?? null;
-  }, [selectedAccountId, profiles]);
+  const metricAccounts = useMemo(
+    () => [...slotMetricAccounts, ...unassignedProfiles],
+    [slotMetricAccounts, unassignedProfiles],
+  );
+
+  const selectedMetricAccount = useMemo<MetricAccount | null>(() => {
+    if (selectedAccountId) {
+      const selected = metricAccounts.find(account =>
+        account.key === selectedAccountId || String(account.profile?.id) === selectedAccountId,
+      );
+      if (selected) return selected;
+    }
+    return metricAccounts[0] ?? null;
+  }, [selectedAccountId, metricAccounts]);
+
+  const selectedProfile = selectedMetricAccount?.profile ?? null;
+  const selectedAccountUsername = selectedMetricAccount?.username ?? selectedProfile?.username ?? "";
 
   const metricsStats = useMemo(() => {
     if (!selectedProfile) return [];
-    return statsMap.get(selectedProfile.id) ?? [];
+    return selectedProfile ? (statsMap.get(selectedProfile.id) ?? []) : [];
   }, [selectedProfile, statsMap]);
 
   const { data: metricsTools } = useQuery<Tool[]>({
     queryKey: selectedProfile ? [`/api/profiles/${selectedProfile.id}/tools`] : ["no-profile"],
     enabled: !!selectedProfile,
+  });
+
+  // Mobile-engine counters are persisted separately from the normal profile
+  // stats, using the slot username as their key. Always load them for the
+  // selected account, even when its device is disconnected or has no current
+  // slot configuration; the metrics must remain available across restarts.
+  const { data: mobileSlotStats, isLoading: isMobileSlotStatsLoading } = useQuery<{
+    daily: Record<string, number>;
+    lifetime: Record<string, number>;
+  }>({
+    queryKey: selectedProfile
+      ? [`/api/mobile/slot-stats?username=${encodeURIComponent(selectedAccountUsername.trim())}`]
+      : selectedMetricAccount
+        ? [`/api/mobile/slot-stats?username=${encodeURIComponent(selectedAccountUsername.trim())}`]
+      : ["no-mobile-slot-stats"],
+    enabled: activeTab === "metrics" && !!selectedAccountUsername,
+    refetchInterval: 30000,
   });
 
   const { data: apiCallCountData } = useQuery<{ count: number }>({
@@ -671,6 +754,31 @@ export function StatsPage() {
       .sort((a, b) => b.value - a.value),
   [endpointCountsData]);
 
+  const mobilePieData = useMemo(() =>
+    MOBILE_METRIC_DEFS
+      .map(metric => ({
+        name: metric.label,
+        value: mobileSlotStats?.daily?.[metric.key] ?? 0,
+        color: metric.pieColor,
+      }))
+      .filter(d => d.value > 0)
+      .sort((a, b) => b.value - a.value),
+  [mobileSlotStats]);
+
+  const mobileLifetimePieData = useMemo(() =>
+    MOBILE_METRIC_DEFS
+      .map(metric => ({
+        name: metric.label,
+        value: mobileSlotStats?.lifetime?.[metric.key] ?? 0,
+        color: metric.pieColor,
+      }))
+      .filter(d => d.value > 0)
+      .sort((a, b) => b.value - a.value),
+  [mobileSlotStats]);
+
+  const getMobileStat = (key: string, period: "daily" | "lifetime") =>
+    mobileSlotStats?.[period]?.[key] ?? 0;
+
   const totalToday = useMemo(() =>
     actionStatTypes.reduce((sum, st) => sum + getStat(st.key, today), 0),
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -739,7 +847,7 @@ export function StatsPage() {
             <div className="flex items-center gap-3">
               <span className="text-sm font-semibold text-muted-foreground whitespace-nowrap">Account:</span>
               <Select
-                value={selectedAccountId || (profiles?.[0] ? String(profiles[0].id) : "")}
+                value={selectedMetricAccount?.key ?? ""}
                 onValueChange={setSelectedAccountId}
               >
                 <SelectTrigger className="w-72">
@@ -754,21 +862,21 @@ export function StatsPage() {
                             <Smartphone className="w-3 h-3" />
                             {group.label}
                           </SelectLabel>
-                          {group.profiles.map(p => (
-                            <SelectItem key={p.id} value={String(p.id)} className="pl-6">
-                              {p.accountLabel || p.username}
+                          {group.accounts.map(account => (
+                            <SelectItem key={account.key} value={account.key} className="pl-6">
+                              {account.label}
                             </SelectItem>
                           ))}
                         </SelectGroup>
                       ))}
-                      {unassignedProfiles.length > 0 && (
+                        {unassignedProfiles.length > 0 && (
                         <SelectGroup>
                           <SelectLabel className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-2 py-1.5">
                             Other
                           </SelectLabel>
-                          {unassignedProfiles.map(p => (
-                            <SelectItem key={p.id} value={String(p.id)} className="pl-6">
-                              {p.accountLabel || p.username}
+                          {unassignedProfiles.map(account => (
+                            <SelectItem key={account.key} value={account.key} className="pl-6">
+                              {account.label}
                             </SelectItem>
                           ))}
                         </SelectGroup>
@@ -776,9 +884,9 @@ export function StatsPage() {
                     </>
                   ) : (
                     // Fallback flat list when no device data yet
-                    [...(profiles ?? [])].sort((a, b) => (a.accountLabel || a.username || "").localeCompare(b.accountLabel || b.username || "")).map(p => (
-                      <SelectItem key={p.id} value={String(p.id)}>
-                        {p.accountLabel || p.username}
+                    unassignedProfiles.map(account => (
+                      <SelectItem key={account.key} value={account.key}>
+                        {account.label}
                       </SelectItem>
                     ))
                   )}
@@ -789,7 +897,7 @@ export function StatsPage() {
               )}
             </div>
 
-            {!selectedProfile ? (
+            {!selectedMetricAccount ? (
               <Card className="desktop-card border-none shadow-sm">
                 <CardContent className="py-16 text-center text-muted-foreground">
                   No accounts found. Add an account to view metrics.
@@ -797,6 +905,89 @@ export function StatsPage() {
               </Card>
             ) : (
               <>
+                {/* Mobile-engine metrics for the selected account slot */}
+                <Card className="desktop-card border-none shadow-sm">
+                  <CardHeader className="border-b border-border/50 bg-muted/5 pb-3">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <Smartphone className="w-4 h-4 text-primary" />
+                      Mobile Engine Metrics
+                      <span className="text-[11px] font-normal text-muted-foreground ml-1">
+                        @{selectedAccountUsername}
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-4 space-y-4">
+                    {isMobileSlotStatsLoading ? (
+                      <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
+                        Loading account metrics…
+                      </div>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                          {([
+                            { title: "Today's Activity", data: mobilePieData, empty: "No mobile activity recorded today" },
+                            { title: "Lifetime Activity", data: mobileLifetimePieData, empty: "No lifetime mobile activity recorded" },
+                          ] as const).map(chart => (
+                            <div key={chart.title} className="rounded-lg border border-border/50 bg-muted/5 p-3">
+                              <p className="text-xs font-semibold text-muted-foreground mb-2">{chart.title}</p>
+                              {chart.data.length === 0 ? (
+                                <div className="h-44 flex items-center justify-center text-muted-foreground text-xs">
+                                  {chart.empty}
+                                </div>
+                              ) : (
+                                <div className="flex gap-3 items-center">
+                                  <div className="flex-1 min-w-0 max-h-[190px] overflow-y-auto space-y-0.5 pr-1">
+                                    {(() => {
+                                      const total = chart.data.reduce((sum, entry) => sum + entry.value, 0);
+                                      return chart.data.map(entry => (
+                                        <div key={entry.name} className="flex items-center justify-between gap-1.5 py-0.5">
+                                          <div className="flex items-center gap-1.5 min-w-0">
+                                            <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: entry.color }} />
+                                            <span className="text-[10px] text-muted-foreground truncate">{entry.name}</span>
+                                          </div>
+                                          <span className="text-[10px] font-semibold text-foreground shrink-0 tabular-nums">
+                                            {total > 0 ? `${(entry.value / total * 100).toFixed(1)}%` : "0.0%"}
+                                          </span>
+                                        </div>
+                                      ));
+                                    })()}
+                                  </div>
+                                  <div className="shrink-0 w-[170px]">
+                                    <ResponsiveContainer width="100%" height={205}>
+                                      <PieChart>
+                                        <Pie data={chart.data} cx="50%" cy="50%" innerRadius={46} outerRadius={74} paddingAngle={2} dataKey="value">
+                                          {chart.data.map((entry, idx) => <Cell key={idx} fill={entry.color} />)}
+                                        </Pie>
+                                        <Tooltip formatter={(value: number, name: string) => [value.toLocaleString(), name]} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                                      </PieChart>
+                                    </ResponsiveContainer>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                          {MOBILE_METRIC_DEFS.map(metric => (
+                            <div key={metric.key} className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
+                              <span className={`text-[10px] font-bold uppercase tracking-wide flex items-center gap-1 ${metric.color}`}>
+                                {metric.icon}{metric.label}
+                              </span>
+                              <span className="text-2xl font-bold tabular-nums text-foreground">
+                                {getMobileStat(metric.key, "daily").toLocaleString()}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground">
+                                today · {getMobileStat(metric.key, "lifetime").toLocaleString()} lifetime
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+
                 {/* Pie charts — actions only */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   <Card className="desktop-card border-none shadow-sm">
