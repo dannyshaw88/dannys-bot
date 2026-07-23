@@ -4,6 +4,63 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.115
+
+### Feature — Trust Score tiers now use the full mobile Human Session Tool settings panel
+
+**What changed:** Each Trust Score tier (Noob, Regular, Trusted, Veteran, Ghost) now
+has its own complete mobile-engine automation settings panel — the same panel used in
+Phone Farm when you tap a connected phone. Previously the Trust Score detail page showed
+a browser-based Human Session Tool with separate Follow, Unfollow, Contact, and browser
+Human Session tabs that used the old browser automation engine, which is no longer the
+active automation path.
+
+**What you see now:**
+
+Opening any Trust Score tier (from Settings → Trust Scores, or from the Tools → Trust
+Scores tab) now shows the exact same controls you see under Phone Farm → [phone] → Human
+Session Tool:
+
+- **(STEP 1) Active toggle** — enable or disable automation for this tier
+- **Run every X to Y minutes** — interval range for how often cycles fire
+- **(STEP 2) Tool selection with Shuffle toggle:**
+  - **View Feed** — Activate Percentage, Scroll count range, Delay between actions,
+    Like % of posts, Share to Feed %, Share via DM %, Save %
+  - **View Explore Page** — Activate Percentage
+  - **View Stories from Feed** — Activate Percentage, Stories to watch, % to watch,
+    Like %, Share DM %
+  - **View Reels** — Activate Percentage, Reels to watch, % to watch, Jitter (ms),
+    Like %, Comment %, Share %, Save %
+  - **Follow Users** — Activate Percentage, hashtags/usernames to scrape from, follow
+    limits per cycle, unfollow age threshold
+  - **Random Actions** — Activate Percentage (jitter between tool runs)
+  - **Make a Post** — post scheduling, caption, source account, image settings
+
+**Important:** Editing a Trust Score template does **not** start a live automation cycle
+on any connected phone. These are template defaults that get applied when a phone is
+assigned to that trust tier — the automation still only runs when the phone's own
+master toggle is on and the phone is connected.
+
+**Settings are saved per tier and persist across restarts.** Changes auto-save 500ms
+after you stop editing (same debounce as Phone Farm settings). The full set of fields
+is stored in the database under each tier's key (`noob`, `regular`, `trusted`,
+`veteran`, `ghost`).
+
+**Old tabs removed:** The Follow Tool, Unfollow Tool, Contact Tool, and browser Human
+Session Tool tabs that appeared on the Trust Score detail page are gone. Those tabs
+controlled the deprecated browser automation engine, which is not used for mobile
+farming.
+
+**API endpoints added:**
+
+- `GET  /api/trust-score-templates/:id/mobile-settings` — load saved settings for a tier
+- `POST /api/trust-score-templates/:id/mobile-settings` — save settings for a tier
+
+Both endpoints are backed by the existing `key_value_store` table in SQLite under
+the key prefix `trust_score_mobile_settings_<tier>`.
+
+---
+
 ## v1.2.114
 
 ### Fix — Reels: 2-minute wasted poll on devices where IG hides player node IDs
