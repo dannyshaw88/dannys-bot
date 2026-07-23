@@ -4,6 +4,63 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.112
+
+### Feature — Statistics Metrics now follows device account slots
+
+The Statistics → Metrics account selector now keeps account visibility independent
+of the current USB/device response. It includes configured device-slot usernames,
+slot-only accounts, and remaining non-template profiles, so a disconnected phone
+or an incomplete profile record no longer makes the account selector appear empty.
+Username matching is case-insensitive throughout the slot metrics path.
+
+### Feature — Per-account mobile activity charts and totals
+
+Selecting an account in Statistics → Metrics now loads its persisted Mobile Engine
+activity using the account-slot username. The page displays separate Today and
+Lifetime pie charts plus metric cards for:
+
+- Cycles
+- Likes
+- Follows
+- Story views
+- Reels viewed
+- DMs sent
+- Feed shares
+- Reel, feed, and Explore scrolls
+
+The backend also resolves slot metric keys case-insensitively, preserving metrics
+when the capitalization in a saved slot differs from the profile record.
+
+### Feature — Metrics TrustScore and Human Session are slot-specific
+
+The badge shown on Statistics → Metrics now reads the selected device account
+slot's persisted TrustScore rather than the unrelated profile-level score. The
+same isolated Metrics control reads and updates that slot's independent Human
+Session setting.
+
+This Metrics badge is implemented as a separate component and does not modify the
+shared profile badge, Dashboard badge, Mobile page slot badges, or any of the
+other existing TrustScore locations. Changes to the Metrics badge therefore
+cannot change those other badges.
+
+### Feature — Tool Performance usernames open the matching Human Session Tool
+
+Every `@username` in Statistics → Tool Performance is now clickable. It opens the
+exact device and account slot's Human Session Tool using the slot-specific deep
+link. The original slot index is preserved even when the table is sorted by
+activity, so each username always opens the correct account slot.
+
+### Build — Windows installer workflow remains canonical
+
+The existing `.github/workflows/build-windows-installer.yml` remains the only
+active Windows installer workflow. It builds the web/API bundles, produces the
+Windows installer, and uploads the `Equinox-Windows-Installer` Actions artifact.
+Deprecated duplicate workflow files remain inert to prevent multiple competing
+installer builds on every push.
+
+---
+
 ## v1.2.111
 
 ### Fix — Inject Browsing profile-grid scrolls now wait 5–15 seconds between each row
