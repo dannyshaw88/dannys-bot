@@ -5872,6 +5872,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // doing all follows back-to-back at the end.
       let _spreadCandidateSource: Map<string, string> | undefined;
       let _spreadCandidateMeta: Map<string, { isVerified?: boolean; isPrivate?: boolean; followerCount?: number }> | undefined;
+      // Backup queue: extra pre-fetched candidates kept for filter-retry and
+      // HikerAPI re-scrape fallback.  Flushed to Surplus after the tool loop.
+      let _sfBackupQueue: string[] = [];
+      let _sfHikerToken: string = "";
+      let _sfSpreadProfileId: number | undefined;
+      let _sfSpreadSlotKey: string = "";
 
       if (followSpreadFollows && _toolActivated['follow']) {
         const _slo = Math.min(followUsersMin, followUsersMax);
@@ -6004,21 +6010,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               if (_sfPool.length >= 2 && _nonFollowTools.length >= 1) {
                 _spreadCandidateSource = _sfSource;
                 _spreadCandidateMeta   = _sfMeta;
+                _sfHikerToken          = _sfToken;
+                _sfSpreadProfileId     = _sfProfileId;
+                _sfSpreadSlotKey       = _sfSlotKey;
 
-                // Save unused candidates (beyond pool) back to surplus
-                if (_sfCandidates.length > _sfPool.length && (_sfProfileId && _sfProfileId > 0 || _sfSlotKey)) {
-                  const _surplus = _sfCandidates.slice(_sfPool.length);
-                  const _now = new Date().toISOString();
-                  storage.addOverspillUsers(_surplus.map(u => ({
-                    profileId: (_sfProfileId && _sfProfileId > 0) ? _sfProfileId : 0,
-                    phoneSlotKey: (_sfProfileId && _sfProfileId > 0) ? "" : _sfSlotKey,
-                    instagramUsername: u,
-                    instagramUserId: "",
-                    sourceValue: _sfSource.get(u) ?? "surplus",
-                    sourceType: "phone",
-                    scrapedAt: _now,
-                  }))).catch(() => {});
-                  tLog(`  Spread Follows: saved ${_surplus.length} unused candidate(s) to Surplus`);
+                // Keep extras as a backup queue for filter-retry — do NOT flush
+                // to Surplus yet.  Any survivors are flushed after the tool loop.
+                if (_sfCandidates.length > _sfPool.length) {
+                  _sfBackupQueue = _sfCandidates.slice(_sfPool.length);
+                  tLog(`  Spread Follows: keeping ${_sfBackupQueue.length} candidate(s) as backup pool`);
                 }
 
                 // Interleave: replace 'follow' with the first follow_spread slot at its
@@ -6253,47 +6253,110 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           const _spreadUsername = _tool.slice('follow_spread:'.length);
           tLog(`▶ Spread Follow → @${_spreadUsername}`);
           try {
-            const _sfCount = await runFollowUsersStep(serial, {
+            // Pre-compute skip sets once; reused for all retries in this slot.
+            const _ssSkipFollowed = await (async () => {
+              if (!globalSkipFollowed) return undefined;
+              const local = new Set(getMobileFollowedList(serial).map(e => e.username.toLowerCase()));
+              const globalSet = await storage.getAllFollowedUsernames();
+              for (const u of globalSet) local.add(u);
+              return local;
+            })();
+            const _ssSkipSkipped = await (async () => {
+              if (!globalSkipSkipped) return undefined;
+              const rows = await storage.getSkippedUsers(100_000);
+              return new Set(rows.map(s => s.instagramUsername.toLowerCase()));
+            })();
+            const _ssBrowsing = injectBrowsingEnabled ? {
+              activatePctMin: injectBrowsingActivatePctMin, activatePctMax: injectBrowsingActivatePctMax,
+              beforeFollowPctMin: injectBrowsingBeforeFollowPctMin, beforeFollowPctMax: injectBrowsingBeforeFollowPctMax,
+              feedMin: injectBrowsingFeedMin, feedMax: injectBrowsingFeedMax,
+              clickPostPctMin: injectBrowsingClickPostPctMin, clickPostPctMax: injectBrowsingClickPostPctMax,
+              likePctMin: injectBrowsingLikePctMin, likePctMax: injectBrowsingLikePctMax,
+              shareFeedPctMin: injectBrowsingShareFeedPctMin, shareFeedPctMax: injectBrowsingShareFeedPctMax,
+              shareDmPctMin: injectBrowsingShareDmPctMin, shareDmPctMax: injectBrowsingShareDmPctMax,
+              savePostPctMin: injectBrowsingSavePostPctMin, savePostPctMax: injectBrowsingSavePostPctMax,
+              abandonFollowPctMin: injectBrowsingAbandonFollowPctMin, abandonFollowPctMax: injectBrowsingAbandonFollowPctMax,
+            } : undefined;
+            const _ssFilters = followFiltersEnabled
+              ? { skipVerified: followFilterVerifiedUsers, maxFollowers: followFilterMaxFollowers25k ? 25_000 : undefined,
+                  skipPrivate: followFilterPrivateUsers, minFollowers: followFilterMinFollowers50 ? 50 : undefined,
+                  requireEnglish: followFilterEnglishSpeaking }
+              : undefined;
+
+            // Helper — calls runFollowUsersStep for exactly one candidate.
+            const _runOneSpreadSlot = (candidate: string) => runFollowUsersStep(serial, {
               usersMin: 1, usersMax: 1,
               sources: followSources,
               preloadedCandidates: {
-                targets: [_spreadUsername],
+                targets: [candidate],
                 candidateSource: _spreadCandidateSource ?? new Map(),
                 candidateMeta:   _spreadCandidateMeta   ?? new Map(),
               },
               onLog: (msg) => tLog(`  ${msg}`),
-              recordFollow: (username, source) => recordMobileFollow(serial, username, source),
-              skipFollowedUsernames: await (async () => {
-                if (!globalSkipFollowed) return undefined;
-                const local = new Set(getMobileFollowedList(serial).map(e => e.username.toLowerCase()));
-                const globalSet = await storage.getAllFollowedUsernames();
-                for (const u of globalSet) local.add(u);
-                return local;
-              })(),
-              skipSkippedUsernames: await (async () => {
-                if (!globalSkipSkipped) return undefined;
-                const rows = await storage.getSkippedUsers(100_000);
-                return new Set(rows.map(s => s.instagramUsername.toLowerCase()));
-              })(),
-              browsing: injectBrowsingEnabled ? {
-                activatePctMin: injectBrowsingActivatePctMin, activatePctMax: injectBrowsingActivatePctMax,
-                beforeFollowPctMin: injectBrowsingBeforeFollowPctMin, beforeFollowPctMax: injectBrowsingBeforeFollowPctMax,
-                feedMin: injectBrowsingFeedMin, feedMax: injectBrowsingFeedMax,
-                clickPostPctMin: injectBrowsingClickPostPctMin, clickPostPctMax: injectBrowsingClickPostPctMax,
-                likePctMin: injectBrowsingLikePctMin, likePctMax: injectBrowsingLikePctMax,
-                shareFeedPctMin: injectBrowsingShareFeedPctMin, shareFeedPctMax: injectBrowsingShareFeedPctMax,
-                shareDmPctMin: injectBrowsingShareDmPctMin, shareDmPctMax: injectBrowsingShareDmPctMax,
-                savePostPctMin: injectBrowsingSavePostPctMin, savePostPctMax: injectBrowsingSavePostPctMax,
-                abandonFollowPctMin: injectBrowsingAbandonFollowPctMin, abandonFollowPctMax: injectBrowsingAbandonFollowPctMax,
-              } : undefined,
-              filters: followFiltersEnabled
-                ? { skipVerified: followFilterVerifiedUsers, maxFollowers: followFilterMaxFollowers25k ? 25_000 : undefined,
-                    skipPrivate: followFilterPrivateUsers, minFollowers: followFilterMinFollowers50 ? 50 : undefined,
-                    requireEnglish: followFilterEnglishSpeaking }
-                : undefined,
+              recordFollow: (u, src) => recordMobileFollow(serial, u, src),
+              skipFollowedUsernames: _ssSkipFollowed,
+              skipSkippedUsernames:  _ssSkipSkipped,
+              browsing: _ssBrowsing,
+              filters:  _ssFilters,
               profileId: mobileProfileId ?? undefined,
               phoneSlotKey: mobileProfileId ? undefined : (slotUsername || undefined),
             });
+
+            let _sfCount = await _runOneSpreadSlot(_spreadUsername);
+
+            // If filtered/skipped at follow-time, try backup candidates first.
+            while (_sfCount === 0 && _sfBackupQueue.length > 0) {
+              const _nextUser = _sfBackupQueue.shift()!;
+              tLog(`  Spread Follow: @${_spreadUsername} filtered — trying backup @${_nextUser}`);
+              _sfCount = await _runOneSpreadSlot(_nextUser);
+            }
+
+            // Backup queue exhausted — do one HikerAPI re-scrape round.
+            if (_sfCount === 0 && _sfHikerToken && followSources.length) {
+              tLog(`  Spread Follow: backup queue empty — re-scraping HikerAPI for replacement…`);
+              try {
+                const _rsHiker = new HikerApiClient(_sfHikerToken);
+                for (const src of [...followSources].sort(() => Math.random() - 0.5)) {
+                  if (_sfBackupQueue.length >= 10) break;
+                  try {
+                    const srcLabel = src.type === "hashtag"
+                      ? `#${src.value.replace(/^#/, "")}`
+                      : `@${src.value.replace(/^@/, "")}`;
+                    const users: { username: string; isVerified?: boolean; isPrivate?: boolean; followerCount?: number }[] = [];
+                    if (src.type === "hashtag") {
+                      const res = await _rsHiker.getHashtagUsers(src.value.replace(/^#/, ""), 50);
+                      users.push(...res.users);
+                    } else if (src.type === "target_followers") {
+                      const ui = await _rsHiker.getUserByUsername(src.value.replace(/^@/, "")).catch(() => null);
+                      if (ui?.pk) users.push(...await _rsHiker.getFollowers(ui.pk, 50));
+                    }
+                    for (const u of users) {
+                      if (_ssSkipFollowed?.has(u.username.toLowerCase())) continue;
+                      if (_ssSkipSkipped?.has(u.username.toLowerCase())) continue;
+                      if (_spreadCandidateSource?.has(u.username)) continue; // already in pool/attempted
+                      _spreadCandidateSource?.set(u.username, srcLabel);
+                      if (u.isVerified !== undefined || u.isPrivate !== undefined || u.followerCount !== undefined)
+                        _spreadCandidateMeta?.set(u.username, { isVerified: u.isVerified, isPrivate: u.isPrivate, followerCount: u.followerCount });
+                      _sfBackupQueue.push(u.username);
+                    }
+                  } catch (e: any) { if (e?.message === "cycle-aborted") throw e; }
+                }
+                if (_sfBackupQueue.length) {
+                  tLog(`  Spread Follow: re-scrape found ${_sfBackupQueue.length} new candidate(s)`);
+                  while (_sfCount === 0 && _sfBackupQueue.length > 0) {
+                    const _nextUser = _sfBackupQueue.shift()!;
+                    tLog(`  Spread Follow: trying re-scraped @${_nextUser}`);
+                    _sfCount = await _runOneSpreadSlot(_nextUser);
+                  }
+                } else {
+                  tLog(`  Spread Follow: re-scrape found no viable candidates — slot unfulfilled`);
+                }
+              } catch (e: any) {
+                if (e?.message === "cycle-aborted") throw e;
+                tLog(`  Spread Follow: re-scrape error — ${e?.message}`);
+              }
+            }
+
             followedCount += _sfCount;
             steps.push(`follow_spread(@${_spreadUsername}${_sfCount > 0 ? '' : ',skipped'})`);
           } catch (e: any) {
@@ -6405,6 +6468,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // ── Random Jitter ───────────────────────────────────────────────
         } else if (_tool === 'jitter') {
           if (_toolActivated[_tool]) { // pre-rolled above
+            let _jitterFired = false;
             const notifChance = rollRange(checkNotificationsPctMin, checkNotificationsPctMax) / 100;
             if (notifChance > 0 && Math.random() < notifChance) {
               tLog("▶ Random Jitter: checking notifications…");
@@ -6416,12 +6480,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 onLog: (msg) => tLog(`  ${msg}`),
               });
               steps.push("jitter-check-notifications");
+              _jitterFired = true;
             }
             const profileChance = rollRange(visitProfilePctMin, visitProfilePctMax) / 100;
             if (profileChance > 0 && Math.random() < profileChance) {
               tLog("▶ Random Jitter: visiting own profile…");
               await runVisitOwnProfile(serial, (msg) => tLog(`  ${msg}`));
               steps.push("jitter-visit-profile");
+              _jitterFired = true;
+            }
+            if (!_jitterFired) {
+              tLog("▶ Random Jitter: activated — both action rolls missed this cycle");
+              steps.push("jitter(activated,no-actions-rolled)");
             }
           } else if (randomJitterEnabled) {
             steps.push("jitter(skipped — Activate Percentage roll missed this execution)");
@@ -6431,6 +6501,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
         _toolsRan++;
       } // end tool dispatch loop
+
+      // Flush any remaining spread backup candidates to Surplus so they're
+      // available for the next cycle (not lost when none were needed this run).
+      if (_sfBackupQueue.length && (_sfSpreadProfileId && _sfSpreadProfileId > 0 || _sfSpreadSlotKey)) {
+        const _flushNow = new Date().toISOString();
+        storage.addOverspillUsers(_sfBackupQueue.map(u => ({
+          profileId: (_sfSpreadProfileId && _sfSpreadProfileId > 0) ? _sfSpreadProfileId : 0,
+          phoneSlotKey: (_sfSpreadProfileId && _sfSpreadProfileId > 0) ? "" : _sfSpreadSlotKey,
+          instagramUsername: u,
+          instagramUserId: "",
+          sourceValue: _spreadCandidateSource?.get(u) ?? "surplus",
+          sourceType: "phone",
+          scrapedAt: _flushNow,
+        }))).catch(() => {});
+        tLog(`  Spread Follows: flushed ${_sfBackupQueue.length} unused backup candidate(s) to Surplus`);
+        _sfBackupQueue = [];
+      }
+
       } // end if (!accountSwitchFailed) — failed switch aborts all tools
 
       // 5. Close Instagram completely — recents switcher + swipe away, not a
