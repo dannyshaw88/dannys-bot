@@ -40,43 +40,6 @@ const ALL_STAT_TYPES: { key: StatKey; label: string; icon: React.ReactNode; colo
   { key: "human_session", label: "Human Session", icon: <Fingerprint className="w-3.5 h-3.5" />,           color: "text-cyan-500",    isTool: true,  toolTypeKey: "human_sessions", pieColor: "#06b6d4" },
 ];
 
-const ENDPOINT_COLORS: Record<string, string> = {
-  ViewTimelineFeedSeen:      "#3b82f6",
-  FollowedUser:              "#10b981",
-  UnfollowUser:              "#ef4444",
-  GetDirectMessages:         "#8b5cf6",
-  GetDirectMessageThread:    "#a78bfa",
-  ViewTimelineStories:       "#f97316",
-  LikeMedia:                 "#f43f5e",
-  ViewFeedPost:              "#06b6d4",
-  VisitUserProfile:          "#0ea5e9",
-  ViewUserFeed:              "#14b8a6",
-  SaveMedia:                 "#84cc16",
-  FetchConfig:               "#64748b",
-  GetKeyedTokens:            "#94a3b8",
-  SendMobileConfig:          "#c084fc",
-  ViewStories:               "#f59e0b",
-  TopicalExplore:            "#ec4899",
-  Banyan:                    "#6366f1",
-  ExecuteNotificationsBadge: "#a3e635",
-  GetReelsTray:              "#fb923c",
-  GetTimeLineFeed:           "#38bdf8",
-  GetAccountFamily:          "#34d399",
-  VerifyAccount:             "#fbbf24",
-  ViewHighlights:            "#f472b6",
-  CommentMedia:              "#22d3ee",
-  PostMedia:                 "#4ade80",
-};
-const EP_FALLBACK = ["#3b82f6","#10b981","#f43f5e","#f97316","#8b5cf6","#06b6d4","#84cc16","#ec4899","#14b8a6","#6366f1","#fbbf24","#0ea5e9"];
-function epColor(name: string, idx: number): string {
-  return ENDPOINT_COLORS[name] ?? EP_FALLBACK[idx % EP_FALLBACK.length];
-}
-// Strip legacy "METHOD:Name" format (e.g. "POST:FeedTimeline" → "FeedTimeline")
-// that was produced by an older version of _opNameFromPath.
-function cleanEpName(name: string): string {
-  return /^(GET|POST|PUT|PATCH|DELETE):/.test(name) ? name.replace(/^[A-Z]+:/, "") : name;
-}
-
 const DEFAULT_COL_WIDTHS: Record<ColKey | "account", number> = {
   account: 160, trustscore: 120, follow: 110, unfollow: 110, dm: 110,
   like: 100, comment: 110, story: 120, repost: 110, human_session: 140,
@@ -683,83 +646,10 @@ export function StatsPage() {
     refetchInterval: 30000,
   });
 
-  const { data: endpointCountsRaw } = useQuery<{ operationName: string; todayCount: number; totalCount: number }[]>({
-    queryKey: selectedProfile ? [`/api/profiles/${selectedProfile.id}/api-endpoint-counts`] : ["no-profile-endpoint"],
-    enabled: !!selectedProfile,
-    refetchInterval: 60000,
-  });
-
-  // Filter out HikerAPI calls (not made by the account itself)
-  const endpointCountsData = useMemo(
-    () => (endpointCountsRaw ?? []).filter(r => r.operationName !== "HikerAPI"),
-    [endpointCountsRaw],
-  );
-
-  // Sortable columns for the Raw API Endpoint table
-  const [epSortCol, setEpSortCol] = useState<"endpoint" | "today" | "total" | "preAccount" | "preGlobal">("endpoint");
-  const [epSortDir, setEpSortDir] = useState<"asc" | "desc">("asc");
-
-  const cycleEpSort = (col: typeof epSortCol) => {
-    if (epSortCol === col) {
-      setEpSortDir(d => d === "asc" ? "desc" : "asc");
-    } else {
-      setEpSortCol(col);
-      setEpSortDir(col === "endpoint" ? "asc" : "desc");
-    }
-  };
-
-  const { data: preStatusChangeHitsData } = useQuery<{
-    perAccount: { operationName: string; perAccountCount: number }[];
-    global: { operationName: string; globalCount: number }[];
-  }>({
-    queryKey: selectedProfile ? [`/api/profiles/${selectedProfile.id}/pre-status-change-hits`] : ["no-profile-psch"],
-    enabled: !!selectedProfile,
-    refetchInterval: 60000,
-  });
-
-  const perAccountHitsMap = useMemo(() => {
-    const m: Record<string, number> = {};
-    for (const r of preStatusChangeHitsData?.perAccount ?? []) m[r.operationName] = r.perAccountCount;
-    return m;
-  }, [preStatusChangeHitsData]);
-
-  const globalHitsMap = useMemo(() => {
-    const m: Record<string, number> = {};
-    for (const r of preStatusChangeHitsData?.global ?? []) m[r.operationName] = r.globalCount;
-    return m;
-  }, [preStatusChangeHitsData]);
-
-  const sortedEndpointData = useMemo(() => {
-    if (!endpointCountsData.length) return endpointCountsData;
-    const dir = epSortDir === "asc" ? 1 : -1;
-    return [...endpointCountsData].sort((a, b) => {
-      if (epSortCol === "endpoint") return dir * a.operationName.localeCompare(b.operationName);
-      if (epSortCol === "today")    return dir * (a.todayCount - b.todayCount);
-      if (epSortCol === "total")    return dir * (a.totalCount - b.totalCount);
-      if (epSortCol === "preAccount") return dir * ((perAccountHitsMap[a.operationName] ?? 0) - (perAccountHitsMap[b.operationName] ?? 0));
-      if (epSortCol === "preGlobal")  return dir * ((globalHitsMap[a.operationName] ?? 0) - (globalHitsMap[b.operationName] ?? 0));
-      return 0;
-    });
-  }, [endpointCountsData, epSortCol, epSortDir, perAccountHitsMap, globalHitsMap]);
-
   const getStat = (type: string, date: string) =>
     metricsStats.find((s: any) => s.toolType === type && s.date === date)?.count ?? 0;
 
   const actionStatTypes = ALL_STAT_TYPES.filter(st => !st.isTool);
-
-  const pieData = useMemo(() =>
-    endpointCountsData
-      .map((ep, idx) => ({ name: cleanEpName(ep.operationName), value: ep.todayCount, color: epColor(ep.operationName, idx) }))
-      .filter(d => d.value > 0)
-      .sort((a, b) => b.value - a.value),
-  [endpointCountsData]);
-
-  const lifetimePieData = useMemo(() =>
-    endpointCountsData
-      .map((ep, idx) => ({ name: cleanEpName(ep.operationName), value: ep.totalCount, color: epColor(ep.operationName, idx) }))
-      .filter(d => d.value > 0)
-      .sort((a, b) => b.value - a.value),
-  [endpointCountsData]);
 
   const mobilePieData = useMemo(() =>
     MOBILE_METRIC_DEFS
@@ -1002,91 +892,6 @@ export function StatsPage() {
                   </CardContent>
                 </Card>
 
-                {/* Pie charts — actions only */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <Card className="desktop-card border-none shadow-sm">
-                    <CardHeader className="border-b border-border/50 bg-muted/5 pb-3">
-                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <BarChart2 className="w-4 h-4 text-primary" />
-                        Today's Endpoint Breakdown
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-4">
-                      {pieData.length === 0 ? (
-                        <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No actions recorded today</div>
-                      ) : (
-                        <div className="flex gap-3 items-center">
-                          <div className="flex-1 min-w-0 max-h-[220px] overflow-y-auto space-y-0.5 pr-1 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full">
-                            {(() => {
-                              const total = pieData.reduce((s, d) => s + d.value, 0);
-                              return pieData.map((entry, idx) => (
-                                <div key={idx} className="flex items-center justify-between gap-1.5 py-0.5">
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: entry.color }} />
-                                    <span className="text-[10px] text-muted-foreground truncate">{entry.name}</span>
-                                  </div>
-                                  <span className="text-[10px] font-semibold text-foreground shrink-0 tabular-nums">{total > 0 ? (entry.value / total * 100).toFixed(1) : "0.0"}%</span>
-                                </div>
-                              ));
-                            })()}
-                          </div>
-                          <div className="shrink-0 w-[180px]">
-                            <ResponsiveContainer width="100%" height={220}>
-                              <PieChart>
-                                <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value">
-                                  {pieData.map((entry, idx) => <Cell key={idx} fill={entry.color} />)}
-                                </Pie>
-                                <Tooltip formatter={(v: number, n: string) => [v.toLocaleString(), n]} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                              </PieChart>
-                            </ResponsiveContainer>
-                          </div>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card className="desktop-card border-none shadow-sm">
-                    <CardHeader className="border-b border-border/50 bg-muted/5 pb-3">
-                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <BarChart2 className="w-4 h-4 text-primary" />
-                        Lifetime Endpoint Breakdown
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-4">
-                      {lifetimePieData.length === 0 ? (
-                        <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No lifetime actions recorded</div>
-                      ) : (
-                        <div className="flex gap-3 items-center">
-                          <div className="flex-1 min-w-0 max-h-[220px] overflow-y-auto space-y-0.5 pr-1 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full">
-                            {(() => {
-                              const total = lifetimePieData.reduce((s, d) => s + d.value, 0);
-                              return lifetimePieData.map((entry, idx) => (
-                                <div key={idx} className="flex items-center justify-between gap-1.5 py-0.5">
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: entry.color }} />
-                                    <span className="text-[10px] text-muted-foreground truncate">{entry.name}</span>
-                                  </div>
-                                  <span className="text-[10px] font-semibold text-foreground shrink-0 tabular-nums">{total > 0 ? (entry.value / total * 100).toFixed(1) : "0.0"}%</span>
-                                </div>
-                              ));
-                            })()}
-                          </div>
-                          <div className="shrink-0 w-[180px]">
-                            <ResponsiveContainer width="100%" height={220}>
-                              <PieChart>
-                                <Pie data={lifetimePieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value">
-                                  {lifetimePieData.map((entry, idx) => <Cell key={idx} fill={entry.color} />)}
-                                </Pie>
-                                <Tooltip formatter={(v: number, n: string) => [v.toLocaleString(), n]} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                              </PieChart>
-                            </ResponsiveContainer>
-                          </div>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-
                 {/* Account health & system data points */}
                 <Card className="desktop-card border-none shadow-sm">
                   <CardHeader className="border-b border-border/50 bg-muted/5 pb-3">
@@ -1188,74 +993,6 @@ export function StatsPage() {
                         <span className="text-[10px] text-muted-foreground">today · {getStat("human_session", "lifetime").toLocaleString()} lifetime</span>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-
-                {/* Raw API Endpoint Count */}
-                <Card className="desktop-card border-none shadow-sm">
-                  <CardHeader className="border-b border-border/50 bg-muted/5 pb-3">
-                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                      <Webhook className="w-4 h-4 text-primary" />
-                      Raw API Endpoint Count
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-4">
-                    {!endpointCountsData || endpointCountsData.length === 0 ? (
-                      <div className="py-8 text-center text-muted-foreground text-sm">No API calls recorded yet for this account.</div>
-                    ) : (
-                      <div className="overflow-x-auto max-h-[340px] overflow-y-auto">
-                        <table className="w-full text-sm">
-                          <thead className="sticky top-0 bg-card z-10">
-                            <tr className="border-b border-border/50">
-                              {([ 
-                                { key: "endpoint" as const, label: "Endpoint", align: "left", cls: "text-muted-foreground", pad: "py-2 pr-4" },
-                                { key: "today" as const, label: "Today", align: "center", cls: "text-muted-foreground", pad: "py-2 px-3" },
-                                { key: "total" as const, label: "Total", align: "center", cls: "text-muted-foreground", pad: "py-2 px-3" },
-                                { key: "preAccount" as const, label: "Pre-Change (Account)", align: "center", cls: "text-amber-500/80", pad: "py-2 px-3", title: "Times this endpoint was the last API call before this account's status changed" },
-                                { key: "preGlobal" as const, label: "Pre-Change (Global)", align: "center", cls: "text-red-500/80", pad: "py-2 pl-3", title: "Times this endpoint was the last API call before any account's status changed" },
-                              ] as const).map(col => (
-                                <th
-                                  key={col.key}
-                                  onClick={() => cycleEpSort(col.key)}
-                                  title={col.title ?? undefined}
-                                  className={`${col.pad} text-${col.align} text-[10px] font-bold uppercase tracking-wide ${col.cls} whitespace-nowrap cursor-pointer select-none hover:text-foreground transition-colors`}
-                                >
-                                  {col.label}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-border/30">
-                            {sortedEndpointData.map(row => (
-                              <tr key={row.operationName} className="hover:bg-muted/5 transition-colors">
-                                <td className="py-1.5 pr-4 text-[12px] text-foreground">{cleanEpName(row.operationName)}</td>
-                                <td className="py-1.5 px-3 text-center tabular-nums text-[12px] font-bold text-foreground">{row.todayCount.toLocaleString()}</td>
-                                <td className="py-1.5 px-3 text-center tabular-nums text-[12px] text-foreground">{row.totalCount.toLocaleString()}</td>
-                                <td className="py-1.5 px-3 text-center tabular-nums text-[12px] font-bold text-amber-500">{(perAccountHitsMap[row.operationName] ?? 0) > 0 ? (perAccountHitsMap[row.operationName] ?? 0).toLocaleString() : <span className="text-muted-foreground/30">—</span>}</td>
-                                <td className="py-1.5 pl-3 text-center tabular-nums text-[12px] font-bold text-red-500">{(globalHitsMap[row.operationName] ?? 0) > 0 ? (globalHitsMap[row.operationName] ?? 0).toLocaleString() : <span className="text-muted-foreground/30">—</span>}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                          <tfoot>
-                            <tr className="border-t border-border/50 bg-muted/5">
-                              <td className="py-2 pr-4 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Total ({endpointCountsData.length} endpoints)</td>
-                              <td className="py-2 px-3 text-center tabular-nums text-[11px] font-bold text-foreground">
-                                {endpointCountsData.reduce((s, r) => s + r.todayCount, 0).toLocaleString()}
-                              </td>
-                              <td className="py-2 px-3 text-center tabular-nums text-[11px] text-foreground">
-                                {endpointCountsData.reduce((s, r) => s + r.totalCount, 0).toLocaleString()}
-                              </td>
-                              <td className="py-2 px-3 text-center tabular-nums text-[11px] font-bold text-amber-500">
-                                {endpointCountsData.reduce((s, r) => s + (perAccountHitsMap[r.operationName] ?? 0), 0).toLocaleString()}
-                              </td>
-                              <td className="py-2 pl-3 text-center tabular-nums text-[11px] font-bold text-red-500">
-                                {endpointCountsData.reduce((s, r) => s + (globalHitsMap[r.operationName] ?? 0), 0).toLocaleString()}
-                              </td>
-                            </tr>
-                          </tfoot>
-                        </table>
-                      </div>
-                    )}
                   </CardContent>
                 </Card>
 
