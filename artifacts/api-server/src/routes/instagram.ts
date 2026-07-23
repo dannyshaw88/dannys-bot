@@ -5594,6 +5594,8 @@ export async function registerInstagramRoutes(
     }
     if (typeof useLocalTime === "boolean") {
       await storage.setGlobalSetting("useLocalTime", String(useLocalTime));
+      const { setLogUseLocalTime } = await import("../lib/logSettings");
+      setLogUseLocalTime(useLocalTime);
     }
     if (typeof twoCaptchaApiKey === "string") {
       await storage.setGlobalSetting("twoCaptchaApiKey", twoCaptchaApiKey);

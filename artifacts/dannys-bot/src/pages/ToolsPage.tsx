@@ -429,7 +429,24 @@ export function BulkImportTabContent() {
     queryFn: () => fetch("/api/mobile/usb-phones").then(r => r.json()),
     refetchInterval: 15_000,
   });
-  const phones = phonesData?.phones ?? [];
+
+  // Farm-device slot order — kept in sync every 30 s (same as Phone Farm page).
+  const { data: farmData } = useQuery<{ devices: Array<{ slotIndex: number; serial: string }> }>({
+    queryKey: ["/api/mobile/farm-devices"],
+    queryFn: () => fetch("/api/mobile/farm-devices").then(r => r.json()),
+    refetchInterval: 30_000,
+    staleTime: 20_000,
+  });
+  const slotBySerial: Record<string, number> = Object.fromEntries(
+    (farmData?.devices ?? []).map(d => [d.serial, d.slotIndex])
+  );
+
+  // Sort connected phones by Phone Farm slot; unregistered phones sort last.
+  const phones = [...(phonesData?.phones ?? [])].sort((a, b) => {
+    const sa = slotBySerial[a.serial] ?? Infinity;
+    const sb = slotBySerial[b.serial] ?? Infinity;
+    return sa - sb;
+  });
 
   // Slot counts per device — one query per connected phone, refreshed every 15 s.
   const slotCountResults = useQueries({
@@ -604,9 +621,11 @@ export function BulkImportTabContent() {
             {phones.map(p => {
               const name = p.marketName ?? (p.manufacturer ? `${p.manufacturer} ${p.model ?? p.serial}` : p.serial);
               const slots = slotCountBySerial[p.serial];
-              const slotSuffix = slots != null && slots > 0 ? ` - ${slots} slot${slots !== 1 ? 's' : ''} assigned` : '';
+              const slotSuffix = slots != null && slots > 0 ? ` · ${slots} slot${slots !== 1 ? 's' : ''}` : '';
+              const slotIdx = slotBySerial[p.serial];
+              const slotPrefix = slotIdx != null ? `Slot ${slotIdx} — ` : '';
               return (
-                <option key={p.serial} value={p.serial}>{name}{slotSuffix}</option>
+                <option key={p.serial} value={p.serial}>{slotPrefix}{name}{slotSuffix}</option>
               );
             })}
           </select>

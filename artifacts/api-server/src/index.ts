@@ -4,6 +4,7 @@ import fs from "fs";
 import express from "express";
 import app from "./app";
 import { logger } from "./lib/logger";
+import { getLogUseLocalTime, setLogUseLocalTime } from "./lib/logSettings";
 import { registerInstagramRoutes } from "./routes/instagram";
 import { registerMobileRoutes } from "./routes/mobile";
 
@@ -32,11 +33,19 @@ try {
   _logFd = fs.openSync(SERVER_LOG_PATH, "a");
 } catch {}
 
+function _formatLogTs(): string {
+  const d = new Date();
+  if (!getLogUseLocalTime()) return `[${d.toISOString()}] `;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `[${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}] `;
+}
+
 function _writeLogLine(chunk: string | Buffer): void {
   if (_logFd === null) return;
   try {
-    const line = typeof chunk === "string" ? chunk : chunk.toString("utf8");
-    fs.write(_logFd, line.endsWith("\n") ? line : line + "\n", () => {});
+    const raw = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+    const line = _formatLogTs() + (raw.endsWith("\n") ? raw : raw + "\n");
+    fs.write(_logFd, line, () => {});
 
     // Rotate when over limit
     try {
@@ -47,7 +56,8 @@ function _writeLogLine(chunk: string | Buffer): void {
         const half = content.slice(Math.floor(content.length / 2));
         const boundary = half.indexOf("\n");
         const trimmed = boundary >= 0 ? half.slice(boundary + 1) : half;
-        fs.writeFileSync(SERVER_LOG_PATH, `[Log rotated at ${new Date().toISOString()}]\n` + trimmed, "utf8");
+        const rotateTs = _formatLogTs();
+        fs.writeFileSync(SERVER_LOG_PATH, `${rotateTs}[Log rotated]\n` + trimmed, "utf8");
         _logFd = fs.openSync(SERVER_LOG_PATH, "a");
       }
     } catch {}
@@ -75,7 +85,14 @@ const httpServer = createServer(app);
 
 registerMobileRoutes(httpServer, app);
 
-registerInstagramRoutes(httpServer, app).then(() => {
+registerInstagramRoutes(httpServer, app).then(async () => {
+  // Sync log timestamp mode with the persisted setting
+  try {
+    const { storage } = await import("./storage");
+    const settings = await storage.getGlobalSettings();
+    setLogUseLocalTime(settings.useLocalTime === "true");
+  } catch { /* leave default false if storage unavailable */ }
+
   const frontendDist = process.env.FRONTEND_DIST_PATH ||
     path.join(process.cwd(), "artifacts", "dannys-bot", "dist", "public");
   if (fs.existsSync(frontendDist)) {
