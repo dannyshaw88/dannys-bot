@@ -872,7 +872,7 @@ function DeviceCard({
             {active ? (
               <span className="text-sm font-semibold text-green-400">Active</span>
             ) : (
-              <span className="text-sm font-semibold text-red-400">Not Active</span>
+              <span className="text-sm font-semibold text-red-600 dark:text-red-500">Not Active</span>
             )}
           </div>
         </div>
