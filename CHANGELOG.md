@@ -4,6 +4,32 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.113
+
+### Change — Metrics no longer exposes raw API endpoint data
+
+Statistics → Metrics has been simplified to focus on account activity and health
+instead of internal API implementation details. Removed from the page:
+
+- The Raw API Endpoint Count table
+- Today's Endpoint Breakdown chart
+- Lifetime Endpoint Breakdown chart
+- Endpoint sorting and pre-status-change endpoint columns
+- The endpoint-specific API request used only by those views
+
+The page still retains the aggregate Total API Calls card, account health
+indicators, action totals, device-slot TrustScore badge, mobile activity charts,
+and per-account mobile metric cards.
+
+### Change — Metrics TrustScore badge remains TrustScore-only
+
+The Metrics slot badge continues to show and manage only the selected slot's
+TrustScore. The unrelated Human Session icon, label, and toggle are not rendered
+beside the badge. Human Session navigation from Tool Performance remains
+available through each clickable account username.
+
+---
+
 ## v1.2.112
 
 ### Feature — Statistics Metrics now follows device account slots
