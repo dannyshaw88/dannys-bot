@@ -4,6 +4,52 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.106
+
+### Fix — Phone Farm: wallpaper/text shows for 2 seconds then disappears; blank black when mirror idle
+
+**Root cause**
+
+`LiveCanvas` renders a root `<div className="absolute inset-0 bg-black">` —
+fully opaque black. The wallpaper/text overlay was gated on `!live`, so
+whenever `live=true` the opaque black div covered the wallpaper entirely,
+even when the canvas wasn't painting any frames (phone screen locked between
+automation cycles, scrcpy connecting, screen off during airplane-mode recycle,
+etc.).
+
+The "briefly 2 seconds then disappears" pattern: on navigation the component
+renders with `live=false` momentarily, wallpaper flashes, then
+`AccountSettingsPanel` fires `onAnyEnabled(true)` as each slot's
+`SlotHumanSessionView` reports its current `running` state → `hstEnabled=true`
+→ `live=true` → opaque black canvas covers wallpaper.
+
+**Fix**
+
+Added `onStatusChange` callback to `LiveCanvas`. It fires every time the
+internal stream status changes (`"connecting" | "waiting" | "live" |
+"asleep" | "error"`).
+
+`PhoneSlot` tracks `canvasStreaming` (true only when status === `"live"`,
+i.e. decoded frames are actively being painted). The wallpaper/text overlay
+now renders whenever `!live || !canvasStreaming`:
+
+- `live=false` → canvas not mounted → wallpaper shows ✓ (as before)
+- `live=true`, connecting/waiting/asleep/error → canvas mounted but black →
+  wallpaper shows on top ✓ *(the fix)*
+- `live=true`, frames flowing → canvas painting → wallpaper hidden ✓
+
+`canvasStreaming` is reset to `false` the moment `live` turns off so the
+wallpaper reappears immediately (not waiting for a status event from an
+already-unmounted canvas).
+
+**Files changed:**
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — `onStatusChange` prop
+  added to `LiveCanvas`; status bubbled via ref-stable `useEffect`;
+  `canvasStreaming` state + `useEffect` added to `PhoneSlot`; wallpaper
+  condition changed from `!live` to `!live || !canvasStreaming`.
+
+---
+
 ## v1.2.105
 
 ### Fix — Follow Users: correct user skipped ("not found") + old username not cleared

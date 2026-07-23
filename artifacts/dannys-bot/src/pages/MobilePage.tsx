@@ -232,7 +232,7 @@ type PendingPin = {
   parentNode: InspectNode | null;
 };
 
-const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; live: boolean; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; inspectMode?: boolean; inspectNodes?: InspectNode[] | null; onInspectResult?: (r: InspectResult) => void; onHoverNode?: (n: InspectNode | null) => void; clickTestMode?: boolean; logRecMode?: boolean; logMarkers?: LogMarker[]; onExpectedTap?: (x: number, y: number, kind?: "expected" | "vicinity") => void }>(function LiveCanvas({ serial, live, onLog, onDimensions, inspectMode, inspectNodes, onInspectResult, onHoverNode, clickTestMode, logRecMode, logMarkers, onExpectedTap }, ref) {
+const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; live: boolean; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; inspectMode?: boolean; inspectNodes?: InspectNode[] | null; onInspectResult?: (r: InspectResult) => void; onHoverNode?: (n: InspectNode | null) => void; clickTestMode?: boolean; logRecMode?: boolean; logMarkers?: LogMarker[]; onExpectedTap?: (x: number, y: number, kind?: "expected" | "vicinity") => void; onStatusChange?: (status: "connecting" | "waiting" | "live" | "asleep" | "error") => void }>(function LiveCanvas({ serial, live, onLog, onDimensions, inspectMode, inspectNodes, onInspectResult, onHoverNode, clickTestMode, logRecMode, logMarkers, onExpectedTap, onStatusChange }, ref) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   // Cache the 2D context so we don't re-call getContext() every frame.
   const ctxRef       = useRef<CanvasRenderingContext2D | null>(null);
@@ -301,6 +301,12 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
 
   const [status, setStatus] = useState<"connecting" | "waiting" | "live" | "asleep" | "error">("connecting");
   const [fps,    setFps]    = useState(0);
+
+  // Bubble stream status up to PhoneSlot so the wallpaper/text overlay can
+  // be shown whenever frames aren't actually flowing (even if live=true).
+  const onStatusChangeRef = useRef(onStatusChange);
+  onStatusChangeRef.current = onStatusChange;
+  useEffect(() => { onStatusChangeRef.current?.(status); }, [status]);
 
   // Keep canvas.width/height = CSS client size so canvas-pixel coords are
   // identical to CSS-pixel coords. This is the key invariant the letterbox
@@ -1622,6 +1628,18 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
       return liveCanvasRef.current?.getVideoSize() ?? null;
     },
   }), []);
+
+  // True only while LiveCanvas is actively painting decoded frames.
+  // Used to show the wallpaper/text overlay even when live=true — the canvas
+  // root div has bg-black (opaque) so without this check, the wallpaper is
+  // hidden by the black canvas background whenever the phone screen is off
+  // (locked between automation cycles, awaiting connection, etc.).
+  const [canvasStreaming, setCanvasStreaming] = useState(false);
+  // Reset to false the moment we stop asking for a live mirror so the
+  // wallpaper reappears immediately rather than waiting for the next status
+  // transition inside LiveCanvas (which is unmounted when live turns off).
+  useEffect(() => { if (!live) setCanvasStreaming(false); }, [live]);
+
   const [clickTestMode, setClickTestMode] = useState(false);
   const [showCustomize, setShowCustomize] = useState(false);
 
@@ -1866,8 +1884,14 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
            style={inspectMode ? { flexBasis: "50%", flexShrink: 1 } : undefined}>
         {isEmpty && <EmptyShell idx={idx} />}
 
-        {/* Wallpaper + text overlay — shown in all non-live states */}
-        {!live && (custom.wallpaper || custom.texts.length > 0) && (
+        {/* Wallpaper + text overlay — shown whenever frames aren't flowing.
+             This includes the obvious !live case (mirror off) AND the case
+             where live=true but the canvas is not yet painting frames —
+             e.g. phone screen is locked between automation cycles, scrcpy is
+             connecting, or the phone screen is off.  LiveCanvas has an opaque
+             bg-black root div, so without this check the black canvas covers
+             the wallpaper every time the screen goes dark between cycles. */}
+        {(!live || !canvasStreaming) && (custom.wallpaper || custom.texts.length > 0) && (
           <div className="absolute inset-0 pointer-events-none overflow-hidden">
             {custom.wallpaper && (
               <img
@@ -1932,6 +1956,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
             logRecMode={logRecMode}
             logMarkers={logMarkers}
             onExpectedTap={onExpectedTap}
+            onStatusChange={s => setCanvasStreaming(s === "live")}
           />
         )}
         {isReady && phone && !live && (
