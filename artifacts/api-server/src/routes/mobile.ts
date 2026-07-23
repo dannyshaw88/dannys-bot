@@ -223,6 +223,7 @@ type AutomationSettings = {
   followEnabled?: boolean;
   followUsersMin?: number;
   followUsersMax?: number;
+  followSpreadFollows?: boolean;
   followSources?: { type: string; value: string }[];
   // Inject Browsing — per-user profile-browsing behaviour (same fix).
   injectBrowsingEnabled?: boolean;
@@ -1165,6 +1166,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     followEnabled: z.boolean().default(false),
     followUsersMin: z.number().min(0).max(9999).default(1),
     followUsersMax: z.number().min(0).max(9999).default(3),
+    followSpreadFollows: z.boolean().default(false),
     followSources: z.array(followSourceSchema).default([]),
     injectBrowsingEnabled: z.boolean().default(false),
     injectBrowsingActivatePctMin: z.number().min(0).max(100).default(0),
@@ -1296,7 +1298,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       viewExploreShareFeedPercentMin: 0, viewExploreShareFeedPercentMax: 0,
       viewExploreShareDmPercentMin: 0, viewExploreShareDmPercentMax: 0,
       viewExploreSavePercentMin: 0, viewExploreSavePercentMax: 0,
-      followEnabled: false, followUsersMin: 1, followUsersMax: 3, followSources: [],
+      followEnabled: false, followUsersMin: 1, followUsersMax: 3, followSpreadFollows: false, followSources: [],
       injectBrowsingEnabled: false,
       injectBrowsingActivatePctMin: 0, injectBrowsingActivatePctMax: 0,
       injectBrowsingBeforeFollowPctMin: 0, injectBrowsingBeforeFollowPctMax: 0,
@@ -1387,7 +1389,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewExploreShareFeedPercentMin: 0, viewExploreShareFeedPercentMax: 0,
         viewExploreShareDmPercentMin: 0, viewExploreShareDmPercentMax: 0,
         viewExploreSavePercentMin: 0, viewExploreSavePercentMax: 0,
-        followEnabled: false, followUsersMin: 1, followUsersMax: 3, followSources: [],
+        followEnabled: false, followUsersMin: 1, followUsersMax: 3, followSpreadFollows: false, followSources: [],
         injectBrowsingEnabled: false,
         injectBrowsingActivatePctMin: 0, injectBrowsingActivatePctMax: 0,
         injectBrowsingBeforeFollowPctMin: 0, injectBrowsingBeforeFollowPctMax: 0,
@@ -3695,6 +3697,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     followEnabled: z.boolean().default(false),
     followUsersMin: z.number().min(0).max(9999).default(1),
     followUsersMax: z.number().min(0).max(9999).default(3),
+    followSpreadFollows: z.boolean().default(false),
     followSources: z.array(z.object({ type: z.string(), value: z.string() })).default([]),
     followMaxScrapeSessions: z.number().min(0).max(999).default(0),
     // Inject Browsing — per-user profile-browsing behaviour woven into the
@@ -4862,43 +4865,62 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
        *  has no matching EB profile. Surplus is keyed by this when profileId
        *  is absent. */
       phoneSlotKey?: string;
+      /** Spread-Follows mode: pre-fetched candidates from the automation cycle.
+       *  When provided the entire HikerAPI/surplus fetch phase is skipped and
+       *  these candidates are used directly. Surplus save is also skipped (the
+       *  caller manages it). */
+      preloadedCandidates?: {
+        targets: string[];
+        candidateSource: Map<string, string>;
+        candidateMeta: Map<string, { isVerified?: boolean; isPrivate?: boolean; followerCount?: number }>;
+      };
     },
   ): Promise<number> {
     const { usersMin, usersMax, sources, onLog, recordFollow, browsing, skipFollowedUsernames, skipSkippedUsernames, filters } = params;
 
-    if (!sources.length) {
-      onLog?.("Follow: no target sources configured — skipping");
-      return 0;
-    }
+    // ── Shared state — populated by either the normal fetch path or the
+    //    spread-mode preloaded path, then consumed by the shared follow loop. ──
+    const _usePreloaded = !!params.preloadedCandidates;
+    let candidateSource = new Map<string, string>();
+    let candidateMeta   = new Map<string, { isVerified?: boolean; isPrivate?: boolean; followerCount?: number }>();
+    let targets: string[] = [];
+    let targetCount = 0;
+    let hiker: HikerApiClient | undefined;
+    let attemptedSet = new Set<string>();
+    let MAX_SCRAPE_ROUNDS = 0;
+    const profileId = params.profileId;
+    const phoneSlotKey = params.phoneSlotKey?.replace(/^@/, "").toLowerCase() || "";
 
-    const globalSettings = await storage.getGlobalSettings();
-    const hikerApiToken: string = globalSettings?.hikerApiToken ?? "";
-    if (!hikerApiToken) {
-      onLog?.("Follow: HikerAPI token not configured (Settings → Global → HikerAPI) — skipping");
-      return 0;
-    }
+    if (!_usePreloaded) {
+      if (!sources.length) {
+        onLog?.("Follow: no target sources configured — skipping");
+        return 0;
+      }
 
-    const lo = Math.min(usersMin, usersMax);
-    const hi = Math.max(usersMin, usersMax);
-    const targetCount = lo === hi ? lo : Math.round(lo + Math.random() * (hi - lo));
-    if (targetCount === 0) { onLog?.("Follow: target count is 0 — skipping"); return 0; }
+      const globalSettings = await storage.getGlobalSettings();
+      const hikerApiToken: string = globalSettings?.hikerApiToken ?? "";
+      if (!hikerApiToken) {
+        onLog?.("Follow: HikerAPI token not configured (Settings → Global → HikerAPI) — skipping");
+        return 0;
+      }
 
-    onLog?.(`Follow: targeting ${targetCount} users from ${sources.length} source(s)`);
+      const lo = Math.min(usersMin, usersMax);
+      const hi = Math.max(usersMin, usersMax);
+      targetCount = lo === hi ? lo : Math.round(lo + Math.random() * (hi - lo));
+      if (targetCount === 0) { onLog?.("Follow: target count is 0 — skipping"); return 0; }
 
-    const hiker = new HikerApiClient(hikerApiToken);
-    // Track source per username so the Followed Users tab shows the hashtag
-    // or target account the user was discovered from, not "hikerapi".
-    const candidateSource = new Map<string, string>();
-    const candidateMeta   = new Map<string, { isVerified?: boolean; isPrivate?: boolean; followerCount?: number }>();
-    const candidates: string[] = [];
+      onLog?.(`Follow: targeting ${targetCount} users from ${sources.length} source(s)`);
+
+      hiker = new HikerApiClient(hikerApiToken);
+      // Track source per username so the Followed Users tab shows the hashtag
+      // or target account the user was discovered from, not "hikerapi".
+      const candidates: string[] = [];
 
     // ── Surplus / Overspill candidates ──────────────────────────────────────
     // Before calling HikerAPI, check the Surplus table for candidates saved
     // from previous cycles for this account. Consuming these first avoids
     // burning HikerAPI quota on sources that were already scraped.
     const overspillIdsToDelete: number[] = [];
-    const profileId = params.profileId;
-    const phoneSlotKey = params.phoneSlotKey?.replace(/^@/, "").toLowerCase() || "";
     if (profileId && profileId > 0) {
       try {
         const overspillRows = await storage.getOverspillUsersByProfile(profileId);
@@ -5024,21 +5046,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Mutable candidate pool. Extended automatically by re-scraping HikerAPI
     // whenever the current batch is exhausted before `targetCount` is reached —
     // the Follow tool never abandons mid-run just because a batch ran dry.
-    const targets = [...filtered];
+    targets = [...filtered];
     // Track every username ever placed in the pool across all scrape rounds so
     // re-scrapes never inject duplicates.
-    const attemptedSet = new Set<string>(targets.map(u => u.toLowerCase()));
-    onLog?.(`Follow: ${targets.length} candidate${targets.length !== 1 ? "s" : ""} in pool, targeting ${targetCount} follow${targetCount !== 1 ? "s" : ""}`);
+    attemptedSet = new Set<string>(targets.map(u => u.toLowerCase()));
+      onLog?.(`Follow: ${targets.length} candidate${targets.length !== 1 ? "s" : ""} in pool, targeting ${targetCount} follow${targetCount !== 1 ? "s" : ""}`);
+      MAX_SCRAPE_ROUNDS = (params.maxScrapeSessions ?? 0) > 0
+        ? (params.maxScrapeSessions as number) - 1   // -1: initial scrape already done before loop
+        : 50;  // effectively unlimited
+    } else {
+      // ── Spread mode: use pre-fetched candidates provided by the automation cycle ─
+      const _pre = params.preloadedCandidates!;
+      for (const [k, v] of _pre.candidateSource) candidateSource.set(k, v);
+      for (const [k, v] of _pre.candidateMeta)   candidateMeta.set(k, v);
+      targets = [..._pre.targets];
+      targetCount = targets.length;
+      if (targetCount === 0) { onLog?.("Follow: spread slot — no pre-fetched candidates"); return 0; }
+      onLog?.(`Follow: spread mode — ${targetCount} pre-fetched candidate(s)`);
+      attemptedSet = new Set<string>(targets.map(u => u.toLowerCase()));
+      // MAX_SCRAPE_ROUNDS stays 0 — no re-scraping in spread mode
+    }
 
     let followed = 0;
     let _fi = 0;              // manual index into `targets` (grows as re-scrapes inject new entries)
     let scrapeRound = 0;
-    // 0 = unlimited (Jarvee-style "abort after X scrapes"). When a positive
-    // limit is set the follow session ends as soon as that many HikerAPI
-    // scrape rounds have been used — the initial scrape counts as round 1.
-    const MAX_SCRAPE_ROUNDS = (params.maxScrapeSessions ?? 0) > 0
-      ? (params.maxScrapeSessions as number) - 1   // -1: initial scrape already done before loop
-      : 50;  // effectively unlimited
 
     // Navigate to Search tab. Give the just-opened feed a moment to settle
     // before attempting to locate the bottom nav.
@@ -5105,7 +5136,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             : `@${src.value.replace(/^@/, "")}`;
           try {
             if (src.type === "hashtag") {
-              const res = await hiker.getHashtagUsers(src.value.replace(/^#/, ""), 50);
+              const res = await hiker!.getHashtagUsers(src.value.replace(/^#/, ""), 50);
               for (const u of res.users) {
                 if (attemptedSet.has(u.username.toLowerCase())) continue;
                 if (!candidateSource.has(u.username)) candidateSource.set(u.username, srcLabel);
@@ -5116,9 +5147,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               }
               onLog?.(`Follow: re-scrape ${srcLabel} → ${res.users.length} users`);
             } else if (src.type === "target_followers") {
-              const userInfo = await hiker.getUserByUsername(src.value.replace(/^@/, "")).catch(() => null);
+              const userInfo = await hiker!.getUserByUsername(src.value.replace(/^@/, "")).catch(() => null);
               if (userInfo?.pk) {
-                const followers = await hiker.getFollowers(userInfo.pk, 50);
+                const followers = await hiker!.getFollowers(userInfo.pk, 50);
                 for (const u of followers) {
                   if (attemptedSet.has(u.username.toLowerCase())) continue;
                   if (!candidateSource.has(u.username)) candidateSource.set(u.username, srcLabel);
@@ -5485,7 +5516,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // targetCount was reached first) is written to the Surplus table so the
     // NEXT cycle can consume them before calling HikerAPI again — saving
     // API quota.  Only candidates from index _fi onward were never attempted.
-    if (_fi < targets.length && (profileId && profileId > 0 || phoneSlotKey)) {
+    if (!_usePreloaded && _fi < targets.length && (profileId && profileId > 0 || phoneSlotKey)) {
       const surplus = targets.slice(_fi);
       const now = new Date().toISOString();
       const surplusEntries = surplus.map(u => ({
@@ -5613,7 +5644,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewExploreShareFeedPercentMin, viewExploreShareFeedPercentMax,
         viewExploreShareDmPercentMin, viewExploreShareDmPercentMax,
         viewExploreSavePercentMin, viewExploreSavePercentMax,
-        followEnabled, followUsersMin, followUsersMax, followSources,
+        followEnabled, followUsersMin, followUsersMax, followSpreadFollows, followSources,
         followFiltersEnabled, followFilterVerifiedUsers, followFilterMaxFollowers25k,
         followFilterPrivateUsers, followFilterEnglishSpeaking, followFilterMinFollowers50,
         injectBrowsingEnabled,
@@ -5834,6 +5865,187 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         tLog(`▶ Tool order shuffled: ${_toolSeq.length > 0 ? _toolSeq.join(' → ') : '(no tools active this execution)'}`);
       }
 
+      // ── Spread Follows mode ───────────────────────────────────────────────
+      // When enabled and follow is activated with targetCount ≥ 2, pre-fetches
+      // all candidates upfront via HikerAPI/surplus then rebuilds the tool
+      // sequence so one follow fires between each non-follow tool instead of
+      // doing all follows back-to-back at the end.
+      let _spreadCandidateSource: Map<string, string> | undefined;
+      let _spreadCandidateMeta: Map<string, { isVerified?: boolean; isPrivate?: boolean; followerCount?: number }> | undefined;
+
+      if (followSpreadFollows && _toolActivated['follow']) {
+        const _slo = Math.min(followUsersMin, followUsersMax);
+        const _shi = Math.max(followUsersMin, followUsersMax);
+        const _spreadTarget = _slo === _shi ? _slo : Math.round(_slo + Math.random() * (_shi - _slo));
+        if (_spreadTarget >= 2) {
+          tLog(`▶ Spread Follows: pre-fetching ${_spreadTarget} candidates…`);
+          try {
+            const _sfGlobal = await storage.getGlobalSettings();
+            const _sfToken: string = _sfGlobal?.hikerApiToken ?? "";
+            if (!_sfToken) {
+              tLog("▶ Spread Follows: HikerAPI token not configured — falling back to normal follow");
+            } else if (!followSources.length) {
+              tLog("▶ Spread Follows: no follow sources configured — falling back to normal follow");
+            } else {
+              // Build skip sets (same as normal follow dispatcher)
+              const _sfSkipFollowed = await (async () => {
+                if (!globalSkipFollowed) return undefined;
+                const local = new Set(getMobileFollowedList(serial).map(e => e.username.toLowerCase()));
+                const globalSet = await storage.getAllFollowedUsernames();
+                for (const u of globalSet) local.add(u);
+                return local;
+              })();
+              const _sfSkipSkipped = await (async () => {
+                if (!globalSkipSkipped) return undefined;
+                const rows = await storage.getSkippedUsers(100_000);
+                return new Set(rows.map(s => s.instagramUsername.toLowerCase()));
+              })();
+              const _sfFilters = followFiltersEnabled
+                ? { skipVerified: followFilterVerifiedUsers, maxFollowers: followFilterMaxFollowers25k ? 25_000 : undefined,
+                    skipPrivate: followFilterPrivateUsers, minFollowers: followFilterMinFollowers50 ? 50 : undefined,
+                    requireEnglish: followFilterEnglishSpeaking }
+                : undefined;
+
+              const _sfHiker = new HikerApiClient(_sfToken);
+              const _sfSource = new Map<string, string>();
+              const _sfMeta   = new Map<string, { isVerified?: boolean; isPrivate?: boolean; followerCount?: number }>();
+              const _sfRaw: string[] = [];
+
+              // Consume surplus first before calling HikerAPI
+              const _sfProfileId = mobileProfileId;
+              const _sfSlotKey = (mobileProfileId ? undefined : (slotUsername || undefined))?.replace(/^@/, "").toLowerCase() ?? "";
+              if (_sfProfileId && _sfProfileId > 0) {
+                try {
+                  const rows = await storage.getOverspillUsersByProfile(_sfProfileId);
+                  for (const row of rows) {
+                    const u = row.instagramUsername;
+                    if (_sfSkipFollowed?.has(u.toLowerCase())) continue;
+                    if (_sfSkipSkipped?.has(u.toLowerCase())) continue;
+                    if (!_sfSource.has(u)) _sfSource.set(u, row.sourceValue || "surplus");
+                    _sfRaw.push(u);
+                  }
+                  if (rows.length) {
+                    storage.deleteOverspillUsers(rows.map(r => r.id)).catch(() => {});
+                    tLog(`  Spread Follows: consumed ${rows.length} surplus candidate(s)`);
+                  }
+                } catch {}
+              } else if (_sfSlotKey) {
+                try {
+                  const rows = await storage.getOverspillUsersByPhoneSlot(_sfSlotKey);
+                  for (const row of rows) {
+                    const u = row.instagramUsername;
+                    if (_sfSkipFollowed?.has(u.toLowerCase())) continue;
+                    if (_sfSkipSkipped?.has(u.toLowerCase())) continue;
+                    if (!_sfSource.has(u)) _sfSource.set(u, row.sourceValue || "surplus");
+                    _sfRaw.push(u);
+                  }
+                  if (rows.length) {
+                    storage.deleteOverspillUsers(rows.map(r => r.id)).catch(() => {});
+                    tLog(`  Spread Follows: consumed ${rows.length} surplus candidate(s)`);
+                  }
+                } catch {}
+              }
+
+              if (_sfRaw.length < _spreadTarget * 3) {
+                const _sfShuffledSrcs = [...followSources].sort(() => Math.random() - 0.5);
+                for (const src of _sfShuffledSrcs) {
+                  if (_sfRaw.length >= _spreadTarget * 3) break;
+                  const srcLabel = src.type === "hashtag" ? `#${src.value.replace(/^#/, "")}` : `@${src.value.replace(/^@/, "")}`;
+                  try {
+                    if (src.type === "hashtag") {
+                      const res = await _sfHiker.getHashtagUsers(src.value.replace(/^#/, ""), 50);
+                      for (const u of res.users) {
+                        if (!_sfSource.has(u.username)) _sfSource.set(u.username, srcLabel);
+                        if (u.isVerified !== undefined || u.isPrivate !== undefined || u.followerCount !== undefined)
+                          _sfMeta.set(u.username, { isVerified: u.isVerified, isPrivate: u.isPrivate, followerCount: u.followerCount });
+                        _sfRaw.push(u.username);
+                      }
+                      tLog(`  Spread Follows: ${srcLabel} → ${res.users.length} users`);
+                    } else if (src.type === "target_followers") {
+                      const userInfo = await _sfHiker.getUserByUsername(src.value.replace(/^@/, "")).catch(() => null);
+                      if (!userInfo?.pk) continue;
+                      const followers = await _sfHiker.getFollowers(userInfo.pk, 50);
+                      for (const u of followers) {
+                        if (!_sfSource.has(u.username)) _sfSource.set(u.username, srcLabel);
+                        if (u.isVerified !== undefined || u.isPrivate !== undefined || u.followerCount !== undefined)
+                          _sfMeta.set(u.username, { isVerified: u.isVerified, isPrivate: u.isPrivate, followerCount: u.followerCount });
+                        _sfRaw.push(u.username);
+                      }
+                      tLog(`  Spread Follows: ${srcLabel} followers → ${followers.length} users`);
+                    }
+                  } catch (e: any) {
+                    if (e?.message === "cycle-aborted") throw e;
+                    tLog(`  Spread Follows: HikerAPI error for "${src.value}": ${e?.message}`);
+                  }
+                }
+              } else {
+                tLog("  Spread Follows: Surplus pool sufficient — skipping HikerAPI scrape");
+              }
+
+              // Dedup + filter candidates
+              let _sfCandidates = [...new Set(_sfRaw)].sort(() => Math.random() - 0.5);
+              if (_sfSkipFollowed?.size) _sfCandidates = _sfCandidates.filter(u => !_sfSkipFollowed!.has(u.toLowerCase()));
+              if (_sfSkipSkipped?.size)  _sfCandidates = _sfCandidates.filter(u => !_sfSkipSkipped!.has(u.toLowerCase()));
+              if (_sfFilters) {
+                _sfCandidates = _sfCandidates.filter(u => {
+                  const meta = _sfMeta.get(u);
+                  if (!meta) return true;
+                  if (_sfFilters.skipVerified && meta.isVerified === true) return false;
+                  if (_sfFilters.skipPrivate  && meta.isPrivate  === true) return false;
+                  if (_sfFilters.maxFollowers !== undefined && meta.followerCount !== undefined && meta.followerCount >= _sfFilters.maxFollowers) return false;
+                  if (_sfFilters.minFollowers !== undefined && meta.followerCount !== undefined && meta.followerCount <  _sfFilters.minFollowers) return false;
+                  return true;
+                });
+              }
+
+              const _sfPool = _sfCandidates.slice(0, _spreadTarget);
+              const _nonFollowTools = _toolSeq.filter(t => t !== 'follow');
+
+              if (_sfPool.length >= 2 && _nonFollowTools.length >= 1) {
+                _spreadCandidateSource = _sfSource;
+                _spreadCandidateMeta   = _sfMeta;
+
+                // Save unused candidates (beyond pool) back to surplus
+                if (_sfCandidates.length > _sfPool.length && (_sfProfileId && _sfProfileId > 0 || _sfSlotKey)) {
+                  const _surplus = _sfCandidates.slice(_sfPool.length);
+                  const _now = new Date().toISOString();
+                  storage.addOverspillUsers(_surplus.map(u => ({
+                    profileId: (_sfProfileId && _sfProfileId > 0) ? _sfProfileId : 0,
+                    phoneSlotKey: (_sfProfileId && _sfProfileId > 0) ? "" : _sfSlotKey,
+                    instagramUsername: u,
+                    instagramUserId: "",
+                    sourceValue: _sfSource.get(u) ?? "surplus",
+                    sourceType: "phone",
+                    scrapedAt: _now,
+                  }))).catch(() => {});
+                  tLog(`  Spread Follows: saved ${_surplus.length} unused candidate(s) to Surplus`);
+                }
+
+                // Interleave: after each non-follow tool, inject one follow slot.
+                // Any remaining follow slots are appended at the end.
+                const _spreadSeq: string[] = [];
+                let _sfi = 0;
+                for (const _nt of _nonFollowTools) {
+                  _spreadSeq.push(_nt);
+                  if (_sfi < _sfPool.length) _spreadSeq.push(`follow_spread:${_sfPool[_sfi++]}`);
+                }
+                while (_sfi < _sfPool.length) _spreadSeq.push(`follow_spread:${_sfPool[_sfi++]}`);
+
+                _toolSeq.splice(0, _toolSeq.length, ..._spreadSeq);
+                tLog(`▶ Spread Follows active (${_sfPool.length} user(s)) → ${_spreadSeq.join(' → ')}`);
+              } else if (_sfPool.length < 2) {
+                tLog(`▶ Spread Follows: only ${_sfPool.length} candidate(s) fetched — falling back to normal follow`);
+              }
+              // _nonFollowTools.length === 0: sequence unchanged, follow runs normally
+            }
+          } catch (e: any) {
+            if (e?.message === "cycle-aborted") throw e;
+            tLog(`▶ Spread Follows pre-fetch error — ${e?.message} — falling back to normal follow`);
+          }
+        }
+        // targetCount === 1: spread never applies, follow runs normally via standard dispatcher
+      }
+
       let _toolsRan = 0; // how many tools have executed before the current one
 
       for (const _tool of _toolSeq) {
@@ -6029,6 +6241,60 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           }
 
         // ── Follow Users ────────────────────────────────────────────────
+        } else if (_tool.startsWith('follow_spread:')) {
+          // ── Spread Follow slot — one pre-fetched user ─────────────────────
+          const _spreadUsername = _tool.slice('follow_spread:'.length);
+          tLog(`▶ Spread Follow → @${_spreadUsername}`);
+          try {
+            const _sfCount = await runFollowUsersStep(serial, {
+              usersMin: 1, usersMax: 1,
+              sources: followSources,
+              preloadedCandidates: {
+                targets: [_spreadUsername],
+                candidateSource: _spreadCandidateSource ?? new Map(),
+                candidateMeta:   _spreadCandidateMeta   ?? new Map(),
+              },
+              onLog: (msg) => tLog(`  ${msg}`),
+              recordFollow: (username, source) => recordMobileFollow(serial, username, source),
+              skipFollowedUsernames: await (async () => {
+                if (!globalSkipFollowed) return undefined;
+                const local = new Set(getMobileFollowedList(serial).map(e => e.username.toLowerCase()));
+                const globalSet = await storage.getAllFollowedUsernames();
+                for (const u of globalSet) local.add(u);
+                return local;
+              })(),
+              skipSkippedUsernames: await (async () => {
+                if (!globalSkipSkipped) return undefined;
+                const rows = await storage.getSkippedUsers(100_000);
+                return new Set(rows.map(s => s.instagramUsername.toLowerCase()));
+              })(),
+              browsing: injectBrowsingEnabled ? {
+                activatePctMin: injectBrowsingActivatePctMin, activatePctMax: injectBrowsingActivatePctMax,
+                beforeFollowPctMin: injectBrowsingBeforeFollowPctMin, beforeFollowPctMax: injectBrowsingBeforeFollowPctMax,
+                feedMin: injectBrowsingFeedMin, feedMax: injectBrowsingFeedMax,
+                clickPostPctMin: injectBrowsingClickPostPctMin, clickPostPctMax: injectBrowsingClickPostPctMax,
+                likePctMin: injectBrowsingLikePctMin, likePctMax: injectBrowsingLikePctMax,
+                shareFeedPctMin: injectBrowsingShareFeedPctMin, shareFeedPctMax: injectBrowsingShareFeedPctMax,
+                shareDmPctMin: injectBrowsingShareDmPctMin, shareDmPctMax: injectBrowsingShareDmPctMax,
+                savePostPctMin: injectBrowsingSavePostPctMin, savePostPctMax: injectBrowsingSavePostPctMax,
+                abandonFollowPctMin: injectBrowsingAbandonFollowPctMin, abandonFollowPctMax: injectBrowsingAbandonFollowPctMax,
+              } : undefined,
+              filters: followFiltersEnabled
+                ? { skipVerified: followFilterVerifiedUsers, maxFollowers: followFilterMaxFollowers25k ? 25_000 : undefined,
+                    skipPrivate: followFilterPrivateUsers, minFollowers: followFilterMinFollowers50 ? 50 : undefined,
+                    requireEnglish: followFilterEnglishSpeaking }
+                : undefined,
+              profileId: mobileProfileId ?? undefined,
+              phoneSlotKey: mobileProfileId ? undefined : (slotUsername || undefined),
+            });
+            followedCount += _sfCount;
+            steps.push(`follow_spread(@${_spreadUsername}${_sfCount > 0 ? '' : ',skipped'})`);
+          } catch (e: any) {
+            if (e?.message === "cycle-aborted") throw e;
+            tLog(`▶ Spread Follow @${_spreadUsername} error — ${e?.message}`);
+            steps.push(`follow_spread(@${_spreadUsername},error)`);
+          }
+
         } else if (_tool === 'follow') {
           if (_toolActivated[_tool]) { // pre-rolled above
             tLog("▶ Follow Users — fetching targets via HikerAPI…");

@@ -2468,6 +2468,7 @@ interface AutomationSettingsData {
   followEnabled: boolean;
   followUsersMin: number;
   followUsersMax: number;
+  followSpreadFollows: boolean;
   followSources: { type: string; value: string }[];
   // Inject Browsing — per-user profile-browsing behaviour woven into the
   // Follow Users flow (12 Jul 2026 rework). No per-item toggles: search
@@ -2573,6 +2574,7 @@ const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   viewReelsWatchPctMin: 30, viewReelsWatchPctMax: 70,
   followEnabled: false,
   followUsersMin: 1, followUsersMax: 3,
+  followSpreadFollows: false,
   followSources: [],
   injectBrowsingEnabled: false,
   injectBrowsingActivatePctMin: 0, injectBrowsingActivatePctMax: 0,
@@ -3113,6 +3115,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             followEnabled: s.followEnabled,
             followUsersMin: s.followUsersMin,
             followUsersMax: s.followUsersMax,
+            followSpreadFollows: s.followSpreadFollows,
             followSources: s.followSources,
             injectBrowsingEnabled: s.injectBrowsingEnabled,
             injectBrowsingActivatePctMin: s.injectBrowsingActivatePctMin,
@@ -3561,7 +3564,7 @@ const COPY_SECTIONS: CopySection[] = [
   { key: 'follow',        label: 'Follow Users', sub: [
     { key: 'followEnabled',     label: 'Enabled',                       fields: ['followEnabled'] },
     { key: 'followActivate',    label: 'Activate Percentage',           fields: ['followActivatePctMin','followActivatePctMax'] },
-    { key: 'followCount',       label: 'Follow count per session',      fields: ['followUsersMin','followUsersMax'] },
+    { key: 'followCount',       label: 'Follow count per session',      fields: ['followUsersMin','followUsersMax','followSpreadFollows'] },
     { key: 'followSources',     label: 'Follow sources list',           fields: ['followSources'] },
     { key: 'injectAbandon',     label: 'Abandon Follow %',              fields: ['injectBrowsingAbandonFollowPctMin','injectBrowsingAbandonFollowPctMax'] },
   ]},
@@ -4825,7 +4828,7 @@ function AutomationSettingsPanel({
 
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground">Users to follow per operation</Label>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.followUsersMin}
                 onChange={e => setSettings(s => ({ ...s, followUsersMin: clamp4(Number(e.target.value)) }))}
@@ -4835,6 +4838,16 @@ function AutomationSettingsPanel({
                 value={settings.followUsersMax}
                 onChange={e => setSettings(s => ({ ...s, followUsersMax: clamp4(Number(e.target.value)) }))}
                 disabled={loading} />
+              <label className="flex items-center gap-2 text-sm cursor-pointer select-none ml-1">
+                <input
+                  type="checkbox"
+                  checked={settings.followSpreadFollows}
+                  onChange={e => setSettings(s => ({ ...s, followSpreadFollows: e.target.checked }))}
+                  disabled={loading}
+                  className="w-4 h-4 accent-primary rounded"
+                />
+                <span className="text-foreground font-medium">Spread Follows</span>
+              </label>
             </div>
           </div>
 
