@@ -3564,7 +3564,8 @@ const COPY_SECTIONS: CopySection[] = [
   { key: 'follow',        label: 'Follow Users', sub: [
     { key: 'followEnabled',     label: 'Enabled',                       fields: ['followEnabled'] },
     { key: 'followActivate',    label: 'Activate Percentage',           fields: ['followActivatePctMin','followActivatePctMax'] },
-    { key: 'followCount',       label: 'Follow count per session',      fields: ['followUsersMin','followUsersMax','followSpreadFollows'] },
+    { key: 'followCount',       label: 'Follow count per session',      fields: ['followUsersMin','followUsersMax'] },
+    { key: 'followSpread',      label: 'Spread Follows',                fields: ['followSpreadFollows'] },
     { key: 'followSources',     label: 'Follow sources list',           fields: ['followSources'] },
     { key: 'injectAbandon',     label: 'Abandon Follow %',              fields: ['injectBrowsingAbandonFollowPctMin','injectBrowsingAbandonFollowPctMax'] },
   ]},
