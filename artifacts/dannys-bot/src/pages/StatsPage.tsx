@@ -2,7 +2,7 @@ import { useRef, useState, useMemo, useEffect, Fragment } from "react";
 import { usePersistentSetting } from "@/hooks/use-persistent-setting";
 import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { useQuery, useQueries } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { TrustScoreBadge } from "@/components/TrustScoreBadge";
 import { MetricsSlotTrustScoreBadge } from "@/components/MetricsSlotTrustScoreBadge";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -326,7 +326,13 @@ function PhoneFarmPhoneSection({
           <tr key={slot.idx} className="border-b border-border/50 hover:bg-muted/10 transition-colors">
             <td className="py-2.5 px-4 text-[12px]">
               <span className="text-blue-500 text-[10px] mr-1.5">Slot {slot.idx + 1}</span>
-              <span className="font-medium text-foreground">@{slot.username}</span>
+              <Link
+                href={`/mobile/farm/${encodeURIComponent(phone.serial)}?slot=${slot.idx}`}
+                className="font-medium text-foreground hover:text-primary hover:underline transition-colors"
+                title={`Open Human Session Tool for @${slot.username}`}
+              >
+                @{slot.username}
+              </Link>
             </td>
             {orderedLabels.map(s => {
               const daily = slot.daily[s.key] ?? 0;
