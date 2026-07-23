@@ -159,7 +159,7 @@ export function TrustScoresTabContent() {
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">Drag to reorder. Click a badge to open its account settings.</p>
+        <p className="text-sm text-muted-foreground">Drag to reorder. Click a badge to open its mobile Human Session Tool settings.</p>
 
       <div className="space-y-1.5 w-full">
         {levels.map((level, idx) => {
@@ -181,11 +181,11 @@ export function TrustScoresTabContent() {
                 <GripVertical className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
                 <span className="w-5 text-[11px] font-bold text-muted-foreground text-left">{idx + 1}</span>
                 <button
-                  onClick={() => setLocation(`/trust-scores/${level.id}?tab=human-session`)}
+                  onClick={() => setLocation(`/trust-scores/${level.id}`)}
                   onMouseDown={e => e.stopPropagation()}
                   className="flex items-center justify-center gap-1.5 rounded-full px-3.5 py-1.5 hover:opacity-80 active:scale-95 transition-all"
                   style={{ background: level.bg, border: `1px solid ${level.border}`, width: 130, minWidth: 130, maxWidth: 130, overflow: "hidden" }}
-                  title="Open Human Session settings for this trust score"
+                  title="Open mobile Human Session Tool settings for this trust score"
                 >
                   <span style={{ fontSize: 13, fontWeight: 700, color: level.text, letterSpacing: "0.05em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{level.label}</span>
                   <Icon size={13} color={level.text} fill={level.text} strokeWidth={2} className="shrink-0" />

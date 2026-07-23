@@ -43,3 +43,4 @@
 - [Share-sheet confirm+recipient-scan dump timing](share-sheet-dump-timing.md) — two sequential ~9s uiautomator dumps left the DM share sheet idle long enough to close before recipient pick; combine confirm+scan into one dump.
 - [Your Story same resource-id as DM contacts](share-sheet-your-story-rid.md) — grid_view_pog_avatar_view is used for BOTH Your Story/Close Friends AND real DM contact avatars; must XML-lookback-filter parent content-desc before picking.
 - [Collision Preventer turn priority](collision-preventer-turn-priority.md) — preserve each HST due time through collision rest; queued slots run next, then receive a fresh interval only after completion.
+- [Trust Score mobile settings](trust-score-mobile-settings.md) — Trust Score tiers use the mobile-engine Human Session Tool surface, not browser-tool settings, and must not start live device cycles.

@@ -36,7 +36,7 @@ declare const __API_PORT__: string;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface UsbPhone {
+export interface UsbPhone {
   serial:          string;
   state:           "device" | "unauthorized" | "offline" | string;
   model?:          string;
@@ -2394,7 +2394,7 @@ function NoPhonesPanel({ rawOutput }: { rawOutput?: string | null }) {
 
 // ─── Automation settings panel (right column, per device) ────────────────────
 
-interface AutomationSettingsData {
+export interface AutomationSettingsData {
   enabled: boolean;
   cycleIntervalMin: number;
   cycleIntervalMax: number;
@@ -2542,7 +2542,7 @@ interface AutomationSettingsData {
   dismissDirection: "auto" | "left" | "up";
 }
 
-const AUTOMATION_DEFAULTS: AutomationSettingsData = {
+export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
   feedEnabled: true, storiesEnabled: true, shuffleToolOrder: false,
   actionDelayMin: 5, actionDelayMax: 10,
@@ -3975,7 +3975,7 @@ function CopySettingsDialog({
   );
 }
 
-function AutomationSettingsPanel({
+export function AutomationSettingsPanel({
   phone, settings, setSettings, setEnabledByUser, loading, saveError, running, nextRunAt,
   slotIdx, slotUsername, slotUsernames, onCopied, showCopyDialog, setShowCopyDialog,
 }: {

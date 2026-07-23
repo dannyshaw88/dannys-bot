@@ -1471,6 +1471,49 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to save slot automation settings" }); }
   });
 
+  // ── Trust Score template Human Session Tool settings ───────────────────────
+  // Trust Score tiers use the same mobile-engine settings UI as Phone Farm, but
+  // they are templates rather than physical devices/slots. Keep their
+  // configuration in global settings so editing a tier never requires a
+  // connected phone and never starts a live automation cycle.
+  const trustScoreAutomationDefaults = () => automationSchema.parse({
+    actionDelayMin: 5,
+    actionDelayMax: 10,
+    likePercentMin: 3,
+    likePercentMax: 5,
+    feedScrollMin: 5,
+    feedScrollMax: 10,
+  });
+  const trustScoreAutomationKey = (trustScoreId: string) =>
+    `trust_score_mobile_settings_${trustScoreId}`;
+  const trustScoreIdSchema = z.string().min(1).max(100);
+
+  app.get("/api/trust-score-templates/:trustScoreId/mobile-settings", async (req: Request, res: Response) => {
+    try {
+      const trustScoreId = trustScoreIdSchema.parse(p(req, "trustScoreId"));
+      const all = await storage.getGlobalSettings();
+      const savedRaw = all[trustScoreAutomationKey(trustScoreId)];
+      const saved = savedRaw ? JSON.parse(savedRaw) : {};
+      res.json({ ...trustScoreAutomationDefaults(), ...saved });
+    } catch (e: any) {
+      res.status(400).json({ error: e?.message ?? "Failed to load Trust Score settings" });
+    }
+  });
+
+  app.post("/api/trust-score-templates/:trustScoreId/mobile-settings", async (req: Request, res: Response) => {
+    try {
+      const trustScoreId = trustScoreIdSchema.parse(p(req, "trustScoreId"));
+      const input = automationSchema.parse(req.body);
+      await storage.setGlobalSetting(
+        trustScoreAutomationKey(trustScoreId),
+        JSON.stringify(input),
+      );
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(400).json({ error: e?.message ?? "Failed to save Trust Score settings" });
+    }
+  });
+
   // ── Per-device prefs (hardware-level, not per-slot) ────────────────────────
   // Stored separately from automation settings so they can never be
   // accidentally overwritten by an autosave of the automation panel.
