@@ -9,6 +9,7 @@ When the platform auto-registers artifacts for an existing project, it creates i
 
 **How to apply:**
 - Never assume "one workflow = one process" once artifacts are involved. Check `System log status` / workflow list for duplicate workflow names running the same underlying script whenever a project has been auto-artifactified.
+- Artifact-managed API workflows may receive a different port than the primary API workflow; frontend proxy defaults must match the workflow serving the artifact, or browser API calls can fail while localhost checks pass.
 - For any singleton stateful service, implement a cross-process single-instance lock keyed to a filesystem location guaranteed shared across the duplicate processes regardless of `cwd` — e.g. `os.tmpdir()`, not `process.cwd()`-relative paths (since duplicate processes can have different cwd → different resolved data paths, e.g. two separate SQLite files, even though they were meant to be "the same" instance).
 - Use an atomic acquire primitive (`fs.link()` test-and-set, not `writeFile`/`existsSync` check-then-write) with staleness-based takeover and token-verified periodic renewal, so a crashed owner doesn't permanently starve every other process.
 - Release the lock on `SIGTERM`/`SIGINT`/`exit` (best-effort sync unlink) — otherwise every workflow restart makes the next owner wait out the full staleness window before it can take over.
