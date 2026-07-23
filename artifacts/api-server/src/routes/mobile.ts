@@ -3399,10 +3399,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // This block is isolated to the View Reels loop and has no effect on
         // any other tool.
         {
+          // Match what findReelActionIcons actually anchors on: content-desc
+          // "Like" / "Unlike" in the right-side column. The old resource-id
+          // list (like_count, comment_button, direct_share_button) does not
+          // exist on all devices/IG builds, causing the poll to burn its full
+          // 6 × 2 s budget even when the reel is visibly playing.
           const REEL_NODES = [
-            "com.instagram.android:id/like_count",
-            "com.instagram.android:id/comment_button",
-            "com.instagram.android:id/direct_share_button",
+            'content-desc="Like"',
+            'content-desc="Unlike"',
           ];
           const POLL_MS   = 2000;
           const MAX_POLLS = 6; // up to 12 s extra wait
