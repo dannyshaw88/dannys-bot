@@ -4,6 +4,62 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.130
+
+### Fix — View Stories Comment % incorrectly reported replies as disabled
+
+**Problem:**
+
+The **Comment %** setting in **View Stories from Feed** was being rolled, but
+the action was skipped with:
+
+> author has message replies disabled
+
+This happened on a Xiaomi Redmi A5 even though the story visibly displayed the
+**Send message** reply field. As a result, configured story-comment activity
+never reached the emoji picker or send step.
+
+**Root cause:**
+
+The preflight check required the reply-bar node to contain both:
+
+- `message_composer_container`
+- the exact parent description `Send Message or Reaction`
+
+The real device's UIAutomator dump exposed the stable composer resource ID,
+while the visible `Send message` label appeared on the separate
+`composer_text` child. Instagram can also omit, localize, or move these labels
+between app builds and devices, so the exact description check produced a
+false “comments disabled” result.
+
+**Fix:**
+
+- Treat the `message_composer_container` resource ID as the authoritative
+  signal that story replies are available.
+- Support both the live Android XML attributes (`resource-id`,
+  `content-desc`) and the shortened inspection-dump attributes (`id`, `desc`).
+- Find the composer node itself and tap its actual UIAutomator bounds.
+- Skip safely and log a diagnostic if the composer node has no usable bounds;
+  there is no guessed fallback tap.
+- Log whether the composer container, legacy label, and visible child label
+  were found so future device-specific failures can be diagnosed from one run.
+
+**Verification:**
+
+- Confirmed against the uploaded Xiaomi UIAutomator dump:
+  `message_composer_container` at `[16,1398][528,1494]`.
+- Confirmed against live-style Android XML using
+  `com.instagram.android:id/message_composer_container`.
+- API server esbuild passes and the API workflow starts successfully.
+
+**Windows installer:**
+
+The existing canonical `.github/workflows/build-windows-installer.yml` workflow
+continues to run on pushes to `main` and `v*` tags. It builds the web/API
+bundles, packages the Electron application on Windows, and uploads the
+`Equinox-Windows-Installer` artifact. Deprecated duplicate workflows remain
+inert by design so one push does not trigger multiple installer builds.
+
 ## v1.2.129
 
 ### Feature — Story Comment %: send a random emoji reply to stories
