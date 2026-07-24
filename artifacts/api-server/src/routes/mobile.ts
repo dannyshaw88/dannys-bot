@@ -3839,16 +3839,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     let likes = 0, sharesFeed = 0, sharesDm = 0, saves = 0, reelsViewed = 0;
 
-    // Session scroll personality for Reels — no back-scroll (it would snap
-    // to the previous clip mid-loop). Weights are relative, same approach as
-    // the feed/explore tools so each Reels session has its own character.
+    // Session scroll personality for Reels — same dynamic-weight approach as
+    // feed/explore. Back-scroll snaps fully to the previous clip (Reels snaps
+    // per clip, unlike the feed's partial nudge), which just means occasionally
+    // rewatching a reel — a normal human behaviour kept at a low weight.
     const reelsScrollWeights = {
       skim:      Math.max(5,  28 + Math.round((Math.random() - 0.5) * 24)),  // ~16–40
       normal:    Math.max(10, 50 + Math.round((Math.random() - 0.5) * 24)),  // ~38–62
       interested:Math.max(2,  14 + Math.round((Math.random() - 0.5) * 16)),  //  ~6–22
-      back:      0,  // disabled — would navigate to the previous reel
+      back:      Math.max(0,   5 + Math.round((Math.random() - 0.5) *  8)),  //   1–9 (low — occasional rewatch)
     };
-    onLog?.(`Reels scroll personality — skim:${reelsScrollWeights.skim} normal:${reelsScrollWeights.normal} interested:${reelsScrollWeights.interested}`);
+    onLog?.(`Reels scroll personality — skim:${reelsScrollWeights.skim} normal:${reelsScrollWeights.normal} interested:${reelsScrollWeights.interested} back:${reelsScrollWeights.back}`);
 
     // Reels snap fully to the next clip on a swipe — unlike the feed's
     // partial scroll (runCheckFeedLoop), a single full-height swipe here
