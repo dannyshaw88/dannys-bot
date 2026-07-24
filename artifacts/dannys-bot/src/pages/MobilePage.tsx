@@ -2663,7 +2663,7 @@ const _hstNextRunAt = new Map<string, number>();
 // the Human Session Tool tab never unmounts this and interrupts an
 // in-progress automation cycle — the loop must keep running in the
 // background regardless of which tab is currently visible.
-function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void, slotIdx?: number, slotUsername?: string, requestSlot?: (idx: number, readyAt: number) => Promise<boolean>, releaseSlot?: (idx: number, skipRest?: boolean) => void, cancelQueuedSlot?: (idx: number) => void, refreshKey?: number) {
+function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void, slotIdx?: number, slotUsername?: string, requestSlot?: (idx: number, readyAt: number) => Promise<boolean>, releaseSlot?: (idx: number, skipRest?: boolean) => void, cancelQueuedSlot?: (idx: number) => void, refreshKey?: number, collisionPreventerConfig?: CollisionPreventerConfig) {
   const [settings, setSettings] = useState<AutomationSettingsData>(AUTOMATION_DEFAULTS);
   const [loading,  setLoading]  = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -2697,6 +2697,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   phoneRef.current = phone;
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  // Always-current ref to the collision preventer config so runCycle can read
+  // it without capturing a stale closure value.
+  const collisionConfigRef = useRef(collisionPreventerConfig);
+  collisionConfigRef.current = collisionPreventerConfig;
   // Abort controller for the currently in-flight automation-cycle fetch.
   // When the master toggle is flipped off, this is aborted immediately so
   // the running cycle also receives a stop signal server-side.
@@ -3234,8 +3238,20 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       if (_hstStop.has(key)) { _hstStop.delete(key); setRunning(false); _hstNextRunAt.delete(key); setNextRunAt(null); return; }
       setRunning(false);
       const s2 = settingsRef.current;
-      const safeMin = Math.max(1, Math.min(s2.cycleIntervalMin, s2.cycleIntervalMax));
-      const safeMax = Math.max(1, Math.max(s2.cycleIntervalMin, s2.cycleIntervalMax));
+      const cp2 = collisionConfigRef.current;
+      // When the Collision Preventer is enabled use its X–Y mins as the
+      // inter-cycle interval for this profile.  The CP was designed to control
+      // how long the device rests before the NEXT slot fires, but for a single
+      // profile on My Device its rest window IS the profile's scheduling
+      // interval.  Using the HST "Run every" value here (the old behaviour)
+      // caused the CP min/max to be ignored entirely for scheduling purposes.
+      const useCP = cp2?.enabled && cp2.restMinMin > 0;
+      const safeMin = useCP
+        ? Math.max(1, Math.min(cp2!.restMinMin, cp2!.restMinMax))
+        : Math.max(1, Math.min(s2.cycleIntervalMin, s2.cycleIntervalMax));
+      const safeMax = useCP
+        ? Math.max(1, Math.max(cp2!.restMinMin, cp2!.restMinMax))
+        : Math.max(1, Math.max(s2.cycleIntervalMin, s2.cycleIntervalMax));
       const gapMs = (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
       const nextFireAt2 = Date.now() + Math.round(gapMs);
       _hstNextRunAt.set(key, nextFireAt2);
@@ -5841,11 +5857,12 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   refreshKey?: number;
   onCopied?: (targetSlotIdxs: number[]) => void;
   onAutomationState?: (slotIdx: number, state: SlotAutomationState) => void;
+  collisionConfig?: CollisionPreventerConfig;
 }>(function SlotHumanSessionView(
-  { phone, slotIdx, slotUsername, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, onCopied, onAutomationState },
+  { phone, slotIdx, slotUsername, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, onCopied, onAutomationState, collisionConfig },
   ref,
 ) {
-  const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey);
+  const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, collisionConfig);
   const isFirst = slotIdx === 0;
   const isLast = slotIdx === (slotCount ?? 1) - 1;
 
@@ -5953,7 +5970,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   const [openSlotTool, setOpenSlotTool] = useState<number | null>(initialSlot ?? null);
   useEffect(() => { onSlotChange?.(openSlotTool); }, [openSlotTool]);
   useImperativeHandle(ref, () => ({ backToSlots: () => setOpenSlotTool(null) }));
-  const { requestSlot, releaseSlot, cancelQueuedSlot } = useCollisionPreventer(phone?.serial ?? null);
+  const { config: collisionConfig, requestSlot, releaseSlot, cancelQueuedSlot } = useCollisionPreventer(phone?.serial ?? null);
   const hydratedRef = useRef(false);
   const lastSavedRef = useRef<string>(JSON.stringify(Array.from({ length: ACCT_SLOT_COUNT }, emptySlot)));
   // Kept outside the effect so clearTimeout on new keystrokes works without
@@ -6115,6 +6132,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
             requestSlot={requestSlot}
             releaseSlot={releaseSlot}
             cancelQueuedSlot={cancelQueuedSlot}
+            collisionConfig={collisionConfig}
             refreshKey={slotRefreshKeys[i] ?? 0}
             onCopied={handleCopied}
             onAutomationState={handleSlotAutomationState}
