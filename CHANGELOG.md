@@ -4,6 +4,50 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.122
+
+### Fix — Follow Users: skip Instagram search suggestion chip that blocked profile navigation
+
+**Problem:**
+Instagram recently started inserting a "search suggestion chip" as the very first row in search results when you type a username (e.g. `@pro_liftts077`). This chip is not a user profile — tapping it simply re-runs the same search query and leaves you on the results page. The actual target user profile appears in the row below it.
+
+The Follow Users tool was tapping the first result it found, which was now the chip. Since no profile page loaded, the Follow button was never found, and the tool logged "already following?" and moved on — silently skipping the follow entirely.
+
+**Two code paths were affected:**
+
+**Path 1 — Accessibility tree (a11y):**
+`findAndTapUserInSearch` used `_findElem()` which returns only the first regex match for the username in the UIAutomator XML dump. The suggestion chip's text (`@pro_liftts077`) matched the partial-match regex before the real user row, so it was tapped first.
+
+Fix: introduced a new `_findAllElems()` helper that collects every coordinate matching the username, deduplicates them, sorts top-to-bottom, and groups them into ~30 px row bands. If two or more distinct rows are found, the topmost is identified as the suggestion chip and skipped — the second row (the real user profile) is tapped instead. If only one row is found (IG builds without the chip), that single result is used as before. A new log line `Follow: suggestion chip detected (N rows) — skipping topmost, tapping real user at (x,y)` is emitted when the chip-skip fires.
+
+**Path 2 — Positional fallback (Xiaomi Redmi 12 5G and similar):**
+On certain devices the entire search results area — keyboard and result rows — is absent from the UIAutomator accessibility tree even when visually rendered. The code had a positional fallback that tapped at `50% × 22%` of screen height. The original comment said "first result row centre is at ~22 %", but with the new chip layout the chip sits at ~22 % and the real first user row has moved to ~26–27 %. Confirmed from live device capture (24 Jul 2026, 1080×2460 screen). Updated positional fallback from `fbH × 0.22` to `fbH × 0.27` to land on the actual profile row.
+
+**Files changed:**
+- `artifacts/api-server/src/mobile/androidManager.ts` — `_findAllElems()` helper, updated `findAndTapUserInSearch` loop, positional fallback Y updated 0.22 → 0.27
+
+---
+
+### Fix — My Device Collision Preventer: use its own X–Y mins to schedule profile runs, not the HST interval
+
+**Problem:**
+The Collision Preventer has its own configurable "rest between slots" range (X–Y minutes). On My Device with a single account slot, users expected this range to control how long the device waits before re-running the Human Session Tool cycle. Instead, the post-cycle scheduling always used the HST's "Run every X to Y mins" setting, making the Collision Preventer's interval values have no effect on scheduling whatsoever.
+
+**Root cause:**
+After each cycle completes, `runCycle` reschedules the next run using `cycleIntervalMin`/`cycleIntervalMax` unconditionally (lines 3236–3243 of `MobilePage.tsx`). The Collision Preventer's `restMinMin`/`restMinMax` were only fed into a rest-window timer that fires between concurrent slot hand-offs. With a single slot there is no hand-off queue, so that rest timer fired, found nothing in the queue, and returned immediately — the CP values never influenced when the next cycle ran.
+
+**Fix:**
+- Added a `collisionPreventerConfig` parameter to `useAutomationSettings` with an always-current ref (`collisionConfigRef`) so the async `runCycle` closure reads the live config at fire-time, not a stale captured value.
+- Post-cycle scheduling now branches: if the Collision Preventer is enabled and `restMinMin > 0`, the next cycle is delayed by a random value drawn from `restMinMin–restMinMax`; otherwise it falls back to `cycleIntervalMin–cycleIntervalMax` as before.
+- The collision config is threaded from `useCollisionPreventer` (which already held it but did not expose it to the scheduler) through the parent component → `SlotHumanSessionView` prop → `useAutomationSettings` parameter.
+
+This means the HST "Run every" field now acts as the fallback scheduling interval when the Collision Preventer is off, and the Collision Preventer X–Y mins take over as the scheduling interval when it is on — matching what the UI implies.
+
+**Files changed:**
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — `useAutomationSettings` signature, `collisionConfigRef`, post-cycle scheduling branch, `SlotHumanSessionView` props, parent destructure + prop pass-through
+
+---
+
 ## v1.2.121
 
 ### Fix — Make a Post assigned directory now persists permanently per account slot
