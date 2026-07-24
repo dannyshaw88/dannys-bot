@@ -2910,13 +2910,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // the presence of id="message_composer_container" with
       // desc="Send Message or Reaction" in the accessibility tree.
       //
-      // Flow (from UIAutomator dumps):
+      // Flow:
       //   SEND-MESSAGE-BAR  → message_composer_container present → tap to open keyboard
-      //   ENTER-MESSAGE     → keyboard open, reel_reaction_toolbar visible
-      //   PICK-AN-EMOJI     → tap emoji button on system keyboard (bottom-left, not in a11y tree)
-      //                       → scroll picker 1-50× (swipe up = scrolls list down)
-      //                       → tap random position in emoji grid area
-      //   TAP-SEND-PAPER-AIRPLANE → emoji in field (text="😁"), send button visible:
+      //   ENTER-MESSAGE     → keyboard open; inject emoji via `adb shell input text`
+      //                       (no picker needed — InputManager.injectString() writes
+      //                       directly into the focused EditText on Android 8+)
+      //   TAP-SEND-PAPER-AIRPLANE → emoji in field, send button visible:
       //                       id="row_thread_composer_send_button_background" desc="Send"
       if (willComment && (await stillInStoryViewer(/* fastOnly= */ true))) {
         try {
@@ -2972,43 +2971,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             await android.tap(serial, _composerX, _composerY);
             await sleepOrAbort(serial, 800); // keyboard animates up
 
-            // Tap the emoji/smiley button on the system keyboard to open the
-            // full emoji picker. System keyboard elements do NOT appear in the
-            // UIAutomator accessibility tree, so locate the key from the live
-            // screenshot: it is immediately left of the wide space bar.
-            // Never use a bottom-left coordinate fallback — on the Redmi A5
-            // that coordinate is in the Android navigation bar and the swipes
-            // that follow type letters into the message field instead.
-            const _emojiKey = await android.findKeyboardEmojiButton(serial);
-            if (!_emojiKey) {
-              onLog?.(`Story ${s + 1}: emoji comment skipped — keyboard emoji key not visually detected`);
-              logger.warn({ serial, story: s + 1 }, "[view-stories] emoji comment — keyboard emoji key not detected");
-              await android.pressBack(serial).catch(() => {});
-              continue;
-            }
-            onLog?.(`Story ${s + 1}: tapping keyboard emoji button at (${_emojiKey.x},${_emojiKey.y})…`);
-            await android.tap(serial, _emojiKey.x, _emojiKey.y);
-            await sleepOrAbort(serial, 500); // emoji picker opens
-
-            // Scroll the emoji picker 1-50 random times.
-            // Swipe up = drag from lower y to higher y = scrolls list downward.
-            const _scrollCount = 1 + Math.floor(Math.random() * 50);
-            onLog?.(`Story ${s + 1}: scrolling emoji picker ${_scrollCount}×…`);
-            for (let _ei = 0; _ei < _scrollCount; _ei++) {
-              await android.swipe(serial,
-                Math.round(w * 0.50), Math.round(h * 0.84),
-                Math.round(w * 0.50), Math.round(h * 0.71),
-                150);
-              await sleepOrAbort(serial, 80);
-            }
-
-            // Tap a random position inside the emoji grid.
-            // Emoji grid occupies the keyboard area from ~h*0.77 to ~h*0.91.
-            const _emojiX = Math.round(w * 0.08 + Math.random() * w * 0.84);
-            const _emojiY = Math.round(h * 0.77 + Math.random() * h * 0.14);
-            onLog?.(`Story ${s + 1}: tapping random emoji at (${_emojiX},${_emojiY})…`);
-            await android.tap(serial, _emojiX, _emojiY);
-            await sleepOrAbort(serial, 400); // emoji enters field; keyboard may close
+            // Type a random emoji directly via ADB text injection.
+            //
+            // Every previous approach tried to open the emoji picker by
+            // pixel-scanning a live screencap to locate the smiley key on the
+            // system keyboard.  That screencap takes ~1.5 s to transfer over
+            // USB — long enough for the keyboard to disappear on some devices/
+            // Instagram builds before the scan completes.  The result was
+            // always "keyboard emoji key not visually detected" → skip.
+            //
+            // `adb shell input text <emoji>` calls Android's
+            // InputManager.injectString() directly — no keyboard UI involved,
+            // no timing dependency, no pixel detection.  It works on Android 8+
+            // (including all Xiaomi/Redmi devices in the farm) and is already
+            // used elsewhere in this codebase for username/search injection.
+            const _STORY_EMOJIS = [
+              '🔥','❤️','😍','😂','🙌','👏','💪','🤩','😎','✨',
+              '💯','🥰','😘','💖','🎉','👍','🤙','💫','🌟','👀',
+              '😁','🤣','😊','💕','🫶','🙏','😏','🤯','🫠','💀',
+              '😭','🥹','☠️','💥','🤌','👁️','🫡','🤑','😤','🤤',
+            ];
+            const _chosenEmoji = _STORY_EMOJIS[Math.floor(Math.random() * _STORY_EMOJIS.length)];
+            onLog?.(`Story ${s + 1}: typing emoji "${_chosenEmoji}" via ADB text injection…`);
+            await android.inputText(serial, _chosenEmoji);
+            await sleepOrAbort(serial, 400); // emoji enters field
 
             // Find the send button that appears after the emoji is entered.
             // From TAP-SEND-PAPER-AIRPLANE dump:

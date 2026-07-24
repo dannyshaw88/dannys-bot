@@ -4,6 +4,49 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.137 — 2026-07-24
+
+### Fixed — Story emoji comment never sent (keyboard disappears before screencap can scan it)
+
+**Symptom:**
+Every story comment cycle logged
+`Story N: emoji comment skipped — keyboard emoji key not visually detected`
+and sent nothing, even though the keyboard visibly appeared on screen after
+tapping the composer bar.
+
+**Root cause — screencap race:**
+The emoji key was located by capturing a PNG screenshot with
+`adb exec-out screencap -p` and pixel-scanning it for the smiley key in the
+keyboard's bottom row. That screencap takes **~1.5 seconds** to transfer over
+USB — long enough for the keyboard to close on this device/Instagram build
+before the scan even starts. By the time the pixels arrived, the keyboard was
+already gone, so the scan always returned null and the comment was skipped.
+
+This approach had been patched multiple times across several versions to handle
+different keyboard themes (light → dark → gray → tinted), key-glyph split
+segments, and adjacency tolerances — but every fix still depended on the
+screencap arriving while the keyboard was on screen, which this device does
+not guarantee.
+
+**Fix — bypass the emoji picker entirely (`artifacts/api-server/src/routes/mobile.ts`):**
+
+Instead of:
+1. Screencap the screen → pixel-scan for smiley key → tap it → open picker →
+   random-scroll picker → tap random grid position → read dump → send
+
+The flow is now:
+1. Pick a random emoji from a 40-entry pool
+2. `adb shell input text <emoji>` — Android's `InputManager.injectString()`
+   writes directly into the focused EditText. No keyboard UI involved, no
+   timing dependency, no pixel detection.
+3. Read dump → tap send button
+
+`adb shell input text` with Unicode/emoji works on Android 8+ (all devices in
+this farm). The same `android.inputText()` helper is already used elsewhere
+in the codebase for username search injection without issues.
+
+---
+
 ## v1.2.136 — 2026-07-24
 
 ### Fixed — Spread Follow fails on every user after the first
