@@ -4,6 +4,46 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.121
+
+### Fix — Make a Post assigned directory now persists permanently per account slot
+
+**Two root causes found and fixed:**
+
+**Cause 1 — Copy Settings was wiping the folder path.**
+`makePostLocalFolderPath` was listed in the `postLocalFolder` Copy Settings
+section. When Copy Settings ran from a slot that had no folder assigned (empty
+string), it stamped `""` onto every target slot — silently clearing any path
+that was there. Fixed by removing `makePostLocalFolderPath` from COPY_SECTIONS
+entirely. Copy Settings now copies the `enabled`, `no-repeat`, `random`, and
+`delete-after-upload` toggles but never touches the folder path.
+
+**Cause 2 — No dedicated durable store for the path.**
+The folder path was persisted only through the normal autosave flow into
+`mobile-instances.json`. This made it vulnerable to overwrite by a Copy
+Settings call, a USB-flicker settings reload, or any other race that replaces
+the settings object with an older snapshot.
+
+Fixed using the same pattern already proven for `mobile-followed` and
+`mobile-posted-local`:
+
+- **Server:** A new `mobile-folder-paths/` directory (anchored to
+  `EQUINOX_DATA_DIR`, same as all other data dirs) holds one plain-text file
+  per slot: `<serial>_slot<N>.txt`.  Two new endpoints handle it:
+  `GET /api/mobile/devices/:serial/slots/:slotIdx/folder-path` and
+  `POST /api/mobile/devices/:serial/slots/:slotIdx/folder-path`.
+  The POST also patches `mobile-instances.json` as a secondary backup.
+  The GET automation-settings endpoint now merges the dedicated file value on
+  top of whatever `mobile-instances.json` has, so the dedicated file always
+  wins on load.
+
+- **Client:** When the user selects a folder via the Electron dialog, the new
+  `/folder-path` endpoint is called immediately (bypassing the autosave
+  debounce). The path is therefore written to its own file at the moment of
+  assignment and can never be erased by a subsequent settings copy or reload.
+
+---
+
 ## v1.2.120
 
 ### Fix — HST Follow Users "Followed" tab now isolated per account slot

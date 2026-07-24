@@ -3609,7 +3609,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'postImgSettings',   label: 'Image Settings',                fields: ['makePostImageSettingsEnabled','makePostImageSettings'] },
     { key: 'postHikerApi',      label: 'Use Hiker API',                 fields: ['makePostUseHikerApi'] },
     { key: 'postDisableAt',     label: 'Disable at post count',         fields: ['makePostDisableAtPostCount','makePostDisableWhenExhausted'] },
-    { key: 'postLocalFolder',   label: 'Local Folder source',           fields: ['makePostLocalFolderEnabled','makePostLocalFolderPath','makePostLocalFolderNoRepeat','makePostLocalFolderRandom','makePostLocalFolderDeleteAfterUpload'] },
+    { key: 'postLocalFolder',   label: 'Local Folder source',           fields: ['makePostLocalFolderEnabled','makePostLocalFolderNoRepeat','makePostLocalFolderRandom','makePostLocalFolderDeleteAfterUpload'] },
     { key: 'postCaption',       label: 'ChatGPT / caption settings',    fields: ['makePostUseChatGpt','makePostFixAiSlop','makePostMakeUnique','makePostCaptionText'] },
   ]},
 ];
@@ -5422,19 +5422,23 @@ export function AutomationSettingsPanel({
                           if (result?.canceled || !result?.folder) return;
                           const updatedSettings = { ...settings, makePostLocalFolderPath: result.folder };
                           setSettings(() => updatedSettings);
-                          // Save immediately — bypass the debounce so the path is
-                          // written to mobile-instances.json before Electron can
-                          // close or the user navigates away (same pattern as
-                          // HumanSessionPanel.tsx).
-                          if (phone) {
-                            const saveUrl = slotIdx !== undefined
-                              ? `/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/automation-settings`
-                              : `/api/mobile/devices/${encodeURIComponent(phone.serial)}/automation-settings`;
+                          if (phone && slotIdx !== undefined) {
+                            // Primary save: dedicated folder-path endpoint — this is the
+                            // authoritative store, immune to Copy Settings and autosave races.
+                            // It also patches mobile-instances.json as a secondary backup.
+                            fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/folder-path`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ path: result.folder }),
+                            }).catch(() => {});
+                          } else if (phone) {
+                            // Fallback for the rare case where slotIdx is undefined.
+                            const saveUrl = `/api/mobile/devices/${encodeURIComponent(phone.serial)}/automation-settings`;
                             fetch(saveUrl, {
                               method: "POST",
                               headers: { "Content-Type": "application/json" },
                               body: JSON.stringify(updatedSettings),
-                            }).catch(() => { /* debounce will retry on next render */ });
+                            }).catch(() => {});
                           }
                         }}
                         className="h-7 px-3 text-xs rounded border border-border bg-background hover:border-foreground/30 hover:bg-accent transition-colors shrink-0 font-medium text-foreground"

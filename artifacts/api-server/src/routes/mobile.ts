@@ -339,6 +339,32 @@ function saveInstanceConfigs(cfg: InstanceConfigMap): void {
   fs.writeFileSync(configFilePath(), JSON.stringify(cfg, null, 2));
 }
 
+// ── Make a Post — dedicated per-slot folder path store ──────────────────────
+// Stored in a separate plain-text file per (serial, slotIdx) so the assigned
+// directory survives settings copies (Copy Settings), schema migrations, and
+// any autosave race that could overwrite mobile-instances.json with a stale
+// empty-string value.  Mirrors the FOLLOWED_DIR / POSTED_DIR pattern exactly.
+const FOLDER_PATHS_DIR: string = process.env.EQUINOX_DATA_DIR
+  ? path.join(process.env.EQUINOX_DATA_DIR, "mobile-folder-paths")
+  : path.join(path.dirname(path.resolve(process.argv[1] ?? ".")), "..", "mobile-folder-paths");
+try { fs.mkdirSync(FOLDER_PATHS_DIR, { recursive: true }); } catch { /* already exists */ }
+
+function _folderPathFile(serial: string, slotIdx: number): string {
+  return path.join(FOLDER_PATHS_DIR, `${serial.replace(/[^a-zA-Z0-9_\-]/g, "_")}_slot${slotIdx}.txt`);
+}
+
+/** Returns the persisted Make-a-Post local folder path for this slot, or "" if none. */
+function getMakePostFolderPath(serial: string, slotIdx: number): string {
+  try { return fs.readFileSync(_folderPathFile(serial, slotIdx), "utf8").trim(); }
+  catch { return ""; }
+}
+
+/** Writes the Make-a-Post local folder path for this slot to its dedicated file. */
+function setMakePostFolderPath(serial: string, slotIdx: number, folderPath: string): void {
+  try { fs.writeFileSync(_folderPathFile(serial, slotIdx), folderPath, "utf8"); }
+  catch { /* best effort */ }
+}
+
 /**
  * Strip CRLF pairs injected by Windows ADB exec-out into binary streams.
  * On Windows, ADB exec-out can convert \n (0x0A) bytes to \r\n (0x0D 0x0A),
@@ -1438,6 +1464,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       };
       const saved = cfg[serial]?.slotAutomation?.[String(slotIdx)];
       const merged = { ...defaults, ...saved };
+      // The dedicated folder-path file is the authoritative source for
+      // makePostLocalFolderPath.  It is written directly when the user assigns
+      // a folder, so it survives Copy Settings, schema drift, and any autosave
+      // race that could overwrite mobile-instances.json with a stale "".
+      const dedicatedFolderPath = getMakePostFolderPath(serial, slotIdx);
+      if (dedicatedFolderPath) merged.makePostLocalFolderPath = dedicatedFolderPath;
       logger.info(`[TOGGLE-DBG] GET slot settings  serial=${serial} slotIdx=${slotIdx} enabled=${merged.enabled}`);
       res.json(merged);
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to load slot automation settings" }); }
@@ -5623,6 +5655,42 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (isNaN(slotIdx) || slotIdx < 0) { res.status(400).json({ error: "Invalid slot index" }); return; }
     const list = getMobileFollowedList(serial, slotIdx);
     res.json({ ok: true, users: list });
+  });
+
+  // ── Make a Post — dedicated folder path endpoints ─────────────────────────
+  // These endpoints read/write the per-slot dedicated folder-path text file,
+  // which is the authoritative source of truth for makePostLocalFolderPath.
+  // Using a dedicated file means the assigned directory can never be wiped by
+  // Copy Settings or an autosave race against mobile-instances.json.
+  app.get("/api/mobile/devices/:serial/slots/:slotIdx/folder-path", (req: Request, res: Response) => {
+    const serial  = req.params.serial as string;
+    const slotIdx = parseInt(req.params.slotIdx, 10);
+    if (isNaN(slotIdx) || slotIdx < 0) { res.status(400).json({ error: "Invalid slot index" }); return; }
+    res.json({ ok: true, path: getMakePostFolderPath(serial, slotIdx) });
+  });
+
+  app.post("/api/mobile/devices/:serial/slots/:slotIdx/folder-path", (req: Request, res: Response) => {
+    const serial     = req.params.serial as string;
+    const slotIdx    = parseInt(req.params.slotIdx, 10);
+    if (isNaN(slotIdx) || slotIdx < 0) { res.status(400).json({ error: "Invalid slot index" }); return; }
+    const folderPath = typeof req.body?.path === "string" ? req.body.path : "";
+    // Write to the dedicated file first — this is the authoritative store.
+    setMakePostFolderPath(serial, slotIdx, folderPath);
+    // Also patch mobile-instances.json so the value is available on a cold
+    // start before the dedicated file takes over.
+    try {
+      const cfg = loadInstanceConfigs();
+      const existing = cfg[serial]?.slotAutomation?.[String(slotIdx)] ?? {};
+      cfg[serial] = {
+        ...cfg[serial],
+        slotAutomation: {
+          ...cfg[serial]?.slotAutomation,
+          [String(slotIdx)]: { ...existing, makePostLocalFolderPath: folderPath },
+        },
+      };
+      saveInstanceConfigs(cfg);
+    } catch { /* best effort — dedicated file is the real source of truth */ }
+    res.json({ ok: true });
   });
 
   // Posted Media — list of local-folder filenames that have already been posted
