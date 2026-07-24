@@ -2971,30 +2971,44 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             await android.tap(serial, _composerX, _composerY);
             await sleepOrAbort(serial, 800); // keyboard animates up
 
-            // Type a random emoji directly via ADB text injection.
+            // Open the emoji picker via KEYCODE_PICTSYMBOLS (219).
             //
-            // Every previous approach tried to open the emoji picker by
-            // pixel-scanning a live screencap to locate the smiley key on the
-            // system keyboard.  That screencap takes ~1.5 s to transfer over
-            // USB — long enough for the keyboard to disappear on some devices/
-            // Instagram builds before the scan completes.  The result was
-            // always "keyboard emoji key not visually detected" → skip.
+            // History of failed approaches:
+            //   v1: screencap → pixel-scan for smiley key → tap it
+            //       Failed: screencap takes ~1.5 s over USB; keyboard closes
+            //       before the scan completes on this device.
+            //   v2: adb shell input text <emoji>
+            //       Failed: InputShellCommand.sendText() calls
+            //       KeyCharacterMap.getEvents() which returns null for emoji
+            //       (they are not in the hardware key map) → NullPointerException.
             //
-            // `adb shell input text <emoji>` calls Android's
-            // InputManager.injectString() directly — no keyboard UI involved,
-            // no timing dependency, no pixel detection.  It works on Android 8+
-            // (including all Xiaomi/Redmi devices in the farm) and is already
-            // used elsewhere in this codebase for username/search injection.
-            const _STORY_EMOJIS = [
-              '🔥','❤️','😍','😂','🙌','👏','💪','🤩','😎','✨',
-              '💯','🥰','😘','💖','🎉','👍','🤙','💫','🌟','👀',
-              '😁','🤣','😊','💕','🫶','🙏','😏','🤯','🫠','💀',
-              '😭','🥹','☠️','💥','🤌','👁️','🫡','🤑','😤','🤤',
-            ];
-            const _chosenEmoji = _STORY_EMOJIS[Math.floor(Math.random() * _STORY_EMOJIS.length)];
-            onLog?.(`Story ${s + 1}: typing emoji "${_chosenEmoji}" via ADB text injection…`);
-            await android.inputText(serial, _chosenEmoji);
-            await sleepOrAbort(serial, 400); // emoji enters field
+            // KEYCODE_PICTSYMBOLS (219) is the standard Android keycode that
+            // switches the active IME into its emoji / pictograph mode.  Gboard,
+            // MIUI keyboard, and most OEM keyboards honour it.  It is a plain
+            // keyevent — synchronous, instant, no image transfer, no Unicode
+            // injection — so it fires and registers before the keyboard can close.
+            onLog?.(`Story ${s + 1}: sending KEYCODE_PICTSYMBOLS to open emoji picker…`);
+            await android.keyevent(serial, 219);
+            await sleepOrAbort(serial, 500); // picker animates open
+
+            // Scroll the emoji picker a random number of times so the same
+            // emoji is never at the top across runs.
+            const _scrollCount = 1 + Math.floor(Math.random() * 50);
+            onLog?.(`Story ${s + 1}: scrolling emoji picker ${_scrollCount}×…`);
+            for (let _ei = 0; _ei < _scrollCount; _ei++) {
+              await android.swipe(serial,
+                Math.round(w * 0.50), Math.round(h * 0.84),
+                Math.round(w * 0.50), Math.round(h * 0.71),
+                150);
+              await sleepOrAbort(serial, 80);
+            }
+
+            // Tap a random position inside the emoji grid.
+            const _emojiX = Math.round(w * 0.08 + Math.random() * w * 0.84);
+            const _emojiY = Math.round(h * 0.77 + Math.random() * h * 0.14);
+            onLog?.(`Story ${s + 1}: tapping random emoji at (${_emojiX},${_emojiY})…`);
+            await android.tap(serial, _emojiX, _emojiY);
+            await sleepOrAbort(serial, 400); // emoji enters field; keyboard may close
 
             // Find the send button that appears after the emoji is entered.
             // From TAP-SEND-PAPER-AIRPLANE dump:

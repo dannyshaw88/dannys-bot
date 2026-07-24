@@ -4,6 +4,39 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.138 — 2026-07-24
+
+### Fixed — Story emoji comment: open full emoji picker via KEYCODE_PICTSYMBOLS
+
+**Symptom:**
+Story emoji comments still never sent. v1.2.137's `adb shell input text` approach
+threw a `NullPointerException` from `InputShellCommand.sendText()` on every emoji
+because `KeyCharacterMap.getEvents()` returns `null` for emoji characters (they are
+not in the hardware key map). Using a fixed emoji pool from the pre-loaded reaction
+bubbles was also ruled out — those repeat the same few icons across all accounts and
+undermine natural-looking engagement.
+
+**Fix (`artifacts/api-server/src/routes/mobile.ts`):**
+
+Send `KEYCODE_PICTSYMBOLS` (keycode 219) immediately after the keyboard appears.
+This is the standard Android keycode for switching the active IME into its emoji /
+pictograph mode. Gboard, MIUI keyboard, and most OEM keyboards honour it. It is a
+plain `adb shell input keyevent` call — synchronous, instant, no image transfer,
+no Unicode injection — so it fires before the keyboard can close. After the picker
+opens, the existing random-scroll + random-grid-tap logic runs as designed to pick
+from the full emoji set.
+
+**Full history of approaches for this feature:**
+- v1 (screencap): captured a PNG via `adb exec-out screencap -p`, pixel-scanned
+  for the smiley key left of the space bar. Failed — screencap takes ~1.5 s over
+  USB; keyboard closes first.
+- v2 (adb input text): called `InputManager.injectString()` directly. Failed —
+  `KeyCharacterMap.getEvents()` returns null for emoji → NullPointerException.
+- v3 (this release): `KEYCODE_PICTSYMBOLS` (219) → picker open → random scroll
+  → random grid tap → send.
+
+---
+
 ## v1.2.137 — 2026-07-24
 
 ### Fixed — Story emoji comment never sent (keyboard disappears before screencap can scan it)
