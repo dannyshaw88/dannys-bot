@@ -6,14 +6,49 @@ All notable changes to Aura Farming are documented here.
 
 ## v1.2.132 — 2026-07-24
 
-### Fixed
-- **Story comment emoji key not detected on dark-theme keyboards** — the pixel
-  detector previously required nearly-white key surfaces (min ≥ 232 RGB), which
-  only matched Gboard's light theme.  Devices using the system dark theme have
-  medium-dark-gray key surfaces (~50–145 RGB) that were always rejected.
-  `findKeyboardEmojiButtonFromPixels` now tries light-theme detection first, then
-  falls back to dark-theme detection, so the emoji key is found on both keyboard
-  colour schemes without any coordinate fallback.
+### Fixed — Story comment emoji button not pressed on dark-theme keyboards
+
+**Symptom:**
+Every story comment cycle logged `emoji comment skipped — keyboard emoji key not
+visually detected` and skipped the emoji tap entirely, even though the message
+composer opened correctly.  Affected all devices whose system keyboard uses a
+dark colour scheme (e.g. Xiaomi Redmi A5 in dark mode / Gboard dark theme).
+
+**Root cause:**
+The keyboard emoji-key detector (`findKeyboardEmojiButtonFromPixels` in
+`androidManager.ts`) used pixel thresholds tuned exclusively for light-theme
+keyboards:
+
+- *Keyboard background rows* — required `min(r,g,b) ≥ 190` (nearly white).
+- *Key interior segments* — required `min(r,g,b) ≥ 232` and `max−min ≤ 28`
+  (near-pure white key surface).
+
+On a dark keyboard the background is ~RGB 20–80 and key surfaces are
+~RGB 55–130 (medium dark gray).  Both checks failed for every pixel, so the
+detector returned `null` on the very first scan and the emoji tap was silently
+skipped on every single story.
+
+**Fix:**
+`findKeyboardEmojiButtonFromPixels` now delegates to a private helper
+`_findKeyboardEmojiButtonForTheme(img, theme)` that accepts either `"light"` or
+`"dark"`.  The public function calls light first; if it returns `null` it
+immediately retries with dark and returns that result.  No coordinate fallback
+or retry loop is added — if both themes fail the caller skips the emoji action
+as before.
+
+Dark-theme thresholds:
+- *Keyboard background row* — `max(r,g,b) ≤ 130` and `max−min ≤ 40`.  This
+  generously covers the very dark inter-key gaps (~20 RGB) AND the slightly
+  lighter key surfaces (~60–130 RGB), so the row-fraction scan correctly
+  identifies dark keyboard bands as keyboard rows.
+- *Key interior segment* — `min(r,g,b) ≥ 50`, `max(r,g,b) ≤ 145`, and
+  `max−min ≤ 35`.  This distinguishes medium-dark key surfaces from the very
+  dark gaps (< 50) while excluding anything that might be light story content
+  above the keyboard.
+
+All downstream logic (longest coherent run selection, bottom-row segment scan,
+space-bar identification, left-adjacent emoji-key selection, adjacency gap
+check) is identical for both themes — only the two pixel predicates differ.
 
 ---
 
