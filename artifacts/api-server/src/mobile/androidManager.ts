@@ -2271,12 +2271,13 @@ type ScreenPixels = { width: number; height: number; channels: number; pixels: B
  */
 export function findKeyboardEmojiButtonFromPixels(img: ScreenPixels): { x: number; y: number } | null {
   return _findKeyboardEmojiButtonForTheme(img, "light") ??
+         _findKeyboardEmojiButtonForTheme(img, "gray")  ??
          _findKeyboardEmojiButtonForTheme(img, "dark");
 }
 
 function _findKeyboardEmojiButtonForTheme(
   img: ScreenPixels,
-  theme: "light" | "dark",
+  theme: "light" | "gray" | "dark",
 ): { x: number; y: number } | null {
   const { width, height, channels, pixels } = img;
   if (!width || !height || channels < 3) return null;
@@ -2287,36 +2288,45 @@ function _findKeyboardEmojiButtonForTheme(
    * Light keyboard: nearly white / light-neutral (Gboard default light).
    *   min(r,g,b) >= 190 and low saturation (max−min ≤ 42).
    *
+   * Gray keyboard: medium gray — the Gboard "gray" / system-default theme.
+   *   This is the most common theme on Xiaomi/Redmi devices. Key surfaces sit
+   *   around RGB 90–115 and key gaps/shadows around RGB 40–70.  Story content
+   *   above the keyboard is very dark (near 0), so requiring min ≥ 60 cleanly
+   *   excludes it while including all keyboard background pixels.
+   *
    * Dark keyboard: dark neutral (Gboard dark / follows system dark mode).
-   *   max(r,g,b) <= 130 and low saturation (max−min ≤ 40).
-   *   Uses a generous ceiling so both the very dark gaps and the slightly
-   *   lighter key surfaces both qualify as "keyboard background rows".
+   *   Key surfaces ~55–90 RGB.  The story content is also near-zero, so we
+   *   require min ≥ 30 to separate the two; dark inter-key gaps (~15–35) may
+   *   sit right on the boundary but the row-fraction threshold compensates.
    */
   const isKeyboardBg = (x: number, y: number): boolean => {
     const idx = y * width * channels + x * channels;
     const r = pixels[idx], g = pixels[idx + 1], b = pixels[idx + 2];
-    if (theme === "light") {
-      return Math.min(r, g, b) >= 190 && Math.max(r, g, b) - Math.min(r, g, b) <= 42;
-    } else {
-      return Math.max(r, g, b) <= 130 && Math.max(r, g, b) - Math.min(r, g, b) <= 40;
-    }
+    const mn = Math.min(r, g, b), mx = Math.max(r, g, b);
+    if (theme === "light") return mn >= 190 && mx - mn <= 42;
+    if (theme === "gray")  return mn >= 60  && mx <= 180 && mx - mn <= 40;
+    /* dark */             return mn >= 30  && mx <= 130 && mx - mn <= 40;
   };
 
   /**
    * Returns true when an individual pixel looks like the interior of a keyboard
    * key (as opposed to a gap / shadow between keys).
    *
-   * Light keyboard: nearly white with very low saturation.
-   * Dark keyboard: medium-dark gray that is clearly brighter than the very dark
-   *   gaps (≥ 50) but still well below any light surface (≤ 145).
+   * Light:  nearly white — key background is light gray/white; text labels are
+   *   dark and break the run, leaving left/right key-surface strips.
+   *
+   * Gray:   medium gray key surface (~90–115 RGB).  Inter-key gaps are darker
+   *   (~40–70 RGB), so min ≥ 70 separates key surface from gap cleanly.
+   *   Dark key labels also fall below 70, breaking the run as needed.
+   *
+   * Dark:   dark-gray key surface (~55–90 RGB).  Inter-key gaps are very dark
+   *   (~10–35 RGB), so min ≥ 45 is enough separation.
    */
   const isKeyInterior = (r: number, g: number, b: number): boolean => {
-    if (theme === "light") {
-      return Math.min(r, g, b) >= 232 && Math.max(r, g, b) - Math.min(r, g, b) <= 28;
-    } else {
-      return Math.min(r, g, b) >= 50 && Math.max(r, g, b) <= 145 &&
-             Math.max(r, g, b) - Math.min(r, g, b) <= 35;
-    }
+    const mn = Math.min(r, g, b), mx = Math.max(r, g, b);
+    if (theme === "light") return mn >= 232 && mx - mn <= 28;
+    if (theme === "gray")  return mn >= 70  && mx <= 200 && mx - mn <= 45;
+    /* dark */             return mn >= 45  && mx <= 145 && mx - mn <= 35;
   };
 
   // Find the longest lower-screen band whose rows are predominantly the

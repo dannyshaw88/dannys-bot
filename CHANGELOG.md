@@ -4,6 +4,50 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.133 — 2026-07-24
+
+### Fixed — Story comment emoji button still not detected (medium-gray keyboard)
+
+**What the previous fix got wrong (v1.2.132):**
+
+v1.2.132 added a "dark" keyboard theme (max ≤ 130 RGB) alongside the existing
+"light" theme (min ≥ 190 RGB).  Pixel analysis of the actual device screencap
+showed the Redmi A5 keyboard is **medium gray (~95–104 RGB)** — not near-white
+and not near-black.  Neither threshold matched it.  On top of that, the dark
+theme's background check (max ≤ 130) also matched the near-zero story pixels
+*above* the keyboard, causing the key-segment scan to land in dark story content
+instead of the keyboard's bottom row, finding zero segments.
+
+**Root cause (confirmed by pixel analysis):**
+
+The system keyboard on this device uses Gboard's gray/default theme.  Key
+surfaces are ~90–115 RGB; inter-key shadows are ~40–70 RGB; the story background
+above the keyboard is near-zero (~0–20 RGB).  Three distinct luminance ranges,
+none covered by the two existing thresholds.
+
+**Fix — three-theme detection, tried in order:**
+
+1. **Light** (unchanged) — key surface min ≥ 232, background min ≥ 190.
+   Matches Gboard light/white theme.
+
+2. **Gray** (new) — background: `min ≥ 60 && max ≤ 180 && max−min ≤ 40`.
+   Key interior: `min ≥ 70 && max ≤ 200 && max−min ≤ 45`.
+   - Near-zero story pixels (min~0) fail `min ≥ 60` → correctly excluded.
+   - Gray key surfaces (~90–115) pass all three bg conditions.
+   - Inter-key shadows (~40–70) fail `min ≥ 70` in the interior check →
+     correctly break the key-surface run so individual keys are segmented.
+
+3. **Dark** (tightened) — background now requires `min ≥ 30` (was no lower
+   bound), preventing near-zero story pixels from inflating the keyboard band.
+   Key interior lower bound lowered to `min ≥ 45` (was 50) to be more
+   inclusive of true dark key surfaces.
+
+`findKeyboardEmojiButtonFromPixels` tries all three in order and returns the
+first successful result; `_findKeyboardEmojiButtonForTheme` is shared across
+all three, with only the two pixel predicates varying per theme.
+
+---
+
 ## v1.2.132 — 2026-07-24
 
 ### Fixed — Story comment emoji button not pressed on dark-theme keyboards
