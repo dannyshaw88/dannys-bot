@@ -4055,7 +4055,7 @@ export function AutomationSettingsPanel({
     if (!phone?.serial) return;
     setLoadingFollowed(true);
     try {
-      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/followed-users`);
+      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx ?? 0}/followed-users`);
       const data = await r.json().catch(() => null);
       if (data?.users) setMobileFollowedList(data.users);
     } catch {} finally { setLoadingFollowed(false); }

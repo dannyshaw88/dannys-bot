@@ -4,6 +4,35 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.120
+
+### Fix — HST Follow Users "Followed" tab now isolated per account slot
+
+**Root cause:** The followed-users list was keyed only by device serial, so every
+account slot on the same physical phone shared one list. Slot 1 would see Slot 2's
+follows and vice-versa.
+
+**What changed (server):**
+- `_followedFilePath`, `getMobileFollowedList`, and `recordMobileFollow` now take
+  a `slotIdx` argument and key storage by `(serial, slotIdx)`.
+- Per-slot files are written as `<serial>_slot<N>.json`. Slot 0 falls back to the
+  legacy `<serial>.json` file on first access so existing data is not lost.
+- The GET endpoint is now `/api/mobile/devices/:serial/slots/:slotIdx/followed-users`
+  (consistent with the existing slot-scoped settings/trust-score pattern).
+- The skip-set used during follow deduplication (`skipFollowedUsernames`) is now
+  built from the per-slot list, so each account slot only skips usernames it
+  personally followed (the global SQLite table still deduplicates across devices).
+
+**What changed (client):**
+- `loadFollowedUsers` in `AutomationSettingsPanel` fetches from the new
+  per-slot endpoint using `slotIdx`.
+
+**Copy Settings** never copied the followed list — it only copies settings fields
+(`followSources`, counts, percentages, etc.). The sharing was purely a storage-key
+bug, not a copy-settings issue.
+
+---
+
 ## v1.2.119
 
 ### Fix — Phone Farm: live mirror thumbnail now shows automatically when HST is running

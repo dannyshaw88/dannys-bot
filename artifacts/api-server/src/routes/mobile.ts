@@ -3891,27 +3891,45 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
   } catch { /* best effort */ }
 
-  const _followedFilePath = (serial: string) =>
+  // Per-(serial, slotIdx) file path.  Slot 0 also checks the legacy per-serial
+  // file so existing data is preserved after the upgrade.
+  const _followedFilePath = (serial: string, slotIdx: number) =>
+    path.join(FOLLOWED_DIR, `${serial.replace(/[^a-zA-Z0-9_\-]/g, "_")}_slot${slotIdx}.json`);
+
+  // Legacy path used before per-slot isolation was introduced.
+  const _followedFilePathLegacy = (serial: string) =>
     path.join(FOLLOWED_DIR, `${serial.replace(/[^a-zA-Z0-9_\-]/g, "_")}.json`);
 
-  const getMobileFollowedList = (serial: string): MobileFollowedEntry[] => {
-    if (!mobileFollowedUsers.has(serial)) {
+  const getMobileFollowedList = (serial: string, slotIdx: number): MobileFollowedEntry[] => {
+    const mapKey = `${serial}:${slotIdx}`;
+    if (!mobileFollowedUsers.has(mapKey)) {
       // Hydrate from disk on first access so data survives restarts.
       try {
-        const raw = fs.readFileSync(_followedFilePath(serial), "utf8");
-        mobileFollowedUsers.set(serial, JSON.parse(raw) as MobileFollowedEntry[]);
+        const raw = fs.readFileSync(_followedFilePath(serial, slotIdx), "utf8");
+        mobileFollowedUsers.set(mapKey, JSON.parse(raw) as MobileFollowedEntry[]);
       } catch {
-        mobileFollowedUsers.set(serial, []);
+        // For slot 0, fall back to the pre-isolation legacy file so existing
+        // data is not lost after upgrading.
+        if (slotIdx === 0) {
+          try {
+            const raw = fs.readFileSync(_followedFilePathLegacy(serial), "utf8");
+            mobileFollowedUsers.set(mapKey, JSON.parse(raw) as MobileFollowedEntry[]);
+          } catch {
+            mobileFollowedUsers.set(mapKey, []);
+          }
+        } else {
+          mobileFollowedUsers.set(mapKey, []);
+        }
       }
     }
-    return mobileFollowedUsers.get(serial)!;
+    return mobileFollowedUsers.get(mapKey)!;
   };
 
-  const recordMobileFollow = (serial: string, username: string, source: string) => {
-    const list = getMobileFollowedList(serial);
+  const recordMobileFollow = (serial: string, slotIdx: number, username: string, source: string) => {
+    const list = getMobileFollowedList(serial, slotIdx);
     list.unshift({ username, source, followedAt: Date.now() });
     // Persist to disk so data survives server restarts.
-    try { fs.writeFileSync(_followedFilePath(serial), JSON.stringify(list), "utf8"); } catch { /* best effort */ }
+    try { fs.writeFileSync(_followedFilePath(serial, slotIdx), JSON.stringify(list), "utf8"); } catch { /* best effort */ }
     // Also write to the shared global followed_users table so ALL phones see
     // this follow when checking the global skip list. profileId = 0 is the
     // phone-automation sentinel (no real browser-bot profile). SQLite does not
@@ -5599,9 +5617,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   }
 
   // ── Followed Users endpoint — returns in-memory follow log per device ─────
-  app.get("/api/mobile/devices/:serial/followed-users", (req: Request, res: Response) => {
-    const serial = req.params.serial as string;
-    const list = getMobileFollowedList(serial);
+  app.get("/api/mobile/devices/:serial/slots/:slotIdx/followed-users", (req: Request, res: Response) => {
+    const serial  = req.params.serial as string;
+    const slotIdx = parseInt(req.params.slotIdx, 10);
+    if (isNaN(slotIdx) || slotIdx < 0) { res.status(400).json({ error: "Invalid slot index" }); return; }
+    const list = getMobileFollowedList(serial, slotIdx);
     res.json({ ok: true, users: list });
   });
 
@@ -6356,7 +6376,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 candidateMeta:   _spreadCandidateMeta   ?? new Map(),
               },
               onLog: (msg) => tLog(`  ${msg}`),
-              recordFollow: (u, src) => recordMobileFollow(serial, u, src),
+              recordFollow: (u, src) => recordMobileFollow(serial, slotIdx, u, src),
               skipFollowedUsernames: _ssSkipFollowed,
               skipSkippedUsernames:  _ssSkipSkipped,
               browsing: _ssBrowsing,
@@ -6438,10 +6458,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 sources: followSources,
                 maxScrapeSessions: globalFollowMaxScrapeSessions,
                 onLog: (msg) => tLog(`  ${msg}`),
-                recordFollow: (username, source) => recordMobileFollow(serial, username, source),
+                recordFollow: (username, source) => recordMobileFollow(serial, slotIdx, username, source),
                 skipFollowedUsernames: await (async () => {
                   if (!globalSkipFollowed) return undefined;
-                  const local = new Set(getMobileFollowedList(serial).map(e => e.username.toLowerCase()));
+                  const local = new Set(getMobileFollowedList(serial, slotIdx).map(e => e.username.toLowerCase()));
                   if (globalSkipFollowed) {
                     const globalSet = await storage.getAllFollowedUsernames();
                     for (const u of globalSet) local.add(u);
