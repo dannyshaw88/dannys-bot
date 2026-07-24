@@ -95,7 +95,7 @@ jobs:
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: Equinox-Windows-Installer
+          name: Aura-Farming-Windows-Installer
           path: artifacts/electron/release/*.exe
           if-no-files-found: error
 

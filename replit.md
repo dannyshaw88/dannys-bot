@@ -1,4 +1,4 @@
-# Danny's Bot (Equinox)
+# Aura Farming
 
 This is an Instagram automation tool using real mobile phone devices connected via USB on Windows Electron — **not Replit's Linux environment**. Replit is used for code changes only. The built app runs entirely on the user's Windows PC, controlling physical Android phones over ADB.
 
@@ -95,22 +95,22 @@ Some device/IG builds strip both `content-desc` and `resource-id` from every act
 Every push to `main` triggers `.github/workflows/build-windows-installer.yml` (the ONLY canonical workflow — `build.yml`, `build-windows.yml`, `windows-installer.yml`, and `release.yml` are all deprecated inert stubs), which runs two jobs:
 
 1. **`build-web`** (ubuntu-latest) — installs workspace deps with `pnpm install --no-frozen-lockfile --ignore-scripts`, builds the API server and React frontend, uploads them as intermediate Actions artifacts called `api-server-dist` and `dannys-bot-dist`. These are NOT the installer.
-2. **`build-installer`** (windows-latest) — downloads the dist artifacts, installs Electron deps with `npm install --ignore-scripts`, runs `build.mjs` to bundle the app, then runs `electron-builder --win --publish never` to produce the Windows installer. Uploads the installer as an Actions artifact called `Equinox-Windows-Installer` (~88MB). On tagged releases (`v*`) also publishes to GitHub Releases.
+2. **`build-installer`** (windows-latest) — downloads the dist artifacts, installs Electron deps with `npm install --ignore-scripts`, runs `build.mjs` to bundle the app, then runs `electron-builder --win --publish never` to produce the Windows installer. Uploads the installer as an Actions artifact called `Aura-Farming-Windows-Installer` (~88MB). On tagged releases (`v*`) also publishes to GitHub Releases.
 
 ### How the user gets the installer
 
 1. Go to `github.com/dannyshaw88/dannys-bot/actions`
 2. Click the latest successful run
 3. Scroll to the Artifacts section at the bottom
-4. Download **`Equinox-Windows-Installer`** (88MB) — this is the real installer
+4. Download **`Aura-Farming-Windows-Installer`** (88MB) — this is the real installer
 
 **Do NOT tell the user to go to the Releases tab.** They always use the Actions tab. The `web-builds` artifact (4MB) in the same run is just an intermediate build output — not the installer.
 
 ### If the user says "the download is only 4MB"
 
-They are downloading `web-builds` instead of `Equinox-Windows-Installer`. Both appear in the Actions artifacts list. Point them to the correct one.
+They are downloading `web-builds` instead of `Aura-Farming-Windows-Installer`. Both appear in the Actions artifacts list. Point them to the correct one.
 
-### If the Equinox-Windows-Installer artifact is missing from the Actions tab
+### If the Aura-Farming-Windows-Installer artifact is missing from the Actions tab
 
 The upload step at the end of `package-windows` in `build.yml` is missing or broken. It should look like:
 
@@ -118,7 +118,7 @@ The upload step at the end of `package-windows` in `build.yml` is missing or bro
 - name: Upload installer to Actions artifacts
   uses: actions/upload-artifact@v4
   with:
-    name: Equinox-Windows-Installer
+    name: Aura-Farming-Windows-Installer
     path: artifacts/electron/release/*.exe
     if-no-files-found: error
 ```

@@ -982,7 +982,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   // ── HST diagnostic log endpoint ────────────────────────────────────────────
   // Receives fire-and-forget POST from the client scheduling effect so that
-  // [HST-DBG] messages appear in equinox-debug.log, not just the UI Action Log.
+  // [HST-DBG] messages appear in aura-farming-debug.log, not just the UI Action Log.
   app.post("/api/hst-dbg", (req: Request, res: Response) => {
     const msg = typeof req.body?.msg === "string" ? req.body.msg : String(req.body?.msg ?? "");
     if (msg) logger.info(`[HST-DBG] ${msg}`);

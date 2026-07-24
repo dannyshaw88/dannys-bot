@@ -37,7 +37,7 @@ Start both. The frontend will be visible in the Replit preview pane.
 
 ## What this project is (read before touching any code)
 
-Danny's Bot (Equinox) — Instagram automation tool for real Android phones connected via USB on Windows. Replit is for **code editing only**. The built app runs on the user's Windows PC.
+Aura Farming — Instagram automation tool for real Android phones connected via USB on Windows. Replit is for **code editing only**. The built app runs on the user's Windows PC.
 
 **Stack:** pnpm monorepo, Node.js 20, TypeScript 5.9, Express 5, SQLite + Drizzle ORM, React + Vite + Tailwind + shadcn/ui, Electron desktop wrapper.
 
@@ -69,7 +69,7 @@ Danny's Bot (Equinox) — Instagram automation tool for real Android phones conn
 
 1. Go to `github.com/dannyshaw88/dannys-bot/actions`
 2. Click the latest successful run
-3. Download **`Equinox-Windows-Installer`** (88MB) — NOT the 4MB `web-builds` artifact
+3. Download **`Aura-Farming-Windows-Installer`** (88MB) — NOT the 4MB `web-builds` artifact
 
 ---
 

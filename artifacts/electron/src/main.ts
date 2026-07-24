@@ -24,7 +24,7 @@ function appendToMainLog(msg: string): void {
     try { fs.appendFileSync(_mainLogPath, line + "\n"); } catch {}
   }
   // Route through the server's /api/ipc-log so the line appears in
-  // equinox-debug.log — direct appendFileSync is silently swallowed on
+  // aura-farming-debug.log — direct appendFileSync is silently swallowed on
   // Windows because the server process holds the file descriptor open.
   if (serverPort) {
     try {
@@ -1058,7 +1058,7 @@ async function createWindow() {
   });
 
   // Place the log file next to the exe in the installation directory so it is
-  // easy to find (e.g. AppData\Local\Programs\DannysBot\logs.log).
+  // easy to find (e.g. C:\Program Files\Aura Farming\logs.log).
   // path.dirname(app.getPath("exe")) always resolves to the correct install
   // folder regardless of whether the user customised the install location.
   const logPath = path.join(path.dirname(app.getPath("exe")), "logs.log");

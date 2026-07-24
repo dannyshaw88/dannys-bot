@@ -4,6 +4,45 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.144 — 2026-07-24
+
+### Rebrand — All references updated from "Danny's Bot / Equinox" to "Aura Farming"
+
+**What changed:**
+
+Every internal reference to the old product name "Danny's Bot" or "Equinox" has been
+updated to "Aura Farming" across all documentation, code comments, and build pipeline
+configuration to match the current Windows installer branding.
+
+**Debug log file renamed:**
+
+The server's on-disk debug log was still being written as `equinox-debug.log` even though
+the Windows installer already installs to `C:\Program Files\Aura Farming\Aura Farming.exe`.
+The file is now written as `aura-farming-debug.log` in the same location next to the
+database file (set by the `DATABASE_PATH` env var in production).
+
+- `artifacts/api-server/src/index.ts` — `equinox-debug.log` → `aura-farming-debug.log`
+- `artifacts/electron/src/main.ts` — updated comment: install path is now
+  `C:\Program Files\Aura Farming\logs.log` (next to the exe); Electron's
+  `_serverDebugLogPath` already correctly used `aura-farming-debug.log`.
+
+**GitHub Actions installer artifact renamed:**
+
+The downloadable artifact in the Actions tab was still called `Equinox-Windows-Installer`.
+It is now called `Aura-Farming-Windows-Installer` to match the app name.
+
+To get the Windows installer:
+1. Go to `github.com/dannyshaw88/dannys-bot/actions`
+2. Click the latest successful run
+3. Download **`Aura-Farming-Windows-Installer`** (~88 MB)
+
+**Files updated:**
+- `.github/workflows/build-windows-installer.yml` — artifact name
+- `AGENT-BRIEFING.md` — product name + installer download instructions
+- `replit.md` — product name + all installer name references
+
+---
+
 ## v1.2.143 — 2026-07-24
 
 ### Corrected — Temporary keyboard colour diagnostics go to the Windows Debugging Log

@@ -20,8 +20,8 @@ if (Number.isNaN(port) || port <= 0) {
 // DevTools or a command prompt.  The file is capped at 5 MB and rotates by
 // discarding the oldest half when the limit is reached.
 const SERVER_LOG_PATH = process.env.DATABASE_PATH
-  ? path.join(path.dirname(process.env.DATABASE_PATH), "equinox-debug.log")
-  : path.join(process.cwd(), "equinox-debug.log");
+  ? path.join(path.dirname(process.env.DATABASE_PATH), "aura-farming-debug.log")
+  : path.join(process.cwd(), "aura-farming-debug.log");
 
 const MAX_LOG_BYTES = 5 * 1024 * 1024;
 
