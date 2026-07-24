@@ -839,7 +839,7 @@ function DeviceCard({
     <div className="group h-full relative flex flex-col">
       <button
         onClick={onClick}
-        className={`flex-1 flex flex-col items-center gap-1.5 py-2 px-2 rounded-2xl border border-border bg-card hover:border-primary/50 hover:bg-card/80 transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40${active ? ' device-card-active' : ''}`}
+        className={`flex-1 flex flex-col items-center gap-1.5 py-2 px-2 rounded-2xl border border-border bg-card transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40${active ? ' device-card-active' : ''}`}
       >
         {/* Phone shell — wallpaper and text rendered natively inside the SVG screen */}
         <PhoneShell
@@ -882,7 +882,7 @@ function DeviceCard({
       <button
         onClick={e => { e.stopPropagation(); setPanelOpen(true); }}
         title="Customise wallpaper & text"
-        className="absolute top-2 left-2 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary/10 hover:border-primary/40 hover:text-primary text-muted-foreground"
+        className="absolute top-2 right-10 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary/10 hover:border-primary/40 hover:text-primary text-muted-foreground"
       >
         <Palette className="w-3 h-3" />
       </button>

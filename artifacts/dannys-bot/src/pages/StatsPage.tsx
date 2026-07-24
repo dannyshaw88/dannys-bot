@@ -19,7 +19,7 @@ import {
 import {
   User, Heart, MessageCircle, Eye, UserPlus, UserMinus, Mail, Activity,
   Settings2, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Fingerprint, ImagePlus,
-  BarChart2, Zap, Repeat2, ShieldAlert, PhoneOff, Webhook, Bot, Lock, Flag,
+  BarChart2, Zap, Repeat2, ShieldAlert, PhoneOff, Lock, Flag,
   Smartphone,
 } from "lucide-react";
 import { type Profile, type Tool } from "@shared/schema";
@@ -640,16 +640,8 @@ export function StatsPage() {
     refetchInterval: 30000,
   });
 
-  const { data: apiCallCountData } = useQuery<{ count: number }>({
-    queryKey: selectedProfile ? [`/api/profiles/${selectedProfile.id}/api-call-count`] : ["no-profile-api"],
-    enabled: !!selectedProfile,
-    refetchInterval: 30000,
-  });
-
   const getStat = (type: string, date: string) =>
     metricsStats.find((s: any) => s.toolType === type && s.date === date)?.count ?? 0;
-
-  const actionStatTypes = ALL_STAT_TYPES.filter(st => !st.isTool);
 
   const mobilePieData = useMemo(() =>
     MOBILE_METRIC_DEFS
@@ -677,14 +669,14 @@ export function StatsPage() {
     mobileSlotStats?.[period]?.[key] ?? 0;
 
   const totalToday = useMemo(() =>
-    actionStatTypes.reduce((sum, st) => sum + getStat(st.key, today), 0),
+    MOBILE_METRIC_DEFS.reduce((sum, m) => sum + getMobileStat(m.key, "daily"), 0),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [metricsStats, today]);
+  [mobileSlotStats]);
 
   const totalLifetime = useMemo(() =>
-    actionStatTypes.reduce((sum, st) => sum + getStat(st.key, "lifetime"), 0),
+    MOBILE_METRIC_DEFS.reduce((sum, m) => sum + getMobileStat(m.key, "lifetime"), 0),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [metricsStats]);
+  [mobileSlotStats]);
 
   const humanSessionTool = metricsTools?.find(t => t.type === "human_sessions");
   const humanSessionEnabled = humanSessionTool?.enabled ?? false;
@@ -892,6 +884,41 @@ export function StatsPage() {
                   </CardContent>
                 </Card>
 
+                {/* Action data points — wired to mobile slot stats */}
+                <Card className="desktop-card border-none shadow-sm">
+                  <CardHeader className="border-b border-border/50 bg-muted/5 pb-3">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-primary" />
+                      Action Totals
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                      {/* Grand totals */}
+                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Total Today</span>
+                        <span className="text-2xl font-bold tabular-nums text-foreground">{totalToday.toLocaleString()}</span>
+                        <span className="text-[10px] text-muted-foreground">all actions</span>
+                      </div>
+                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Total Lifetime</span>
+                        <span className="text-2xl font-bold tabular-nums text-foreground">{totalLifetime.toLocaleString()}</span>
+                        <span className="text-[10px] text-muted-foreground">all actions</span>
+                      </div>
+                      {/* Per-action breakdown from mobile slot stats */}
+                      {MOBILE_METRIC_DEFS.map(m => (
+                        <div key={m.key} className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
+                          <span className={`text-[10px] font-bold uppercase tracking-wide flex items-center gap-1 ${m.color}`}>
+                            {m.icon}{m.label}
+                          </span>
+                          <span className="text-2xl font-bold tabular-nums text-foreground">{getMobileStat(m.key, "daily").toLocaleString()}</span>
+                          <span className="text-[10px] text-muted-foreground">today · {getMobileStat(m.key, "lifetime").toLocaleString()} lifetime</span>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
                 {/* Account health & system data points */}
                 <Card className="desktop-card border-none shadow-sm">
                   <CardHeader className="border-b border-border/50 bg-muted/5 pb-3">
@@ -902,16 +929,6 @@ export function StatsPage() {
                   </CardHeader>
                   <CardContent className="pt-4">
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                      {/* Total API calls */}
-                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
-                          <Webhook className="w-3 h-3" />Total API Calls
-                        </span>
-                        <span className="text-2xl font-bold tabular-nums text-foreground">
-                          {(apiCallCountData?.count ?? 0).toLocaleString()}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground">all time</span>
-                      </div>
 
                       {/* ABD dismissed */}
                       <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
@@ -949,49 +966,6 @@ export function StatsPage() {
                         <span className="text-[10px] text-muted-foreground">accounts currently locked</span>
                       </div>
 
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Action data points */}
-                <Card className="desktop-card border-none shadow-sm">
-                  <CardHeader className="border-b border-border/50 bg-muted/5 pb-3">
-                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                      <Zap className="w-4 h-4 text-primary" />
-                      Action Totals
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-4">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                      {/* Grand totals */}
-                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Total Today</span>
-                        <span className="text-2xl font-bold tabular-nums text-foreground">{totalToday.toLocaleString()}</span>
-                        <span className="text-[10px] text-muted-foreground">all actions</span>
-                      </div>
-                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Total Lifetime</span>
-                        <span className="text-2xl font-bold tabular-nums text-foreground">{totalLifetime.toLocaleString()}</span>
-                        <span className="text-[10px] text-muted-foreground">all actions</span>
-                      </div>
-                      {/* Per-action breakdown */}
-                      {actionStatTypes.map(st => (
-                        <div key={st.key} className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
-                          <span className={`text-[10px] font-bold uppercase tracking-wide flex items-center gap-1 ${st.color}`}>
-                            {st.icon}{st.label}
-                          </span>
-                          <span className="text-2xl font-bold tabular-nums text-foreground">{getStat(st.key, today).toLocaleString()}</span>
-                          <span className="text-[10px] text-muted-foreground">today · {getStat(st.key, "lifetime").toLocaleString()} lifetime</span>
-                        </div>
-                      ))}
-                      {/* HS Cycles — human session activity count */}
-                      <div className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-cyan-500 flex items-center gap-1">
-                          <Bot className="w-3 h-3" />HS Cycles
-                        </span>
-                        <span className="text-2xl font-bold tabular-nums text-foreground">{getStat("human_session", today).toLocaleString()}</span>
-                        <span className="text-[10px] text-muted-foreground">today · {getStat("human_session", "lifetime").toLocaleString()} lifetime</span>
-                      </div>
                     </div>
                   </CardContent>
                 </Card>

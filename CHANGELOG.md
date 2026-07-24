@@ -4,6 +4,22 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.123
+
+### Fix — Statistics page: wire Action Totals card to mobile slot stats
+Action Totals now shows real mobile-engine counters (likes, follows, story views, reels, DMs, scrolls, etc.) pulled from `/api/mobile/slot-stats` instead of empty EB browser stats.
+
+### Fix — Statistics page: move Account Health & System card to bottom, remove Total API Calls column
+Card order in the Metrics tab is now: Mobile Engine Metrics → Action Totals → Account Health & System. The Total API Calls tile has been removed from the Account Health & System card.
+
+### Fix — Phone Farm: hover highlight restricted to SVG phone image only
+The device slot `hover:border` and `hover:bg` styles have been removed from the whole slot button so only the SVG phone shell scales on hover, not the entire card.
+
+### Fix — Phone Farm: move wallpaper customisation icon to left of recycle bin
+The Palette icon button now appears immediately to the left of the red recycle bin (both top-right on hover), instead of top-left.
+
+---
+
 ## v1.2.122
 
 ### Fix — Follow Users: skip Instagram search suggestion chip that blocked profile navigation
