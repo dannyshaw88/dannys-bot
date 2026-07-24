@@ -4479,10 +4479,41 @@ export async function switchToInstagramAccount(
       await runAdb(adbPath, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], 4000).catch(() => {});
       return true;
     }
-    onLog?.(`  ⚠ "@${clean}" not found in switcher — is the account logged in on this device?`);
-    // Dismiss the switcher so the cycle can continue with whatever account is active.
-    await runAdb(adbPath, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], 4000).catch(() => {});
-    return false;
+
+    // Devices now log in ~10 accounts but the switcher sheet only shows the
+    // first 7-8 without scrolling.  If the target wasn't in the initial dump,
+    // do up to 2 quick upward swipes (drag up = sheet scrolls down, revealing
+    // accounts lower in the list) and re-check after each one.
+    const { w: sw, h: sh } = getScreenSize(serial);
+    const swipeCx  = Math.round(sw * 0.5);
+    const swipeFrom = Math.round(sh * 0.65); // start y (lower on screen)
+    const swipeTo   = Math.round(sh * 0.35); // end y   (higher on screen)
+    const SCROLL_ATTEMPTS = 2;
+    for (let s = 0; s < SCROLL_ATTEMPTS && !coords; s++) {
+      onLog?.(`  ↳ @${clean} not visible yet — scrolling switcher list (attempt ${s + 1}/${SCROLL_ATTEMPTS})…`);
+      await runAdb(adbPath, [
+        "-s", serial, "shell", "input", "swipe",
+        String(swipeCx), String(swipeFrom),
+        String(swipeCx), String(swipeTo),
+        "300",
+      ], 4000).catch(() => {});
+      await _sleep(400); // let the list settle
+      xml = await _uiDump(adbPath, serial).catch(() => "");
+      coords = _findElem(xml, clean, `@${clean}`);
+      if (!coords && (xml.includes(`"@${clean}"`) || xml.includes(`"${clean}"`))) {
+        // Already the active account — visible somewhere in the tree but no tappable row.
+        onLog?.(`  ↳ @${clean} is the currently active account — dismissing switcher`);
+        await runAdb(adbPath, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], 4000).catch(() => {});
+        return true;
+      }
+    }
+
+    if (!coords) {
+      onLog?.(`  ⚠ "@${clean}" not found in switcher — is the account logged in on this device?`);
+      // Dismiss the switcher so the cycle can continue with whatever account is active.
+      await runAdb(adbPath, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], 4000).catch(() => {});
+      return false;
+    }
   }
 
   // 4. Tap the username row to switch accounts.
