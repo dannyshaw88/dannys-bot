@@ -4,6 +4,29 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.139 — 2026-07-24
+
+### Fixed — Story emoji comments now open the keyboard picker on Xiaomi devices
+
+**Symptom:**
+Story emoji comments opened the normal keyboard, then either typed nothing or
+selected a random QWERTY key. The previous `KEYCODE_PICTSYMBOLS` approach was
+ignored by the keyboard shown on the Xiaomi Redmi 12 5G.
+
+**Fix:**
+After the story reply composer opens, the automation reads the live UIAutomator
+tree to find the keyboard's space bar. It derives the adjacent emoji-key centre
+from that space bar's measured bounds, taps it once, and verifies that an emoji
+picker node appeared before doing anything else. Emoji scrolling and selection
+also use the picker bounds and clickable emoji nodes from the live accessibility
+tree, so the flow does not depend on fixed coordinates or screen dimensions.
+
+If the keyboard does not expose a space bar or the picker verification fails,
+the story is dismissed cleanly and the action is skipped rather than typing into
+the message field or tapping blindly.
+
+---
+
 ## v1.2.138 — 2026-07-24
 
 ### Fixed — Story emoji comment: open full emoji picker via KEYCODE_PICTSYMBOLS

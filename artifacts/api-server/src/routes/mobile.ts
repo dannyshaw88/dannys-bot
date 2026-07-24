@@ -2971,42 +2971,109 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             await android.tap(serial, _composerX, _composerY);
             await sleepOrAbort(serial, 800); // keyboard animates up
 
-            // Open the emoji picker via KEYCODE_PICTSYMBOLS (219).
-            //
-            // History of failed approaches:
-            //   v1: screencap → pixel-scan for smiley key → tap it
-            //       Failed: screencap takes ~1.5 s over USB; keyboard closes
-            //       before the scan completes on this device.
-            //   v2: adb shell input text <emoji>
-            //       Failed: InputShellCommand.sendText() calls
-            //       KeyCharacterMap.getEvents() which returns null for emoji
-            //       (they are not in the hardware key map) → NullPointerException.
-            //
-            // KEYCODE_PICTSYMBOLS (219) is the standard Android keycode that
-            // switches the active IME into its emoji / pictograph mode.  Gboard,
-            // MIUI keyboard, and most OEM keyboards honour it.  It is a plain
-            // keyevent — synchronous, instant, no image transfer, no Unicode
-            // injection — so it fires and registers before the keyboard can close.
-            onLog?.(`Story ${s + 1}: sending KEYCODE_PICTSYMBOLS to open emoji picker…`);
-            await android.keyevent(serial, 219);
-            await sleepOrAbort(serial, 500); // picker animates open
+            // Open the emoji picker from live keyboard geometry instead of
+            // KEYCODE_PICTSYMBOLS or adb input text, both of which fail on the
+            // Xiaomi keyboard shown in the supplied capture.
+            const _keyboardXml = await android.dumpUi(serial).catch(() => "");
+            const _keyboardNodes = [..._keyboardXml.matchAll(/<node\s([^>]+?)(?:\/?>)/g)];
+            const _spaceBar = _keyboardNodes
+              .map((m) => {
+                const attrs = m[1];
+                const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+                if (!bounds) return null;
+                const x1 = +bounds[1], y1 = +bounds[2], x2 = +bounds[3], y2 = +bounds[4];
+                const width = x2 - x1, height = y2 - y1;
+                const resourceId = attrs.match(/(?:resource-id|id)="([^"]*)"/i)?.[1] ?? "";
+                const contentDesc = attrs.match(/(?:content-desc|desc)="([^"]*)"/i)?.[1] ?? "";
+                const text = attrs.match(/text="([^"]*)"/i)?.[1] ?? "";
+                const label = `${contentDesc} ${text}`.trim();
+                const namedSpace = /(?:spacebar|space_bar|key_space|space_key)/i.test(resourceId) ||
+                  /^(?:space|space bar|spacebar)$/i.test(label);
+                const languageSpace = /^[A-Za-z]+(?:\s*\([^)]*\))?$/.test(label) && width > height * 2;
+                if (y1 < h * 0.55 ||
+                    height <= 0 || width <= height * 2 || (!namedSpace && !languageSpace)) return null;
+                return { x1, y1, x2, y2, score: (namedSpace ? 100 : 0) + (languageSpace ? 10 : 0) };
+              })
+              .filter((candidate): candidate is { x1: number; y1: number; x2: number; y2: number; score: number } => candidate !== null)
+              .sort((a, b) => b.score - a.score)[0];
+            const _emojiButton = _spaceBar
+              ? {
+                  x: _spaceBar.x1 - Math.max(1, Math.round((_spaceBar.y2 - _spaceBar.y1) / 2)),
+                  y: Math.round((_spaceBar.y1 + _spaceBar.y2) / 2),
+                }
+              : await android.findKeyboardEmojiButton(serial).catch(() => null);
+            if (!_emojiButton) {
+              onLog?.(`Story ${s + 1}: emoji comment skipped — keyboard space bar not found in a11y dump`);
+              logger.warn({ serial, story: s + 1 }, "[view-stories] emoji key geometry not verified");
+              await android.pressBack(serial).catch(() => {});
+              continue;
+            }
+            const _emojiKeyX = _emojiButton.x;
+            const _emojiKeyY = _emojiButton.y;
+            onLog?.(`Story ${s + 1}: tapping detected emoji key left of space bar at (${_emojiKeyX},${_emojiKeyY})…`);
+            await android.tap(serial, _emojiKeyX, _emojiKeyY);
+            await sleepOrAbort(serial, 350); // picker animates open
 
-            // Scroll the emoji picker a random number of times so the same
-            // emoji is never at the top across runs.
-            const _scrollCount = 1 + Math.floor(Math.random() * 50);
-            onLog?.(`Story ${s + 1}: scrolling emoji picker ${_scrollCount}×…`);
+            const _pickerXml = await android.dumpUi(serial).catch(() => "");
+            const _emojiCells = [..._pickerXml.matchAll(/<node\s([^>]+?)(?:\/?>)/g)]
+              .map((m) => {
+                const attrs = m[1];
+                const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+                if (!bounds) return null;
+                const x1 = +bounds[1], y1 = +bounds[2], x2 = +bounds[3], y2 = +bounds[4];
+                const label = attrs.match(/(?:content-desc|desc|text)="([^"]+)"/i)?.[1]?.trim() ?? "";
+                const resourceId = attrs.match(/(?:resource-id|id)="([^"]*)"/i)?.[1] ?? "";
+                const isEmojiLabel = [...label].some((char) => {
+                  const code = char.codePointAt(0) ?? 0;
+                  return code >= 0x1f000 || (code >= 0x2600 && code <= 0x27bf);
+                });
+                if (!/clickable="true"/i.test(attrs) ||
+                    (!isEmojiLabel && !/emoji|emoticon/i.test(resourceId)) ||
+                    /category|tab|search|delete|backspace/i.test(resourceId) ||
+                    x2 <= x1 || y2 <= y1 || x2 - x1 >= w * 0.35 || y2 - y1 >= h * 0.35) return null;
+                return { x1, y1, x2, y2 };
+              })
+              .filter((cell): cell is { x1: number; y1: number; x2: number; y2: number } => cell !== null);
+            if (_emojiCells.length < 3) {
+              onLog?.(`Story ${s + 1}: emoji comment skipped — detected key did not open emoji picker`);
+              logger.warn({ serial, story: s + 1 }, "[view-stories] emoji picker verification failed");
+              await android.pressBack(serial).catch(() => {});
+              continue;
+            }
+            onLog?.(`Story ${s + 1}: emoji picker verified from live a11y dump (${_emojiCells.length} cells)`);
+
+            // Scroll the verified picker region so the same emoji is not
+            // always selected from the first visible row. The swipe bounds
+            // come from actual clickable emoji cells, not screen percentages.
+            const _pickerBounds = _emojiCells.reduce(
+              (region, cell) => ({
+                x1: Math.min(region.x1, cell.x1),
+                y1: Math.min(region.y1, cell.y1),
+                x2: Math.max(region.x2, cell.x2),
+                y2: Math.max(region.y2, cell.y2),
+              }),
+              { x1: w, y1: h, x2: 0, y2: 0 },
+            );
+            const _scrollCount = 1 + Math.floor(Math.random() * 10);
+            onLog?.(`Story ${s + 1}: scrolling verified emoji picker ${_scrollCount}×…`);
             for (let _ei = 0; _ei < _scrollCount; _ei++) {
-              await android.swipe(serial,
-                Math.round(w * 0.50), Math.round(h * 0.84),
-                Math.round(w * 0.50), Math.round(h * 0.71),
-                150);
+              const _scrollX = Math.round((_pickerBounds.x1 + _pickerBounds.x2) / 2);
+              await android.swipe(
+                serial,
+                _scrollX,
+                _pickerBounds.y2,
+                _scrollX,
+                _pickerBounds.y1,
+                150,
+              );
               await sleepOrAbort(serial, 80);
             }
 
-            // Tap a random position inside the emoji grid.
-            const _emojiX = Math.round(w * 0.08 + Math.random() * w * 0.84);
-            const _emojiY = Math.round(h * 0.77 + Math.random() * h * 0.14);
-            onLog?.(`Story ${s + 1}: tapping random emoji at (${_emojiX},${_emojiY})…`);
+            // Tap one cell that was positively identified in the picker tree.
+            const _selectedEmoji = _emojiCells[Math.floor(Math.random() * _emojiCells.length)];
+            const _emojiX = Math.round((_selectedEmoji.x1 + _selectedEmoji.x2) / 2);
+            const _emojiY = Math.round((_selectedEmoji.y1 + _selectedEmoji.y2) / 2);
+            onLog?.(`Story ${s + 1}: tapping detected emoji at (${_emojiX},${_emojiY})…`);
             await android.tap(serial, _emojiX, _emojiY);
             await sleepOrAbort(serial, 400); // emoji enters field; keyboard may close
 
