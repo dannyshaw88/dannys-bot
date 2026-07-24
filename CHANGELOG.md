@@ -4,6 +4,64 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.134 — 2026-07-24
+
+### Fixed — Story comment emoji button tapped wrong spot (glyph fragment + tinted keyboard)
+
+**Two bugs fixed in this release — both caused "emoji comment skipped — keyboard emoji
+key not visually detected" or a mis-tap that did nothing:**
+
+---
+
+#### Bug 1 — Detector taps a tiny glyph fragment instead of the smiley key (all themes)
+
+**Root cause:**
+The 😊 emoji icon rendered on the smiley key is not a plain key-surface pixel — it
+contains colourful glyph pixels that break the key-interior scan into a left strip and
+a right strip.  Before this fix the code picked the strip *closest to the space bar*
+(the right strip), which could be as narrow as 10 px.  The tap landed on the key's
+right edge rather than its centre, registering no press at all.
+
+**Fix — two-stage defence:**
+
+1. **Segment merging** — after scanning the bottom row for key-surface runs, adjacent
+   segments separated by a gap narrower than `max(6, width × 0.8 %)` are merged into
+   one.  This reassembles left-strip + right-strip back into one key-sized segment before
+   any selection logic runs.  The threshold is screen-width-relative so it works
+   identically on 720 p, 1080 p, and 1440 p devices.
+
+2. **Minimum key-width guard** — even after merging, any candidate narrower than 12 % of
+   the detected space bar width is rejected.  A real smiley key is always ≥ 12 % of the
+   space bar width; a residual anti-aliasing or glyph-outline fragment is typically < 3 %.
+   This guard is the final safety net for fragments that survive merging.
+
+---
+
+#### Bug 2 — Tinted / coloured Gboard keyboard themes not detected (new "tinted" profile)
+
+**Root cause:**
+The three existing themes (light, gray, dark) all require low colour saturation
+(`max − min ≤ 40–42`).  Gboard colour themes — Mint, Sage, Rose, Sky, Lavender, etc. —
+produce key surfaces where `max − min` can reach 60–80, causing all three profiles to
+reject every pixel in the keyboard band and return null before any key-row scan begins.
+
+**Fix — new "tinted-light" detector profile:**
+- `isKeyboardBg`: `min ≥ 120 && max ≤ 240 && max−min ≤ 80`
+  Excludes near-black story pixels (min < 120) and blown-out overlays (max > 240) while
+  accepting any pastel colour cast.
+- `isKeyInterior`: `min ≥ 145 && max ≤ 250 && max−min ≤ 80`
+  Requires key surfaces to be slightly brighter than inter-key gaps (which fall around
+  min ~100–130 in tinted themes), cleanly segmenting individual keys.
+
+The row-fraction gate (≥ 42 % of sampled pixels must match across the keyboard band)
+prevents a colourful story background from being mistaken for a tinted keyboard; story
+images are multicoloured and will not sustain a consistent hue across the full width.
+
+**Detection order:** light → tinted → gray → dark.  Each theme is tried in turn; the
+first to return a valid, key-sized smiley coordinate wins.
+
+---
+
 ## v1.2.133 — 2026-07-24
 
 ### Fixed — Story comment emoji button still not detected (medium-gray keyboard)

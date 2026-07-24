@@ -2270,14 +2270,15 @@ type ScreenPixels = { width: number; height: number; channels: number; pixels: B
  * because both are common depending on the device's system theme and the app.
  */
 export function findKeyboardEmojiButtonFromPixels(img: ScreenPixels): { x: number; y: number } | null {
-  return _findKeyboardEmojiButtonForTheme(img, "light") ??
-         _findKeyboardEmojiButtonForTheme(img, "gray")  ??
+  return _findKeyboardEmojiButtonForTheme(img, "light")  ??
+         _findKeyboardEmojiButtonForTheme(img, "tinted") ??
+         _findKeyboardEmojiButtonForTheme(img, "gray")   ??
          _findKeyboardEmojiButtonForTheme(img, "dark");
 }
 
 function _findKeyboardEmojiButtonForTheme(
   img: ScreenPixels,
-  theme: "light" | "gray" | "dark",
+  theme: "light" | "tinted" | "gray" | "dark",
 ): { x: number; y: number } | null {
   const { width, height, channels, pixels } = img;
   if (!width || !height || channels < 3) return null;
@@ -2287,6 +2288,15 @@ function _findKeyboardEmojiButtonForTheme(
    *
    * Light keyboard: nearly white / light-neutral (Gboard default light).
    *   min(r,g,b) >= 190 and low saturation (max−min ≤ 42).
+   *
+   * Tinted-light keyboard: Gboard color themes (mint, sage, rose, sky, lavender…).
+   *   Key surfaces are pastel — medium-high brightness with a colour cast.
+   *   The gray theme's `max ≤ 180` cap rejects these (max can reach 200–240),
+   *   so a separate profile is required.  min ≥ 120 excludes near-black story
+   *   content; max-min ≤ 80 allows a mild hue while rejecting neon/oversaturated
+   *   surfaces.  The row-fraction gate (≥ 42 % of pixels matching across the
+   *   keyboard band) provides the additional safety net against colourful story
+   *   backgrounds that happen to match individual pixel checks.
    *
    * Gray keyboard: medium gray — the Gboard "gray" / system-default theme.
    *   This is the most common theme on Xiaomi/Redmi devices. Key surfaces sit
@@ -2303,30 +2313,36 @@ function _findKeyboardEmojiButtonForTheme(
     const idx = y * width * channels + x * channels;
     const r = pixels[idx], g = pixels[idx + 1], b = pixels[idx + 2];
     const mn = Math.min(r, g, b), mx = Math.max(r, g, b);
-    if (theme === "light") return mn >= 190 && mx - mn <= 42;
-    if (theme === "gray")  return mn >= 60  && mx <= 180 && mx - mn <= 40;
-    /* dark */             return mn >= 30  && mx <= 130 && mx - mn <= 40;
+    if (theme === "light")  return mn >= 190 && mx - mn <= 42;
+    if (theme === "tinted") return mn >= 120 && mx <= 240 && mx - mn <= 80;
+    if (theme === "gray")   return mn >= 60  && mx <= 180 && mx - mn <= 40;
+    /* dark */              return mn >= 30  && mx <= 130 && mx - mn <= 40;
   };
 
   /**
    * Returns true when an individual pixel looks like the interior of a keyboard
    * key (as opposed to a gap / shadow between keys).
    *
-   * Light:  nearly white — key background is light gray/white; text labels are
+   * Light:   nearly white — key background is light gray/white; text labels are
    *   dark and break the run, leaving left/right key-surface strips.
    *
-   * Gray:   medium gray key surface (~90–115 RGB).  Inter-key gaps are darker
+   * Tinted:  pastel key surfaces (e.g. mint ~RGB 185–225, sage ~RGB 180–215).
+   *   Inter-key gaps are a darker shade of the same hue (~RGB 100–155), so
+   *   min ≥ 145 separates key surface from gap.
+   *
+   * Gray:    medium gray key surface (~90–115 RGB).  Inter-key gaps are darker
    *   (~40–70 RGB), so min ≥ 70 separates key surface from gap cleanly.
    *   Dark key labels also fall below 70, breaking the run as needed.
    *
-   * Dark:   dark-gray key surface (~55–90 RGB).  Inter-key gaps are very dark
+   * Dark:    dark-gray key surface (~55–90 RGB).  Inter-key gaps are very dark
    *   (~10–35 RGB), so min ≥ 45 is enough separation.
    */
   const isKeyInterior = (r: number, g: number, b: number): boolean => {
     const mn = Math.min(r, g, b), mx = Math.max(r, g, b);
-    if (theme === "light") return mn >= 232 && mx - mn <= 28;
-    if (theme === "gray")  return mn >= 70  && mx <= 200 && mx - mn <= 45;
-    /* dark */             return mn >= 45  && mx <= 145 && mx - mn <= 35;
+    if (theme === "light")  return mn >= 232 && mx - mn <= 28;
+    if (theme === "tinted") return mn >= 145 && mx <= 250 && mx - mn <= 80;
+    if (theme === "gray")   return mn >= 70  && mx <= 200 && mx - mn <= 45;
+    /* dark */              return mn >= 45  && mx <= 145 && mx - mn <= 35;
   };
 
   // Find the longest lower-screen band whose rows are predominantly the
@@ -2412,21 +2428,50 @@ function _findKeyboardEmojiButtonForTheme(
   }
 
   if (bestSegments.length < 3) return null;
-  const space = bestSegments.reduce((a, b) =>
+
+  // Merge immediately-adjacent segments that were split by a key's glyph.
+  // When the emoji icon (😊) or any other key label is rendered over the key
+  // surface, those non-key-interior pixels break the run into a left strip and
+  // a right strip. Without merging, the rightmost strip — which may be only
+  // ~10 px wide — becomes the "closest left candidate", landing the tap on an
+  // anti-aliasing fragment rather than the centre of the real smiley key.
+  // Two segments are merged when the gap between them is narrower than one
+  // minimum-key-width unit (scaled to screen width so it works on all devices).
+  const mergeGap = Math.max(6, Math.round(width * 0.008));
+  type Segment = (typeof bestSegments)[number];
+  const merged: Segment[] = [];
+  for (const seg of bestSegments) {
+    const prev = merged[merged.length - 1];
+    if (prev && seg.x1 - prev.x2 <= mergeGap) {
+      // Extend the previous segment to absorb this fragment.
+      prev.x2 = seg.x2;
+    } else {
+      merged.push({ ...seg });
+    }
+  }
+
+  const space = merged.reduce((a, b) =>
     (a.x2 - a.x1) >= (b.x2 - b.x1) ? a : b,
   );
-  const leftCandidates = bestSegments
+  const leftCandidates = merged
     .filter(s => s.x2 < space.x1)
     .sort((a, b) => b.x2 - a.x2);
   const emoji = leftCandidates[0];
   if (!emoji) return null;
 
-  // The target must be immediately adjacent to the space key, not an earlier
-  // modifier key. A generous gap handles rounded key corners while rejecting
-  // a missing/fragmented keyboard row.
   const gap = space.x1 - emoji.x2;
   const emojiWidth = emoji.x2 - emoji.x1;
+  const spaceWidth = space.x2 - space.x1;
+
+  // Adjacency check: the emoji key must be immediately next to the space bar.
+  // A generous gap handles rounded key corners while rejecting a missing row.
   if (gap > Math.max(32, emojiWidth * 0.75)) return null;
+
+  // Key-size check: even after merging, reject any candidate that is still
+  // implausibly narrow for a real key.  The smiley key is always at least
+  // ~12 % of the space-bar width on every device size.  This rejects residual
+  // single-pixel anti-aliasing or glyph-outline fragments that survive merging.
+  if (emojiWidth < spaceWidth * 0.12) return null;
 
   return {
     x: Math.round((emoji.x1 + emoji.x2) / 2),
