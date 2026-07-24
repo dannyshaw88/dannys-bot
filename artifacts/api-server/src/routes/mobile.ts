@@ -1883,6 +1883,74 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   const _viewExploreLastDmRecipient     = new Map<string, { x: number; y: number }>();
   const _injectBrowsingLastDmRecipient  = new Map<string, { x: number; y: number }>();
 
+  /**
+   * Rolls a single scroll-swipe velocity from a session-level weight set.
+   *
+   * Four modes, weighted by `weights` (treated as relative, not %-of-100):
+   *   skim       — fast long swipe (flicking through boring content)
+   *   normal     — medium-paced scroll
+   *   interested — slow short nudge (something caught the eye)
+   *   back       — short reversed swipe (peeked back up)
+   *
+   * Pass `allowBack = false` for Reels (a back-swipe navigates to the
+   * previous clip, which is never what we want mid-loop).
+   *
+   * `safeStartFrac` is the minimum Y fraction for the swipe start point.
+   * Feed requires ≥0.88 to clear the post action bar; Explore can use 0.80.
+   */
+  function rollScrollVelocity(
+    h: number,
+    weights: { skim: number; normal: number; interested: number; back: number },
+    allowBack = true,
+    safeStartFrac = 0.80,
+  ): { duration: number; fromY: number; toY: number; mode: string } {
+    const effectiveBack = allowBack ? weights.back : 0;
+    const total = weights.skim + weights.normal + weights.interested + effectiveBack;
+    const roll = Math.random() * total;
+    let cum = 0;
+
+    cum += weights.skim;
+    if (roll < cum) {
+      // Skim: fast, full-height flick
+      return {
+        mode: "skim",
+        duration: 150 + Math.round(Math.random() * 200),
+        fromY: Math.round(h * safeStartFrac),
+        toY:   Math.round(h * 0.08),
+      };
+    }
+
+    cum += weights.normal;
+    if (roll < cum) {
+      // Normal: comfortable mid-speed scroll
+      return {
+        mode: "normal",
+        duration: 450 + Math.round(Math.random() * 350),
+        fromY: Math.round(h * safeStartFrac),
+        toY:   Math.round(h * 0.22),
+      };
+    }
+
+    cum += weights.interested;
+    if (roll < cum) {
+      // Interested: slow nudge — something caught the eye
+      return {
+        mode: "interested",
+        duration: 900 + Math.round(Math.random() * 600),
+        fromY: Math.round(h * Math.min(0.65, safeStartFrac)),
+        toY:   Math.round(h * 0.38),
+      };
+    }
+
+    // Back-scroll: short reversed swipe (scroll up to re-examine)
+    return {
+      mode: "back",
+      duration: 350 + Math.round(Math.random() * 250),
+      fromY: Math.round(h * 0.28),
+      toY:   Math.round(h * 0.52),
+    };
+  }
+
   // Shared by the standalone `/check-feed` route and the full
   // `/automation-cycle` route below — the scroll/like/share loop.
   async function runCheckFeedLoop(serial: string, params: {
@@ -1981,11 +2049,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
       }
     };
+    // Roll session scroll personality once — each run of the feed tool gets
+    // its own mix so the distribution never converges to a fixed signature
+    // over many sessions. Weights are relative (don't need to sum to 100).
+    const feedScrollWeights = {
+      skim:      Math.max(5,  28 + Math.round((Math.random() - 0.5) * 24)),  // ~16–40
+      normal:    Math.max(10, 50 + Math.round((Math.random() - 0.5) * 24)),  // ~38–62
+      interested:Math.max(2,  14 + Math.round((Math.random() - 0.5) * 16)),  //  ~6–22
+      back:      Math.max(0,   8 + Math.round((Math.random() - 0.5) * 16)),  //   0–16
+    };
+    onLog?.(`Feed scroll personality — skim:${feedScrollWeights.skim} normal:${feedScrollWeights.normal} interested:${feedScrollWeights.interested} back:${feedScrollWeights.back}`);
+
     for (let i = 0; i < count; i++) {
       if (isCycleAborted(serial)) throw new Error("cycle-aborted");
-      onLog?.(`Scroll ${i + 1}/${count}`);
-      logger.info({ serial, target: "feed-scroll", from: [x, y1], to: [x, y2] }, "[check-feed] swipe");
-      await android.swipe(serial, x, y1, x, y2, 550 + Math.round(Math.random() * 200));
+      const sv = rollScrollVelocity(h, feedScrollWeights, /*allowBack=*/true, /*safeStartFrac=*/0.88);
+      onLog?.(`Scroll ${i + 1}/${count} [${sv.mode}]`);
+      logger.info({ serial, target: "feed-scroll", mode: sv.mode, from: [x, sv.fromY], to: [x, sv.toY], durationMs: sv.duration }, "[check-feed] swipe");
+      await android.swipe(serial, x, sv.fromY, x, sv.toY, sv.duration);
       await sleepOrAbort(serial, 180);
       await verifyStillInInstagram();
 
@@ -3306,8 +3386,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     // Scroll geometry: same safe band as runCheckFeedLoop.
     const x  = Math.round(w / 2);
-    const y1 = Math.round(h * 0.80);
-    const y2 = Math.round(h * 0.22);
+
+    // Session scroll personality — same approach as runCheckFeedLoop.
+    const exploreScrollWeights = {
+      skim:      Math.max(5,  28 + Math.round((Math.random() - 0.5) * 24)),  // ~16–40
+      normal:    Math.max(10, 50 + Math.round((Math.random() - 0.5) * 24)),  // ~38–62
+      interested:Math.max(2,  14 + Math.round((Math.random() - 0.5) * 16)),  //  ~6–22
+      back:      Math.max(0,   8 + Math.round((Math.random() - 0.5) * 16)),  //   0–16
+    };
+    onLog?.(`Explore scroll personality — skim:${exploreScrollWeights.skim} normal:${exploreScrollWeights.normal} interested:${exploreScrollWeights.interested} back:${exploreScrollWeights.back}`);
 
     for (let i = 0; i < scrollCount; i++) {
       if (isCycleAborted(serial)) throw new Error("cycle-aborted");
@@ -3694,7 +3781,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const delaySec = delayLoSec + Math.random() * (delayHiSec - delayLoSec);
         if (delaySec > 0) await sleepOrAbort(serial, Math.round(delaySec * 1000));
         // Swipe up to reveal more Explore posts.
-        await android.swipe(serial, x, y1, x, y2, 400 + Math.round(Math.random() * 200));
+        const esv = rollScrollVelocity(h, exploreScrollWeights, /*allowBack=*/true, /*safeStartFrac=*/0.80);
+        onLog?.(`Explore scroll ${i + 1}/${scrollCount}: next swipe [${esv.mode}]`);
+        await android.swipe(serial, x, esv.fromY, x, esv.toY, esv.duration);
         await sleepOrAbort(serial, 800);
       }
     }
@@ -3750,14 +3839,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     let likes = 0, sharesFeed = 0, sharesDm = 0, saves = 0, reelsViewed = 0;
 
+    // Session scroll personality for Reels — no back-scroll (it would snap
+    // to the previous clip mid-loop). Weights are relative, same approach as
+    // the feed/explore tools so each Reels session has its own character.
+    const reelsScrollWeights = {
+      skim:      Math.max(5,  28 + Math.round((Math.random() - 0.5) * 24)),  // ~16–40
+      normal:    Math.max(10, 50 + Math.round((Math.random() - 0.5) * 24)),  // ~38–62
+      interested:Math.max(2,  14 + Math.round((Math.random() - 0.5) * 16)),  //  ~6–22
+      back:      0,  // disabled — would navigate to the previous reel
+    };
+    onLog?.(`Reels scroll personality — skim:${reelsScrollWeights.skim} normal:${reelsScrollWeights.normal} interested:${reelsScrollWeights.interested}`);
+
     // Reels snap fully to the next clip on a swipe — unlike the feed's
     // partial scroll (runCheckFeedLoop), a single full-height swipe here
     // always lands on exactly the next reel.
-    const swipeToNextReel = async () => {
-      const x = Math.round(w / 2);
-      const y1 = Math.round(h * 0.80);
-      const y2 = Math.round(h * 0.20);
-      await android.swipe(serial, x, y1, x, y2, 300 + Math.round(Math.random() * 150));
+    const swipeToNextReel = async (reelLabel: string) => {
+      const rx = Math.round(w / 2);
+      const rsv = rollScrollVelocity(h, reelsScrollWeights, /*allowBack=*/false, /*safeStartFrac=*/0.80);
+      onLog?.(`${reelLabel}: advance swipe [${rsv.mode}]`);
+      await android.swipe(serial, rx, rsv.fromY, rx, rsv.toY, rsv.duration);
     };
 
     for (let i = 0; i < totalReels; i++) {
@@ -4046,7 +4146,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       reelsViewed++;
 
       if (i < totalReels - 1) {
-        await swipeToNextReel();
+        await swipeToNextReel(`Reel ${i + 1}/${totalReels}`);
         await sleepOrAbort(serial, 400 + Math.round(Math.random() * 300));
       }
     }
