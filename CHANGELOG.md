@@ -4,6 +4,55 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.145 — 2026-07-24
+
+### Fixed — Story emoji comment pixel scanner no longer mistakes bright story content for the keyboard
+
+**Symptom:**
+
+Story emoji comment was skipped with:
+> `emoji comment skipped — space bar not in a11y dump and pixel scan found no matching keyboard theme`
+
+…even though the keyboard was visibly open on screen (confirmed by screenshot and IME dump).
+
+**Root cause — two bugs in `_findKeyboardEmiButtonForTheme` (androidManager.ts):**
+
+1. **Scan range started too high (50% of screen height).** The keyboard only ever
+   appears in the bottom ~30% of the screen, but the scanner was sampling from 50%
+   upward. On story screens whose video content includes bright/white frames, the
+   `light` theme's background check (`mn ≥ 190, mx−mn ≤ 42`) matched hundreds of
+   pixels in the story content, producing 366 qualifying rows — almost all of them
+   above the actual keyboard.
+
+2. **"Best run" selector picked the longest run, not the last.** The code comment
+   said "use the last coherent run" but the implementation used `>` (longest wins).
+   With 366 false qualifying rows spread across the story content, the longest
+   coherent run was somewhere in the story image, not the keyboard band at the
+   bottom. The scanner then looked for a space-bar row inside that wrong region and
+   found nothing, returning null for every theme.
+
+   Diagnostic evidence from the debug log:
+   ```
+   [kbd-diag] theme=light  maxRowFrac=1.000  qualifyingRows=366
+   [kbd-diag] y=2091 (85%)  R=28-255  G=25-255  B=30-255
+   ```
+   The full 28–255 RGB range at y=2091 confirms the diagnostic sample landed in
+   story content, not the keyboard.
+
+**Fix:**
+
+- **Scan start raised from `height × 0.50` to `height × 0.65`** — cuts out the
+  upper story content entirely; the keyboard never appears above 65% of screen height.
+
+- **Run selector changed from "longest" to "last" (bottommost)** — the keyboard is
+  always the lowest coherent band in the scan range. Any story content that still
+  matches a theme's background check after the narrower scan start forms earlier runs;
+  the last qualifying run (≥ 24 px) is always the actual keyboard.
+
+**File changed:** `artifacts/api-server/src/mobile/androidManager.ts`
+
+---
+
 ## v1.2.144 — 2026-07-24
 
 ### Rebrand — All references updated from "Danny's Bot / Equinox" to "Aura Farming"

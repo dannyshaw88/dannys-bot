@@ -2425,9 +2425,12 @@ function _findKeyboardEmojiButtonForTheme(
     /* dark */              return mn >= 45  && mx <= 145 && mx - mn <= 35;
   };
 
-  // Find the longest lower-screen band whose rows are predominantly the
-  // neutral keyboard background. Sample every 4th pixel to keep this
-  // probe cheap on the large screens used by the phone farm.
+  // Find the lowest coherent band whose rows are predominantly the neutral
+  // keyboard background.  Scan only the bottom 35% of the screen (65%–96%)
+  // because the keyboard never appears above that — starting at 50% caused
+  // story content (bright/white video frames) to generate hundreds of false
+  // qualifying rows and swamp the actual keyboard band.
+  // Sample every 4th pixel to keep the probe cheap on large screens.
   const rowNeutralFraction = (y: number) => {
     let matches = 0;
     let samples = 0;
@@ -2439,7 +2442,7 @@ function _findKeyboardEmojiButtonForTheme(
   };
   const keyboardRows: number[] = [];
   let maxRowFraction = 0;
-  for (let y = Math.floor(height * 0.50); y < Math.floor(height * 0.96); y += 2) {
+  for (let y = Math.floor(height * 0.65); y < Math.floor(height * 0.96); y += 2) {
     const fraction = rowNeutralFraction(y);
     if (fraction > maxRowFraction) {
       maxRowFraction = fraction;
@@ -2477,29 +2480,33 @@ function _findKeyboardEmojiButtonForTheme(
   );
   if (keyboardRows.length < 12) return null;
 
-  // Use the last coherent keyboard-background run. This avoids mistaking a
-  // pale story sticker or caption above the actual keyboard for its key row.
+  // Always use the LAST (lowest / bottommost) coherent keyboard-background run.
+  // The keyboard is physically at the bottom of the scan range; any story
+  // content that happens to match the theme's background check appears above it
+  // and forms earlier runs.  Picking the last qualifying run (≥ 24 px) is
+  // therefore always the actual keyboard band, regardless of how many false
+  // runs appear higher up.
   let runStart = keyboardRows[0];
   let runEnd = keyboardRows[0];
-  let bestStart = runStart;
-  let bestEnd = runEnd;
+  let bestStart = -1;
+  let bestEnd = -1;
   for (let i = 1; i < keyboardRows.length; i++) {
     const y = keyboardRows[i];
     if (y - keyboardRows[i - 1] <= 8) {
       runEnd = y;
     } else {
-      if (runEnd - runStart > bestEnd - bestStart) {
-        bestStart = runStart;
+      if (runEnd - runStart >= 24) {
+        bestStart = runStart; // always overwrite — prefer the lower run
         bestEnd = runEnd;
       }
       runStart = runEnd = y;
     }
   }
-  if (runEnd - runStart > bestEnd - bestStart) {
+  if (runEnd - runStart >= 24) {
     bestStart = runStart;
     bestEnd = runEnd;
   }
-  if (bestEnd - bestStart < 24) return null;
+  if (bestEnd < 0 || bestEnd - bestStart < 24) return null;
 
   // Scan several rows through the lowest key row. At each row, key-interior
   // runs represent individual keys; keyboard gaps and shadows break the runs.
