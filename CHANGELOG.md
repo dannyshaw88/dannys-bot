@@ -4,6 +4,25 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.119
+
+### Fix — Phone Farm: live mirror thumbnail now shows automatically when HST is running
+
+**What changed:** The mirror thumbnail inside each device's SVG phone slot was only
+displayed after the user had visited the device detail page (which explicitly signals
+`mirror-live` to the server). If you never opened the detail page the Farm card had
+no `streamingSerials` entry and the thumbnail never polled.
+
+Fix: `isStreaming` on the Farm card now also fires when the device has an active
+automation cycle (`activeCycleSerials`) and is online — so the screencap thumbnail
+polls and shows the live screen as soon as the Human Session Tool starts, without
+requiring a detail-page visit first.
+
+When neither condition is true the card falls back to the configured wallpaper and
+text, exactly as before. No other logic was changed.
+
+---
+
 ## v1.2.118
 
 ### Fix — Trust Score Copy Settings dialog now shows both panels correctly

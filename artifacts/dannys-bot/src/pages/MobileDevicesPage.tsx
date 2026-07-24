@@ -1079,7 +1079,7 @@ export function MobileDevicesPage() {
                       phone={livePhone}
                       online={onlineSerials.has(device.serial)}
                       active={activeCycleSerials.has(device.serial) && onlineSerials.has(device.serial)}
-                      isStreaming={streamingSerials.has(device.serial)}
+                      isStreaming={streamingSerials.has(device.serial) || (activeCycleSerials.has(device.serial) && onlineSerials.has(device.serial))}
                       onClick={() => setLocation(`/mobile/farm/${encodeURIComponent(device.serial)}`)}
                       onRemove={() => handleRemove(device.slotIndex)}
                       custom={slotCustom[device.slotIndex] ?? DEFAULT_SLOT_CUSTOM}
