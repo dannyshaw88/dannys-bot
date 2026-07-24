@@ -4,6 +4,13 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.124
+
+### Fix — Follow Users: English Speaking filter now correctly blocks Hindi/Devanagari, Arabic, Urdu and other non-Latin/CJK scripts
+The old filter used a non-ASCII character ratio (>40%) which silently passed mixed bios — e.g. a Hindi bio with some Latin lines and emojis could dilute the ratio below the threshold. The new filter uses Unicode script ranges directly: Arabic, Devanagari (Hindi), Bengali, Gujarati, Tamil, Telugu, Kannada, Malayalam, Thai, Myanmar, and all related Indic/SE-Asian scripts are blocked the moment 3+ characters from those ranges appear in any bio node. Safe scripts — Latin (all EU languages), CJK (Chinese, Japanese), Hangul (Korean), Cyrillic (Bulgarian/Serbian), Greek — are unaffected.
+
+---
+
 ## v1.2.123
 
 ### Fix — Statistics page: wire Action Totals card to mobile slot stats

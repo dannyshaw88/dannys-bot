@@ -5467,27 +5467,55 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             }
 
             // ── English Speaking ────────────────────────────────────────────
-            // Scan all accessibility node text for non-ASCII ratio. A node
-            // where >40 % of characters are non-ASCII is treated as
-            // non-English and the user is skipped. Profiles with no bio text
-            // (or all-ASCII bios) pass through.
-            // Both content-desc="..." and text="..." attributes are scanned —
-            // Instagram stores the bio text in text= nodes (TextView), NOT
-            // content-desc= nodes, so checking only content-desc silently
-            // misses Devanagari/Sanskrit/Arabic/Chinese bios entirely.
+            // Detect non-allowed scripts by Unicode range rather than a
+            // non-ASCII ratio. Ratio checks fail on mixed bios (some Hindi,
+            // some Latin + emojis) because the Latin portion dilutes the
+            // ratio below any threshold.
+            //
+            // SAFE scripts (pass through):
+            //   Latin / Latin Extended (English, all EU languages)
+            //   CJK Unified Ideographs (Chinese, Japanese)
+            //   Hiragana / Katakana (Japanese)
+            //   Hangul (Korean)
+            //   Cyrillic (Bulgarian, Serbian — EU members)
+            //   Greek (EU member)
+            //   Common: ASCII, digits, punctuation, emoji
+            //
+            // BLOCKED scripts (trigger skip):
+            //   Arabic / Urdu / Persian  U+0600–06FF, U+0750–077F,
+            //                            U+08A0–08FF, U+FB50–FDFF, U+FE70–FEFF
+            //   Devanagari (Hindi etc.)  U+0900–097F
+            //   Bengali                  U+0980–09FF
+            //   Gurmukhi (Punjabi)       U+0A00–0A7F
+            //   Gujarati                 U+0A80–0AFF
+            //   Oriya                    U+0B00–0B7F
+            //   Tamil                    U+0B80–0BFF
+            //   Telugu                   U+0C00–0C7F
+            //   Kannada                  U+0C80–0CFF
+            //   Malayalam                U+0D00–0D7F
+            //   Sinhala                  U+0D80–0DFF
+            //   Thai                     U+0E00–0E7F
+            //   Lao                      U+0E80–0EFF
+            //   Tibetan                  U+0F00–0FFF
+            //   Myanmar                  U+1000–109F
+            //
+            // Even 3 characters from a blocked script in any node is enough
+            // to skip — a single Hindi word easily exceeds that.
             if (filters.requireEnglish) {
+              // eslint-disable-next-line no-misleading-character-class
+              const BLOCKED_SCRIPT_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF\u0B00-\u0B7F\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F\u0D80-\u0DFF\u0E00-\u0E7F\u0E80-\u0EFF\u0F00-\u0FFF\u1000-\u109F]/g;
               let skipForEnglish = false;
-              const contentDescNodes = profileXml.match(/content-desc="([^"]{10,300})"/g) ?? [];
-              const textNodes        = profileXml.match(/\btext="([^"]{10,300})"/g) ?? [];
+              const contentDescNodes = profileXml.match(/content-desc="([^"]{3,300})"/g) ?? [];
+              const textNodes        = profileXml.match(/\btext="([^"]{3,300})"/g) ?? [];
               const allNodes = [...contentDescNodes, ...textNodes];
               for (const m of allNodes) {
                 const val = m.replace(/^(?:content-desc|text)="/, "").replace(/"$/, "");
-                if (val.length < 10) continue;
-                const nonAscii = (val.match(/[^\x00-\x7F]/g) ?? []).length;
-                if (nonAscii / val.length > 0.4) { skipForEnglish = true; break; }
+                if (val.length < 3) continue;
+                const blockedChars = (val.match(BLOCKED_SCRIPT_RE) ?? []).length;
+                if (blockedChars >= 3) { skipForEnglish = true; break; }
               }
               if (skipForEnglish) {
-                onLog?.(`Follow: @${username} bio appears non-English — skipping (English Speaking filter)`);
+                onLog?.(`Follow: @${username} bio contains non-allowed script — skipping (English Speaking filter)`);
                 storage.addSkippedUser(username, "non-english").catch(() => {});
                 await android.pressBack(serial);
                 await sleepOrAbort(serial, 500);
