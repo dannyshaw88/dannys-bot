@@ -4573,6 +4573,36 @@ function _findElem(xml: string, ...candidates: string[]): { x: number; y: number
   return null;
 }
 
+/**
+ * Like _findElem but returns ALL matching centre-points sorted top-to-bottom
+ * (ascending Y). Used when a search may return multiple rows for the same
+ * candidate text — e.g. an Instagram "suggestion chip" row above the real
+ * user profile row — so the caller can choose which to tap.
+ */
+function _findAllElems(xml: string, ...candidates: string[]): Array<{ x: number; y: number }> {
+  const seen = new Set<string>();
+  const results: Array<{ x: number; y: number }> = [];
+  for (const t of candidates) {
+    const esc = t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    for (const attr of ["text", "content-desc", "hint", "resource-id"]) {
+      for (const pattern of [
+        new RegExp(`${attr}="${esc}"[^>]*bounds="([^"]+)"`, "gi"),
+        new RegExp(`${attr}="[^"]*${esc}[^"]*"[^>]*bounds="([^"]+)"`, "gi"),
+      ]) {
+        let m: RegExpExecArray | null;
+        while ((m = pattern.exec(xml)) !== null) {
+          const c = _parseCenter(m[1]);
+          if (c) {
+            const key = `${c.x},${c.y}`;
+            if (!seen.has(key)) { seen.add(key); results.push(c); }
+          }
+        }
+      }
+    }
+  }
+  return results.sort((a, b) => a.y - b.y);
+}
+
 /** Find an element by partial resource-id match (e.g. "fab", "hostname"). */
 function _findByResId(xml: string, ...ids: string[]): { x: number; y: number } | null {
   for (const id of ids) {
@@ -5613,8 +5643,25 @@ export async function findAndTapUserInSearch(
     }
     const xml = await _uiDump(adb, serial);
     if (!xml) continue;
-    const pos = _findElem(xml, clean, `@${clean}`);
-    if (pos) {
+    const allPos = _findAllElems(xml, clean, `@${clean}`);
+    if (allPos.length > 0) {
+      // Instagram may render a "search suggestion chip" (@username) as the
+      // topmost row — tapping it re-runs the search instead of opening the
+      // profile. When we find 2+ distinct Y-rows, the first is the chip; skip
+      // it and tap the second (the real user profile row).
+      // Group by ~30 px bands to treat positions in the same row as one entry.
+      const rowMap = new Map<number, { x: number; y: number }>();
+      for (const p of allPos) {
+        const band = Math.round(p.y / 30);
+        if (!rowMap.has(band)) rowMap.set(band, p);
+      }
+      const rows = [...rowMap.values()].sort((a, b) => a.y - b.y);
+      const pos = rows.length >= 2 ? rows[1] : rows[0];
+      if (rows.length >= 2) {
+        onLog?.(
+          `Follow: suggestion chip detected (${rows.length} rows) — skipping topmost, tapping real user at (${pos.x},${pos.y})`,
+        );
+      }
       _adbTap(adb, serial, pos.x, pos.y);
       return true;
     }
@@ -5636,14 +5683,16 @@ export async function findAndTapUserInSearch(
       onLog?.(`Follow: positional fallback skipped — Instagram not in foreground`);
       return false;
     }
-    // First result sits just below the search bar. The search bar is at
-    // ~13–15 % of screen height; the first result row centre is at ~22 %.
-    // This ratio is consistent across 720×1280, 1080×2400, and 1080×2460
-    // devices observed so far.
+    // Instagram now shows a "search suggestion chip" (@username) as the first
+    // visual row (~22 % screen height), pushing the first real user profile row
+    // down to ~27 %.  Tapping at 22 % hits the chip (which just re-runs the
+    // search) instead of the profile — confirmed from screenshot 24 Jul 2026.
+    // 27 % lands on the first actual user result across 720×1280, 1080×2400,
+    // and 1080×2460 devices observed so far.
     const { w: fbW, h: fbH } = getScreenSize(serial);
     const fbX = Math.round(fbW * 0.50);
-    const fbY = Math.round(fbH * 0.22);
-    onLog?.(`Follow: @${clean} not in a11y tree — positional fallback: tapping first result at (${fbX},${fbY})`);
+    const fbY = Math.round(fbH * 0.27);
+    onLog?.(`Follow: @${clean} not in a11y tree — positional fallback: tapping first user result at (${fbX},${fbY})`);
     _adbTap(adb, serial, fbX, fbY);
     await _sleep(1500);
     return true;
