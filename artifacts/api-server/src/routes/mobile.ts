@@ -2974,15 +2974,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
             // Tap the emoji/smiley button on the system keyboard to open the
             // full emoji picker. System keyboard elements do NOT appear in the
-            // UIAutomator accessibility tree — coordinates are the only option.
-            // MIUI keyboard layout (1080×2226 reference from dumps):
-            //   Keyboard starts at ~y=1607 (composer bottom from ENTER-MESSAGE dump).
-            //   Bottom bar of keyboard is the last ~80px of the screen.
-            //   Emoji/smiley key is the leftmost key in that bar (~3.7% of width).
-            const _emojiKeyX = Math.round(w * 0.037);
-            const _emojiKeyY = Math.round(h * 0.982);
-            onLog?.(`Story ${s + 1}: tapping keyboard emoji button at (${_emojiKeyX},${_emojiKeyY})…`);
-            await android.tap(serial, _emojiKeyX, _emojiKeyY);
+            // UIAutomator accessibility tree, so locate the key from the live
+            // screenshot: it is immediately left of the wide space bar.
+            // Never use a bottom-left coordinate fallback — on the Redmi A5
+            // that coordinate is in the Android navigation bar and the swipes
+            // that follow type letters into the message field instead.
+            const _emojiKey = await android.findKeyboardEmojiButton(serial);
+            if (!_emojiKey) {
+              onLog?.(`Story ${s + 1}: emoji comment skipped — keyboard emoji key not visually detected`);
+              logger.warn({ serial, story: s + 1 }, "[view-stories] emoji comment — keyboard emoji key not detected");
+              await android.pressBack(serial).catch(() => {});
+              continue;
+            }
+            onLog?.(`Story ${s + 1}: tapping keyboard emoji button at (${_emojiKey.x},${_emojiKey.y})…`);
+            await android.tap(serial, _emojiKey.x, _emojiKey.y);
             await sleepOrAbort(serial, 500); // emoji picker opens
 
             // Scroll the emoji picker 1-50 random times.

@@ -20,3 +20,22 @@ percentage.
 that same node's bounds before tapping, and skip safely if the node or bounds
 are missing. Log the container/label signals separately for future device
 diagnosis.
+
+## Keyboard emoji button
+
+After the composer opens, the system keyboard is not represented in
+UIAutomator. Locate its emoji key from a fresh screenshot by finding the
+keyboard's bottom-row key immediately left of the wide space bar. Never use the
+old bottom-left screen coordinate: on the Redmi A5 it landed in Android's
+navigation bar, so subsequent emoji-picker swipes typed into the message field.
+
+**Why:** The keyboard layout is outside Instagram's accessibility tree and its
+vertical position varies with the device's navigation inset. A fixed
+percentage can therefore tap a different surface while still looking
+plausible in logs.
+
+**How to apply:** Capture and decode the live screen, visually identify the
+light keyboard region and its uniquely wide space-bar key, tap the adjacent
+left key only when the geometry is unambiguous, and otherwise dismiss the
+keyboard and skip the emoji action. Do not add a blind coordinate fallback or
+retry tap.

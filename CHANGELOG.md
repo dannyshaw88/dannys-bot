@@ -4,6 +4,48 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.131
+
+### Fix — Story emoji replies now open the keyboard emoji picker
+
+**Problem:**
+
+The story comment flow successfully tapped the **Send message** field, but the
+next tap never pressed the keyboard's emoji button. On the Xiaomi Redmi A5,
+the old coordinate `(3.7% of screen width, 98.2% of screen height)` landed in
+the Android navigation area below the keyboard. The following emoji-picker
+swipes therefore ran across the text keyboard and typed `by` into the reply
+field instead of scrolling emojis.
+
+**Root cause:**
+
+The system keyboard is outside Instagram's UIAutomator accessibility tree, so
+the old implementation used a hardcoded screen-percentage coordinate based on
+one keyboard layout. The attached Redmi A5 screenshot and inspection dump show
+that the emoji key is in the keyboard's bottom row immediately to the left of
+the wide space bar; it is not at the bottom edge of the display.
+
+**Fix:**
+
+- Capture the live device screen after the message composer opens.
+- Detect the light keyboard region and scan its bottom row for key interiors.
+- Identify the uniquely wide space-bar key.
+- Tap the center of the immediately adjacent key on the space bar's left,
+  which is the keyboard's emoji button on this device layout.
+- Refuse to tap when the keyboard geometry is ambiguous; dismiss the keyboard
+  and skip the emoji action instead of typing into the reply field.
+- Remove the old hardcoded bottom-left coordinate and do not add a blind retry.
+- Log the detected emoji-key coordinates or the safe-skip reason.
+
+**Verification:**
+
+- The detector identifies the adjacent emoji key from the supplied Redmi A5
+  screenshot geometry.
+- The API server build passes.
+- The API workflow restarts and listens successfully on port 8082.
+- Existing comment-percentage rolling and composer resource-ID detection remain
+  unchanged.
+
 ## v1.2.130
 
 ### Fix — View Stories Comment % incorrectly reported replies as disabled

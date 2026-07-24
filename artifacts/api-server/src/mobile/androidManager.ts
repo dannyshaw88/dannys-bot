@@ -2228,8 +2228,8 @@ function _decodePng(buf: Buffer): { width: number; height: number; channels: num
 /**
  * Captures the current screen as a raw pixel buffer via
  * `adb exec-out screencap -p`. Returns null on any failure (missing tool,
- * timeout, corrupt PNG) so callers can fall back to fixed-coordinate taps
- * — this must never throw and break an automation cycle.
+ * timeout, corrupt PNG) so callers can skip an unverified visual action
+ * safely — this must never throw and break an automation cycle.
  */
 async function _captureScreenPixels(serial: string): Promise<{ width: number; height: number; channels: number; pixels: Buffer } | null> {
   try {
@@ -2246,6 +2246,151 @@ async function _captureScreenPixels(serial: string): Promise<{ width: number; he
   } catch {
     return null;
   }
+}
+
+type ScreenPixels = { width: number; height: number; channels: number; pixels: Buffer };
+
+/**
+ * Finds the system keyboard's emoji key from the live screenshot.
+ *
+ * The keyboard is an Android system surface, so its keys are not present in
+ * Instagram's UIAutomator tree.  Do not use a screen-percentage fallback here:
+ * the old bottom-left coordinate landed on the navigation bar on the Redmi A5
+ * and the subsequent swipes were interpreted as keyboard typing gestures.
+ *
+ * The keyboard's bottom row has a distinctive visual structure:
+ *   [smaller key] [emoji key] [wide space bar] [smaller key] [enter]
+ *
+ * We locate the light keyboard region, scan its bottom row for light key
+ * rectangles, select the widest rectangle as the space bar, and return the
+ * centre of the adjacent rectangle on its left.  Returning null is safer than
+ * tapping an unverified keyboard coordinate.
+ */
+export function findKeyboardEmojiButtonFromPixels(img: ScreenPixels): { x: number; y: number } | null {
+  const { width, height, channels, pixels } = img;
+  if (!width || !height || channels < 3) return null;
+
+  const isLightNeutral = (x: number, y: number) => {
+    const idx = y * width * channels + x * channels;
+    const r = pixels[idx], g = pixels[idx + 1], b = pixels[idx + 2];
+    return Math.min(r, g, b) >= 190 && Math.max(r, g, b) - Math.min(r, g, b) <= 42;
+  };
+
+  // Find the longest lower-screen band whose rows are predominantly the
+  // neutral/light keyboard background. Sample every 4th pixel to keep this
+  // probe cheap on the large screens used by the phone farm.
+  const rowNeutralFraction = (y: number) => {
+    let matches = 0;
+    let samples = 0;
+    for (let x = 0; x < width; x += 4) {
+      samples++;
+      if (isLightNeutral(x, y)) matches++;
+    }
+    return samples ? matches / samples : 0;
+  };
+  const keyboardRows: number[] = [];
+  for (let y = Math.floor(height * 0.50); y < Math.floor(height * 0.96); y += 2) {
+    if (rowNeutralFraction(y) >= 0.42) keyboardRows.push(y);
+  }
+  if (keyboardRows.length < 12) return null;
+
+  // Use the last coherent keyboard-background run. This avoids mistaking a
+  // pale story sticker or caption above the actual keyboard for its key row.
+  let runStart = keyboardRows[0];
+  let runEnd = keyboardRows[0];
+  let bestStart = runStart;
+  let bestEnd = runEnd;
+  for (let i = 1; i < keyboardRows.length; i++) {
+    const y = keyboardRows[i];
+    if (y - keyboardRows[i - 1] <= 8) {
+      runEnd = y;
+    } else {
+      if (runEnd - runStart > bestEnd - bestStart) {
+        bestStart = runStart;
+        bestEnd = runEnd;
+      }
+      runStart = runEnd = y;
+    }
+  }
+  if (runEnd - runStart > bestEnd - bestStart) {
+    bestStart = runStart;
+    bestEnd = runEnd;
+  }
+  if (bestEnd - bestStart < 24) return null;
+
+  // Scan several rows through the lowest key row. At each row, very light
+  // runs represent key interiors; keyboard gaps and key shadows break runs.
+  // Pick the row with the strongest bottom-row signature.
+  type Segment = { x1: number; x2: number; y: number };
+  let bestSegments: Segment[] = [];
+  for (let y = Math.max(bestStart, bestEnd - 100); y <= bestEnd - 8; y += 2) {
+    const segments: Segment[] = [];
+    let start = -1;
+    for (let x = 0; x < width; x++) {
+      const idx = y * width * channels + x * channels;
+      const r = pixels[idx], g = pixels[idx + 1], b = pixels[idx + 2];
+      const keyInterior = Math.min(r, g, b) >= 232 && Math.max(r, g, b) - Math.min(r, g, b) <= 28;
+      if (keyInterior) {
+        if (start < 0) start = x;
+      } else if (start >= 0) {
+        if (x - start >= Math.max(8, Math.round(width * 0.015)) &&
+            x - start <= Math.round(width * 0.42)) {
+          segments.push({ x1: start, x2: x - 1, y });
+        }
+        start = -1;
+      }
+    }
+    if (start >= 0 && width - start >= Math.max(8, Math.round(width * 0.015))) {
+      segments.push({ x1: start, x2: width - 1, y });
+    }
+
+    // A valid bottom row has several keys and one clearly wider space bar.
+    const usable = segments.filter(s => s.x1 > width * 0.01 && s.x2 < width * 0.99);
+    if (usable.length >= 3 && usable.length <= 10) {
+      const widest = Math.max(...usable.map(s => s.x2 - s.x1));
+      const wideCount = usable.filter(s => s.x2 - s.x1 >= widest * 0.65).length;
+      if (wideCount === 1 && widest >= width * 0.16) {
+        const currentScore = widest + usable.length * width * 0.01;
+        const previousScore = bestSegments.length
+          ? Math.max(...bestSegments.map(s => s.x2 - s.x1)) + bestSegments.length * width * 0.01
+          : -1;
+        if (currentScore > previousScore) bestSegments = usable;
+      }
+    }
+  }
+
+  if (bestSegments.length < 3) return null;
+  const space = bestSegments.reduce((a, b) =>
+    (a.x2 - a.x1) >= (b.x2 - b.x1) ? a : b,
+  );
+  const leftCandidates = bestSegments
+    .filter(s => s.x2 < space.x1)
+    .sort((a, b) => b.x2 - a.x2);
+  const emoji = leftCandidates[0];
+  if (!emoji) return null;
+
+  // The target must be immediately adjacent to the space key, not an earlier
+  // modifier key. A generous gap handles rounded key corners while rejecting
+  // a missing/fragmented keyboard row.
+  const gap = space.x1 - emoji.x2;
+  const emojiWidth = emoji.x2 - emoji.x1;
+  if (gap > Math.max(32, emojiWidth * 0.75)) return null;
+
+  return {
+    x: Math.round((emoji.x1 + emoji.x2) / 2),
+    y: emoji.y,
+  };
+}
+
+/**
+ * Captures the current keyboard frame and locates the emoji key visually.
+ * The caller should skip the emoji action when this returns null.
+ */
+export async function findKeyboardEmojiButton(
+  serial: string,
+): Promise<{ x: number; y: number } | null> {
+  const img = await _captureScreenPixels(serial);
+  return img ? findKeyboardEmojiButtonFromPixels(img) : null;
 }
 
 /**
