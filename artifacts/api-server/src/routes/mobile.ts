@@ -171,6 +171,8 @@ type AutomationSettings = {
   viewStoriesLikePercentMax: number;
   viewStoriesShareDmPercentMin: number;
   viewStoriesShareDmPercentMax: number;
+  viewStoriesCommentPercentMin: number;
+  viewStoriesCommentPercentMax: number;
   // View Reels — taps the Reels tab, snap-swipes through N reels, and acts
   // on each via the right-side vertical icon column (see findReelActionIcons
   // in androidManager.ts, distinct from the feed's horizontal action bar).
@@ -1160,6 +1162,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     viewStoriesLikePercentMax: z.number().min(0).max(100).default(0),
     viewStoriesShareDmPercentMin: z.number().min(0).max(100).default(0),
     viewStoriesShareDmPercentMax: z.number().min(0).max(100).default(0),
+    viewStoriesCommentPercentMin: z.number().min(0).max(100).default(0),
+    viewStoriesCommentPercentMax: z.number().min(0).max(100).default(0),
     viewReelsEnabled: z.boolean().default(false),
     viewReelsScrollMin: z.number().min(0).max(100).default(0),
     viewReelsScrollMax: z.number().min(0).max(100).default(0),
@@ -1325,6 +1329,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
       viewStoriesLikePercentMin: 0, viewStoriesLikePercentMax: 0,
       viewStoriesShareDmPercentMin: 0, viewStoriesShareDmPercentMax: 0,
+      viewStoriesCommentPercentMin: 0, viewStoriesCommentPercentMax: 0,
       viewReelsEnabled: false, viewReelsScrollMin: 0, viewReelsScrollMax: 0,
       viewReelsLikePercentMin: 0, viewReelsLikePercentMax: 0,
       viewReelsShareFeedPercentMin: 0, viewReelsShareFeedPercentMax: 0,
@@ -1420,6 +1425,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
         viewStoriesLikePercentMin: 0, viewStoriesLikePercentMax: 0,
         viewStoriesShareDmPercentMin: 0, viewStoriesShareDmPercentMax: 0,
+        viewStoriesCommentPercentMin: 0, viewStoriesCommentPercentMax: 0,
         viewReelsEnabled: false, viewReelsScrollMin: 0, viewReelsScrollMax: 0,
         viewReelsLikePercentMin: 0, viewReelsLikePercentMax: 0,
         viewReelsShareFeedPercentMin: 0, viewReelsShareFeedPercentMax: 0,
@@ -2517,6 +2523,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     slideWatchPctMin: number; slideWatchPctMax: number;
     likePercentMin: number; likePercentMax: number;
     shareDmPercentMin: number; shareDmPercentMax: number;
+    commentPercentMin: number; commentPercentMax: number;
     onLog?: (msg: string) => void;
   }): Promise<{ storiesWatched: number }> {
     const {
@@ -2524,6 +2531,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       slideWatchPctMin, slideWatchPctMax,
       likePercentMin, likePercentMax,
       shareDmPercentMin, shareDmPercentMax,
+      commentPercentMin, commentPercentMax,
       onLog,
     } = params;
 
@@ -2547,6 +2555,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       Math.random() * Math.abs(likePercentMax - likePercentMin)) / 100;
     const shareChance = (Math.min(shareDmPercentMin, shareDmPercentMax) +
       Math.random() * Math.abs(shareDmPercentMax - shareDmPercentMin)) / 100;
+    const commentChance = (Math.min(commentPercentMin, commentPercentMax) +
+      Math.random() * Math.abs(commentPercentMax - commentPercentMin)) / 100;
 
     // Returns true only while the story viewer is genuinely still on screen.
     // Root-cause fix (Jul 2026): every prior fix in this loop assumed that
@@ -2654,9 +2664,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         await sleepOrAbort(serial, 400);
       }
 
-      // Like and/or share this story?
-      const willLike  = likeChance  > 0 && Math.random() < likeChance;
-      const willShare = shareChance > 0 && Math.random() < shareChance;
+      // Like, share, and/or comment on this story?
+      const willLike    = likeChance    > 0 && Math.random() < likeChance;
+      const willShare   = shareChance   > 0 && Math.random() < shareChance;
+      const willComment = commentChance > 0 && Math.random() < commentChance;
 
       // Watch this story for a random percentage of its ~6s duration — but
       // ONLY when no action is scheduled on this slide. When a like and/or
@@ -2670,7 +2681,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // ago, nothing has navigated away). Post-action checks (pre-advance
       // at line ~2076, pre-exit at ~2106) still guard against blind taps
       // after the slide timer expires.
-      if (!(willLike || willShare)) {
+      if (!(willLike || willShare || willComment)) {
         const watchPct = Math.min(slideWatchPctMin, slideWatchPctMax) +
           Math.random() * Math.abs(slideWatchPctMax - slideWatchPctMin);
         const watchMs = Math.max(1500, Math.round((watchPct / 100) * 6000));
@@ -2890,6 +2901,107 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             }
           }
           } // closes sheetSendBtn else
+        }
+      }
+
+      // ── View Stories — Emoji comment reply ─────────────────────────────
+      // Sends a random emoji as a text reply to the current story slide.
+      // Only fires when the author allows message replies — confirmed by
+      // the presence of id="message_composer_container" with
+      // desc="Send Message or Reaction" in the accessibility tree.
+      //
+      // Flow (from UIAutomator dumps):
+      //   SEND-MESSAGE-BAR  → message_composer_container present → tap to open keyboard
+      //   ENTER-MESSAGE     → keyboard open, reel_reaction_toolbar visible
+      //   PICK-AN-EMOJI     → tap emoji button on system keyboard (bottom-left, not in a11y tree)
+      //                       → scroll picker 1-50× (swipe up = scrolls list down)
+      //                       → tap random position in emoji grid area
+      //   TAP-SEND-PAPER-AIRPLANE → emoji in field (text="😁"), send button visible:
+      //                       id="row_thread_composer_send_button_background" desc="Send"
+      if (willComment && (await stillInStoryViewer(/* fastOnly= */ true))) {
+        try {
+          const _cXml = await android.dumpUi(serial).catch(() => "");
+          const _composerPresent =
+            _cXml.includes('id="message_composer_container"') &&
+            _cXml.includes('desc="Send Message or Reaction"');
+          if (!_composerPresent) {
+            onLog?.(`Story ${s + 1}: emoji comment skipped — author has message replies disabled`);
+            logger.info({ serial, story: s + 1 }, "[view-stories] emoji comment skipped — no message_composer_container");
+          } else {
+            // Parse the composer tap coords from the dump.
+            const _composerMatch = _cXml.match(/id="message_composer_container"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+            const _composerX = _composerMatch
+              ? Math.round((+_composerMatch[1] + +_composerMatch[3]) / 2)
+              : Math.round(w * 0.39);
+            const _composerY = _composerMatch
+              ? Math.round((+_composerMatch[2] + +_composerMatch[4]) / 2)
+              : Math.round(h * 0.974);
+            onLog?.(`Story ${s + 1}: tapping message composer at (${_composerX},${_composerY})…`);
+            await android.tap(serial, _composerX, _composerY);
+            await sleepOrAbort(serial, 800); // keyboard animates up
+
+            // Tap the emoji/smiley button on the system keyboard to open the
+            // full emoji picker. System keyboard elements do NOT appear in the
+            // UIAutomator accessibility tree — coordinates are the only option.
+            // MIUI keyboard layout (1080×2226 reference from dumps):
+            //   Keyboard starts at ~y=1607 (composer bottom from ENTER-MESSAGE dump).
+            //   Bottom bar of keyboard is the last ~80px of the screen.
+            //   Emoji/smiley key is the leftmost key in that bar (~3.7% of width).
+            const _emojiKeyX = Math.round(w * 0.037);
+            const _emojiKeyY = Math.round(h * 0.982);
+            onLog?.(`Story ${s + 1}: tapping keyboard emoji button at (${_emojiKeyX},${_emojiKeyY})…`);
+            await android.tap(serial, _emojiKeyX, _emojiKeyY);
+            await sleepOrAbort(serial, 500); // emoji picker opens
+
+            // Scroll the emoji picker 1-50 random times.
+            // Swipe up = drag from lower y to higher y = scrolls list downward.
+            const _scrollCount = 1 + Math.floor(Math.random() * 50);
+            onLog?.(`Story ${s + 1}: scrolling emoji picker ${_scrollCount}×…`);
+            for (let _ei = 0; _ei < _scrollCount; _ei++) {
+              await android.swipe(serial,
+                Math.round(w * 0.50), Math.round(h * 0.84),
+                Math.round(w * 0.50), Math.round(h * 0.71),
+                150);
+              await sleepOrAbort(serial, 80);
+            }
+
+            // Tap a random position inside the emoji grid.
+            // Emoji grid occupies the keyboard area from ~h*0.77 to ~h*0.91.
+            const _emojiX = Math.round(w * 0.08 + Math.random() * w * 0.84);
+            const _emojiY = Math.round(h * 0.77 + Math.random() * h * 0.14);
+            onLog?.(`Story ${s + 1}: tapping random emoji at (${_emojiX},${_emojiY})…`);
+            await android.tap(serial, _emojiX, _emojiY);
+            await sleepOrAbort(serial, 400); // emoji enters field; keyboard may close
+
+            // Find the send button that appears after the emoji is entered.
+            // From TAP-SEND-PAPER-AIRPLANE dump:
+            //   id="row_thread_composer_send_button_background" desc="Send"
+            //   bounds=[898,1150][1041,1249] center=(970,1200)
+            const _sendXml = await android.dumpUi(serial).catch(() => "");
+            const _sendMatch = _sendXml.match(
+              /id="row_thread_composer_send_button[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/
+            );
+            if (_sendMatch) {
+              const _sbX = Math.round((+_sendMatch[1] + +_sendMatch[3]) / 2);
+              const _sbY = Math.round((+_sendMatch[2] + +_sendMatch[4]) / 2);
+              onLog?.(`Story ${s + 1}: tapping send at (${_sbX},${_sbY})…`);
+              await android.tap(serial, _sbX, _sbY);
+              await sleepOrAbort(serial, 300);
+              onLog?.(`Story ${s + 1}: ✓ emoji reply sent`);
+              logger.info({ serial, story: s + 1 }, "[view-stories] emoji comment sent");
+            } else {
+              // Send button not found — emoji may not have been entered or
+              // keyboard is still showing. Press BACK to dismiss cleanly.
+              await android.pressBack(serial).catch(() => {});
+              await sleepOrAbort(serial, 300);
+              onLog?.(`Story ${s + 1}: emoji comment — send button not found, dismissed keyboard`);
+              logger.warn({ serial, story: s + 1 }, "[view-stories] emoji comment — send button not found after emoji tap");
+            }
+          }
+        } catch (e: any) {
+          if (e?.message === "cycle-aborted") throw e;
+          onLog?.(`Story ${s + 1}: emoji comment error — ${e?.message}`);
+          await android.pressBack(serial).catch(() => {}); // safety dismiss
         }
       }
 
@@ -3841,6 +3953,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     viewStoriesLikePercentMax: z.number().min(0).max(100).default(0),
     viewStoriesShareDmPercentMin: z.number().min(0).max(100).default(0),
     viewStoriesShareDmPercentMax: z.number().min(0).max(100).default(0),
+    viewStoriesCommentPercentMin: z.number().min(0).max(100).default(0),
+    viewStoriesCommentPercentMax: z.number().min(0).max(100).default(0),
     // View Reels — see AutomationSettings type above for full comment.
     viewReelsEnabled: z.boolean().default(false),
     viewReelsScrollMin: z.number().min(0).max(100).default(0),
@@ -6005,6 +6119,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewStoriesSlideWatchPctMin, viewStoriesSlideWatchPctMax,
         viewStoriesLikePercentMin, viewStoriesLikePercentMax,
         viewStoriesShareDmPercentMin, viewStoriesShareDmPercentMax,
+        viewStoriesCommentPercentMin, viewStoriesCommentPercentMax,
         viewReelsEnabled, viewReelsScrollMin, viewReelsScrollMax,
         viewReelsWatchPctMin, viewReelsWatchPctMax,
         viewReelsLikePercentMin, viewReelsLikePercentMax,
@@ -6513,6 +6628,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               slideWatchPctMin: viewStoriesSlideWatchPctMin, slideWatchPctMax: viewStoriesSlideWatchPctMax,
               likePercentMin: viewStoriesLikePercentMin, likePercentMax: viewStoriesLikePercentMax,
               shareDmPercentMin: viewStoriesShareDmPercentMin, shareDmPercentMax: viewStoriesShareDmPercentMax,
+              commentPercentMin: viewStoriesCommentPercentMin, commentPercentMax: viewStoriesCommentPercentMax,
               onLog: (msg) => tLog(`  ${msg}`),
             });
             // runViewStoriesFromFeedLoop exits the viewer internally (ad-

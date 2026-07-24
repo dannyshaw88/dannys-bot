@@ -2424,6 +2424,8 @@ export interface AutomationSettingsData {
   viewStoriesLikePercentMax: number;
   viewStoriesShareDmPercentMin: number;
   viewStoriesShareDmPercentMax: number;
+  viewStoriesCommentPercentMin: number;
+  viewStoriesCommentPercentMax: number;
   // View Explore Page — taps the Search/Explore tab, scrolls the grid N times,
   // and optionally clicks individual posts to like / share / save them.
   viewExploreEnabled: boolean;
@@ -2561,6 +2563,7 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
   viewStoriesLikePercentMin: 0, viewStoriesLikePercentMax: 0,
   viewStoriesShareDmPercentMin: 0, viewStoriesShareDmPercentMax: 0,
+  viewStoriesCommentPercentMin: 0, viewStoriesCommentPercentMax: 0,
   viewExploreEnabled: false,
   viewExploreActivatePctMin: 100, viewExploreActivatePctMax: 100,
   viewExploreScrollMin: 0, viewExploreScrollMax: 0,
@@ -3094,6 +3097,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             viewStoriesLikePercentMax: s.viewStoriesLikePercentMax,
             viewStoriesShareDmPercentMin: s.viewStoriesShareDmPercentMin,
             viewStoriesShareDmPercentMax: s.viewStoriesShareDmPercentMax,
+            viewStoriesCommentPercentMin: s.viewStoriesCommentPercentMin,
+            viewStoriesCommentPercentMax: s.viewStoriesCommentPercentMax,
             viewExploreEnabled: s.viewExploreEnabled,
             viewExploreActivatePctMin: s.viewExploreActivatePctMin,
             viewExploreActivatePctMax: s.viewExploreActivatePctMax,
@@ -3572,6 +3577,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'storiesWatchPct',   label: '% to watch',                    fields: ['viewStoriesSlideWatchPctMin','viewStoriesSlideWatchPctMax'] },
     { key: 'storiesLike',       label: 'Like %',                        fields: ['viewStoriesLikePercentMin','viewStoriesLikePercentMax'] },
     { key: 'storiesShareDm',    label: 'Share DM %',                    fields: ['viewStoriesShareDmPercentMin','viewStoriesShareDmPercentMax'] },
+    { key: 'storiesComment',    label: 'Comment %',                     fields: ['viewStoriesCommentPercentMin','viewStoriesCommentPercentMax'] },
   ]},
   { key: 'explore',       label: 'View Explore Page', sub: [
     { key: 'exploreEnabled',    label: 'Enabled',                       fields: ['viewExploreEnabled'] },
@@ -4671,6 +4677,22 @@ export function AutomationSettingsPanel({
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewStoriesShareDmPercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesShareDmPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Comment %</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewStoriesCommentPercentMin}
+                onChange={e => setSettings(s => ({ ...s, viewStoriesCommentPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewStoriesCommentPercentMax}
+                onChange={e => setSettings(s => ({ ...s, viewStoriesCommentPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
 
             </div>

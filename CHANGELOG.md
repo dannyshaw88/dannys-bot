@@ -4,6 +4,37 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.129
+
+### Feature — Story Comment %: send a random emoji reply to stories
+
+**What changed and why:**
+
+Adds a new **Comment %** min/max field to the View Stories from Feed tool (displayed after Share DM % in the settings panel). When rolled, the bot sends a single random emoji as a text reply to the story slide — the most human-looking engagement signal after a like.
+
+**How it works (step-by-step, derived from UIAutomator dumps):**
+
+1. **Availability check** — dumps the accessibility tree and looks for `id="message_composer_container"` with `desc="Send Message or Reaction"`. If absent, the author has disabled message replies and the action is silently skipped (no taps, no disruption).
+2. **Open the message field** — taps the composer bar at its real bounds from the dump (falls back to proportional coordinates if parsing fails).
+3. **Open the emoji picker** — taps the emoji/smiley button on the MIUI system keyboard. Because system keyboard elements never appear in the UIAutomator accessibility tree, this uses screen-proportional coordinates calibrated from the ENTER-MESSAGE dump (`w*0.037`, `h*0.982` — the bottom-left key in the keyboard's bottom bar).
+4. **Scroll the emoji list** — performs 1–50 random upward swipe gestures (drag up = scrolls picker downward) so the starting emoji is never the same between uses.
+5. **Pick a random emoji** — taps a random coordinate within the emoji grid area (`x ∈ [w*8%, w*92%]`, `y ∈ [h*77%, h*91%]`).
+6. **Send** — dumps the tree after the emoji is entered and finds the send button by resource-id (`id="row_thread_composer_send_button_background"`). Taps it if found; presses BACK to safely dismiss the keyboard if not.
+
+**Where it appears:**
+
+- `artifacts/api-server/src/routes/mobile.ts` — `AutomationSettings` interface, both Zod schemas, both defaults blocks, destructuring in the cycle handler, `runViewStoriesFromFeedLoop` signature + params + per-slide `willComment` roll + full implementation block.
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — type definition, defaults, API mapping, settings-row table entry, and UI input controls (Comment % min/max inputs after Share DM %).
+
+**Key safety notes:**
+
+- The action is isolated entirely within `runViewStoriesFromFeedLoop` — no other tool is touched.
+- `willComment` is independent of `willLike` and `willShare`: all three are separate rolls and can co-exist on the same slide.
+- Added `willComment` to the no-watch guard: if a comment is scheduled on a slide, the bot fires immediately rather than watching first (same principle as like/share).
+- Any error in the comment flow presses BACK as a safety dismiss before moving on — never leaves the keyboard open.
+
+---
+
 ## v1.2.128
 
 ### Fix — "Interacting with content shared from Facebook" dialog blocks story automation
