@@ -4,6 +4,49 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.125
+
+### Feature — Human Session Tool: Direct Messaging card
+
+A new **Direct Messaging** tool card has been added to the Human Session Tool, positioned between **View Reels** and **Follow Users** in the execution sequence. This addresses one of the highest-signal absences in the bot's human-behaviour profile: real accounts that actively like posts and share to DMs but never open their own inbox are flagged as suspicious by Instagram's telemetry.
+
+**What it does:**
+
+1. Taps the paper-plane (DM) icon in the top-right header of the Instagram home feed
+2. Automatically dismisses any "Turn on notifications" / "Not now" popup that Instagram may show on first open
+3. Scrolls through the inbox a random number of times (within the configured Scroll amount range) with natural timing variation
+4. Optionally taps a random conversation thread (from the three most-recent threads, chosen at random) to simulate reading messages, then presses Back to return to the inbox
+5. Presses Back again to return to the home feed
+
+**Settings exposed in the UI (all min/max pairs, matching the pattern of all other cards):**
+
+| Setting | Description |
+|---|---|
+| Activate Percentage | Per-execution chance gate (100/100 = always runs when enabled). Rolled once per automation cycle, before any other logic. |
+| Scroll amount | How many times to scroll through the inbox (e.g. 1–3). |
+| Click Thread % | Probability of tapping a conversation thread. 0/0 = never tap; 100/100 = always tap. |
+
+**Backend changes (`artifacts/api-server/src/`):**
+
+- `mobile/androidManager.ts` — two new exported functions:
+  - `findInstagramDmTab(serial)` — 3-strategy search: (1) content-desc match for "Direct", "Messenger", "Chats", "Messages", "DM"; (2) known resource-IDs (`:id/direct_inbox`, `:id/direct_tab`, etc.); (3) positional scan of clickable nodes in the top-right header zone (60–82% screen width, top 15% of height), returning the leftmost candidate so it picks the paper-plane rather than the notifications bell
+  - `findDmConversationItem(serial)` — scans for wide clickable rows (>50% screen width) in the inbox body zone, sorts top-to-bottom, and picks randomly from the top 3 so the bot doesn't always tap the same first thread
+- `routes/mobile.ts`:
+  - New schema fields added in all three layers: TypeScript `AutomationSettings` interface, persistence Zod schema (both device-level and slot-level defaults objects), and `automationCycleSchema`
+  - `checkDmEnabled`, `checkDmActivatePctMin/Max`, `checkDmScrollMin/Max`, `checkDmClickPctMin/Max` destructured from `automationCycleSchema.parse()`
+  - `checkDm` entry added to `_toolActivated` map; `'checkDm'` inserted between `'reels'` and `'follow'` in `_toolSeq`
+  - `runCheckDmLoop()` function added (modelled on `runCheckNotifications`): tap DM icon → auto-dismiss interstitial → scroll inbox → optionally tap thread → return home
+  - Dispatch case `'checkDm'` wired in between the Reels and Follow dispatch blocks
+
+**Frontend changes (`artifacts/dannys-bot/src/pages/MobilePage.tsx`):**
+
+- `checkDm*` fields added to the `AutomationSettingsData` TypeScript interface and `AUTOMATION_DEFAULTS` object
+- Fields included in the API body sent to `/api/mobile/devices/:serial/automation-cycle` (and the slot variant)
+- **Direct Messaging** card renders between the View Reels card and the Follow Users card; the card body (settings rows) is hidden when the checkbox is unticked, exactly matching the pattern used by all other tool cards
+- **Copy Settings dialog** — a new `{ key: 'checkDm', label: 'Direct Messaging' }` section added to `COPY_SECTIONS` with four copyable sub-items: Enabled, Activate Percentage, Scroll amount, Click Thread %. Settings can be bulk-copied to other slots/devices exactly like every other tool.
+
+---
+
 ## v1.2.124
 
 ### Fix — Follow Users: English Speaking filter now correctly blocks Hindi/Devanagari, Arabic, Urdu and other non-Latin/CJK scripts
