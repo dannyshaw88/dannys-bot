@@ -4,6 +4,28 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.142 — 2026-07-24
+
+### Improved — Windows installer now includes keyboard failure diagnostics
+
+When story emoji comments could not find the Xiaomi/MIUI emoji key, the Windows
+installer only showed the final skip message. The bundled Android scanner now
+records one compact diagnostic entry for each keyboard theme it probes, including
+the strongest matching row and the number of qualifying keyboard rows. When
+geometry is rejected, it also records the sampled RGB ranges near the keyboard
+and the number of detected key segments.
+
+This makes the next exported Debugging Log actionable: it shows whether the
+failure is caused by the keyboard colour profile, an incomplete keyboard band,
+or the bottom-row geometry. Detection remains conservative — no unverified
+coordinate is tapped and no retry loop was added.
+
+The existing `build-windows-installer.yml` workflow remains the single
+canonical Windows build workflow, so these diagnostics are included in the
+Electron installer produced by GitHub Actions.
+
+---
+
 ## v1.2.141 — 2026-07-24
 
 ### Fixed — Story emoji comments now work on Xiaomi MIUI keyboards (pixel scanner + better diagnostics)

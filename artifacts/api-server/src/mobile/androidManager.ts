@@ -2336,11 +2336,17 @@ type ScreenPixels = { width: number; height: number; channels: number; pixels: B
  * because both are common depending on the device's system theme and the app.
  */
 export function findKeyboardEmojiButtonFromPixels(img: ScreenPixels): { x: number; y: number } | null {
-  return _findKeyboardEmojiButtonForTheme(img, "light")  ??
-         _findKeyboardEmojiButtonForTheme(img, "tinted") ??
-         _findKeyboardEmojiButtonForTheme(img, "silver") ??
-         _findKeyboardEmojiButtonForTheme(img, "gray")   ??
-         _findKeyboardEmojiButtonForTheme(img, "dark");
+  const themes: Array<"light" | "tinted" | "silver" | "gray" | "dark"> =
+    ["light", "tinted", "silver", "gray", "dark"];
+  for (const theme of themes) {
+    const button = _findKeyboardEmojiButtonForTheme(img, theme);
+    if (button) return button;
+  }
+  logger.warn(
+    { width: img.width, height: img.height, channels: img.channels },
+    "[kbd-diag] all keyboard themes failed — no verified emoji key",
+  );
+  return null;
 }
 
 function _findKeyboardEmojiButtonForTheme(
@@ -2438,9 +2444,27 @@ function _findKeyboardEmojiButtonForTheme(
     return samples ? matches / samples : 0;
   };
   const keyboardRows: number[] = [];
+  let maxRowFraction = 0;
+  let maxRowY = Math.floor(height * 0.50);
   for (let y = Math.floor(height * 0.50); y < Math.floor(height * 0.96); y += 2) {
-    if (rowNeutralFraction(y) >= 0.42) keyboardRows.push(y);
+    const fraction = rowNeutralFraction(y);
+    if (fraction > maxRowFraction) {
+      maxRowFraction = fraction;
+      maxRowY = y;
+    }
+    if (fraction >= 0.42) keyboardRows.push(y);
   }
+  logger.info(
+    {
+      theme,
+      width,
+      height,
+      maxRowY,
+      maxRowFrac: Number(maxRowFraction.toFixed(3)),
+      qualifyingRows: keyboardRows.length,
+    },
+    "[kbd-diag] keyboard theme probe",
+  );
   if (keyboardRows.length < 12) return null;
 
   // Use the last coherent keyboard-background run. This avoids mistaking a
@@ -2465,7 +2489,13 @@ function _findKeyboardEmojiButtonForTheme(
     bestStart = runStart;
     bestEnd = runEnd;
   }
-  if (bestEnd - bestStart < 24) return null;
+  if (bestEnd - bestStart < 24) {
+    logger.info(
+      { theme, bestStart, bestEnd, coherentRunHeight: bestEnd - bestStart },
+      "[kbd-diag] keyboard theme rejected — coherent run too short",
+    );
+    return null;
+  }
 
   // Scan several rows through the lowest key row. At each row, key-interior
   // runs represent individual keys; keyboard gaps and shadows break the runs.
@@ -2507,7 +2537,31 @@ function _findKeyboardEmojiButtonForTheme(
     }
   }
 
-  if (bestSegments.length < 3) return null;
+  if (bestSegments.length < 3) {
+    const sampleY = Math.max(0, Math.min(height - 1, Math.round(height * 0.85)));
+    let minR = 255, maxR = 0, minG = 255, maxG = 0, minB = 255, maxB = 0;
+    for (let x = 0; x < width; x += 4) {
+      const idx = sampleY * width * channels + x * channels;
+      minR = Math.min(minR, pixels[idx]);
+      maxR = Math.max(maxR, pixels[idx]);
+      minG = Math.min(minG, pixels[idx + 1]);
+      maxG = Math.max(maxG, pixels[idx + 1]);
+      minB = Math.min(minB, pixels[idx + 2]);
+      maxB = Math.max(maxB, pixels[idx + 2]);
+    }
+    logger.info(
+      {
+        theme,
+        sampleY,
+        r: `${minR}-${maxR}`,
+        g: `${minG}-${maxG}`,
+        b: `${minB}-${maxB}`,
+        segments: bestSegments.length,
+      },
+      "[kbd-diag] keyboard theme rejected — bottom-row key geometry not found",
+    );
+    return null;
+  }
 
   // Merge immediately-adjacent segments that were split by a key's glyph.
   // When the emoji icon (😊) or any other key label is rendered over the key
