@@ -701,6 +701,24 @@ export async function dismissInstagramInterstitials(
   // These check for a known popup title before tapping "OK" / generic
   // buttons, so we never accidentally dismiss a legitimate compose screen.
 
+  // "Collect the posts you love" bottom sheet — appears after tapping the
+  // save/ribbon icon on a feed post when the account has no existing
+  // collections. The sheet slides up and presents "Start a collection" CTA.
+  // The correct dismiss is to tap the transparent background_dimmer ABOVE the
+  // sheet (y ≈ 12 % of screen height), which is always safe — no interactive
+  // controls exist in that zone while the collection sheet is visible.
+  //
+  // Detection uses id="pinned_save_row" (the saved-item row inside the sheet,
+  // unique to this sheet type) OR the empty-state title text as a fallback.
+  // We NEVER use "Start a collection" as a tap target because that would
+  // create a collection instead of dismissing the sheet.
+  if (xml.includes('id="pinned_save_row"') || xml.includes('text="Collect the posts you love"')) {
+    const { w: _csW, h: _csH } = _getScreenSize(xml);
+    _adbTap(adb, serial, Math.round(_csW * 0.50), Math.round(_csH * 0.12));
+    await _sleep(400);
+    return "Collect the posts you love — dimmer tap";
+  }
+
   // "Sharing posts" bottom sheet — Instagram shows this on the caption/share
   // screen the first time an account posts, explaining public sharing & reuse.
   // The sheet has id="igds_button" children: "OK" (tap to proceed) and

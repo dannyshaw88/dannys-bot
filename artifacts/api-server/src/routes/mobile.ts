@@ -2324,11 +2324,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   await sleepOrAbort(serial, 200 + Math.round(Math.random() * 200));
                   onLog?.(`Scroll ${i + 1}/${count}: tapping save (ribbon) icon at (${_saveBtn.x},${_saveBtn.y})…`);
                   await android.tap(serial, _saveBtn.x, _saveBtn.y);
-                  // Instagram shows a brief non-modal toast after save — no
-                  // tap is needed or safe here. Any tap in this region risks
-                  // hitting the post's profile header and navigating away.
-                  // Just wait for the toast to clear naturally.
-                  await sleepOrAbort(serial, 800);
+                  await sleepOrAbort(serial, 600);
+                  // Instagram may show a "Collect the posts you love" bottom
+                  // sheet on accounts with no existing collections.  Detect it
+                  // with a fresh dump and dismiss it by tapping the transparent
+                  // background_dimmer above the sheet (top 12% of screen).
+                  // The dump is skipped when the sheet isn't present — the
+                  // timeout is rare and acceptable on the save path.
+                  {
+                    const _fsSaveXml = await android.dumpUi(serial).catch(() => "");
+                    if (_fsSaveXml.includes('pinned_save_row') || _fsSaveXml.includes('Collect the posts you love')) {
+                      const { w: _fsW, h: _fsH } = getScreenSize(serial);
+                      await android.tap(serial, Math.round(_fsW * 0.50), Math.round(_fsH * 0.12));
+                      onLog?.(`Scroll ${i + 1}/${count}: dismissed "Save to collection?" popup`);
+                      await sleepOrAbort(serial, 300);
+                    }
+                  }
                   saves++;
                   logger.info({ serial }, "[check-feed] saved post via ribbon icon");
                   onLog?.(`Scroll ${i + 1}/${count}: ✓ post saved`);
@@ -3368,8 +3379,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     // in that zone while the collection sheet is visible.
                     const _eDismissX = Math.round(w * 0.50);
                     const _eDismissY = Math.round(h * 0.12);
-                    await android.tap(serial, _eDismissX, _eDismissY);
-                    await sleepOrAbort(serial, 400);
+                    // Only dismiss if the collection sheet is actually visible —
+                    // an unconditional tap risks hitting the Explore header when
+                    // the toast appears without the sheet.
+                    const _eSaveXml = await android.dumpUi(serial).catch(() => "");
+                    if (_eSaveXml.includes('pinned_save_row') || _eSaveXml.includes('Collect the posts you love')) {
+                      await android.tap(serial, _eDismissX, _eDismissY);
+                      await sleepOrAbort(serial, 300);
+                    }
                     saves++;
                     logger.info({ serial }, "[view-explore] saved post via ribbon icon");
                     onLog?.(`Explore scroll ${i + 1}/${scrollCount}: ✓ saved`);
@@ -5025,7 +5042,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
         onLog?.(`Inject Browsing: tapping save icon at (${icons.save.x},${icons.save.y})…`);
         await android.tap(serial, icons.save.x, icons.save.y);
-        await sleepOrAbort(serial, 800);
+        await sleepOrAbort(serial, 600);
+        // Dismiss the "Collect the posts you love" bottom sheet if it appears.
+        {
+          const _ibSaveXml = await android.dumpUi(serial).catch(() => "");
+          if (_ibSaveXml.includes('pinned_save_row') || _ibSaveXml.includes('Collect the posts you love')) {
+            const { w: _ibW, h: _ibH } = getScreenSize(serial);
+            await android.tap(serial, Math.round(_ibW * 0.50), Math.round(_ibH * 0.12));
+            onLog?.("Inject Browsing: dismissed \"Save to collection?\" popup");
+            await sleepOrAbort(serial, 300);
+          }
+        }
         onLog?.("Inject Browsing: ✓ post saved");
       } catch (e: any) {
         if (e?.message === "cycle-aborted") throw e;

@@ -4,6 +4,43 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.126
+
+### Fix — Save action: dismiss "Collect the posts you love" bottom sheet across all tools
+
+**Problem:**
+After tapping the save/ribbon bookmark icon on a feed post, Instagram shows a bottom sheet titled "Collect the posts you love" / "Start a collection" on accounts that have no existing saved collections. This sheet blocked the automation cycle — the code did not detect or dismiss it, leaving the phone sitting on an unhandled popup instead of continuing to the next action.
+
+**Root cause analysis (from UIAutomator dump):**
+The sheet is a `bottom_sheet_container` that slides up from y≈404 (on a 720×1640 screen), with a clickable `background_dimmer` node covering the full screen behind it. Tapping anywhere in the transparent zone ABOVE the sheet's top edge (y < sheet_top) fires the `background_dimmer` and dismisses the sheet instantly. The top 12% of the screen is always in this safe zone and contains no interactive controls while the sheet is visible.
+
+**What was already handled vs what was missing:**
+
+| Tool | Before this fix |
+|---|---|
+| View Reels — Save | ✅ Already correct: conditional dump → check text → tap dimmer at `h*0.12` |
+| View Explore — Save | ⚠ Unconditional tap at `h*0.12` (worked, but always tapped even when no popup appeared, risking accidental navigation) |
+| View Feed — Save | ❌ No dismissal at all. Comment said "no tap needed" — incorrect when the sheet is present |
+| Inject Browsing — Save | ❌ No dismissal at all |
+
+**Changes:**
+
+- `artifacts/api-server/src/mobile/androidManager.ts` — `dismissInstagramInterstitials()`:
+  Added a specific guard at the top of the function (before the generic DISMISS_LABELS loop) that detects the "Collect the posts you love" sheet via `id="pinned_save_row"` (unique to this sheet type) or the text `"Collect the posts you love"` as a fallback. When detected, it taps at `(w*0.50, h*0.12)` — the transparent dimmer zone above the sheet — and returns the label so callers can log it. This means any future caller of `dismissInstagramInterstitials` also automatically handles this popup.
+
+- `artifacts/api-server/src/routes/mobile.ts` — **View Feed save path**:
+  Replaced the "no tap needed" comment + bare 800ms sleep with a 600ms sleep followed by a conditional dump: if `pinned_save_row` or `"Collect the posts you love"` is in the XML, taps the dimmer and waits 300ms. Does nothing if the popup is absent.
+
+- `artifacts/api-server/src/routes/mobile.ts` — **View Explore save path**:
+  Converted the existing unconditional `tap(w*0.50, h*0.12)` to a conditional one: now does a fresh dump after the save tap and only fires the dimmer tap if the collection sheet is actually visible, avoiding false taps on the Explore header.
+
+- `artifacts/api-server/src/routes/mobile.ts` — **Inject Browsing save path**:
+  Added the same dump-then-conditionally-tap pattern after the save tap. Replaced the bare 800ms sleep with 600ms + conditional dismissal.
+
+The View Reels path was already correct and is unchanged.
+
+---
+
 ## v1.2.125
 
 ### Feature — Human Session Tool: Direct Messaging card
