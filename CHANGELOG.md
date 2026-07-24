@@ -4,6 +4,26 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.128
+
+### Fix — "Interacting with content shared from Facebook" dialog blocks story automation
+
+**Problem:**
+While watching stories, Instagram occasionally shows a full-screen informational dialog titled "Interacting with content shared from Facebook". This dialog appears when a story contains cross-platform Facebook content. Unlike most Instagram popups, this dialog **cannot be dismissed by tapping outside** — only the "OK" primary button works. The automation had no handler for it, so the phone would sit completely frozen on this dialog for the rest of the story cycle.
+
+**Root cause (from UIAutomator dump):**
+The dialog renders inside `id="dialog_container"` with `id="igds_headline_headline"` carrying the title text. The only interactive dismiss path is `id="primary_button"` (text="OK") — tapping anywhere else registers nothing. The existing `dismissInstagramInterstitials()` function had no guard for this dialog, and the story loop had no mid-slide interstitial check at all (only a pre-stories check before the viewer opened).
+
+**Changes:**
+
+- `artifacts/api-server/src/mobile/androidManager.ts` — `dismissInstagramInterstitials()`:
+  Added a specific guard that detects the dialog via both `id="dialog_container"` AND the exact headline text (double-lock to prevent accidental matches on other dialogs using the same container). Taps `id="primary_button"` directly (from the dump's real coordinates) rather than a generic "OK" label scan.
+
+- `artifacts/api-server/src/routes/mobile.ts` — `runViewStoriesFromFeedLoop`:
+  Added a `dismissInstagramInterstitials` call at the **top of every per-slide iteration**, before like/share logic runs. Previously there was only a pre-stories check (before the viewer opened) — nothing inside the slide loop itself. Since the dialog appears mid-story, the mid-slide check is what catches and dismisses it, allowing the story session to continue unblocked.
+
+---
+
 ## v1.2.127
 
 ### Feature — Double-tap to like (human-gesture liking across all tools except Stories)
