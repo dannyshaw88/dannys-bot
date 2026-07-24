@@ -6003,18 +6003,29 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           });
         }
 
-        // Always navigate back to a clean Explore page after each user —
-        // including the last one. Skipping Back for the last user left the
-        // phone on a profile grid, which broke any tool that ran next
-        // (e.g. View Feed: findHomeTab gets null from a profile page, the
-        // coordinate fallback then hits the system nav bar instead of IG's
-        // Home icon, and the scroll loop runs on the profile grid instead
-        // of the home feed).
-        // One pressBack: profile → search results (still has @username in bar)
-        // Second pressBack: search results → clean Explore
-        await android.pressBack(serial);
+        // Navigate back to the home feed after each user so the next
+        // runFollowUsersStep call finds the bottom nav accessible.
+        //
+        // Root cause of the "second follow always fails" bug:
+        //   pressBack #1: profile → search results  (nav bar IS in a11y tree here)
+        //   pressBack #2: search results → Explore  (nav bar moves to a SEPARATE
+        //     UIAutomator window on Explore; findInstagramSearchTab can't see it)
+        //
+        // Fix: after pressBack #1 (back to search results) tap the Home tab
+        // directly — the nav bar is still in the main a11y window at that point.
+        // The next iteration starts from the home feed and taps Search normally.
+        await android.pressBack(serial);               // profile → search results
         await sleepOrAbort(serial, 500);
-        await android.pressBack(serial);
+        const _followHomeTab = await android.findHomeTab(serial).catch(() => null);
+        if (_followHomeTab) {
+          await android.tap(serial, _followHomeTab.x, _followHomeTab.y);
+        } else {
+          // Fallback: home tab not found from search results (unusual) — press
+          // Back once more to reach Explore, accepting the nav-bar gap for this
+          // iteration rather than leaving the phone stranded mid-flow.
+          onLog?.(`Follow: home tab not found after back — falling back to second pressBack`);
+          await android.pressBack(serial);
+        }
         await sleepOrAbort(serial, 800);
         // Dismiss any popup that appeared after pressing back (e.g. IG Plus
         // upsell, notification prompts) before the next operation.

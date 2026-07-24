@@ -4,6 +4,49 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.136 — 2026-07-24
+
+### Fixed — Spread Follow fails on every user after the first
+
+**Symptom:**
+When Spread Follow was enabled, only the first candidate in each execution slot
+was ever followed. Every subsequent candidate logged
+`Follow: Search tab not found — skipping` and was silently skipped, so the bot
+consumed candidates without following anyone after the first.
+
+**Root cause:**
+After visiting a profile, the follow loop pressed Back twice to return to a
+"clean Explore page":
+- Back #1: profile → search results ✓ (nav bar is in the main accessibility window here)
+- Back #2: search results → Explore ✗ (on Explore, Android moves the bottom nav
+  bar into a **separate** UIAutomator accessibility window — `findInstagramSearchTab`
+  queries the main window only and gets null, so the next iteration's
+  "tap Search tab" step is skipped entirely)
+
+**Fix (`artifacts/api-server/src/routes/mobile.ts`):**
+After Back #1 (profile → search results), instead of pressing Back again into
+Explore, we now locate and tap the **Home tab** directly from the search-results
+screen, where the nav bar is still fully visible in the accessibility tree.
+Each subsequent iteration then starts from the home feed and taps Search
+normally — the same navigation path the very first iteration uses, which already
+worked reliably. A graceful fallback to the old double-Back is kept for the
+(unusual) case where `findHomeTab` returns null from search results.
+
+---
+
+### Fixed — Debugging Log timestamps invisible (near-black on dark background)
+
+**Symptom:**
+The `[HH:MM:SS]` timestamp prefix on every line in the Debugging Log tab was
+rendered with `text-green-400/25` — 25% opacity green — which was effectively
+invisible against the dark panel background.
+
+**Fix (`artifacts/dannys-bot/src/pages/MobilePage.tsx`):**
+Changed the timestamp span colour to `text-white` so timestamps are clearly
+legible at all times.
+
+---
+
 ## v1.2.135 — 2026-07-24
 
 ### Fixed — Reels action icons not found; likes skipped entirely on some builds
