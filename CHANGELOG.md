@@ -4,6 +4,67 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.140 — 2026-07-24
+
+### Improved — Inspect tool now detects Android keyboard keys as individual tappable nodes
+
+**What changed:**
+
+The Inspect tool (Device → Debugging Log → Tree tab) previously missed every key on
+the on-screen Android keyboard whenever the keyboard was open. The QWERTY rows, number
+row, space bar, backspace, enter, emoji button, and all other keyboard keys simply did
+not appear in the accessibility tree — the tree showed only the foreground Instagram
+nodes, and the keyboard was invisible to the debugger.
+
+**Root cause:**
+
+`uiautomator dump` only dumps the foreground application window by default. The Android
+soft keyboard (IME — Input Method Editor) runs in a completely separate system window.
+Because that window was never included in the dump, its accessibility nodes were never
+parsed, and the inspect tree showed 0 keyboard nodes regardless of what was visible on
+screen.
+
+**Fix — `dumpUiWithIme` (androidManager.ts):**
+
+A new exported function `dumpUiWithIme()` was added alongside the existing `dumpUi()`.
+It runs `uiautomator dump --include-ime <path>` — a flag available on Android 6+ /
+UIAutomator 2.x — which forces the IME window into the accessibility tree alongside
+the foreground app. The function follows the same async spawn + pull + retry pattern
+as the existing `_uiDump` / `_uiDumpOnce` pipeline (9 s spawn timeout, 6 s pull
+timeout, 3 retries on truncated XML). If the device does not support `--include-ime`
+(the flag was absent on older builds), the resulting XML will be missing its closing
+`</hierarchy>` tag; the function detects that and automatically falls back to a
+standard `_uiDump` call, returning `{ xml, imeIncluded: false }` so the caller always
+gets a valid tree.
+
+**Inspect endpoint updated (routes/mobile.ts):**
+
+The `/api/mobile/devices/:serial/inspect-all-nodes` backend route now calls
+`dumpUiWithIme` instead of `dumpUi`. The `imeIncluded` boolean is forwarded in the
+JSON response alongside `nodes`, `screenW`, and `screenH`, so the frontend knows
+whether keyboard nodes are present in the current dump.
+
+**Frontend indicator added (MobilePage.tsx):**
+
+- The `imeIncluded` boolean is now stored in component state and updated on every
+  Re-dump as well as the automatic dump that fires when inspect mode is opened.
+- A small `⌨ kbd` badge (emerald green) appears in the Tree tab header when the
+  keyboard window was successfully captured. It shows `⌨ no kbd` (grey) when the
+  device does not support `--include-ime` and fell back to the regular dump.
+- Hovering the badge shows a tooltip explaining what it means.
+
+**Result:**
+
+When the Android keyboard is open and the user opens the Inspect tool (or clicks
+↻ Re-dump), every keyboard key — Q, W, E, R, T, Y… rows, space bar, backspace,
+enter, emoji picker button, symbol-toggle button — appears as a separate accessibility
+node in the tree with its correct `bounds`, `class`, `text`, and `clickable` flag.
+The hover-to-highlight overlay on the mirror also works for keyboard nodes, so you can
+hover any key row in the tree panel and see its exact bounding box lit up on the
+device mirror.
+
+---
+
 ## v1.2.139 — 2026-07-24
 
 ### Fixed — Story emoji comments now open the keyboard picker on Xiaomi devices
