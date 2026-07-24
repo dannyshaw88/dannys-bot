@@ -733,6 +733,28 @@ export async function dismissInstagramInterstitials(
     }
   }
 
+  // "Interacting with content shared from Facebook" full-screen dialog —
+  // appears mid-story (and sometimes mid-feed) when Instagram detects
+  // cross-platform content. Unlike most popups this dialog CANNOT be
+  // dismissed by tapping outside — the only valid dismiss is the "OK"
+  // primary button (id="primary_button"). Tapping any other area does
+  // nothing and the automation gets completely stuck.
+  //
+  // Detection: id="dialog_container" is the unique wrapper; the headline
+  // text is the human-readable guard that prevents accidental matches on
+  // any other dialog that happens to use the same container resource-id.
+  if (
+    xml.includes('id="dialog_container"') &&
+    xml.includes('text="Interacting with content shared from Facebook"')
+  ) {
+    const okPos = _findByResId(xml, ":id/primary_button") ?? _findElem(xml, "OK");
+    if (okPos) {
+      _adbTap(adb, serial, okPos.x, okPos.y);
+      await _sleep(600);
+      return "Interacting with content from Facebook — OK";
+    }
+  }
+
   // Ordered by specificity — more specific labels first so we don't
   // accidentally tap a generic button on a legitimate screen.
   // NOTE: "Cancel" and "OK" are intentionally excluded from the generic list

@@ -2638,6 +2638,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     for (let s = 0; s < totalStories; s++) {
       if (isCycleAborted(serial)) break;
 
+      // Mid-story interstitial guard — runs at the start of every slide.
+      // The "Interacting with content shared from Facebook" dialog (and
+      // similar full-screen popups) block all further interaction and cannot
+      // be dismissed by tapping outside — only their primary OK button works.
+      // dismissInstagramInterstitials handles this and other known dialogs,
+      // so we check once per slide before doing anything else.  Most slides
+      // produce no dump cost because dismissInstagramInterstitials reuses any
+      // preloaded XML passed to it; here we let it do its own dump since we
+      // have none yet at the top of the iteration.
+      const _storySlidePopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
+      if (_storySlidePopup) {
+        onLog?.(`Story ${s + 1}: mid-story popup dismissed (${_storySlidePopup})`);
+        logger.info({ serial, story: s + 1, dismissed: _storySlidePopup }, "[view-stories] mid-story interstitial dismissed");
+        await sleepOrAbort(serial, 400);
+      }
+
       // Like and/or share this story?
       const willLike  = likeChance  > 0 && Math.random() < likeChance;
       const willShare = shareChance > 0 && Math.random() < shareChance;
