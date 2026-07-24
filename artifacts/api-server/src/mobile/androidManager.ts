@@ -2261,30 +2261,73 @@ type ScreenPixels = { width: number; height: number; channels: number; pixels: B
  * The keyboard's bottom row has a distinctive visual structure:
  *   [smaller key] [emoji key] [wide space bar] [smaller key] [enter]
  *
- * We locate the light keyboard region, scan its bottom row for light key
- * rectangles, select the widest rectangle as the space bar, and return the
+ * We locate the keyboard region (light OR dark theme), scan its bottom row for
+ * key rectangles, select the widest rectangle as the space bar, and return the
  * centre of the adjacent rectangle on its left.  Returning null is safer than
  * tapping an unverified keyboard coordinate.
+ *
+ * Detection is tried for light-theme keyboards first, then dark-theme keyboards,
+ * because both are common depending on the device's system theme and the app.
  */
 export function findKeyboardEmojiButtonFromPixels(img: ScreenPixels): { x: number; y: number } | null {
+  return _findKeyboardEmojiButtonForTheme(img, "light") ??
+         _findKeyboardEmojiButtonForTheme(img, "dark");
+}
+
+function _findKeyboardEmojiButtonForTheme(
+  img: ScreenPixels,
+  theme: "light" | "dark",
+): { x: number; y: number } | null {
   const { width, height, channels, pixels } = img;
   if (!width || !height || channels < 3) return null;
 
-  const isLightNeutral = (x: number, y: number) => {
+  /**
+   * Returns true when pixel (x, y) matches the keyboard background for this theme.
+   *
+   * Light keyboard: nearly white / light-neutral (Gboard default light).
+   *   min(r,g,b) >= 190 and low saturation (max−min ≤ 42).
+   *
+   * Dark keyboard: dark neutral (Gboard dark / follows system dark mode).
+   *   max(r,g,b) <= 130 and low saturation (max−min ≤ 40).
+   *   Uses a generous ceiling so both the very dark gaps and the slightly
+   *   lighter key surfaces both qualify as "keyboard background rows".
+   */
+  const isKeyboardBg = (x: number, y: number): boolean => {
     const idx = y * width * channels + x * channels;
     const r = pixels[idx], g = pixels[idx + 1], b = pixels[idx + 2];
-    return Math.min(r, g, b) >= 190 && Math.max(r, g, b) - Math.min(r, g, b) <= 42;
+    if (theme === "light") {
+      return Math.min(r, g, b) >= 190 && Math.max(r, g, b) - Math.min(r, g, b) <= 42;
+    } else {
+      return Math.max(r, g, b) <= 130 && Math.max(r, g, b) - Math.min(r, g, b) <= 40;
+    }
+  };
+
+  /**
+   * Returns true when an individual pixel looks like the interior of a keyboard
+   * key (as opposed to a gap / shadow between keys).
+   *
+   * Light keyboard: nearly white with very low saturation.
+   * Dark keyboard: medium-dark gray that is clearly brighter than the very dark
+   *   gaps (≥ 50) but still well below any light surface (≤ 145).
+   */
+  const isKeyInterior = (r: number, g: number, b: number): boolean => {
+    if (theme === "light") {
+      return Math.min(r, g, b) >= 232 && Math.max(r, g, b) - Math.min(r, g, b) <= 28;
+    } else {
+      return Math.min(r, g, b) >= 50 && Math.max(r, g, b) <= 145 &&
+             Math.max(r, g, b) - Math.min(r, g, b) <= 35;
+    }
   };
 
   // Find the longest lower-screen band whose rows are predominantly the
-  // neutral/light keyboard background. Sample every 4th pixel to keep this
+  // neutral keyboard background. Sample every 4th pixel to keep this
   // probe cheap on the large screens used by the phone farm.
   const rowNeutralFraction = (y: number) => {
     let matches = 0;
     let samples = 0;
     for (let x = 0; x < width; x += 4) {
       samples++;
-      if (isLightNeutral(x, y)) matches++;
+      if (isKeyboardBg(x, y)) matches++;
     }
     return samples ? matches / samples : 0;
   };
@@ -2318,8 +2361,8 @@ export function findKeyboardEmojiButtonFromPixels(img: ScreenPixels): { x: numbe
   }
   if (bestEnd - bestStart < 24) return null;
 
-  // Scan several rows through the lowest key row. At each row, very light
-  // runs represent key interiors; keyboard gaps and key shadows break runs.
+  // Scan several rows through the lowest key row. At each row, key-interior
+  // runs represent individual keys; keyboard gaps and shadows break the runs.
   // Pick the row with the strongest bottom-row signature.
   type Segment = { x1: number; x2: number; y: number };
   let bestSegments: Segment[] = [];
@@ -2329,8 +2372,7 @@ export function findKeyboardEmojiButtonFromPixels(img: ScreenPixels): { x: numbe
     for (let x = 0; x < width; x++) {
       const idx = y * width * channels + x * channels;
       const r = pixels[idx], g = pixels[idx + 1], b = pixels[idx + 2];
-      const keyInterior = Math.min(r, g, b) >= 232 && Math.max(r, g, b) - Math.min(r, g, b) <= 28;
-      if (keyInterior) {
+      if (isKeyInterior(r, g, b)) {
         if (start < 0) start = x;
       } else if (start >= 0) {
         if (x - start >= Math.max(8, Math.round(width * 0.015)) &&

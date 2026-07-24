@@ -4,6 +4,19 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.132 — 2026-07-24
+
+### Fixed
+- **Story comment emoji key not detected on dark-theme keyboards** — the pixel
+  detector previously required nearly-white key surfaces (min ≥ 232 RGB), which
+  only matched Gboard's light theme.  Devices using the system dark theme have
+  medium-dark-gray key surfaces (~50–145 RGB) that were always rejected.
+  `findKeyboardEmojiButtonFromPixels` now tries light-theme detection first, then
+  falls back to dark-theme detection, so the emoji key is found on both keyboard
+  colour schemes without any coordinate fallback.
+
+---
+
 ## v1.2.131
 
 ### Fix — Story emoji replies now open the keyboard emoji picker
