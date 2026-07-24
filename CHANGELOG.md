@@ -4,6 +4,79 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.135 — 2026-07-24
+
+### Fixed — Reels action icons not found; likes skipped entirely on some builds
+
+**Symptom (confirmed on Redmi 12 5G):**
+Every reel burned a full 12-second wait, then logged
+`action icons not found — skipping like/share for this reel`.
+Zero likes, shares, or saves were performed on any reel, even though the reels
+were visually playing and Like % was configured.
+
+---
+
+#### Root cause 1 — Player-ready poll only checked for `content-desc="Like"/"Unlike"`
+
+The poll that waits for the reel player's a11y tree to attach looked exclusively
+for those two exact strings.  On this IG build the action icons have no
+`content-desc` at all, so the poll always timed out (12 s wasted per reel) and
+`findReelActionIcons` was then called against a tree where the player had not
+fully loaded.
+
+**Fix — expanded REEL_NODES marker list:**
+Added three additional presence signals that appear in the reel player view
+hierarchy even when action-icon labels are absent:
+- `reel_viewer` — covers `reel_viewer_root`, `reel_viewer_video_player`, toolbar, etc.
+- `reels_feed_media_view` — Reels-tab feed container root on some builds
+- `:id/outer_container` — action-icon column wrapper on label-absent builds
+
+The poll exits as soon as ANY of these strings appears in the raw dump.
+
+---
+
+#### Root cause 2 — `findReelActionIcons` returned null immediately when Like label absent
+
+`findReelActionIcons` anchored its entire search on `content-desc="Like"` or
+`content-desc="Unlike"` in the right column.  When neither was found it logged a
+diagnostic of clickable nodes and returned null, skipping all actions — including
+Share/Save which need icon coordinates AND likes which mostly don't.
+
+**Fix — two additional fallback passes before giving up:**
+
+1. **Resource-id fallback** — scans for nodes whose `resource-id` contains
+   `like_button`, `row_feed_button_like`, `like_count_button`, or `heart_button`
+   in the right column (x > 72 % of screen width).  Determines already-liked
+   state from the node's own `content-desc` if present.
+
+2. **Broadened content-desc match** — matches any node whose `content-desc`
+   starts with the word "Like" or "Unlike" (case-insensitive), catching labels
+   like "Like video", "Liked", count strings, etc.
+
+**Improved diagnostic when still null** — now logs BOTH clickable AND
+non-clickable nodes in the right column.  Non-clickable nodes are tagged
+`[non-clickable]` in the log.  This exposes containers whose child icons are
+not individually marked `clickable="true"` — the most common structural reason
+the Like anchor is missing on newer/tighter IG builds.
+
+---
+
+#### Root cause 3 — Double-tap likes were gated behind the icon scan
+
+93 % of Reels likes use double-tap on the video area, which needs NO icon
+coordinate from `findReelActionIcons`.  The old code placed the double-tap
+inside `if (icons) { … }`, so when `findReelActionIcons` returned null (for any
+reason), every double-tap was silently skipped along with the share/save actions.
+
+**Fix — like logic moved outside the icon-scan guard:**
+The `wantLike` block now runs independently of `icons`.  When `icons` is null
+the double-tap path is always taken (never the 7 % heart-icon-tap path, since
+that needs a coordinate).  Share to Feed, Share via DM, and Save still require
+`icons` and are skipped when it is null — they log
+`action icons not found — skipping share/save for this reel`.
+
+---
+
 ## v1.2.134 — 2026-07-24
 
 ### Fixed — Story comment emoji button tapped wrong spot (glyph fragment + tinted keyboard)

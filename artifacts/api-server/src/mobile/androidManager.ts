@@ -1993,16 +1993,76 @@ export async function findReelActionIcons(serial: string, onLog?: (msg: string) 
   }
 
   if (!like) {
-    // Diagnostic dump: every clickable node in the right-edge column, so a
-    // real run's log shows exactly what label/resource-id this device/build
-    // actually exposes for the Reels action column instead of a silent null.
+    // ── Fallback 1: resource-id patterns for the Like button ─────────────────
+    // On some device/IG-build combinations (observed: Redmi 12 5G) the Reels
+    // action icons do not carry content-desc="Like"/"Unlike".  Try well-known
+    // resource-id fragments instead.  Only accept nodes in the right column.
+    const RID_LIKE_PATTERNS = [
+      "like_button",           // com.instagram.android:id/like_button
+      "row_feed_button_like",  // feed row like button rid
+      "like_count_button",     // some builds: like count tappable
+      "heart_button",          // alternative label used in some versions
+    ];
+    {
+      const ridRe = /<node\s([^>]+?)\s*\/?>/g;
+      let rm: RegExpExecArray | null;
+      outer: while ((rm = ridRe.exec(xml)) !== null) {
+        const a = rm[1];
+        const ridM = a.match(/resource-id="([^"]*)"/);
+        if (!ridM) continue;
+        const rid = ridM[1];
+        if (!RID_LIKE_PATTERNS.some(p => rid.includes(p))) continue;
+        const bm = a.match(/bounds="(\[\d+,\d+\]\[\d+,\d+\])"/);
+        if (!bm) continue;
+        const c = _parseCenter(bm[1]);
+        if (!c || c.x < rightBand) continue;
+        // Determine already-liked from content-desc of this node if available
+        const cd = (a.match(/content-desc="([^"]*)"/) ?? [])[1] ?? "";
+        if (/\bunlike\b/i.test(cd)) alreadyLiked = true;
+        like = c;
+        onLog?.(`[reel-icons] Like found via resource-id fallback: rid="${rid}" cd="${cd}" at (${c.x},${c.y})`);
+        break outer;
+      }
+    }
+
+    // ── Fallback 2: broadened content-desc match (e.g. "Like video", count) ─
+    // Some builds label the button with a count or alternative phrase rather
+    // than the plain word "Like".  Match any node in the right column whose
+    // content-desc starts with "Like" or equals "Unlike" (case-insensitive).
+    if (!like) {
+      const cdRe = /<node\s([^>]+?)\s*\/?>/g;
+      let cm: RegExpExecArray | null;
+      while ((cm = cdRe.exec(xml)) !== null) {
+        const a = cm[1];
+        const cdM = a.match(/content-desc="([^"]*)"/);
+        if (!cdM) continue;
+        const cd = cdM[1];
+        if (!/^\blike\b/i.test(cd) && !/^\bunlike\b/i.test(cd)) continue;
+        const bm = a.match(/bounds="(\[\d+,\d+\]\[\d+,\d+\])"/);
+        if (!bm) continue;
+        const c = _parseCenter(bm[1]);
+        if (!c || c.x < rightBand) continue;
+        if (/^\bunlike\b/i.test(cd)) alreadyLiked = true;
+        like = c;
+        onLog?.(`[reel-icons] Like found via broadened cd match: cd="${cd}" at (${c.x},${c.y})`);
+        break;
+      }
+    }
+  }
+
+  if (!like) {
+    // Diagnostic dump: every node (clickable or not) in the right-edge column
+    // so a real run shows exactly what this device/IG build exposes.  Logging
+    // ALL nodes (not just clickable ones) reveals containers whose children
+    // are rendered without individual clickable="true" flags — the most common
+    // cause of "no Like found" on newer/tighter IG builds.
     const colTolerance = w * 0.28;
     const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
-    const nodes: string[] = [];
+    const clickableNodes: string[] = [];
+    const allNodes: string[] = [];
     let dm: RegExpExecArray | null;
     while ((dm = nodeRe.exec(xml)) !== null) {
       const a = dm[1];
-      if (!/clickable="true"/.test(a)) continue;
       const bm = a.match(/bounds="(\[\d+,\d+\]\[\d+,\d+\])"/);
       if (!bm) continue;
       const c = _parseCenter(bm[1]);
@@ -2010,9 +2070,15 @@ export async function findReelActionIcons(serial: string, onLog?: (msg: string) 
       const cd  = (a.match(/content-desc="([^"]*)"/) || [])[1] ?? "";
       const rid = (a.match(/resource-id="([^"]*)"/)  || [])[1] ?? "";
       const cls = (a.match(/class="([^"]*)"/)        || [])[1] ?? "";
-      nodes.push(`(${c.x},${c.y}) cd="${cd}" rid="${rid}" cls="${cls}"`);
+      const isClickable = /clickable="true"/.test(a);
+      const entry = `(${c.x},${c.y}) cd="${cd}" rid="${rid}" cls="${cls}"${isClickable ? "" : " [non-clickable]"}`;
+      if (isClickable) clickableNodes.push(entry);
+      else allNodes.push(entry);
     }
-    onLog?.(`[reel-icons] no Like/Unlike node found in right column — right-edge clickable nodes: ${nodes.length ? nodes.join(" | ") : "(none)"}`);
+    onLog?.(`[reel-icons] no Like/Unlike node found — right-edge clickable: ${clickableNodes.length ? clickableNodes.join(" | ") : "(none)"}`);
+    if (allNodes.length > 0) {
+      onLog?.(`[reel-icons] right-edge non-clickable nodes: ${allNodes.slice(0, 8).join(" | ")}${allNodes.length > 8 ? ` … +${allNodes.length - 8} more` : ""}`);
+    }
     return null;
   }
 

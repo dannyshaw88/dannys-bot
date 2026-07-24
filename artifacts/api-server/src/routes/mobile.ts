@@ -3721,9 +3721,29 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // list (like_count, comment_button, direct_share_button) does not
           // exist on all devices/IG builds, causing the poll to burn its full
           // 6 × 2 s budget even when the reel is visibly playing.
+          // Signals that the reel player's view hierarchy has attached to the
+          // a11y tree.  Ordered from most-specific to least-specific so the
+          // poll exits as early as possible.
+          //
+          // Why not content-desc="Like"/"Unlike" only?
+          //   On some device/IG-build combinations (observed: Redmi 12 5G) the
+          //   Reels action icons do NOT carry those exact content-desc values —
+          //   the poll burned its full 12 s budget every reel, then proceeded
+          //   to findReelActionIcons which also failed to find the Like anchor
+          //   and returned null, silently skipping every action.
+          //
+          // The resource-id markers below appear in the reel player view
+          // hierarchy even when content-desc is absent:
+          //   • reel_viewer_*       — reel_viewer_root / reel_viewer_video_player / …
+          //   • reels_feed_media_view_root — Reels-tab feed container
+          //   • :id/outer_container — action-icon column container on builds
+          //                           where individual icons lack labels
           const REEL_NODES = [
             'content-desc="Like"',
             'content-desc="Unlike"',
+            "reel_viewer",                  // reel_viewer_root, _video_player, _toolbar, …
+            "reels_feed_media_view",        // Reels-tab feed root (some builds)
+            ":id/outer_container",          // action-icon column container (no-cd builds)
           ];
           const POLL_MS   = 2000;
           const MAX_POLLS = 6; // up to 12 s extra wait
@@ -3766,32 +3786,41 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
         onLog?.(`Reel ${i + 1}/${totalReels}: scanning right-side action column…`);
         const icons = await android.findReelActionIcons(serial, (msg) => onLog?.(`  ${msg}`)).catch(() => null);
-        if (!icons) {
-          onLog?.(`Reel ${i + 1}/${totalReels}: action icons not found — skipping like/share for this reel`);
-        } else {
-          if (wantLike) {
-            if (icons.alreadyLiked) {
-              onLog?.(`Reel ${i + 1}/${totalReels}: already liked — skipping like`);
+
+        // ── Like — decoupled from icon scan ────────────────────────────────
+        // 93 % of likes use double-tap on the video area and need NO icon
+        // coordinate from findReelActionIcons.  Do not gate them on icons
+        // being non-null: on builds where the Reels action column lacks
+        // content-desc labels (e.g. Redmi 12 5G), findReelActionIcons returns
+        // null, and the old `if (!icons)` block was silently skipping every
+        // double-tap like even though they require no a11y information at all.
+        if (wantLike) {
+          if (icons?.alreadyLiked) {
+            onLog?.(`Reel ${i + 1}/${totalReels}: already liked — skipping like`);
+          } else {
+            const useDoubleTap = !icons || Math.random() < 0.93; // force dt when icons unavailable
+            if (useDoubleTap) {
+              const { w: _rW, h: _rH } = getScreenSize(serial);
+              const dtX = Math.round(_rW * 0.38) + Math.round((Math.random() - 0.5) * 20);
+              const dtY = Math.round(_rH * 0.45) + Math.round((Math.random() - 0.5) * 40);
+              onLog?.(`Reel ${i + 1}/${totalReels}: double-tapping video at (${dtX},${dtY})…`);
+              await android.doubleTap(serial, dtX, dtY);
             } else {
-              // ~93 % double-tap on the video area; ~7 % tap the heart icon.
-              // For Reels the action icons are on the right edge, so the
-              // double-tap targets the left-centre of the screen to stay clear.
-              const useDoubleTap = Math.random() < 0.93;
-              if (useDoubleTap) {
-                const { w: _rW, h: _rH } = getScreenSize(serial);
-                const dtX = Math.round(_rW * 0.38) + Math.round((Math.random() - 0.5) * 20);
-                const dtY = Math.round(_rH * 0.45) + Math.round((Math.random() - 0.5) * 40);
-                onLog?.(`Reel ${i + 1}/${totalReels}: double-tapping video at (${dtX},${dtY})…`);
-                await android.doubleTap(serial, dtX, dtY);
-              } else {
-                onLog?.(`Reel ${i + 1}/${totalReels}: tapping heart icon at (${icons.like.x},${icons.like.y})…`);
-                await android.tap(serial, icons.like.x, icons.like.y);
-              }
-              likes++;
-              onLog?.(`Reel ${i + 1}/${totalReels}: ✓ liked`);
-              await sleepOrAbort(serial, 250);
+              onLog?.(`Reel ${i + 1}/${totalReels}: tapping heart icon at (${icons!.like.x},${icons!.like.y})…`);
+              await android.tap(serial, icons!.like.x, icons!.like.y);
             }
+            likes++;
+            onLog?.(`Reel ${i + 1}/${totalReels}: ✓ liked`);
+            await sleepOrAbort(serial, 250);
           }
+        }
+
+        // ── Share / Save — require icon coordinates ─────────────────────────
+        if (!icons) {
+          if (wantShareFeed || wantSave || wantShareDm) {
+            onLog?.(`Reel ${i + 1}/${totalReels}: action icons not found — skipping share/save for this reel`);
+          }
+        } else {
           if (wantShareFeed) {
             if (!icons.shareFeed) {
               onLog?.(`Reel ${i + 1}/${totalReels}: Share to Feed icon not found — skipping`);
