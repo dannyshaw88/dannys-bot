@@ -2070,22 +2070,43 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             onLog?.(`Scroll ${i + 1}/${count}: action bar found — ${iconSummary}`);
 
             if (wantLike) {
-              // Tiny jitter (a few px) so repeated taps aren't pixel-identical,
-              // but small enough to stay inside the button's own hit target.
-              const jx = likeBtn.x + Math.round((Math.random() - 0.5) * 6);
-              const jy = likeBtn.y + Math.round((Math.random() - 0.5) * 6);
-              logger.info({ serial, target: "like-button", x: jx, y: jy, matched: true }, "[check-feed] tap like");
-              onLog?.(`Scroll ${i + 1}/${count}: tapping Like at (${jx},${jy})…`);
-              try {
-                await android.tap(serial, jx, jy);
-                likes++;
-                onLog?.(`Scroll ${i + 1}/${count}: ✓ tapped Like`);
-              } catch {
-                likeFailures++;
-                onLog?.(`Scroll ${i + 1}/${count}: ✗ like tap threw an error`);
+              if (icons.alreadyLiked) {
+                onLog?.(`Scroll ${i + 1}/${count}: already liked — skipping like`);
+              } else {
+                // ~93 % of likes use a double-tap on the post image — the
+                // natural human gesture.  The remaining ~7 % tap the heart
+                // icon so the mix of input methods looks organic to
+                // Instagram's telemetry.  Stories are excluded from this
+                // path (they use their own accessibility-tree like button).
+                const useDoubleTap = Math.random() < 0.93;
+                try {
+                  if (useDoubleTap) {
+                    // Target the centre of the post image, which sits above
+                    // the action bar.  Stepping ~300 px above like.y lands
+                    // reliably inside the image on all common phone sizes.
+                    const { w: _fW } = getScreenSize(serial);
+                    const dtX = Math.round(_fW / 2) + Math.round((Math.random() - 0.5) * 20);
+                    const dtY = likeBtn.y - 300 + Math.round((Math.random() - 0.5) * 40);
+                    logger.info({ serial, target: "image-double-tap", x: dtX, y: dtY }, "[check-feed] double-tap like");
+                    onLog?.(`Scroll ${i + 1}/${count}: double-tapping image at (${dtX},${dtY})…`);
+                    await android.doubleTap(serial, dtX, dtY);
+                  } else {
+                    // Heart-icon tap — used ~7 % of the time for variety.
+                    const jx = likeBtn.x + Math.round((Math.random() - 0.5) * 6);
+                    const jy = likeBtn.y + Math.round((Math.random() - 0.5) * 6);
+                    logger.info({ serial, target: "like-button", x: jx, y: jy }, "[check-feed] heart-icon like");
+                    onLog?.(`Scroll ${i + 1}/${count}: tapping heart icon at (${jx},${jy})…`);
+                    await android.tap(serial, jx, jy);
+                  }
+                  likes++;
+                  onLog?.(`Scroll ${i + 1}/${count}: ✓ liked`);
+                } catch {
+                  likeFailures++;
+                  onLog?.(`Scroll ${i + 1}/${count}: ✗ like threw an error`);
+                }
+                await sleepOrAbort(serial, 300);
+                await verifyStillInInstagram();
               }
-              await sleepOrAbort(serial, 300);
-              await verifyStillInInstagram();
             } else {
               onLog?.(`Scroll ${i + 1}/${count}: like roll missed (chance ${Math.round(likeChance * 100)}%) — scrolling without like`);
             }
@@ -3217,12 +3238,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             } else {
               // ── Like ──────────────────────────────────────────────────────
               if (wantLike) {
-                const jx = icons.like.x + Math.round((Math.random() - 0.5) * 6);
-                const jy = icons.like.y + Math.round((Math.random() - 0.5) * 6);
-                await android.tap(serial, jx, jy);
-                likes++;
-                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: ✓ liked at (${jx},${jy})`);
-                await sleepOrAbort(serial, 300);
+                if (icons.alreadyLiked) {
+                  onLog?.(`Explore scroll ${i + 1}/${scrollCount}: already liked — skipping like`);
+                } else {
+                  // ~93 % double-tap on image; ~7 % heart-icon tap for variety.
+                  const useDoubleTap = Math.random() < 0.93;
+                  if (useDoubleTap) {
+                    const { w: _eW } = getScreenSize(serial);
+                    const dtX = Math.round(_eW / 2) + Math.round((Math.random() - 0.5) * 20);
+                    const dtY = icons.like.y - 300 + Math.round((Math.random() - 0.5) * 40);
+                    onLog?.(`Explore scroll ${i + 1}/${scrollCount}: double-tapping image at (${dtX},${dtY})…`);
+                    await android.doubleTap(serial, dtX, dtY);
+                  } else {
+                    const jx = icons.like.x + Math.round((Math.random() - 0.5) * 6);
+                    const jy = icons.like.y + Math.round((Math.random() - 0.5) * 6);
+                    onLog?.(`Explore scroll ${i + 1}/${scrollCount}: tapping heart icon at (${jx},${jy})…`);
+                    await android.tap(serial, jx, jy);
+                  }
+                  likes++;
+                  onLog?.(`Explore scroll ${i + 1}/${scrollCount}: ✓ liked`);
+                  await sleepOrAbort(serial, 300);
+                }
               }
 
               // ── Share to Feed (repost) ─────────────────────────────────────
@@ -3572,9 +3608,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             if (icons.alreadyLiked) {
               onLog?.(`Reel ${i + 1}/${totalReels}: already liked — skipping like`);
             } else {
-              await android.tap(serial, icons.like.x, icons.like.y);
+              // ~93 % double-tap on the video area; ~7 % tap the heart icon.
+              // For Reels the action icons are on the right edge, so the
+              // double-tap targets the left-centre of the screen to stay clear.
+              const useDoubleTap = Math.random() < 0.93;
+              if (useDoubleTap) {
+                const { w: _rW, h: _rH } = getScreenSize(serial);
+                const dtX = Math.round(_rW * 0.38) + Math.round((Math.random() - 0.5) * 20);
+                const dtY = Math.round(_rH * 0.45) + Math.round((Math.random() - 0.5) * 40);
+                onLog?.(`Reel ${i + 1}/${totalReels}: double-tapping video at (${dtX},${dtY})…`);
+                await android.doubleTap(serial, dtX, dtY);
+              } else {
+                onLog?.(`Reel ${i + 1}/${totalReels}: tapping heart icon at (${icons.like.x},${icons.like.y})…`);
+                await android.tap(serial, icons.like.x, icons.like.y);
+              }
               likes++;
-              onLog?.(`Reel ${i + 1}/${totalReels}: liked at (${icons.like.x},${icons.like.y})`);
+              onLog?.(`Reel ${i + 1}/${totalReels}: ✓ liked`);
               await sleepOrAbort(serial, 250);
             }
           }
@@ -4850,8 +4899,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         logger.info({ serial }, "[inject-browsing] post already liked (Unlike button found) — skipped like tap, share/DM actions will still run");
       } else {
         try {
-          await android.tap(serial, icons.like.x, icons.like.y);
-          onLog?.("Inject Browsing: liked the post");
+          // ~93 % double-tap on the post image; ~7 % heart-icon tap for variety.
+          const useDoubleTap = Math.random() < 0.93;
+          if (useDoubleTap) {
+            const { w: _ibW } = getScreenSize(serial);
+            const dtX = Math.round(_ibW / 2) + Math.round((Math.random() - 0.5) * 20);
+            const dtY = icons.like.y - 300 + Math.round((Math.random() - 0.5) * 40);
+            onLog?.(`Inject Browsing: double-tapping image at (${dtX},${dtY})…`);
+            await android.doubleTap(serial, dtX, dtY);
+          } else {
+            onLog?.(`Inject Browsing: tapping heart icon at (${icons.like.x},${icons.like.y})…`);
+            await android.tap(serial, icons.like.x, icons.like.y);
+          }
+          onLog?.("Inject Browsing: ✓ liked the post");
           await sleepOrAbort(serial, 300);
         } catch { /* best effort */ }
       }

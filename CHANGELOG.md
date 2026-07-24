@@ -4,6 +4,37 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.127
+
+### Feature — Double-tap to like (human-gesture liking across all tools except Stories)
+
+**What changed and why:**
+
+Every real Instagram user likes posts by double-tapping the image, not by finding and tapping the heart icon. Instagram's own telemetry tracks *how* a like was triggered (gesture vs. icon), so an automation that always taps the icon creates a fingerprint that no real user produces. This release replaces the icon-tap-only path with a mixed strategy:
+
+- **~93 % of all likes** are now performed by a double-tap on the post image itself — the same gesture real users make. The tap lands in the centre of the visible image area, well above the action bar (approximately 300 px above the Like icon's Y coordinate), with a ±20 px random jitter on X and ±40 px random jitter on Y so no two likes land at the exact same pixel.
+- **~7 % of likes** still tap the heart icon directly, keeping a small but non-zero presence of icon-taps so the account's gesture mix looks natural rather than robotically uniform.
+
+**Where this applies:**
+
+| Tool | Change |
+|---|---|
+| View Feed | ✅ Double-tap on post image (93 %) / heart icon (7 %). Also added missing `alreadyLiked` guard — was previously missing from the feed path, risking an accidental unlike. |
+| View Explore | ✅ Double-tap on post image (93 %) / heart icon (7 %). Added `alreadyLiked` guard. |
+| View Reels | ✅ Double-tap on the video area at ~38 % screen width / 45 % screen height (left-centre, clear of the right-edge icon column) (93 %) / heart icon (7 %). `alreadyLiked` guard already existed and is preserved. |
+| Inject Browsing | ✅ Double-tap on post image (93 %) / heart icon (7 %). `alreadyLiked` guard already existed and is preserved. |
+| View Stories | ⛔ **Not changed.** Instagram does not support double-tap to like on Stories — the correct gesture there is the heart-icon tap via the accessibility toolbar, which was already in place and is untouched. |
+
+**How the double-tap works technically:**
+
+The `doubleTap()` helper in `androidManager.ts` fires both taps inside a single `adb shell` invocation (`input tap X Y; sleep 0.08; input tap X Y`) so the on-device gap between the two taps is a tight, consistent ~80 ms — within Instagram's GestureDetector double-tap recognition window. Firing two separate `adb shell input tap` calls (as was done historically) added 100–300 ms of USB/IPC overhead between taps, causing Instagram to see them as two independent single-taps rather than a double-tap.
+
+**Also in this release:**
+
+- Account switcher scroll: if a target account isn't visible in the switcher sheet after the initial poll (devices now carry ~10 accounts instead of 5–7), the code now performs up to 2 quick upward swipe gestures (scroll down in the list) and re-checks after each one before giving up. Swipe geometry uses `getScreenSize()` so it works correctly across different device resolutions and Xiaomi Override sizes.
+
+---
+
 ## v1.2.126
 
 ### Fix — Save action: dismiss "Collect the posts you love" bottom sheet across all tools
