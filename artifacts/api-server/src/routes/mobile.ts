@@ -7960,7 +7960,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.get("/api/mobile/devices/:serial/inspect-all-nodes", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
-      const xml = await android.dumpUi(serial);
+      const { xml, imeIncluded } = await android.dumpUiWithIme(serial);
       if (!xml || xml.length < 200) {
         res.json({ ok: false, nodes: [], error: "Empty dump — is the phone awake and unlocked?" });
         return;
@@ -7997,7 +7997,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           area:        (x2-x1) * (y2-y1),
         });
       }
-      res.json({ ok: true, nodes, screenW: W, screenH: H });
+      res.json({ ok: true, nodes, screenW: W, screenH: H, imeIncluded });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 

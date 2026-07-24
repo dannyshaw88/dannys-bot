@@ -4653,6 +4653,47 @@ export async function dumpUi(serial: string): Promise<string> {
 }
 
 /**
+ * Like dumpUi but includes the IME (soft keyboard) window in the dump.
+ * Uses `uiautomator dump --include-ime` (Android 6+). If the device doesn't
+ * support the flag the output will be an error string or empty — we detect
+ * that and fall back to a regular dump so the caller always gets a usable
+ * tree. Used by the Inspect tool so keyboard keys appear as tappable nodes
+ * when the on-screen keyboard is visible.
+ */
+export async function dumpUiWithIme(serial: string): Promise<{ xml: string; imeIncluded: boolean }> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+
+  // Try --include-ime first (Android 6+ / uiautomator 2.x)
+  const tmpDev  = "/sdcard/equinox_ui_dump_ime.xml";
+  const tmpHost = path.join(os.tmpdir(), `equinox-ui-ime-${serial.replace(/[^a-z0-9]/gi, "-")}.xml`);
+
+  let imeXml = "";
+  await new Promise<void>((resolve) => {
+    const child = spawn(adb, ["-s", serial, "shell", "uiautomator", "dump", "--include-ime", tmpDev], { stdio: "ignore" });
+    const t = setTimeout(() => { try { child.kill(); } catch { /**/ } resolve(); }, 9000);
+    child.on("close", () => { clearTimeout(t); resolve(); });
+    child.on("error", () => { clearTimeout(t); resolve(); });
+  });
+  await new Promise<void>((resolve) => {
+    const child = spawn(adb, ["-s", serial, "pull", tmpDev, tmpHost], { stdio: "ignore" });
+    const t = setTimeout(() => { try { child.kill(); } catch { /**/ } resolve(); }, 6000);
+    child.on("close", () => { clearTimeout(t); resolve(); });
+    child.on("error", () => { clearTimeout(t); resolve(); });
+  });
+  try { imeXml = fs.readFileSync(tmpHost, "utf8"); fs.unlinkSync(tmpHost); } catch { /**/ }
+
+  // A valid dump always ends with </hierarchy>. If it's missing or empty the
+  // flag isn't supported on this device → fall back to the standard dump.
+  if (imeXml && imeXml.includes("</hierarchy>")) {
+    return { xml: imeXml, imeIncluded: true };
+  }
+
+  const fallback = await _uiDump(adb, serial);
+  return { xml: fallback, imeIncluded: false };
+}
+
+/**
  * Switches the active Instagram account to the one matching `username` by
  * triggering Instagram's built-in account switcher:
  *   1. Long-press the profile tab (bottom-right nav) for 2 s → switcher opens

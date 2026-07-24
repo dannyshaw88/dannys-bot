@@ -1662,6 +1662,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
   const [inspectTab,     setInspectTab]     = useState<'tree' | 'scan'>('tree');
   const [inspectNodes,   setInspectNodes]   = useState<InspectNode[] | null>(null);
   const [inspectLoading, setInspectLoading] = useState(false);
+  const [imeIncluded,    setImeIncluded]    = useState<boolean | null>(null);
   const [mirrorHoveredIdx, setMirrorHoveredIdx] = useState<number | null>(null);
   const treeRef = useRef<HTMLDivElement>(null);
 
@@ -1688,10 +1689,16 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
     let cancelled = false;
     setInspectLoading(true);
     setInspectNodes(null);
+    setImeIncluded(null);
     fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/inspect-all-nodes`)
       .then(r => r.json())
-      .then(body => { if (!cancelled) setInspectNodes(body.ok ? body.nodes : []); })
-      .catch(() => { if (!cancelled) setInspectNodes([]); })
+      .then(body => {
+        if (!cancelled) {
+          setInspectNodes(body.ok ? body.nodes : []);
+          setImeIncluded(body.ok ? (body.imeIncluded ?? false) : null);
+        }
+      })
+      .catch(() => { if (!cancelled) { setInspectNodes([]); setImeIncluded(null); } })
       .finally(() => { if (!cancelled) setInspectLoading(false); });
     return () => { cancelled = true; };
   }, [inspectMode, phone?.serial]);
@@ -1701,10 +1708,14 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
     setInspectLoading(true);
     setInspectNodes(null);
     setMirrorHoveredIdx(null);
+    setImeIncluded(null);
     fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/inspect-all-nodes`)
       .then(r => r.json())
-      .then(body => setInspectNodes(body.ok ? body.nodes : []))
-      .catch(() => setInspectNodes([]))
+      .then(body => {
+        setInspectNodes(body.ok ? body.nodes : []);
+        setImeIncluded(body.ok ? (body.imeIncluded ?? false) : null);
+      })
+      .catch(() => { setInspectNodes([]); setImeIncluded(null); })
       .finally(() => setInspectLoading(false));
   };
 
@@ -2002,6 +2013,15 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
               className={`text-[8px] font-bold px-2 py-0.5 rounded transition-colors ml-0.5 ${inspectTab === 'scan' ? "bg-orange-500/25 text-orange-300 border border-orange-400/40" : "text-white/30 hover:text-white/60"}`}>
               Scan {customPins.length > 0 ? `(${customPins.length} pins)` : ""}
             </button>
+
+            {/* IME / keyboard indicator — shown while tree tab is active and a dump has been taken */}
+            {inspectTab === 'tree' && imeIncluded !== null && (
+              <span
+                title={imeIncluded ? "Keyboard (IME) window was included in this dump — keyboard keys are visible as nodes" : "Keyboard (IME) not detected or not supported on this device — keyboard keys will not appear as nodes"}
+                className={`ml-1.5 px-1.5 py-0.5 rounded text-[7px] font-bold border select-none ${imeIncluded ? "bg-emerald-500/20 text-emerald-300 border-emerald-400/40" : "bg-white/5 text-white/25 border-white/10"}`}>
+                ⌨ {imeIncluded ? "kbd" : "no kbd"}
+              </span>
+            )}
 
             {/* Context actions */}
             <div className="flex gap-1 ml-auto shrink-0">
