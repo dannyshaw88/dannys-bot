@@ -4,25 +4,33 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.143 — 2026-07-24
+
+### Corrected — Temporary keyboard colour diagnostics go to the Windows Debugging Log
+
+The previous diagnostic attempt added too much runtime instrumentation. This
+correction leaves the keyboard detection and tap logic unchanged and adds only
+the temporary lines needed to identify the keyboard colours:
+
+- one `[kbd-diag] theme=... maxRowFrac=... qualifyingRows=...` line per
+  keyboard colour profile;
+- one `[kbd-diag] y=... (85%) R=... G=... B=...` sample line from the
+  lower keyboard area.
+
+These lines use the API process logger, which the Windows Electron installer
+already writes to `equinox-debug.log` and exposes through the existing
+Debugging Log export. The next Windows run can therefore provide the actual
+RGB values for tuning the MIUI keyboard profile.
+
+---
+
 ## v1.2.142 — 2026-07-24
 
-### Improved — Windows installer now includes keyboard failure diagnostics
+### Replaced by v1.2.143 — Temporary keyboard diagnostics
 
-When story emoji comments could not find the Xiaomi/MIUI emoji key, the Windows
-installer only showed the final skip message. The bundled Android scanner now
-records one compact diagnostic entry for each keyboard theme it probes, including
-the strongest matching row and the number of qualifying keyboard rows. When
-geometry is rejected, it also records the sampled RGB ranges near the keyboard
-and the number of detected key segments.
-
-This makes the next exported Debugging Log actionable: it shows whether the
-failure is caused by the keyboard colour profile, an incomplete keyboard band,
-or the bottom-row geometry. Detection remains conservative — no unverified
-coordinate is tapped and no retry loop was added.
-
-The existing `build-windows-installer.yml` workflow remains the single
-canonical Windows build workflow, so these diagnostics are included in the
-Electron installer produced by GitHub Actions.
+The previous release added broader runtime diagnostics than needed. The
+temporary logging has been narrowed to the exact colour samples required by
+the Windows Debugging Log; keyboard detection behaviour is unchanged.
 
 ---
 
