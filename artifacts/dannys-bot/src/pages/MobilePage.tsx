@@ -2461,6 +2461,12 @@ export interface AutomationSettingsData {
   viewReelsActivatePctMax: number;
   viewReelsWatchPctMin: number;
   viewReelsWatchPctMax: number;
+  // Check DMs — opens the inbox, scrolls through it, and optionally taps one
+  // conversation thread. Runs between View Reels and Follow Users.
+  checkDmEnabled: boolean;
+  checkDmActivatePctMin: number; checkDmActivatePctMax: number;
+  checkDmScrollMin: number; checkDmScrollMax: number;
+  checkDmClickPctMin: number; checkDmClickPctMax: number;
   // Follow Users — HikerAPI-driven follow flow.
   // followSources is stored inline (no separate DB table) to keep mobile
   // settings self-contained. Each entry is a source the HikerAPI client
@@ -2572,6 +2578,10 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   viewReelsSavePercentMin: 0, viewReelsSavePercentMax: 0,
   viewReelsActivatePctMin: 100, viewReelsActivatePctMax: 100,
   viewReelsWatchPctMin: 30, viewReelsWatchPctMax: 70,
+  checkDmEnabled: false,
+  checkDmActivatePctMin: 100, checkDmActivatePctMax: 100,
+  checkDmScrollMin: 1, checkDmScrollMax: 3,
+  checkDmClickPctMin: 0, checkDmClickPctMax: 0,
   followEnabled: false,
   followUsersMin: 1, followUsersMax: 3,
   followSpreadFollows: false,
@@ -3116,6 +3126,13 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             viewReelsActivatePctMax: s.viewReelsActivatePctMax,
             viewReelsWatchPctMin: s.viewReelsWatchPctMin,
             viewReelsWatchPctMax: s.viewReelsWatchPctMax,
+            checkDmEnabled: s.checkDmEnabled,
+            checkDmActivatePctMin: s.checkDmActivatePctMin,
+            checkDmActivatePctMax: s.checkDmActivatePctMax,
+            checkDmScrollMin: s.checkDmScrollMin,
+            checkDmScrollMax: s.checkDmScrollMax,
+            checkDmClickPctMin: s.checkDmClickPctMin,
+            checkDmClickPctMax: s.checkDmClickPctMax,
             followEnabled: s.followEnabled,
             followUsersMin: s.followUsersMin,
             followUsersMax: s.followUsersMax,
@@ -4786,7 +4803,71 @@ export function AutomationSettingsPanel({
           </div>
         </div>}
 
-        {/* Border separator between View Reels above and the Follow Users
+        {/* ── Direct Messaging — between View Reels and Follow Users ── */}
+        <div className="border-t border-border" />
+
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id={`checkdm-enabled-${slotIdx ?? 0}`}
+              checked={settings.checkDmEnabled}
+              onChange={e => setSettings(s => ({ ...s, checkDmEnabled: e.target.checked }))}
+              disabled={loading}
+              className="w-4 h-4 accent-primary cursor-pointer"
+            />
+            <label htmlFor={`checkdm-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">Direct Messaging</label>
+          </div>
+        </div>
+
+        {settings.checkDmEnabled && <div className="flex items-start gap-6 flex-wrap">
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Activate Percentage</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.checkDmActivatePctMin}
+                onChange={e => setSettings(s => ({ ...s, checkDmActivatePctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.checkDmActivatePctMax}
+                onChange={e => setSettings(s => ({ ...s, checkDmActivatePctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Scroll amount</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={50} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.checkDmScrollMin}
+                onChange={e => setSettings(s => ({ ...s, checkDmScrollMin: clamp4(Number(e.target.value)) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={50} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.checkDmScrollMax}
+                onChange={e => setSettings(s => ({ ...s, checkDmScrollMax: clamp4(Number(e.target.value)) }))}
+                disabled={loading} />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Click Thread %</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.checkDmClickPctMin}
+                onChange={e => setSettings(s => ({ ...s, checkDmClickPctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.checkDmClickPctMax}
+                onChange={e => setSettings(s => ({ ...s, checkDmClickPctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+            </div>
+          </div>
+        </div>}
+
+        {/* Border separator between Direct Messaging above and the Follow Users
             feature below — same card/step (STEP2). */}
         <div className="border-t border-border" />
 

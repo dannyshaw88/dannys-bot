@@ -257,6 +257,14 @@ type AutomationSettings = {
   checkNotificationsClickPctMax?: number;
   visitProfilePctMin?: number;
   visitProfilePctMax?: number;
+  // Check DMs — opens the inbox, scrolls, optionally taps a thread.
+  checkDmEnabled?: boolean;
+  checkDmActivatePctMin?: number;
+  checkDmActivatePctMax?: number;
+  checkDmScrollMin?: number;
+  checkDmScrollMax?: number;
+  checkDmClickPctMin?: number;
+  checkDmClickPctMax?: number;
   // Activate Percentage — a top-level chance (rolled once per automation-cycle
   // execution, i.e. once per "toggle tick") that gates whether the tool runs
   // AT ALL on this execution, independent of its own internal settings. This
@@ -1234,6 +1242,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     checkNotificationsClickPctMax: z.number().min(0).max(100).default(0),
     visitProfilePctMin: z.number().min(0).max(100).default(0),
     visitProfilePctMax: z.number().min(0).max(100).default(0),
+    // ── Check DMs — opens the inbox, scrolls, optionally taps a thread.
+    checkDmEnabled: z.boolean().default(false),
+    checkDmActivatePctMin: z.number().min(0).max(100).default(100),
+    checkDmActivatePctMax: z.number().min(0).max(100).default(100),
+    checkDmScrollMin: z.number().min(0).max(50).default(1),
+    checkDmScrollMax: z.number().min(0).max(50).default(3),
+    checkDmClickPctMin: z.number().min(0).max(100).default(0),
+    checkDmClickPctMax: z.number().min(0).max(100).default(0),
     // ── Activate Percentage — top-level per-execution chance gate for each
     // tool (rolled once per automation-cycle run, before the tool's own
     // internal settings are even considered). Defaults to 100/100 (always
@@ -1340,6 +1356,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       checkNotificationsScrollsMin: 2, checkNotificationsScrollsMax: 5,
       checkNotificationsClickPctMin: 0, checkNotificationsClickPctMax: 0,
       visitProfilePctMin: 0, visitProfilePctMax: 0,
+      checkDmEnabled: false,
+      checkDmActivatePctMin: 100, checkDmActivatePctMax: 100,
+      checkDmScrollMin: 1, checkDmScrollMax: 3,
+      checkDmClickPctMin: 0, checkDmClickPctMax: 0,
       feedActivatePctMin: 100, feedActivatePctMax: 100,
       viewStoriesActivatePctMin: 100, viewStoriesActivatePctMax: 100,
       followActivatePctMin: 100, followActivatePctMax: 100,
@@ -1437,6 +1457,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         checkNotificationsScrollsMin: 2, checkNotificationsScrollsMax: 5,
         checkNotificationsClickPctMin: 0, checkNotificationsClickPctMax: 0,
         visitProfilePctMin: 0, visitProfilePctMax: 0,
+        checkDmEnabled: false,
+        checkDmActivatePctMin: 100, checkDmActivatePctMax: 100,
+        checkDmScrollMin: 1, checkDmScrollMax: 3,
+        checkDmClickPctMin: 0, checkDmClickPctMax: 0,
         feedActivatePctMin: 100, feedActivatePctMax: 100,
         viewStoriesActivatePctMin: 100, viewStoriesActivatePctMax: 100,
         followActivatePctMin: 100, followActivatePctMax: 100,
@@ -3769,6 +3793,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     viewExploreShareDmPercentMax: z.number().min(0).max(100).default(0),
     viewExploreSavePercentMin: z.number().min(0).max(100).default(0),
     viewExploreSavePercentMax: z.number().min(0).max(100).default(0),
+    // Check DMs — opens the inbox, scrolls through it, and optionally taps one
+    // conversation thread. Positioned between View Reels and Follow Users in the
+    // tool sequence to mimic the natural human habit of checking messages mid-session.
+    checkDmEnabled: z.boolean().default(false),
+    checkDmActivatePctMin: z.number().min(0).max(100).default(100),
+    checkDmActivatePctMax: z.number().min(0).max(100).default(100),
+    checkDmScrollMin: z.number().min(0).max(50).default(1),
+    checkDmScrollMax: z.number().min(0).max(50).default(3),
+    checkDmClickPctMin: z.number().min(0).max(100).default(0),
+    checkDmClickPctMax: z.number().min(0).max(100).default(0),
     // Follow Users — HikerAPI-driven follow flow. HikerAPI fetches candidates
     // from the configured target sources (hashtags / followers-of-account);
     // the software then navigates to Instagram Search and follows each user by
@@ -4448,6 +4482,66 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     await android.pressBack(serial);
     await sleepOrAbort(serial, 800);
     onLog?.("Random Jitter: ✓ notifications check done");
+  }
+
+  /**
+   * Check DM inbox: tap the paper-plane icon, dismiss any "Not now" popup,
+   * scroll through the inbox, and optionally tap one conversation thread.
+   */
+  async function runCheckDmLoop(serial: string, opts: {
+    scrollsMin: number; scrollsMax: number;
+    clickPctMin: number; clickPctMax: number;
+    onLog?: (msg: string) => void;
+  }): Promise<void> {
+    const { scrollsMin, scrollsMax, clickPctMin, clickPctMax, onLog } = opts;
+    // Tap the DM paper-plane icon (top-right header area of the home feed).
+    const dmTab = await android.findInstagramDmTab(serial).catch(() => null);
+    if (!dmTab) {
+      onLog?.("Direct Messaging: DM icon not found — skipping");
+      logger.warn({ serial }, "[check-dm] DM icon not found by scan");
+      return;
+    }
+    await android.tap(serial, dmTab.x, dmTab.y);
+    await sleepOrAbort(serial, 2000);
+    // Dismiss any "Not now" popup (e.g. "Turn on notifications for Direct").
+    const dismissed = await android.dismissInstagramInterstitials(serial).catch(() => null);
+    if (dismissed) {
+      onLog?.(`Direct Messaging: dismissed popup ("${dismissed}")`);
+      await sleepOrAbort(serial, 600);
+    }
+    onLog?.("Direct Messaging: ✓ opened DM inbox");
+    // Scroll through inbox N times.
+    const scrollCount = rollRange(scrollsMin, scrollsMax);
+    const { w, h } = getScreenSize(serial);
+    for (let i = 0; i < scrollCount; i++) {
+      await android.swipe(
+        serial,
+        Math.round(w * 0.5), Math.round(h * 0.65),
+        Math.round(w * 0.5), Math.round(h * 0.30),
+        380 + Math.round(Math.random() * 120),
+      );
+      await sleepOrAbort(serial, 500 + Math.round(Math.random() * 500));
+    }
+    // Optionally tap a conversation thread.
+    const clickChance = rollRange(clickPctMin, clickPctMax) / 100;
+    if (clickChance > 0 && Math.random() < clickChance) {
+      const item = await android.findDmConversationItem(serial).catch(() => null);
+      if (item) {
+        await android.tap(serial, item.x, item.y);
+        onLog?.("Direct Messaging: ✓ opened conversation thread");
+        await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 1500));
+        await android.pressBack(serial);
+        await sleepOrAbort(serial, 600);
+      } else {
+        onLog?.("Direct Messaging: no conversation thread found — skipping tap");
+      }
+    } else {
+      onLog?.("Direct Messaging: click-thread roll missed — skipping");
+    }
+    // Return to home feed.
+    await android.pressBack(serial);
+    await sleepOrAbort(serial, 800);
+    onLog?.("Direct Messaging: ✓ DM inbox check done");
   }
 
   /** Visit own profile: tap profile icon in bottom nav, dwell briefly, return to home. */
@@ -5823,6 +5917,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewExploreShareFeedPercentMin, viewExploreShareFeedPercentMax,
         viewExploreShareDmPercentMin, viewExploreShareDmPercentMax,
         viewExploreSavePercentMin, viewExploreSavePercentMax,
+        checkDmEnabled, checkDmActivatePctMin, checkDmActivatePctMax,
+        checkDmScrollMin, checkDmScrollMax, checkDmClickPctMin, checkDmClickPctMax,
         followEnabled, followUsersMin, followUsersMax, followSpreadFollows, followSources,
         followFiltersEnabled, followFilterVerifiedUsers, followFilterMaxFollowers25k,
         followFilterPrivateUsers, followFilterEnglishSpeaking, followFilterMinFollowers50,
@@ -6028,13 +6124,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         stories: storiesEnabled && viewStoriesSlidesMax > 0 && rollActivate(viewStoriesActivatePctMin ?? 100, viewStoriesActivatePctMax ?? 100),
         explore: (viewExploreEnabled ?? false) && (viewExploreScrollMax ?? 0) > 0 && rollActivate(viewExploreActivatePctMin ?? 100, viewExploreActivatePctMax ?? 100),
         reels:   (viewReelsEnabled ?? false) && (viewReelsScrollMax ?? 0) > 0 && rollActivate(viewReelsActivatePctMin ?? 100, viewReelsActivatePctMax ?? 100),
+        checkDm: (checkDmEnabled ?? false) && rollActivate(checkDmActivatePctMin ?? 100, checkDmActivatePctMax ?? 100),
         follow:  followEnabled && rollActivate(followActivatePctMin, followActivatePctMax),
         post:    makePostEnabled && rollActivate(makePostActivatePctMin, makePostActivatePctMax),
         jitter:  randomJitterEnabled && rollActivate(randomJitterActivatePctMin, randomJitterActivatePctMax),
       };
 
       // Build the sequence from only the tools that passed their activate gate.
-      const _toolSeq = ['feed', 'stories', 'explore', 'reels', 'follow', 'post', 'jitter']
+      const _toolSeq = ['feed', 'stories', 'explore', 'reels', 'checkDm', 'follow', 'post', 'jitter']
         .filter(t => _toolActivated[t]);
       if (shuffleToolOrder) {
         for (let _si = _toolSeq.length - 1; _si > 0; _si--) {
@@ -6424,6 +6521,32 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           } else if (viewReelsEnabled && viewReelsScrollMax > 0) {
             steps.push("reels(skipped — Activate Percentage roll missed this execution)");
             tLog("▶ View Reels Activate Percentage roll missed — skipping reels this execution");
+          }
+
+        // ── Check DMs ───────────────────────────────────────────────────
+        } else if (_tool === 'checkDm') {
+          if (_toolActivated[_tool]) {
+            tLog("▶ Direct Messaging — opening DM inbox…");
+            try {
+              await runCheckDmLoop(serial, {
+                scrollsMin: checkDmScrollMin,
+                scrollsMax: checkDmScrollMax,
+                clickPctMin: checkDmClickPctMin,
+                clickPctMax: checkDmClickPctMax,
+                onLog: (msg) => tLog(`  ${msg}`),
+              });
+              steps.push("checkDm(done)");
+              tLog("▶ Direct Messaging done");
+            } catch (e: any) {
+              if (e?.message === "cycle-aborted") throw e;
+              tLog(`▶ Direct Messaging error — ${e?.message}`);
+              steps.push("checkDm(error)");
+            }
+          } else if (!checkDmEnabled) {
+            // no-op — Direct Messaging disabled is the common/default state
+          } else {
+            steps.push("checkDm(skipped — Activate Percentage roll missed this execution)");
+            tLog("▶ Direct Messaging Activate Percentage roll missed — skipping this execution");
           }
 
         // ── Follow Users ────────────────────────────────────────────────

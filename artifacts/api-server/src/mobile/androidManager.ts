@@ -5168,6 +5168,105 @@ export async function findInstagramProfileTab(serial: string): Promise<{ x: numb
 }
 
 /**
+ * Find the Instagram Direct Messages tab (paper-plane icon, bottom-nav centre-right).
+ * Tries resource IDs and content-desc labels first; falls back to a positional
+ * scan of clickable nodes in the bottom-nav band at ~60–75 % of screen width.
+ */
+export async function findInstagramDmTab(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+  const { w: xmlW, h: xmlH } = _getScreenSize(xml);
+  // ── Strategy 1: content-desc match for DM / Messenger / Direct.
+  {
+    const s1Re = /content-desc="(?:Direct|Messenger|Chats?|Messages?|DM)[^"]*"[^>]*bounds="(\[[^\]]+\]\[[^\]]+\])"/gi;
+    const botMin = Math.round(xmlH * 0.85);
+    let s1m: RegExpExecArray | null;
+    while ((s1m = s1Re.exec(xml)) !== null) {
+      const c = _parseCenter(s1m[1]);
+      if (c && c.y > botMin) return c;
+    }
+  }
+  // ── Strategy 2: known resource-ids.
+  const byId = _findByResId(xml,
+    ":id/direct_inbox", ":id/direct_tab", ":id/messenger_tab",
+    ":id/nav_direct", ":id/bottom_tab_direct", ":id/tab_direct");
+  if (byId) return byId;
+  // ── Strategy 3: positional fallback.
+  // Instagram's bottom nav has 5 tabs: Home, Search, Reels, Shop/+, Profile.
+  // The DM paper-plane is NOT in the bottom nav — it lives in the top-right
+  // header of the home feed. We cannot rely on a bottom-nav positional scan.
+  // Instead look for a clickable node in the TOP-RIGHT quadrant (x > 75% of
+  // width, y < 15% of height) that is NOT the notifications bell
+  // (which is further right). The DM icon is typically the leftmost of the
+  // two top-right header icons on this device layout.
+  const rightMin = Math.round(xmlW * 0.60);
+  const rightMax = Math.round(xmlW * 0.82);
+  const topThresh = Math.round(xmlH * 0.15);
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+  let m: RegExpExecArray | null;
+  const candidates: { x: number; y: number }[] = [];
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    if (!/clickable="true"/.test(attrs)) continue;
+    const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+    if (!bm) continue;
+    const cx = Math.round((Number(bm[1]) + Number(bm[3])) / 2);
+    const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
+    if (cx >= rightMin && cx <= rightMax && cy < topThresh) {
+      candidates.push({ x: cx, y: cy });
+    }
+  }
+  if (candidates.length > 0) {
+    // Return leftmost candidate in the zone — the DM icon sits to the left
+    // of the notifications bell in Instagram's header layout.
+    candidates.sort((a, b) => a.x - b.x);
+    return candidates[0];
+  }
+  return null;
+}
+
+/**
+ * Find a random tappable conversation thread row in the Instagram DM inbox.
+ * Returns one of the top-3 most-recent rows (chosen at random) so the bot
+ * naturally gravitates toward active conversations without always tapping
+ * the very first one.
+ */
+export async function findDmConversationItem(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+  const { w, h } = _getScreenSize(xml);
+  const topSkip  = Math.round(h * 0.12); // skip the DM header row
+  const botSkip  = Math.round(h * 0.88); // skip bottom nav
+  // Conversation rows span almost the full width and are clickable.
+  // Require width > 50% of screen width to exclude narrow icon-only nodes.
+  const minW = Math.round(w * 0.50);
+  const candidates: { x: number; y: number }[] = [];
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+  let m: RegExpExecArray | null;
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    if (!/clickable="true"/.test(attrs)) continue;
+    const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+    if (!bm) continue;
+    const x1 = Number(bm[1]), y1 = Number(bm[2]), x2 = Number(bm[3]), y2 = Number(bm[4]);
+    const rowW = x2 - x1;
+    const cy = Math.round((y1 + y2) / 2);
+    if (rowW < minW) continue;
+    if (cy < topSkip || cy > botSkip) continue;
+    candidates.push({ x: Math.round((x1 + x2) / 2), y: cy });
+  }
+  if (candidates.length === 0) return null;
+  // Sort top-to-bottom (most recent first in IG inbox) and pick from top 3.
+  candidates.sort((a, b) => a.y - b.y);
+  const pool = candidates.slice(0, 3);
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+/**
  * Find a random tappable item from the Instagram notifications page.
  * Returns the centre of a clickable notification-row avatar View, or null if
  * none is found.  Tapping the avatar navigates to the notifying user's
