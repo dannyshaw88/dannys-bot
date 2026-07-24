@@ -2974,7 +2974,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // Open the emoji picker from live keyboard geometry instead of
             // KEYCODE_PICTSYMBOLS or adb input text, both of which fail on the
             // Xiaomi keyboard shown in the supplied capture.
-            const _keyboardXml = await android.dumpUi(serial).catch(() => "");
+            // Use dumpUiWithIme so the keyboard window is included on devices
+            // that support --include-ime (Android 6+ / standard keyboards).
+            // MIUI keyboards don't expose keys via UIAutomator even with this
+            // flag — the pixel-scanner fallback handles those devices.
+            const { xml: _keyboardXml, imeIncluded: _kbImeIncluded } =
+              await android.dumpUiWithIme(serial).catch(() => ({ xml: "", imeIncluded: false }));
+            onLog?.(
+              `Story ${s + 1}: keyboard dump — ${_kbImeIncluded ? "IME window included" : "IME not available, using pixel fallback"}`,
+            );
             const _keyboardNodes = [..._keyboardXml.matchAll(/<node\s([^>]+?)(?:\/?>)/g)];
             const _spaceBar = _keyboardNodes
               .map((m) => {
@@ -3003,8 +3011,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 }
               : await android.findKeyboardEmojiButton(serial).catch(() => null);
             if (!_emojiButton) {
-              onLog?.(`Story ${s + 1}: emoji comment skipped — keyboard space bar not found in a11y dump`);
-              logger.warn({ serial, story: s + 1 }, "[view-stories] emoji key geometry not verified");
+              if (!_spaceBar) {
+                onLog?.(`Story ${s + 1}: emoji comment skipped — space bar not in a11y dump${_kbImeIncluded ? "" : " (IME not included)"} and pixel scan found no matching keyboard theme`);
+              } else {
+                onLog?.(`Story ${s + 1}: emoji comment skipped — emoji key geometry could not be derived`);
+              }
+              logger.warn({ serial, story: s + 1, imeIncluded: _kbImeIncluded }, "[view-stories] emoji key geometry not verified");
               await android.pressBack(serial).catch(() => {});
               continue;
             }

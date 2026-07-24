@@ -2338,13 +2338,14 @@ type ScreenPixels = { width: number; height: number; channels: number; pixels: B
 export function findKeyboardEmojiButtonFromPixels(img: ScreenPixels): { x: number; y: number } | null {
   return _findKeyboardEmojiButtonForTheme(img, "light")  ??
          _findKeyboardEmojiButtonForTheme(img, "tinted") ??
+         _findKeyboardEmojiButtonForTheme(img, "silver") ??
          _findKeyboardEmojiButtonForTheme(img, "gray")   ??
          _findKeyboardEmojiButtonForTheme(img, "dark");
 }
 
 function _findKeyboardEmojiButtonForTheme(
   img: ScreenPixels,
-  theme: "light" | "tinted" | "gray" | "dark",
+  theme: "light" | "tinted" | "silver" | "gray" | "dark",
 ): { x: number; y: number } | null {
   const { width, height, channels, pixels } = img;
   if (!width || !height || channels < 3) return null;
@@ -2364,11 +2365,18 @@ function _findKeyboardEmojiButtonForTheme(
    *   keyboard band) provides the additional safety net against colourful story
    *   backgrounds that happen to match individual pixel checks.
    *
+   * Silver keyboard: mid-light gray — Xiaomi MIUI default light keyboard.
+   *   Key surfaces sit around RGB 185–225 and inter-key gaps around RGB 155–185.
+   *   This fills the gap between "light" (needs mn ≥ 232 for key interior) and
+   *   "gray" (requires mx ≤ 180, too low for MIUI's light variant).  The
+   *   saturation cap (mx−mn ≤ 42) rejects skin-tone story backgrounds which
+   *   have high red−blue spread, and the coherent-run gate (≥ 24 rows) stops
+   *   brief neutral patches in story content from matching.
+   *
    * Gray keyboard: medium gray — the Gboard "gray" / system-default theme.
-   *   This is the most common theme on Xiaomi/Redmi devices. Key surfaces sit
-   *   around RGB 90–115 and key gaps/shadows around RGB 40–70.  Story content
-   *   above the keyboard is very dark (near 0), so requiring min ≥ 60 cleanly
-   *   excludes it while including all keyboard background pixels.
+   *   Key surfaces sit around RGB 90–115 and key gaps/shadows around RGB 40–70.
+   *   Story content above the keyboard is very dark (near 0), so requiring
+   *   min ≥ 60 cleanly excludes it while including all keyboard background pixels.
    *
    * Dark keyboard: dark neutral (Gboard dark / follows system dark mode).
    *   Key surfaces ~55–90 RGB.  The story content is also near-zero, so we
@@ -2381,6 +2389,7 @@ function _findKeyboardEmojiButtonForTheme(
     const mn = Math.min(r, g, b), mx = Math.max(r, g, b);
     if (theme === "light")  return mn >= 190 && mx - mn <= 42;
     if (theme === "tinted") return mn >= 120 && mx <= 240 && mx - mn <= 80;
+    if (theme === "silver") return mn >= 155 && mx <= 230 && mx - mn <= 42;
     if (theme === "gray")   return mn >= 60  && mx <= 180 && mx - mn <= 40;
     /* dark */              return mn >= 30  && mx <= 130 && mx - mn <= 40;
   };
@@ -2396,6 +2405,10 @@ function _findKeyboardEmojiButtonForTheme(
    *   Inter-key gaps are a darker shade of the same hue (~RGB 100–155), so
    *   min ≥ 145 separates key surface from gap.
    *
+   * Silver: mid-light gray key surface (~185–225 RGB).  Inter-key gaps are
+   *   slightly darker (~155–185 RGB), so min ≥ 190 separates key from gap.
+   *   Dark key labels break runs as needed.
+   *
    * Gray:    medium gray key surface (~90–115 RGB).  Inter-key gaps are darker
    *   (~40–70 RGB), so min ≥ 70 separates key surface from gap cleanly.
    *   Dark key labels also fall below 70, breaking the run as needed.
@@ -2407,6 +2420,7 @@ function _findKeyboardEmojiButtonForTheme(
     const mn = Math.min(r, g, b), mx = Math.max(r, g, b);
     if (theme === "light")  return mn >= 232 && mx - mn <= 28;
     if (theme === "tinted") return mn >= 145 && mx <= 250 && mx - mn <= 80;
+    if (theme === "silver") return mn >= 190 && mx <= 240 && mx - mn <= 38;
     if (theme === "gray")   return mn >= 70  && mx <= 200 && mx - mn <= 45;
     /* dark */              return mn >= 45  && mx <= 145 && mx - mn <= 35;
   };

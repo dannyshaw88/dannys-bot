@@ -4,6 +4,74 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.141 — 2026-07-24
+
+### Fixed — Story emoji comments now work on Xiaomi MIUI keyboards (pixel scanner + better diagnostics)
+
+**Symptom:**
+
+After the keyboard opened in the story composer, the automation always logged:
+> `Story 1: emoji comment skipped — keyboard space bar not found in a11y dump`
+…and dismissed back without sending any emoji reaction.
+
+**Root cause — two simultaneous failures:**
+
+1. **Plain dump, no IME window.** The keyboard dump at this step called `android.dumpUi()` —
+   the standard UIAutomator dump with no `--include-ime` flag.  The Xiaomi MIUI keyboard
+   window was never in the dump, so the space-bar accessibility search always returned null.
+   Even after v1.2.140 added `dumpUiWithIme` for the Inspect tool, the *story path* still
+   used the plain variant.
+
+2. **Pixel scanner "silver gap" miss.** The fallback pixel scanner
+   (`findKeyboardEmojiButton`) tries four keyboard colour profiles in order — light, tinted,
+   gray, dark.  The Xiaomi MIUI default light keyboard uses a silver/mid-gray palette:
+   key surfaces ~RGB 185–225, inter-key gaps ~RGB 155–185.  That range is above the `gray`
+   theme's `mx ≤ 180` ceiling and below the `light` theme's `isKeyInterior mn ≥ 232` floor,
+   so all four passes returned null and the emoji tap was abandoned.
+
+**Fix 1 — story path now uses `dumpUiWithIme` (androidManager / mobile.ts):**
+
+The keyboard dump in the story emoji comment flow was changed from `android.dumpUi()` to
+`android.dumpUiWithIme()`.  On devices whose keyboard exposes its keys through UIAutomator
+(standard Gboard, AOSP keyboard, Samsung keyboard with `--include-ime`) the space bar will
+now be found in the dump and the emoji key is derived from it geometrically.
+
+A new log line now shows which path was used:
+- `keyboard dump — IME window included` → space-bar found via accessibility tree
+- `keyboard dump — IME not available, using pixel fallback` → falling through to pixel scan
+
+Note: the Xiaomi MIUI keyboard still does not expose its keys through UIAutomator (verified
+by the Inspect tool dump — 85 nodes, zero keyboard keys even with `--include-ime`).  Those
+devices rely entirely on the pixel scanner.
+
+**Fix 2 — "silver" keyboard theme added to pixel scanner (androidManager.ts):**
+
+A new `"silver"` theme profile was inserted in `_findKeyboardEmojiButtonForTheme` between
+`"tinted"` and `"gray"`:
+
+- `isKeyboardBg`:  `mn ≥ 155 && mx ≤ 230 && mx−mn ≤ 42`
+  Covers the ~RGB 155–185 inter-key gaps of the MIUI light keyboard.
+  The saturation cap (`mx−mn ≤ 42`) rejects skin-tone story backgrounds
+  (which have high red–blue spread) and any coloured story overlays.
+
+- `isKeyInterior`: `mn ≥ 190 && mx ≤ 240 && mx−mn ≤ 38`
+  Covers the ~RGB 190–225 key surfaces.  The `mx ≤ 240` ceiling stops
+  pure-white story content from counting as key surfaces.
+
+The coherent-run gate (requires ≥ 24 consecutive matching pixel rows) ensures a brief
+neutral patch in story content is never mistaken for a keyboard, and the "last coherent run"
+selection always picks the actual keyboard band at the bottom of the frame.
+
+**Fix 3 — better diagnostic log on failure:**
+
+If both the accessibility dump path and the pixel scanner fail, the log now states
+*exactly why*:
+- `space bar not in a11y dump (IME not included) and pixel scan found no matching keyboard theme`
+  → lets you distinguish a device that needs a new pixel-scanner theme from one where the dump
+  succeeded but something else went wrong.
+
+---
+
 ## v1.2.140 — 2026-07-24
 
 ### Improved — Inspect tool now detects Android keyboard keys as individual tappable nodes
