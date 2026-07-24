@@ -4,6 +4,74 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.146 — 2026-07-24
+
+### Added — Variable scroll velocity with dynamic session personality (Feed, Explore, Reels)
+
+**Background:**
+
+A constant-speed, fixed-distance scroll is one of the easier automation signals for Instagram to detect. Every session would average to the same statistical distribution of swipe durations and distances over time, making the account's scroll behaviour identifiable as non-human even if individual scrolls looked plausible in isolation.
+
+---
+
+**What changed:**
+
+A new shared helper `rollScrollVelocity(h, weights, allowBack, safeStartFrac)` was added to `artifacts/api-server/src/routes/mobile.ts`, used by the Feed (View Feed), Explore (View Explore Page), and Reels (View Reels) tools.
+
+**Four scroll modes**, each with distinct geometry and timing:
+
+| Mode | Swipe distance | Duration | What it mimics |
+|---|---|---|---|
+| `skim` | Full height (start → 8%) | 150–350 ms | Fast flick through boring content |
+| `normal` | Medium (start → 22%) | 450–800 ms | Regular casual scroll |
+| `interested` | Short nudge (65% → 38%) | 900–1500 ms | Slowed down — something caught the eye |
+| `back` | Reversed (28% → 52%) | 350–600 ms | Scrolled past something, peeked back up |
+
+The `safeStartFrac` parameter enforces per-tool constraints: Feed requires ≥ 0.88 (clears the post action bar on all post formats including 4:5 portrait), Explore can use 0.80.
+
+---
+
+**Dynamic session weights — the key anti-detection measure:**
+
+Weights are not fixed. At the start of each tool run, a session-level personality is rolled once with ±12 pp variance around the base values:
+
+```
+skim:       base 28  ±12  →  ~16–40
+normal:     base 50  ±12  →  ~38–62
+interested: base 14  ± 8  →  ~6–22
+back:       base  8  ± 8  →  0–16  (Feed / Explore)
+            base  5  ± 4  →  1–9   (Reels — low, occasional rewatch)
+```
+
+This means each run of the tool has its own "scroll character" — one session skims aggressively, another lingers often — rather than every session converging to the same signature over enough samples. The weights are treated as relative (not percentage-of-100), so the helper normalises against their sum.
+
+The personality is logged at the start of each tool run for diagnostics, e.g.:
+```
+Feed scroll personality — skim:22 normal:54 interested:18 back:6
+Scroll 4/15 [interested]
+Scroll 5/15 [skim]
+```
+
+---
+
+**Reels back-scroll:**
+
+Reels snaps fully to the adjacent clip on a swipe (unlike the feed's partial nudge which stays on the same post). Back-scroll on Reels navigates to the previous clip — the same thing a real user does when they scroll past something and go back to rewatch it. This is intentionally kept at a low weight (base 5, capped minimum 1) so it happens occasionally rather than frequently.
+
+---
+
+**Inject Browsing not changed:**
+
+The profile-grid scroll in Inject Browsing was deliberately left alone. That tool uses long explicit render-wait delays between grid rows and doesn't resemble feed-scrolling behaviour — adding velocity variance there would serve no detection-avoidance purpose.
+
+---
+
+**Files changed:**
+
+- `artifacts/api-server/src/routes/mobile.ts` — `rollScrollVelocity()` helper + session weight rolls in `runCheckFeedLoop`, `runViewExplorePage`, and `runViewReelsLoop` / `swipeToNextReel`
+
+---
+
 ## v1.2.145 — 2026-07-24
 
 ### Fixed — Story emoji comment pixel scanner no longer mistakes bright story content for the keyboard
