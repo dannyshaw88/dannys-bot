@@ -4962,12 +4962,31 @@ export async function switchToInstagramAccount(
   _adbTap(adbPath, serial, coords.x, coords.y);
   await _sleep(600); // short wait before verifying the switcher closed
 
-  // 5. Confirm the switcher actually closed.  If the target account was
-  //    already the active one, Instagram ignores the tap and the switcher
-  //    stays open — the same username is still visible in the XML dump.
-  //    In that case, dismiss with BACK (we are already on the right account).
+  // 5. Confirm the switcher actually closed.
+  //
+  // Original assumption: "if the tapped account was already active, Instagram
+  // ignores the tap and the switcher stays open, so we must send KEYCODE_BACK."
+  //
+  // Reality (confirmed from debug log + screenshot): tapping the active account
+  // row DOES close the switcher — Instagram does not ignore the tap.  After the
+  // 600 ms sleep the post-tap dump is the HOME FEED, not the switcher.
+  // _findElem(xml, clean, @clean) then false-positives on the profile-tab nav
+  // button whose content-desc is "Profile picture for [username]" or
+  // "[username]'s profile", and KEYCODE_BACK fires at the home feed → the
+  // Android "Tap again to exit" toast appears.
+  //
+  // Fix: treat the presence of those home-feed-only profile-tab descriptions
+  // as proof the switcher already closed.  Only send Back when the avatar
+  // text is NOT visible (genuine "switcher still open" — some IG builds / slow
+  // devices may leave the sheet open after tapping a non-active account row).
   const postTapXml = await _uiDump(adbPath, serial).catch(() => "");
-  if (_findElem(postTapXml, clean, `@${clean}`)) {
+  const postLc = postTapXml.toLowerCase();
+  const cleanLc = clean.toLowerCase();
+  const switcherAlreadyClosed =
+    postLc.includes(`"profile picture for ${cleanLc}"`) ||
+    postLc.includes(`"${cleanLc}'s profile"`) ||
+    postLc.includes(`"@${cleanLc}"`);           // home-feed nav tab on some builds
+  if (!switcherAlreadyClosed && _findElem(postTapXml, clean, `@${clean}`)) {
     onLog?.(`  ↳ Already on @${clean} — dismissing switcher`);
     await runAdb(adbPath, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], 4000).catch(() => {});
     await _sleep(400);

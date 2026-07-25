@@ -4,6 +4,40 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.161 — 2026-07-25
+
+### Fixed — "Tap again to exit" toast appearing after account switch
+
+**Symptom:** After switching Instagram accounts, the phone displayed the Android "Tap again to exit"
+toast on the home feed immediately following the account-switch step. This happened because a
+`KEYCODE_BACK` was incorrectly sent to the home feed instead of the account switcher sheet.
+
+**Root cause:** The account-switcher logic (step 5 of `switchToInstagramAccount`) was based on a
+false assumption: *"if the tapped account was already active, Instagram ignores the tap and the
+switcher stays open."* In reality, tapping the active account's row **does** close the switcher.
+After the 600 ms wait following the tap, the accessibility-tree dump is of the **home feed** — not
+the switcher. However, `_findElem(postTapXml, clean, "@clean")` was still finding the account
+username — because the profile-tab nav button in the bottom navigation bar carries a `content-desc`
+such as `"Profile picture for macneecekarleenyher"` or `"macneecekarleenyher's profile"`, which
+satisfies the search. The code incorrectly concluded the switcher was still open and sent
+`KEYCODE_BACK` to the home feed, producing the toast.
+
+**Fix:** Before deciding to send `KEYCODE_BACK`, the post-tap XML is now checked for
+home-feed-only profile-tab markers — specifically:
+- `"profile picture for [username]"` — the profile-tab avatar description on the home feed
+- `"[username]'s profile"` — alternative profile-tab content-desc on some builds
+- `"@[username]"` — bare @-prefixed content-desc used by some IG builds
+
+If any of these are present, the switcher has already closed and `KEYCODE_BACK` is skipped. The
+code falls through to the normal 2 s settle wait instead. The genuine case where the switcher
+remains open (some IG builds / slow devices) is preserved: if none of the home-feed markers appear
+but `_findElem` still finds the account row, `KEYCODE_BACK` is sent as before.
+
+**Changed file:** `artifacts/api-server/src/mobile/androidManager.ts` — step 5 of
+`switchToInstagramAccount`, post-tap confirmation block.
+
+---
+
 ## v1.2.160 — 2026-07-25
 
 ### Fixed — WebSocket log-stream routing + swipe instrumentation for pull-to-refresh diagnosis
