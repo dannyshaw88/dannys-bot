@@ -4,6 +4,50 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.149 — 2026-07-25
+
+### Fixed — Expand Captions now actually fires during feed scrolls
+
+The **Expand Caption %** setting in the Human Session Tool's View Feed section was silently being treated as 0% on every cycle, regardless of what value was configured in the UI. Three separate bugs were responsible; all three are fixed in this release.
+
+---
+
+#### Bug 1 — Human Session Tool slot settings were not delivering the value to the cycle
+
+**What was broken:** The automation cycle receives its settings as a POST request. The server-side execution schema (`automationCycleSchema`) was missing `expandCaptionPercentMin` and `expandCaptionPercentMax`. Zod silently strips any field not declared in the schema, so both values arrived at the cycle handler as `undefined`, which Zod then defaulted to `0`. The result: `captionExpandChance` was always `0.0` → `wantExpandCaption` was always `false` → the "more" tap never ran, no matter what was configured.
+
+**What was fixed:** `expandCaptionPercentMin` and `expandCaptionPercentMax` were added to `automationCycleSchema` so they survive the POST body parse and reach the feed loop with their real values.
+
+---
+
+#### Bug 2 — Per-slot GET defaults were missing the fields (Human Session Tool only)
+
+**What was broken:** The server's GET endpoint for per-slot Human Session Tool settings (`/api/mobile/devices/:serial/slots/:slotIdx/automation-settings`) returns a hardcoded defaults object merged with whatever was previously saved for that slot. The `expandCaptionPercentMin/Max` fields were present in the device-level defaults but missing from the slot-level defaults. For any slot that had never explicitly saved those fields, the server response omitted them entirely. The frontend React state fell back to 0/0, which was then sent in subsequent POST bodies — compounding Bug 1.
+
+**What was fixed:** `expandCaptionPercentMin: 0, expandCaptionPercentMax: 0` were added to the slot-level GET defaults object so newly opened slots always include the field in the server response.
+
+---
+
+#### Bug 3 — "more" button detection was checking the wrong accessibility attribute
+
+**What was broken:** Even if the setting value reached the cycle correctly, the code would still not tap anything. The detection logic searched the UIAutomator accessibility dump for `content-desc="more"`, but Instagram's caption truncation link is a `TextView` — its attribute in the accessibility tree is `text="more"`, not `content-desc`. No node with `content-desc="more"` exists in a typical feed post dump, so every post would log "caption 'more' not visible — skipping expand" and move on.
+
+**What was fixed:** The detection now checks for **both** `text="more"` and `content-desc="more"` on each XML node segment. Whichever attribute matches first triggers the tap. The log message now also states which attribute matched (e.g. `[matched via text]`) so future debugging is immediate.
+
+---
+
+#### Diagnostic log added
+
+At the start of every feed scroll run, the Debugging Log now shows the rolled chance values for all five per-scroll actions:
+
+```
+Feed settings — like:4% expandCaption:100% save:0% shareFeed:0% shareDm:0%
+```
+
+If `expandCaption` ever shows `0%` when it should be higher, that is the signal to check the settings save/load chain rather than the detection code.
+
+---
+
 ## v1.2.148 — 2026-07-25
 
 ### Added — App Switch random action (Random Actions / Human Session Tool)
