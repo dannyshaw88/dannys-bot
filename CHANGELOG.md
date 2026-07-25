@@ -4,6 +4,32 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.151 — 2026-07-25
+
+### Added — Tap Highlights in Inject Browsing
+
+A new **Tap Highlights %** min/max field pair is now available in the Inject Browsing section of the Follow tool, positioned between "Browse before follow %" and "Feed posts".
+
+When the roll wins, the bot taps one of the profile's story highlight circles (the circular bubbles that appear below the Follow/Message buttons — e.g. "meh", "2k26", "gym"), dwells inside the story viewer for 2–20 seconds, then swipes down to dismiss. If the viewer already auto-closed (single-story highlight), it logs that and moves on without trying to dismiss.
+
+**Timing:** a coin flip decides whether the highlight tap fires *before* or *after* the profile-grid scroll (50/50 per user), so the browsing pattern varies naturally across users.
+
+**If a profile has no highlights** — the bot logs "no highlights found" and silently skips, continuing with the rest of the inject-browsing sequence as normal.
+
+#### Detection
+
+The accessibility dump is scanned for tappable nodes in the profile-header zone (Y between 350–700 px) that have:
+- `content-desc` containing "Highlight" (e.g. "meh Highlight") — excludes "Add" which is the + button
+- OR a `resource-id` that contains "highlight" (some Instagram builds use this instead of content-desc)
+
+One is chosen at random if multiple highlights are found.
+
+#### UI layout change
+
+The **Abandon Follow %** row has been moved to its own second row (separated from the rest of the Inject Browsing fields) so the first row doesn't overflow at normal window widths.
+
+---
+
 ## v1.2.150 — 2026-07-25
 
 ### Fixed — Expand Caption block was nested inside the Save block (never ran unless Save also won)

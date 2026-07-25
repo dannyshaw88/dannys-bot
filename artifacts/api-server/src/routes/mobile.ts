@@ -249,6 +249,8 @@ type AutomationSettings = {
   injectBrowsingSavePostPctMax?: number;
   injectBrowsingAbandonFollowPctMin?: number;
   injectBrowsingAbandonFollowPctMax?: number;
+  injectBrowsingTapHighlightsPctMin?: number;
+  injectBrowsingTapHighlightsPctMax?: number;
   // Random Jitter — human-like interstitial actions (same persistence fix as
   // Follow/Inject Browsing above; was missing from this type even though the
   // zod schema and defaults object already used these keys).
@@ -1232,6 +1234,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     injectBrowsingSavePostPctMax: z.number().min(0).max(100).default(0),
     injectBrowsingAbandonFollowPctMin: z.number().min(0).max(100).default(0),
     injectBrowsingAbandonFollowPctMax: z.number().min(0).max(100).default(0),
+    injectBrowsingTapHighlightsPctMin: z.number().min(0).max(100).default(0),
+    injectBrowsingTapHighlightsPctMax: z.number().min(0).max(100).default(0),
     // ── Follow Filters — profile-quality gates. Were missing from the
     //    persistence schema, causing zod to strip them on every POST so
     //    Copy Settings never actually applied them to target slots.
@@ -1367,6 +1371,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       injectBrowsingShareFeedPctMin: 0, injectBrowsingShareFeedPctMax: 0,
       injectBrowsingShareDmPctMin: 0, injectBrowsingShareDmPctMax: 0,
       injectBrowsingSavePostPctMin: 0, injectBrowsingSavePostPctMax: 0,
+      injectBrowsingTapHighlightsPctMin: 0, injectBrowsingTapHighlightsPctMax: 0,
       randomJitterEnabled: false,
       checkNotificationsPctMin: 0, checkNotificationsPctMax: 0,
       checkNotificationsScrollsMin: 2, checkNotificationsScrollsMax: 5,
@@ -1465,6 +1470,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         injectBrowsingShareDmPctMin: 0, injectBrowsingShareDmPctMax: 0,
         injectBrowsingSavePostPctMin: 0, injectBrowsingSavePostPctMax: 0,
         injectBrowsingAbandonFollowPctMin: 0, injectBrowsingAbandonFollowPctMax: 0,
+        injectBrowsingTapHighlightsPctMin: 0, injectBrowsingTapHighlightsPctMax: 0,
         followFiltersEnabled: false,
         followFilterPrivateUsers: false,
         followFilterEnglishSpeaking: false,
@@ -4361,6 +4367,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     injectBrowsingShareFeedPctMax: z.number().min(0).max(100).default(0),
     injectBrowsingShareDmPctMin: z.number().min(0).max(100).default(0),
     injectBrowsingShareDmPctMax: z.number().min(0).max(100).default(0),
+    injectBrowsingTapHighlightsPctMin: z.number().min(0).max(100).default(0),
+    injectBrowsingTapHighlightsPctMax: z.number().min(0).max(100).default(0),
     // ── Filters — profile-quality gates applied before each follow action.
     // followFiltersEnabled is the master gate; individual sub-flags control
     // which specific checks are run.
@@ -5180,6 +5188,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
      *  so not every browsing session ends in a follow. The user can still be
      *  scraped and followed again later by any account. */
     abandonFollowPctMin: number; abandonFollowPctMax: number;
+    /** Chance (%) to tap one of the profile's story highlight circles and
+     *  dwell in it briefly before swiping down to dismiss. Fires before OR
+     *  after the profile-grid scroll (50/50 coin flip per user). */
+    tapHighlightsPctMin: number; tapHighlightsPctMax: number;
   }
 
   /** Picks a value uniformly from [lo, hi], tolerating either order. */
@@ -5228,6 +5240,99 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   }
 
   /**
+   * Taps one randomly chosen story highlight on the profile page, dwells
+   * inside the story viewer for 2–20 s, then swipes down to close if still
+   * in the viewer (auto-close means only one story existed).
+   *
+   * Detection: Instagram renders highlight circles as tappable nodes in the
+   * profile header area. They appear with content-desc patterns like
+   * "meh Highlight" or "gym Highlight", or with resource-ids that contain
+   * "highlight". We scan the live a11y dump and pick one at random.
+   * If none are found (profile has no highlights) the call is a silent no-op.
+   */
+  async function tapOneProfileHighlight(
+    serial: string,
+    onLog?: (msg: string) => void,
+  ): Promise<void> {
+    try {
+      if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+      const { h: _hlH } = getScreenSize(serial);
+      const xml = await android.dumpUi(serial).catch(() => "");
+
+      // Collect candidate highlight nodes from the accessibility dump.
+      // A highlight circle must be:
+      //   • tappable (clickable="true")
+      //   • in the profile-header zone (Y center between 350 and 700 dp — safely
+      //     below the Follow/Message buttons and above the post grid)
+      //   • have content-desc containing "Highlight" (excluding "Add" which is the
+      //     + button to add a new highlight) OR have a resource-id that contains
+      //     the substring "highlight" (some builds use resource-id instead).
+      const candidates: { x: number; y: number; name: string }[] = [];
+      for (const seg of xml.split("<node ")) {
+        if (!seg.includes('clickable="true"')) continue;
+        const bb = seg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+        if (!bb) continue;
+        const cx = Math.round((parseInt(bb[1]) + parseInt(bb[3])) / 2);
+        const cy = Math.round((parseInt(bb[2]) + parseInt(bb[4])) / 2);
+        // Restrict to profile-header zone: below ~350px and above ~700px
+        if (cy < 350 || cy > 700) continue;
+        const cdM = seg.match(/content-desc="([^"]*)"/);
+        const ridM = seg.match(/resource-id="([^"]*)"/);
+        const cd = cdM?.[1] ?? "";
+        const rid = ridM?.[1] ?? "";
+        const isHighlightByDesc = cd.includes("Highlight") && !cd.toLowerCase().startsWith("add");
+        const isHighlightByRid  = rid.toLowerCase().includes("highlight") && !rid.toLowerCase().includes("add");
+        if (!isHighlightByDesc && !isHighlightByRid) continue;
+        candidates.push({ x: cx, y: cy, name: cd || rid || "highlight" });
+      }
+
+      if (candidates.length === 0) {
+        onLog?.("Inject Browsing: no highlights found on this profile — skipping tap");
+        return;
+      }
+
+      // Pick one at random and tap it.
+      const pick = candidates[Math.floor(Math.random() * candidates.length)];
+      onLog?.(`Inject Browsing: tapping highlight "${pick.name}" at (${pick.x},${pick.y})…`);
+      await android.tap(serial, pick.x, pick.y);
+      await sleepOrAbort(serial, 1500); // wait for story viewer to open
+
+      // Dwell 2–20 s inside the highlight story.
+      const dwellMs = 2000 + Math.round(Math.random() * 18000);
+      onLog?.(`Inject Browsing: dwelling in highlight for ${(dwellMs / 1000).toFixed(1)}s…`);
+      await sleepOrAbort(serial, dwellMs);
+
+      // Check whether we are still inside a story/reel viewer.
+      // Fast path: single-story highlights auto-close after the story ends.
+      const afterXml = await android.dumpUi(serial).catch(() => "");
+      const inViewer = afterXml.includes("reel_viewer_root") ||
+                       afterXml.includes("story_media_cell") ||
+                       afterXml.includes("storiesProgressView") ||
+                       afterXml.includes("progress_container") ||
+                       afterXml.includes("reel_progress_container");
+
+      if (inViewer) {
+        // Fast swipe down from upper-third to lower-third to dismiss the viewer.
+        const { w: _hlW } = getScreenSize(serial);
+        onLog?.("Inject Browsing: still in highlight story — swiping down to close…");
+        await android.swipe(
+          serial,
+          Math.round(_hlW / 2), Math.round(_hlH * 0.25),
+          Math.round(_hlW / 2), Math.round(_hlH * 0.82),
+          180, // fast swipe
+        );
+        await sleepOrAbort(serial, 700);
+        onLog?.("Inject Browsing: ✓ highlight viewed and dismissed");
+      } else {
+        onLog?.("Inject Browsing: ✓ highlight viewed — viewer already closed (single-story)");
+      }
+    } catch (e: any) {
+      if (e?.message === "cycle-aborted") throw e;
+      onLog?.(`Inject Browsing: tap highlights error — ${e?.message}`);
+    }
+  }
+
+  /**
    * Runs the "Inject Browsing" sequence for ONE user's profile page. Caller
    * decides (via rollInjectBrowsingDecision) whether and when this runs —
    * this function no longer rolls the activate/before-follow gates itself.
@@ -5257,6 +5362,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     onLog?: (msg: string) => void,
   ): Promise<number> {
     const { w, h } = getScreenSize(serial);
+
+    // ── Tap Highlights — roll once at the start; coin-flip decides timing ──
+    // 50 % chance it fires BEFORE the profile-grid scroll (highlighting feels
+    // more natural when the page is still at the top), 50 % chance AFTER.
+    const tapHighlightsChance = rollRange(browsing.tapHighlightsPctMin, browsing.tapHighlightsPctMax) / 100;
+    const willTapHighlights   = tapHighlightsChance > 0 && Math.random() < tapHighlightsChance;
+    const tapHighlightsBefore = willTapHighlights && Math.random() < 0.5;
+    if (willTapHighlights) {
+      onLog?.(`Inject Browsing: tap highlights — chance:${Math.round(tapHighlightsChance * 100)}% timing:${tapHighlightsBefore ? 'before' : 'after'} feed scroll`);
+    }
+
+    // ── Highlights — BEFORE feed scroll ──────────────────────────────────
+    if (tapHighlightsBefore) {
+      await tapOneProfileHighlight(serial, onLog);
+    }
 
     // Activation already decided by rollInjectBrowsingDecision — no second
     // gate here. If we were called, the grid scroll is guaranteed to run;
@@ -5619,6 +5739,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Back out of the opened post to the profile grid before continuing.
     await android.pressBack(serial);
     await sleepOrAbort(serial, 500);
+
+    // ── Highlights — AFTER feed scroll ───────────────────────────────────
+    // The profile grid is scrolled down by `rows` rows. Scroll back to the
+    // top so the highlights row is visible, tap a highlight, then return 0
+    // so the caller knows we've already restored the top position.
+    if (willTapHighlights && !tapHighlightsBefore) {
+      if (rows > 0) {
+        onLog?.(`Inject Browsing: scrolling back to top for highlights — ${rows} row(s)`);
+        for (let _hsi = 0; _hsi < rows; _hsi++) {
+          await android.swipe(serial, Math.round(w / 2), Math.round(h * 0.35), Math.round(w / 2), Math.round(h * 0.80), 400);
+          await sleepOrAbort(serial, 350);
+        }
+        await sleepOrAbort(serial, 500);
+      }
+      await tapOneProfileHighlight(serial, onLog);
+      return 0; // already at top — caller must not scroll back further
+    }
+
     return rows;
   }
 
@@ -6528,6 +6666,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         injectBrowsingShareDmPctMin, injectBrowsingShareDmPctMax,
         injectBrowsingSavePostPctMin, injectBrowsingSavePostPctMax,
         injectBrowsingAbandonFollowPctMin, injectBrowsingAbandonFollowPctMax,
+        injectBrowsingTapHighlightsPctMin, injectBrowsingTapHighlightsPctMax,
         randomJitterEnabled,
         checkNotificationsPctMin, checkNotificationsPctMax,
         checkNotificationsScrollsMin, checkNotificationsScrollsMax,
@@ -7177,6 +7316,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               shareDmPctMin: injectBrowsingShareDmPctMin, shareDmPctMax: injectBrowsingShareDmPctMax,
               savePostPctMin: injectBrowsingSavePostPctMin, savePostPctMax: injectBrowsingSavePostPctMax,
               abandonFollowPctMin: injectBrowsingAbandonFollowPctMin, abandonFollowPctMax: injectBrowsingAbandonFollowPctMax,
+              tapHighlightsPctMin: injectBrowsingTapHighlightsPctMin, tapHighlightsPctMax: injectBrowsingTapHighlightsPctMax,
             } : undefined;
             const _ssFilters = followFiltersEnabled
               ? { skipVerified: followFilterVerifiedUsers, maxFollowers: followFilterMaxFollowers25k ? 25_000 : undefined,
@@ -7301,6 +7441,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   shareDmPctMin: injectBrowsingShareDmPctMin, shareDmPctMax: injectBrowsingShareDmPctMax,
                   savePostPctMin: injectBrowsingSavePostPctMin, savePostPctMax: injectBrowsingSavePostPctMax,
                   abandonFollowPctMin: injectBrowsingAbandonFollowPctMin, abandonFollowPctMax: injectBrowsingAbandonFollowPctMax,
+                  tapHighlightsPctMin: injectBrowsingTapHighlightsPctMin, tapHighlightsPctMax: injectBrowsingTapHighlightsPctMax,
                 } : undefined,
                 filters: followFiltersEnabled
                   ? {

@@ -2517,6 +2517,7 @@ export interface AutomationSettingsData {
   injectBrowsingShareDmPctMin: number; injectBrowsingShareDmPctMax: number;
   injectBrowsingSavePostPctMin: number; injectBrowsingSavePostPctMax: number;
   injectBrowsingAbandonFollowPctMin: number; injectBrowsingAbandonFollowPctMax: number;
+  injectBrowsingTapHighlightsPctMin: number; injectBrowsingTapHighlightsPctMax: number;
   // Follow Filters — profile-quality gates applied before each follow action.
   // Not wired to execution logic yet — UI-only until the automation hooks are built.
   followFiltersEnabled: boolean;
@@ -2623,6 +2624,7 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   injectBrowsingShareDmPctMin: 0, injectBrowsingShareDmPctMax: 0,
   injectBrowsingSavePostPctMin: 0, injectBrowsingSavePostPctMax: 0,
   injectBrowsingAbandonFollowPctMin: 0, injectBrowsingAbandonFollowPctMax: 0,
+  injectBrowsingTapHighlightsPctMin: 0, injectBrowsingTapHighlightsPctMax: 0,
   followFiltersEnabled: false,
   followFilterPrivateUsers: false,
   followFilterEnglishSpeaking: false,
@@ -3189,6 +3191,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             injectBrowsingSavePostPctMax: s.injectBrowsingSavePostPctMax,
             injectBrowsingAbandonFollowPctMin: s.injectBrowsingAbandonFollowPctMin,
             injectBrowsingAbandonFollowPctMax: s.injectBrowsingAbandonFollowPctMax,
+            injectBrowsingTapHighlightsPctMin: s.injectBrowsingTapHighlightsPctMin,
+            injectBrowsingTapHighlightsPctMax: s.injectBrowsingTapHighlightsPctMax,
             followFiltersEnabled: s.followFiltersEnabled,
             followFilterPrivateUsers: s.followFilterPrivateUsers,
             followFilterEnglishSpeaking: s.followFilterEnglishSpeaking,
@@ -5245,6 +5249,14 @@ export function AutomationSettingsPanel({
               </div>
             </div>
             <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Tap Highlights %</Label>
+              <div className="flex items-center gap-2">
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingTapHighlightsPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingTapHighlightsPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                <span className="text-muted-foreground text-sm">to</span>
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingTapHighlightsPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingTapHighlightsPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Feed posts</Label>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={50} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
@@ -5284,6 +5296,8 @@ export function AutomationSettingsPanel({
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingShareDmPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareDmPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
               </div>
             </div>
+          </div>
+          <div className="flex items-start flex-wrap gap-6 mt-2">
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Abandon Follow %</Label>
               <div className="flex items-center gap-2">
