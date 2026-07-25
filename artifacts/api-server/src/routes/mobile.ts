@@ -1432,6 +1432,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         shareFeedPercentMin: 0, shareFeedPercentMax: 0,
         shareDmPercentMin: 0, shareDmPercentMax: 0,
         savePercentMin: 0, savePercentMax: 0,
+        expandCaptionPercentMin: 0, expandCaptionPercentMax: 0,
         feedScrollMin: 5, feedScrollMax: 10,
         viewStoriesSlidesMin: 0, viewStoriesSlidesMax: 0,
         viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
@@ -2000,6 +2001,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const captionExpandLo = Math.min(expandCaptionPercentMin, expandCaptionPercentMax);
     const captionExpandHi = Math.max(expandCaptionPercentMin, expandCaptionPercentMax);
     const captionExpandChance = (captionExpandLo + Math.random() * (captionExpandHi - captionExpandLo)) / 100;
+    onLog?.(`Feed settings — like:${Math.round(likeChance * 100)}% expandCaption:${Math.round(captionExpandChance * 100)}% save:${Math.round(saveChance * 100)}% shareFeed:${Math.round(shareFeedChance * 100)}% shareDm:${Math.round(shareDmChance * 100)}%`);
 
     const { w, h } = getScreenSize(serial);
     const x  = Math.round(w / 2);
@@ -2479,26 +2481,32 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
               // ── Expand Caption ──────────────────────────────────────────
               // Taps the truncated-caption "more" link to expand it in place.
-              // The node has content-desc="more" (exact, lowercase) — distinct
-              // from "More actions for this post" which is a longer phrase.
+              // Instagram renders this as a TextView; its text attribute is
+              // "more" (exact, lowercase).  Some builds also set content-desc
+              // to the same value.  We check both so either attribute works.
+              // "More actions for this post" (the ⋮ button) won't match because
+              // it's a longer phrase — the contains() check is safe.
               // Uses its own fresh dump so it works independently of the
               // action-bar scan above.
               if (wantExpandCaption) {
                 try {
                   if (isCycleAborted(serial)) throw new Error("cycle-aborted");
                   const _ecXml = await android.dumpUi(serial).catch(() => "");
-                  // Split on '<node ' and check each segment for the exact
-                  // content-desc="more" attribute — avoids regex backslash
-                  // issues and false-matches on longer phrases.
+                  // Split on '<node ' and check each segment for text="more"
+                  // OR content-desc="more" (exact, lowercase in both cases).
+                  // Using includes() instead of regex avoids backslash issues
+                  // and is immune to attribute ordering variations.
                   let _ecTapped = false;
                   for (const _ecSeg of _ecXml.split("<node ")) {
                     if (_ecTapped) break;
-                    if (!_ecSeg.includes('content-desc="more"')) continue;
+                    const _hasMoreText = _ecSeg.includes('text="more"');
+                    const _hasMoreDesc = _ecSeg.includes('content-desc="more"');
+                    if (!_hasMoreText && !_hasMoreDesc) continue;
                     const _ecBb = _ecSeg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
                     if (!_ecBb) continue;
                     const _ecX = Math.round((parseInt(_ecBb[1]) + parseInt(_ecBb[3])) / 2);
                     const _ecY = Math.round((parseInt(_ecBb[2]) + parseInt(_ecBb[4])) / 2);
-                    onLog?.(`Scroll ${i + 1}/${count}: tapping caption "more" at (${_ecX},${_ecY})...`);
+                    onLog?.(`Scroll ${i + 1}/${count}: tapping caption "more" at (${_ecX},${_ecY}) [matched via ${_hasMoreText ? "text" : "content-desc"}]`);
                     await android.tap(serial, _ecX, _ecY);
                     // Dwell after expanding — simulate reading the caption.
                     // 2–10 s, rolled fresh each time so the duration looks human.
