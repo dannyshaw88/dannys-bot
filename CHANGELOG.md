@@ -4,6 +4,45 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.154 — 2026-07-25
+
+### Fixed — Inject Browsing highlight detection broken on non-English Instagram locales
+
+Highlights were still reported as "no highlights found" on every profile even after the v1.2.153 Y-range fix, because the sole detection signal was the English word "Highlight" appearing in `content-desc`. On Italian (and other non-English) Instagram builds, the content-desc for a highlight circle is just the circle's title ("Dicono di noi", "Eventi", "Dove acquista…") — the word "Highlight" is never appended, so the keyword filter silently discards every node.
+
+#### Root cause
+
+The detection in `tapOneProfileHighlight` was:
+
+```
+cd.includes("Highlight") && !cd.toLowerCase().startsWith("add")
+```
+
+This only matches English-locale Instagram where Instagram itself writes e.g. `"Treinos Highlight"`. On any other locale the content-desc is locale-agnostic title-only.
+
+#### What was fixed
+
+Detection is now a 3-strategy cascade — the first strategy that finds candidates wins:
+
+1. **English keyword** (unchanged) — `content-desc` contains `"Highlight"`, excluding `"Add"` (the + button). Handles all English-locale builds.
+2. **`reel_header` resource-id** — Instagram uses `com.instagram.android:id/reel_header_content` (and similar) for highlight tray items on many builds including non-English locales. Matches the clickable node directly without relying on text content.
+3. **Structural tray-bounds** — finds the scrollable tray container whose `resource-id` contains `"highlight"` or `"tray"`, extracts its Y bounds, then collects every clickable node inside that band whose shape is roughly square (aspect ratio 0.4–2.5, min 60 px wide — the circle icons). Works even when neither "Highlight" nor "reel_header" appears on the individual circle node.
+4. **Diagnostic fallback** — if all three strategies find nothing, logs all clickable nodes (resource-id, content-desc, bounds, size) to the Debugging Log so the correct pattern can be identified.
+
+#### What to expect in the Debugging Log
+
+On a profile with highlights (any locale):
+
+```
+Inject Browsing: tapping highlight "Dicono di noi" at (X,Y)…
+Inject Browsing: dwelling in highlight for X.Xs…
+Inject Browsing: ✓ highlight viewed and dismissed
+```
+
+If detection still fails (unlikely), the log will now print a full list of all clickable nodes from the dump so the pattern can be debugged without a separate inspect run.
+
+---
+
 ## v1.2.153 — 2026-07-25
 
 ### Fixed — Inject Browsing highlights not found on tall-screen devices (1080×2460 and similar)
