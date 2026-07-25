@@ -4,6 +4,31 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.162 — 2026-07-25
+
+### Fixed — "Tap again to exit" toast still appearing after account switch (v1.2.161 partial fix)
+
+**Symptom:** The toast persisted in v1.2.161.
+
+**Root cause of v1.2.161 failure:** The guard added in v1.2.161 used three `includes()` patterns to
+detect home-feed markers, then fell back to `_findElem()` for the actual check. However,
+`_findElem()` uses a partial-substring regex (`re2`) that matches any XML attribute containing the
+username as a substring — not just the specific phrases checked by `includes()`. On this device
+the profile-tab nav button carries `content-desc="damekabharrpoleoybb"` (bare username, no
+surrounding phrase), which passes `_findElem()` but was not covered by any of the three
+`includes()` guards. So `switcherAlreadyClosed` evaluated to `false`, `_findElem` returned
+truthy, and `KEYCODE_BACK` still fired at the home feed.
+
+**Correct fix:** Removed step 5 entirely. The assumption it was based on ("tapping the active
+account row leaves the switcher open") is factually wrong — Instagram closes the switcher
+unconditionally on any row tap. After tapping the target account row, no `KEYCODE_BACK` is ever
+needed; the code now simply waits 2 s for the feed to reload and returns.
+
+**Changed file:** `artifacts/api-server/src/mobile/androidManager.ts` — step 5 of
+`switchToInstagramAccount` replaced with an unconditional 2 s sleep.
+
+---
+
 ## v1.2.161 — 2026-07-25
 
 ### Fixed — "Tap again to exit" toast appearing after account switch
