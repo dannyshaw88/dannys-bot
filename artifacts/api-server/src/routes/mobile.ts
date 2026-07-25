@@ -7647,10 +7647,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
             let _sfCount = await _runOneSpreadSlot(_spreadUsername);
 
+            // Helper — navigates back to the home feed before a backup slot.
+            // When a candidate is filtered the phone is left on the search
+            // results page with the rejected username still in the bar.  Each
+            // backup attempt calls runFollowUsersStep fresh, which re-taps the
+            // search tab at startup.  Tapping the search tab when it is already
+            // active dismisses the search and leaves Instagram in a broken
+            // explore-grid state where findInstagramSearchBar can't locate the
+            // bar, the positional fallback misfires, and no results ever appear.
+            // Navigating to home first gives every backup call the same clean
+            // starting state as the very first spread slot.
+            const _resetToHome = async () => {
+              try {
+                const _ht = await android.findHomeTab(serial).catch(() => null);
+                if (_ht) { await android.tap(serial, _ht.x, _ht.y); }
+                else { await android.pressBack(serial); }
+                await sleepOrAbort(serial, 800);
+              } catch { /* best-effort — cycle-aborted will surface on next sleepOrAbort */ }
+            };
+
             // If filtered/skipped at follow-time, try backup candidates first.
             while (_sfCount === 0 && _sfBackupQueue.length > 0) {
               const _nextUser = _sfBackupQueue.shift()!;
               tLog(`  Spread Follow: @${_spreadUsername} filtered — trying backup @${_nextUser}`);
+              await _resetToHome();
               _sfCount = await _runOneSpreadSlot(_nextUser);
             }
 
@@ -7689,6 +7709,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   while (_sfCount === 0 && _sfBackupQueue.length > 0) {
                     const _nextUser = _sfBackupQueue.shift()!;
                     tLog(`  Spread Follow: trying re-scraped @${_nextUser}`);
+                    await _resetToHome();
                     _sfCount = await _runOneSpreadSlot(_nextUser);
                   }
                 } else {
