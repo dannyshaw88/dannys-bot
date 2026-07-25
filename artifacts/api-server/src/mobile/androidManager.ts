@@ -5658,6 +5658,75 @@ export async function findInstagramProfileTab(serial: string): Promise<{ x: numb
 }
 
 /**
+ * Find the Instagram profile-page "Options" hamburger button (three lines, top-right).
+ * Confirmed UIAutomator node: ImageView content-desc="Options" at ~(992,181) on this farm.
+ *
+ * Strategy 1: content-desc="Options" anywhere in the top header area (y < 15 % of height).
+ * Strategy 2: Rightmost clickable ImageView in the top header strip (x > 80 % width, y < 15 %).
+ */
+export async function findInstagramProfileOptionsButton(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+  const { w: xmlW, h: xmlH } = _getScreenSize(xml);
+  const topThresh = Math.round(xmlH * 0.15);
+  // ── Strategy 1: content-desc exact "Options" in header area.
+  {
+    const s1Re = /content-desc="Options"[^>]*bounds="(\[[^\]]+\]\[[^\]]+\])"/gi;
+    let s1m: RegExpExecArray | null;
+    while ((s1m = s1Re.exec(xml)) !== null) {
+      const c = _parseCenter(s1m[1]);
+      if (c && c.y < topThresh) return c;
+    }
+  }
+  // ── Strategy 2: positional fallback — rightmost clickable node in top-right header strip.
+  const rightMin = Math.round(xmlW * 0.80);
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+  let m: RegExpExecArray | null;
+  let best: { x: number; y: number } | null = null;
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    if (!/clickable="true"/.test(attrs)) continue;
+    const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+    if (!bm) continue;
+    const cx = Math.round((Number(bm[1]) + Number(bm[3])) / 2);
+    const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
+    if (cx > rightMin && cy < topThresh) {
+      if (!best || cx > best.x) best = { x: cx, y: cy };
+    }
+  }
+  return best;
+}
+
+/**
+ * Find the "Saved" row on Instagram's Settings and activity page.
+ * Confirmed UIAutomator node: View content-desc="Saved" at ~(540,1033) on this farm.
+ *
+ * Strategy 1: content-desc="Saved" (any y position on the page).
+ * Strategy 2: TextView text="Saved" (some IG builds use text not content-desc).
+ */
+export async function findInstagramSavedRow(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+  // ── Strategy 1: content-desc="Saved".
+  const byDesc = _findElem(xml, "Saved");
+  if (byDesc) return byDesc;
+  // ── Strategy 2: text="Saved" in a TextView node.
+  {
+    const s2Re = /text="Saved"[^>]*bounds="(\[[^\]]+\]\[[^\]]+\])"/gi;
+    let s2m: RegExpExecArray | null;
+    while ((s2m = s2Re.exec(xml)) !== null) {
+      const c = _parseCenter(s2m[1]);
+      if (c) return c;
+    }
+  }
+  return null;
+}
+
+/**
  * Find the Instagram Direct Messages tab (paper-plane icon, bottom-nav centre-right).
  * Tries resource IDs and content-desc labels first; falls back to a positional
  * scan of clickable nodes in the bottom-nav band at ~60–75 % of screen width.

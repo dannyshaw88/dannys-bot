@@ -4,6 +4,48 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.158 — 2026-07-25
+
+### Added — Visit Saved: new Random Actions jitter tool
+
+Added a **Visit Saved %** action to the Phone Farm **Random Actions** tool. When rolled, the automation navigates to the account's own Saved media page, scrolls through it 1–10 times (randomly selected), then returns to the home feed. This simulates natural "revisit my saved posts" behaviour that real users exhibit.
+
+**Navigation flow** (confirmed from UIAutomator XML dumps):
+
+1. Tap the Home tab to ensure a clean starting state (same guard used by Visit Profile).
+2. Tap the **Profile tab** (bottom nav, rightmost icon — `profile_tab` resource-id / `Profile` content-desc).
+3. Wait for profile page to load (2.0–2.8 s).
+4. Tap the **hamburger / Options button** (`ImageView content-desc="Options"`, top-right of the profile header, confirmed at ~(992, 181) on the farm device).
+5. Wait for Settings and activity page to load (2.0–2.6 s).
+6. Tap the **Saved row** (`View content-desc="Saved"`, confirmed at ~(540, 1033) on the farm device).
+7. Wait for Saved media page to load (2.0–2.8 s).
+8. Scroll down through the saved posts grid **1–10 times** (random, same swipe parameters as other scroll actions: 380–500 ms duration, 500–1100 ms pause between swipes).
+9. Press Back (Saved → Settings and activity), press Back again (Settings → Profile), then tap the Home tab to return to the feed.
+
+**Where to configure:** Phone Farm → any slot → Random Actions → **Visit Saved %** min/max (0–100 %).  
+A min of 0 / max of 0 means the action never fires (default, matching existing behaviour for saved accounts).
+
+**Implementation details:**
+
+- Two new exported functions added to `androidManager.ts`:
+  - `findInstagramProfileOptionsButton(serial)` — locates the hamburger/Options button via `content-desc="Options"` with a positional top-right fallback (rightmost clickable node in the top 15 % of the screen with x > 80 % width).
+  - `findInstagramSavedRow(serial)` — locates the Saved row via `content-desc="Saved"`, with a `text="Saved"` TextView fallback for IG builds that use text instead of content-desc.
+- `runVisitSaved()` function added to `mobile.ts` (alongside `runVisitOwnProfile`, `runCheckNotifications`, etc.) wiring the full multi-step navigation sequence with proper early-exit + home-return guards at each failure point.
+- `visitSavedPctMin` / `visitSavedPctMax` fields added across all four schema layers in `mobile.ts` (the `AutomationSettings` TypeScript interface, the Zod persistence schema, the Zod execution/cycle schema, and both sets of GET defaults — non-slot and slot).
+- Same fields added across `MobilePage.tsx`: the `AutomationSettingsData` type, `AUTOMATION_DEFAULTS`, the autosave request body builder, the Copy Settings `COPY_SECTIONS` (`randomJitter` section), and a new **Visit Saved %** input pair rendered in the Random Actions settings block between Visit Profile % and App Switch %.
+
+---
+
+## v1.2.157 — 2026-07-25
+
+### Fixed — Make a Post "My Computer" assigned directory wiped on every restart
+
+**Root cause:** The dedicated per-slot folder-path file (`mobile-folder-paths/<serial>_slot<N>.txt`) was only written by the explicit `/folder-path` API endpoint — the one called directly when the user picks a folder via the Browse dialog. The autosave (which fires 500 ms after any settings change and goes to the `automation-settings` endpoint) never wrote to the dedicated file. If the `/folder-path` fetch failed silently for any reason (which `.catch(() => {})` swallows completely), the dedicated file was never created, and on restart the GET handler found an empty dedicated file and fell back to whatever was in `mobile-instances.json`. If the JSON value had also been lost (e.g. a race with another write, or a prior Copy Settings POST that reset the field), the path came back as `""`.
+
+**Fix:** The slot `automation-settings` POST handler now also calls `setMakePostFolderPath` whenever the incoming `makePostLocalFolderPath` is non-empty. This means every successful autosave — which is guaranteed to fire within 500 ms of the user picking a folder — independently writes the dedicated file. The path now has two write paths (explicit `/folder-path` fetch + autosave) and two read paths (dedicated file preferred, JSON fallback), so both must fail simultaneously before the path can be lost on restart.
+
+---
+
 ## v1.2.156 — 2026-07-25
 
 ### Fixed — Copy Settings: Tap Highlights % missing from Inject Browsing section

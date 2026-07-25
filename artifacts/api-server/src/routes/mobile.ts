@@ -263,6 +263,9 @@ type AutomationSettings = {
   checkNotificationsClickPctMax?: number;
   visitProfilePctMin?: number;
   visitProfilePctMax?: number;
+  // Visit Saved — navigates to own Saved media page via profile → hamburger → Saved, scrolls.
+  visitSavedPctMin?: number;
+  visitSavedPctMax?: number;
   // App Switch — presses square button, opens SMS app for a random dwell, returns to Instagram.
   appSwitchPctMin?: number;
   appSwitchPctMax?: number;
@@ -1257,6 +1260,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     checkNotificationsClickPctMax: z.number().min(0).max(100).default(0),
     visitProfilePctMin: z.number().min(0).max(100).default(0),
     visitProfilePctMax: z.number().min(0).max(100).default(0),
+    // Visit Saved — go to profile → hamburger → Saved, scroll 1–10 times, return.
+    visitSavedPctMin: z.number().min(0).max(100).default(0),
+    visitSavedPctMax: z.number().min(0).max(100).default(0),
     // App Switch: press square button, open SMS for random dwell, return to Instagram.
     appSwitchPctMin: z.number().min(0).max(100).default(0),
     appSwitchPctMax: z.number().min(0).max(100).default(0),
@@ -1377,6 +1383,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       checkNotificationsScrollsMin: 2, checkNotificationsScrollsMax: 5,
       checkNotificationsClickPctMin: 0, checkNotificationsClickPctMax: 0,
       visitProfilePctMin: 0, visitProfilePctMax: 0,
+      visitSavedPctMin: 0, visitSavedPctMax: 0,
       appSwitchPctMin: 0, appSwitchPctMax: 0,
       checkDmEnabled: false,
       checkDmActivatePctMin: 100, checkDmActivatePctMax: 100,
@@ -1482,6 +1489,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         checkNotificationsScrollsMin: 2, checkNotificationsScrollsMax: 5,
         checkNotificationsClickPctMin: 0, checkNotificationsClickPctMax: 0,
         visitProfilePctMin: 0, visitProfilePctMax: 0,
+        visitSavedPctMin: 0, visitSavedPctMax: 0,
         appSwitchPctMin: 0, appSwitchPctMax: 0,
         checkDmEnabled: false,
         checkDmActivatePctMin: 100, checkDmActivatePctMax: 100,
@@ -1549,6 +1557,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         slotAutomation: { ...cfg[serial]?.slotAutomation, [String(slotIdx)]: input },
       };
       saveInstanceConfigs(cfg);
+      // Mirror the folder path into the dedicated file whenever it arrives
+      // non-empty.  The explicit /folder-path endpoint does this too, but the
+      // autosave (which fires every 500 ms after any settings change) hits
+      // THIS endpoint — not /folder-path.  If the /folder-path fetch ever
+      // fails silently, the autosave is the only other write path, and without
+      // this line the dedicated file would never be created.  Writing here
+      // means every successful autosave is also a dedicated-file write, giving
+      // the path two independent stores that must BOTH be empty before it can
+      // be lost on restart.
+      if (input.makePostLocalFolderPath) {
+        setMakePostFolderPath(serial, slotIdx, input.makePostLocalFolderPath);
+      }
       res.json({ ok: true });
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to save slot automation settings" }); }
   });
@@ -4391,6 +4411,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Visit My Profile: taps the profile icon in the bottom nav, then returns.
     visitProfilePctMin: z.number().min(0).max(100).default(0),
     visitProfilePctMax: z.number().min(0).max(100).default(0),
+    // Visit Saved: profile → hamburger → Saved page, scrolls 1–10×, returns.
+    visitSavedPctMin: z.number().min(0).max(100).default(0),
+    visitSavedPctMax: z.number().min(0).max(100).default(0),
     // App Switch: press square button, open SMS for random 10–30 s, return to Instagram.
     appSwitchPctMin: z.number().min(0).max(100).default(0),
     appSwitchPctMax: z.number().min(0).max(100).default(0),
@@ -5124,6 +5147,103 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await android.pressBack(serial);
     }
     await sleepOrAbort(serial, 600);
+  }
+
+  /**
+   * Visit Saved — navigates to the account's Saved media page via:
+   *   Profile tab → hamburger "Options" button → "Saved" row
+   * then scrolls 1–10 times through the saved posts grid, and returns
+   * to the home feed.
+   *
+   * Navigation path confirmed from UIAutomator XML dumps:
+   *   - Profile page hamburger: ImageView content-desc="Options" (~top-right)
+   *   - Settings and activity page Saved row: View content-desc="Saved"
+   */
+  async function runVisitSaved(serial: string, onLog?: (msg: string) => void): Promise<void> {
+    // 1. Ensure we're on the home feed first (same guard used by runVisitOwnProfile).
+    const homeTabFirst = await android.findHomeTab(serial).catch(() => null);
+    if (homeTabFirst) {
+      await android.tap(serial, homeTabFirst.x, homeTabFirst.y);
+      await sleepOrAbort(serial, 1000);
+    } else {
+      await android.pressBack(serial);
+      await sleepOrAbort(serial, 1000);
+    }
+
+    // 2. Tap the profile tab (bottom nav, rightmost icon).
+    const profileTab = await android.findInstagramProfileTab(serial).catch(() => null);
+    if (!profileTab) {
+      onLog?.("Visit Saved: profile tab not found — skipping");
+      logger.warn({ serial }, "[jitter-visit-saved] profile tab not found");
+      return;
+    }
+    await android.tap(serial, profileTab.x, profileTab.y);
+    await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 800));
+
+    // Dismiss any interstitial that may appear on profile page load.
+    const d1 = await android.dismissInstagramInterstitials(serial).catch(() => null);
+    if (d1) await sleepOrAbort(serial, 500);
+
+    // 3. Tap the hamburger "Options" button (top-right of profile page).
+    const optionsBtn = await android.findInstagramProfileOptionsButton(serial).catch(() => null);
+    if (!optionsBtn) {
+      onLog?.("Visit Saved: Options button not found — skipping");
+      logger.warn({ serial }, "[jitter-visit-saved] Options/hamburger button not found");
+      // Return to home and bail.
+      const ht = await android.findHomeTab(serial).catch(() => null);
+      ht ? await android.tap(serial, ht.x, ht.y) : await android.pressBack(serial);
+      await sleepOrAbort(serial, 600);
+      return;
+    }
+    await android.tap(serial, optionsBtn.x, optionsBtn.y);
+    await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 600));
+    onLog?.("Visit Saved: ✓ opened Settings and activity");
+
+    // 4. Tap the "Saved" row on the Settings and activity page.
+    const savedRow = await android.findInstagramSavedRow(serial).catch(() => null);
+    if (!savedRow) {
+      onLog?.("Visit Saved: Saved row not found — skipping");
+      logger.warn({ serial }, "[jitter-visit-saved] Saved row not found");
+      // Back out: Settings and activity → profile → home.
+      await android.pressBack(serial);
+      await sleepOrAbort(serial, 600);
+      const ht = await android.findHomeTab(serial).catch(() => null);
+      ht ? await android.tap(serial, ht.x, ht.y) : await android.pressBack(serial);
+      await sleepOrAbort(serial, 600);
+      return;
+    }
+    await android.tap(serial, savedRow.x, savedRow.y);
+    await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 800));
+    onLog?.("Visit Saved: ✓ opened Saved media page");
+
+    // 5. Scroll through saved posts 1–10 times.
+    const scrollCount = rollRange(1, 10);
+    const { w, h } = getScreenSize(serial);
+    for (let i = 0; i < scrollCount; i++) {
+      await android.swipe(
+        serial,
+        Math.round(w * 0.5), Math.round(h * 0.65),
+        Math.round(w * 0.5), Math.round(h * 0.30),
+        380 + Math.round(Math.random() * 120),
+      );
+      await sleepOrAbort(serial, 500 + Math.round(Math.random() * 600));
+    }
+    onLog?.(`Visit Saved: ✓ scrolled ${scrollCount}×`);
+
+    // 6. Return to home feed: pressBack × 2 (Saved → Settings, Settings → Profile),
+    //    then tap the home tab.
+    await android.pressBack(serial);
+    await sleepOrAbort(serial, 600);
+    await android.pressBack(serial);
+    await sleepOrAbort(serial, 600);
+    const homeTab = await android.findHomeTab(serial).catch(() => null);
+    if (homeTab) {
+      await android.tap(serial, homeTab.x, homeTab.y);
+    } else {
+      await android.pressBack(serial);
+    }
+    await sleepOrAbort(serial, 600);
+    onLog?.("Visit Saved: ✓ done, returned to home feed");
   }
 
   /**
@@ -6750,6 +6870,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         checkNotificationsScrollsMin, checkNotificationsScrollsMax,
         checkNotificationsClickPctMin, checkNotificationsClickPctMax,
         visitProfilePctMin, visitProfilePctMax,
+        visitSavedPctMin, visitSavedPctMax,
         appSwitchPctMin, appSwitchPctMax,
         feedActivatePctMin, feedActivatePctMax,
         viewStoriesActivatePctMin, viewStoriesActivatePctMax,
@@ -7607,6 +7728,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               tLog("▶ Random Jitter: visiting own profile…");
               await runVisitOwnProfile(serial, (msg) => tLog(`  ${msg}`));
               steps.push("jitter-visit-profile");
+              _jitterFired = true;
+            }
+            const savedChance = rollRange(visitSavedPctMin, visitSavedPctMax) / 100;
+            if (savedChance > 0 && Math.random() < savedChance) {
+              tLog("▶ Random Jitter: visiting saved posts…");
+              await runVisitSaved(serial, (msg) => tLog(`  ${msg}`));
+              steps.push("jitter-visit-saved");
               _jitterFired = true;
             }
             const appSwitchChance = rollRange(appSwitchPctMin, appSwitchPctMax) / 100;
