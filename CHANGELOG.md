@@ -4,6 +4,42 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.167 — 2026-07-25
+
+### Added — Tap Audio % in View Feed (Human Session Tool)
+
+A new **Tap Audio %** Min/Max percentage setting has been added as a third row in the
+View Timeline Feed section of the Human Session Tool.
+
+**What it does:**
+
+When rolled per post, the bot detects the audio/music affordance on the current feed post
+(the rotating disc/music-note element that appears on posts with a soundtrack) and taps it
+to open the song's "other posts using this audio" grid page. It then scrolls that grid
+1–20 times (rolled randomly per roll), with a 1–10% per-scroll chance to tap a post,
+before returning to the feed with a Back press.
+
+**Detection and edge cases:**
+
+- Audio affordance is detected from the live UIAutomator accessibility tree — no
+  hardcoded coordinates. If no audio node is found on the current post the roll is
+  silently skipped (not all posts have audio).
+- **Meta Edits popup** ("Level up your edits") — if this promotional popup appears after
+  the first tap, it is dismissed with Back and the audio affordance is tapped a second
+  time. If the popup still shows on the second attempt the roll is aborted cleanly.
+- **"View song details" sheet** — some posts show an intermediate bottom sheet with a
+  "View song details" option; the bot detects this via the a11y tree and taps the option
+  to continue to the song page.
+- After visiting the song page, a single Back press returns to the feed.
+
+**Settings persistence:** `tapAudioPercentMin` and `tapAudioPercentMax` added to
+`automationSchema` and `automationCycleSchema` (required for values to survive a save
+cycle without being stripped by Zod). Default is 0/0 (disabled) for all existing devices.
+
+**Copy Settings** group updated to include the new setting pair under View Timeline Feed.
+
+---
+
 ## v1.2.166 — 2026-07-25
 
 ### Fixed — Fix AI Slop checkbox had zero effect on every automation cycle run

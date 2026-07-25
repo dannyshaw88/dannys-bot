@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Bell, User, RefreshCw, Settings, PlaySquare, BookOpen, Bookmark,
   MessageSquare, Repeat2, AtSign, Clock, ExternalLink, Image as ImageIcon,
-  ChevronDown, ChevronUp, Heart, Copy, FolderOpen, UserPlus, UserMinus, Zap, Film, Percent, AlignLeft, Trash2, Globe, Compass,
+  ChevronDown, ChevronUp, Heart, Copy, FolderOpen, UserPlus, UserMinus, Zap, Film, Percent, AlignLeft, Trash2, Globe, Compass, Music,
 } from "lucide-react";
 import { format } from "date-fns";
 import { type Tool, type Profile, type RepostedPost, type SessionAction } from "@shared/schema";
@@ -81,6 +81,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         { key: "vtf_save_media",  label: "Save liked media",               settingKeys: ["saveMediaEnabled","saveMediaPercent"] },
         { key: "vtf_share_post",  label: "Share % (chance to share viewed posts to feed)", settingKeys: ["sharePostPercentMin","sharePostPercentMax"] },
         { key: "vtf_expand_caption", label: "Expand Caption %",             settingKeys: ["expandCaptionPercentMin","expandCaptionPercentMax"] },
+        { key: "vtf_tap_audio",      label: "Tap Audio % (browse song page)", settingKeys: ["tapAudioPercentMin","tapAudioPercentMax"] },
         { key: "vtf_view_profile",     label: "Visit profile %",             settingKeys: ["viewPostProfilePercentMin","viewPostProfilePercentMax"] },
         { key: "vtf_profile_feed",     label: "View profile feed % + count", settingKeys: ["viewProfileFeedPercentMin","viewProfileFeedPercentMax","viewProfileFeedCountMin","viewProfileFeedCountMax"] },
         { key: "vtf_profile_posts",    label: "Open profile posts count + %",settingKeys: ["viewProfilePostsCountMin","viewProfilePostsCountMax","viewProfilePostsPercentMin","viewProfilePostsPercentMax"] },
@@ -544,6 +545,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       likeTimelinePostsPercentMax: 0,
       expandCaptionPercentMin: 0,
       expandCaptionPercentMax: 0,
+      tapAudioPercentMin: 0,
+      tapAudioPercentMax: 0,
       viewReelsEnabled: false,
       viewReelsOrderMin: 0,
       viewReelsOrderMax: 0,
@@ -679,6 +682,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       sharePostPercentMin: 0, sharePostPercentMax: 0,
       likeTimelinePostsPercentMin: 0, likeTimelinePostsPercentMax: 0,
       expandCaptionPercentMin: 0, expandCaptionPercentMax: 0,
+      tapAudioPercentMin: 0, tapAudioPercentMax: 0,
       viewReelsEnabled: false, viewReelsOrderMin: 0, viewReelsOrderMax: 0,
       viewReelsNotUsedMin: 0, viewReelsNotUsedMax: 0,
       viewPostProfilePercentMin: 0, viewPostProfilePercentMax: 0,
@@ -987,7 +991,16 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Expand Caption%</span>
                 </div>
               </div>
-              {/* ROW 2: Like Delay | Save Liked | Like% — left-aligned */}
+              {/* ROW 3: Tap Audio% — tap the music affordance on a post to browse the song's grid */}
+              <div className={`flex items-center gap-3 flex-wrap pt-1.5 border-t border-border/40 transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                <div className="flex items-center gap-1.5">
+                  {pctInputs("tapAudioPercentMin", "tapAudioPercentMax")}
+                  <Music className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Tap Audio%</span>
+                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">tap post audio to browse other posts with same song</span>
+                </div>
+              </div>
+              {/* ROW 4 (was 2): Like Delay | Save Liked | Like% — left-aligned */}
               <div className={`flex items-center gap-3 flex-wrap pt-1.5 border-t border-border/40 transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                 <div className="flex items-center gap-1.5">
                   {pctInputs("likeTimelinePostsPercentMin", "likeTimelinePostsPercentMax")}

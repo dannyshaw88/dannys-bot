@@ -163,6 +163,8 @@ type AutomationSettings = {
   savePercentMax: number;
   expandCaptionPercentMin: number;
   expandCaptionPercentMax: number;
+  tapAudioPercentMin: number;
+  tapAudioPercentMax: number;
   feedScrollMin: number;
   feedScrollMax: number;
   viewStoriesSlidesMin: number;
@@ -1167,6 +1169,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     savePercentMax: z.number().min(0).max(100).default(0),
     expandCaptionPercentMin: z.number().min(0).max(100).default(0),
     expandCaptionPercentMax: z.number().min(0).max(100).default(0),
+    tapAudioPercentMin: z.number().min(0).max(100).default(0),
+    tapAudioPercentMax: z.number().min(0).max(100).default(0),
     feedScrollMin: z.number().min(1).max(50),
     feedScrollMax: z.number().min(1).max(50),
     viewStoriesSlidesMin: z.number().min(0).max(100).default(0),
@@ -1351,6 +1355,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       shareDmPercentMin: 0, shareDmPercentMax: 0,
       savePercentMin: 0, savePercentMax: 0,
       expandCaptionPercentMin: 0, expandCaptionPercentMax: 0,
+      tapAudioPercentMin: 0, tapAudioPercentMax: 0,
       feedScrollMin: 5, feedScrollMax: 10,
       viewStoriesSlidesMin: 0, viewStoriesSlidesMax: 0,
       viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
@@ -1452,6 +1457,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         shareDmPercentMin: 0, shareDmPercentMax: 0,
         savePercentMin: 0, savePercentMax: 0,
         expandCaptionPercentMin: 0, expandCaptionPercentMax: 0,
+        tapAudioPercentMin: 0, tapAudioPercentMax: 0,
         feedScrollMin: 5, feedScrollMax: 10,
         viewStoriesSlidesMin: 0, viewStoriesSlidesMax: 0,
         viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
@@ -2008,14 +2014,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     shareDmPercentMin?: number; shareDmPercentMax?: number;
     savePercentMin?: number; savePercentMax?: number;
     expandCaptionPercentMin?: number; expandCaptionPercentMax?: number;
+    tapAudioPercentMin?: number; tapAudioPercentMax?: number;
     onLog?: (msg: string) => void;
-  }): Promise<{ count: number; likes: number; likeFailures: number; sharesFeed: number; sharesDm: number; saves: number; captionExpands: number; strayNavRecoveries: number }> {
+  }): Promise<{ count: number; likes: number; likeFailures: number; sharesFeed: number; sharesDm: number; saves: number; captionExpands: number; strayNavRecoveries: number; audioTaps: number }> {
     const {
       count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
       shareFeedPercentMin = 0, shareFeedPercentMax = 0,
       shareDmPercentMin = 0, shareDmPercentMax = 0,
       savePercentMin = 0, savePercentMax = 0,
       expandCaptionPercentMin = 0, expandCaptionPercentMax = 0,
+      tapAudioPercentMin = 0, tapAudioPercentMax = 0,
       onLog,
     } = params;
     const delayLoSec = Math.min(delayMinSec, delayMaxSec);
@@ -2035,7 +2043,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const captionExpandLo = Math.min(expandCaptionPercentMin, expandCaptionPercentMax);
     const captionExpandHi = Math.max(expandCaptionPercentMin, expandCaptionPercentMax);
     const captionExpandChance = (captionExpandLo + Math.random() * (captionExpandHi - captionExpandLo)) / 100;
-    onLog?.(`Feed settings — like:${Math.round(likeChance * 100)}% expandCaption:${Math.round(captionExpandChance * 100)}% save:${Math.round(saveChance * 100)}% shareFeed:${Math.round(shareFeedChance * 100)}% shareDm:${Math.round(shareDmChance * 100)}%`);
+    const tapAudioLo = Math.min(tapAudioPercentMin, tapAudioPercentMax);
+    const tapAudioHi = Math.max(tapAudioPercentMin, tapAudioPercentMax);
+    const tapAudioChance = (tapAudioLo + Math.random() * (tapAudioHi - tapAudioLo)) / 100;
+    onLog?.(`Feed settings — like:${Math.round(likeChance * 100)}% expandCaption:${Math.round(captionExpandChance * 100)}% tapAudio:${Math.round(tapAudioChance * 100)}% save:${Math.round(saveChance * 100)}% shareFeed:${Math.round(shareFeedChance * 100)}% shareDm:${Math.round(shareDmChance * 100)}%`);
 
     const { w, h } = getScreenSize(serial);
     const x  = Math.round(w / 2);
@@ -2076,6 +2087,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let sharesDm = 0;
     let saves = 0;
     let strayNavRecoveries = 0;
+    let audioTaps = 0;
     // Sponsored posts ("Ads") render a full-width CTA button ("Shop Now",
     // "Install Now", "Learn More") overlaid near the bottom of the media —
     // right where our double-tap-to-like jitter can land after a scroll that
@@ -2173,6 +2185,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const wantShareDm = shareDmChance > 0 && Math.random() < shareDmChance;
       const wantSave = saveChance > 0 && Math.random() < saveChance;
       const wantExpandCaption = captionExpandChance > 0 && Math.random() < captionExpandChance;
+      const wantTapAudio = tapAudioChance > 0 && Math.random() < tapAudioChance;
 
       if (wantLike || wantShareFeed || wantShareDm || wantSave || wantExpandCaption) {
         const feedbackCard = await android.isFeedbackOrSurveyCard(serial).catch(() => null);
@@ -2579,6 +2592,162 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         onLog?.(`Scroll ${i + 1}/${count}: no actions rolled this scroll`);
       }
 
+      // ── Tap Audio (music/song page) — independent of action bar ──────
+      // On posts that carry an audio affordance (rotating disc icon at the
+      // bottom-left of the media), tapping it opens the song's page — a
+      // grid of other posts using the same track.  We scroll that grid
+      // briefly and return to the feed with Back.  The roll is skipped
+      // silently when no audio affordance is detectable on the current post.
+      // The Meta Edits promotional popup ("Level up your edits") is dismissed
+      // with one Back press; if a second tap still triggers it the roll is
+      // aborted cleanly.  No retry loops — per-project rules.
+      if (wantTapAudio) {
+        try {
+          if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+          await sleepOrAbort(serial, 300);
+          const _atXml = await android.dumpUi(serial).catch(() => "");
+          // Detect an audio affordance by scanning the a11y tree for any node
+          // whose resource-id or content-desc signals music/audio.
+          // We exclude action-bar verbs (Like, Comment, Share, Save) so the
+          // action-bar icons never count as an audio affordance.
+          let _atNode: { x: number; y: number } | null = null;
+          for (const _atSeg of _atXml.split("<node ")) {
+            const _rid  = (_atSeg.match(/resource-id="([^"]*)"/) ?? [])[1] ?? "";
+            const _desc = (_atSeg.match(/content-desc="([^"]*)"/) ?? [])[1] ?? "";
+            const _txt  = (_atSeg.match(/\btext="([^"]*)"/) ?? [])[1] ?? "";
+            // Resource-id match (most reliable, language-independent).
+            const _isAudioRid  = /audio/i.test(_rid) && !/action_bar|like_button|comment|share|send|save/.test(_rid);
+            // Content-desc / text fallback (localised builds may lack a stable ID).
+            const _isAudioDesc = /\baudio\b/i.test(_desc) || /\baudio\b/i.test(_txt);
+            if (!_isAudioRid && !_isAudioDesc) continue;
+            const _atBb = _atSeg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+            if (!_atBb) continue;
+            const _atX = Math.round((parseInt(_atBb[1]) + parseInt(_atBb[3])) / 2);
+            const _atY = Math.round((parseInt(_atBb[2]) + parseInt(_atBb[4])) / 2);
+            // Must be in the lower portion of the screen — the audio marquee
+            // sits below the post media and above the action bar.
+            // Nodes near the very top (status bar / header) are never audio.
+            if (_atY < h * 0.40) continue;
+            _atNode = { x: _atX, y: _atY };
+            break;
+          }
+
+          if (!_atNode) {
+            onLog?.(`Scroll ${i + 1}/${count}: tap-audio rolled but no audio affordance on this post — skipping`);
+          } else {
+            onLog?.(`Scroll ${i + 1}/${count}: tapping audio affordance at (${_atNode.x},${_atNode.y})…`);
+            await android.tap(serial, _atNode.x, _atNode.y);
+            await sleepOrAbort(serial, 1000);
+            await verifyStillInInstagram();
+
+            const _atXml2 = await android.dumpUi(serial).catch(() => "");
+            let _atOnSongPage = false;
+
+            if (_atXml2.toLowerCase().includes("level up")) {
+              // Meta Edits promotional popup — dismiss and try once more.
+              onLog?.(`Scroll ${i + 1}/${count}: Meta Edits popup detected — dismissing and retrying…`);
+              await android.pressBack(serial);
+              await sleepOrAbort(serial, 600);
+              await android.tap(serial, _atNode.x, _atNode.y);
+              await sleepOrAbort(serial, 1000);
+              await verifyStillInInstagram();
+              const _atXml3 = await android.dumpUi(serial).catch(() => "");
+              if (_atXml3.toLowerCase().includes("level up")) {
+                onLog?.(`Scroll ${i + 1}/${count}: Meta Edits popup still showing after retry — aborting audio tap`);
+                await android.pressBack(serial);
+                await sleepOrAbort(serial, 400);
+              } else {
+                _atOnSongPage = true;
+              }
+            } else if (_atXml2.toLowerCase().includes("view song details")) {
+              // Bottom sheet — tap "View song details" to proceed to the page.
+              onLog?.(`Scroll ${i + 1}/${count}: "View song details" sheet detected — tapping…`);
+              let _atSheetTapped = false;
+              for (const _atSeg2 of _atXml2.split("<node ")) {
+                const _atT2 = (_atSeg2.match(/\btext="([^"]*)"/) ?? [])[1] ?? "";
+                const _atD2 = (_atSeg2.match(/content-desc="([^"]*)"/) ?? [])[1] ?? "";
+                if (!(_atT2.toLowerCase().includes("view song details") || _atD2.toLowerCase().includes("view song details"))) continue;
+                const _atBb2 = _atSeg2.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+                if (!_atBb2) break;
+                const _atX2 = Math.round((parseInt(_atBb2[1]) + parseInt(_atBb2[3])) / 2);
+                const _atY2 = Math.round((parseInt(_atBb2[2]) + parseInt(_atBb2[4])) / 2);
+                onLog?.(`Scroll ${i + 1}/${count}: tapping "View song details" at (${_atX2},${_atY2})…`);
+                await android.tap(serial, _atX2, _atY2);
+                await sleepOrAbort(serial, 1200);
+                await verifyStillInInstagram();
+                _atOnSongPage = true;
+                _atSheetTapped = true;
+                break;
+              }
+              if (!_atSheetTapped) {
+                // Sheet visible but couldn't resolve the node — press Back.
+                onLog?.(`Scroll ${i + 1}/${count}: "View song details" node not found in sheet — pressing Back`);
+                await android.pressBack(serial);
+                await sleepOrAbort(serial, 400);
+              }
+            } else {
+              // Navigated directly to the song/audio page.
+              _atOnSongPage = true;
+            }
+
+            if (_atOnSongPage) {
+              // Scroll the song grid 1–20 times with a 1–10% per-scroll tap chance.
+              const _atScrolls = 1 + Math.floor(Math.random() * 20);
+              const _atTapChance = 0.01 + Math.random() * 0.09; // 1–10%
+              onLog?.(`Scroll ${i + 1}/${count}: on song page — scrolling ${_atScrolls}x (tap chance ${Math.round(_atTapChance * 100)}%)…`);
+              const { w: _atW, h: _atH } = getScreenSize(serial);
+              let _atDidTap = false;
+              for (let _atS = 0; _atS < _atScrolls; _atS++) {
+                if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+                const _atSY1 = Math.round(_atH * 0.75);
+                const _atSY2 = Math.round(_atH * 0.30);
+                const _atSX  = Math.round(_atW / 2);
+                const _atDur = 300 + Math.round(Math.random() * 400);
+                await android.swipe(serial, _atSX, _atSY1, _atSX, _atSY2, _atDur);
+                await sleepOrAbort(serial, 280);
+                if (!_atDidTap && Math.random() < _atTapChance) {
+                  // Tap a random clickable item in the content area.
+                  const _atGXml = await android.dumpUi(serial).catch(() => "");
+                  const _atItems: { x: number; y: number }[] = [];
+                  for (const _atGSeg of _atGXml.split("<node ")) {
+                    if (!_atGSeg.includes('clickable="true"')) continue;
+                    const _atGBb = _atGSeg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+                    if (!_atGBb) continue;
+                    const _gX = Math.round((parseInt(_atGBb[1]) + parseInt(_atGBb[3])) / 2);
+                    const _gY = Math.round((parseInt(_atGBb[2]) + parseInt(_atGBb[4])) / 2);
+                    // Only items in the main content zone — skip top nav / bottom nav.
+                    if (_gY > _atH * 0.12 && _gY < _atH * 0.92) _atItems.push({ x: _gX, y: _gY });
+                  }
+                  if (_atItems.length > 0) {
+                    const _atPicked = _atItems[Math.floor(Math.random() * _atItems.length)];
+                    onLog?.(`Scroll ${i + 1}/${count}: song-page tap at (${_atPicked.x},${_atPicked.y})…`);
+                    await android.tap(serial, _atPicked.x, _atPicked.y);
+                    await sleepOrAbort(serial, 1000);
+                    await verifyStillInInstagram();
+                    // Press Back once to return from the post (or wherever the tap landed).
+                    await android.pressBack(serial);
+                    await sleepOrAbort(serial, 600);
+                    await verifyStillInInstagram();
+                    _atDidTap = true;
+                    break; // stop scrolling after a tap
+                  }
+                }
+              }
+              // Return to the feed — one Back press from the song/audio page.
+              onLog?.(`Scroll ${i + 1}/${count}: returning from song page…`);
+              await android.pressBack(serial);
+              await sleepOrAbort(serial, 700);
+              await verifyStillInInstagram();
+              audioTaps++;
+              onLog?.(`Scroll ${i + 1}/${count}: ✓ audio page visited`);
+            }
+          }
+        } catch (e: any) {
+          if (e?.message === "cycle-aborted") throw e;
+          onLog?.(`Scroll ${i + 1}/${count}: tap-audio error — ${e?.message}`);
+        }
+      }
+
       if (i < count - 1) {
         const delaySec = delayLoSec + Math.random() * (delayHiSec - delayLoSec);
         await sleepOrAbort(serial, Math.round(delaySec * 1000));
@@ -2588,7 +2757,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       logger.warn({ serial, strayNavRecoveries }, "[check-feed] recovered from stray navigation (ad CTA) during this run");
       onLog?.(`⚠ Recovered from ${strayNavRecoveries} stray navigation(s) — likely tapped an ad CTA during scroll`);
     }
-    return { count, likes, likeFailures, sharesFeed, sharesDm, saves, captionExpands, strayNavRecoveries };
+    return { count, likes, likeFailures, sharesFeed, sharesDm, saves, captionExpands, strayNavRecoveries, audioTaps };
   }
 
   // View stories from the stories bar at the top of the feed.
@@ -4312,6 +4481,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     savePercentMax: z.number().min(0).max(100).default(0),
     expandCaptionPercentMin: z.number().min(0).max(100).default(0),
     expandCaptionPercentMax: z.number().min(0).max(100).default(0),
+    tapAudioPercentMin: z.number().min(0).max(100).default(0),
+    tapAudioPercentMax: z.number().min(0).max(100).default(0),
     viewStoriesSlidesMin: z.number().min(0).max(100).default(0),
     viewStoriesSlidesMax: z.number().min(0).max(100).default(0),
     viewStoriesSlideWatchPctMin: z.number().min(1).max(100).default(50),
@@ -6929,7 +7100,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let reelsLikes = 0;
     // Hoisted so the catch block can include partial stats in the COMPLETE log
     // even when the cycle is aborted or errors mid-run.
-    let likes = 0, likeFailures = 0, sharesFeed = 0, sharesDm = 0, saves = 0, captionExpands = 0, strayNavRecoveries = 0;
+    let likes = 0, likeFailures = 0, sharesFeed = 0, sharesDm = 0, saves = 0, captionExpands = 0, strayNavRecoveries = 0, audioTaps = 0;
     let feedScrolled = 0; // number of feed posts requested to scroll this cycle
     let exploreScrolled = 0; // number of explore scrolls this cycle
     let _slotUsername = "";       // captured from schema parse for catch-block use
@@ -6950,6 +7121,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         shareDmPercentMin, shareDmPercentMax,
         savePercentMin, savePercentMax,
         expandCaptionPercentMin, expandCaptionPercentMax,
+        tapAudioPercentMin, tapAudioPercentMax,
         viewStoriesSlidesMin, viewStoriesSlidesMax,
         viewStoriesSlideWatchPctMin, viewStoriesSlideWatchPctMax,
         viewStoriesLikePercentMin, viewStoriesLikePercentMax,
@@ -7412,16 +7584,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               await sleepOrAbort(serial, 2000);
             }
             tLog(`▶ Starting feed scroll — ${count} posts`);
-            ({ likes, likeFailures, sharesFeed, sharesDm, saves, captionExpands, strayNavRecoveries } = await runCheckFeedLoop(serial, {
+            ({ likes, likeFailures, sharesFeed, sharesDm, saves, captionExpands, strayNavRecoveries, audioTaps } = await runCheckFeedLoop(serial, {
               count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
               shareFeedPercentMin, shareFeedPercentMax,
               shareDmPercentMin, shareDmPercentMax,
               savePercentMin, savePercentMax,
               expandCaptionPercentMin, expandCaptionPercentMax,
+              tapAudioPercentMin, tapAudioPercentMax,
               onLog: (msg) => tLog(`  ${msg}`),
             }));
             feedScrolled = count;
-            steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${saves} saves, ${captionExpands} caption-expands, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
+            steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${saves} saves, ${captionExpands} caption-expands, ${audioTaps} audio-taps, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
             tLog(`▶ Feed done — ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} DM-shares, ${saves} saves, ${captionExpands} caption-expands`);
           } else if (!feedEnabled) {
             steps.push("feed(skipped — View Feed disabled)");
