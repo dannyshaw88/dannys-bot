@@ -3670,6 +3670,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'injectShareDm',     label: 'Share DM %',                    fields: ['injectBrowsingShareDmPctMin','injectBrowsingShareDmPctMax'] },
     { key: 'injectSavePost',    label: 'Save Post %',                   fields: ['injectBrowsingSavePostPctMin','injectBrowsingSavePostPctMax'] },
     { key: 'injectAbandon',     label: 'Abandon Follow %',              fields: ['injectBrowsingAbandonFollowPctMin','injectBrowsingAbandonFollowPctMax'] },
+    { key: 'injectTapHL',       label: 'Tap Highlights %',              fields: ['injectBrowsingTapHighlightsPctMin','injectBrowsingTapHighlightsPctMax'] },
   ]},
   { key: 'randomJitter',  label: 'Random Actions', sub: [
     { key: 'jitterEnabled',     label: 'Enabled',                       fields: ['randomJitterEnabled'] },
