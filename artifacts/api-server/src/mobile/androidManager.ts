@@ -647,10 +647,25 @@ export async function dismissAdsChoiceDialog(
   xml = await _uiDump(adb, serial);
   pos = _findElem(xml, "Use for free with ads", "Free with ads");
   if (pos) {
-    _adbTap(adb, serial, pos.x, pos.y);
-    steps.push("ads-choice: selected Use for free with ads");
-    await _sleep(400); // reduced from 500ms
-    xml = await _uiDump(adb, serial);
+    // Instagram sometimes pre-selects "Use for free with ads" when the screen
+    // loads.  Tapping a radio button that is ALREADY selected deselects it,
+    // leaving no option chosen — the Continue button then refuses to advance
+    // and the dialog is never dismissed.
+    // Detection: the outer ViewGroup's content-desc ends with
+    // "Radio button . Selected" when selected, "Radio button . Unselected" when not.
+    // We find the index of "Use for free with ads" in the XML and look for
+    // "Radio button . Selected" within the next ~600 chars (the same desc attr).
+    const freeIdx = xml.indexOf("Use for free with ads");
+    const selectedMarkerIdx = freeIdx !== -1 ? xml.indexOf("Radio button . Selected", freeIdx) : -1;
+    const alreadySelected = selectedMarkerIdx !== -1 && (selectedMarkerIdx - freeIdx) < 600;
+    if (!alreadySelected) {
+      _adbTap(adb, serial, pos.x, pos.y);
+      steps.push("ads-choice: selected Use for free with ads");
+      await _sleep(400); // reduced from 500ms
+      xml = await _uiDump(adb, serial);
+    } else {
+      steps.push("ads-choice: Use for free with ads already selected — skipping tap");
+    }
   }
   pos = _findElem(xml, "Continue", "CONTINUE");
   if (pos) {
