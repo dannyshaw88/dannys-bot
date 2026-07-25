@@ -6217,26 +6217,74 @@ export async function findAndTapUserInSearch(
     }
     const xml = await _uiDump(adb, serial);
     if (!xml) continue;
-    const allPos = _findAllElems(xml, clean, `@${clean}`);
-    if (allPos.length > 0) {
-      // Instagram may render a "search suggestion chip" (@username) as the
-      // topmost row — tapping it re-runs the search instead of opening the
-      // profile. When we find 2+ distinct Y-rows, the first is the chip; skip
-      // it and tap the second (the real user profile row).
-      // Group by ~30 px bands to treat positions in the same row as one entry.
-      const rowMap = new Map<number, { x: number; y: number }>();
-      for (const p of allPos) {
-        const band = Math.round(p.y / 30);
-        if (!rowMap.has(band)) rowMap.set(band, p);
+
+    // Parse node segments individually so we can exclude non-profile nodes.
+    //
+    // Root cause of the old false-chip bug:
+    //   _findAllElems scanned ALL attributes, including the search bar
+    //   EditText which contains "@username" as the typed query. That node
+    //   registered as the "topmost row" → the code falsely declared a chip
+    //   and skipped the first real profile result, tapping the second one.
+    //
+    // Fix: split the XML into <node> segments and exclude any segment whose
+    // class is android.widget.EditText (the search bar). The remaining
+    // candidates are profile result rows; take the topmost one.
+    //
+    // Real suggestion chip (magnifying-glass-in-circle): if one is genuinely
+    // present it will still appear as the topmost non-EditText match. The
+    // post-tap verification below catches that case — if we don't land on a
+    // profile page within 3 s we re-dump and try the next row.
+    const cleanLc = clean.toLowerCase();
+    const atCleanLc = `@${cleanLc}`;
+    const seenKeys = new Set<string>();
+    const candidatePos: Array<{ x: number; y: number }> = [];
+    for (const seg of xml.split(/(?=<node )/)) {
+      if (!seg.startsWith("<node ")) continue;
+      // Skip the search bar — it holds the typed "@username" as its text value
+      if (/class="android\.widget\.EditText"/i.test(seg)) continue;
+      // Exact-match on text= or content-desc= only (avoids partial substring hits)
+      const segLc = seg.toLowerCase();
+      const hasMatch =
+        segLc.includes(`text="${cleanLc}"`) ||
+        segLc.includes(`text="${atCleanLc}"`) ||
+        segLc.includes(`content-desc="${cleanLc}"`) ||
+        segLc.includes(`content-desc="${atCleanLc}"`);
+      if (!hasMatch) continue;
+      const bb = seg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (!bb) continue;
+      const cx = Math.round((parseInt(bb[1]) + parseInt(bb[3])) / 2);
+      const cy = Math.round((parseInt(bb[2]) + parseInt(bb[4])) / 2);
+      const key = `${cx},${cy}`;
+      if (!seenKeys.has(key)) { seenKeys.add(key); candidatePos.push({ x: cx, y: cy }); }
+    }
+    candidatePos.sort((a, b) => a.y - b.y); // topmost first
+
+    if (candidatePos.length > 0) {
+      // Try candidates top-to-bottom. After each tap, verify we landed on a
+      // profile page (Follow / Following / Requested button present). If the
+      // tapped row was a real suggestion chip it re-runs the search — the
+      // Follow button won't appear and we'll retry with the next row.
+      for (let ci = 0; ci < candidatePos.length; ci++) {
+        const pos = candidatePos[ci];
+        onLog?.(`Follow: tapping @${clean} result row ${ci + 1}/${candidatePos.length} at (${pos.x},${pos.y})`);
+        _adbTap(adb, serial, pos.x, pos.y);
+        await _sleep(2000);
+        const verifyXml = await _uiDump(adb, serial).catch(() => "");
+        const onProfile =
+          /(?:text|content-desc)="Follow(?:ing|ed)?"/.test(verifyXml) ||
+          /(?:text|content-desc)="Requested"/.test(verifyXml) ||
+          /(?:text|content-desc)="Follow"/.test(verifyXml) ||
+          verifyXml.includes(":id/follow_button") ||
+          verifyXml.includes(":id/follow_btn");
+        if (onProfile) return true; // landed on a profile page — caller handles Follow tap
+        // Not on a profile page — likely hit a chip; dismiss / back and try next row
+        if (ci < candidatePos.length - 1) {
+          onLog?.(`Follow: row ${ci + 1} did not open a profile (chip?) — trying next row`);
+          await runAdb(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], 4000).catch(() => {});
+          await _sleep(800);
+        }
       }
-      const rows = [...rowMap.values()].sort((a, b) => a.y - b.y);
-      const pos = rows.length >= 2 ? rows[1] : rows[0];
-      if (rows.length >= 2) {
-        onLog?.(
-          `Follow: suggestion chip detected (${rows.length} rows) — skipping topmost, tapping real user at (${pos.x},${pos.y})`,
-        );
-      }
-      _adbTap(adb, serial, pos.x, pos.y);
+      // All rows tried, none opened a profile — return true so caller can handle gracefully
       return true;
     }
   }
