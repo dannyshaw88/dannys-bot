@@ -4,6 +4,69 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.160 — 2026-07-25
+
+### Fixed — WebSocket log-stream routing + swipe instrumentation for pull-to-refresh diagnosis
+
+#### WebSocket log-stream routing fix
+
+The **Action Log** tab in the frontend connects to `/api/mobile/log-stream/:serial` via WebSocket so
+automation cycle messages (`tLog` output) stream into the UI in real time. A pre-existing bug in the
+server's WebSocket upgrade dispatcher was silently destroying these connections: the Instagram
+screen-mirror upgrade handler ran first, didn't recognise the `/log-stream/` URL, and closed the
+socket before the log-stream handler could claim it. Every log-stream connection was rejected with
+"URL did not match screen route" and all `tLog` messages were lost from the Action Log during live
+runs.
+
+**Fix:** the log-stream upgrade handler is now registered *before* the screen-mirror handler in the
+`httpServer.on("upgrade", …)` chain, so it claims `/api/mobile/log-stream/:serial` connections
+immediately and the generic handler never sees them. The log-stream WebSocket now stays alive for the
+full duration of the automation cycle, and all Action Log messages are delivered reliably.
+
+**Impact:** no change to automation behaviour, timing, or any gesture. Pure observability fix.
+
+#### `[mobile-input]` swipe instrumentation
+
+Background: the account `@gorinoceanadqch` was observed performing two literal pull-to-refresh
+gestures (tap + drag downward on the feed) immediately after an account switch, even when View Feed
+was not activated in the shuffle. Because the log-stream WebSocket bug (above) was silently dropping
+all internal `tLog` records during that run, it was impossible to identify which code path triggered
+the downward swipes from the existing log alone.
+
+To diagnose this on the next Windows run, a `logger.info` trace is now emitted to
+`aura-farming-debug.log` **immediately before every automation swipe** at the locations most likely
+to produce a pull-to-refresh if navigation lands on the home feed instead of the expected screen:
+
+| `source` label in log | What it is | Finger direction |
+|---|---|---|
+| `stories-viewer-exit-down` | Story viewer dismiss swipe (y 50% → 92%) | ↓ downward |
+| `inject-highlight-dismiss-down` | Highlight story dismiss swipe (y 25% → 82%) | ↓ downward |
+| `inject-profile-grid-scroll-down` | Inject Browsing profile grid scroll down | ↑ upward |
+| `inject-profile-grid-scroll-back-for-highlights` | Grid scroll-back before tapping highlights (y 35% → 80%) | ↓ finger / scrolls content up |
+| `inject-follow-profile-grid-scroll-back` | Grid scroll-back before follow tap (y 35% → 80%) | ↓ finger / scrolls content up |
+| `explore-scroll` | Explore page scroll | ↑ upward |
+| `reels-advance` | Reels clip advance | ↑ upward |
+
+Each log entry includes: `serial`, `source`, `from` coordinates, `to` coordinates, and `durationMs`.
+Example log line:
+
+```
+[mobile-input] swipe  serial="..." source="inject-follow-profile-grid-scroll-back" from=[540,1710] to=[540,3920] durationMs=400
+```
+
+**No gesture coordinates, timing, retry behaviour, or automation logic was changed.** This is purely
+additive logging. The `[check-feed] swipe` log that already existed on feed scrolls is unchanged.
+
+**What to look for:** after the next Windows run, search `aura-farming-debug.log` for
+`[mobile-input] swipe` entries in the ~30 s after the account-switch stamp for `@gorinoceanadqch`.
+The `source` field names the exact caller. The strongest candidates are
+`inject-follow-profile-grid-scroll-back` and `inject-profile-grid-scroll-back-for-highlights` —
+both perform a downward finger drag (y 35% → 80%) that would register as a pull-to-refresh if
+Inject Browsing's navigation accidentally left the device on the home feed instead of the profile
+grid.
+
+---
+
 ## v1.2.159 — 2026-07-25
 
 ### Added — Visit Random Settings: new Random Actions jitter tool

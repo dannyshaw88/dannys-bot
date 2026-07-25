@@ -3387,6 +3387,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // this would just be a harmless extra swipe on the feed, but skipping
     // it keeps the log accurate about what really happened on screen.
     if (await stillInStoryViewer()) {
+      logger.info({ serial, source: "stories-viewer-exit-down", from: [Math.round(w / 2), Math.round(h * 0.50)], to: [Math.round(w / 2), Math.round(h * 0.92)], durationMs: 300 }, "[mobile-input] swipe");
       await android.swipe(
         serial,
         Math.round(w / 2), Math.round(h * 0.50),
@@ -3885,6 +3886,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // Swipe up to reveal more Explore posts.
         const esv = rollScrollVelocity(h, exploreScrollWeights, /*allowBack=*/true, /*safeStartFrac=*/0.80);
         onLog?.(`Explore scroll ${i + 1}/${scrollCount}: next swipe [${esv.mode}]`);
+        logger.info({ serial, source: "explore-scroll", mode: esv.mode, from: [x, esv.fromY], to: [x, esv.toY], durationMs: esv.duration }, "[mobile-input] swipe");
         await android.swipe(serial, x, esv.fromY, x, esv.toY, esv.duration);
         await sleepOrAbort(serial, 800);
       }
@@ -3960,6 +3962,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const rx = Math.round(w / 2);
       const rsv = rollScrollVelocity(h, reelsScrollWeights, /*allowBack=*/false, /*safeStartFrac=*/0.80);
       onLog?.(`${reelLabel}: advance swipe [${rsv.mode}]`);
+      logger.info({ serial, source: "reels-advance", mode: rsv.mode, from: [rx, rsv.fromY], to: [rx, rsv.toY], durationMs: rsv.duration }, "[mobile-input] swipe");
       await android.swipe(serial, rx, rsv.fromY, rx, rsv.toY, rsv.duration);
     };
 
@@ -5607,6 +5610,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // Fast swipe down from upper-third to lower-third to dismiss the viewer.
         const { w: _hlW } = getScreenSize(serial);
         onLog?.("Inject Browsing: still in highlight story — swiping down to close…");
+        logger.info({ serial, source: "inject-highlight-dismiss-down", from: [Math.round(_hlW / 2), Math.round(_hlH * 0.25)], to: [Math.round(_hlW / 2), Math.round(_hlH * 0.82)], durationMs: 180 }, "[mobile-input] swipe");
         await android.swipe(
           serial,
           Math.round(_hlW / 2), Math.round(_hlH * 0.25),
@@ -5697,6 +5701,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const y2 = Math.round(h * 0.30);
     for (let i = 0; i < rows; i++) {
       if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+      logger.info({ serial, source: "inject-profile-grid-scroll-down", from: [x, y1], to: [x, y2] }, "[mobile-input] swipe");
       await android.swipe(serial, x, y1, x, y2, 500 + Math.round(Math.random() * 200));
       // Wait 4–10 seconds so images fully render before the next scroll.
       const renderWait = 4000 + Math.round(Math.random() * 6000);
@@ -5713,6 +5718,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (rows > 0) {
         onLog?.(`Inject Browsing: scrolling back to top for highlights — ${rows} row(s)`);
         for (let _hsi = 0; _hsi < rows; _hsi++) {
+          logger.info({ serial, source: "inject-profile-grid-scroll-back-for-highlights", from: [Math.round(w / 2), Math.round(h * 0.35)], to: [Math.round(w / 2), Math.round(h * 0.80)], durationMs: 400 }, "[mobile-input] swipe");
           await android.swipe(serial, Math.round(w / 2), Math.round(h * 0.35), Math.round(w / 2), Math.round(h * 0.80), 400);
           await sleepOrAbort(serial, 350);
         }
@@ -6673,6 +6679,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // start-y, so a longer swipe here does NOT risk pull-to-refresh
             // as long as we don't scroll MORE rows than we scrolled down.
             for (let _si = 0; _si < didScroll; _si++) {
+              logger.info({ serial, source: "inject-follow-profile-grid-scroll-back", from: [Math.round(bw / 2), Math.round(bh * 0.35)], to: [Math.round(bw / 2), Math.round(bh * 0.80)], durationMs: 400 }, "[mobile-input] swipe");
               await android.swipe(serial, Math.round(bw / 2), Math.round(bh * 0.35), Math.round(bw / 2), Math.round(bh * 0.80), 400);
               await sleepOrAbort(serial, 350);
             }
