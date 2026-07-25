@@ -5262,11 +5262,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Collect candidate highlight nodes from the accessibility dump.
       // A highlight circle must be:
       //   • tappable (clickable="true")
-      //   • in the profile-header zone (Y center between 350 and 700 dp — safely
-      //     below the Follow/Message buttons and above the post grid)
       //   • have content-desc containing "Highlight" (excluding "Add" which is the
       //     + button to add a new highlight) OR have a resource-id that contains
       //     the substring "highlight" (some builds use resource-id instead).
+      //
+      // NOTE: no Y-range guard — the "in the header zone" check was previously
+      // capped at y < 700 dp, but UIAutomator dumps raw device pixels and on
+      // tall-screen devices (e.g. 1080×2460) the highlights row sits at
+      // y ≈ 800–950 px, well above the old cap.  The content-desc "Highlight"
+      // keyword is specific enough to Instagram highlight circles on a profile
+      // page that no Y filter is needed.
       const candidates: { x: number; y: number; name: string }[] = [];
       for (const seg of xml.split("<node ")) {
         if (!seg.includes('clickable="true"')) continue;
@@ -5274,8 +5279,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (!bb) continue;
         const cx = Math.round((parseInt(bb[1]) + parseInt(bb[3])) / 2);
         const cy = Math.round((parseInt(bb[2]) + parseInt(bb[4])) / 2);
-        // Restrict to profile-header zone: below ~350px and above ~700px
-        if (cy < 350 || cy > 700) continue;
         const cdM = seg.match(/content-desc="([^"]*)"/);
         const ridM = seg.match(/resource-id="([^"]*)"/);
         const cd = cdM?.[1] ?? "";

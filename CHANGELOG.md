@@ -4,6 +4,40 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.153 — 2026-07-25
+
+### Fixed — Inject Browsing highlights not found on tall-screen devices (1080×2460 and similar)
+
+After v1.2.152 fixed the "after feed scroll" timing so highlights actually attempt to fire, the highlight circles were still never detected — the debug log showed "no highlights found on this profile" even on profiles with clearly visible highlight circles ("Treinos", "Inspira Pilates", "Alunos").
+
+#### Root cause
+
+The detection code in `tapOneProfileHighlight` had a hardcoded Y-range guard:
+
+```
+if (cy < 350 || cy > 700) continue;
+```
+
+UIAutomator dumps use raw device pixel coordinates, not density-independent pixels. On a Redmi 12 5G (1080×2460), the highlights row sits at approximately **y ≈ 800–950 px** — well above the 700 px cutoff. Every highlight node was silently dropped by the guard before the `content-desc` check could match it.
+
+#### What was fixed
+
+Removed the Y-range filter entirely. The `content-desc` pattern `"… Highlight"` (with the "Add" button excluded) is specific enough to Instagram highlight circles on a profile page that no positional guard is needed. The resource-id fallback path (`highlight` substring) is similarly specific.
+
+#### What to expect in the Debugging Log
+
+On profiles with highlights you will now see:
+
+```
+Inject Browsing: tapping highlight "Treinos Highlight" at (X,Y)…
+Inject Browsing: dwelling in highlight for X.Xs…
+Inject Browsing: ✓ highlight viewed and dismissed   ← or "viewer already closed"
+```
+
+"No highlights found" will only appear on profiles that genuinely have no highlight circles.
+
+---
+
 ## v1.2.152 — 2026-07-25
 
 ### Fixed — Inject Browsing "after feed scroll" highlights tap never executed
