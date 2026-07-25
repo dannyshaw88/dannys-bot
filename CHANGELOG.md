@@ -8,35 +8,119 @@ All notable changes to Aura Farming are documented here.
 
 ### Added — Tap Audio % in View Feed (Human Session Tool)
 
-A new **Tap Audio %** Min/Max percentage setting has been added as a third row in the
-View Timeline Feed section of the Human Session Tool.
+#### What it does
 
-**What it does:**
+A new **Tap Audio %** Min/Max percentage field (row 3, 🎵 icon) in the
+**View Timeline Feed** section of the Human Session Tool. When the roll fires on a given
+post, the bot taps the audio/music affordance (the rotating disc/marquee element that
+Instagram shows at the bottom of any post that has a soundtrack). This opens the song's
+discovery page — a grid of other posts that use the same audio track — which the bot then
+briefly browses before returning to the feed. This is a naturally human behaviour
+(discovering content through shared audio) that was entirely absent from the previous
+automation cycle.
 
-When rolled per post, the bot detects the audio/music affordance on the current feed post
-(the rotating disc/music-note element that appears on posts with a soundtrack) and taps it
-to open the song's "other posts using this audio" grid page. It then scrolls that grid
-1–20 times (rolled randomly per roll), with a 1–10% per-scroll chance to tap a post,
-before returning to the feed with a Back press.
+#### Per-post execution flow
 
-**Detection and edge cases:**
+1. **Roll** — once per scroll iteration, independent of the Like/Share/Save rolls. A
+   per-session roll maps the configured Min–Max percentage to a fixed chance for the
+   whole feed run (same pattern as all other feed percentage fields).
 
-- Audio affordance is detected from the live UIAutomator accessibility tree — no
-  hardcoded coordinates. If no audio node is found on the current post the roll is
-  silently skipped (not all posts have audio).
-- **Meta Edits popup** ("Level up your edits") — if this promotional popup appears after
-  the first tap, it is dismissed with Back and the audio affordance is tapped a second
-  time. If the popup still shows on the second attempt the roll is aborted cleanly.
-- **"View song details" sheet** — some posts show an intermediate bottom sheet with a
-  "View song details" option; the bot detects this via the a11y tree and taps the option
-  to continue to the song page.
-- After visiting the song page, a single Back press returns to the feed.
+2. **Detect** — takes a fresh UIAutomator accessibility-tree dump of whatever is currently
+   on screen. Scans every `<node>` for an audio affordance using two independent signals:
+   - **resource-id** match: any node whose `resource-id` contains `"audio"` but does NOT
+     contain action-bar verbs (`action_bar`, `like_button`, `comment`, `share`, `send`,
+     `save`). The resource-id is the most reliable signal — it is language-independent and
+     version-stable.
+   - **content-desc / text fallback**: any node whose `content-desc` or `text` attribute
+     contains the word `"audio"` (case-insensitive). Covers localised Instagram builds
+     that use a different resource naming scheme.
+   - Node must also be in the **lower 60 %** of the screen (y > 40 % of height) so status-
+     bar and header nodes are never mistaken for an audio affordance.
+   - **If no matching node is found** the roll is silently skipped and the rest of the
+     loop iteration continues normally. No error, no log noise — not every post has audio.
 
-**Settings persistence:** `tapAudioPercentMin` and `tapAudioPercentMax` added to
-`automationSchema` and `automationCycleSchema` (required for values to survive a save
-cycle without being stripped by Zod). Default is 0/0 (disabled) for all existing devices.
+3. **Tap** — taps the detected node's centre coordinates. Waits 1 000 ms then checks the
+   resulting screen state with a second UIAutomator dump. Three outcomes are handled:
 
-**Copy Settings** group updated to include the new setting pair under View Timeline Feed.
+   a. **Meta Edits promotional popup** (contains "Level up" in the dump) — Instagram
+      sometimes intercepts the audio tap with a full-screen "Level up your videos with
+      Edits" modal. The bot presses Back to dismiss it, waits 600 ms, then taps the audio
+      node a **second time** (one retry only — per the project's no-retry-loop rule). If
+      the popup is *still* showing after the second tap the roll is **aborted cleanly**
+      (Back + 400 ms wait) and the per-post loop continues to the delay phase.
+
+   b. **"View song details" bottom sheet** (dump contains "view song details") — some
+      posts show an intermediate sheet before going to the song page. The bot scans the
+      dump for a node whose `text` or `content-desc` contains `"view song details"`
+      (case-insensitive), extracts its centre coordinates, and taps it. Waits 1 200 ms,
+      verifies still in Instagram, then proceeds to the song page browsing phase. If the
+      sheet is detected but the node cannot be resolved (no matching bounds), presses Back
+      and skips the browsing phase for this post.
+
+   c. **Direct song/audio page** — the tap navigated straight to the song grid without
+      any intermediate sheet. Proceeds immediately to the browsing phase.
+
+4. **Browse the song grid** — once on the song/audio discovery page:
+   - Rolls a random scroll count between **1 and 20** for this visit.
+   - Rolls a per-scroll tap chance between **1 % and 10 %** (rolled once per visit, not
+     per scroll, so the chance is consistent for the whole browsing session).
+   - Each scroll: swipes upward (75 % → 30 % of screen height, 300–700 ms duration),
+     waits 280 ms, then if the per-scroll tap roll fires: takes a UIAutomator dump, collects
+     all `clickable="true"` nodes whose centre Y falls between 12 % and 92 % of the screen
+     height (skips top navigation bar and bottom nav), picks one at random, taps it, waits
+     1 000 ms, verifies still in Instagram, presses Back once to return to the song grid,
+     waits 600 ms, then **breaks the scroll loop** (only one post tap per audio-page visit).
+   - If no tap occurs during the scroll loop the full scroll count completes normally.
+
+5. **Return to feed** — presses Back once from the song/audio grid, waits 700 ms, verifies
+   still in Instagram. Increments the `audioTaps` counter and logs `✓ audio page visited`.
+
+6. **Error handling** — any thrown exception (except `"cycle-aborted"`) is caught, logged
+   with the error message, and the per-post loop continues. The cycle-abort signal is
+   re-thrown immediately so the master abort path is never swallowed.
+
+#### Settings changes
+
+| Key | Schema | Default |
+|-----|--------|---------|
+| `tapAudioPercentMin` | `automationSchema`, `automationCycleSchema`, `AutomationSettings` type, both defaults objects | `0` |
+| `tapAudioPercentMax` | same | `0` |
+
+Both keys are `z.number().min(0).max(100).default(0)`. A default of 0/0 means the feature
+is **off for all existing devices** until the user explicitly enables it. Setting both to
+the same non-zero value makes the chance fixed; setting Min < Max randomises the session
+chance within that band.
+
+#### Return type and counters
+
+`runCheckFeedLoop` now returns `audioTaps: number` alongside the existing `likes`,
+`likeFailures`, `sharesFeed`, `sharesDm`, `saves`, `captionExpands`, `strayNavRecoveries`
+counters. The automation cycle's hoisted `let` block and `steps.push(...)` log line have
+both been updated to include `audioTaps`.
+
+#### UI changes (`HumanSessionPanel.tsx`)
+
+- `Music` icon imported from `lucide-react`.
+- New percentage row inserted between the **Expand Caption %** row (row 2) and the
+  **Like % / Like Delay / Save Liked / Share %** row (which becomes row 4). The row
+  contains the standard `pctInputs("tapAudioPercentMin", "tapAudioPercentMax")` Min/Max
+  fields, the `Music` icon in purple, and a short description label.
+- Copy Settings dialog: new entry `{ key: "vtf_tap_audio", label: "Tap Audio % (browse song page)", settingKeys: ["tapAudioPercentMin","tapAudioPercentMax"] }` appended to the View Timeline Feed sub-options list.
+
+#### Files changed
+
+- `artifacts/api-server/src/routes/mobile.ts` — all backend logic above
+- `artifacts/dannys-bot/src/components/tools/HumanSessionPanel.tsx` — UI + copy-settings
+- `package.json` — version 1.2.166 → 1.2.167
+- `artifacts/electron/package.json` — same bump
+- `CHANGELOG.md` — this entry
+
+#### GitHub Actions
+
+The existing `build-windows-installer.yml` workflow triggers automatically on every push
+to `main`, so the Windows installer for v1.2.167 will build and appear as the
+`Aura-Farming-Windows-Installer` artifact on the Actions run. No workflow changes were
+needed.
 
 ---
 
