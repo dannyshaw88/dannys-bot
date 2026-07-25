@@ -1069,6 +1069,22 @@ export async function sleepScreen(serial: string): Promise<void> {
   await keyevent(serial, 223); // KEYCODE_SLEEP
 }
 
+export function rebootDevice(serial: string): void {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  spawnSync(adb, ["-s", serial, "reboot"], { encoding: "utf8", timeout: 5000 });
+}
+
+export function setBrightness(serial: string, percent: number): void {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  // Disable auto-brightness so the manual value actually sticks.
+  spawnSync(adb, ["-s", serial, "shell", "settings", "put", "system", "screen_brightness_mode", "0"], { encoding: "utf8", timeout: 3000 });
+  // Android brightness scale is 0–255; 50 % ≈ 128.
+  const value = Math.round((Math.max(0, Math.min(100, percent)) / 100) * 255);
+  spawnSync(adb, ["-s", serial, "shell", "settings", "put", "system", "screen_brightness", String(value)], { encoding: "utf8", timeout: 3000 });
+}
+
 // ── Device profile lookup table ────────────────────────────────────────────
 // Maps ro.product.model → the behavioral flags that differ between OEM
 // launchers. Only covers the Android system-shell surface; Instagram's own UI
@@ -6312,20 +6328,25 @@ export async function findAndTapUserInSearch(
 
     // Parse node segments individually so we can exclude non-profile nodes.
     //
-    // Root cause of the old false-chip bug:
+    // Root cause of the old false-chip bug (fix 1):
     //   _findAllElems scanned ALL attributes, including the search bar
     //   EditText which contains "@username" as the typed query. That node
     //   registered as the "topmost row" → the code falsely declared a chip
     //   and skipped the first real profile result, tapping the second one.
+    //   Fix: exclude any segment whose class is android.widget.EditText.
     //
-    // Fix: split the XML into <node> segments and exclude any segment whose
-    // class is android.widget.EditText (the search bar). The remaining
-    // candidates are profile result rows; take the topmost one.
-    //
-    // Real suggestion chip (magnifying-glass-in-circle): if one is genuinely
-    // present it will still appear as the topmost non-EditText match. The
-    // post-tap verification below catches that case — if we don't land on a
-    // profile page within 3 s we re-dump and try the next row.
+    // Search icon chip pre-filter (fix 4 — 25 Jul 2026):
+    //   Instagram sometimes renders a "search keyword" chip as the first row
+    //   above the user results. This chip's inner TextView
+    //   (id="row_search_keyword_title") has text="<username>" and therefore
+    //   matched the candidate scan, appearing as the topmost hit. The code
+    //   then tapped the chip (which just re-runs the search), detected the
+    //   miss via post-tap dump (~5 s round-trip), and only then fell back to
+    //   the real user row. Fix: exclude any segment that carries the
+    //   row_search_keyword_title or search_keyword_title resource-id — these
+    //   are definitively chip nodes, never user-profile rows.
+    //   The post-tap verification loop below remains as a safety net for any
+    //   future Instagram chip variant not caught by the resource-id filter.
     const cleanLc = clean.toLowerCase();
     const atCleanLc = `@${cleanLc}`;
     const seenKeys = new Set<string>();
@@ -6334,6 +6355,10 @@ export async function findAndTapUserInSearch(
       if (!seg.startsWith("<node ")) continue;
       // Skip the search bar — it holds the typed "@username" as its text value
       if (/class="android\.widget\.EditText"/i.test(seg)) continue;
+      // Skip search keyword chip nodes — they match the username text but are
+      // NOT user profile rows; tapping them just re-runs the search query.
+      if (seg.includes('id="row_search_keyword_title"') ||
+          seg.includes('id="search_keyword_title"')) continue;
       // Exact-match on text= or content-desc= only (avoids partial substring hits)
       const segLc = seg.toLowerCase();
       const hasMatch =

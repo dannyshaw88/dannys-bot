@@ -19,7 +19,7 @@ import {
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
   ChevronLeft, Home, LayoutGrid, Power, Volume2, VolumeX, Trash2,
   FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim,
-  Palette, Plus, X,
+  Palette, Plus, X, RotateCcw, Sun,
 } from "lucide-react";
 
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
@@ -6665,6 +6665,41 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   // SIM phone number manual inputs (keyed by slot index)
   const [simPhoneInputs, setSimPhoneInputs] = React.useState<Record<number, string>>({});
 
+  // Device quick-controls (Standby / Restart / Brightness)
+  const [screenOn,    setScreenOn]    = React.useState(true);
+  const [dimmed,      setDimmed]      = React.useState(false);
+  const [rebooting,   setRebooting]   = React.useState(false);
+
+  const handleStandby = React.useCallback(async () => {
+    if (!serial) return;
+    const next = !screenOn;
+    setScreenOn(next);
+    await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/standby`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ on: next }),
+    }).catch(() => {});
+  }, [serial, screenOn]);
+
+  const handleReboot = React.useCallback(async () => {
+    if (!serial || rebooting) return;
+    setRebooting(true);
+    await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/reboot`, {
+      method: "POST",
+    }).catch(() => {});
+    // Give the device ~15 s to go offline then assume it came back.
+    setTimeout(() => { setRebooting(false); setScreenOn(true); }, 15000);
+  }, [serial, rebooting]);
+
+  const handleBrightness = React.useCallback(async () => {
+    if (!serial) return;
+    const next = !dimmed;
+    setDimmed(next);
+    await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/brightness`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ percent: next ? 0 : 50 }),
+    }).catch(() => {});
+  }, [serial, dimmed]);
+
   // App close gesture (dismiss direction)
   const [dismissDir,    setDismissDir]    = React.useState<"auto" | "left" | "up">("auto");
   const [dismissSaving, setDismissSaving] = React.useState(false);
@@ -6889,6 +6924,54 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
 
   return (
     <div className="h-full overflow-y-auto p-6 space-y-6">
+
+      {/* ── Device Quick Controls ────────────────────────────────────── */}
+      <div className="flex items-center gap-4">
+        {/* Standby */}
+        <div className="flex flex-col items-center gap-1.5">
+          <button
+            onClick={handleStandby}
+            disabled={!serial}
+            title={screenOn ? "Put device to sleep" : "Wake device"}
+            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md
+              ${screenOn
+                ? "bg-red-500 hover:bg-red-600 text-white"
+                : "bg-red-500/30 hover:bg-red-500/50 text-red-400 ring-2 ring-red-500/40"}`}
+          >
+            <Power className="w-5 h-5" />
+          </button>
+          <span className="text-[10px] text-muted-foreground">{screenOn ? "Standby" : "Wake"}</span>
+        </div>
+
+        {/* Restart */}
+        <div className="flex flex-col items-center gap-1.5">
+          <button
+            onClick={handleReboot}
+            disabled={!serial || rebooting}
+            title="Restart device"
+            className="w-12 h-12 rounded-full flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md bg-green-500 hover:bg-green-600 text-white"
+          >
+            <RotateCcw className={`w-5 h-5 ${rebooting ? "animate-spin" : ""}`} />
+          </button>
+          <span className="text-[10px] text-muted-foreground">{rebooting ? "Restarting…" : "Restart"}</span>
+        </div>
+
+        {/* Brightness */}
+        <div className="flex flex-col items-center gap-1.5">
+          <button
+            onClick={handleBrightness}
+            disabled={!serial}
+            title={dimmed ? "Restore 50% brightness" : "Set brightness to 0%"}
+            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md border
+              ${dimmed
+                ? "bg-white/5 border-white/20 text-white/30 hover:bg-white/10"
+                : "bg-white/15 border-white/30 text-white hover:bg-white/25"}`}
+          >
+            <Sun className="w-5 h-5" />
+          </button>
+          <span className="text-[10px] text-muted-foreground">{dimmed ? "0% — tap to restore" : "Brightness"}</span>
+        </div>
+      </div>
 
       {/* ── App Close Gesture ───────────────────────────────────────── */}
       <div className="bg-card border border-border rounded-xl p-5 space-y-3">

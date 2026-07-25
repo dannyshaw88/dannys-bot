@@ -4,6 +4,94 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.164 — 2026-07-25
+
+### Fixed — Sponsored-post CTA button being tapped instead of caption "more"
+
+**Symptom:** During feed scroll, the automation occasionally tapped the blue ad CTA button
+("Visit Instagram profile", "Learn More", "Shop Now", etc.) that appears at the bottom of
+sponsored posts. This opened the advertiser's Instagram profile page *within* the app, causing
+every subsequent action in the cycle to fire on the wrong screen — resulting in the DM composer
+opening unexpectedly, follow taps missing, and the whole cycle running blind until the next
+airplane-mode recycle.
+
+**Root cause:** The caption-expand code searched the a11y dump for any node with
+`text="more"` or `content-desc="more"`. Instagram's sponsored post CTA buttons can carry
+`content-desc="more"` in the accessibility tree while their class is
+`android.widget.Button`. That button sorted above the real caption "more" link (which is a
+`android.widget.TextView`) because it appeared earlier in the XML, so it was tapped first.
+Because the navigation stayed inside the Instagram package (`com.instagram.android`),
+`verifyStillInInstagram()` did not fire — the cycle thought the caption had expanded and
+dwelled for 5 s on the advertiser's profile instead.
+
+**Fix (`artifacts/api-server/src/routes/mobile.ts` — `runCheckFeedLoop`):**
+- The "more" match now additionally requires `class="android.widget.TextView"`. The real
+  caption "more" link is always a `TextView`; CTA buttons are `android.widget.Button` and are
+  now excluded before any tap fires.
+- Added `await verifyStillInInstagram()` immediately after the caption-expand tap so that any
+  future Instagram build serving a CTA as a `TextView` (that navigates to an external browser
+  or app) is still caught and recovered with `BACK`.
+
+---
+
+### Fixed — Search icon chip tapped before target user on every follow (wasted 5 s per follow)
+
+**Symptom:** The Follow tool always tapped the search keyword chip (the magnifying-glass row
+with the typed username) as the first result, then detected the miss and fell back to the real
+user row. This added a ~5-second round-trip (tap → wait 2 s → dump → detect wrong page →
+press Back → wait → tap again) to every single follow, which was especially noticeable during
+Spread Follow runs with many targets.
+
+**Root cause:** Instagram occasionally renders a "search keyword" chip as the first row above
+the user results. This chip's inner `TextView` (`id="row_search_keyword_title"`) carries
+`text="<username>"` and therefore passed every existing filter (not an `EditText`, exact
+username match). It appeared at a lower y-coordinate than the real user row, so the candidate
+sort placed it first and it was tapped every time the chip was present.
+
+**Fix (`artifacts/api-server/src/mobile/androidManager.ts` — `findAndTapUserInSearch`):**
+- Added an explicit pre-filter: any XML segment containing `id="row_search_keyword_title"` or
+  `id="search_keyword_title"` is skipped before being added to the candidate list. These
+  resource-IDs are Instagram's chip nodes — definitively not user-profile rows — so they are
+  excluded before any tap is attempted.
+- The chip is now never tapped. The real user row (`id="row_search_user_username"`) is the
+  first and only candidate, and the follow lands correctly on the first attempt.
+- The existing post-tap profile-page verification loop is retained as a safety net for any
+  future chip variant Instagram introduces that does not carry these resource-IDs.
+
+---
+
+### Added — Device Quick Controls on the My Device tab (Standby / Restart / Brightness)
+
+Three circular action buttons are now shown at the top of the **My Device** tab, left-aligned,
+above the App Close Gesture selector:
+
+**🔴 Standby (Power icon)**
+- Click once: sends `KEYCODE_SLEEP` (keycode 223) to put the phone's screen off immediately.
+- Click again: sends `KEYCODE_WAKEUP` (keycode 224) to wake the screen back up.
+- The button visually dims with a faint ring when the screen is currently off, so you can tell
+  the state at a glance. The label toggles between "Standby" and "Wake".
+
+**🟢 Restart (Rotate icon)**
+- Sends `adb reboot` to the connected device, triggering a clean system restart.
+- The icon spins and the label reads "Restarting…" for 15 seconds while the device cycles,
+  then automatically resets to normal so you can interact with the button again.
+
+**⬜ Brightness (Sun icon)**
+- Click once: disables Android's auto-brightness mode and sets the display to **0% brightness**
+  (value 0 on the 0–255 Android scale). Useful for reducing LED exposure during overnight runs.
+- Click again: restores brightness to **50%** (value 128). Label reads "0% — tap to restore"
+  when dimmed.
+
+All three buttons are disabled (greyed out) when no device is connected.
+
+**New API endpoints added:**
+- `POST /api/mobile/devices/:serial/standby` — body `{ on: boolean }`; wakes or sleeps screen.
+- `POST /api/mobile/devices/:serial/reboot` — triggers `adb reboot`.
+- `POST /api/mobile/devices/:serial/brightness` — body `{ percent: number (0–100) }`;
+  disables auto-brightness and sets the manual brightness level.
+
+---
+
 ## v1.2.163 — 2026-07-25
 
 ### Fixed — Make a Post (Source: My PC) was permanently deleting images from the assigned PC directory

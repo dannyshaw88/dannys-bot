@@ -2523,6 +2523,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // it's a longer phrase — the contains() check is safe.
             // Uses its own fresh dump so it works independently of the
             // action-bar scan above.
+            //
+            // IMPORTANT: must also require class="android.widget.TextView".
+            // Sponsored posts render a full-width CTA button ("Visit Instagram
+            // profile", "Learn More", etc.) that can carry content-desc="more"
+            // in Instagram's a11y tree.  That button is class="android.widget.Button"
+            // — not a TextView — and tapping it opens the advertiser's profile
+            // within Instagram (same package, so verifyStillInInstagram() won't
+            // catch it), breaking every subsequent action in the cycle.
             if (wantExpandCaption) {
               try {
                 if (isCycleAborted(serial)) throw new Error("cycle-aborted");
@@ -2531,18 +2539,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 // OR content-desc="more" (exact, lowercase in both cases).
                 // Using includes() instead of regex avoids backslash issues
                 // and is immune to attribute ordering variations.
+                // Also require class="android.widget.TextView" — caption "more"
+                // links are always TextViews; sponsored-post CTA buttons are
+                // android.widget.Button and must be excluded.
                 let _ecTapped = false;
                 for (const _ecSeg of _ecXml.split("<node ")) {
                   if (_ecTapped) break;
                   const _hasMoreText = _ecSeg.includes('text="more"');
                   const _hasMoreDesc = _ecSeg.includes('content-desc="more"');
                   if (!_hasMoreText && !_hasMoreDesc) continue;
+                  // Reject CTA buttons on sponsored posts — they are Buttons, not TextViews.
+                  if (!_ecSeg.includes('class="android.widget.TextView"')) continue;
                   const _ecBb = _ecSeg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
                   if (!_ecBb) continue;
                   const _ecX = Math.round((parseInt(_ecBb[1]) + parseInt(_ecBb[3])) / 2);
                   const _ecY = Math.round((parseInt(_ecBb[2]) + parseInt(_ecBb[4])) / 2);
                   onLog?.(`Scroll ${i + 1}/${count}: tapping caption "more" at (${_ecX},${_ecY}) [matched via ${_hasMoreText ? "text" : "content-desc"}]`);
                   await android.tap(serial, _ecX, _ecY);
+                  await verifyStillInInstagram();
                   // Dwell after expanding — simulate reading the caption.
                   // 2–10 s, rolled fresh each time so the duration looks human.
                   const _ecDwellMs = 2000 + Math.round(Math.random() * 8000);
@@ -8934,6 +8948,33 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       const input = keySchema.parse(req.body);
       await android.keyevent(p(req, "serial"), input.code);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
+
+  // ── Device control shortcuts (My Device tab) ────────────────────────────
+  const standbySchema = z.object({ on: z.boolean() });
+  app.post("/api/mobile/devices/:serial/standby", async (req: Request, res: Response) => {
+    try {
+      const { on } = standbySchema.parse(req.body);
+      if (on) await android.wakeScreen(p(req, "serial"));
+      else     await android.sleepScreen(p(req, "serial"));
+      res.json({ ok: true });
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
+
+  app.post("/api/mobile/devices/:serial/reboot", async (req: Request, res: Response) => {
+    try {
+      android.rebootDevice(p(req, "serial"));
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ error: e?.message }); }
+  });
+
+  const brightnessSchema2 = z.object({ percent: z.number().min(0).max(100) });
+  app.post("/api/mobile/devices/:serial/brightness", async (req: Request, res: Response) => {
+    try {
+      const { percent } = brightnessSchema2.parse(req.body);
+      android.setBrightness(p(req, "serial"), percent);
       res.json({ ok: true });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
