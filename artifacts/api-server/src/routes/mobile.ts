@@ -266,6 +266,9 @@ type AutomationSettings = {
   // Visit Saved — navigates to own Saved media page via profile → hamburger → Saved, scrolls.
   visitSavedPctMin?: number;
   visitSavedPctMax?: number;
+  // Visit Random Settings — opens profile → hamburger → scrolls settings 1–10 rows, taps once, backs out.
+  visitSettingsPctMin?: number;
+  visitSettingsPctMax?: number;
   // App Switch — presses square button, opens SMS app for a random dwell, returns to Instagram.
   appSwitchPctMin?: number;
   appSwitchPctMax?: number;
@@ -1263,6 +1266,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Visit Saved — go to profile → hamburger → Saved, scroll 1–10 times, return.
     visitSavedPctMin: z.number().min(0).max(100).default(0),
     visitSavedPctMax: z.number().min(0).max(100).default(0),
+    // Visit Random Settings — profile → hamburger → scroll settings 1–10 rows, tap once, back×2.
+    visitSettingsPctMin: z.number().min(0).max(100).default(0),
+    visitSettingsPctMax: z.number().min(0).max(100).default(0),
     // App Switch: press square button, open SMS for random dwell, return to Instagram.
     appSwitchPctMin: z.number().min(0).max(100).default(0),
     appSwitchPctMax: z.number().min(0).max(100).default(0),
@@ -1384,6 +1390,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       checkNotificationsClickPctMin: 0, checkNotificationsClickPctMax: 0,
       visitProfilePctMin: 0, visitProfilePctMax: 0,
       visitSavedPctMin: 0, visitSavedPctMax: 0,
+      visitSettingsPctMin: 0, visitSettingsPctMax: 0,
       appSwitchPctMin: 0, appSwitchPctMax: 0,
       checkDmEnabled: false,
       checkDmActivatePctMin: 100, checkDmActivatePctMax: 100,
@@ -1490,6 +1497,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         checkNotificationsClickPctMin: 0, checkNotificationsClickPctMax: 0,
         visitProfilePctMin: 0, visitProfilePctMax: 0,
         visitSavedPctMin: 0, visitSavedPctMax: 0,
+        visitSettingsPctMin: 0, visitSettingsPctMax: 0,
         appSwitchPctMin: 0, appSwitchPctMax: 0,
         checkDmEnabled: false,
         checkDmActivatePctMin: 100, checkDmActivatePctMax: 100,
@@ -4414,6 +4422,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Visit Saved: profile → hamburger → Saved page, scrolls 1–10×, returns.
     visitSavedPctMin: z.number().min(0).max(100).default(0),
     visitSavedPctMax: z.number().min(0).max(100).default(0),
+    // Visit Random Settings: profile → hamburger → scroll settings 1–10 rows, tap once, back×2.
+    visitSettingsPctMin: z.number().min(0).max(100).default(0),
+    visitSettingsPctMax: z.number().min(0).max(100).default(0),
     // App Switch: press square button, open SMS for random 10–30 s, return to Instagram.
     appSwitchPctMin: z.number().min(0).max(100).default(0),
     appSwitchPctMax: z.number().min(0).max(100).default(0),
@@ -5244,6 +5255,90 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     await sleepOrAbort(serial, 600);
     onLog?.("Visit Saved: ✓ done, returned to home feed");
+  }
+
+  /**
+   * Visit Random Settings — navigates to the Settings and activity page via:
+   *   Profile tab → hamburger "Options" button
+   * then scrolls 1–10 rows through the settings list, taps once anywhere on
+   * screen (simulating curiosity / mis-tap), presses Back twice to exit back
+   * through Settings and activity → profile, then returns to the home feed.
+   */
+  async function runVisitSettings(serial: string, onLog?: (msg: string) => void): Promise<void> {
+    // 1. Ensure we're on the home feed first.
+    const homeTabFirst = await android.findHomeTab(serial).catch(() => null);
+    if (homeTabFirst) {
+      await android.tap(serial, homeTabFirst.x, homeTabFirst.y);
+      await sleepOrAbort(serial, 1000);
+    } else {
+      await android.pressBack(serial);
+      await sleepOrAbort(serial, 1000);
+    }
+
+    // 2. Tap the profile tab (bottom nav, rightmost icon).
+    const profileTab = await android.findInstagramProfileTab(serial).catch(() => null);
+    if (!profileTab) {
+      onLog?.("Visit Settings: profile tab not found — skipping");
+      logger.warn({ serial }, "[jitter-visit-settings] profile tab not found");
+      return;
+    }
+    await android.tap(serial, profileTab.x, profileTab.y);
+    await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 800));
+
+    // Dismiss any interstitial that may appear on profile page load.
+    const d1 = await android.dismissInstagramInterstitials(serial).catch(() => null);
+    if (d1) await sleepOrAbort(serial, 500);
+
+    // 3. Tap the hamburger "Options" button (top-right of profile page).
+    const optionsBtn = await android.findInstagramProfileOptionsButton(serial).catch(() => null);
+    if (!optionsBtn) {
+      onLog?.("Visit Settings: Options button not found — skipping");
+      logger.warn({ serial }, "[jitter-visit-settings] Options/hamburger button not found");
+      const ht = await android.findHomeTab(serial).catch(() => null);
+      ht ? await android.tap(serial, ht.x, ht.y) : await android.pressBack(serial);
+      await sleepOrAbort(serial, 600);
+      return;
+    }
+    await android.tap(serial, optionsBtn.x, optionsBtn.y);
+    await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 600));
+    onLog?.("Visit Settings: ✓ opened Settings and activity");
+
+    // 4. Scroll through the settings list 1–10 rows.
+    const scrollCount = rollRange(1, 10);
+    const { w, h } = getScreenSize(serial);
+    for (let i = 0; i < scrollCount; i++) {
+      await android.swipe(
+        serial,
+        Math.round(w * 0.5), Math.round(h * 0.65),
+        Math.round(w * 0.5), Math.round(h * 0.30),
+        350 + Math.round(Math.random() * 150),
+      );
+      await sleepOrAbort(serial, 400 + Math.round(Math.random() * 500));
+    }
+    onLog?.(`Visit Settings: ✓ scrolled ${scrollCount} row(s)`);
+
+    // 5. Tap once anywhere on screen (random mid-screen point).
+    const tapX = Math.round(w * (0.2 + Math.random() * 0.6));
+    const tapY = Math.round(h * (0.3 + Math.random() * 0.4));
+    await android.tap(serial, tapX, tapY);
+    await sleepOrAbort(serial, 1500 + Math.round(Math.random() * 800));
+    onLog?.("Visit Settings: ✓ tapped screen");
+
+    // 6. Back×2: exit whatever was tapped / Settings and activity → profile.
+    await android.pressBack(serial);
+    await sleepOrAbort(serial, 800);
+    await android.pressBack(serial);
+    await sleepOrAbort(serial, 800);
+
+    // 7. Return to home feed.
+    const homeTab = await android.findHomeTab(serial).catch(() => null);
+    if (homeTab) {
+      await android.tap(serial, homeTab.x, homeTab.y);
+    } else {
+      await android.pressBack(serial);
+    }
+    await sleepOrAbort(serial, 600);
+    onLog?.("Visit Settings: ✓ done, returned to home feed");
   }
 
   /**
@@ -6871,6 +6966,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         checkNotificationsClickPctMin, checkNotificationsClickPctMax,
         visitProfilePctMin, visitProfilePctMax,
         visitSavedPctMin, visitSavedPctMax,
+        visitSettingsPctMin, visitSettingsPctMax,
         appSwitchPctMin, appSwitchPctMax,
         feedActivatePctMin, feedActivatePctMax,
         viewStoriesActivatePctMin, viewStoriesActivatePctMax,
@@ -7735,6 +7831,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               tLog("▶ Random Jitter: visiting saved posts…");
               await runVisitSaved(serial, (msg) => tLog(`  ${msg}`));
               steps.push("jitter-visit-saved");
+              _jitterFired = true;
+            }
+            const settingsChance = rollRange(visitSettingsPctMin, visitSettingsPctMax) / 100;
+            if (settingsChance > 0 && Math.random() < settingsChance) {
+              tLog("▶ Random Jitter: visiting random settings…");
+              await runVisitSettings(serial, (msg) => tLog(`  ${msg}`));
+              steps.push("jitter-visit-settings");
               _jitterFired = true;
             }
             const appSwitchChance = rollRange(appSwitchPctMin, appSwitchPctMax) / 100;
