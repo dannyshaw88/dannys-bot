@@ -4,6 +4,36 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.150 — 2026-07-25
+
+### Fixed — Expand Caption block was nested inside the Save block (never ran unless Save also won)
+
+Even after v1.2.149 fixed the value delivery and the "more" attribute detection, the caption expand code was still inside `if (wantSave)` — it only executed on the same scroll where the save roll also won. On every other scroll (including the common case where Save is at 0%) the block was silently skipped. The `wantExpandCaption` check is now at the same level as `wantSave` so the two actions are fully independent.
+
+---
+
+#### Root cause
+
+In `artifacts/api-server/src/routes/mobile.ts`, the expand-caption block (`if (wantExpandCaption) { ... }`) was placed inside the closing brace of `if (wantSave)`. Because Save is typically set to 0%, `wantSave` was almost never `true`, meaning the caption expand branch was never reached — even with Expand Caption % set to 100%.
+
+#### What was fixed
+
+- Moved the `}` that closed `if (wantSave)` to immediately after the save logic.
+- The expand-caption block is now a sibling of `wantSave`, not a child.
+
+#### What to expect in the Debugging Log
+
+With Expand Caption % > 0%, you will now consistently see one of these two lines on every scroll:
+
+```
+Scroll N/10: tapping caption "more" at (X,Y) [matched via text]
+Scroll N/10: caption "more" not visible — skipping expand
+```
+
+The first line means a truncated caption was found and tapped. The second means the post's caption was short enough that Instagram didn't add a "more" link — this is expected and normal.
+
+---
+
 ## v1.2.149 — 2026-07-25
 
 ### Fixed — Expand Captions now actually fires during feed scrolls
