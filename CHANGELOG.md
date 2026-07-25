@@ -4,6 +4,67 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.147 — 2026-07-25
+
+### Fixed — Follow tool tapping the wrong profile (false suggestion-chip detection)
+
+**Root cause:**
+
+The function `findAndTapUserInSearch` in `androidManager.ts` used `_findAllElems` to locate the target username across all accessibility-tree attributes. That function matched any XML node whose `text`, `content-desc`, `hint`, or `resource-id` contained the username — including the **search bar `EditText`** itself, which holds the typed `@username` as its current value.
+
+The search bar always sits at the top of the screen (lowest Y coordinate). Because there were now 2+ distinct Y-rows containing the username, the code declared "suggestion chip detected" and **skipped the topmost row** (the search bar, mistaken for a chip) and tapped **the second row** — which was the second profile result, not the intended first. The real target account was never opened.
+
+**What changed in `findAndTapUserInSearch` (`androidManager.ts`):**
+
+- Replaced `_findAllElems` with a per-`<node>` segment scanner that **excludes any node whose `class` attribute is `android.widget.EditText`** (the search bar). That node can never be a candidate regardless of what text is typed in it.
+- Removed the "skip first row = chip" heuristic entirely. Candidates are sorted top-to-bottom and tapped starting from the first one — no assumption about chips is made upfront.
+- Added **post-tap profile verification**: after each tap the code waits 2 s, takes a fresh UIAutomator dump, and checks for a Follow / Following / Requested button (or a known follow `resource-id`). If the Follow button is found, we're on the right profile — return success. If not found (meaning the tapped row re-ran the search instead of opening a profile — the real chip behaviour), the code presses Back and tries the next candidate row automatically. This means even if a genuine Instagram suggestion chip is present in future, the tool self-corrects without needing a code change.
+
+**Log output change:**
+
+Old (broken):
+```
+Follow: suggestion chip detected (3 rows) — skipping topmost, tapping real user at (341,338)
+Follow: Follow button not found or state did not change on @bundle.alex — already following?
+```
+
+New (fixed):
+```
+Follow: tapping @bundle.alex result row 1/2 at (540,415)
+Follow: ✓ followed @bundle.alex (1/12)
+```
+
+---
+
+### Added — Expand Caption % (View Feed tool)
+
+**What it does:**
+
+A new per-session action in the View Feed tool. After a post is saved (or after a save roll that doesn't fire), the bot rolls a per-scroll chance to tap the **"more"** expand-caption link that appears below truncated captions. This makes the session look like a user who reads captions, not just a scroller.
+
+**How it works:**
+
+- Two new settings in the View Feed section of the Human Session panel: **Expand Caption % min** and **Expand Caption % max** (both default to 0 — disabled).
+- At the start of each feed run, a session-level chance is rolled once from the min/max range (same pattern as Like %, Save %, etc.) so the rate varies between sessions.
+- Per scroll, a per-post roll is made against that chance. When it fires, the code takes a fresh UIAutomator dump of the current screen and scans for a node with **`content-desc="more"`** (exact lowercase — this is the caption expand link; it is deliberately distinct from `content-desc="More actions for this post"` which is the three-dot menu).
+- The centre of the matched node's `bounds` is computed from the live accessibility tree — **no hardcoded coordinates**. Works correctly across all device resolutions and screen sizes.
+- After tapping "more", the bot **dwells for 2–10 seconds** (rolled randomly each time) before continuing — simulating a user pausing to read the expanded caption.
+- `captionExpands` is tracked per-run and included in the cycle summary log line: `feed(N scrolls, N likes, ... N caption-expands, ...)`.
+
+**New settings fields:**
+
+| Setting | Description | Default |
+|---|---|---|
+| Expand Caption % min | Lower bound of the per-session expand chance | 0 (off) |
+| Expand Caption % max | Upper bound of the per-session expand chance | 0 (off) |
+
+**Files changed:**
+
+- `artifacts/api-server/src/routes/mobile.ts` — `AutomationSettings` type, `automationSchema` Zod, both defaults objects, `runCheckFeedLoop` params + logic + return type, automation-cycle destructuring + call site + log line
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — settings type, `DEFAULT_SETTINGS`, API payload, stats row, UI input pair in the View Feed section
+
+---
+
 ## v1.2.146 — 2026-07-24
 
 ### Added — Variable scroll velocity with dynamic session personality (Feed, Explore, Reels)
