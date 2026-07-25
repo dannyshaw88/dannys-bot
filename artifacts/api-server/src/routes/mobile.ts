@@ -4456,12 +4456,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     followActivatePctMax: z.number().min(0).max(100).default(100),
     randomJitterActivatePctMin: z.number().min(0).max(100).default(100),
     randomJitterActivatePctMax: z.number().min(0).max(100).default(100),
-    // ── Make a Post — wired into the automation cycle (13 Jul 2026). Only
-    // the local-folder image source is implemented for the on-device flow
-    // (per user preference over the HikerAPI-scrape-from-another-user path);
-    // the other makePost* fields (source username, ChatGPT,
-    // image alterations) remain persisted via automationSchema above but are
-    // not yet read here.
+    // ── Make a Post — wired into the automation cycle (13 Jul 2026).
+    // Only the local-folder image source is used for the on-device flow.
+    // ALL makePost* fields that the cycle handler reads MUST be listed here —
+    // Zod strips unknown keys, so any field missing from this schema arrives
+    // as undefined in the handler regardless of what the frontend sends.
     makePostEnabled: z.boolean().default(false),
     makePostActivatePctMin: z.number().min(0).max(100).default(100),
     makePostActivatePctMax: z.number().min(0).max(100).default(100),
@@ -4473,6 +4472,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostLocalFolderRandom: z.boolean().default(false),
     makePostLocalFolderDeleteAfterUpload: z.boolean().default(false),
     makePostCaptionText: z.string().default(""),
+    // Fix AI Slop — strip C2PA / EXIF / XMP / IPTC metadata and apply pixel
+    // perturbation before pushing the image to the device.  MUST be in this
+    // schema or Zod strips it from the request body and doFixAiSlop is always
+    // undefined (falsy) regardless of what the frontend sends.
+    makePostFixAiSlop: z.boolean().default(false),
+    makePostMakeUnique: z.boolean().default(false),
     // Which Instagram account slot is driving this cycle. When set the cycle
     // switches to that account via the built-in Instagram switcher before
     // running any tools, so each slot's settings are always applied to the

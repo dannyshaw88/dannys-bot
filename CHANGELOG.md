@@ -4,6 +4,55 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.166 — 2026-07-25
+
+### Fixed — Fix AI Slop checkbox had zero effect on every automation cycle run
+
+**Symptom:** Enabling "Fix AI Slop" in the Make a Post settings had no effect whatsoever.
+Images posted via the automation cycle were never processed — no metadata was stripped, no pixel
+perturbation applied — regardless of the checkbox state. The tool appeared to run (no error logged)
+but produced the identical output as if it were disabled.
+
+**Root cause — `makePostFixAiSlop` missing from `automationCycleSchema`:**
+
+The server has two separate Zod schemas for Make a Post settings:
+
+- `automationSchema` — the **save/load** schema. Used when settings are written to disk
+  (`POST /api/mobile/devices/:serial/slots/:slotIdx/automation-settings`) and read back.
+  This schema correctly included `makePostFixAiSlop: z.boolean().default(false)`.
+
+- `automationCycleSchema` — the **execution** schema. Used when the frontend fires the
+  `/api/mobile/automation-cycle` request that actually runs the cycle. Zod's default behaviour
+  strips any key not declared in the schema before returning the parsed object.
+
+`makePostFixAiSlop` was **never added to `automationCycleSchema`**. A comment in the schema
+even explicitly said these fields "are not yet read here", which caused every subsequent code
+review to leave them out intentionally.
+
+The result: the frontend sent `makePostFixAiSlop: true` in the cycle request; Zod stripped it
+silently because it was not a declared schema field; the handler destructured `makePostFixAiSlop`
+from the parsed object and got `undefined`; `doFixAiSlop: undefined` was passed to
+`runMakePostStep`; `if (doFixAiSlop)` evaluated to `false`; the function was never called.
+
+This is why the fix "broke again" on every update — the schema gap was structural, not a
+code-path bug. No amount of changes to `fixAiSlop.ts` or `makeUnique.ts` could make the function
+run when the schema was silently eating the flag before the handler ever saw it.
+
+**Fix — `artifacts/api-server/src/routes/mobile.ts`:**
+- Added `makePostFixAiSlop: z.boolean().default(false)` to `automationCycleSchema`.
+- Added `makePostMakeUnique: z.boolean().default(false)` to `automationCycleSchema` (same gap,
+  same fix — `makePostMakeUnique` was also being stripped before the handler could read it).
+- Replaced the stale comment that said these fields "are not yet read here" with a warning that
+  explicitly documents the schema-drift rule: *"ALL makePost* fields that the cycle handler reads
+  MUST be listed here — Zod strips unknown keys, so any field missing from this schema arrives as
+  undefined in the handler regardless of what the frontend sends."*
+
+No changes to `fixAiSlop.ts` or `makeUnique.ts` — those files are correct. The stripping
+pipeline (binary C2PA / EXIF / XMP / IPTC + pixel perturbation) now actually runs for the first
+time since it was built.
+
+---
+
 ## v1.2.165 — 2026-07-25
 
 ### Fixed — Fix AI Slop no longer stripping all AI watermarks on Windows
