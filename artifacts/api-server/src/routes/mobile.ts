@@ -5259,22 +5259,32 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const { h: _hlH } = getScreenSize(serial);
       const xml = await android.dumpUi(serial).catch(() => "");
 
-      // ── Highlight detection — multi-strategy ────────────────────────────
+      // ── Structural highlight-circle detection ────────────────────────────
       //
-      // Instagram renders highlight circles as a horizontal tray of circular
-      // icons below the bio. Detection must work across:
-      //   - language locales: Italian/non-English builds do NOT append the
-      //     word "Highlight" to content-desc; they use only the circle title
-      //   - Instagram versions: resource-ids differ between builds
+      // Highlight circles are identified purely by their position in the
+      // accessibility tree — NOT by content-desc or any user-visible text.
+      // The user can name a highlight anything (or leave it blank, which
+      // makes Instagram default the title to "Highlight"), so text matching
+      // is fundamentally unreliable.
       //
       // Strategy order (first non-empty result wins):
-      //   1. content-desc contains "Highlight" (English locale)
-      //   2. resource-id contains "reel_header" (common highlight tray item id)
-      //   3. Tray-bounds structural: find the scrollable highlight tray
-      //      container by resource-id, extract its Y range, then pick every
-      //      small clickable node inside that band (the circles themselves).
-      //   4. Diagnostic fallback: log all clickable nodes so we can identify
-      //      the correct pattern on the next run.
+      //
+      //   1. resource-id contains "reel_header" AND clickable=true
+      //      Instagram uses com.instagram.android:id/reel_header_content (and
+      //      similar) for the clickable wrapper around each highlight circle.
+      //      This is a code identifier, completely independent of locale or
+      //      user-defined title.
+      //
+      //   2. Tray-bounds structural: find the scrollable/non-clickable
+      //      container whose resource-id contains "highlight" (a code id, e.g.
+      //      "profile_header_highlights_tray"), extract its Y bounds, then
+      //      collect every small square-ish clickable node whose centre falls
+      //      inside that band.  The circles are always roughly 100-220px wide
+      //      with a near-1:1 aspect ratio.
+      //
+      //   3. Diagnostic fallback: log every clickable node's resource-id,
+      //      content-desc, size, and position so the exact pattern can be
+      //      identified from the Debugging Log without a separate inspect run.
 
       const segments = xml.split("<node ");
 
@@ -5298,37 +5308,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         };
       }
 
-      // Strategy 1: English "… Highlight" content-desc OR resource-id "highlight"
+      // Strategy 1: resource-id contains "reel_header" (structural code id,
+      // not text — works regardless of locale or user-defined title).
       for (const seg of segments) {
         if (!seg.includes('clickable="true"')) continue;
         const n = parseHLNode(seg); if (!n) continue;
-        const byDesc = n.cd.includes("Highlight") && !n.cd.toLowerCase().startsWith("add");
-        const byRid  = n.rid.toLowerCase().includes("highlight") && !n.rid.toLowerCase().includes("add");
-        if (!byDesc && !byRid) continue;
-        candidates.push({ x: n.cx, y: n.cy, name: n.cd || n.rid || "highlight" });
+        if (!n.rid.toLowerCase().includes("reel_header")) continue;
+        candidates.push({ x: n.cx, y: n.cy, name: n.cd || n.rid });
       }
 
-      // Strategy 2: resource-id contains "reel_header" — used by Instagram on
-      // many builds (incl. non-English locales) for highlight tray items.
-      if (candidates.length === 0) {
-        for (const seg of segments) {
-          if (!seg.includes('clickable="true"')) continue;
-          const n = parseHLNode(seg); if (!n) continue;
-          if (!n.rid.toLowerCase().includes("reel_header")) continue;
-          candidates.push({ x: n.cx, y: n.cy, name: n.cd || n.rid || "highlight" });
-        }
-      }
-
-      // Strategy 3: Structural — locate the scrollable tray container whose
-      // resource-id contains "highlight" or "tray", get its Y bounds, then
-      // collect every small square-ish clickable node within that Y band.
-      // Covers builds where neither "Highlight" keyword nor "reel_header"
-      // appears on the individual circle nodes.
+      // Strategy 2: find the highlights tray container by resource-id
+      // (contains "highlight" as a code identifier — e.g.
+      // "profile_header_highlights_tray"), extract its Y bounds, then
+      // collect every small square-ish clickable node inside that band.
       if (candidates.length === 0) {
         let trayY1 = -1, trayY2 = -1;
         for (const seg of segments) {
           const rid = seg.match(/resource-id="([^"]*)"/)?.[1]?.toLowerCase() ?? "";
-          if (!rid.includes("highlight") && !rid.includes("tray")) continue;
+          // Must contain "highlight" as a code id but not itself be a
+          // clickable circle (those are handled above / below).
+          if (!rid.includes("highlight")) continue;
+          if (seg.includes('clickable="true"')) continue; // skip individual items
           const bb = seg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
           if (!bb) continue;
           trayY1 = parseInt(bb[2]); trayY2 = parseInt(bb[4]);
@@ -5341,16 +5341,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             if (!seg.includes('clickable="true"')) continue;
             const n = parseHLNode(seg); if (!n) continue;
             if (n.cy < bandY1 || n.cy > bandY2) continue;
-            // Roughly square (circle icon): aspect ratio 0.4-2.5, min 60px wide
+            // Circle icons are roughly square: AR 0.4-2.5, min 60 px wide.
             const ar = n.w > 0 ? n.h / n.w : 0;
             if (ar < 0.4 || ar > 2.5 || n.w < 60) continue;
-            candidates.push({ x: n.cx, y: n.cy, name: n.cd || n.rid || "highlight" });
+            candidates.push({ x: n.cx, y: n.cy, name: n.cd || n.rid });
           }
         }
       }
 
-      // No highlights found — emit diagnostic so the next run reveals what nodes
-      // are actually in the dump (resource-id, content-desc, bounds).
+      // Strategy 3: diagnostic — log every clickable node so the Debugging
+      // Log reveals the exact resource-ids used on this device/build.
       if (candidates.length === 0) {
         onLog?.("Inject Browsing: no highlights found on this profile — skipping tap");
         const diagLines: string[] = [];
@@ -5358,14 +5358,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           if (!seg.includes('clickable="true"')) continue;
           const n = parseHLNode(seg); if (!n) continue;
           diagLines.push(
-            `  rid="${n.rid.slice(0, 60)}" cd="${n.cd.slice(0, 50)}" pos=(${n.cx},${n.cy}) size=${n.w}x${n.h}`,
+            `  rid="${n.rid.slice(0, 70)}" cd="${n.cd.slice(0, 40)}" pos=(${n.cx},${n.cy}) size=${n.w}x${n.h}`,
           );
-          if (diagLines.length >= 30) { diagLines.push("  … (truncated)"); break; }
+          if (diagLines.length >= 35) { diagLines.push("  … (truncated)"); break; }
         }
         if (diagLines.length > 0) {
-          onLog?.(
-            `Inject Browsing: [diag] clickable nodes in dump:\n${diagLines.join("\n")}`,
-          );
+          onLog?.(`Inject Browsing: [diag] clickable nodes:\n${diagLines.join("\n")}`);
         }
         return;
       }

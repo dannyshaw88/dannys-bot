@@ -4,6 +4,27 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.155 — 2026-07-25
+
+### Fixed — Inject Browsing highlight detection: remove all text-based matching, use pure structural detection
+
+The v1.2.154 detection still included a text-keyword strategy (content-desc contains "Highlight") which is fundamentally wrong. The highlight circle title is user-defined — it can be anything. Instagram only shows "Highlight" when the user leaves the title blank; otherwise it shows whatever the user typed. Text matching cannot identify highlight circles reliably.
+
+#### What was removed
+
+Strategy 1 from v1.2.154 (content-desc keyword matching) has been deleted entirely.
+
+#### What remains — purely structural
+
+Detection now uses two structural strategies only, based on code identifiers (resource-ids) and element geometry — completely independent of locale, language, or user-set titles:
+
+1. **`reel_header` resource-id** — Instagram uses `com.instagram.android:id/reel_header_content` (and variants) as the clickable wrapper around each highlight circle. This is an internal code identifier, never user-visible.
+2. **Tray-bounds structural** — finds the highlights tray container by resource-id (contains `"highlight"` as a code id, e.g. `profile_header_highlights_tray`), extracts its Y bounds, then collects every small square-ish clickable node whose centre falls inside that band (aspect ratio 0.4–2.5, min 60 px wide — the circular icons).
+
+If both structural strategies find nothing, the Debugging Log now prints every clickable node's resource-id, content-desc, position, and size so the correct pattern can be identified from a single run without a separate inspect dump.
+
+---
+
 ## v1.2.154 — 2026-07-25
 
 ### Fixed — Inject Browsing highlight detection broken on non-English Instagram locales
