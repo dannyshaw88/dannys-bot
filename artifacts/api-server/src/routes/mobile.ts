@@ -161,6 +161,8 @@ type AutomationSettings = {
   shareDmPercentMax: number;
   savePercentMin: number;
   savePercentMax: number;
+  expandCaptionPercentMin: number;
+  expandCaptionPercentMax: number;
   feedScrollMin: number;
   feedScrollMax: number;
   viewStoriesSlidesMin: number;
@@ -1152,6 +1154,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     shareDmPercentMax: z.number().min(0).max(100).default(0),
     savePercentMin: z.number().min(0).max(100).default(0),
     savePercentMax: z.number().min(0).max(100).default(0),
+    expandCaptionPercentMin: z.number().min(0).max(100).default(0),
+    expandCaptionPercentMax: z.number().min(0).max(100).default(0),
     feedScrollMin: z.number().min(1).max(50),
     feedScrollMax: z.number().min(1).max(50),
     viewStoriesSlidesMin: z.number().min(0).max(100).default(0),
@@ -1324,6 +1328,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       shareFeedPercentMin: 0, shareFeedPercentMax: 0,
       shareDmPercentMin: 0, shareDmPercentMax: 0,
       savePercentMin: 0, savePercentMax: 0,
+      expandCaptionPercentMin: 0, expandCaptionPercentMax: 0,
       feedScrollMin: 5, feedScrollMax: 10,
       viewStoriesSlidesMin: 0, viewStoriesSlidesMax: 0,
       viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
@@ -1959,13 +1964,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     shareFeedPercentMin?: number; shareFeedPercentMax?: number;
     shareDmPercentMin?: number; shareDmPercentMax?: number;
     savePercentMin?: number; savePercentMax?: number;
+    expandCaptionPercentMin?: number; expandCaptionPercentMax?: number;
     onLog?: (msg: string) => void;
-  }): Promise<{ count: number; likes: number; likeFailures: number; sharesFeed: number; sharesDm: number; saves: number; strayNavRecoveries: number }> {
+  }): Promise<{ count: number; likes: number; likeFailures: number; sharesFeed: number; sharesDm: number; saves: number; captionExpands: number; strayNavRecoveries: number }> {
     const {
       count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
       shareFeedPercentMin = 0, shareFeedPercentMax = 0,
       shareDmPercentMin = 0, shareDmPercentMax = 0,
       savePercentMin = 0, savePercentMax = 0,
+      expandCaptionPercentMin = 0, expandCaptionPercentMax = 0,
       onLog,
     } = params;
     const delayLoSec = Math.min(delayMinSec, delayMaxSec);
@@ -1982,6 +1989,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const saveLo = Math.min(savePercentMin, savePercentMax);
     const saveHi = Math.max(savePercentMin, savePercentMax);
     const saveChance = (saveLo + Math.random() * (saveHi - saveLo)) / 100;
+    const captionExpandLo = Math.min(expandCaptionPercentMin, expandCaptionPercentMax);
+    const captionExpandHi = Math.max(expandCaptionPercentMin, expandCaptionPercentMax);
+    const captionExpandChance = (captionExpandLo + Math.random() * (captionExpandHi - captionExpandLo)) / 100;
 
     const { w, h } = getScreenSize(serial);
     const x  = Math.round(w / 2);
@@ -2017,6 +2027,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     let likes = 0;
     let likeFailures = 0;
+    let captionExpands = 0;
     let sharesFeed = 0;
     let sharesDm = 0;
     let saves = 0;
@@ -2117,8 +2128,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const wantShareFeed = shareFeedChance > 0 && Math.random() < shareFeedChance;
       const wantShareDm = shareDmChance > 0 && Math.random() < shareDmChance;
       const wantSave = saveChance > 0 && Math.random() < saveChance;
+      const wantExpandCaption = captionExpandChance > 0 && Math.random() < captionExpandChance;
 
-      if (wantLike || wantShareFeed || wantShareDm || wantSave) {
+      if (wantLike || wantShareFeed || wantShareDm || wantSave || wantExpandCaption) {
         const feedbackCard = await android.isFeedbackOrSurveyCard(serial).catch(() => null);
         if (feedbackCard) {
           // This card replaced the post entirely — there is nothing safe to
@@ -2456,6 +2468,46 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   onLog?.(`Scroll ${i + 1}/${count}: save error — ${e?.message}`);
                 }
               }
+
+              // ── Expand Caption ──────────────────────────────────────────
+              // Taps the truncated-caption "more" link to expand it in place.
+              // The node has content-desc="more" (exact, lowercase) — distinct
+              // from "More actions for this post" which is a longer phrase.
+              // Uses its own fresh dump so it works independently of the
+              // action-bar scan above.
+              if (wantExpandCaption) {
+                try {
+                  if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+                  const _ecXml = await android.dumpUi(serial).catch(() => "");
+                  // Split on '<node ' and check each segment for the exact
+                  // content-desc="more" attribute — avoids regex backslash
+                  // issues and false-matches on longer phrases.
+                  let _ecTapped = false;
+                  for (const _ecSeg of _ecXml.split("<node ")) {
+                    if (_ecTapped) break;
+                    if (!_ecSeg.includes('content-desc="more"')) continue;
+                    const _ecBb = _ecSeg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+                    if (!_ecBb) continue;
+                    const _ecX = Math.round((parseInt(_ecBb[1]) + parseInt(_ecBb[3])) / 2);
+                    const _ecY = Math.round((parseInt(_ecBb[2]) + parseInt(_ecBb[4])) / 2);
+                    onLog?.(`Scroll ${i + 1}/${count}: tapping caption "more" at (${_ecX},${_ecY})...`);
+                    await android.tap(serial, _ecX, _ecY);
+                    // Dwell after expanding — simulate reading the caption.
+                    // 2–10 s, rolled fresh each time so the duration looks human.
+                    const _ecDwellMs = 2000 + Math.round(Math.random() * 8000);
+                    onLog?.(`Scroll ${i + 1}/${count}: ✓ caption expanded — dwelling ${(_ecDwellMs / 1000).toFixed(1)}s`);
+                    await sleepOrAbort(serial, _ecDwellMs);
+                    captionExpands++;
+                    _ecTapped = true;
+                  }
+                  if (!_ecTapped) {
+                    onLog?.(`Scroll ${i + 1}/${count}: caption "more" not visible — skipping expand`);
+                  }
+                } catch (e: any) {
+                  if (e?.message === "cycle-aborted") throw e;
+                  onLog?.(`Scroll ${i + 1}/${count}: expand caption error — ${e?.message}`);
+                }
+              }
             }
           }
         }
@@ -2472,7 +2524,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       logger.warn({ serial, strayNavRecoveries }, "[check-feed] recovered from stray navigation (ad CTA) during this run");
       onLog?.(`⚠ Recovered from ${strayNavRecoveries} stray navigation(s) — likely tapped an ad CTA during scroll`);
     }
-    return { count, likes, likeFailures, sharesFeed, sharesDm, saves, strayNavRecoveries };
+    return { count, likes, likeFailures, sharesFeed, sharesDm, saves, captionExpands, strayNavRecoveries };
   }
 
   // View stories from the stories bar at the top of the feed.
@@ -6352,7 +6404,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let reelsLikes = 0;
     // Hoisted so the catch block can include partial stats in the COMPLETE log
     // even when the cycle is aborted or errors mid-run.
-    let likes = 0, likeFailures = 0, sharesFeed = 0, sharesDm = 0, saves = 0, strayNavRecoveries = 0;
+    let likes = 0, likeFailures = 0, sharesFeed = 0, sharesDm = 0, saves = 0, captionExpands = 0, strayNavRecoveries = 0;
     let feedScrolled = 0; // number of feed posts requested to scroll this cycle
     let exploreScrolled = 0; // number of explore scrolls this cycle
     let _slotUsername = "";       // captured from schema parse for catch-block use
@@ -6372,6 +6424,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         shareFeedPercentMin, shareFeedPercentMax,
         shareDmPercentMin, shareDmPercentMax,
         savePercentMin, savePercentMax,
+        expandCaptionPercentMin, expandCaptionPercentMax,
         viewStoriesSlidesMin, viewStoriesSlidesMax,
         viewStoriesSlideWatchPctMin, viewStoriesSlideWatchPctMax,
         viewStoriesLikePercentMin, viewStoriesLikePercentMax,
@@ -6830,16 +6883,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               await sleepOrAbort(serial, 2000);
             }
             tLog(`▶ Starting feed scroll — ${count} posts`);
-            ({ likes, likeFailures, sharesFeed, sharesDm, saves, strayNavRecoveries } = await runCheckFeedLoop(serial, {
+            ({ likes, likeFailures, sharesFeed, sharesDm, saves, captionExpands, strayNavRecoveries } = await runCheckFeedLoop(serial, {
               count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
               shareFeedPercentMin, shareFeedPercentMax,
               shareDmPercentMin, shareDmPercentMax,
               savePercentMin, savePercentMax,
+              expandCaptionPercentMin, expandCaptionPercentMax,
               onLog: (msg) => tLog(`  ${msg}`),
             }));
             feedScrolled = count;
-            steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${saves} saves, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
-            tLog(`▶ Feed done — ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} DM-shares, ${saves} saves`);
+            steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${saves} saves, ${captionExpands} caption-expands, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
+            tLog(`▶ Feed done — ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} DM-shares, ${saves} saves, ${captionExpands} caption-expands`);
           } else if (!feedEnabled) {
             steps.push("feed(skipped — View Feed disabled)");
             tLog("▶ View Feed disabled — skipping feed scroll");
