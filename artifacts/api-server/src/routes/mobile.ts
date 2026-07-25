@@ -261,6 +261,9 @@ type AutomationSettings = {
   checkNotificationsClickPctMax?: number;
   visitProfilePctMin?: number;
   visitProfilePctMax?: number;
+  // App Switch — presses square button, opens SMS app for a random dwell, returns to Instagram.
+  appSwitchPctMin?: number;
+  appSwitchPctMax?: number;
   // Check DMs — opens the inbox, scrolls, optionally taps a thread.
   checkDmEnabled?: boolean;
   checkDmActivatePctMin?: number;
@@ -1250,6 +1253,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     checkNotificationsClickPctMax: z.number().min(0).max(100).default(0),
     visitProfilePctMin: z.number().min(0).max(100).default(0),
     visitProfilePctMax: z.number().min(0).max(100).default(0),
+    // App Switch: press square button, open SMS for random dwell, return to Instagram.
+    appSwitchPctMin: z.number().min(0).max(100).default(0),
+    appSwitchPctMax: z.number().min(0).max(100).default(0),
     // ── Check DMs — opens the inbox, scrolls, optionally taps a thread.
     checkDmEnabled: z.boolean().default(false),
     checkDmActivatePctMin: z.number().min(0).max(100).default(100),
@@ -1366,6 +1372,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       checkNotificationsScrollsMin: 2, checkNotificationsScrollsMax: 5,
       checkNotificationsClickPctMin: 0, checkNotificationsClickPctMax: 0,
       visitProfilePctMin: 0, visitProfilePctMax: 0,
+      appSwitchPctMin: 0, appSwitchPctMax: 0,
       checkDmEnabled: false,
       checkDmActivatePctMin: 100, checkDmActivatePctMax: 100,
       checkDmScrollMin: 1, checkDmScrollMax: 3,
@@ -1468,6 +1475,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         checkNotificationsScrollsMin: 2, checkNotificationsScrollsMax: 5,
         checkNotificationsClickPctMin: 0, checkNotificationsClickPctMax: 0,
         visitProfilePctMin: 0, visitProfilePctMax: 0,
+        appSwitchPctMin: 0, appSwitchPctMax: 0,
         checkDmEnabled: false,
         checkDmActivatePctMin: 100, checkDmActivatePctMax: 100,
         checkDmScrollMin: 1, checkDmScrollMax: 3,
@@ -4365,6 +4373,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Visit My Profile: taps the profile icon in the bottom nav, then returns.
     visitProfilePctMin: z.number().min(0).max(100).default(0),
     visitProfilePctMax: z.number().min(0).max(100).default(0),
+    // App Switch: press square button, open SMS for random 10–30 s, return to Instagram.
+    appSwitchPctMin: z.number().min(0).max(100).default(0),
+    appSwitchPctMax: z.number().min(0).max(100).default(0),
     // ── Activate Percentage — see AutomationSettings type for full comment.
     // Rolled once per tool per automation-cycle execution, gating whether
     // that tool runs at all THIS cycle, on top of its own enabled toggle.
@@ -5095,6 +5106,53 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await android.pressBack(serial);
     }
     await sleepOrAbort(serial, 600);
+  }
+
+  /**
+   * App Switch — presses the square (Overview) button to open the
+   * floating-windows recents overlay, launches the device's default SMS app
+   * via a generic SENDTO intent (works across OEMs without hardcoding a
+   * package name), waits a random 10–30 s to simulate reading messages, then
+   * re-opens the recents overlay, swipes the SMS card up to dismiss it, and
+   * launches Instagram back to the foreground.
+   */
+  async function runAppSwitch(serial: string, onLog?: (msg: string) => void): Promise<void> {
+    // 1. Open the recent-apps (square/Overview) overlay.
+    await android.openRecentApps(serial);
+    await sleepOrAbort(serial, 800 + Math.round(Math.random() * 400));
+
+    // 2. Launch the default SMS app via a generic intent so it works across
+    //    OEMs (Samsung, Xiaomi, stock Android, etc.) without a hardcoded pkg.
+    const tools = android.detectToolset();
+    const adb = tools.adb.path ?? "";
+    if (adb) {
+      spawnSync(adb, [
+        "-s", serial, "shell", "am", "start",
+        "-a", "android.intent.action.SENDTO",
+        "-d", "smsto:",
+      ], { encoding: "utf8", timeout: 8000 });
+    }
+    onLog?.("Random Jitter: ✓ opened SMS app");
+
+    // 3. Dwell in the SMS app for a random 10–30 s.
+    const dwellMs = 10_000 + Math.round(Math.random() * 20_000);
+    onLog?.(`Random Jitter: staying in SMS for ${Math.round(dwellMs / 1000)}s…`);
+    await sleepOrAbort(serial, dwellMs);
+
+    // 4. Re-open the recents overlay — SMS is now the top card.
+    await android.openRecentApps(serial);
+    await sleepOrAbort(serial, 700 + Math.round(Math.random() * 300));
+
+    // 5. Swipe up to dismiss the SMS card, leaving Instagram as the remaining app.
+    await android.swipeUpFromBottom(serial);
+    await sleepOrAbort(serial, 600 + Math.round(Math.random() * 400));
+
+    // 6. Bring Instagram back to the foreground.  Using launchInstagram is
+    //    more reliable than tapping a recents card whose position may vary.
+    await android.launchInstagram(serial);
+    await sleepOrAbort(serial, 1500 + Math.round(Math.random() * 500));
+
+    onLog?.("Random Jitter: ✓ returned to Instagram after app switch");
   }
 
   // ── HikerAPI-driven follow step ──────────────────────────────────────────
@@ -6465,6 +6523,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         checkNotificationsScrollsMin, checkNotificationsScrollsMax,
         checkNotificationsClickPctMin, checkNotificationsClickPctMax,
         visitProfilePctMin, visitProfilePctMax,
+        appSwitchPctMin, appSwitchPctMax,
         feedActivatePctMin, feedActivatePctMax,
         viewStoriesActivatePctMin, viewStoriesActivatePctMax,
         followActivatePctMin, followActivatePctMax,
@@ -7319,6 +7378,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               tLog("▶ Random Jitter: visiting own profile…");
               await runVisitOwnProfile(serial, (msg) => tLog(`  ${msg}`));
               steps.push("jitter-visit-profile");
+              _jitterFired = true;
+            }
+            const appSwitchChance = rollRange(appSwitchPctMin, appSwitchPctMax) / 100;
+            if (appSwitchChance > 0 && Math.random() < appSwitchChance) {
+              tLog("▶ Random Jitter: app switch (SMS)…");
+              await runAppSwitch(serial, (msg) => tLog(`  ${msg}`));
+              steps.push("jitter-app-switch");
               _jitterFired = true;
             }
             if (!_jitterFired) {

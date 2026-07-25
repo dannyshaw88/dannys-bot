@@ -2532,6 +2532,7 @@ export interface AutomationSettingsData {
   checkNotificationsScrollsMin: number; checkNotificationsScrollsMax: number;
   checkNotificationsClickPctMin: number; checkNotificationsClickPctMax: number;
   visitProfilePctMin: number; visitProfilePctMax: number;
+  appSwitchPctMin: number; appSwitchPctMax: number;
   // Activate Percentage — top-level per-execution chance gate for each tool
   // (rolled once per automation-cycle run/"toggle tick", before the tool's
   // own internal settings are even considered). 100/100 = always runs.
@@ -2633,6 +2634,7 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   checkNotificationsScrollsMin: 2, checkNotificationsScrollsMax: 5,
   checkNotificationsClickPctMin: 0, checkNotificationsClickPctMax: 0,
   visitProfilePctMin: 0, visitProfilePctMax: 0,
+  appSwitchPctMin: 0, appSwitchPctMax: 0,
   feedActivatePctMin: 100, feedActivatePctMax: 100,
   viewStoriesActivatePctMin: 100, viewStoriesActivatePctMax: 100,
   followActivatePctMin: 100, followActivatePctMax: 100,
@@ -3210,6 +3212,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             checkNotificationsClickPctMax: s.checkNotificationsClickPctMax,
             visitProfilePctMin: s.visitProfilePctMin,
             visitProfilePctMax: s.visitProfilePctMax,
+            appSwitchPctMin: s.appSwitchPctMin,
+            appSwitchPctMax: s.appSwitchPctMax,
             makePostEnabled: s.makePostEnabled,
             makePostActivatePctMin: s.makePostActivatePctMin,
             makePostActivatePctMax: s.makePostActivatePctMax,
@@ -3670,6 +3674,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'jitterNotifScroll', label: 'Notification scrolls',          fields: ['checkNotificationsScrollsMin','checkNotificationsScrollsMax'] },
     { key: 'jitterNotifClick',  label: 'Notification click %',          fields: ['checkNotificationsClickPctMin','checkNotificationsClickPctMax'] },
     { key: 'jitterVisitPct',    label: 'Visit Profile %',               fields: ['visitProfilePctMin','visitProfilePctMax'] },
+    { key: 'jitterAppSwitch',   label: 'App Switch %',                  fields: ['appSwitchPctMin','appSwitchPctMax'] },
   ]},
   { key: 'makePost',      label: 'Make a Post', sub: [
     { key: 'postEnabled',       label: 'Enabled',                       fields: ['makePostEnabled'] },
@@ -5459,6 +5464,22 @@ export function AutomationSettingsPanel({
                   <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.visitProfilePctMax}
                     onChange={e => setSettings(s => ({ ...s, visitProfilePctMax: clamp4(Number(e.target.value)) }))}
+                    disabled={loading} />
+                </div>
+              </div>
+
+              {/* ── App Switch ── */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">App Switch %</Label>
+                <div className="flex items-center gap-2">
+                  <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                    value={settings.appSwitchPctMin}
+                    onChange={e => setSettings(s => ({ ...s, appSwitchPctMin: clamp4(Number(e.target.value)) }))}
+                    disabled={loading} />
+                  <span className="text-muted-foreground text-sm">to</span>
+                  <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                    value={settings.appSwitchPctMax}
+                    onChange={e => setSettings(s => ({ ...s, appSwitchPctMax: clamp4(Number(e.target.value)) }))}
                     disabled={loading} />
                 </div>
               </div>
