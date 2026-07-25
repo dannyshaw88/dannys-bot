@@ -4,6 +4,16 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.156 — 2026-07-25
+
+### Fixed — Copy Settings: Tap Highlights % missing from Inject Browsing section
+
+The **Tap Highlights %** min/max fields added in v1.2.151 were absent from the Phone Farm Copy Settings dialog. Opening Copy Settings → Inject Browsing showed every other setting (Enabled, Activate %, Before Follow %, Feed posts, Click post %, Like %, Share to Feed %, Share DM %, Save Post %, Abandon Follow %) but not Tap Highlights %, so the setting could not be copied across slots.
+
+Added `injectTapHL` — **Tap Highlights %** — as the final entry in the Inject Browsing copy section in `MobilePage.tsx`, wiring `injectBrowsingTapHighlightsPctMin` and `injectBrowsingTapHighlightsPctMax`.
+
+---
+
 ## v1.2.155 — 2026-07-25
 
 ### Fixed — Inject Browsing highlight detection: remove all text-based matching, use pure structural detection
