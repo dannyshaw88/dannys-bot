@@ -4,6 +4,50 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.159 — 2026-07-25
+
+### Added — Visit Random Settings: new Random Actions jitter tool
+
+Added a **Visit Random Settings %** action to the Phone Farm **Random Actions** tool. When rolled, the automation navigates into the account's Instagram Settings and activity page, scrolls through the settings list a random number of rows, taps once at a random location on screen (simulating a natural curiosity tap or mis-tap), then presses Back twice to exit fully before returning to the home feed.
+
+This prevents the automation from ever getting "trapped" in the Settings area between shuffled tool executions — the Back × 2 exit is unconditional, so the device always returns to the home feed regardless of what was tapped.
+
+**Navigation flow:**
+
+1. Tap the **Home tab** to ensure a clean starting state (same guard used by Visit Saved and Visit Profile).
+2. Tap the **Profile tab** (bottom nav, rightmost icon — `profile_tab` resource-id / `Profile` content-desc).
+3. Wait 2.0–2.8 s for the profile page to load; dismiss any interstitials.
+4. Tap the **hamburger / Options button** (`ImageView content-desc="Options"`, top-right of the profile header) — same `findInstagramProfileOptionsButton()` helper used by Visit Saved.
+5. Wait 2.0–2.6 s for the Settings and activity page to load.
+6. Scroll down through the settings list **1–10 rows** (randomly selected; same swipe parameters: 350–500 ms swipe duration, 400–900 ms pause between swipes, centred on screen width × 50 %).
+7. **Tap once** at a random mid-screen coordinate (x: 20–80 % of screen width, y: 30–70 % of screen height).
+8. Wait 1.5–2.3 s after the tap (simulates briefly looking at whatever opened).
+9. Press **Back** (exits whatever sub-page or dialog the tap opened).
+10. Wait 800 ms, press **Back** again (exits Settings and activity back to the profile page).
+11. Wait 800 ms, then tap the **Home tab** (or press Back as fallback) to return to the home feed.
+
+**Why Back × 2 matters:** if shuffle is enabled and the slot rolls Visit Random Settings followed by another tool (e.g. View Feed, Follow), the second tool starts with the device on the home feed — not stranded inside a settings sub-page where navigation helpers cannot find any expected UI elements.
+
+**Where to configure:** Phone Farm → any slot → Human Session Tool → Random Actions → **Visit Random Settings %** min/max (0–100 %). Defaults to 0/0 (never fires) for all existing accounts.
+
+**Implementation details:**
+
+- New `runVisitSettings(serial, onLog?)` async function added to `mobile.ts`, placed immediately after `runVisitSaved()` and following the same guard pattern: early-exit with home-return at every failure point (profile tab not found, Options button not found), so a detection miss never leaves the device in a broken navigation state.
+- `visitSettingsPctMin` / `visitSettingsPctMax` fields added across **all four schema layers** in `mobile.ts`:
+  - `AutomationSettings` TypeScript interface (optional fields, after `visitSavedPctMax`).
+  - Zod persistence schema (`humanSessionToolSchema`) — `z.number().min(0).max(100).default(0)` for both.
+  - Zod execution/cycle schema (`automationCycleSchema`) — same shape.
+  - Both sets of GET defaults (non-slot defaults object and per-slot defaults object), both set to `0 / 0`.
+- Same fields added across `MobilePage.tsx`:
+  - `AutomationSettingsData` TypeScript interface.
+  - `AUTOMATION_DEFAULTS` constant.
+  - Autosave request-body builder (`visitSettingsPctMin: s.visitSettingsPctMin`, `visitSettingsPctMax: s.visitSettingsPctMax`).
+  - `COPY_SECTIONS` randomJitter sub-array — new entry `{ key: 'jitterVisitSettings', label: 'Visit Random Settings %', fields: ['visitSettingsPctMin','visitSettingsPctMax'] }` placed between Visit Saved % and App Switch %.
+  - JSX: a new **Visit Random Settings %** min/max input pair rendered between the Visit Saved % block and the App Switch % block in the Random Actions settings panel.
+- Dispatch added to the jitter block in `mobile.ts` (after the Visit Saved roll, before the App Switch roll): rolls `visitSettingsPctMin`–`visitSettingsPctMax`, fires `runVisitSettings()` if the roll passes, pushes `"jitter-visit-settings"` to the steps log, and sets `_jitterFired = true`.
+
+---
+
 ## v1.2.158 — 2026-07-25
 
 ### Added — Visit Saved: new Random Actions jitter tool
