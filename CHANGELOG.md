@@ -4,6 +4,25 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.168 — 2026-07-25
+
+### Fix: Tap Audio % — now correctly in Phone Farm Human Session Tool → View Feed
+
+The Tap Audio % Min/Max control was previously added only to the browser-based Human Session Tool (wrong panel). It is now added to the correct location: the **Phone Farm → Human Session Tool → View Feed** section in `MobilePage.tsx`, appearing as row 3 after "Expand Caption % of posts".
+
+**What changed:**
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx`
+  - `AutomationSettingsData` interface: added `tapAudioPercentMin: number` and `tapAudioPercentMax: number`
+  - `AUTOMATION_DEFAULTS`: added `tapAudioPercentMin: 0, tapAudioPercentMax: 0`
+  - Copy-settings dispatch: wires `tapAudioPercentMin/Max` so it copies between slots
+  - Copy-settings option array: added `feedTapAudio` entry
+  - View Feed UI: new "🎵 Tap Audio % of posts" row with Min/Max inputs, placed after Expand Caption %
+- `package.json` + `artifacts/electron/package.json`: bumped to `1.2.168`
+
+The automation engine (`mobile.ts`) was already correctly implemented in v1.2.167 — this release adds the missing UI control that exposes it.
+
+---
+
 ## v1.2.167 — 2026-07-25
 
 ### Added — Tap Audio % in View Feed (Human Session Tool)
