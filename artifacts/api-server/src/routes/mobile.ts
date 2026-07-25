@@ -5406,10 +5406,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     for (let i = 0; i < rows; i++) {
       if (isCycleAborted(serial)) throw new Error("cycle-aborted");
       await android.swipe(serial, x, y1, x, y2, 500 + Math.round(Math.random() * 200));
-      // Wait 5–15 seconds so images fully render before the next scroll.
-      const renderWait = 5000 + Math.round(Math.random() * 10000);
+      // Wait 4–10 seconds so images fully render before the next scroll.
+      const renderWait = 4000 + Math.round(Math.random() * 6000);
       onLog?.(`Inject Browsing: waiting ${(renderWait / 1000).toFixed(1)}s for media to render…`);
       await sleepOrAbort(serial, renderWait);
+    }
+
+    // ── Highlights — AFTER feed scroll ───────────────────────────────────
+    // Must run here — before click-post — so it fires even when the
+    // click-post roll misses.  The original placement (after the post-open
+    // block) was unreachable whenever click-post didn't fire, which meant
+    // "after" timing silently never executed.
+    if (willTapHighlights && !tapHighlightsBefore) {
+      if (rows > 0) {
+        onLog?.(`Inject Browsing: scrolling back to top for highlights — ${rows} row(s)`);
+        for (let _hsi = 0; _hsi < rows; _hsi++) {
+          await android.swipe(serial, Math.round(w / 2), Math.round(h * 0.35), Math.round(w / 2), Math.round(h * 0.80), 400);
+          await sleepOrAbort(serial, 350);
+        }
+        await sleepOrAbort(serial, 500);
+      }
+      await tapOneProfileHighlight(serial, onLog);
+      return 0; // already at top — caller must not scroll back further
     }
 
     const clickChance = rollRange(browsing.clickPostPctMin, browsing.clickPostPctMax) / 100;
@@ -5739,23 +5757,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Back out of the opened post to the profile grid before continuing.
     await android.pressBack(serial);
     await sleepOrAbort(serial, 500);
-
-    // ── Highlights — AFTER feed scroll ───────────────────────────────────
-    // The profile grid is scrolled down by `rows` rows. Scroll back to the
-    // top so the highlights row is visible, tap a highlight, then return 0
-    // so the caller knows we've already restored the top position.
-    if (willTapHighlights && !tapHighlightsBefore) {
-      if (rows > 0) {
-        onLog?.(`Inject Browsing: scrolling back to top for highlights — ${rows} row(s)`);
-        for (let _hsi = 0; _hsi < rows; _hsi++) {
-          await android.swipe(serial, Math.round(w / 2), Math.round(h * 0.35), Math.round(w / 2), Math.round(h * 0.80), 400);
-          await sleepOrAbort(serial, 350);
-        }
-        await sleepOrAbort(serial, 500);
-      }
-      await tapOneProfileHighlight(serial, onLog);
-      return 0; // already at top — caller must not scroll back further
-    }
 
     return rows;
   }

@@ -4,6 +4,66 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.152 — 2026-07-25
+
+### Fixed — Inject Browsing "after feed scroll" highlights tap never executed
+
+The Tap Highlights feature added in v1.2.151 supports two timing modes: *before* the profile-grid scroll and *after*. The "after" mode was silently broken from the start — it never fired under any circumstances.
+
+#### Root cause
+
+The "after" highlights block was placed at the very end of the `runInjectBrowsing` function, *after* the entire post-open sequence. However, two early-return paths exist before that point:
+
+1. **Click-post roll misses** — the function returns `rows` immediately (the common case — in this session it fired for every single candidate).
+2. **No grid posts found** — also returns `rows` early.
+
+Because click-post is often set to a low or zero percentage, the "after" block was never reachable. The debugging log confirmed this: `tap highlights — chance:100% timing:after feed scroll` was logged, then the full scroll happened, then `click-post roll missed — not opening a post` caused an early return, and no highlight tap was ever attempted.
+
+#### What was fixed
+
+Moved the entire "after" highlights block (scroll back to top, tap highlight, return 0) to **before** the click-post chance check. It now fires unconditionally whenever the "after" timing was chosen, regardless of whether click-post also fires. The now-dead copy at the bottom of the function was removed.
+
+#### What to expect in the Debugging Log
+
+With Tap Highlights % > 0 and "after" timing rolled, you will now see:
+
+```
+Inject Browsing: tap highlights — chance:X% timing:after feed scroll
+Inject Browsing: scrolling profile grid — N row(s)
+Inject Browsing: waiting Xs for media to render…
+…
+Inject Browsing: scrolling back to top for highlights — N row(s)
+Inject Browsing: tapping highlight "…"   ← or "no highlights found"
+```
+
+---
+
+### Fixed — Ads choice dialog "Use for free with ads" radio deselects itself when pre-selected
+
+Instagram's "Make a choice about your ads" consent flow (three-step: Get started → Use for free with ads + Continue → Agree) was failing to complete when Instagram pre-selected the "Use for free with ads" radio button on screen load.
+
+#### Root cause
+
+`dismissAdsChoiceDialog` in `androidManager.ts` was unconditionally tapping the "Use for free with ads" radio button every time it found the element, with no check of its current state. When Instagram loads the choice screen with "Use for free with ads" already marked **Selected** (which it does on at least some account/region combinations), tapping it a second time **deselected it** — leaving neither option chosen. The Continue button then refused to advance (or re-presented the same screen), and the dialog was never dismissed. The session stalled or bypassed the dialog entirely.
+
+#### Detection approach
+
+The outer ViewGroup's `content-desc` attribute encodes the radio state as either `"… Radio button . Selected"` or `"… Radio button . Unselected"`. The fix reads the XML dump and finds the index of "Use for free with ads", then checks whether `"Radio button . Selected"` appears within 600 characters after that position (scoping the check to the same desc attribute, not accidentally matching the Subscribe radio).
+
+#### What was fixed
+
+Added a pre-tap guard: only tap "Use for free with ads" if it is **not** already selected. If it is already selected, log `"Use for free with ads already selected — skipping tap"` and proceed directly to Continue.
+
+---
+
+### Changed — Inject Browsing profile grid dwell time reduced from 5–15 s to 4–10 s
+
+The per-scroll render wait (`renderWait`) between each profile-grid row scroll was `5000 + random(0–10000) ms` (5–15 seconds). This was too long — the log showed waits of 9–15 s routinely, making multi-row browse sessions disproportionately slow.
+
+Changed to `4000 + random(0–6000) ms` (4–10 seconds). Images still have adequate time to render; the worst-case is now 10 s instead of 15 s.
+
+---
+
 ## v1.2.151 — 2026-07-25
 
 ### Added — Tap Highlights in Inject Browsing
