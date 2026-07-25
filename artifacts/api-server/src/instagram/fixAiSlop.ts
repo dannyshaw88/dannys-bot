@@ -1,28 +1,47 @@
 /**
  * fixAiSlop.ts — Strip AI-detectable signals from images before posting.
  *
- * ── What actually works (learned from unmadewithai.com) ──────────────────────
- * Instagram's "Made with AI" label is driven primarily by C2PA metadata —
- * a cryptographic manifest embedded in the file's binary structure:
+ * ── What we strip and why ─────────────────────────────────────────────────────
  *
- *   • JPEG  — APP11 segment (marker 0xFFEB) whose payload starts with "JP"
- *             (JUMBF container, per ISO 19566-5).
- *   • PNG   — "caBX" ancillary chunk (JUMBF container embedded in PNG).
- *   • WebP  — "C2PA" or "JUMB" RIFF chunk inside the RIFF container.
+ * Instagram's "Made with AI" label is driven by metadata signals embedded in
+ * the file's binary structure.  We remove ALL of them:
  *
- * The reliable fix is binary-level chunk/segment removal — walk the file
- * structure, excise only the C2PA chunks, leave all pixel data untouched.
- * No downscaling, no noise injection, no recompression artefacts.
- * This is what unmadewithai.com does, and it passes Instagram detection.
+ *   C2PA / Content Credentials (ChatGPT, Google Imagen, Adobe Firefly)
+ *   ─────────────────────────────────────────────────────────────────
+ *   • JPEG  — APP11 (0xFFEB) segments whose payload starts with the ISO 19566-5
+ *             Common Identifier bytes "JP" (0x4A 0x50).
+ *   • PNG   — "caBX" ancillary chunks (JUMBF container).
+ *   • WebP  — "C2PA" and "JUMB" RIFF chunks.
  *
- * After binary stripping we do ONE light Sharp pass (withMetadata:false) to
- * remove any residual EXIF / XMP / ICC metadata and produce the final JPEG.
- * Quality is kept high (85–92) so the image looks clean on-screen; Instagram
- * recompresses everything on ingest anyway.
+ *   EXIF metadata (Grok / xAI, and most AI image generators)
+ *   ─────────────────────────────────────────────────────────
+ *   • JPEG  — APP1 (0xFFE1) segments starting with "Exif\0".
+ *   • PNG   — "eXIf" ancillary chunks.
+ *   • WebP  — "EXIF" RIFF chunk.
  *
- * Previous approach (heavy downscale → upscale → dual JPEG) was retired
- * because: (a) it did not reliably pass detection, and (b) it introduced
- * visible quality loss that made images look worse than the binary-strip path.
+ *   XMP / Content Credentials fallback (ChatGPT DALL-E, Google, Adobe)
+ *   ──────────────────────────────────────────────────────────────────
+ *   • JPEG  — APP1 (0xFFE1) starting with the Adobe XMP namespace URI.
+ *             APP1 starting with "W5M0MpCehiHzreSzNTczkc9d" (extended XMP).
+ *   • PNG   — "iTXt" chunks containing "XML:com.adobe.xmp".
+ *             "tEXt" chunks with key "XML:com.adobe.xmp".
+ *   • WebP  — "XMP " RIFF chunk.
+ *
+ *   IPTC / Photoshop IRB (some AI tools embed provenance here)
+ *   ──────────────────────────────────────────────────────────
+ *   • JPEG  — APP13 (0xFFED) segments.
+ *
+ * ── Strategy ────────────────────────────────────────────────────────────────
+ *
+ * ALL metadata stripping is done at binary level (no external dependencies).
+ * This means it works on every platform — Windows/Electron included — even if
+ * Sharp's native binary is unavailable.
+ *
+ * If Sharp IS available an additional pixel-perturbation pass (makeUniqueImage)
+ * is applied to defeat SynthID pixel-level watermarks (Google Imagen, ChatGPT
+ * DALL-E) which are embedded in the pixel data and survive metadata stripping.
+ * The perturbation is imperceptible but shifts spatial frequencies and pixel
+ * statistics enough to break the watermark signal.
  */
 
 import { randomBytes } from "crypto";
@@ -32,20 +51,40 @@ import { join } from "path";
 import { makeUniqueImage } from "./makeUnique";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Binary C2PA / JUMBF strippers
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function bufStartsWith(buf: Buffer, off: number, prefix: string | number[]): boolean {
+  if (typeof prefix === "string") {
+    for (let i = 0; i < prefix.length; i++) {
+      if (off + i >= buf.length) return false;
+      if (buf[off + i] !== prefix.charCodeAt(i)) return false;
+    }
+    return true;
+  }
+  for (let i = 0; i < prefix.length; i++) {
+    if (off + i >= buf.length) return false;
+    if (buf[off + i] !== prefix[i]) return false;
+  }
+  return true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// JPEG — strip C2PA, EXIF, XMP, IPTC in one binary pass
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Strips JUMBF/C2PA containers from a JPEG buffer.
- *
- * JPEG structure: FF D8 [segments…] FF DA [entropy-coded data] FF D9
- * Each segment: [FF][marker][2-byte big-endian length incl. the 2 len bytes][data]
- *
- * APP11 (FF EB) whose payload begins with 0x4A 0x50 ("JP") is the JUMBF
- * container used by C2PA. We skip those segments and copy everything else.
+ * Strips all AI-related metadata from a JPEG buffer:
+ *   APP11 "JP..."  → C2PA / JUMBF
+ *   APP1  "Exif\0" → EXIF
+ *   APP1  "http://ns.adobe.com/xap" → XMP standard
+ *   APP1  "W5M0..."                 → Extended XMP
+ *   APP13 (any)   → IPTC / Photoshop IRB
  */
-function stripJpegC2pa(buf: Buffer): Buffer {
-  if (buf.length < 2 || buf[0] !== 0xff || buf[1] !== 0xd8) return buf;
+function stripJpegAiMeta(buf: Buffer): { buf: Buffer; removed: number } {
+  if (buf.length < 2 || buf[0] !== 0xff || buf[1] !== 0xd8) {
+    return { buf, removed: 0 };
+  }
 
   const out: number[] = [0xff, 0xd8];
   let removed = 0;
@@ -53,18 +92,17 @@ function stripJpegC2pa(buf: Buffer): Buffer {
 
   while (off < buf.length - 1) {
     if (buf[off] !== 0xff) {
-      // Shouldn't happen in a valid JPEG; copy the rest and stop
       for (let i = off; i < buf.length; i++) out.push(buf[i]);
       break;
     }
 
     const marker = buf.readUInt16BE(off);
 
-    // SOI / EOI / RST markers — no length field
+    // SOI / EOI / RST — no length field
     if (
-      marker === 0xffd8 || // SOI (already handled)
-      marker === 0xffd9 || // EOI
-      (marker >= 0xffd0 && marker <= 0xffd7) // RST0–RST7
+      marker === 0xffd8 ||
+      marker === 0xffd9 ||
+      (marker >= 0xffd0 && marker <= 0xffd7)
     ) {
       out.push(0xff, marker & 0xff);
       off += 2;
@@ -72,53 +110,66 @@ function stripJpegC2pa(buf: Buffer): Buffer {
       continue;
     }
 
-    // SOS — rest of the buffer is entropy-coded; copy verbatim
+    // SOS — rest of buffer is entropy-coded data; copy verbatim
     if (marker === 0xffda) {
       for (let i = off; i < buf.length; i++) out.push(buf[i]);
       break;
     }
 
-    // All other segments have a 2-byte length
+    // All other segments have a 2-byte length field
     if (off + 3 >= buf.length) break;
     const segLen = buf.readUInt16BE(off + 2); // includes the 2 length bytes
-    const segEnd = off + 2 + segLen; // exclusive
+    const segEnd = Math.min(off + 2 + segLen, buf.length);
+    const dataOff = off + 4; // first data byte (after FF XX LL LL)
 
-    // APP11 (FF EB) — check for JUMBF/C2PA "JP" prefix
+    // ── Decide whether to strip this segment ──────────────────────────────
+
+    let strip = false;
+
+    // APP11 (FF EB) — C2PA/JUMBF: payload starts with "JP" (ISO 19566-5 CI)
     if (marker === 0xffeb && segLen >= 4) {
-      const p0 = buf[off + 4]; // first data byte (after FF EB LL LL)
-      const p1 = buf[off + 5];
-      if (p0 === 0x4a && p1 === 0x50) {
-        // "JP" — this is a JUMBF/C2PA segment; skip it
-        removed++;
-        off = Math.min(segEnd, buf.length);
-        continue;
-      }
+      strip = bufStartsWith(buf, dataOff, [0x4a, 0x50]); // "JP"
     }
 
-    // Copy segment as-is
-    for (let i = off; i < Math.min(segEnd, buf.length); i++) out.push(buf[i]);
-    off = Math.min(segEnd, buf.length);
+    // APP1 (FF E1) — EXIF, XMP, or Extended XMP
+    else if (marker === 0xffe1 && segLen >= 6) {
+      strip = (
+        bufStartsWith(buf, dataOff, "Exif\0") ||                      // EXIF
+        bufStartsWith(buf, dataOff, "http://ns.adobe.com/xap") ||     // XMP standard
+        bufStartsWith(buf, dataOff, "W5M0MpCehiHzreSzNTczkc9d")      // Extended XMP
+      );
+    }
+
+    // APP13 (FF ED) — IPTC / Photoshop IRB
+    else if (marker === 0xffed) {
+      strip = true;
+    }
+
+    if (strip) {
+      removed++;
+      off = segEnd;
+      continue;
+    }
+
+    // Copy segment unchanged
+    for (let i = off; i < segEnd; i++) out.push(buf[i]);
+    off = segEnd;
   }
 
-  if (removed > 0) {
-    console.log(`[fixAiSlop] JPEG: removed ${removed} JUMBF/C2PA APP11 segment(s)`);
-  }
-  return Buffer.from(out);
+  return { buf: Buffer.from(out), removed };
 }
 
-/**
- * Strips JUMBF/C2PA containers from a PNG buffer.
- *
- * PNG structure: 8-byte signature + [chunks…]
- * Each chunk: [4-byte big-endian data length][4-byte type][data][4-byte CRC]
- *
- * "caBX" is the chunk type used for JUMBF containers (C2PA).
- */
-function stripPngC2pa(buf: Buffer): Buffer {
-  const PNG_SIG = [137, 80, 78, 71, 13, 10, 26, 10];
-  if (buf.length < 8) return buf;
+// ─────────────────────────────────────────────────────────────────────────────
+// PNG — strip C2PA, EXIF, XMP
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PNG_SIG = [137, 80, 78, 71, 13, 10, 26, 10];
+
+/** Strip all AI-related chunks from a PNG buffer. */
+function stripPngAiMeta(buf: Buffer): { buf: Buffer; removed: number } {
+  if (buf.length < 8) return { buf, removed: 0 };
   for (let i = 0; i < 8; i++) {
-    if (buf[i] !== PNG_SIG[i]) return buf;
+    if (buf[i] !== PNG_SIG[i]) return { buf, removed: 0 };
   }
 
   const out: number[] = [...PNG_SIG];
@@ -126,18 +177,34 @@ function stripPngC2pa(buf: Buffer): Buffer {
   let off = 8;
 
   while (off + 12 <= buf.length) {
-    const dataLen = buf.readUInt32BE(off);
+    const dataLen   = buf.readUInt32BE(off);
     const chunkType = buf.slice(off + 4, off + 8).toString("ascii");
     const totalSize = 4 + 4 + dataLen + 4; // len + type + data + CRC
 
-    if (chunkType === "caBX") {
-      // JUMBF/C2PA chunk — skip
+    let strip = false;
+
+    // caBX — C2PA / JUMBF
+    if (chunkType === "caBX") strip = true;
+
+    // eXIf — EXIF data embedded in PNG
+    else if (chunkType === "eXIf") strip = true;
+
+    // iTXt — could be XMP ("XML:com.adobe.xmp")
+    else if (chunkType === "iTXt" && dataLen > 18) {
+      strip = bufStartsWith(buf, off + 8, "XML:com.adobe.xmp");
+    }
+
+    // tEXt — older XMP embedding
+    else if (chunkType === "tEXt" && dataLen > 18) {
+      strip = bufStartsWith(buf, off + 8, "XML:com.adobe.xmp");
+    }
+
+    if (strip) {
       removed++;
       off += totalSize;
       continue;
     }
 
-    // Copy chunk as-is
     const end = Math.min(off + totalSize, buf.length);
     for (let i = off; i < end; i++) out.push(buf[i]);
 
@@ -145,38 +212,32 @@ function stripPngC2pa(buf: Buffer): Buffer {
     off += totalSize;
   }
 
-  if (removed > 0) {
-    console.log(`[fixAiSlop] PNG: removed ${removed} caBX JUMBF/C2PA chunk(s)`);
-  }
-  return Buffer.from(out);
+  return { buf: Buffer.from(out), removed };
 }
 
-/**
- * Strips C2PA containers from a WebP (RIFF) buffer.
- *
- * RIFF structure: "RIFF"[4-byte LE file size]"WEBP"[chunks…]
- * Each chunk: [4-byte type][4-byte LE data size][data (padded to even)]
- *
- * Chunks to remove: "C2PA", "JUMB" (JUMBF container in WebP).
- */
-function stripWebpC2pa(buf: Buffer): Buffer {
-  if (buf.length < 12) return buf;
-  const riff = buf.slice(0, 4).toString("ascii");
-  const webp = buf.slice(8, 12).toString("ascii");
-  if (riff !== "RIFF" || webp !== "WEBP") return buf;
+// ─────────────────────────────────────────────────────────────────────────────
+// WebP — strip C2PA, EXIF, XMP
+// ─────────────────────────────────────────────────────────────────────────────
 
-  const C2PA_CHUNKS = new Set(["C2PA", "JUMB"]);
+const WEBP_AI_CHUNKS = new Set(["C2PA", "JUMB", "EXIF", "XMP "]);
+
+/** Strip all AI-related RIFF chunks from a WebP buffer. */
+function stripWebpAiMeta(buf: Buffer): { buf: Buffer; removed: number } {
+  if (buf.length < 12) return { buf, removed: 0 };
+  if (buf.slice(0, 4).toString("ascii") !== "RIFF") return { buf, removed: 0 };
+  if (buf.slice(8, 12).toString("ascii") !== "WEBP") return { buf, removed: 0 };
+
   const bodyChunks: Buffer[] = [];
   let removed = 0;
   let off = 12;
 
   while (off + 8 <= buf.length) {
-    const type = buf.slice(off, off + 4).toString("ascii");
-    const dataSize = buf.readUInt32LE(off + 4);
-    const paddedSize = dataSize + (dataSize & 1); // RIFF chunks are word-aligned
-    const chunkEnd = off + 8 + paddedSize;
+    const type       = buf.slice(off, off + 4).toString("ascii");
+    const dataSize   = buf.readUInt32LE(off + 4);
+    const paddedSize = dataSize + (dataSize & 1);
+    const chunkEnd   = off + 8 + paddedSize;
 
-    if (C2PA_CHUNKS.has(type)) {
+    if (WEBP_AI_CHUNKS.has(type)) {
       removed++;
       off = Math.min(chunkEnd, buf.length);
       continue;
@@ -186,18 +247,15 @@ function stripWebpC2pa(buf: Buffer): Buffer {
     off = Math.min(chunkEnd, buf.length);
   }
 
-  if (removed === 0) return buf;
+  if (removed === 0) return { buf, removed: 0 };
 
-  console.log(`[fixAiSlop] WebP: removed ${removed} C2PA/JUMB chunk(s)`);
-
-  // Rebuild RIFF container
   const body = Buffer.concat(bodyChunks);
-  const out = Buffer.alloc(12 + body.length);
+  const out  = Buffer.alloc(12 + body.length);
   out.write("RIFF", 0, "ascii");
-  out.writeUInt32LE(4 + body.length, 4); // file size field
+  out.writeUInt32LE(4 + body.length, 4);
   out.write("WEBP", 8, "ascii");
   body.copy(out, 12);
-  return out;
+  return { buf: out, removed };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -209,18 +267,8 @@ type ImageFormat = "jpeg" | "png" | "webp" | "unknown";
 function detectFormat(buf: Buffer): ImageFormat {
   if (buf.length < 4) return "unknown";
   if (buf[0] === 0xff && buf[1] === 0xd8) return "jpeg";
-  if (
-    buf[0] === 137 &&
-    buf[1] === 80 &&
-    buf[2] === 78 &&
-    buf[3] === 71
-  )
-    return "png";
-  if (
-    buf.slice(0, 4).toString("ascii") === "RIFF" &&
-    buf.slice(8, 12).toString("ascii") === "WEBP"
-  )
-    return "webp";
+  if (buf[0] === 137 && buf[1] === 80 && buf[2] === 78 && buf[3] === 71) return "png";
+  if (buf.slice(0, 4).toString("ascii") === "RIFF" && buf.slice(8, 12).toString("ascii") === "WEBP") return "webp";
   return "unknown";
 }
 
@@ -229,11 +277,18 @@ function detectFormat(buf: Buffer): ImageFormat {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Strips AI-detectable signals from an image file and returns the path of a
- * processed temp file. If the input cannot be processed, the original path is
- * returned unchanged and no temp file is created.
+ * Strips all AI-detectable signals from an image file and returns the path of
+ * a processed temp file.  If processing fails, the original path is returned
+ * unchanged and no temp file is created.
  *
- * The caller MUST call cleanupAiSlopTemp() after using the result.
+ * The caller MUST call cleanupAiSlopTemp() after using the returned path.
+ *
+ * Pipeline:
+ *   Step 1 (always) — Binary strip: C2PA, EXIF, XMP, IPTC removed at byte
+ *                     level.  Works on all platforms without any native deps.
+ *   Step 2 (if Sharp available) — Pixel perturbation: 7-layer makeUniqueImage
+ *                     pass to defeat SynthID pixel-level watermarks and CNN-
+ *                     based perceptual hash detectors.
  */
 export async function fixAiSlop(inputPath: string): Promise<string> {
   const tmp = join(
@@ -245,55 +300,61 @@ export async function fixAiSlop(inputPath: string): Promise<string> {
     const raw = await readFile(inputPath);
     const fmt = detectFormat(raw);
 
-    // ── Step 1: Binary C2PA / JUMBF strip ──────────────────────────────────
-    // Walk the file structure and excise only the C2PA metadata containers.
-    // Pixels are completely untouched at this stage.
+    // ── Step 1: Binary metadata strip (platform-independent) ──────────────
     let stripped: Buffer;
+    let removedCount = 0;
+
     if (fmt === "jpeg") {
-      stripped = stripJpegC2pa(raw);
+      const r = stripJpegAiMeta(raw);
+      stripped     = r.buf;
+      removedCount = r.removed;
     } else if (fmt === "png") {
-      stripped = stripPngC2pa(raw);
+      const r = stripPngAiMeta(raw);
+      stripped     = r.buf;
+      removedCount = r.removed;
     } else if (fmt === "webp") {
-      stripped = stripWebpC2pa(raw);
+      const r = stripWebpAiMeta(raw);
+      stripped     = r.buf;
+      removedCount = r.removed;
     } else {
-      // Unknown format — pass through
+      // Unknown format — pass through as-is
       stripped = raw;
     }
 
-    // ── Step 2: Sharp pass — strip residual EXIF / XMP / ICC + JPEG encode ─
-    // withMetadata(false) removes APP1/EXIF, XMP, ICC profiles.
-    // A single JPEG encode at quality 85–92 is enough to clean up any
-    // remaining metadata while keeping visible quality high.
+    console.log(
+      `[fixAiSlop] binary strip — format=${fmt}, removed ${removedCount} AI metadata block(s)`,
+    );
+
+    // ── Step 2: Sharp pixel perturbation (optional, defeats SynthID) ──────
+    // If Sharp is unavailable (e.g. Electron on Windows without native binary)
+    // we still write the binary-stripped file, which covers C2PA, EXIF, and
+    // XMP — the primary triggers for Instagram's "Made with AI" label.
     let sharp: any;
     try {
       sharp = (await import("sharp")).default;
     } catch {
-      // Sharp unavailable — write binary-stripped file and return
       await writeFile(tmp, stripped);
+      console.log(`[fixAiSlop] Sharp unavailable — binary strip only (no pixel perturbation)`);
       return tmp;
     }
 
+    // 2a: Re-encode via Sharp to strip any remaining metadata (ICC profiles,
+    //     residual EXIF that the binary pass may have missed in edge cases)
+    //     and normalise to JPEG for the pixel-perturbation step.
     const quality = 85 + Math.floor(Math.random() * 8); // 85–92
-
-    // Step 2a: Sharp pass — strip residual EXIF / XMP / IPTC / ICC + JPEG encode.
-    // Produce a Buffer so Step 2b can consume it without a disk round-trip.
-    const metaStripped: Buffer = await sharp(stripped)
+    const reencoded: Buffer = await sharp(stripped)
       .withMetadata(false)
       .jpeg({ quality, chromaSubsampling: "4:2:0", force: true })
       .toBuffer();
 
-    // Step 2b: Pixel-level perturbation — defeats Instagram's perceptual / neural
-    // AI-image detection which operates on pixel patterns rather than metadata.
-    // C2PA/metadata stripping alone was sufficient until ~Jul 2026 when Instagram
-    // updated their detection pipeline to include CNN-based perceptual hashing.
-    // makeUniqueImage applies 7 layers: sub-pixel crop, micro-rotation,
-    // per-channel gain, hue shift, brightness jitter, Gaussian noise, and a
-    // final JPEG re-encode — all imperceptible to the eye but enough to break
-    // the perceptual fingerprint the detector keyed on.
-    const finalBuf = await makeUniqueImage(metaStripped);
+    // 2b: 7-layer pixel-perturbation — defeats SynthID and CNN-based perceptual
+    //     hash detectors.  Imperceptible to the human eye.
+    const finalBuf = await makeUniqueImage(reencoded);
     await writeFile(tmp, finalBuf);
 
-    console.log(`[fixAiSlop] done — format=${fmt} jpegQuality=${quality} (+pixel perturbation)`);
+    console.log(
+      `[fixAiSlop] done — format=${fmt}, quality=${quality}, binary-stripped ${removedCount} block(s), pixel-perturbed`,
+    );
     return tmp;
   } catch (err) {
     console.error("[fixAiSlop] failed:", err);
@@ -304,7 +365,7 @@ export async function fixAiSlop(inputPath: string): Promise<string> {
 
 /**
  * Deletes the temp file produced by fixAiSlop, but only if it differs from
- * the original input path. Safe to call even when fixAiSlop fell back to
+ * the original input path.  Safe to call even when fixAiSlop fell back to
  * returning the original path.
  */
 export async function cleanupAiSlopTemp(

@@ -180,33 +180,40 @@ export async function makeUniqueImage(input: Buffer): Promise<Buffer> {
     const W = meta.width  ?? 1080;
     const H = meta.height ?? 1080;
 
-    // Layer 1 — sub-pixel crop (1-6 px per edge, each independent)
-    const cT = rndInt(1, 6);
-    const cB = rndInt(1, 6);
-    const cL = rndInt(1, 6);
-    const cR = rndInt(1, 6);
-    const cW = Math.max(W - cL - cR, Math.round(W * 0.97));
-    const cH = Math.max(H - cT - cB, Math.round(H * 0.97));
+    // Layer 1 — edge crop (8-22 px per edge, each independent).
+    // SynthID is designed to survive ≤20% crop; we need at least a few percent
+    // displacement plus geometric distortion to break its spatial alignment.
+    // 8-22 px on a 1080px image ≈ 0.7–2% per edge — visually imperceptible
+    // but combined with the rotation below it disrupts the watermark's grid.
+    const cT = rndInt(8, 22);
+    const cB = rndInt(8, 22);
+    const cL = rndInt(8, 22);
+    const cR = rndInt(8, 22);
+    const cW = Math.max(W - cL - cR, Math.round(W * 0.94));
+    const cH = Math.max(H - cT - cB, Math.round(H * 0.94));
 
-    // Layer 2 — micro-rotation (±0.1–1.8°)
-    const rotDeg = rnd(0.1, 1.8) * (coin() ? 1 : -1);
+    // Layer 2 — rotation (±0.3–2.5°) — geometric transform disrupts SynthID's
+    // spatially-aligned frequency watermark more than pixel noise alone.
+    const rotDeg = rnd(0.3, 2.5) * (coin() ? 1 : -1);
 
-    // Layer 3 — per-channel gain (R/G/B independently, 0.980–1.020)
-    const rGain = rnd(0.980, 1.020);
-    const gGain = rnd(0.982, 1.018);
-    const bGain = rnd(0.978, 1.022);
+    // Layer 3 — per-channel gain (R/G/B independently)
+    const rGain = rnd(0.975, 1.025);
+    const gGain = rnd(0.978, 1.022);
+    const bGain = rnd(0.973, 1.027);
 
-    // Layer 4 — hue shift (±2–9°) — must be integer, Sharp rejects floats
-    const hueShift = Math.round(rnd(2, 9)) * (coin() ? 1 : -1);
+    // Layer 4 — hue shift (±3–11°) — must be integer, Sharp rejects floats
+    const hueShift = Math.round(rnd(3, 11)) * (coin() ? 1 : -1);
 
-    // Layer 5 — brightness jitter (0.96–1.04)
-    const brightnessF = rnd(0.96, 1.04);
+    // Layer 5 — brightness jitter (0.95–1.05)
+    const brightnessF = rnd(0.95, 1.05);
 
-    // Layer 6 — Gaussian noise sigma (1.5–6.0)
-    const noiseSigma = rnd(1.5, 6.0);
+    // Layer 6 — Gaussian noise sigma (3.0–8.0) — increased from 1.5–6.0 to
+    // better break frequency-domain watermark patterns after JPEG quantisation.
+    const noiseSigma = rnd(3.0, 8.0);
 
-    // Layer 7 — JPEG quality (84–97)
-    const jpegQuality = 84 + (randomBytes(1)[0] % 14);
+    // Layer 7 — JPEG quality (82–95) — wider range = more DCT coefficient
+    // variation across images, reducing cross-image watermark correlation.
+    const jpegQuality = 82 + (randomBytes(1)[0] % 14);
 
     // ── Pipeline ──────────────────────────────────────────────────────────
     // Step A: crop + rotate + resize back → raw pixels

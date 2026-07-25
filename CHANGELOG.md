@@ -4,6 +4,113 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.165 — 2026-07-25
+
+### Fixed — Fix AI Slop no longer stripping all AI watermarks on Windows
+
+**Symptom:** Images posted via Make a Post continued to be labelled "Made with AI" by Instagram
+even when the "Fix AI Slop" checkbox was enabled. The tool appeared to run (no error in the
+automation log) but had no effect on the label.
+
+**Root cause — platform-dependent Sharp fallback:**
+The previous implementation did the binary C2PA strip first, then delegated ALL remaining metadata
+removal (EXIF, XMP, IPTC) to a Sharp pipeline. If Sharp's native binary was unavailable in the
+Electron/Windows environment — which it silently is when the Windows build does not include the
+platform-specific Sharp native module — the code fell through to a `catch` block that wrote the
+binary-stripped file and returned early. No EXIF, no XMP, no IPTC was removed.
+
+Grok-generated images embed AI provenance in EXIF tags. ChatGPT DALL-E embeds both C2PA and XMP.
+Google Imagen embeds C2PA plus pixel-level SynthID. In the Windows Electron context, only the C2PA
+block was stripped; all other markers survived untouched, and Instagram's detector still fired.
+
+**Root cause — binary C2PA strip too narrow:**
+The old JPEG stripper only removed APP11 ("C2PA") segments. It did not touch:
+- APP1 "Exif\0" — EXIF metadata (used by Grok/xAI to embed hidden watermark tags)
+- APP1 "http://ns.adobe.com/xap" — XMP standard namespace (ChatGPT, Adobe, Google)
+- APP1 "W5M0MpCehiHzreSzNTczkc9d" — Extended XMP (ChatGPT DALL-E long manifests)
+- APP13 — IPTC / Photoshop IRB (some AI generators embed provenance here)
+
+PNG and WebP had the same gaps (no EXIF chunk, no XMP chunk removal).
+
+**Fix — `artifacts/api-server/src/instagram/fixAiSlop.ts` fully rewritten:**
+
+All metadata is now stripped at pure binary level in a single pass, with zero external
+dependencies. The Sharp pixel-perturbation step is now optional and only runs if Sharp is
+available; the binary strip always runs on every platform.
+
+What the binary strip now removes per format:
+
+| Metadata type | Trigger for "Made with AI" | JPEG | PNG | WebP |
+|---|---|---|---|---|
+| C2PA / Content Credentials | ChatGPT, Google Imagen, Adobe | APP11 "JP…" | caBX chunk | C2PA + JUMB chunks |
+| EXIF | Grok / xAI hidden tags | APP1 "Exif\0" | eXIf chunk | EXIF RIFF chunk |
+| XMP standard | ChatGPT DALL-E, Adobe, Google | APP1 adobe xap URI | iTXt/tEXt "XML:com.adobe.xmp" | XMP RIFF chunk |
+| Extended XMP | ChatGPT DALL-E long manifests | APP1 "W5M0…" | — | — |
+| IPTC / Photoshop IRB | Some AI generators | APP13 (all) | — | — |
+
+If Sharp IS available, a second pass applies a Sharp `.withMetadata(false)` re-encode (catches any
+residual ICC profile or edge-case metadata the binary pass missed) followed by the 7-layer
+`makeUniqueImage` pixel perturbation to defeat SynthID pixel-level watermarks (Google Imagen,
+ChatGPT DALL-E). If Sharp is NOT available, the binary strip alone still covers every metadata
+trigger Instagram uses for its "Made with AI" label.
+
+**Fix — `artifacts/api-server/src/instagram/makeUnique.ts` — stronger pixel perturbation:**
+
+The SynthID pixel watermark (Google Imagen / DALL-E) is designed to survive ≤20% image crop and
+single-pass JPEG recompression. The previous crop range (1–6 px per edge) was less than 0.6% of
+a 1080px image — nowhere near enough displacement to break SynthID's spatial grid alignment.
+
+Updated ranges:
+- **Crop:** 1–6 px → **8–22 px per edge** (combined with rotation, disrupts spatial watermark grid)
+- **Rotation:** ±0.1–1.8° → **±0.3–2.5°** (geometric transform is more effective than noise alone)
+- **Gaussian noise σ:** 1.5–6.0 → **3.0–8.0** (stronger frequency disruption post-JPEG quantisation)
+- **JPEG quality:** 84–97 → **82–95** (wider DCT coefficient variation reduces cross-image correlation)
+- **Hue shift:** ±2–9° → **±3–11°** (wider colour-space spread)
+- **Per-channel gain:** ±2% → **±2.5%** (slightly wider RGB channel decorrelation)
+
+All perturbations remain imperceptible to the human eye. Instagram recompresses every uploaded
+image anyway so the output quality is a non-issue.
+
+---
+
+### Fixed — Brightness button not recognising existing phone brightness level
+
+**Symptom:** The Brightness quick-control button on the My Device tab did not know what brightness
+the phone was already set to. On first press it always assumed the phone was at full brightness and
+sent 0%, even if the phone was already at 50% — which then pushed it to a different value than
+expected. On a second press it sent 50% regardless of the actual current state. The button also
+appeared as a near-invisible white icon on a white/transparent background.
+
+**Root cause:**
+The `dimmed` React state was initialised to `false` on every page load and never read the device's
+actual brightness. The toggle was pure UI state with no ground truth, so pressing the button the
+wrong number of times left the UI state and the phone state completely out of sync.
+
+The button styling used `text-white` on `bg-white/15` — a white Sun icon on a semi-transparent
+white background — making it effectively invisible.
+
+**Fix — `artifacts/dannys-bot/src/pages/MobilePage.tsx`:**
+- On serial change (device selected), a `useEffect` now fetches the real brightness from the new
+  `GET /api/mobile/devices/:serial/brightness` endpoint and initialises `dimmed` from that value.
+  Anything ≤10% is treated as "dimmed" (0% was previously set); anything above is treated as
+  "normal" (50% target). The button now always reflects the phone's actual state before the first
+  press.
+- Button now always sets **absolutely** — first press → 0%, next press → 50% — not relative to
+  current level. No accumulation is possible regardless of how many times it has been pressed.
+- Button styling fixed: `bg-white text-gray-900` (solid white circle, dark Sun icon) when active;
+  faint translucent ring when dimmed. The icon is now clearly visible in both states.
+
+**Fix — `artifacts/api-server/src/mobile/androidManager.ts`:**
+- Added `getBrightness(serial)` function: reads `screen_brightness` via
+  `adb shell settings get system screen_brightness` and converts the 0–255 Android scale to a
+  0–100 percent value.
+
+**Fix — `artifacts/api-server/src/routes/mobile.ts`:**
+- Added `GET /api/mobile/devices/:serial/brightness` endpoint that returns `{ percent: number }`
+  (0–100). Used by the frontend on device selection to sync the button state.
+
+---
+
 ## v1.2.164 — 2026-07-25
 
 ### Fixed — Sponsored-post CTA button being tapped instead of caption "more"
