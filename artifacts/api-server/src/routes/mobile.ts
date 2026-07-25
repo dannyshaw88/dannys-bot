@@ -4251,6 +4251,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     shareDmPercentMax: z.number().min(0).max(100).default(0),
     savePercentMin: z.number().min(0).max(100).default(0),
     savePercentMax: z.number().min(0).max(100).default(0),
+    expandCaptionPercentMin: z.number().min(0).max(100).default(0),
+    expandCaptionPercentMax: z.number().min(0).max(100).default(0),
     viewStoriesSlidesMin: z.number().min(0).max(100).default(0),
     viewStoriesSlidesMax: z.number().min(0).max(100).default(0),
     viewStoriesSlideWatchPctMin: z.number().min(1).max(100).default(50),
