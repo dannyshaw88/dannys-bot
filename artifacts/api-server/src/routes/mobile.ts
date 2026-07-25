@@ -1313,7 +1313,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostLocalFolderPath: z.string().default(""),
     makePostLocalFolderNoRepeat: z.boolean().default(false),
     makePostLocalFolderRandom: z.boolean().default(false),
-    makePostLocalFolderDeleteAfterUpload: z.boolean().default(true),
+    makePostLocalFolderDeleteAfterUpload: z.boolean().default(false),
     makePostUseChatGpt: z.boolean().default(false),
     makePostFixAiSlop: z.boolean().default(false),
     makePostMakeUnique: z.boolean().default(false),
@@ -1409,7 +1409,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       makePostDisableAtPostCount: 0, makePostDisableWhenExhausted: true,
       makePostLocalFolderEnabled: false, makePostLocalFolderPath: "",
       makePostLocalFolderNoRepeat: false, makePostLocalFolderRandom: false,
-      makePostLocalFolderDeleteAfterUpload: true,
+      makePostLocalFolderDeleteAfterUpload: false,
       makePostUseChatGpt: false, makePostFixAiSlop: false, makePostMakeUnique: false,
       makePostCaptionText: "",
       makePostImageSettings: {
@@ -1516,7 +1516,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostDisableAtPostCount: 0, makePostDisableWhenExhausted: true,
         makePostLocalFolderEnabled: false, makePostLocalFolderPath: "",
         makePostLocalFolderNoRepeat: false, makePostLocalFolderRandom: false,
-        makePostLocalFolderDeleteAfterUpload: true,
+        makePostLocalFolderDeleteAfterUpload: false,
         makePostUseChatGpt: false, makePostFixAiSlop: false, makePostMakeUnique: false,
         makePostCaptionText: "",
         makePostImageSettings: {
@@ -4457,7 +4457,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostLocalFolderPath: z.string().default(""),
     makePostLocalFolderNoRepeat: z.boolean().default(false),
     makePostLocalFolderRandom: z.boolean().default(false),
-    makePostLocalFolderDeleteAfterUpload: z.boolean().default(true),
+    makePostLocalFolderDeleteAfterUpload: z.boolean().default(false),
     makePostCaptionText: z.string().default(""),
     // Which Instagram account slot is driving this cycle. When set the cycle
     // switches to that account via the built-in Instagram switcher before

@@ -2660,7 +2660,7 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   makePostLocalFolderPath: "",
   makePostLocalFolderNoRepeat: false,
   makePostLocalFolderRandom: false,
-  makePostLocalFolderDeleteAfterUpload: true,
+  makePostLocalFolderDeleteAfterUpload: false,
   makePostUseChatGpt: false,
   makePostFixAiSlop: false,
   makePostMakeUnique: false,
@@ -5716,6 +5716,14 @@ export function AutomationSettingsPanel({
                           disabled={loading}
                           className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                         <label htmlFor={`make-a-post-local-random-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Pick at random</label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" id={`make-a-post-local-delete-after-${slotIdx ?? 0}`}
+                          checked={settings.makePostLocalFolderDeleteAfterUpload === true}
+                          onChange={e => setSettings(s => ({ ...s, makePostLocalFolderDeleteAfterUpload: e.target.checked }))}
+                          disabled={loading}
+                          className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                        <label htmlFor={`make-a-post-local-delete-after-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Delete from PC after posting</label>
                       </div>
                     </div>
 
