@@ -6690,6 +6690,18 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     setTimeout(() => { setRebooting(false); setScreenOn(true); }, 15000);
   }, [serial, rebooting]);
 
+  // Sync dimmed state from the actual device brightness on serial change
+  React.useEffect(() => {
+    if (!serial) return;
+    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/brightness`)
+      .then(r => r.json())
+      .then((d: { percent?: number }) => {
+        // Consider anything ≤10% as "dimmed" (0% target was set)
+        setDimmed(typeof d.percent === "number" ? d.percent <= 10 : false);
+      })
+      .catch(() => {});
+  }, [serial]);
+
   const handleBrightness = React.useCallback(async () => {
     if (!serial) return;
     const next = !dimmed;
@@ -6962,10 +6974,10 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
             onClick={handleBrightness}
             disabled={!serial}
             title={dimmed ? "Restore 50% brightness" : "Set brightness to 0%"}
-            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md border
+            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md
               ${dimmed
-                ? "bg-white/5 border-white/20 text-white/30 hover:bg-white/10"
-                : "bg-white/15 border-white/30 text-white hover:bg-white/25"}`}
+                ? "bg-white/10 border border-white/20 text-white/40 hover:bg-white/15"
+                : "bg-white text-gray-900 hover:bg-gray-100"}`}
           >
             <Sun className="w-5 h-5" />
           </button>

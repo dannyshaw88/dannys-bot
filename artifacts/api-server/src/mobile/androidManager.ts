@@ -1085,6 +1085,16 @@ export function setBrightness(serial: string, percent: number): void {
   spawnSync(adb, ["-s", serial, "shell", "settings", "put", "system", "screen_brightness", String(value)], { encoding: "utf8", timeout: 3000 });
 }
 
+export function getBrightness(serial: string): number {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const result = spawnSync(adb, ["-s", serial, "shell", "settings", "get", "system", "screen_brightness"], { encoding: "utf8", timeout: 3000 });
+  const raw = parseInt(result.stdout?.trim() ?? "", 10);
+  if (isNaN(raw)) return 50; // default if unreadable
+  // Convert Android 0–255 scale back to 0–100 percent
+  return Math.round((Math.max(0, Math.min(255, raw)) / 255) * 100);
+}
+
 // ── Device profile lookup table ────────────────────────────────────────────
 // Maps ro.product.model → the behavioral flags that differ between OEM
 // launchers. Only covers the Android system-shell surface; Instagram's own UI

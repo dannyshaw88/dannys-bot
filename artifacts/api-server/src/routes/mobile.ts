@@ -8970,6 +8970,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(500).json({ error: e?.message }); }
   });
 
+  app.get("/api/mobile/devices/:serial/brightness", async (req: Request, res: Response) => {
+    try {
+      const percent = android.getBrightness(p(req, "serial"));
+      res.json({ percent });
+    } catch (e: any) { res.status(500).json({ error: e?.message }); }
+  });
+
   const brightnessSchema2 = z.object({ percent: z.number().min(0).max(100) });
   app.post("/api/mobile/devices/:serial/brightness", async (req: Request, res: Response) => {
     try {
