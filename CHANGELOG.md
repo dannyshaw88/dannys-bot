@@ -4,6 +4,72 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.148 — 2026-07-25
+
+### Added — App Switch random action (Random Actions / Human Session Tool)
+
+A new **App Switch %** min/max field has been added to the **Random Actions** section of the phone farm's Human Session Tool settings.
+
+**What it does when rolled:**
+
+1. Presses the Android square/Overview button to open the floating-windows recent-apps overlay.
+2. Launches the device's default SMS app using a generic `android.intent.action.SENDTO` intent — this works across all OEM launchers (Samsung, Xiaomi, stock Android, etc.) without hardcoding any package name.
+3. Dwells inside the SMS app for a random **10–30 seconds**, simulating someone checking messages mid-session.
+4. Presses the Overview button again to re-open the recents overlay.
+5. Swipes up to dismiss the SMS app card, leaving Instagram as the only remaining app.
+6. Calls `launchInstagram()` to bring Instagram back to the foreground and resume the session.
+
+**Where to find it in the UI:**
+
+Phone Farm → select a device → Account Slot → Human Session Tool → **Random Actions** → enable the toggle → **App Switch %** field (appears below Visit Profile %).
+
+**How to configure:**
+
+Set a min/max percentage (0–100). Each automation cycle rolls once; if the roll passes, the app switch fires during that cycle's jitter phase. Setting both to 0 disables it entirely (default). Example: 10–20 means roughly a 15% average chance per cycle.
+
+**Schema locations updated:**
+
+- `AutomationSettings` TypeScript interface
+- Persistence Zod schema (`automationSchema`)
+- Execution Zod schema (`automationCycleSchema`)
+- Both default-value blocks
+- `automationCycleSchema` destructuring
+- `AUTOMATION_DEFAULTS` and `AutomationSettingsData` interface in the frontend
+- `COPY_SECTIONS` config (so it copies correctly when copying settings across slots)
+- UI panel (`AutomationSettingsPanel` in `MobilePage.tsx`)
+
+---
+
+### Fixed — Expand Caption % never firing (always 0 regardless of setting)
+
+**Root cause:**
+
+`expandCaptionPercentMin` and `expandCaptionPercentMax` were present in:
+- The **persistence schema** (`automationSchema`) — so the values saved to the database correctly.
+- The TypeScript `AutomationSettings` interface.
+- The destructuring block in the automation cycle handler.
+- The `runCheckFeedLoop()` call site (values were passed in).
+
+But they were **missing from `automationCycleSchema`** — the Zod schema that parses the HTTP POST body when the automation cycle runs. Zod strips unknown fields by default, so both values were silently discarded on every cycle POST and arrived at `runCheckFeedLoop()` as `undefined`, which defaulted to `0`.
+
+`captionExpandChance` was therefore always `0`, making `wantExpandCaption` always `false`. The feature appeared to do nothing regardless of what value was set in the UI.
+
+**Evidence from logs (`equinox-log-2026-07-25`):**
+
+```
+▶ Feed done — 3 likes, 0 feed-shares, 0 DM-shares, 0 saves, 0 caption-expands
+```
+
+Even with Expand Caption % set to 100 and 10 posts scrolled, every scroll logged "no actions rolled this scroll" for posts that didn't happen to roll a like — because `wantExpandCaption` was always false, so the `if (wantLike || ... || wantExpandCaption)` gate never opened for caption-only scrolls.
+
+**Fix:**
+
+Added `expandCaptionPercentMin` and `expandCaptionPercentMax` to `automationCycleSchema.extend({...})` in `artifacts/api-server/src/routes/mobile.ts`, directly after the existing `savePercentMax` entry. The values now survive the Zod parse and reach `runCheckFeedLoop()` with the user's actual settings.
+
+**File changed:** `artifacts/api-server/src/routes/mobile.ts`
+
+---
+
 ## v1.2.147 — 2026-07-25
 
 ### Fixed — Follow tool tapping the wrong profile (false suggestion-chip detection)
