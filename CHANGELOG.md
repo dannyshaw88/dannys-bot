@@ -4,6 +4,65 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.163 — 2026-07-25
+
+### Fixed — Make a Post (Source: My PC) was permanently deleting images from the assigned PC directory
+
+**Symptom:** Images were silently disappearing from the folder assigned to a slot's "Source: My PC"
+setting after being posted. Users had to repeatedly re-add images that should have stayed on disk.
+
+**Root cause:** The `deleteAfterUpload` setting (which controls whether the original PC-side image
+is removed after a successful post) defaulted to `true` in every layer of the code — both zod
+schemas, all fallback defaults, and the UI state object. Critically, there was **no checkbox in
+the UI** to turn this off. The phone-side temp copy has always been deleted after every post
+(intentional — prevents camera-roll bloat), but the PC-side original was being deleted too with
+no way to stop it short of editing source code.
+
+**Fix:**
+- Changed the default from `true` to `false` in all four schema/default locations in
+  `artifacts/api-server/src/routes/mobile.ts` (lines 1316, 1412, 1519, 4460) and the
+  UI state in `artifacts/dannys-bot/src/pages/MobilePage.tsx`.
+- Added a **"Delete from PC after posting"** checkbox to the Source: My Computer section of
+  the Human Session Tool, alongside the existing "Do not repost the same image" and
+  "Pick at random" checkboxes. The setting is now opt-in, not opt-out.
+- The phone-side temp copy continues to be deleted unconditionally after every post (unchanged).
+
+---
+
+### Fixed — Spread Follows with filters enabled was navigating into accounts instead of searching for a new target
+
+**Symptom:** When Spread Follows was enabled and a follower-count filter (e.g. "under 25K" or
+"50 followers+") rejected a pre-fetched candidate, the backup candidates that followed would fail
+to complete properly. Instead of searching for and following the backup account, the phone would
+end up on the wrong profile — or tap something on the wrong screen entirely — as if it had
+continued forward rather than going back to search.
+
+**Root cause:** In normal (non-spread) follow mode, all candidates share a single
+`runFollowUsersStep` call. When a candidate is filtered, the code does `pressBack` + `continue`
+inside the existing while loop — the phone stays on the search results page where the search bar
+is always visible and the next candidate works correctly.
+
+With Spread Follows, each backup candidate triggers a **fresh** `runFollowUsersStep` call. Every
+fresh call starts by tapping the search tab to navigate there. But when called after a filtered
+candidate, the phone is already on the search results page with the rejected username still in the
+bar — the search tab is already active. Tapping the active search tab on this Instagram build
+**dismisses the search entirely** and returns to the Explore grid in a different layout state.
+In that state, `findInstagramSearchBar` fails to locate the bar in the accessibility tree, the
+positional fallback misfires, no text gets typed into a real search field, results never appear,
+and the code falls back to tapping a fixed coordinate — landing on the wrong profile.
+
+**Fix:** Before calling `_runOneSpreadSlot` for any backup candidate (both the initial
+backup-queue retry loop and the post-exhaustion HikerAPI re-scrape retry loop), the code now
+navigates back to the home feed first via `findHomeTab` + tap (with `pressBack` as a fallback).
+This gives every backup call the same clean starting state as the very first spread slot —
+arriving at the search tab from the home feed, which has always worked correctly.
+
+**Changed file:** `artifacts/api-server/src/routes/mobile.ts` — `_resetToHome` helper added
+inside the Spread Follow slot handler; called before each entry into the backup-queue while loop
+and the re-scrape while loop.
+
+---
+
 ## v1.2.162 — 2026-07-25
 
 ### Fixed — "Tap again to exit" toast still appearing after account switch (v1.2.161 partial fix)
