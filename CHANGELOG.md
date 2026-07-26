@@ -4,6 +4,32 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.202 — 2026-07-26
+
+### Improved — Account Switch and Check DM tool markers added; Random Jitter corrected
+
+Two corrections to the section-marker work from v1.2.201:
+
+**Check DM was missing its own marker.** There are 8 tools in the Human Session Tool, not 7. The tool dispatcher sequence is `feed → stories → explore → reels → checkDm → follow → post → jitter`. `runCheckDmLoop()` had been grouped inside the Random Jitter marker by mistake — it is a separate tool with its own UI toggle. It now has its own `═══` section block, and the Random Jitter marker no longer lists it.
+
+**Account Switch now has its own marker.** The block that calls `android.switchToInstagramAccount()` before every tool dispatch runs inside the automation cycle without any section boundary. It now has an `ACCOUNT SWITCH` marker that clarifies: this block owns account verification and switching only; no tool logic belongs here; the implementation lives in `androidManager.ts → switchToInstagramAccount()`.
+
+Marked sections after this release (9 total including Account Switch):
+
+| Section | Functions |
+|---|---|
+| Account Switch | `android.switchToInstagramAccount()` (in androidManager.ts) |
+| View Feed | `runCheckFeedLoop` |
+| View Stories | `pickAndOpenRandomStory`, `runViewStoriesFromFeedLoop` |
+| View Explore Page | `runViewExplorePage` |
+| View Reels | `runViewReelsLoop` |
+| Make a Post | `pickLocalFolderImage`, `runMakePostStep` |
+| Check DM | `runCheckDmLoop` |
+| Follow | `runProfileBrowsingSequence`, `tapOneProfileHighlight`, `runFollowUsersStep` |
+| Random Jitter | `runCheckNotifications`, `runVisitOwnProfile`, `runVisitSaved`, `runVisitSettings`, `runAppSwitch` |
+
+---
+
 ## v1.2.201 — 2026-07-26
 
 ### Improved — Tool boundary markers added to routes/mobile.ts

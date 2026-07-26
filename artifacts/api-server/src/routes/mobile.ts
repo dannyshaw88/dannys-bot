@@ -5364,11 +5364,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   // ═══════════════════════════════════════════════════════════════════════════
   // TOOL: RANDOM JITTER
-  // Functions: runCheckNotifications(), runCheckDmLoop(), runVisitOwnProfile(),
-  //            runVisitSaved(), runVisitSettings(), runAppSwitch()
+  // Functions: runCheckNotifications(), runVisitOwnProfile(), runVisitSaved(),
+  //            runVisitSettings(), runAppSwitch()
   // Route:     (called from automation-cycle only, interleaved between tools)
   // Isolation: human-behaviour padding actions. None of these functions should
   //            contain tool-specific logic (follow, post, story, etc.).
+  //            NOTE: runCheckDmLoop() is the CHECK DM TOOL — see its own
+  //            marker below. It is NOT part of Jitter.
   // ═══════════════════════════════════════════════════════════════════════════
 
   /** Check Instagram notifications: tap heart icon → scroll → optionally tap item. */
@@ -5421,6 +5423,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     await sleepOrAbort(serial, 800);
     onLog?.("Random Jitter: ✓ notifications check done");
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TOOL: CHECK DM
+  // Functions: runCheckDmLoop()
+  // Route:     (called from automation-cycle only)
+  // Isolation: opens DM inbox, scrolls, optionally taps a thread.
+  //            Separate from Random Jitter — it has its own toggle in the UI.
+  //            Do not merge its logic with Jitter helpers.
+  // ═══════════════════════════════════════════════════════════════════════════
 
   /**
    * Check DM inbox: tap the paper-plane icon, dismiss any "Not now" popup,
@@ -7447,6 +7458,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         tLog("▶ No launch popup — feed ready");
       }
       tLog("  ✓ Instagram open");
+
+      // ═════════════════════════════════════════════════════════════════════
+      // ACCOUNT SWITCH
+      // Functions: android.switchToInstagramAccount() [in androidManager.ts]
+      // When:      runs before every tool dispatch, once per automation-cycle
+      //            slot execution — switches to the account assigned to this
+      //            slot so the correct account is always active before tools run.
+      // Isolation: this block owns account verification and switching only.
+      //            No tool logic (feed, follow, stories, etc.) belongs here.
+      //            The underlying implementation lives entirely in
+      //            androidManager.ts → switchToInstagramAccount().
+      // ═════════════════════════════════════════════════════════════════════
 
       // 2d. Switch to the correct Instagram account for this slot.
       // Each slot stores the username of the Instagram account it represents.
