@@ -4,6 +4,69 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.178 — 2026-07-26
+
+### Bug Fix — View Stories emoji key pixel scanner: glyph-split merge now fuses the 😊 face halves
+
+**Root cause (from `[kbd-diag]` log data).**
+
+The pixel scanner finds the emoji key by scanning the keyboard's bottom row for
+key-shaped segments, picking the widest one (space bar), and returning the centre
+of the segment immediately to its left. The 😊 emoji glyph painted on the key
+surface breaks that key into two narrow strips at pixel-scan time:
+
+```
+left-strip  (before the face): ~19 px wide
+[glyph gap ~30 px — orange/yellow face pixels fail isKeyInterior]
+right-strip (after  the face): ~22 px wide
+```
+
+The existing small merge pass (gap ≤ 9 px) bridges letter-glyph breaks but is
+far too narrow to bridge a 30 px emoji face. So only the ~22 px right-strip
+reached `leftCandidates[0]`. The size guard `emojiWidth < spaceWidth × 0.12`
+(22 < 57 on a 1080p screen) then rejected it and the function returned null —
+the keyboard appeared but the smiley key was never pressed.
+
+**Confirmed from logs:**
+
+```
+[kbd-diag] theme=light  maxRowFrac=1.000 qualifyingRows=366
+[view-stories] emoji key not found — skipping emoji comment   imeIncluded=true
+```
+
+The `imeIncluded=true` in the warning confirmed the keyboard WAS found; the
+failure was purely in the left-candidate size check after the glyph stripped
+the key down to a ~22 px fragment.
+
+**Fix — second-pass glyph-split merge (`androidManager.ts`).**
+
+After the existing small-gap merge, a targeted second pass checks the two
+rightmost left-of-space-bar candidates:
+
+- gap > 10 px (safely above any real inter-key gap of ~4–8 px)
+- gap ≤ 48 px (covers a 30–50 px emoji face glyph)
+- combined width 10 %–55 % of space bar (plausible for a single key)
+
+When all three conditions hold, the two strips are fused into the full emoji key
+bounding box and the size guard is evaluated against the combined width (~80 px),
+which comfortably passes `≥ 10 %` of the space bar. The fuse is logged at
+`[kbd-diag] glyph-split merge:` so it is visible in the debug log.
+
+The size threshold was also lowered from 12 % to 10 % to give headroom for
+partially-reconstructed keys on unusual screen densities.
+
+**What users will see.** The emoji key is now tapped correctly on Xiaomi/MIUI
+keyboards with the 😊 smiley face glyph. The emoji picker opens, a random
+emoji is selected, and the reply is sent — the full comment flow completes.
+
+**Files changed.**
+
+- `artifacts/api-server/src/mobile/androidManager.ts` —
+  `findKeyboardEmojiButtonFromPixels()`: added glyph-split second-pass merge
+  with diagnostic log line; size threshold 12 % → 10 %.
+
+---
+
 ## v1.2.177 — 2026-07-26
 
 ### Bug Fix — View Stories emoji comment: smiley key now found by node scan, not coordinate guess

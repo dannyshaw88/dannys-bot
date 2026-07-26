@@ -2618,22 +2618,62 @@ function _findKeyboardEmojiButtonForTheme(
   const leftCandidates = merged
     .filter(s => s.x2 < space.x1)
     .sort((a, b) => b.x2 - a.x2);
-  const emoji = leftCandidates[0];
-  if (!emoji) return null;
+  if (!leftCandidates[0]) return null;
+
+  const spaceWidth = space.x2 - space.x1;
+
+  // Second-pass glyph-split merge.
+  //
+  // The first-pass merge (mergeGap ~9 px) bridges tiny letter-glyph breaks,
+  // but the 😊 emoji face is much wider (~30–50 px on 1080p screens) and
+  // leaves the emoji key as two separate strips:
+  //   left-strip  (before the face) : x1=~206, x2=~225  →  ~19 px
+  //   right-strip (after  the face) : x1=~262, x2=~284  →  ~22 px
+  //
+  // With only the right-strip surviving as leftCandidates[0], the old size
+  // guard (emojiWidth < spaceWidth * 0.12, i.e. 22 < 57) rejects it and
+  // the whole function returns null — keyboard appears but smiley never taps.
+  //
+  // Detection: if the two rightmost left-of-space-bar candidates have a gap
+  // in the "glyph range" (> 10 px, ≤ 48 px) AND their combined span is
+  // plausible for a single key (10 %–55 % of the space bar), treat them as
+  // the left-strip + right-strip of one emoji key and fuse them.
+  // The > 10 px lower bound is safely above any real inter-key gap (~4–8 px),
+  // so this never accidentally merges two distinct keys.
+  let emoji = leftCandidates[0];
+  if (leftCandidates.length >= 2) {
+    const rightStrip = leftCandidates[0]; // closest to space bar
+    const leftStrip  = leftCandidates[1]; // second closest
+    const glyphGap     = rightStrip.x1 - leftStrip.x2;
+    const combinedWidth = rightStrip.x2 - leftStrip.x1;
+    const glyphGapMax  = Math.max(48, Math.round(width * 0.05));
+    if (
+      glyphGap > 10 &&
+      glyphGap <= glyphGapMax &&
+      combinedWidth >= spaceWidth * 0.10 &&
+      combinedWidth <= spaceWidth * 0.55
+    ) {
+      // Fuse the two strips into the full emoji key bounding box.
+      emoji = { x1: leftStrip.x1, x2: rightStrip.x2, y: rightStrip.y };
+      logger.info(
+        `[kbd-diag] glyph-split merge: strips [${leftStrip.x1},${leftStrip.x2}]+[${rightStrip.x1},${rightStrip.x2}]` +
+        ` → [${emoji.x1},${emoji.x2}] (glyphGap=${glyphGap} combinedW=${combinedWidth} spaceW=${spaceWidth})`,
+      );
+    }
+  }
 
   const gap = space.x1 - emoji.x2;
   const emojiWidth = emoji.x2 - emoji.x1;
-  const spaceWidth = space.x2 - space.x1;
 
   // Adjacency check: the emoji key must be immediately next to the space bar.
   // A generous gap handles rounded key corners while rejecting a missing row.
   if (gap > Math.max(32, emojiWidth * 0.75)) return null;
 
-  // Key-size check: even after merging, reject any candidate that is still
-  // implausibly narrow for a real key.  The smiley key is always at least
-  // ~12 % of the space-bar width on every device size.  This rejects residual
-  // single-pixel anti-aliasing or glyph-outline fragments that survive merging.
-  if (emojiWidth < spaceWidth * 0.12) return null;
+  // Key-size check: reject any candidate that is still implausibly narrow
+  // after both merge passes.  The smiley key is always at least ~10 % of the
+  // space-bar width on every device size (lowered from 12 % to give headroom
+  // when the glyph-split fuse only partially reconstructs the key bounds).
+  if (emojiWidth < spaceWidth * 0.10) return null;
 
   return {
     x: Math.round((emoji.x1 + emoji.x2) / 2),
