@@ -4,6 +4,66 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.173 — 2026-07-26
+
+### Maintenance — Freeze the legacy profile Human Session Tool and route edits to Phone Farm
+
+The project contains two separate Human Session Tool implementations:
+
+1. The newer **Phone Farm/mobile implementation**, which runs actions on physical
+   Android devices through ADB and UIAutomator.
+2. The older **profile/browser implementation**, which runs through the browser/API
+   automation engine.
+
+To prevent changes intended for Phone Farm from being applied to the wrong tool,
+the project guidance now defines an explicit editing boundary.
+
+#### Default edit target
+
+Human Session Tool changes should now target only:
+
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx`
+- `artifacts/api-server/src/routes/mobile.ts`
+- `artifacts/api-server/src/mobile/androidManager.ts`
+
+The live mobile execution path is:
+
+```text
+MobilePage.tsx
+→ POST /api/mobile/devices/:serial/automation-cycle
+→ routes/mobile.ts
+→ mobile/androidManager.ts
+```
+
+#### Frozen legacy target
+
+The following profile/browser files are marked as frozen and must not be edited,
+refactored, renamed, migrated, or synchronized during mobile work:
+
+- `artifacts/dannys-bot/src/components/tools/HumanSessionPanel.tsx`
+- `artifacts/dannys-bot/src/pages/ProfileDetailsPage.tsx`
+- `artifacts/api-server/src/instagram/automationEngine.ts`
+- The duplicate legacy source tree under `artifacts/api-server/src/src/instagram/`
+
+The same boundary is documented in both `replit.md` and `AGENT-BRIEFING.md` so
+future changes can be checked against the correct execution path before editing.
+
+#### Windows installer workflow
+
+The existing `.github/workflows/build-windows-installer.yml` remains the single
+canonical GitHub Actions workflow for Windows installers. It:
+
+- Builds the API server and frontend on Ubuntu.
+- Transfers both build outputs to the Windows packaging job.
+- Installs Electron dependencies and builds the Electron bundle.
+- Produces the `Aura-Farming-Windows-Installer` artifact.
+- Publishes tagged builds to GitHub Releases.
+
+The deprecated duplicate workflow files remain inert by design so one push cannot
+start multiple competing installer builds.
+
+---
+
 ## v1.2.172 — 2026-07-26
 
 ### Fix — Click Hashtag % fields added to the correct Phone Farm settings panel (MobilePage)
