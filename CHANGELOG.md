@@ -4,6 +4,34 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.174 — 2026-07-26
+
+### Bug Fix — Make a Post "My Computer" directory path no longer resets
+
+Three-layer fix for the path resetting after a few hours:
+
+1. **`setMakePostFolderPath` now refuses to write empty strings** and re-ensures the
+   `mobile-folder-paths` directory exists on every write. Previously, if the directory
+   creation at server startup failed silently (a Windows permission race), every
+   subsequent write would also fail silently — the dedicated file was never created and
+   the path lived only in `mobile-instances.json`, which could then be cleared by a
+   stale autosave.
+
+2. **`POST /folder-path` endpoint now rejects empty paths** and returns `ok: true`
+   without touching any files. The only caller is the Browse button, which always
+   produces a real path — but if for any reason an empty string reached this endpoint
+   it would clear *both* the dedicated file and `mobile-instances.json` simultaneously,
+   losing the path from every persistence layer at once.
+
+3. **The automation cycle now falls back to the dedicated file** when
+   `makePostLocalFolderPath` in the request body is empty. The cycle receives the
+   path from the React state; if that state had a glitch (hydration race, stale
+   re-fetch) the cycle would silently skip Make a Post. It now reads directly from
+   `getMakePostFolderPath()` as a fallback — the dedicated file is always the
+   authoritative source of truth.
+
+---
+
 ## v1.2.173 — 2026-07-26
 
 ### Maintenance — Freeze the legacy profile Human Session Tool and route edits to Phone Farm

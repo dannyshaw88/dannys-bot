@@ -386,10 +386,17 @@ function getMakePostFolderPath(serial: string, slotIdx: number): string {
   catch { return ""; }
 }
 
-/** Writes the Make-a-Post local folder path for this slot to its dedicated file. */
+/** Writes the Make-a-Post local folder path for this slot to its dedicated file.
+ *  Never writes an empty string — an empty path would silently clear the file and
+ *  make it look like the setting was never saved.  Re-ensures the directory exists
+ *  on every write so a failed mkdirSync at startup (rare Windows permission races)
+ *  does not permanently prevent the file from being created. */
 function setMakePostFolderPath(serial: string, slotIdx: number, folderPath: string): void {
-  try { fs.writeFileSync(_folderPathFile(serial, slotIdx), folderPath, "utf8"); }
-  catch { /* best effort */ }
+  if (!folderPath) return; // never overwrite with empty — callers use "" to mean "no change"
+  try {
+    fs.mkdirSync(FOLDER_PATHS_DIR, { recursive: true }); // re-ensure dir on every write
+    fs.writeFileSync(_folderPathFile(serial, slotIdx), folderPath, "utf8");
+  } catch { /* best effort */ }
 }
 
 /**
@@ -7189,7 +7196,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const serial     = req.params.serial as string;
     const slotIdx    = parseInt(req.params.slotIdx, 10);
     if (isNaN(slotIdx) || slotIdx < 0) { res.status(400).json({ error: "Invalid slot index" }); return; }
-    const folderPath = typeof req.body?.path === "string" ? req.body.path : "";
+    const folderPath = typeof req.body?.path === "string" ? req.body.path.trim() : "";
+    // Guard: never write an empty path.  An empty string has no legitimate meaning
+    // here — the only caller is the Browse button which always produces a real path.
+    // Writing "" would clear BOTH the dedicated file and mobile-instances.json,
+    // which is exactly the reset bug this endpoint was meant to prevent.
+    if (!folderPath) { res.json({ ok: true }); return; }
     // Write to the dedicated file first — this is the authoritative store.
     setMakePostFolderPath(serial, slotIdx, folderPath);
     // Also patch mobile-instances.json so the value is available on a cold
@@ -8164,7 +8176,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // ── Make a Post ─────────────────────────────────────────────────
         } else if (_tool === 'post') {
           if (_toolActivated[_tool]) { // pre-rolled above
-            if (!makePostLocalFolderEnabled || !makePostLocalFolderPath) {
+            // The frontend sends makePostLocalFolderPath from its React state.
+            // If that state was stale/empty for any reason (hydration glitch,
+            // settings loaded before the dedicated file was ready, etc.) fall
+            // back to reading directly from the dedicated file — it is always
+            // the authoritative source and survives everything that can clear
+            // the JSON store.
+            const resolvedFolderPath = makePostLocalFolderPath || getMakePostFolderPath(serial, slotIdx);
+            if (!makePostLocalFolderEnabled || !resolvedFolderPath) {
               steps.push("make-a-post(skipped — Local Folder source not configured)");
               tLog("▶ Make a Post enabled but no Local Folder path configured — skipping");
             } else {
@@ -8174,7 +8193,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               for (let i = 0; i < postCount; i++) {
                 try {
                   const result = await runMakePostStep(serial, {
-                    localFolderPath: makePostLocalFolderPath,
+                    localFolderPath: resolvedFolderPath,
                     localFolderRandom: makePostLocalFolderRandom,
                     localFolderNoRepeat: makePostLocalFolderNoRepeat,
                     deleteAfterUpload: makePostLocalFolderDeleteAfterUpload,
