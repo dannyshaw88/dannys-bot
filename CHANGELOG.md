@@ -4,16 +4,150 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
-## v1.2.181
+## v1.2.181 — 2026-07-26
 
-- **Fix: emoji key detection for MIUI/Xiaomi keyboards.** The previous geometry approach picked the widest node in the keyboard area as the "space bar", but MIUI exposes the bottom key row as a full-screen-width container (`x1=0, x2=1080`), so nothing could ever be "to its left". Three strategies now run in order: (1) label search — `content-desc` containing "emoji"/"Switch to emoji keyboard"; (2) geometry with full-width containers excluded before picking the space bar; (3) coordinate estimate (`x ≈ 27 % of screen width`) when MIUI provides only container nodes. Strategy 3 is what fires on this Xiaomi Redmi 12 5G and places the tap at the correct emoji key position.
+### Bug Fix — View Stories emoji key: MIUI/Xiaomi keyboard container node breaks geometry
+
+**Why the v1.2.179 geometry fix still failed on Xiaomi Redmi 12 5G.**
+
+The v1.2.179 fix found the emoji key by locating the widest node in the keyboard
+area (the space bar), then picking the node in the same row whose right edge sat
+just to the left of the space bar's left edge (`x2 ≤ spaceBar.x1`).
+
+This worked correctly on Gboard and Samsung keyboards. It silently failed on
+MIUI (Xiaomi's Android skin) because MIUI's keyboard accessibility tree does not
+expose individual key nodes — it exposes the **bottom key row as a single
+full-screen-width container node** with `x1=0` and `x2=screenWidth (1080)`.
+That container was the "widest" node, so it was selected as the space bar.
+Since `x1=0`, the condition `x2 ≤ 0` is mathematically impossible — nothing
+can ever be "to the left" of x=0. The emoji key search always returned empty.
+
+**Evidence in the debug log:**
+```
+spaceBar: {x1:0, y1:2056, x2:1080, y2:2089}
+sameRowNodes: [{x1:0, y1:2056, x2:1080, y2:2089, rid:"", desc:"", text:""},
+               {x1:0, y1:2056, x2:1080, y2:2089, rid:"", desc:"", text:""}]
+kbNodeCount: 13
+"emoji key not found — no node left of space bar"
+```
+Two identical full-width container nodes, both spanning 0→1080. No individual
+keys. `kbNodeCount: 13` total nodes in the keyboard band — but all of them were
+row containers, not key leaves.
+
+**Fix — three strategies in priority order.**
+
+1. **Label search (new, first):** scan every keyboard-area node for
+   `content-desc` matching `emoji`, `smiley`, `emoticon`, or
+   `Switch.*emoji keyboard`. Works on Gboard and Samsung keyboards that
+   label the emoji key explicitly. Fires first; skips strategies 2–3 when found.
+
+2. **Geometry with container exclusion (existing, improved):** before picking
+   the space bar, filter out nodes whose width is ≥ 90% of screen width. These
+   are row containers, not keys. Finds the real space bar on keyboards that
+   expose individual key nodes (Gboard, Samsung, etc.), then does the
+   left-of-space-bar search as before.
+
+3. **Coordinate estimate (new, MIUI fallback):** when the "space bar" is still
+   full-width after strategy 2 (meaning the keyboard exposed only containers),
+   tap `x ≈ 27% of screen width` on the bottom-row y-centre. The emoji key is
+   always the third key on the bottom row (`?123 | , | 😊 | [space] | . | ↵`).
+   On this farm's 1080 px wide phone: `x ≈ 292 px`. The row y-centre is read
+   from the detected container's `y1`/`y2` bounds, so it adapts to any screen
+   height without hard-coded pixel values.
+
+**Files changed:**
+- `artifacts/api-server/src/routes/mobile.ts` — keyboard scanning block inside
+  `runViewStoriesFromFeedLoop`
 
 ---
 
-## v1.2.180
+## v1.2.180 — 2026-07-26
 
-- **Fix: account switcher no longer presses BACK after a successful switch tap.** The dismiss-with-BACK is now reserved exclusively for the "already active account" path where no tap was fired and the switcher is still open. Previously a post-tap UIAutomator dump (which can lag while the UI settles) falsely detected the switcher as "still open" and sent an unnecessary BACK that could close a welcome interstitial or exit Instagram.
-- **Fix: story tray tap now reads the real Y position from UIAutomator instead of a hardcoded percentage.** The "Your story" bubble (content-desc="Add") is located via accessibility dump and its centre-Y is used directly, so the tap lands on the correct bubble regardless of device model or screen height. The previous hardcoded 14% value (calibrated on a 1080×2226 device) landed in the feed area on the 1080×2460 Xiaomi Redmi 12 5G, causing audio tracks on feed posts to be tapped instead of stories. Falls back to 11% if the dump fails or the element is absent.
+### Bug Fix — Account switcher fires unnecessary BACK after a successful switch
+
+**What was happening.**
+
+After tapping the target account row in Instagram's account switcher, the code
+took a UIAutomator dump to confirm the switcher had closed. If a `content-desc="Home"`
+or `feed_tab` resource-id was not found in that dump, it pressed `KEYCODE_BACK`
+to dismiss the switcher.
+
+This BACK press fired even after a completely successful account switch. The
+UIAutomator dump runs while the Instagram UI is still animating (the switcher
+sheet slides away, the feed reloads). During that transition the home feed's nav
+controls may not yet be present in the accessibility tree — the dump snapshot
+was taken too early. The code then concluded "switcher still open" and pressed
+BACK, which hit whatever appeared next: a "Welcome back" interstitial, the
+already-dismissed sheet, or the home feed itself.
+
+**Evidence in the debug log:**
+```
+[12:32:01] ✓ Found @damekahart... in switcher — switching…
+[12:32:11] Account switcher still open — dismissing with BACK
+[12:32:11] Dismissed post-switch popup (Dismiss)
+```
+The switch succeeded (slot found, tap fired) but BACK still fired 10 s later.
+
+**Fix.**
+
+Removed the post-tap verification dump and the BACK keyevent entirely from the
+"switch tap was fired" path. The switcher tap itself closes the sheet; no
+additional dismissal is needed. The `_sleep(2000)` that follows gives Instagram
+time to reload the new account's feed before the next automation step.
+
+`KEYCODE_BACK` is now sent **only** in the two "already active account" branches,
+where the switcher is open but the target account is already selected and no
+tap was fired:
+- Username found via `xml.includes()` fallback (no tappable row — typical for
+  the currently-active account on some IG builds)
+- Same scenario after a scroll attempt reveals the username is already active
+
+**Files changed:**
+- `artifacts/api-server/src/mobile/androidManager.ts` — `switchToInstagramAccount`
+  function, step 5 (post-tap verify block removed)
+
+---
+
+### Bug Fix — Story tray tap lands on feed content instead of story bubbles
+
+**What was happening.**
+
+The story tray Y-centre was hard-coded at `h * 0.14` (14% of screen height),
+calibrated on a 1080×2226 reference device where that equals ~312 px.
+
+On the farm's 1080×2460 Xiaomi Redmi 12 5G: `14% × 2460 = 344 px`. The story
+tray on this phone sits at approximately y ≈ 200–250 px (accounting for a taller
+status bar and Instagram header on the taller aspect ratio). y=344 lands below
+the story tray — in the first visible feed post. The tap opened an audio track
+on a feed post instead of a story bubble.
+
+**Evidence in the debug log and screenshot:**
+```
+Story tray: tapping slot 1/4 at (876,314) — attempt 1/3, biased away from
+  bottom-right follow badge
+Story tray: slot 1 opened successfully   ← false positive from the viewer check
+```
+The "opened successfully" result was a false positive — the fast pixel check
+matched a full-screen video post's black bars, not a real story viewer.
+
+**Fix.**
+
+Before picking a slot, `pickAndOpenRandomStory` now does a `dumpUi` call and
+locates the `content-desc="Add"` node — the "Your Story" circle, which is always
+present at the left end of the story tray. The node's vertical centre is the
+exact tray y-centre for this device. The code validates that the detected y is in
+a plausible range (4–22% of screen height) before using it.
+
+Fallback: if the dump fails or the element is not found, uses `h * 0.11` (11%),
+which is more conservative than the old 14% and errs toward the header rather
+than the feed on tall phones.
+
+The next run logs: `Story tray: detected Y centre NNN px from UIAutomator (N%
+of 2460px screen)` confirming which y was used.
+
+**Files changed:**
+- `artifacts/api-server/src/routes/mobile.ts` — `pickAndOpenRandomStory`
+  function, `storyBarYCenter` calculation
 
 ---
 
