@@ -6410,64 +6410,105 @@ export async function findAndTapUserInSearch(
     const xml = await _uiDump(adb, serial);
     if (!xml) continue;
 
-    // Parse node segments individually so we can exclude non-profile nodes.
+    // ── Candidate selection ───────────────────────────────────────────────────
     //
-    // Root cause of the old false-chip bug (fix 1):
-    //   _findAllElems scanned ALL attributes, including the search bar
-    //   EditText which contains "@username" as the typed query. That node
-    //   registered as the "topmost row" → the code falsely declared a chip
-    //   and skipped the first real profile result, tapping the second one.
-    //   Fix: exclude any segment whose class is android.widget.EditText.
+    // Fix 5 (26 Jul 2026) — avatar-ring positive signal replaces broken chip
+    // filter:
     //
-    // Search icon chip pre-filter (fix 4 — 25 Jul 2026):
-    //   Instagram sometimes renders a "search keyword" chip as the first row
-    //   above the user results. This chip's inner TextView
-    //   (id="row_search_keyword_title") has text="<username>" and therefore
-    //   matched the candidate scan, appearing as the topmost hit. The code
-    //   then tapped the chip (which just re-runs the search), detected the
-    //   miss via post-tap dump (~5 s round-trip), and only then fell back to
-    //   the real user row. Fix: exclude any segment that carries the
-    //   row_search_keyword_title or search_keyword_title resource-id — these
-    //   are definitively chip nodes, never user-profile rows.
-    //   The post-tap verification loop below remains as a safety net for any
-    //   future Instagram chip variant not caught by the resource-id filter.
+    //   Problem: Instagram's search results page can show 0, 1, or 2 "chip"
+    //   rows above the real user-profile rows.  Chips are either a search-
+    //   keyword chip (magnifying-glass icon, text="@username") or a recent-
+    //   search chip (clock icon, text="@username").  Both carry the searched
+    //   username as their text, so they matched the text-scan and were being
+    //   tapped as if they were profile rows.
+    //
+    //   The previous chip filter checked id="row_search_keyword_title" but
+    //   raw UIAutomator XML uses resource-id="com.instagram.android:id/..."
+    //   — the substring id=" never appears next to the id name, so the filter
+    //   never matched and chips continued to slip through.
+    //
+    //   Fix: instead of excluding chip nodes (fragile), positively identify
+    //   real profile rows by scanning for row_search_avatar_in_ring /
+    //   row_search_avatar_with_ring nodes.  These resource-ids are present
+    //   ONLY in real user-profile rows (they carry the circular avatar with
+    //   story ring); chip rows show a search or clock icon via a completely
+    //   different node tree and never contain these ids.
+    //
+    //   The avatar ring node's vertical center equals its containing row's
+    //   vertical center (confirmed from UIAutomator dump: ring bounds
+    //   [904,600][1025,721] cy=661, row bounds [0,578][1080,743] cy=661).
+    //   We tap at screen-horizontal-centre × ring-vertical-centre.
+    //
+    //   Text-match candidates (fix 1–4 logic) are kept as a secondary
+    //   fallback for the rare case where IG does not expose avatar-ring nodes.
+
+    // Primary: scan for avatar-ring nodes — these mark real profile rows only.
+    const { w: swForRing } = getScreenSize(serial);
+    const ringPositions: Array<{ x: number; y: number }> = [];
+    const ringSeen = new Set<string>();
+    for (const seg of xml.split(/(?=<node )/)) {
+      if (!seg.startsWith("<node ")) continue;
+      if (!seg.includes("/row_search_avatar_in_ring\"") &&
+          !seg.includes("/row_search_avatar_with_ring\"")) continue;
+      const bb = seg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (!bb) continue;
+      const cy = Math.round((parseInt(bb[2]) + parseInt(bb[4])) / 2);
+      const cx = Math.round(swForRing / 2); // tap screen horizontal centre
+      const key = `${cx},${cy}`;
+      if (!ringSeen.has(key)) { ringSeen.add(key); ringPositions.push({ x: cx, y: cy }); }
+    }
+    ringPositions.sort((a, b) => a.y - b.y); // topmost (first result) first
+
+    // Secondary fallback: text-match scan with chip nodes excluded.
+    // Used only when no avatar-ring nodes are found in the tree.
     const cleanLc = clean.toLowerCase();
     const atCleanLc = `@${cleanLc}`;
     const seenKeys = new Set<string>();
     const candidatePos: Array<{ x: number; y: number }> = [];
-    for (const seg of xml.split(/(?=<node )/)) {
-      if (!seg.startsWith("<node ")) continue;
-      // Skip the search bar — it holds the typed "@username" as its text value
-      if (/class="android\.widget\.EditText"/i.test(seg)) continue;
-      // Skip search keyword chip nodes — they match the username text but are
-      // NOT user profile rows; tapping them just re-runs the search query.
-      if (seg.includes('id="row_search_keyword_title"') ||
-          seg.includes('id="search_keyword_title"')) continue;
-      // Exact-match on text= or content-desc= only (avoids partial substring hits)
-      const segLc = seg.toLowerCase();
-      const hasMatch =
-        segLc.includes(`text="${cleanLc}"`) ||
-        segLc.includes(`text="${atCleanLc}"`) ||
-        segLc.includes(`content-desc="${cleanLc}"`) ||
-        segLc.includes(`content-desc="${atCleanLc}"`);
-      if (!hasMatch) continue;
-      const bb = seg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-      if (!bb) continue;
-      const cx = Math.round((parseInt(bb[1]) + parseInt(bb[3])) / 2);
-      const cy = Math.round((parseInt(bb[2]) + parseInt(bb[4])) / 2);
-      const key = `${cx},${cy}`;
-      if (!seenKeys.has(key)) { seenKeys.add(key); candidatePos.push({ x: cx, y: cy }); }
+    if (ringPositions.length === 0) {
+      for (const seg of xml.split(/(?=<node )/)) {
+        if (!seg.startsWith("<node ")) continue;
+        // Skip the search bar — it holds the typed "@username" as its text value
+        if (/class="android\.widget\.EditText"/i.test(seg)) continue;
+        // Skip search keyword chip nodes (resource-id contains /row_search_keyword_title
+        // or /search_keyword_title — these are definitively chip nodes, never user rows).
+        // Note: raw UIAutomator XML uses resource-id="com.instagram.android:id/..."
+        // so the correct substring to check is /row_search_keyword_title" not id="...".
+        if (seg.includes("/row_search_keyword_title\"") ||
+            seg.includes("/search_keyword_title\"")) continue;
+        // Exact-match on text= or content-desc= only (avoids partial substring hits)
+        const segLc = seg.toLowerCase();
+        const hasMatch =
+          segLc.includes(`text="${cleanLc}"`) ||
+          segLc.includes(`text="${atCleanLc}"`) ||
+          segLc.includes(`content-desc="${cleanLc}"`) ||
+          segLc.includes(`content-desc="${atCleanLc}"`);
+        if (!hasMatch) continue;
+        const bb = seg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+        if (!bb) continue;
+        const cx = Math.round((parseInt(bb[1]) + parseInt(bb[3])) / 2);
+        const cy = Math.round((parseInt(bb[2]) + parseInt(bb[4])) / 2);
+        const key = `${cx},${cy}`;
+        if (!seenKeys.has(key)) { seenKeys.add(key); candidatePos.push({ x: cx, y: cy }); }
+      }
+      candidatePos.sort((a, b) => a.y - b.y); // topmost first
     }
-    candidatePos.sort((a, b) => a.y - b.y); // topmost first
 
-    if (candidatePos.length > 0) {
+    // Use ring positions if found (they bypass chips entirely); else text candidates.
+    const finalCandidates = ringPositions.length > 0 ? ringPositions : candidatePos;
+    const usingRings = ringPositions.length > 0;
+    if (usingRings) {
+      onLog?.(`Follow: @${clean} — ${ringPositions.length} real profile row(s) found via avatar-ring signal`);
+    }
+
+    if (finalCandidates.length > 0) {
       // Try candidates top-to-bottom. After each tap, verify we landed on a
-      // profile page (Follow / Following / Requested button present). If the
-      // tapped row was a real suggestion chip it re-runs the search — the
-      // Follow button won't appear and we'll retry with the next row.
-      for (let ci = 0; ci < candidatePos.length; ci++) {
-        const pos = candidatePos[ci];
-        onLog?.(`Follow: tapping @${clean} result row ${ci + 1}/${candidatePos.length} at (${pos.x},${pos.y})`);
+      // profile page (Follow / Following / Requested button present). The
+      // post-tap verification loop is the safety net — if a chip somehow slips
+      // through the avatar-ring filter we detect the miss and try the next row.
+      for (let ci = 0; ci < finalCandidates.length; ci++) {
+        const pos = finalCandidates[ci];
+        onLog?.(`Follow: tapping @${clean} result row ${ci + 1}/${finalCandidates.length} at (${pos.x},${pos.y})`);
         _adbTap(adb, serial, pos.x, pos.y);
         await _sleep(2000);
         const verifyXml = await _uiDump(adb, serial).catch(() => "");
@@ -6479,7 +6520,7 @@ export async function findAndTapUserInSearch(
           verifyXml.includes(":id/follow_btn");
         if (onProfile) return true; // landed on a profile page — caller handles Follow tap
         // Not on a profile page — likely hit a chip; dismiss / back and try next row
-        if (ci < candidatePos.length - 1) {
+        if (ci < finalCandidates.length - 1) {
           onLog?.(`Follow: row ${ci + 1} did not open a profile (chip?) — trying next row`);
           await runAdb(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], 4000).catch(() => {});
           await _sleep(800);
