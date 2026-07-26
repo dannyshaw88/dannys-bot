@@ -3558,202 +3558,35 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             await android.tap(serial, _composerX, _composerY);
             await sleepOrAbort(serial, 800); // keyboard animates up
 
-            // ── Open the emoji picker ────────────────────────────────────────
+            // ── Inject emoji directly into the focused composer ──────────────
             //
-            // The keyboard is an Android IME window — a separate process and
-            // window from Instagram.  Touch events that land on the keyboard
-            // are delivered to the keyboard app, NOT to Instagram.  Instagram
-            // cannot observe individual keyboard key taps.  What Instagram CAN
-            // observe is the touch event when the user taps an emoji in the
-            // picker — that picker is part of Instagram's own UI and IS in the
-            // standard accessibility tree.
+            // The emoji picker lives inside the keyboard's IME window — a
+            // separate Android process that UIAutomator cannot dump.  Every
+            // attempt to open the picker and then find cells via the
+            // accessibility tree has failed on MIUI for this reason.
             //
-            // Strategy 0 — calibrated emoji key tap (preferred):
-            //   If the device has a keyboard calibration map with an "emoji"
-            //   entry, use the exact screen coordinate captured during
-            //   calibration.  This is a real finger-down event delivered to
-            //   the keyboard process at the pixel the user physically tapped,
-            //   making it indistinguishable from a human press on that device.
-            //   More reliable than keycodes or label-scans because it requires
-            //   no accessibility tree visibility of the keyboard window.
-            //
-            // Strategy A — KEYCODE_PICTSYMBOLS (keycode 94):
-            //   Android's standard OS-level event telling the active IME to
-            //   switch to its emoji/pictographic input mode.  Equivalent to
-            //   tapping the emoji key as far as the keyboard process is
-            //   concerned; invisible to Instagram either way since both happen
-            //   in the keyboard window.  Works on MIUI, Gboard, Samsung, and
-            //   any keyboard that implements standard Android input routing.
-            //
-            // Strategy B — label-based node tap (fallback):
-            //   Some keyboards (Gboard, Samsung) DO expose the emoji key as an
-            //   accessibility node with content-desc containing "emoji"/"smiley".
-            //   If Strategy A fails to open the picker, dump the IME tree, find
-            //   that node by label, and tap it by its node bounds.
-            //
-            // After whichever strategy opens the picker, we verify by dumping
-            // Instagram's UI and looking for clickable emoji cells.  The actual
-            // emoji selection that follows is always a node-based tap.
-
-            // ── Strategy 0: calibrated emoji key coordinate ──────────────────
-            const _calMap = android.loadKeyCalibrationMap(serial);
-            const _calEmojiCoord = _calMap?.["emoji"];
-            if (_calEmojiCoord) {
-              onLog?.(
-                `Story ${s + 1}: tapping calibrated emoji key at (${_calEmojiCoord.x},${_calEmojiCoord.y})…`,
-              );
-              await android.tap(serial, _calEmojiCoord.x, _calEmojiCoord.y);
-            } else {
-              // ── Strategy A: KEYCODE_PICTSYMBOLS ─────────────────────────────
-              onLog?.(`Story ${s + 1}: no calibration map — sending KEYCODE_PICTSYMBOLS to open emoji picker…`);
-              await android.keyevent(serial, 94);
-            }
-            await sleepOrAbort(serial, 500); // picker animates open
-
-            const _pickerXml = await android.dumpUi(serial).catch(() => "");
-            const _emojiCells = [..._pickerXml.matchAll(/<node\s([^>]+?)(?:\/?>)/g)]
-              .map((m) => {
-                const attrs = m[1];
-                const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-                if (!bounds) return null;
-                const x1 = +bounds[1], y1 = +bounds[2], x2 = +bounds[3], y2 = +bounds[4];
-                const label = attrs.match(/(?:content-desc|desc|text)="([^"]+)"/i)?.[1]?.trim() ?? "";
-                const resourceId = attrs.match(/(?:resource-id|id)="([^"]*)"/i)?.[1] ?? "";
-                const isEmojiLabel = [...label].some((char) => {
-                  const code = char.codePointAt(0) ?? 0;
-                  return code >= 0x1f000 || (code >= 0x2600 && code <= 0x27bf);
-                });
-                if (!/clickable="true"/i.test(attrs) ||
-                    (!isEmojiLabel && !/emoji|emoticon/i.test(resourceId)) ||
-                    /category|tab|search|delete|backspace/i.test(resourceId) ||
-                    x2 <= x1 || y2 <= y1 || x2 - x1 >= w * 0.35 || y2 - y1 >= h * 0.35) return null;
-                return { x1, y1, x2, y2 };
-              })
-              .filter((cell): cell is { x1: number; y1: number; x2: number; y2: number } => cell !== null);
-            let _emojiCellsFinal = _emojiCells;
-
-            if (_emojiCells.length < 3) {
-              // ── Strategy B: label-based node tap ──────────────────────────
-              // KEYCODE_PICTSYMBOLS did not open the picker on this keyboard.
-              // Dump the IME tree and look for the emoji key by its
-              // content-desc or text label — Gboard and Samsung expose it.
-              // If found, tap its node bounds directly (pure node-based tap).
-              onLog?.(`Story ${s + 1}: PICTSYMBOLS did not open picker — trying IME label search…`);
-              const { xml: _kbXml } =
-                await android.dumpUiWithIme(serial).catch(() => ({ xml: "", imeIncluded: false }));
-
-              type KbNode = { x1: number; y1: number; x2: number; y2: number; resourceId: string; contentDesc: string; text: string };
-              const _kbAllNodes: KbNode[] = [];
-              for (const m of _kbXml.matchAll(/<node\s([^>]+?)(?:\/?>)/g)) {
-                const attrs = m[1];
-                const b = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-                if (!b) continue;
-                _kbAllNodes.push({
-                  x1: +b[1], y1: +b[2], x2: +b[3], y2: +b[4],
-                  resourceId:  attrs.match(/resource-id="([^"]*)"/i)?.[1] ?? "",
-                  contentDesc: attrs.match(/content-desc="([^"]*)"/i)?.[1] ?? "",
-                  text:        attrs.match(/text="([^"]*)"/i)?.[1] ?? "",
-                });
-              }
-
-              // Keyboard nodes: below top 60 % of screen, not Instagram-owned.
-              const _kbNodes = _kbAllNodes.filter(n =>
-                n.y1 >= h * 0.60 &&
-                !n.resourceId.startsWith("com.instagram.android:"),
-              );
-
-              const _emojiByLabel = _kbNodes.find(n => {
-                const combined = `${n.contentDesc} ${n.text}`.toLowerCase();
-                return /emoji|smiley|emoticon|switch.*emoji|emoji.*keyboard/i.test(combined);
-              });
-
-              if (_emojiByLabel) {
-                const _tapX = Math.round((_emojiByLabel.x1 + _emojiByLabel.x2) / 2);
-                const _tapY = Math.round((_emojiByLabel.y1 + _emojiByLabel.y2) / 2);
-                onLog?.(
-                  `Story ${s + 1}: emoji key found by label — desc="${_emojiByLabel.contentDesc}"` +
-                  ` text="${_emojiByLabel.text}" → tapping (${_tapX},${_tapY})…`,
-                );
-                logger.info(
-                  { serial, story: s + 1, rid: _emojiByLabel.resourceId, desc: _emojiByLabel.contentDesc, tap: { x: _tapX, y: _tapY } },
-                  "[view-stories] emoji key found by label — tapping node",
-                );
-                await android.tap(serial, _tapX, _tapY);
-                await sleepOrAbort(serial, 500);
-
-                // Re-verify picker after label-tap.
-                const _pickerXml2 = await android.dumpUi(serial).catch(() => "");
-                _emojiCellsFinal = [..._pickerXml2.matchAll(/<node\s([^>]+?)(?:\/?>)/g)]
-                  .map((m) => {
-                    const attrs = m[1];
-                    const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-                    if (!bounds) return null;
-                    const x1 = +bounds[1], y1 = +bounds[2], x2 = +bounds[3], y2 = +bounds[4];
-                    const label = attrs.match(/(?:content-desc|desc|text)="([^"]+)"/i)?.[1]?.trim() ?? "";
-                    const resourceId = attrs.match(/(?:resource-id|id)="([^"]*)"/i)?.[1] ?? "";
-                    const isEmojiLabel = [...label].some((char) => {
-                      const code = char.codePointAt(0) ?? 0;
-                      return code >= 0x1f000 || (code >= 0x2600 && code <= 0x27bf);
-                    });
-                    if (!/clickable="true"/i.test(attrs) ||
-                        (!isEmojiLabel && !/emoji|emoticon/i.test(resourceId)) ||
-                        /category|tab|search|delete|backspace/i.test(resourceId) ||
-                        x2 <= x1 || y2 <= y1 || x2 - x1 >= w * 0.35 || y2 - y1 >= h * 0.35) return null;
-                    return { x1, y1, x2, y2 };
-                  })
-                  .filter((cell): cell is { x1: number; y1: number; x2: number; y2: number } => cell !== null);
-              } else {
-                logger.warn(
-                  { serial, story: s + 1, kbNodeCount: _kbNodes.length,
-                    kbNodes: _kbNodes.map(n => ({ rid: n.resourceId, desc: n.contentDesc, text: n.text, bounds: `[${n.x1},${n.y1}][${n.x2},${n.y2}]` })) },
-                  "[view-stories] emoji key not found by label in IME dump",
-                );
-                onLog?.(`Story ${s + 1}: emoji key not found by label (${_kbNodes.length} keyboard-area nodes — see debug log)`);
-              }
-            }
-
-            if (_emojiCellsFinal.length < 3) {
-              onLog?.(`Story ${s + 1}: emoji comment skipped — could not open emoji picker`);
-              logger.warn({ serial, story: s + 1 }, "[view-stories] emoji picker verification failed after both strategies");
+            // The correct approach (and what the original design always
+            // intended) is to bypass the keyboard entirely: once the
+            // message composer is focused and the keyboard is up,
+            // `adb shell input text` calls InputManager.injectString()
+            // which writes directly into the focused EditText on Android 8+.
+            // No key press, no picker, no window-dump — just text in the field.
+            const _STORY_EMOJI_POOL = [
+              "🔥","❤️","😍","👏","💯","😂","🙏","✨","🤣","💪",
+              "😊","🥰","😎","👍","💕","🎉","😁","🤩","💖","🫶",
+              "😘","🤙","💫","⚡","🌟","😆","🥳","👌","💥","🫠",
+            ];
+            const _chosenEmoji = _STORY_EMOJI_POOL[Math.floor(Math.random() * _STORY_EMOJI_POOL.length)];
+            onLog?.(`Story ${s + 1}: injecting emoji "${_chosenEmoji}" via input text…`);
+            try {
+              await android.inputText(serial, _chosenEmoji);
+            } catch (e: any) {
+              onLog?.(`Story ${s + 1}: emoji input failed — ${e?.message}`);
+              logger.warn({ serial, story: s + 1, err: e?.message }, "[view-stories] emoji inputText failed");
               await android.pressBack(serial).catch(() => {});
               continue;
             }
-            onLog?.(`Story ${s + 1}: emoji picker verified from live a11y dump (${_emojiCellsFinal.length} cells)`);
-
-            // Scroll the verified picker region so the same emoji is not
-            // always selected from the first visible row. The swipe bounds
-            // come from actual clickable emoji cells, not screen percentages.
-            const _pickerBounds = _emojiCellsFinal.reduce(
-              (region, cell) => ({
-                x1: Math.min(region.x1, cell.x1),
-                y1: Math.min(region.y1, cell.y1),
-                x2: Math.max(region.x2, cell.x2),
-                y2: Math.max(region.y2, cell.y2),
-              }),
-              { x1: w, y1: h, x2: 0, y2: 0 },
-            );
-            const _scrollCount = 1 + Math.floor(Math.random() * 10);
-            onLog?.(`Story ${s + 1}: scrolling verified emoji picker ${_scrollCount}×…`);
-            for (let _ei = 0; _ei < _scrollCount; _ei++) {
-              const _scrollX = Math.round((_pickerBounds.x1 + _pickerBounds.x2) / 2);
-              await android.swipe(
-                serial,
-                _scrollX,
-                _pickerBounds.y2,
-                _scrollX,
-                _pickerBounds.y1,
-                150,
-              );
-              await sleepOrAbort(serial, 80);
-            }
-
-            // Tap one cell that was positively identified in the picker tree.
-            const _selectedEmoji = _emojiCellsFinal[Math.floor(Math.random() * _emojiCellsFinal.length)];
-            const _emojiX = Math.round((_selectedEmoji.x1 + _selectedEmoji.x2) / 2);
-            const _emojiY = Math.round((_selectedEmoji.y1 + _selectedEmoji.y2) / 2);
-            onLog?.(`Story ${s + 1}: tapping detected emoji at (${_emojiX},${_emojiY})…`);
-            await android.tap(serial, _emojiX, _emojiY);
-            await sleepOrAbort(serial, 400); // emoji enters field; keyboard may close
+            await sleepOrAbort(serial, 400); // text settles; send button appears
 
             // Find the send button that appears after the emoji is entered.
             // From TAP-SEND-PAPER-AIRPLANE dump:

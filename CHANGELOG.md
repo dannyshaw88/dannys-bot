@@ -4,6 +4,24 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.199 — 2026-07-26
+
+### Fixed — View Stories emoji comment now actually works on MIUI
+
+All previous strategies for sending an emoji story reply (KEYCODE_PICTSYMBOLS, calibrated emoji key tap, label-based IME accessibility scan) were trying to open the keyboard's emoji picker and then locate clickable emoji cells via `dumpUi`. The debug log confirmed why this will never work on MIUI: the emoji picker lives inside the **keyboard IME window**, which is a separate Android process. `dumpUi` only dumps Instagram's window — it cannot see anything inside the keyboard process, so the cell count was always 0 and every attempt was skipped.
+
+The entire picker-based section has been removed and replaced with a single direct text injection:
+
+- After the message composer is tapped and the keyboard is up, `adb shell input text <emoji>` is called via `android.inputText(serial, emoji)`.
+- `InputManager.injectString()` writes the character directly into the focused `EditText` on Android 8+ without any keyboard interaction at all. No picker, no key press, no window dump.
+- A random emoji is selected from a 30-item pool covering common high-engagement reactions: 🔥 ❤️ 😍 👏 💯 😂 🙏 ✨ 🤣 💪 😊 🥰 😎 👍 💕 🎉 😁 🤩 💖 🫶 😘 🤙 💫 ⚡ 🌟 😆 🥳 👌 💥 🫠
+- If `inputText` throws (e.g. no focused window), the story slide is skipped cleanly and the keyboard is dismissed with BACK.
+- The send button detection and tap that follow are unchanged.
+
+This is what the original design comment inside the code always described as the intended flow ("inject emoji via `adb shell input text` — no picker needed").
+
+---
+
 ## v1.2.198 — 2026-07-26
 
 ### Improved — Keyboard calibration edit map, capture delay fix, and emoji key wired into View Stories
