@@ -6558,20 +6558,97 @@ export async function typeViaCalibrationMap(
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const missing: string[] = [];
+  let layer: "letters" | "symbols" | "moreSymbols" = "letters";
+
+  const tapMapped = async (label: string, description = label): Promise<boolean> => {
+    const pos = map[label];
+    if (!pos) {
+      onLog?.(`[cal-keyboard] '${description}' is not in calibration map`);
+      return false;
+    }
+    _adbTap(adb, serial, pos.x, pos.y);
+    onLog?.(`[cal-keyboard] tapped ${description} at (${pos.x},${pos.y})`);
+    await _sleep(180 + Math.round(Math.random() * 100));
+    return true;
+  };
+
+  const switchLayer = async (target: "letters" | "symbols" | "moreSymbols"): Promise<boolean> => {
+    if (layer === target) return true;
+    // The extended symbols screen is reached through ?123 first, and the
+    // regular symbols screen is reached through ABC when returning from it.
+    // Do not jump directly between non-adjacent layers: the saved coordinate
+    // is a real key tap, so the intermediate screen matters.
+    if (target === "letters") {
+      const switched = await tapMapped("abc", "ABC");
+      if (switched) layer = "letters";
+      return switched;
+    }
+    if (target === "symbols") {
+      if (layer === "moreSymbols") {
+        const returnedToLetters = await tapMapped("abc", "ABC");
+        if (!returnedToLetters) return false;
+        layer = "letters";
+      }
+      const switched = await tapMapped("symbols", "?123");
+      if (switched) layer = "symbols";
+      return switched;
+    }
+    if (layer === "letters") {
+      const switchedToSymbols = await tapMapped("symbols", "?123");
+      if (!switchedToSymbols) return false;
+      layer = "symbols";
+    }
+    const switched = await tapMapped("moreSymbols", "more symbols");
+    if (switched) layer = "moreSymbols";
+    return switched;
+  };
+
+  // These punctuation keys are available on the ABC layer in the common
+  // Android keyboards used by the farm. The remaining punctuation is captured
+  // on the two symbols layers below.
+  const abcPunctuation = new Set([",", "."]);
+  const moreSymbolChars = new Set([
+    "~", "`", "|", "•", "√", "π", "÷", "×", "§", "∆", "£", "€", "¥",
+    "^", "°", "{", "}", "[", "]", "\\", "<", ">",
+  ]);
 
   for (const ch of text) {
     const label = ch === " " ? "space" : ch === "\n" ? "enter" : ch.toLowerCase();
-    const pos = map[label] ?? map[ch];
-
-    if (!pos) {
-      missing.push(ch);
-      onLog?.(`[cal-keyboard] '${ch}' not in calibration map — skipping`);
+    if (ch === " " || ch === "\n") {
+      await switchLayer("letters");
+      if (!await tapMapped(label, ch === " " ? "space" : "Enter")) missing.push(ch);
       continue;
     }
 
-    _adbTap(adb, serial, pos.x, pos.y);
-    onLog?.(`[cal-keyboard] tapped '${ch}' at (${pos.x},${pos.y})`);
-    await _sleep(120 + Math.round(Math.random() * 80));
+    if (/^[a-z]$/i.test(ch) || abcPunctuation.has(ch)) {
+      if (!await switchLayer("letters")) missing.push(ch);
+      if (missing[missing.length - 1] === ch && !map[label] && !map[ch]) continue;
+
+      if (ch !== ch.toLowerCase()) {
+        if (!await tapMapped("shift", "Shift")) {
+          missing.push(ch);
+          continue;
+        }
+      }
+      if (!await tapMapped(map[label] ? label : ch, ch)) missing.push(ch);
+      continue;
+    }
+
+    if (moreSymbolChars.has(ch)) {
+      if (!await switchLayer("moreSymbols")) missing.push(ch);
+    } else if (!await switchLayer("symbols")) {
+      missing.push(ch);
+      continue;
+    }
+
+    if (!await tapMapped(map[label] ? label : ch, ch)) {
+      // A symbol can be on the extended layer even if the caller did not
+      // classify it above; make one explicit attempt after the layer switch.
+      if (!moreSymbolChars.has(ch) && map[ch]) {
+        if (await switchLayer("moreSymbols") && await tapMapped(ch, ch)) continue;
+      }
+      missing.push(ch);
+    }
   }
 
   return { ok: missing.length === 0, missing };

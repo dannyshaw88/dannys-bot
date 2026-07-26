@@ -4,6 +4,39 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.197 — 2026-07-26
+
+### Improved — Complete keyboard calibration and readable prompts
+
+The Keyboard Calibration tool now walks through the complete set of keys needed
+for real on-screen typing instead of stopping after the basic letters and a
+small selection of symbols:
+
+- Captures all A–Z letter keys, uppercase Shift, Space, Backspace, Enter,
+  comma, period, the emoji opener, and the `?123` layer button.
+- Captures digits 0–9 and the punctuation/symbol keys on the first symbols
+  layer, including `@`, `#`, `$`, `_`, `&`, `-`, `+`, parentheses, slash,
+  asterisk, quotes, colon, semicolon, exclamation mark, question mark,
+  percent, and equals.
+- Captures the extended symbols layer, including brackets, braces, slash,
+  comparison signs, currency symbols, mathematical symbols, and other
+  punctuation.
+- Uses the saved ABC, `?123`, and extended-symbol layer coordinates when the
+  bot types calibrated text, including uppercase letters, numbers, punctuation,
+  and extended symbols. Layer changes are performed in the correct order.
+- Adds a required setup screen so the user is told to open a text field and
+  show the keyboard before the first capture begins.
+- Uses an explicit dark, high-contrast dialog and key tile so white key labels
+  remain readable when the surrounding application is light.
+- Explains that the emoji picker should be closed and the keyboard returned to
+  ABC before saving the completed map.
+
+The existing canonical Windows installer workflow remains
+`.github/workflows/build-windows-installer.yml`; it already runs on every push
+to `main` and uploads the full `Aura-Farming-Windows-Installer` artifact.
+
+---
+
 ## v1.2.196 — 2026-07-26
 
 ### Revert — Undo v1.2.195 IME keyboard rewrite and emoji picker coordinate guards

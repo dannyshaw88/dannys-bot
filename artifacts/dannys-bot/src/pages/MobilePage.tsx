@@ -1636,11 +1636,11 @@ function EmptyShell({ idx }: { idx: number }) {
 const CALIB_GROUPS: Array<{
   name: string;
   instructions: string;
-  keys: Array<{ label: string; display: string }>;
+  keys: Array<{ label: string; display: string; mapKey?: string }>;
 }> = [
   {
     name: "Letters (ABC layer)",
-    instructions: "Keep your phone on the LETTERS keyboard (ABC / qwerty mode)",
+    instructions: "Keep the keyboard on the ABC / qwerty layer. This includes the bottom-row controls used to open emoji and symbols.",
     keys: [
       { label: "q", display: "Q" }, { label: "w", display: "W" }, { label: "e", display: "E" },
       { label: "r", display: "R" }, { label: "t", display: "T" }, { label: "y", display: "Y" },
@@ -1651,27 +1651,60 @@ const CALIB_GROUPS: Array<{
       { label: "l", display: "L" }, { label: "z", display: "Z" }, { label: "x", display: "X" },
       { label: "c", display: "C" }, { label: "v", display: "V" }, { label: "b", display: "B" },
       { label: "n", display: "N" }, { label: "m", display: "M" },
-      { label: "shift",  display: "Shift"  },
-      { label: "space",  display: "Space"  },
-      { label: "delete", display: "Delete" },
-      { label: "enter",  display: "Enter"  },
+      { label: "shift",      display: "⇧ Shift", mapKey: "shift" },
+      { label: "comma",      display: ",", mapKey: "," },
+      { label: "space",      display: "Space" },
+      { label: "period",     display: ".", mapKey: "." },
+      { label: "backspace", display: "⌫ Backspace", mapKey: "backspace" },
+      { label: "enter",      display: "↵ Enter" },
+      // This is intentionally the final key on the ABC layer: tapping it
+      // changes the phone to the symbols layer for the next group.
+      { label: "symbols",    display: "?123 Symbols", mapKey: "symbols" },
     ],
   },
   {
     name: "Numbers & Symbols (?123 layer)",
-    instructions: "Press the ?123 key on your phone now to switch to the NUMBERS layer, then tap each key below",
+    instructions: "Tap the ?123 / Symbols key on your phone now. Stay on this layer while you capture every key below.",
     keys: [
       { label: "1", display: "1" }, { label: "2", display: "2" }, { label: "3", display: "3" },
       { label: "4", display: "4" }, { label: "5", display: "5" }, { label: "6", display: "6" },
       { label: "7", display: "7" }, { label: "8", display: "8" }, { label: "9", display: "9" },
-      { label: "0", display: "0" }, { label: "@", display: "@" }, { label: ".", display: "." },
-      { label: ",", display: "," }, { label: "-", display: "-" }, { label: "_", display: "_" },
-      { label: "!", display: "!" }, { label: "?", display: "?" }, { label: "#", display: "#" },
+      { label: "0", display: "0" }, { label: "@", display: "@" }, { label: "#", display: "#" },
+      { label: "$", display: "$" }, { label: "_", display: "_" }, { label: "&", display: "&" },
+      { label: "-", display: "-" }, { label: "+", display: "+" }, { label: "(", display: "(" },
+      { label: ")", display: ")" }, { label: "/", display: "/" }, { label: "*", display: "*" },
+      { label: "\"", display: "\"" }, { label: "'", display: "'" }, { label: ":", display: ":" },
+      { label: ";", display: ";" }, { label: "!", display: "!" }, { label: "?", display: "?" },
+      { label: "%", display: "%" }, { label: "=", display: "=" },
+      // This is intentionally the final key on the first symbols layer:
+      // tapping it changes the phone to the extended symbols layer.
+      { label: "more-symbols", display: "=\\< More", mapKey: "moreSymbols" },
+    ],
+  },
+  {
+    name: "More symbols (=\\< layer)",
+    instructions: "Tap the =\\< / More symbols key on your phone now. Capture this extra punctuation layer too, then return to ABC when finished.",
+    keys: [
+      { label: "~", display: "~" }, { label: "`", display: "`" }, { label: "|", display: "|" },
+      { label: "•", display: "•" }, { label: "√", display: "√" }, { label: "π", display: "π" },
+      { label: "÷", display: "÷" }, { label: "×", display: "×" }, { label: "§", display: "§" },
+      { label: "∆", display: "∆" }, { label: "£", display: "£" }, { label: "€", display: "€" },
+      { label: "¥", display: "¥" }, { label: "^", display: "^" }, { label: "°", display: "°" },
+      { label: "{", display: "{" }, { label: "}", display: "}" }, { label: "[", display: "[" },
+      { label: "]", display: "]" }, { label: "\\", display: "\\" }, { label: "<", display: "<" },
+      { label: ">", display: ">" },
+      // The ABC key returns to the letter layer so the final emoji capture is
+      // performed from the normal keyboard, where the picker button is stable.
+      { label: "letters", display: "ABC Letters", mapKey: "abc" },
+      // Emoji opens a picker rather than changing the keyboard layer. It is
+      // deliberately the final capture so the run never asks for another
+      // keyboard key while the picker is open.
+      { label: "emoji", display: "😊 Emoji", mapKey: "emoji" },
     ],
   },
 ];
 
-interface CalibKey { label: string; display: string; groupIdx: number; groupName: string; instructions: string; }
+interface CalibKey { label: string; display: string; mapKey?: string; groupIdx: number; groupName: string; instructions: string; }
 const CALIB_KEYS: CalibKey[] = CALIB_GROUPS.flatMap((g, gi) =>
   g.keys.map(k => ({ ...k, groupIdx: gi, groupName: g.name, instructions: g.instructions }))
 );
@@ -1693,6 +1726,7 @@ function CalibrationDialog({
   const [lastResult, setLastResult] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [existingCount, setExistingCount] = useState<number | null>(null);
+  const [started, setStarted] = useState(false);
 
   // Reset state whenever the dialog opens.
   useEffect(() => {
@@ -1702,6 +1736,7 @@ function CalibrationDialog({
     setCapturing(false);
     setLastResult(null);
     setSaved(false);
+    setStarted(false);
     fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/keyboard-calibration`)
       .then(r => r.json())
       .then(body => setExistingCount(body.ok && body.map ? Object.keys(body.map).length : null))
@@ -1725,7 +1760,8 @@ function CalibrationDialog({
       );
       const body = await resp.json();
       if (body.ok && body.x != null && body.y != null) {
-        const newMap = { ...map, [currentKey.label]: { x: body.x, y: body.y } };
+        const mapKey = currentKey.mapKey ?? currentKey.label;
+        const newMap = { ...map, [mapKey]: { x: body.x, y: body.y } };
         setMap(newMap);
         setLastResult(`✓ Captured at (${body.x}, ${body.y})`);
         onLog?.(`[calibration] '${currentKey.display}' → (${body.x}, ${body.y})`);
@@ -1766,20 +1802,58 @@ function CalibrationDialog({
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!capturing) onOpenChange(v); }}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md border-slate-700 bg-slate-950 text-slate-100">
         <DialogHeader>
           <DialogTitle className="text-sm">Keyboard Calibration</DialogTitle>
         </DialogHeader>
 
-        {isDone ? (
+        {!started ? (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-amber-500/50 bg-amber-950/50 px-3 py-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-amber-200">Do this first</p>
+              <p className="mt-1 text-sm leading-5 text-amber-100">
+                Open Instagram on the phone, tap a text field, and make sure the keyboard is fully visible before starting.
+              </p>
+            </div>
+            <ol className="list-decimal space-y-1.5 pl-5 text-xs leading-5 text-slate-300">
+              <li>Open a DM composer, comment box, or search field.</li>
+              <li>Leave the keyboard on the ABC / letters layer.</li>
+              <li>Keep the phone screen awake while calibration runs.</li>
+              <li>After each prompt, tap the matching key on the phone.</li>
+            </ol>
+            {existingCount != null && (
+              <div className="flex items-center justify-between rounded-lg border border-amber-700/60 bg-amber-950/40 px-3 py-2">
+                <span className="text-xs text-amber-200">
+                  Existing map: {existingCount} keys — this run will replace it
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs text-amber-200 hover:bg-red-950/50 hover:text-red-200"
+                  onClick={clearExisting}
+                >
+                  Clear
+                </Button>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Button className="flex-1" onClick={() => setStarted(true)}>
+                Keyboard is open — Start
+              </Button>
+              <Button variant="outline" className="border-slate-600 text-slate-200 hover:bg-slate-800" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : isDone ? (
           /* ── Done ── */
           <div className="space-y-3">
             <p className="text-sm text-green-400 font-semibold">
               ✓ All {CALIB_KEYS.length} keys walked — {Object.keys(map).length} captured
             </p>
-            <p className="text-xs text-white/50">
+            <p className="text-xs text-slate-300">
               {Object.keys(map).length > 0
-                ? "Save the map so the bot uses real tap coordinates from now on."
+                ? "Close the emoji picker and return the phone keyboard to ABC, then save so the bot can use the real tap coordinates."
                 : "No keys were captured. Try again — make sure the keyboard is open before capturing."}
             </p>
             {saved ? (
@@ -1799,38 +1873,30 @@ function CalibrationDialog({
         ) : (
           /* ── Step-through ── */
           <div className="space-y-3">
-            {/* Existing map notice */}
-            {existingCount != null && step === 0 && (
-              <div className="flex items-center justify-between bg-amber-950/40 border border-amber-800/40 rounded-lg px-3 py-2">
-                <span className="text-xs text-amber-300">Existing map: {existingCount} keys — this will replace it</span>
-                <Button size="sm" variant="ghost" className="h-6 text-xs text-amber-400 hover:text-red-400 px-2" onClick={clearExisting}>Clear now</Button>
-              </div>
-            )}
-
             {/* Layer instructions */}
             {showGroupHeader && (
-              <div className="bg-blue-950/40 border border-blue-800/40 rounded-lg px-3 py-2">
-                <p className="text-xs font-semibold text-blue-300">{currentKey!.groupName}</p>
-                <p className="text-xs text-blue-200/70 mt-0.5">{currentKey!.instructions}</p>
+              <div className="rounded-lg border border-blue-700/60 bg-blue-950/60 px-3 py-2">
+                <p className="text-xs font-semibold text-blue-200">{currentKey!.groupName}</p>
+                <p className="mt-0.5 text-xs text-blue-100">{currentKey!.instructions}</p>
               </div>
             )}
 
             {/* Progress bar */}
             <div className="space-y-1">
-              <div className="flex justify-between text-[10px] text-white/30">
+              <div className="flex justify-between text-[10px] text-slate-400">
                 <span>{step} / {CALIB_KEYS.length} keys</span>
                 <span>{progress}%</span>
               </div>
-              <div className="h-1 bg-white/10 rounded-full overflow-hidden">
+              <div className="h-1 overflow-hidden rounded-full bg-slate-700">
                 <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
               </div>
             </div>
 
             {/* Current key display */}
             <div className="flex flex-col items-center gap-2 py-3">
-              <p className="text-[10px] text-white/40 uppercase tracking-wider">Tap this key on your phone</p>
-              <div className="w-16 h-16 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center shadow-lg">
-                <span className="text-2xl font-bold text-white">{currentKey!.display}</span>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-300">Tap this key on your phone</p>
+              <div className="flex min-h-16 min-w-16 max-w-full items-center justify-center rounded-xl border-2 border-slate-500 bg-slate-800 px-3 shadow-lg">
+                <span className="text-center text-2xl font-bold leading-tight text-white">{currentKey!.display}</span>
               </div>
               {lastResult && (
                 <p className={`text-xs font-mono ${lastResult.startsWith("✓") ? "text-green-400" : "text-red-400"}`}>
@@ -1846,9 +1912,9 @@ function CalibrationDialog({
                   ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />Listening… (12 s)</>
                   : "Capture tap"}
               </Button>
-              <Button variant="outline" onClick={skipKey} disabled={capturing}>Skip</Button>
+              <Button variant="outline" className="border-slate-600 text-slate-200 hover:bg-slate-800" onClick={skipKey} disabled={capturing}>Skip</Button>
             </div>
-            <p className="text-[9px] text-white/25 text-center">
+            <p className="text-center text-[9px] text-slate-400">
               Click "Capture tap", then immediately tap the key on the phone screen
             </p>
           </div>

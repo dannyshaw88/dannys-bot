@@ -47,3 +47,4 @@
 - [Story comment composer detection](story-comment-composer-detection.md) — use message_composer_container resource-id as the reply signal; labels vary by Instagram build and dump format
 - [Account switcher render settling](account-switcher-render-settle.md) — profile-tab accessibility can precede visible Instagram navigation; wait briefly before the long-press
 - [Electron debug log fresh session](electron-debug-log-fresh-session.md) — truncate the Windows server debug log at process startup, then append normally within that session
+- [Keyboard calibration layer navigation](keyboard-calibration-layer-navigation.md) — calibrated typing must switch through ABC, ?123, and extended symbols in order; emoji opener is terminal
