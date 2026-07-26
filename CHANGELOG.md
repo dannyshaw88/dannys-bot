@@ -4,6 +4,38 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.200 — 2026-07-26
+
+### Fixed — Follow tool search bar typing restored to direct paste
+
+The keyboard mapping feature added for the Story View tool (v1.2.198) had unintentionally been applied to the Follow tool's Instagram search bar flow. The Follow tool was changed to use `typeViaOnscreenKeyboard` — which taps individual keys on the on-screen keyboard using UIAutomator positions or a stored calibration map — instead of the original direct `adb shell input text` paste. This caused gibberish to be typed into the search bar when a calibration map was present (since the map coordinates were calibrated for a completely different context), and unreliable character-by-character tapping otherwise.
+
+#### What was broken
+
+After the keyboard mapping work, the Follow tool's per-username loop was doing the following:
+1. Tap the Instagram Explore search bar
+2. Attempt to clear any existing text using a 60-keyevent DEL loop or an Instagram × clear button scan
+3. Type `@username` by tapping individual on-screen keyboard keys via `typeViaOnscreenKeyboard`
+
+Step 3 routed through the calibration map if one existed for the device, which produced entirely wrong coordinates (the map is designed for Story View emoji input, not search). Without a map it still tapped keys via UIAutomator — slow, fragile, and liable to miss characters if the keyboard layout shifted between taps.
+
+#### What was restored
+
+The entire clear block (Strategy 1 × button scan + Strategy 2 60× DEL loop) and the `typeViaOnscreenKeyboard` call have been removed from the Follow tool's search loop. Replaced with the original two-line approach:
+
+```
+KEYCODE_CTRL_A          ← select any leftover text from the previous candidate
+adb shell input text    ← paste @username in one shot (InputManager.injectString)
+```
+
+`inputText` writes directly into the focused `EditText` via Android's InputManager — it is instantaneous, immune to keyboard layout, and does not interact with the on-screen keyboard at all. This is what the Follow tool used before keyboard mapping was introduced.
+
+#### Root cause / architecture note
+
+All mobile tools (Follow, View Stories, View Feed, Make a Post, etc.) share a single `routes/mobile.ts` file. When a new shared helper (`typeViaOnscreenKeyboard`) was added for one tool, it was also applied to another tool's input path without the author realising the two tools have different requirements. True per-tool isolation — each tool in its own file with its own explicit imports — would prevent this class of cross-contamination. That refactor has been identified as a future task.
+
+---
+
 ## v1.2.199 — 2026-07-26
 
 ### Fixed — View Stories emoji comment now actually works on MIUI
