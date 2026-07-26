@@ -3598,12 +3598,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             }
 
             // Parse every node that has a valid bounds= attribute.
-            // Include the `package` attribute — every UIAutomator node carries this
-            // and it tells us which app the node belongs to.  Instagram nodes are
-            // always "com.instagram.android"; Android keyboard (IME) nodes carry the
-            // keyboard app package (e.g. "com.miui.mma", "com.google.android.inputmethod.latin",
-            // "com.samsung.android.honeyboard", etc.).
-            type KbNode = { x1: number; y1: number; x2: number; y2: number; pkg: string; resourceId: string; contentDesc: string; text: string };
+            type KbNode = { x1: number; y1: number; x2: number; y2: number; resourceId: string; contentDesc: string; text: string };
             const _allNodes: KbNode[] = [];
             for (const m of _keyboardXml.matchAll(/<node\s([^>]+?)(?:\/?>)/g)) {
               const attrs = m[1];
@@ -3611,28 +3606,39 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               if (!b) continue;
               _allNodes.push({
                 x1: +b[1], y1: +b[2], x2: +b[3], y2: +b[4],
-                pkg:         attrs.match(/package="([^"]*)"/i)?.[1] ?? "",
                 resourceId:  attrs.match(/resource-id="([^"]*)"/i)?.[1] ?? "",
                 contentDesc: attrs.match(/content-desc="([^"]*)"/i)?.[1] ?? "",
                 text:        attrs.match(/text="([^"]*)"/i)?.[1] ?? "",
               });
             }
 
-            // Keyboard nodes = every node whose package is NOT "com.instagram.android".
+            // Keyboard nodes: bottom portion of the screen AND not an Instagram UI node.
             //
-            // The --include-ime dump contains both the Instagram UI tree and the Android
-            // IME (keyboard) window.  Every node carries a `package` attribute set by
-            // the OS.  Instagram nodes are always "com.instagram.android"; keyboard keys
-            // belong to the IME app (Gboard, MIUI, Samsung, etc.).  Filtering by package
-            // is the only fully device-agnostic way to separate them — no screen-position
-            // math, no resource-id prefix guessing, no screen-height percentages.
+            // Two-part filter:
             //
-            // Root cause this closes (Jul 2026): earlier code filtered by y1 >= h*0.60
-            // (screen-position) and then picked the widest node as the "space bar".
-            // Instagram's "Send message" bar passed that position filter and was wider
-            // than any real key, so it was chosen as the space bar every time.  All
-            // geometry after that was computed relative to the wrong node.
-            const _kbNodes = _allNodes.filter(n => n.pkg !== "com.instagram.android");
+            // Part 1 — y1 >= h * 0.60 (bottom 40 % of screen).
+            // The keyboard always lives at the bottom of the screen.  This narrows the
+            // candidate set and avoids matching header/content nodes near the top of the
+            // Instagram story viewer.
+            //
+            // Part 2 — resource-id does NOT start with "com.instagram.android:".
+            // The --include-ime dump includes both the Instagram UI tree and the Android
+            // IME window.  Instagram's own nodes (e.g. the "Send message" composer bar,
+            // resource-id "com.instagram.android:id/reel_viewer_message_composer_text")
+            // sit in the same bottom region as the keyboard.  The composer bar was 915 px
+            // wide on a 1080 px screen — wider than any real key — so it was always
+            // selected as the "space bar", making the emoji search fail every cycle.
+            //
+            // We cannot filter by the `package` attribute: on Xiaomi/MIUI devices,
+            // uiautomator tags every node in the dump (including keyboard keys) with the
+            // foreground app's package ("com.instagram.android"), making the package field
+            // useless for separation.  The resource-id IS reliable: real Android keyboard
+            // keys (Gboard, MIUI, Samsung) never carry a "com.instagram.android:id/..."
+            // resource-id, even when the package field is wrong.
+            const _kbNodes = _allNodes.filter(n =>
+              n.y1 >= h * 0.60 &&
+              !n.resourceId.startsWith("com.instagram.android:"),
+            );
 
             // ── Strategy 1: label-based emoji key search ──────────────────────
             // Some keyboards (Gboard, Samsung) label the emoji key with a

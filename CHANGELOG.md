@@ -4,6 +4,61 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.189 — 2026-07-26
+
+### Bug Fix — View Stories emoji key: correct node separation for MIUI/Xiaomi
+
+**What v1.2.188 got wrong.**
+
+v1.2.188 filtered keyboard nodes by `package != "com.instagram.android"`.
+On Xiaomi/MIUI, `uiautomator dump --include-ime` tags every node in the dump —
+including the real Android keyboard keys — with the foreground app's package
+(`com.instagram.android`). The filter therefore removed every node, leaving
+`kbNodeCount: 0` and failing on every cycle:
+
+```
+kbNodeCount: 0, kbNodes: []
+emoji key not found — no space bar node in keyboard area
+```
+
+**Fix.**
+
+Two-part filter, neither part uses hardcoded pixel positions:
+
+1. **`y1 >= h * 0.60`** — keeps only nodes in the bottom 40% of screen where
+   the keyboard physically lives. This is a screen-relative fraction, not a
+   device-specific coordinate: it works identically on a 2460 px screen or a
+   1920 px screen. It existed before v1.2.188 and is not what was causing the
+   failure.
+
+2. **`!resourceId.startsWith("com.instagram.android:")`** — removes Instagram's
+   own UI nodes that share the bottom screen region. The critical one is the
+   "Send message" composer bar (`reel_viewer_message_composer_text`), which was
+   915 px wide on the 1080 px screen — the widest node in the keyboard area —
+   and was being selected as the space bar every single cycle. Real Android
+   keyboard keys (Gboard, MIUI, Samsung) never carry a
+   `com.instagram.android:id/...` resource-id even when the `package` field in
+   the dump is wrong, so this separation is reliable across all keyboards.
+
+**Why not package?**
+
+The `package` attribute in UIAutomator dumps is set by the dumper, not by the
+view. On MIUI, the dumper propagates the foreground app's package to every node
+in the window, including the IME keys. The resource-id is set by the view's own
+package at build time and is never overridden by the dumper, making it the
+reliable separator.
+
+**Files changed:**
+
+- `artifacts/api-server/src/routes/mobile.ts` — keyboard node filter restored
+  to position + resource-id exclusion; explanation of MIUI package-attribute
+  behaviour added in comment.
+- `package.json` — version `1.2.188` → `1.2.189`.
+- `artifacts/electron/package.json` — version `1.2.188` → `1.2.189`.
+- `CHANGELOG.md` — this entry.
+
+---
+
 ## v1.2.188 — 2026-07-26
 
 ### Bug Fix — View Stories emoji key never pressed: Android keyboard nodes misidentified
