@@ -4,6 +4,19 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.191 — 2026-07-26
+
+### Debug — View Stories emoji key: raw node dump to find per-key MIUI nodes
+
+Added a diagnostic `logger.info` that emits every node in the bottom 60% of the
+screen from the IME dump **before any filter is applied** — bounds, width,
+height, resource-id, content-desc, and text for each one.  This tells us
+whether MIUI exposes individual key child nodes (which the current filters might
+be discarding) or truly only row containers.  The next run log will show the
+full picture needed to write pure node-based emoji key detection.
+
+---
+
 ## v1.2.190 — 2026-07-26
 
 ### Bug Fix — View Stories emoji key: MIUI container path picks bottommost row

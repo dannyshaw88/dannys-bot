@@ -3612,6 +3612,29 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               });
             }
 
+            // ── Diagnostic: dump every raw node in the bottom half of the screen ──
+            // No filters applied — this lets us see exactly what MIUI (or any
+            // keyboard) puts in the XML: whether per-key child nodes exist with
+            // usable attributes, or whether only full-width row containers are
+            // present.  Without this we cannot write true node-based detection.
+            const _rawBottomNodes = _allNodes.filter(n => n.y1 >= h * 0.40);
+            logger.info(
+              {
+                serial, story: s + 1,
+                screenH: h, screenW: w,
+                rawBottomNodeCount: _rawBottomNodes.length,
+                rawBottomNodes: _rawBottomNodes.map(n => ({
+                  bounds: `[${n.x1},${n.y1}][${n.x2},${n.y2}]`,
+                  w: n.x2 - n.x1,
+                  h: n.y2 - n.y1,
+                  rid: n.resourceId,
+                  desc: n.contentDesc,
+                  text: n.text,
+                })),
+              },
+              "[view-stories] keyboard raw node dump (all bottom-half nodes, no filter)",
+            );
+
             // Keyboard nodes: bottom portion of the screen AND not an Instagram UI node.
             //
             // Two-part filter:
