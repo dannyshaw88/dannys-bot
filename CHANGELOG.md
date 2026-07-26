@@ -4,6 +4,47 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.171 — 2026-07-26
+
+### Added — Click Hashtag % in View Feed (Human Session Tool)
+
+A new sub-action called **Click Hashtag %** has been added to the View Timeline Feed tool. When it fires, the phone taps a hashtag link in the post caption, browses the hashtag's grid page for a short time, and then returns to the feed — mimicking the way a real user naturally explores content from a caption tag.
+
+#### What it does (step by step)
+
+1. **Chance roll** — after each feed scroll, the configured percentage chance is evaluated. If the roll misses, the scroll continues as normal with no hashtag interaction.
+2. **Hashtag detection** — a UIAutomator accessibility-tree dump is taken of the current screen. The tree is scanned for `android.widget.Button` nodes whose `content-desc` attribute starts with `#`. These are the tappable hashtag links Instagram renders in post captions (e.g. `#sonyalphauniverse`, `#swallows`). Nodes above the bottom 40% of the screen are excluded to avoid false matches in the top nav area.
+3. **Random hashtag tap** — one hashtag is chosen at random from the detected candidates and tapped.
+4. **Grid page confirmation** — after a 1.5 s settle wait, a fresh dump is taken. The code checks for `grid_card_layout_container`, `tabbed_pager`, or `swipeable_tab_view_pager` to confirm the hashtag grid page opened. If not confirmed, a single Back press is sent and the scroll continues.
+5. **Grid scrolling** — the grid is scrolled **1–10 times** (randomised per visit) with realistic swipe timing (300–700 ms per swipe, 280 ms settle between swipes).
+6. **Random post tap** — a **1–10% per-scroll chance** (rolled once per grid visit) is evaluated on each scroll. On a hit, the accessibility tree is scanned for `grid_card_layout_container` or `image_button` nodes in the main content zone (10–92% of screen height). A random post is tapped, a 1.2 s dwell follows, and then Back is pressed once to return from the post to the hashtag grid.
+7. **Return to feed** — one Back press exits the hashtag grid back to the home feed. If a post was tapped inside the grid, Back is pressed twice total (post → grid → feed).
+8. **Cycle safety** — `isCycleAborted` is checked before every tap. `verifyStillInInstagram` is called after every navigation tap to catch any accidental CTA-tap recovery scenario. All errors are caught and logged non-fatally; no retry loops are added.
+
+#### UI — where to find it
+
+**Phone Farm → Human Session Tool → View Timeline Feed → Click Hashtag%**
+
+The setting appears as a Min/Max percentage pair with a blue `#` icon, immediately below the existing **Tap Audio%** row. It follows the same copy-settings pattern as all other View Feed sub-actions and is included in the slot copy-settings group `viewTimelineFeed`.
+
+#### Schema changes
+
+- `clickHashtagPercentMin` / `clickHashtagPercentMax` added to:
+  - `AutomationSettings` TypeScript type (`artifacts/api-server/src/routes/mobile.ts`)
+  - `automationSchema` (the persistence schema — zod, defaults to `0/0`)
+  - `automationCycleSchema` (the execution schema — zod, defaults to `0/0`)
+  - Both GET-handler default objects (device-level and slot-level settings endpoints)
+- `runCheckFeedLoop` extended with new optional params `clickHashtagPercentMin` / `clickHashtagPercentMax` (both default to `0` so all existing call sites are unaffected).
+- Return type of `runCheckFeedLoop` gains `hashtagTaps: number`.
+- Automation cycle `steps[]` log line now includes `N hashtag-taps` alongside the existing counters.
+
+#### Files changed
+
+- `artifacts/api-server/src/routes/mobile.ts` — schema additions, `runCheckFeedLoop` logic block, cycle call site, stats tracking
+- `artifacts/dannys-bot/src/components/tools/HumanSessionPanel.tsx` — subOption entry, `useState` / `useEffect` defaults, UI row, `Hash` icon import
+
+---
+
 ## v1.2.170 — 2026-07-26
 
 ### Fix: Expand Caption "more" button missed on some IG builds + Switcher poll reduced

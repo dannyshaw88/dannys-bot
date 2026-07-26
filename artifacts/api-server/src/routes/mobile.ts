@@ -165,6 +165,8 @@ type AutomationSettings = {
   expandCaptionPercentMax: number;
   tapAudioPercentMin: number;
   tapAudioPercentMax: number;
+  clickHashtagPercentMin: number;
+  clickHashtagPercentMax: number;
   feedScrollMin: number;
   feedScrollMax: number;
   viewStoriesSlidesMin: number;
@@ -1171,6 +1173,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     expandCaptionPercentMax: z.number().min(0).max(100).default(0),
     tapAudioPercentMin: z.number().min(0).max(100).default(0),
     tapAudioPercentMax: z.number().min(0).max(100).default(0),
+    clickHashtagPercentMin: z.number().min(0).max(100).default(0),
+    clickHashtagPercentMax: z.number().min(0).max(100).default(0),
     feedScrollMin: z.number().min(1).max(50),
     feedScrollMax: z.number().min(1).max(50),
     viewStoriesSlidesMin: z.number().min(0).max(100).default(0),
@@ -1356,6 +1360,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       savePercentMin: 0, savePercentMax: 0,
       expandCaptionPercentMin: 0, expandCaptionPercentMax: 0,
       tapAudioPercentMin: 0, tapAudioPercentMax: 0,
+      clickHashtagPercentMin: 0, clickHashtagPercentMax: 0,
       feedScrollMin: 5, feedScrollMax: 10,
       viewStoriesSlidesMin: 0, viewStoriesSlidesMax: 0,
       viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
@@ -1458,6 +1463,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         savePercentMin: 0, savePercentMax: 0,
         expandCaptionPercentMin: 0, expandCaptionPercentMax: 0,
         tapAudioPercentMin: 0, tapAudioPercentMax: 0,
+        clickHashtagPercentMin: 0, clickHashtagPercentMax: 0,
         feedScrollMin: 5, feedScrollMax: 10,
         viewStoriesSlidesMin: 0, viewStoriesSlidesMax: 0,
         viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
@@ -2015,8 +2021,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     savePercentMin?: number; savePercentMax?: number;
     expandCaptionPercentMin?: number; expandCaptionPercentMax?: number;
     tapAudioPercentMin?: number; tapAudioPercentMax?: number;
+    clickHashtagPercentMin?: number; clickHashtagPercentMax?: number;
     onLog?: (msg: string) => void;
-  }): Promise<{ count: number; likes: number; likeFailures: number; sharesFeed: number; sharesDm: number; saves: number; captionExpands: number; strayNavRecoveries: number; audioTaps: number }> {
+  }): Promise<{ count: number; likes: number; likeFailures: number; sharesFeed: number; sharesDm: number; saves: number; captionExpands: number; strayNavRecoveries: number; audioTaps: number; hashtagTaps: number }> {
     const {
       count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
       shareFeedPercentMin = 0, shareFeedPercentMax = 0,
@@ -2024,6 +2031,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       savePercentMin = 0, savePercentMax = 0,
       expandCaptionPercentMin = 0, expandCaptionPercentMax = 0,
       tapAudioPercentMin = 0, tapAudioPercentMax = 0,
+      clickHashtagPercentMin = 0, clickHashtagPercentMax = 0,
       onLog,
     } = params;
     const delayLoSec = Math.min(delayMinSec, delayMaxSec);
@@ -2046,7 +2054,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const tapAudioLo = Math.min(tapAudioPercentMin, tapAudioPercentMax);
     const tapAudioHi = Math.max(tapAudioPercentMin, tapAudioPercentMax);
     const tapAudioChance = (tapAudioLo + Math.random() * (tapAudioHi - tapAudioLo)) / 100;
-    onLog?.(`Feed settings — like:${Math.round(likeChance * 100)}% expandCaption:${Math.round(captionExpandChance * 100)}% tapAudio:${Math.round(tapAudioChance * 100)}% save:${Math.round(saveChance * 100)}% shareFeed:${Math.round(shareFeedChance * 100)}% shareDm:${Math.round(shareDmChance * 100)}%`);
+    const clickHashtagLo = Math.min(clickHashtagPercentMin, clickHashtagPercentMax);
+    const clickHashtagHi = Math.max(clickHashtagPercentMin, clickHashtagPercentMax);
+    const clickHashtagChance = (clickHashtagLo + Math.random() * (clickHashtagHi - clickHashtagLo)) / 100;
+    onLog?.(`Feed settings — like:${Math.round(likeChance * 100)}% expandCaption:${Math.round(captionExpandChance * 100)}% tapAudio:${Math.round(tapAudioChance * 100)}% clickHashtag:${Math.round(clickHashtagChance * 100)}% save:${Math.round(saveChance * 100)}% shareFeed:${Math.round(shareFeedChance * 100)}% shareDm:${Math.round(shareDmChance * 100)}%`);
 
     const { w, h } = getScreenSize(serial);
     const x  = Math.round(w / 2);
@@ -2088,6 +2099,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let saves = 0;
     let strayNavRecoveries = 0;
     let audioTaps = 0;
+    let hashtagTaps = 0;
     // Sponsored posts ("Ads") render a full-width CTA button ("Shop Now",
     // "Install Now", "Learn More") overlaid near the bottom of the media —
     // right where our double-tap-to-like jitter can land after a scroll that
@@ -2186,6 +2198,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const wantSave = saveChance > 0 && Math.random() < saveChance;
       const wantExpandCaption = captionExpandChance > 0 && Math.random() < captionExpandChance;
       const wantTapAudio = tapAudioChance > 0 && Math.random() < tapAudioChance;
+      const wantClickHashtag = clickHashtagChance > 0 && Math.random() < clickHashtagChance;
 
       if (wantLike || wantShareFeed || wantShareDm || wantSave || wantExpandCaption) {
         const feedbackCard = await android.isFeedbackOrSurveyCard(serial).catch(() => null);
@@ -2773,6 +2786,118 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
       }
 
+      // ── Click Hashtag (browse hashtag grid page) ─────────────────────
+      // Finds hashtag buttons in the visible caption, taps one at random
+      // to open the hashtag grid page, scrolls 1–10 times, and has a
+      // 1–10% per-scroll chance to tap a random post on the grid.
+      // If a post was tapped, presses Back twice (post → grid → feed);
+      // otherwise presses Back once (grid → feed).
+      // The roll is skipped when no hashtag buttons are visible (only
+      // the audio tap runs on posts that have hashtags, not all posts do).
+      if (wantClickHashtag) {
+        try {
+          if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+          await sleepOrAbort(serial, 300);
+          const _chXml = await android.dumpUi(serial).catch(() => "");
+          // Collect hashtag button nodes from the caption area — they are
+          // android.widget.Button elements whose content-desc starts with '#'.
+          // Exclude the action bar (like/comment/share) and non-caption nodes
+          // by checking the '#' prefix on the desc attribute.
+          const _chHashtags: { x: number; y: number; tag: string }[] = [];
+          for (const _chSeg of _chXml.split("<node ")) {
+            const _chDesc = (_chSeg.match(/content-desc="([^"]*)"/) ?? [])[1] ?? "";
+            if (!_chDesc.startsWith("#")) continue;
+            const _chClass = (_chSeg.match(/class="([^"]*)"/) ?? [])[1] ?? "";
+            // Only Button nodes — a11y assigns class Button to caption hashtag links.
+            if (!_chClass.includes("Button")) continue;
+            const _chBb = _chSeg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+            if (!_chBb) continue;
+            const _chX = Math.round((parseInt(_chBb[1]) + parseInt(_chBb[3])) / 2);
+            const _chY = Math.round((parseInt(_chBb[2]) + parseInt(_chBb[4])) / 2);
+            // Only nodes in the caption area — below the action bar (> 40% height).
+            if (_chY < h * 0.40) continue;
+            _chHashtags.push({ x: _chX, y: _chY, tag: _chDesc });
+          }
+
+          if (_chHashtags.length === 0) {
+            onLog?.(`Scroll ${i + 1}/${count}: click-hashtag rolled but no hashtag buttons visible — skipping`);
+          } else {
+            const _chPick = _chHashtags[Math.floor(Math.random() * _chHashtags.length)];
+            onLog?.(`Scroll ${i + 1}/${count}: tapping hashtag "${_chPick.tag}" at (${_chPick.x},${_chPick.y})…`);
+            await android.tap(serial, _chPick.x, _chPick.y);
+            await sleepOrAbort(serial, 1500);
+            await verifyStillInInstagram();
+
+            // Confirm we arrived at the hashtag grid — look for the grid card layout.
+            const _chGridXml = await android.dumpUi(serial).catch(() => "");
+            const _chOnGrid = _chGridXml.includes("grid_card_layout_container") ||
+              _chGridXml.includes("tabbed_pager") ||
+              _chGridXml.includes("swipeable_tab_view_pager");
+
+            if (!_chOnGrid) {
+              onLog?.(`Scroll ${i + 1}/${count}: hashtag grid not confirmed — pressing Back and continuing`);
+              await android.pressBack(serial);
+              await sleepOrAbort(serial, 600);
+            } else {
+              // Scroll the hashtag grid 1–10 times; 1–10% per-scroll tap chance.
+              const _chScrolls = 1 + Math.floor(Math.random() * 10);
+              const _chTapChance = 0.01 + Math.random() * 0.09; // 1–10%
+              onLog?.(`Scroll ${i + 1}/${count}: on hashtag grid "${_chPick.tag}" — scrolling ${_chScrolls}x (tap chance ${Math.round(_chTapChance * 100)}%)…`);
+              const { w: _chW, h: _chH } = getScreenSize(serial);
+              let _chDidTapPost = false;
+              for (let _chS = 0; _chS < _chScrolls; _chS++) {
+                if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+                const _chSY1 = Math.round(_chH * 0.75);
+                const _chSY2 = Math.round(_chH * 0.30);
+                const _chSX  = Math.round(_chW / 2);
+                const _chDur = 300 + Math.round(Math.random() * 400);
+                await android.swipe(serial, _chSX, _chSY1, _chSX, _chSY2, _chDur);
+                await sleepOrAbort(serial, 280);
+                if (!_chDidTapPost && Math.random() < _chTapChance) {
+                  // Tap a random grid post using the grid_card_layout_container nodes.
+                  const _chPXml = await android.dumpUi(serial).catch(() => "");
+                  const _chPosts: { x: number; y: number }[] = [];
+                  for (const _chPSeg of _chPXml.split("<node ")) {
+                    const _chRid = (_chPSeg.match(/resource-id="([^"]*)"/) ?? [])[1] ?? "";
+                    // Match grid card or image_button nodes inside the grid.
+                    if (!_chRid.includes("grid_card_layout_container") && !_chRid.includes("image_button")) continue;
+                    const _chPBb = _chPSeg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+                    if (!_chPBb) continue;
+                    const _chPX = Math.round((parseInt(_chPBb[1]) + parseInt(_chPBb[3])) / 2);
+                    const _chPY = Math.round((parseInt(_chPBb[2]) + parseInt(_chPBb[4])) / 2);
+                    // Stay within the main content zone — skip nav bars.
+                    if (_chPY > _chH * 0.10 && _chPY < _chH * 0.92) _chPosts.push({ x: _chPX, y: _chPY });
+                  }
+                  if (_chPosts.length > 0) {
+                    const _chPostPick = _chPosts[Math.floor(Math.random() * _chPosts.length)];
+                    onLog?.(`Scroll ${i + 1}/${count}: tapping grid post at (${_chPostPick.x},${_chPostPick.y})…`);
+                    await android.tap(serial, _chPostPick.x, _chPostPick.y);
+                    await sleepOrAbort(serial, 1200);
+                    await verifyStillInInstagram();
+                    // Press Back once to return from the post to the hashtag grid.
+                    await android.pressBack(serial);
+                    await sleepOrAbort(serial, 700);
+                    await verifyStillInInstagram();
+                    _chDidTapPost = true;
+                    break; // stop scrolling after a tap
+                  }
+                }
+              }
+              // Return to the feed — one Back press from the hashtag grid.
+              onLog?.(`Scroll ${i + 1}/${count}: returning from hashtag grid…`);
+              await android.pressBack(serial);
+              await sleepOrAbort(serial, 700);
+              await verifyStillInInstagram();
+              hashtagTaps++;
+              onLog?.(`Scroll ${i + 1}/${count}: ✓ hashtag grid visited (${_chPick.tag}${_chDidTapPost ? ", tapped a post" : ""})`);
+            }
+          }
+        } catch (e: any) {
+          if (e?.message === "cycle-aborted") throw e;
+          onLog?.(`Scroll ${i + 1}/${count}: click-hashtag error — ${e?.message}`);
+        }
+      }
+
       if (i < count - 1) {
         const delaySec = delayLoSec + Math.random() * (delayHiSec - delayLoSec);
         await sleepOrAbort(serial, Math.round(delaySec * 1000));
@@ -2782,7 +2907,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       logger.warn({ serial, strayNavRecoveries }, "[check-feed] recovered from stray navigation (ad CTA) during this run");
       onLog?.(`⚠ Recovered from ${strayNavRecoveries} stray navigation(s) — likely tapped an ad CTA during scroll`);
     }
-    return { count, likes, likeFailures, sharesFeed, sharesDm, saves, captionExpands, strayNavRecoveries, audioTaps };
+    return { count, likes, likeFailures, sharesFeed, sharesDm, saves, captionExpands, strayNavRecoveries, audioTaps, hashtagTaps };
   }
 
   // View stories from the stories bar at the top of the feed.
@@ -4508,6 +4633,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     expandCaptionPercentMax: z.number().min(0).max(100).default(0),
     tapAudioPercentMin: z.number().min(0).max(100).default(0),
     tapAudioPercentMax: z.number().min(0).max(100).default(0),
+    clickHashtagPercentMin: z.number().min(0).max(100).default(0),
+    clickHashtagPercentMax: z.number().min(0).max(100).default(0),
     viewStoriesSlidesMin: z.number().min(0).max(100).default(0),
     viewStoriesSlidesMax: z.number().min(0).max(100).default(0),
     viewStoriesSlideWatchPctMin: z.number().min(1).max(100).default(50),
@@ -7145,7 +7272,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let reelsLikes = 0;
     // Hoisted so the catch block can include partial stats in the COMPLETE log
     // even when the cycle is aborted or errors mid-run.
-    let likes = 0, likeFailures = 0, sharesFeed = 0, sharesDm = 0, saves = 0, captionExpands = 0, strayNavRecoveries = 0, audioTaps = 0;
+    let likes = 0, likeFailures = 0, sharesFeed = 0, sharesDm = 0, saves = 0, captionExpands = 0, strayNavRecoveries = 0, audioTaps = 0, hashtagTaps = 0;
     let feedScrolled = 0; // number of feed posts requested to scroll this cycle
     let exploreScrolled = 0; // number of explore scrolls this cycle
     let _slotUsername = "";       // captured from schema parse for catch-block use
@@ -7167,6 +7294,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         savePercentMin, savePercentMax,
         expandCaptionPercentMin, expandCaptionPercentMax,
         tapAudioPercentMin, tapAudioPercentMax,
+        clickHashtagPercentMin, clickHashtagPercentMax,
         viewStoriesSlidesMin, viewStoriesSlidesMax,
         viewStoriesSlideWatchPctMin, viewStoriesSlideWatchPctMax,
         viewStoriesLikePercentMin, viewStoriesLikePercentMax,
@@ -7629,17 +7757,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               await sleepOrAbort(serial, 2000);
             }
             tLog(`▶ Starting feed scroll — ${count} posts`);
-            ({ likes, likeFailures, sharesFeed, sharesDm, saves, captionExpands, strayNavRecoveries, audioTaps } = await runCheckFeedLoop(serial, {
+            ({ likes, likeFailures, sharesFeed, sharesDm, saves, captionExpands, strayNavRecoveries, audioTaps, hashtagTaps } = await runCheckFeedLoop(serial, {
               count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
               shareFeedPercentMin, shareFeedPercentMax,
               shareDmPercentMin, shareDmPercentMax,
               savePercentMin, savePercentMax,
               expandCaptionPercentMin, expandCaptionPercentMax,
               tapAudioPercentMin, tapAudioPercentMax,
+              clickHashtagPercentMin, clickHashtagPercentMax,
               onLog: (msg) => tLog(`  ${msg}`),
             }));
             feedScrolled = count;
-            steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${saves} saves, ${captionExpands} caption-expands, ${audioTaps} audio-taps, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
+            steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${saves} saves, ${captionExpands} caption-expands, ${audioTaps} audio-taps, ${hashtagTaps} hashtag-taps, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
             tLog(`▶ Feed done — ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} DM-shares, ${saves} saves, ${captionExpands} caption-expands`);
           } else if (!feedEnabled) {
             steps.push("feed(skipped — View Feed disabled)");
