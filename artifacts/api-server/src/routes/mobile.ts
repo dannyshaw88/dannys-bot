@@ -2984,6 +2984,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const bm    = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
         if (!bm) continue;
 
+        // ── EXCLUSION: upload / own-story controls ────────────────────────────
+        // "Add to story", "Add to your story", "Your story", etc. all end with
+        // "story" and would match the broad patterns below. Reject them HERE,
+        // before any inclusion check, so they can never enter the candidate list
+        // regardless of their screen position.
+        const UPLOAD_EXCLUDE_RE = /^(add(\s+to)?(\s+your)?\s+story|your\s+story|create(\s+a)?\s+story|new\s+story)$/i;
+        if (UPLOAD_EXCLUDE_RE.test(desc.trim())) continue;
+
         // ── Pattern 1: content-desc ending in "'s story" (ASCII or Unicode) ──
         // e.g. "fruitthchaz's story"  "lyrics_mood_0_'s story"
         const isStoryDesc =

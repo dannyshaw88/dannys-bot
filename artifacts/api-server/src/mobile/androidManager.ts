@@ -4367,6 +4367,20 @@ export async function isInStoryViewerSlow(serial: string): Promise<boolean> {
     if (xml.includes(marker)) return true;
   }
 
+  // ── 1a. Story-creation / media-picker screen — NOT the viewer ────────────
+  // If the device accidentally opened the "Add to story" upload editor (e.g.
+  // because the upload control was selected instead of a friend's story
+  // bubble), neither STORY_MARKERS nor the home tab will be present, so the
+  // code would fall through to the "ambiguous → assume still in viewer" default
+  // and falsely report success. Detect the editor explicitly and return false
+  // so the caller knows to back out.
+  if (
+    /text="Add to story"/i.test(xml) ||
+    /content-desc="Add to story"/i.test(xml)
+  ) {
+    return false;
+  }
+
   // ── 2. Home-tab check — content-desc and resource-id ONLY ────────────────
   // Deliberately no positional fallback here (that's what caused the bug).
   const homeByDesc = /content-desc="Home[^"]*"/.test(xml);

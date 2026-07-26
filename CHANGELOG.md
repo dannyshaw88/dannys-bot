@@ -4,6 +4,146 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.187 — 2026-07-26
+
+### Bug Fix — View Stories: "Add to story" upload control selected instead of a friend's bubble
+
+---
+
+#### Root cause — two compounding failures
+
+**Failure 1 — Broad regex matched the upload control.**
+
+`extractStoryBubbles` inside `pickAndOpenRandomStory` used the pattern
+`/[,\-–]?\s*story$/i` to catch less-common story-bubble label formats such as
+`"username, story"` or `"username - story"`. That pattern matches any string
+ending with `"story"` — including Instagram's own `"Add to story"` upload
+control. The upload control therefore entered the candidate list alongside real
+friend story bubbles.
+
+**Failure 2 — Position-based deduplication removed the wrong node.**
+
+v1.2.186 attempted to exclude the upload control by sorting all candidates
+left-to-right and calling `deduped.shift()` to pop the leftmost one (on the
+assumption that Instagram always places "Your story" in the first slot). On the
+device and session captured in the debug log for this session, the leftmost node
+was `@lisaberry2001's story` (a real friend's story at x≈147), not the upload
+control. The upload control sat at x≈320. The shift therefore removed the
+friend's story and left "Add to story" as the first remaining candidate, which
+was then tapped, opening Instagram's story-creation media picker.
+
+Debug log evidence (exact lines from `aura-farming-debug_1785072846844.log`):
+
+```
+[14:25:03] Story tray: ignoring first bubble "@lisaberry2001's story, 0 of 27,
+           Dneen." at (147,400) — upload-your-own-story control        ← WRONG NODE REMOVED
+[14:25:03] Story tray: found 4 story bubble(s) in dump: …
+[14:25:04] Story tray: tapping "Add to story" at (320,450)             ← UPLOAD CONTROL TAPPED
+[14:25:05] Story tray: "Add to story" opened successfully              ← FALSE POSITIVE
+```
+
+**Failure 3 — `isInStoryViewerSlow` falsely reported success.**
+
+After the upload control was tapped, the phone showed Instagram's story-creation
+/ media-picker screen. `isInStoryViewerSlow` checked the UIAutomator dump
+against a list of known story-viewer resource-id substrings
+(`toolbar_like_button`, `reel_viewer`, `story_viewer`, `tray_viewer`) — none of
+which appear in the creation screen. It then checked for the Home tab
+(`content-desc="Home…"` / `:id/feed_tab` / `:id/home_tab`) — also absent from
+the creation screen. Having found neither a positive viewer marker nor the home
+tab, the function fell through to its safe-default `return true` ("ambiguous —
+assume still in viewer"), reporting the upload control as a successfully opened
+story.
+
+---
+
+#### Fix
+
+Two independent node-based changes. No pixel coordinates, no screen-position
+assumptions.
+
+**1. Exclusion-first filter inside `extractStoryBubbles` (`mobile.ts`)**
+
+An explicit blocklist now runs inside the node-parsing loop, before any
+inclusion pattern is evaluated:
+
+```typescript
+// Immediately reject the "Add to story" / "Your story" upload control
+// before any inclusion pattern can match it.
+const UPLOAD_EXCLUDE_RE =
+  /^(add(\s+to)?(\s+your)?\s+story|your\s+story|create(\s+a)?\s+story|new\s+story)$/i;
+if (UPLOAD_EXCLUDE_RE.test(desc.trim())) continue;
+```
+
+Rejected labels: `Add to story`, `Add to your story`, `Your story`,
+`Create a story`, `Create story`, `New story` — case-insensitive. The check
+runs against the node's own `content-desc` attribute, so it works regardless of
+where the upload control sits on screen. The `deduped.shift()` position-based
+removal is kept as a secondary safety net for builds where the upload control
+carries a generic resource-id instead of a recognisable label, but it is no
+longer the primary exclusion mechanism.
+
+**2. Story-creation screen guard in `isInStoryViewerSlow` (`androidManager.ts`)**
+
+Added immediately after the existing positive story-viewer marker check:
+
+```typescript
+// If the "Add to story" creation screen is on screen we are NOT in the
+// story viewer — return false so the caller backs out rather than
+// declaring false success.
+if (
+  /text="Add to story"/i.test(xml) ||
+  /content-desc="Add to story"/i.test(xml)
+) {
+  return false;
+}
+```
+
+This closes the safe-default loophole: the creation screen has neither story
+viewer markers nor a home tab, so previously the ambiguous-default path returned
+`true`. Now it returns `false` explicitly when the creation-screen toolbar label
+is visible in the dump.
+
+---
+
+#### GitHub Actions — Windows installer
+
+The canonical workflow is `.github/workflows/build-windows-installer.yml`.
+It triggers on every push to `main` and on `workflow_dispatch`. It:
+
+1. Builds the API server (`pnpm --filter @workspace/api-server run build`) and
+   the frontend (`pnpm --filter @workspace/dannys-bot run build`) on
+   `ubuntu-latest`.
+2. Uploads both `dist/` directories as GitHub Actions artifacts.
+3. Downloads them on a `windows-latest` runner, installs Electron dependencies,
+   builds the Electron bundle (`node build.mjs`), packages with
+   `electron-builder --win --publish never`, and uploads the resulting `.exe`
+   as `Aura-Farming-Windows-Installer`.
+4. On tag pushes (`v*`), additionally publishes the `.exe` to a GitHub Release
+   via `softprops/action-gh-release@v2`.
+
+The four other workflow files (`windows-installer.yml`, `build.yml`,
+`release.yml`, `build-windows.yml`) are deprecated inert stubs with no
+triggers, kept only because tracked file deletion is blocked in this
+environment. They do not run on push events. Do not add triggers back to them.
+
+---
+
+#### Files changed
+
+- `artifacts/api-server/src/routes/mobile.ts` — `UPLOAD_EXCLUDE_RE` blocklist
+  added inside `extractStoryBubbles`, before any inclusion check; full comment
+  explaining why position-based removal alone was insufficient.
+- `artifacts/api-server/src/mobile/androidManager.ts` — story-creation screen
+  guard added between the STORY_MARKERS block and the home-tab check inside
+  `isInStoryViewerSlow`; returns `false` when `text="Add to story"` or
+  `content-desc="Add to story"` is present in the UIAutomator dump.
+- `package.json` — version `1.2.186` → `1.2.187`.
+- `artifacts/electron/package.json` — version `1.2.186` → `1.2.187`.
+- `CHANGELOG.md` — this entry.
+
+---
+
 ## v1.2.186 — 2026-07-26
 
 ### Bug Fix — View Stories skips the account’s own upload bubble
