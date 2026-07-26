@@ -4,6 +4,75 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.179 — 2026-07-26
+
+### Bug Fix — View Stories emoji key: found by pure geometry in the Android IME tree, no pixel scanning
+
+**What was wrong with every previous approach.**
+
+The keyboard shown when the story reply field is tapped is the **Android system
+IME** — not part of Instagram's UI. Instagram asks the operating system to open
+its keyboard; the OS renders its own keyboard window. `dumpUiWithIme` with the
+`--include-ime` flag includes that window in the accessibility tree, which is
+why `imeIncluded=true` appeared in every log.
+
+Prior attempts all tried to locate the emoji key by either:
+- Pixel colour scanning (unreliable — keyboard theme varies per device and OS
+  theme; story backgrounds bleed into the scan window)
+- Resource-id / content-desc matching (`emoji`, `smiley`, `pictsym`, etc.) —
+  unreliable because Xiaomi/MIUI uses different attribute names than Gboard,
+  and we were scanning Instagram's window rather than the IME window correctly
+
+All of these produced `imeIncluded=true` but `emoji key not found`, proving the
+node IS in the tree but the search criteria were wrong.
+
+**Fix — pure geometry from the IME accessibility tree.**
+
+No pixel colours. No resource-id guessing. No coordinate offsets.
+
+1. Parse every node from `dumpUiWithIme` that sits in the bottom 40 % of the
+   screen (keyboard area, `y1 ≥ h × 0.60`).
+2. **Space bar** = the node with the largest width in that area. The space bar
+   is always the widest key by a large margin on every keyboard layout.
+3. **Emoji key** = among all nodes in the *same row* as the space bar (nodes
+   whose vertical centre sits within the space bar's `y1`–`y2` range), pick the
+   node whose right edge (`x2`) is closest to — and left of — the space bar's
+   left edge (`x1`). Exclude fragments narrower than 4 % of screen width.
+4. Tap the centre of that node.
+
+This works on any keyboard (MIUI, Gboard, Samsung, etc.) without knowing
+anything about its resource-ids, colours, or theme.
+
+**Diagnostic logging when it fails.**
+
+If no node is found to the left of the space bar, the debug log now contains a
+structured `[view-stories] emoji key not found` warning that includes:
+- The space bar's exact bounds
+- Every node in the same row (resource-id, content-desc, text, bounds)
+- Total count of keyboard-area nodes
+
+This means the next failure report will show exactly what MIUI exposes and we
+can fix it without another guess cycle.
+
+When the emoji key IS found, the log line shows:
+```
+Story N: emoji key found by geometry — node left of space bar
+  rid="..." desc="..." text="..." bounds=[x1,y1][x2,y2] → tap (x,y)
+```
+
+**Pixel scanner removed.** The colour-based `findKeyboardEmojiButton` pixel
+scanner path is no longer called from the story comment flow. The glyph-split
+merge added in v1.2.178 remains in `androidManager.ts` but is no longer
+reachable from this flow.
+
+**Files changed.**
+
+- `artifacts/api-server/src/routes/mobile.ts` — story comment flow: replaced
+  all resource-id / pixel-scanner logic with pure-geometry IME node search;
+  added full diagnostic logging when the key is not found.
+
+---
+
 ## v1.2.178 — 2026-07-26
 
 ### Bug Fix — View Stories emoji key pixel scanner: glyph-split merge now fuses the 😊 face halves
