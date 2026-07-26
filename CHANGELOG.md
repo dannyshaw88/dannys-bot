@@ -4,6 +4,12 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.181
+
+- **Fix: emoji key detection for MIUI/Xiaomi keyboards.** The previous geometry approach picked the widest node in the keyboard area as the "space bar", but MIUI exposes the bottom key row as a full-screen-width container (`x1=0, x2=1080`), so nothing could ever be "to its left". Three strategies now run in order: (1) label search — `content-desc` containing "emoji"/"Switch to emoji keyboard"; (2) geometry with full-width containers excluded before picking the space bar; (3) coordinate estimate (`x ≈ 27 % of screen width`) when MIUI provides only container nodes. Strategy 3 is what fires on this Xiaomi Redmi 12 5G and places the tap at the correct emoji key position.
+
+---
+
 ## v1.2.180
 
 - **Fix: account switcher no longer presses BACK after a successful switch tap.** The dismiss-with-BACK is now reserved exclusively for the "already active account" path where no tap was fired and the switcher is still open. Previously a post-tap UIAutomator dump (which can lag while the UI settles) falsely detected the switcher as "still open" and sent an unnecessary BACK that could close a welcome interstitial or exit Instagram.

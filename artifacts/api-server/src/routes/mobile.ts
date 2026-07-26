@@ -3577,74 +3577,126 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // Keyboard area: nodes whose top edge is in the bottom 40 % of screen.
             const _kbNodes = _allNodes.filter(n => n.y1 >= h * 0.60);
 
-            // Space bar: widest node in the keyboard area.
-            const _spaceBarNode = _kbNodes.length > 0
-              ? _kbNodes.reduce((best, n) =>
-                  (n.x2 - n.x1) > (best.x2 - best.x1) ? n : best,
-                  _kbNodes[0])
-              : null;
+            // ── Strategy 1: label-based emoji key search ──────────────────────
+            // Some keyboards (Gboard, Samsung) label the emoji key with a
+            // recognisable content-desc. Try this first — it's the most
+            // reliable when the label is present.
+            const _emojiByLabel = _kbNodes.find(n => {
+              const combined = `${n.contentDesc} ${n.text}`.toLowerCase();
+              return /emoji|smiley|emoticon|switch.*emoji|emoji.*keyboard/i.test(combined);
+            });
 
             let _emojiButton: { x: number; y: number } | null = null;
 
-            if (_spaceBarNode) {
-              const _sbWidth = _spaceBarNode.x2 - _spaceBarNode.x1;
-              // Same row: a node whose vertical centre sits within the space bar's
-              // y range.  This isolates only the bottom key row, ignoring the rows
-              // of letter keys above.
-              const _spaceBarCentreY = (_spaceBarNode.y1 + _spaceBarNode.y2) / 2;
-              const _sameRow = _kbNodes.filter(n => {
-                const cy = (n.y1 + n.y2) / 2;
-                return cy >= _spaceBarNode.y1 && cy <= _spaceBarNode.y2;
-              });
-              // Emoji key: node in the same row whose right edge (x2) is to the
-              // left of the space bar's left edge (x1), picking the closest one.
-              // Exclude nodes narrower than 4 % of screen width (anti-aliasing
-              // fragments, dividers) and the space bar itself.
-              const _leftOfSpace = _sameRow
-                .filter(n =>
-                  n.x2 <= _spaceBarNode.x1 &&
-                  (n.x2 - n.x1) >= w * 0.04 &&
-                  (n.x2 - n.x1) < _sbWidth * 0.8,
-                )
-                .sort((a, b) => b.x2 - a.x2); // closest to space bar first
+            if (_emojiByLabel) {
+              _emojiButton = {
+                x: Math.round((_emojiByLabel.x1 + _emojiByLabel.x2) / 2),
+                y: Math.round((_emojiByLabel.y1 + _emojiByLabel.y2) / 2),
+              };
+              onLog?.(
+                `Story ${s + 1}: emoji key found by label — desc="${_emojiByLabel.contentDesc}" text="${_emojiByLabel.text}"` +
+                ` → tap (${_emojiButton.x},${_emojiButton.y})`,
+              );
+              logger.info(
+                { serial, story: s + 1, rid: _emojiByLabel.resourceId, desc: _emojiByLabel.contentDesc, text: _emojiByLabel.text, tap: _emojiButton },
+                "[view-stories] emoji key found by label",
+              );
+            }
 
-              if (_leftOfSpace.length > 0) {
-                const _emojiNode = _leftOfSpace[0];
-                _emojiButton = {
-                  x: Math.round((_emojiNode.x1 + _emojiNode.x2) / 2),
-                  y: Math.round((_emojiNode.y1 + _emojiNode.y2) / 2),
-                };
-                onLog?.(
-                  `Story ${s + 1}: emoji key found by geometry — node left of space bar` +
-                  ` rid="${_emojiNode.resourceId}" desc="${_emojiNode.contentDesc}" text="${_emojiNode.text}"` +
-                  ` bounds=[${_emojiNode.x1},${_emojiNode.y1}][${_emojiNode.x2},${_emojiNode.y2}]` +
-                  ` → tap (${_emojiButton.x},${_emojiButton.y})`,
-                );
-                logger.info(
-                  { serial, story: s + 1, rid: _emojiNode.resourceId, desc: _emojiNode.contentDesc, text: _emojiNode.text, tap: _emojiButton },
-                  "[view-stories] emoji key found by geometry",
-                );
+            if (!_emojiButton) {
+              // ── Strategy 2: geometry (space-bar left-edge) ──────────────────
+              // Find the space bar as the widest node in the keyboard area that
+              // is NOT a full-screen-width container.
+              //
+              // Root-cause fix (Jul 2026): MIUI/Xiaomi keyboards expose their
+              // bottom row as a full-width container node (x1=0, x2=screenW)
+              // rather than individual key nodes. The old code picked this
+              // container as "widest", gave it x1=0, and then nothing could
+              // ever satisfy "x2 ≤ spaceBar.x1". Fix: exclude nodes whose
+              // width is ≥ 90% of the screen width before picking the space bar.
+              const _nonContainerKbNodes = _kbNodes.filter(n => (n.x2 - n.x1) < w * 0.90);
+              const _spaceBarNode = _nonContainerKbNodes.length > 0
+                ? _nonContainerKbNodes.reduce((best, n) =>
+                    (n.x2 - n.x1) > (best.x2 - best.x1) ? n : best,
+                    _nonContainerKbNodes[0])
+                : (_kbNodes.length > 0
+                    ? _kbNodes.reduce((best, n) =>
+                        (n.x2 - n.x1) > (best.x2 - best.x1) ? n : best,
+                        _kbNodes[0])
+                    : null);
+
+              if (_spaceBarNode) {
+                const _sbWidth = _spaceBarNode.x2 - _spaceBarNode.x1;
+
+                // ── Strategy 3: coordinate estimate when only containers present ─
+                // If the "space bar" node is still full-width (MIUI exposes ONLY
+                // row containers — no per-key nodes), geometry cannot work.
+                // Fall back: emoji key is always the 3rd key on the bottom row
+                // (layout: ?123 | , | 😊 | [space] | . | ↵). On a standard
+                // Android keyboard the emoji key centre sits at ~27% of screen
+                // width. Use the container's y as the row centre.
+                if (_spaceBarNode.x1 === 0 && _spaceBarNode.x2 >= w * 0.90) {
+                  const _kbRowCY = Math.round((_spaceBarNode.y1 + _spaceBarNode.y2) / 2);
+                  _emojiButton = { x: Math.round(w * 0.27), y: _kbRowCY };
+                  onLog?.(
+                    `Story ${s + 1}: MIUI keyboard — only full-width container nodes found;` +
+                    ` coordinate-estimate emoji key at (${_emojiButton.x},${_kbRowCY})`,
+                  );
+                  logger.info(
+                    { serial, story: s + 1, tap: _emojiButton, kbNodeCount: _kbNodes.length },
+                    "[view-stories] emoji key via coordinate estimate (MIUI container-only keyboard)",
+                  );
+                } else {
+                  // Normal geometry path: look for a node in the same row as the
+                  // space bar whose right edge is to the left of the space bar.
+                  const _sameRow = _kbNodes.filter(n => {
+                    const cy = (n.y1 + n.y2) / 2;
+                    return cy >= _spaceBarNode.y1 && cy <= _spaceBarNode.y2;
+                  });
+                  const _leftOfSpace = _sameRow
+                    .filter(n =>
+                      n.x2 <= _spaceBarNode.x1 &&
+                      (n.x2 - n.x1) >= w * 0.04 &&
+                      (n.x2 - n.x1) < _sbWidth * 0.8,
+                    )
+                    .sort((a, b) => b.x2 - a.x2);
+
+                  if (_leftOfSpace.length > 0) {
+                    const _emojiNode = _leftOfSpace[0];
+                    _emojiButton = {
+                      x: Math.round((_emojiNode.x1 + _emojiNode.x2) / 2),
+                      y: Math.round((_emojiNode.y1 + _emojiNode.y2) / 2),
+                    };
+                    onLog?.(
+                      `Story ${s + 1}: emoji key found by geometry — node left of space bar` +
+                      ` rid="${_emojiNode.resourceId}" desc="${_emojiNode.contentDesc}" text="${_emojiNode.text}"` +
+                      ` bounds=[${_emojiNode.x1},${_emojiNode.y1}][${_emojiNode.x2},${_emojiNode.y2}]` +
+                      ` → tap (${_emojiButton.x},${_emojiButton.y})`,
+                    );
+                    logger.info(
+                      { serial, story: s + 1, rid: _emojiNode.resourceId, desc: _emojiNode.contentDesc, text: _emojiNode.text, tap: _emojiButton },
+                      "[view-stories] emoji key found by geometry",
+                    );
+                  } else {
+                    logger.warn(
+                      { serial, story: s + 1,
+                        spaceBar: { x1: _spaceBarNode.x1, y1: _spaceBarNode.y1, x2: _spaceBarNode.x2, y2: _spaceBarNode.y2 },
+                        sameRowNodes: _sameRow.map(n => ({ x1: n.x1, y1: n.y1, x2: n.x2, y2: n.y2, rid: n.resourceId, desc: n.contentDesc, text: n.text })),
+                        kbNodeCount: _kbNodes.length },
+                      "[view-stories] emoji key not found — no node left of space bar",
+                    );
+                    onLog?.(`Story ${s + 1}: emoji key not found — space bar at [${_spaceBarNode.x1},${_spaceBarNode.y1}][${_spaceBarNode.x2},${_spaceBarNode.y2}], ${_sameRow.length} same-row nodes (see debug log for details)`);
+                  }
+                }
               } else {
-                // Log all keyboard-area nodes so the next report shows exactly
-                // what MIUI exposes — we can fix the detection without guessing.
                 logger.warn(
                   { serial, story: s + 1,
-                    spaceBar: { x1: _spaceBarNode.x1, y1: _spaceBarNode.y1, x2: _spaceBarNode.x2, y2: _spaceBarNode.y2 },
-                    sameRowNodes: _sameRow.map(n => ({ x1: n.x1, y1: n.y1, x2: n.x2, y2: n.y2, rid: n.resourceId, desc: n.contentDesc, text: n.text })),
-                    kbNodeCount: _kbNodes.length },
-                  "[view-stories] emoji key not found — no node left of space bar",
+                    kbNodeCount: _kbNodes.length,
+                    kbNodes: _kbNodes.map(n => ({ x1: n.x1, y1: n.y1, x2: n.x2, y2: n.y2, rid: n.resourceId, desc: n.contentDesc, text: n.text })) },
+                  "[view-stories] emoji key not found — no space bar node in keyboard area",
                 );
-                onLog?.(`Story ${s + 1}: emoji key not found — space bar at [${_spaceBarNode.x1},${_spaceBarNode.y1}][${_spaceBarNode.x2},${_spaceBarNode.y2}], ${_sameRow.length} same-row nodes (see debug log for details)`);
+                onLog?.(`Story ${s + 1}: emoji key not found — space bar not detected in IME dump (${_kbNodes.length} keyboard-area nodes logged)`);
               }
-            } else {
-              // No space bar found at all — log everything in the keyboard area.
-              logger.warn(
-                { serial, story: s + 1,
-                  kbNodeCount: _kbNodes.length,
-                  kbNodes: _kbNodes.map(n => ({ x1: n.x1, y1: n.y1, x2: n.x2, y2: n.y2, rid: n.resourceId, desc: n.contentDesc, text: n.text })) },
-                "[view-stories] emoji key not found — no space bar node in keyboard area",
-              );
-              onLog?.(`Story ${s + 1}: emoji key not found — space bar not detected in IME dump (${_kbNodes.length} keyboard-area nodes logged)`);
             }
 
             if (!_emojiButton) {
