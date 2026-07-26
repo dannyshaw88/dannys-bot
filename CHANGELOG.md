@@ -4,6 +4,24 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.190 — 2026-07-26
+
+### Bug Fix — View Stories emoji key: MIUI container path picks bottommost row
+
+**Problem:** On MIUI/Xiaomi the keyboard exposes only full-width row containers.
+The previous code used a `reduce` to find the "widest" node — when all widths
+are equal it returns `_kbNodes[0]`, which happened to be the ZXC row (y≈2073),
+not the bottom row. The emoji key coordinate estimate was then centred on the
+ZXC row and tapped "x" instead of the emoji icon.
+
+**Fix:** When every keyboard node is full-width (MIUI container-only path), pick
+the container with the **highest y1** (bottommost row on screen) — that is the
+bottom row (`?123 | , | 😊 | space | . | ↵`) where the emoji key always lives.
+Also added container bounds to the debug log so the correct row selection is
+visible in the next run.
+
+---
+
 ## v1.2.189 — 2026-07-26
 
 ### Bug Fix — View Stories emoji key: correct node separation for MIUI/Xiaomi

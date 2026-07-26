@@ -3699,14 +3699,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 // Android keyboard the emoji key centre sits at ~27% of screen
                 // width. Use the container's y as the row centre.
                 if (_spaceBarNode.x1 === 0 && _spaceBarNode.x2 >= w * 0.90) {
-                  const _kbRowCY = Math.round((_spaceBarNode.y1 + _spaceBarNode.y2) / 2);
+                  // All exposed nodes are full-width row containers. Pick the
+                  // BOTTOMMOST one (highest y1) — that is the keyboard's bottom
+                  // row (?123 | , | 😊 | space | . | ↵) where the emoji key lives.
+                  // The previous reduce returned _kbNodes[0] when all widths were
+                  // equal, which happened to be the ZXC row, tapping X instead.
+                  const _bottomRow = _kbNodes.reduce(
+                    (best, n) => (n.y1 > best.y1 ? n : best),
+                    _kbNodes[0],
+                  );
+                  const _kbRowCY = Math.round((_bottomRow.y1 + _bottomRow.y2) / 2);
                   _emojiButton = { x: Math.round(w * 0.27), y: _kbRowCY };
                   onLog?.(
                     `Story ${s + 1}: MIUI keyboard — only full-width container nodes found;` +
+                    ` picked bottommost row [${_bottomRow.x1},${_bottomRow.y1}][${_bottomRow.x2},${_bottomRow.y2}] of ${_kbNodes.length} container(s);` +
                     ` coordinate-estimate emoji key at (${_emojiButton.x},${_kbRowCY})`,
                   );
                   logger.info(
-                    { serial, story: s + 1, tap: _emojiButton, kbNodeCount: _kbNodes.length },
+                    {
+                      serial, story: s + 1, tap: _emojiButton, kbNodeCount: _kbNodes.length,
+                      containers: _kbNodes.map(n => ({ x1: n.x1, y1: n.y1, x2: n.x2, y2: n.y2, rid: n.resourceId, desc: n.contentDesc })),
+                    },
                     "[view-stories] emoji key via coordinate estimate (MIUI container-only keyboard)",
                   );
                 } else {
