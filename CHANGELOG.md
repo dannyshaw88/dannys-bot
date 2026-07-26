@@ -4,6 +4,23 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.172 — 2026-07-26
+
+### Fix — Click Hashtag % fields added to the correct Phone Farm settings panel (MobilePage)
+
+The Click Hashtag % min/max inputs were added in v1.2.171 to `HumanSessionPanel.tsx` (the read-only tool-status panel used by the Human Session Tool's browser-side view), but the Phone Farm slot settings that users actually edit live in `MobilePage.tsx`. This release moves the fields to the correct file.
+
+**What changed in `MobilePage.tsx`:**
+- `AutomationSettingsData` type — added `clickHashtagPercentMin: number` and `clickHashtagPercentMax: number`
+- Default settings state — both fields default to `0`
+- Settings-to-API body mapping — both fields forwarded to the automation cycle request
+- Copy-settings group for "View Feed" — `feedClickHashtag` entry added so the fields are included when copying slot settings
+- UI — **Click Hashtag % of posts** min/max input row inserted immediately after the Tap Audio % row in the View Feed section
+
+No backend changes — `mobile.ts` was already correct from v1.2.171.
+
+---
+
 ## v1.2.171 — 2026-07-26
 
 ### Added — Click Hashtag % in View Feed (Human Session Tool)

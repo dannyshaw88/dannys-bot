@@ -2438,6 +2438,8 @@ export interface AutomationSettingsData {
   expandCaptionPercentMax: number;
   tapAudioPercentMin: number;
   tapAudioPercentMax: number;
+  clickHashtagPercentMin: number;
+  clickHashtagPercentMax: number;
   feedScrollMin: number;
   feedScrollMax: number;
   viewStoriesSlidesMin: number;
@@ -2588,6 +2590,7 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   savePercentMin: 0, savePercentMax: 0,
   expandCaptionPercentMin: 0, expandCaptionPercentMax: 0,
   tapAudioPercentMin: 0, tapAudioPercentMax: 0,
+  clickHashtagPercentMin: 0, clickHashtagPercentMax: 0,
   feedScrollMin: 5, feedScrollMax: 10,
   viewStoriesSlidesMin: 0, viewStoriesSlidesMax: 0,
   viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
@@ -3127,6 +3130,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             expandCaptionPercentMax: s.expandCaptionPercentMax,
             tapAudioPercentMin: s.tapAudioPercentMin,
             tapAudioPercentMax: s.tapAudioPercentMax,
+            clickHashtagPercentMin: s.clickHashtagPercentMin,
+            clickHashtagPercentMax: s.clickHashtagPercentMax,
             viewStoriesSlidesMin: s.viewStoriesSlidesMin,
             viewStoriesSlidesMax: s.viewStoriesSlidesMax,
             viewStoriesSlideWatchPctMin: s.viewStoriesSlideWatchPctMin,
@@ -3617,6 +3622,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'feedSavePct',       label: 'Save %',                        fields: ['savePercentMin','savePercentMax'] },
     { key: 'feedExpandCaption', label: 'Expand Caption %',              fields: ['expandCaptionPercentMin','expandCaptionPercentMax'] },
     { key: 'feedTapAudio',      label: 'Tap Audio %',                   fields: ['tapAudioPercentMin','tapAudioPercentMax'] },
+    { key: 'feedClickHashtag',  label: 'Click Hashtag %',               fields: ['clickHashtagPercentMin','clickHashtagPercentMax'] },
   ]},
   { key: 'stories',       label: 'View Stories', sub: [
     { key: 'storiesEnabled',    label: 'Enabled',                       fields: ['storiesEnabled'] },
@@ -4543,6 +4549,33 @@ export function AutomationSettingsPanel({
                 className={NUM_INPUT_CLASS}
                 value={settings.tapAudioPercentMax}
                 onChange={e => setSettings(s => ({ ...s, tapAudioPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Click Hashtag % of posts</Label>
+            <div className="flex items-center gap-3">
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.clickHashtagPercentMin}
+                onChange={e => setSettings(s => ({ ...s, clickHashtagPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading}
+              />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                maxLength={4}
+                className={NUM_INPUT_CLASS}
+                value={settings.clickHashtagPercentMax}
+                onChange={e => setSettings(s => ({ ...s, clickHashtagPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading}
               />
             </div>
