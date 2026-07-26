@@ -4,6 +4,73 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.176 — 2026-07-26
+
+### Bug Fix — View Stories no longer taps the audio/music icon on feed posts
+
+**Root cause.** After a story slide auto-closes back to the home feed, the
+story-viewer safety gate runs a fast pixel scan to check whether the story
+viewer is still open. That scan detects the progress bar at the top of the
+screen. When the scan was *inconclusive* (returned `null` — e.g. a single-story
+tray with no multi-segment bar, or a story that had already closed), the old
+code assumed the viewer was still open (`fastOnly` path returned `true`) and
+allowed the like/share/comment scan to proceed.
+
+With the story closed and the home feed visible, the lower-screen icon-scan
+then interpreted the feed post's **audio/music control** (bottom-right of the
+media player) as the story's share/send icon, and tapped it — opening the music
+page instead of the DM share sheet.
+
+The equinox log confirmed the failure path exactly:
+
+```
+[11:30:13] [80.3s]   (story-viewer check: fast scan 1517ms inconclusive — fastOnly, assuming open)
+```
+
+**Fix.** The story-viewer gate now **fails closed** in every inconclusive case:
+
+- `fastOnly` path: when the pixel scan cannot positively confirm the viewer is
+  open, it returns `false` instead of `true`. The calling code treats this as
+  "viewer closed" and skips the like/share/comment action for that slide rather
+  than firing at whatever happens to be on screen.
+- Slow dump error path: accessibility-tree dump failures now return `false`
+  (viewer absent) instead of `true` (viewer present). A failed or empty dump no
+  longer authorises any story action.
+
+**What changes for users.** A like or share may occasionally be skipped on a
+slide where the pixel scan fails to read the progress bar. This is a safe
+no-op — the cycle moves to the next story or slot. What is eliminated is the
+mis-tap on feed-post audio, music pages, or any other unrelated feed control
+that was previously reachable when a story closed mid-sequence.
+
+**Files changed.**
+
+- `artifacts/api-server/src/routes/mobile.ts` — `stillInStoryViewer()`:
+  `fastOnly` branch changed from `return true` to `return false`; slow dump
+  `.catch(() => true)` changed to `.catch(() => false)`; comments updated to
+  document the fail-closed rule and the root-cause audio/music mis-tap.
+
+### Windows Installer (GitHub Actions)
+
+The canonical build workflow `.github/workflows/build-windows-installer.yml`
+triggers on every push to `main` and on version tags (`v*`). It:
+
+1. Builds the API server (`esbuild` ESM bundle) and the React frontend (`vite`)
+   on Ubuntu.
+2. Uploads both `dist/` directories as workflow artifacts.
+3. Downloads them onto a `windows-latest` runner and packages the Electron
+   desktop app with `electron-builder`.
+4. Uploads the resulting `.exe` as the **`Aura-Farming-Windows-Installer`**
+   artifact (the ~88 MB file to download from the Actions run).
+5. Publishes the `.exe` to a GitHub Release automatically when a `v*` tag is
+   pushed.
+
+To get the installer: go to `github.com/dannyshaw88/dannys-bot/actions`, click
+the latest successful **Build Windows Installer** run, and download
+**`Aura-Farming-Windows-Installer`** (not the smaller `web-builds` artifact).
+
+---
+
 ## v1.2.175 — 2026-07-26
 
 ### Bug Fix — Account switching no longer leaves the selector covering the feed

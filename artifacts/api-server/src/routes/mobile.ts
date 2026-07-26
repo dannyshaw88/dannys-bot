@@ -3107,27 +3107,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // confident `true`; it returns `null` whenever it can't tell for sure
     // (e.g. a single-story tray with no multi-segment progress bar), and
     // only THEN do we pay for the slow-but-proven accessibility-tree check.
-    // `fastOnly = true` skips the slow uiautomator-dump fallback.  Use it
-    // for the pre-action gate that fires right before a like or share tap:
-    // the slow dump takes 3-4s on this farm's devices — longer than a
-    // short (3s) story slide's entire remaining timer.  When the fast pixel
-    // scan returns null (can't confirm), treating it as "still open" and
-    // proceeding is safer than spending the whole slide budget on a dump.
-    // The worst-case wrong-viewer tap is a double-tap on the home feed
-    // (likes a feed post), which is rare and non-catastrophic.  All other
-    // checks (post-like, post-share, pre-Send, pre-advance) keep the full
-    // fallback since they run well into the multi-second share sequence
-    // where a 3-4s dump doesn't consume the remaining slide time alone.
+    // `fastOnly = true` skips the slow uiautomator-dump fallback and requires
+    // the fast pixel scan to POSITIVELY confirm the story viewer is open.
+    // If the fast scan is inconclusive (returns null), we now FAIL CLOSED and
+    // return false — the caller skips the action entirely.
+    //
+    // Root cause of the audio/music mis-tap bug: when fastOnly was inconclusive
+    // the old code assumed the story was still open and allowed the share icon
+    // scan to proceed. After a story auto-closes to the home feed, the lower-
+    // screen pixel scan mistook the feed post’s audio/music icon for the story
+    // share control and tapped it. Failing closed skips a rare like/share but
+    // eliminates the mis-tap on unrelated feed controls entirely.
     const stillInStoryViewer = async (fastOnly = false) => {
       const fastStart = Date.now();
       const fast = await android.isStoryViewerOpenFast(serial).catch(() => null);
       if (fast === true) return true;
       if (fastOnly) {
-        // Can't tell from pixels alone — assume still open to keep the
-        // like/share firing on time rather than burning the slide budget
-        // on a full accessibility-tree dump.
-        onLog?.(`  (story-viewer check: fast scan ${Date.now() - fastStart}ms inconclusive — fastOnly, assuming open)`);
-        return true;
+        // Can't positively confirm viewer from pixels alone — fail CLOSED.
+        // Skip the action rather than risk tapping a feed control (e.g.
+        // audio/music icon) after the story auto-closes to the home feed.
+        onLog?.(`  (story-viewer check: fast scan ${Date.now() - fastStart}ms inconclusive — fastOnly, failing closed)`);
+        return false;
       }
       // Instrumented (12 Jul 2026): the previous version of this fix
       // assumed the fast pixel-scan check would hit most of the time and
@@ -3143,7 +3143,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // matched the story viewer's own bottom-bar clickables ("Send message"
       // input + heart/share icons all sit at y > 88%), making it return
       // non-null and falsely concluding the viewer was closed.
-      const result = await android.isInStoryViewerSlow(serial).catch(() => true);
+      const result = await android.isInStoryViewerSlow(serial).catch(() => false);
       onLog?.(`  (story-viewer check: fast scan ${slowStart - fastStart}ms inconclusive → slow dump ${Date.now() - slowStart}ms)`);
       return result;
     };
