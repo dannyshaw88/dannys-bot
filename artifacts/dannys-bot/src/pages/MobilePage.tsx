@@ -19,7 +19,7 @@ import {
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
   ChevronLeft, Home, LayoutGrid, Power, Volume2, VolumeX, Trash2,
   FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim,
-  Palette, Plus, X, RotateCcw, Sun,
+  Palette, Plus, X, RotateCcw, Sun, Keyboard,
 } from "lucide-react";
 
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
@@ -1625,6 +1625,239 @@ function EmptyShell({ idx }: { idx: number }) {
 
 // ─── Phone slot ───────────────────────────────────────────────────────────────
 
+// ─── Keyboard Calibration Dialog ─────────────────────────────────────────────
+//
+// One-time per-device calibration: walks through each keyboard key, waits for
+// the user to physically tap it, captures the raw screen coordinate via
+// `adb shell getevent`, and stores label → {x,y} for that device.
+// The API server then uses these stored positions to fire real `input tap`
+// events when the bot needs to type — indistinguishable from a human tap.
+
+const CALIB_GROUPS: Array<{
+  name: string;
+  instructions: string;
+  keys: Array<{ label: string; display: string }>;
+}> = [
+  {
+    name: "Letters (ABC layer)",
+    instructions: "Keep your phone on the LETTERS keyboard (ABC / qwerty mode)",
+    keys: [
+      { label: "q", display: "Q" }, { label: "w", display: "W" }, { label: "e", display: "E" },
+      { label: "r", display: "R" }, { label: "t", display: "T" }, { label: "y", display: "Y" },
+      { label: "u", display: "U" }, { label: "i", display: "I" }, { label: "o", display: "O" },
+      { label: "p", display: "P" }, { label: "a", display: "A" }, { label: "s", display: "S" },
+      { label: "d", display: "D" }, { label: "f", display: "F" }, { label: "g", display: "G" },
+      { label: "h", display: "H" }, { label: "j", display: "J" }, { label: "k", display: "K" },
+      { label: "l", display: "L" }, { label: "z", display: "Z" }, { label: "x", display: "X" },
+      { label: "c", display: "C" }, { label: "v", display: "V" }, { label: "b", display: "B" },
+      { label: "n", display: "N" }, { label: "m", display: "M" },
+      { label: "shift",  display: "Shift"  },
+      { label: "space",  display: "Space"  },
+      { label: "delete", display: "Delete" },
+      { label: "enter",  display: "Enter"  },
+    ],
+  },
+  {
+    name: "Numbers & Symbols (?123 layer)",
+    instructions: "Press the ?123 key on your phone now to switch to the NUMBERS layer, then tap each key below",
+    keys: [
+      { label: "1", display: "1" }, { label: "2", display: "2" }, { label: "3", display: "3" },
+      { label: "4", display: "4" }, { label: "5", display: "5" }, { label: "6", display: "6" },
+      { label: "7", display: "7" }, { label: "8", display: "8" }, { label: "9", display: "9" },
+      { label: "0", display: "0" }, { label: "@", display: "@" }, { label: ".", display: "." },
+      { label: ",", display: "," }, { label: "-", display: "-" }, { label: "_", display: "_" },
+      { label: "!", display: "!" }, { label: "?", display: "?" }, { label: "#", display: "#" },
+    ],
+  },
+];
+
+interface CalibKey { label: string; display: string; groupIdx: number; groupName: string; instructions: string; }
+const CALIB_KEYS: CalibKey[] = CALIB_GROUPS.flatMap((g, gi) =>
+  g.keys.map(k => ({ ...k, groupIdx: gi, groupName: g.name, instructions: g.instructions }))
+);
+
+function CalibrationDialog({
+  serial,
+  open,
+  onOpenChange,
+  onLog,
+}: {
+  serial: string;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onLog?: (msg: string) => void;
+}) {
+  const [step, setStep] = useState(0);
+  const [map, setMap] = useState<Record<string, { x: number; y: number }>>({});
+  const [capturing, setCapturing] = useState(false);
+  const [lastResult, setLastResult] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [existingCount, setExistingCount] = useState<number | null>(null);
+
+  // Reset state whenever the dialog opens.
+  useEffect(() => {
+    if (!open) return;
+    setStep(0);
+    setMap({});
+    setCapturing(false);
+    setLastResult(null);
+    setSaved(false);
+    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/keyboard-calibration`)
+      .then(r => r.json())
+      .then(body => setExistingCount(body.ok && body.map ? Object.keys(body.map).length : null))
+      .catch(() => setExistingCount(null));
+  }, [open, serial]);
+
+  const currentKey = step < CALIB_KEYS.length ? CALIB_KEYS[step] : null;
+  const prevGroupIdx = step > 0 ? CALIB_KEYS[step - 1].groupIdx : -1;
+  const showGroupHeader = currentKey && (step === 0 || currentKey.groupIdx !== prevGroupIdx);
+  const isDone = step >= CALIB_KEYS.length;
+  const progress = Math.round((step / CALIB_KEYS.length) * 100);
+
+  const captureKey = async () => {
+    if (!currentKey || capturing) return;
+    setCapturing(true);
+    setLastResult(null);
+    try {
+      const resp = await fetch(
+        `/api/mobile/devices/${encodeURIComponent(serial)}/keyboard-calibration/capture`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ timeoutMs: 12000 }) }
+      );
+      const body = await resp.json();
+      if (body.ok && body.x != null && body.y != null) {
+        const newMap = { ...map, [currentKey.label]: { x: body.x, y: body.y } };
+        setMap(newMap);
+        setLastResult(`✓ Captured at (${body.x}, ${body.y})`);
+        onLog?.(`[calibration] '${currentKey.display}' → (${body.x}, ${body.y})`);
+        setTimeout(() => { setLastResult(null); setStep(s => s + 1); }, 700);
+      } else {
+        setLastResult(`✗ ${body.error ?? "No tap detected — try again"}`);
+      }
+    } catch {
+      setLastResult("✗ Request failed — check server logs");
+    } finally {
+      setCapturing(false);
+    }
+  };
+
+  const skipKey = () => { setLastResult(null); setStep(s => s + 1); };
+
+  const saveMap = async () => {
+    try {
+      const resp = await fetch(
+        `/api/mobile/devices/${encodeURIComponent(serial)}/keyboard-calibration/save`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ map }) }
+      );
+      const body = await resp.json();
+      if (body.ok) {
+        setSaved(true);
+        onLog?.(`[calibration] Saved ${Object.keys(map).length} keys for ${serial}`);
+      }
+    } catch { /**/ }
+  };
+
+  const clearExisting = async () => {
+    try {
+      await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/keyboard-calibration`, { method: "DELETE" });
+      setExistingCount(null);
+      onLog?.("[calibration] Existing map cleared");
+    } catch { /**/ }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!capturing) onOpenChange(v); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-sm">Keyboard Calibration</DialogTitle>
+        </DialogHeader>
+
+        {isDone ? (
+          /* ── Done ── */
+          <div className="space-y-3">
+            <p className="text-sm text-green-400 font-semibold">
+              ✓ All {CALIB_KEYS.length} keys walked — {Object.keys(map).length} captured
+            </p>
+            <p className="text-xs text-white/50">
+              {Object.keys(map).length > 0
+                ? "Save the map so the bot uses real tap coordinates from now on."
+                : "No keys were captured. Try again — make sure the keyboard is open before capturing."}
+            </p>
+            {saved ? (
+              <div className="space-y-2">
+                <p className="text-xs text-green-400">Saved ✓  The bot will use calibrated taps automatically.</p>
+                <Button variant="outline" className="w-full" onClick={() => onOpenChange(false)}>Close</Button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                {Object.keys(map).length > 0 && (
+                  <Button className="flex-1" onClick={saveMap}>Save calibration</Button>
+                )}
+                <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>Discard</Button>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* ── Step-through ── */
+          <div className="space-y-3">
+            {/* Existing map notice */}
+            {existingCount != null && step === 0 && (
+              <div className="flex items-center justify-between bg-amber-950/40 border border-amber-800/40 rounded-lg px-3 py-2">
+                <span className="text-xs text-amber-300">Existing map: {existingCount} keys — this will replace it</span>
+                <Button size="sm" variant="ghost" className="h-6 text-xs text-amber-400 hover:text-red-400 px-2" onClick={clearExisting}>Clear now</Button>
+              </div>
+            )}
+
+            {/* Layer instructions */}
+            {showGroupHeader && (
+              <div className="bg-blue-950/40 border border-blue-800/40 rounded-lg px-3 py-2">
+                <p className="text-xs font-semibold text-blue-300">{currentKey!.groupName}</p>
+                <p className="text-xs text-blue-200/70 mt-0.5">{currentKey!.instructions}</p>
+              </div>
+            )}
+
+            {/* Progress bar */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-[10px] text-white/30">
+                <span>{step} / {CALIB_KEYS.length} keys</span>
+                <span>{progress}%</span>
+              </div>
+              <div className="h-1 bg-white/10 rounded-full overflow-hidden">
+                <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
+              </div>
+            </div>
+
+            {/* Current key display */}
+            <div className="flex flex-col items-center gap-2 py-3">
+              <p className="text-[10px] text-white/40 uppercase tracking-wider">Tap this key on your phone</p>
+              <div className="w-16 h-16 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center shadow-lg">
+                <span className="text-2xl font-bold text-white">{currentKey!.display}</span>
+              </div>
+              {lastResult && (
+                <p className={`text-xs font-mono ${lastResult.startsWith("✓") ? "text-green-400" : "text-red-400"}`}>
+                  {lastResult}
+                </p>
+              )}
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex gap-2">
+              <Button className="flex-1" onClick={captureKey} disabled={capturing}>
+                {capturing
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />Listening… (12 s)</>
+                  : "Capture tap"}
+              </Button>
+              <Button variant="outline" onClick={skipKey} disabled={capturing}>Skip</Button>
+            </div>
+            <p className="text-[9px] text-white/25 text-center">
+              Click "Capture tap", then immediately tap the key on the phone screen
+            </p>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 type PhoneSlotHandle = { getVideoSize: () => { w: number; h: number } | null };
 
 const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; live: boolean; onPower: () => void; phoneDims: { w: number; h: number } | null; paneSize: { w: number; h: number } | null; inspectMode?: boolean; logRecMode?: boolean; logMarkers?: LogMarker[]; onExpectedTap?: (x: number, y: number, kind?: "expected" | "vicinity") => void; custom: SlotCustomization; onCustomChange: (c: SlotCustomization) => void }>(function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower, phoneDims, paneSize, inspectMode = false, logRecMode, logMarkers, onExpectedTap, custom, onCustomChange }, ref) {
@@ -1652,6 +1885,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
 
   const [clickTestMode, setClickTestMode] = useState(false);
   const [showCustomize, setShowCustomize] = useState(false);
+  const [showCalibration, setShowCalibration] = useState(false);
 
   // ── Element tree inspector ─────────────────────────────────────────────────
   // Full UIAutomator node tree shown below the mirror when inspect mode is on.
@@ -2282,7 +2516,18 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
           <NavBtn icon={<Power       className="w-3 h-3" />}     label="Power"  onClick={() => { liveCanvasRef.current?.clearToBlack(); onPower(); sendKey(phone.serial, 26, "Power", onLog); }} />
           <NavBtn icon={<Volume2     className="w-3 h-3" />}     label="Vol +"  onClick={() => sendKey(phone.serial, 24,  "Vol +",  onLog)} />
           <NavBtn icon={<VolumeX     className="w-3 h-3" />}     label="Vol −"  onClick={() => sendKey(phone.serial, 25,  "Vol −",  onLog)} />
+          <div className="w-px h-4 bg-white/10" />
+          <NavBtn icon={<Keyboard    className="w-3 h-3" />}     label="Keyboard" onClick={() => setShowCalibration(true)} />
         </div>
+      )}
+
+      {phone && (
+        <CalibrationDialog
+          serial={phone.serial}
+          open={showCalibration}
+          onOpenChange={setShowCalibration}
+          onLog={onLog}
+        />
       )}
 
       <CustomizePanel

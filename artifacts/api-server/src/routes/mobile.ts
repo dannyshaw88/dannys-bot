@@ -3604,18 +3604,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   const code = char.codePointAt(0) ?? 0;
                   return code >= 0x1f000 || (code >= 0x2600 && code <= 0x27bf);
                 });
-                // Reject cells whose centre is above 55 % of screen height —
-                // the Android IME reports its picker nodes in IME-window-local
-                // coordinates (y=0 = top of keyboard), so a cell at y≈429 on a
-                // 2460-px screen is actually inside the keyboard, not near the
-                // top of the display. Any cell with centre y < 55 % of screen
-                // height is in the wrong coordinate space and must be discarded.
-                const cellCenterY = (y1 + y2) / 2;
                 if (!/clickable="true"/i.test(attrs) ||
                     (!isEmojiLabel && !/emoji|emoticon/i.test(resourceId)) ||
                     /category|tab|search|delete|backspace/i.test(resourceId) ||
-                    x2 <= x1 || y2 <= y1 || x2 - x1 >= w * 0.35 || y2 - y1 >= h * 0.35 ||
-                    cellCenterY < h * 0.55) return null;
+                    x2 <= x1 || y2 <= y1 || x2 - x1 >= w * 0.35 || y2 - y1 >= h * 0.35) return null;
                 return { x1, y1, x2, y2 };
               })
               .filter((cell): cell is { x1: number; y1: number; x2: number; y2: number } => cell !== null);
@@ -3684,12 +3676,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                       const code = char.codePointAt(0) ?? 0;
                       return code >= 0x1f000 || (code >= 0x2600 && code <= 0x27bf);
                     });
-                    const cellCenterY2 = (y1 + y2) / 2;
                     if (!/clickable="true"/i.test(attrs) ||
                         (!isEmojiLabel && !/emoji|emoticon/i.test(resourceId)) ||
                         /category|tab|search|delete|backspace/i.test(resourceId) ||
-                        x2 <= x1 || y2 <= y1 || x2 - x1 >= w * 0.35 || y2 - y1 >= h * 0.35 ||
-                        cellCenterY2 < h * 0.55) return null;
+                        x2 <= x1 || y2 <= y1 || x2 - x1 >= w * 0.35 || y2 - y1 >= h * 0.35) return null;
                     return { x1, y1, x2, y2 };
                   })
                   .filter((cell): cell is { x1: number; y1: number; x2: number; y2: number } => cell !== null);
@@ -9934,5 +9924,54 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       });
       res.json({ ok: true });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
+
+  // ─── Keyboard Calibration ─────────────────────────────────────────────────
+  // Captures one physical tap via getevent so the UI can build a per-device
+  // key map for real-tap keyboard typing (each keystroke = real OS touch event).
+
+  /** Wait for a single physical tap and return its screen-pixel coordinate. */
+  app.post("/api/mobile/devices/:serial/keyboard-calibration/capture", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const { timeoutMs } = z.object({
+        timeoutMs: z.number().int().min(1000).max(30_000).default(15_000),
+      }).parse(req.body);
+      const result = await android.captureOneTap(serial, timeoutMs);
+      if (!result) {
+        return void res.status(408).json({ ok: false, error: "No tap detected within timeout — make sure a keyboard key was pressed" });
+      }
+      res.json({ ok: true, x: result.x, y: result.y });
+    } catch (e: any) { res.status(400).json({ ok: false, error: e?.message }); }
+  });
+
+  /** Get the saved calibration map for a device (null if none saved yet). */
+  app.get("/api/mobile/devices/:serial/keyboard-calibration", (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const map = android.loadKeyCalibrationMap(serial);
+      res.json({ ok: true, map });
+    } catch (e: any) { res.status(400).json({ ok: false, error: e?.message }); }
+  });
+
+  /** Save a calibration map for a device. */
+  app.post("/api/mobile/devices/:serial/keyboard-calibration/save", (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const { map } = z.object({
+        map: z.record(z.string(), z.object({ x: z.number(), y: z.number() })),
+      }).parse(req.body);
+      android.saveKeyCalibrationMap(serial, map);
+      res.json({ ok: true, count: Object.keys(map).length });
+    } catch (e: any) { res.status(400).json({ ok: false, error: e?.message }); }
+  });
+
+  /** Delete the calibration map for a device. */
+  app.delete("/api/mobile/devices/:serial/keyboard-calibration", (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      android.deleteKeyCalibrationMap(serial);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(400).json({ ok: false, error: e?.message }); }
   });
 }

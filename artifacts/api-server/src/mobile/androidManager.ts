@@ -6208,14 +6208,14 @@ export async function findInstagramSearchBar(
 /**
  * Type text on the on-screen keyboard character by character.
  *
- * FIX for the "danny → fsnny" coordinate-offset bug: instead of calculating
- * key positions from hardcoded or formula-derived x/y values (which drift
- * with DPI, key width, and per-row indentation), this function dumps the
- * accessibility tree once per keyboard layer, finds each key's bounds from
- * the actual XML, and taps the exact centre of the found element.
+ * If a getevent calibration map has been saved for this device (via the
+ * Keyboard Calibration tool in the UI), that map is used — each keystroke
+ * is sent as `adb shell input tap x y`, a real OS touch event that Instagram
+ * sees as a normal hardware keypress with no spoofing possible.
  *
- * For the '@' symbol (which lives on the symbol/numeric keyboard layer) it
- * switches layers via the '?123' key, taps '@', then switches back to ABC.
+ * Without a calibration map, falls back to UIAutomator accessibility-tree
+ * key lookup. On MIUI devices where the IME window is invisible to
+ * UIAutomator, that further falls back to `adb input text`.
  *
  * Precondition: the target text field must already be focused (keyboard
  * must be visible on screen) before this function is called.
@@ -6225,27 +6225,32 @@ export async function typeViaOnscreenKeyboard(
   text: string,
   onLog?: (msg: string) => void,
 ): Promise<void> {
+  // ── Calibration-map path ───────────────────────────────────────────────────
+  // If a getevent-calibrated key map exists for this device, use real tap
+  // coordinates. Each keystroke is a real OS touch event — indistinguishable
+  // from a human pressing the physical key on screen.
+  const calMap = loadKeyCalibrationMap(serial);
+  if (calMap && Object.keys(calMap).length > 5) {
+    onLog?.(`[keyboard] using calibration map (${Object.keys(calMap).length} keys)`);
+    await typeViaCalibrationMap(serial, text, calMap, onLog);
+    return;
+  }
+
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
 
   let keyMap = new Map<string, { x: number; y: number }>();
   let keyMapMode: "letters" | "symbols" = "letters";
 
-  /**
-   * Rebuild the key-position map using dumpUiWithIme so MIUI/Gboard/Samsung
-   * keyboard nodes actually appear (the old _uiDump missed the IME window on
-   * Xiaomi devices). No label-length cap — "Delete", "Space", "Return",
-   * "?123", "shift", emoji key, etc. are all captured.
-   */
+  /** Build key-position map from a standard UIAutomator dump. */
   const refreshKeyMap = async (mode: "letters" | "symbols") => {
     keyMapMode = mode;
     keyMap.clear();
-    const { xml } = await dumpUiWithIme(serial).catch(() => ({ xml: "", imeIncluded: false }));
+    const xml = await _uiDump(adb, serial);
     if (!xml) return;
     const { h } = _getScreenSize(xml);
     // Keyboard occupies the bottom ~45 % of the screen.
     const keyboardTopY = Math.round(h * 0.55);
-    // Walk every node — no label-length limit.
     const nodeRe = /<node\s([^>]+?)(?:\/?>)/g;
     let m: RegExpExecArray | null;
     while ((m = nodeRe.exec(xml)) !== null) {
@@ -6260,15 +6265,17 @@ export async function typeViaOnscreenKeyboard(
         attrs.match(/\btext="([^"]+)"/i)?.[1] ??
         attrs.match(/\bcontent-desc="([^"]+)"/i)?.[1] ?? ""
       ).trim();
-      if (!label) continue;
+      // Short single-key labels only (a–z, digits, @, ?, !, ., etc.)
+      // Multi-word labels belong to app UI elements, not keyboard keys.
+      if (!label || label.length > 3) continue;
       const cx = Math.round((x1 + x2) / 2);
       const cy = Math.round(centerY);
       if (!keyMap.has(label)) keyMap.set(label, { x: cx, y: cy });
-      // Also index by lowercase so lookup is case-insensitive for letters.
+      // Also index by lowercase for case-insensitive letter lookup.
       const low = label.toLowerCase();
       if (!keyMap.has(low)) keyMap.set(low, { x: cx, y: cy });
     }
-    onLog?.(`[keyboard] ${mode} layer: ${keyMap.size} keys found (IME dump)`);
+    onLog?.(`[keyboard] ${mode} layer: ${keyMap.size} keys found`);
   };
 
   const switchToSymbols = async () => {
@@ -6277,7 +6284,7 @@ export async function typeViaOnscreenKeyboard(
     if (sym) {
       _adbTap(adb, serial, sym.x, sym.y);
     } else {
-      const { xml: xml2 } = await dumpUiWithIme(serial).catch(() => ({ xml: "", imeIncluded: false }));
+      const xml2 = await _uiDump(adb, serial);
       const symKey = _findByResId(xml2, ":id/sym_keyboard_key", ":id/key_switch_alpha_numeric", ":id/numberswitch_key") ||
         _findElem(xml2, "?123", "123", "!#1");
       if (symKey) _adbTap(adb, serial, symKey.x, symKey.y);
@@ -6292,7 +6299,7 @@ export async function typeViaOnscreenKeyboard(
     if (abc) {
       _adbTap(adb, serial, abc.x, abc.y);
     } else {
-      const { xml: xml2 } = await dumpUiWithIme(serial).catch(() => ({ xml: "", imeIncluded: false }));
+      const xml2 = await _uiDump(adb, serial);
       const abcKey = _findByResId(xml2, ":id/alpha_keyboard_key", ":id/key_switch_alpha_numeric") ||
         _findElem(xml2, "ABC", "abc");
       if (abcKey) _adbTap(adb, serial, abcKey.x, abcKey.y);
@@ -6304,14 +6311,18 @@ export async function typeViaOnscreenKeyboard(
   await refreshKeyMap("letters");
 
   if (keyMap.size < 5) {
-    // --include-ime not supported on this device or keyboard not yet visible.
-    // No fallback to adb input text — log and bail so the caller knows.
-    onLog?.(`[keyboard] 0 keys found in IME dump — keyboard not visible or --include-ime unsupported; skipping type`);
+    // UIAutomator can't see the keyboard on this device (common on MIUI) —
+    // fall back to adb input text so at least something is typed.
+    onLog?.(`[keyboard] 0 keys found — falling back to adb input text (use Keyboard Calibration for real taps)`);
+    spawnSync(adb, ["-s", serial, "shell", "input", "text", text.replace(/['"]/g, "")], {
+      encoding: "utf8",
+      timeout: 5000,
+    });
     return;
   }
 
   for (const ch of text) {
-    // ── Space ───────────────────────────────────────────────────────────────
+    // ── Space ─────────────────────────────────────────────────────────────────
     if (ch === " ") {
       if (keyMapMode !== "letters") await switchToLetters();
       const spaceKey = keyMap.get(" ") ?? keyMap.get("space") ?? keyMap.get("Space");
@@ -6325,7 +6336,7 @@ export async function typeViaOnscreenKeyboard(
       continue;
     }
 
-    // ── @ ────────────────────────────────────────────────────────────────────
+    // ── @ ─────────────────────────────────────────────────────────────────────
     if (ch === "@") {
       await switchToSymbols();
       const atKey = keyMap.get("@");
@@ -6340,7 +6351,7 @@ export async function typeViaOnscreenKeyboard(
       continue;
     }
 
-    // ── Digits ───────────────────────────────────────────────────────────────
+    // ── Digits ────────────────────────────────────────────────────────────────
     if (ch >= "0" && ch <= "9") {
       await switchToSymbols();
       const numKey = keyMap.get(ch);
@@ -6354,7 +6365,7 @@ export async function typeViaOnscreenKeyboard(
       continue;
     }
 
-    // ── Letters (lower + upper) ───────────────────────────────────────────────
+    // ── Letters ───────────────────────────────────────────────────────────────
     if (keyMapMode !== "letters") await switchToLetters();
 
     const isUpper = ch !== ch.toLowerCase();
@@ -6362,12 +6373,11 @@ export async function typeViaOnscreenKeyboard(
 
     if (isUpper) {
       // Tap Shift to capitalise the next letter.
-      const shiftKey = keyMap.get("shift") ?? keyMap.get("Shift") ?? keyMap.get("⇧");
+      const shiftKey = keyMap.get("⇧") ?? keyMap.get("shift") ?? keyMap.get("Shift");
       if (shiftKey) {
         _adbTap(adb, serial, shiftKey.x, shiftKey.y);
         onLog?.(`[keyboard] tapped Shift at (${shiftKey.x},${shiftKey.y})`);
         await _sleep(150);
-        // Refresh — keyboard may swap to its capitalised-letters layout.
         await refreshKeyMap("letters");
       } else {
         onLog?.(`[keyboard] Shift key not found — will try uppercase label directly`);
@@ -6376,11 +6386,11 @@ export async function typeViaOnscreenKeyboard(
 
     let key = keyMap.get(lower) ?? keyMap.get(ch);
     if (!key) {
-      // Refresh once in case the keyboard re-rendered.
+      // One refresh in case the keyboard re-rendered.
       await refreshKeyMap("letters");
       key = keyMap.get(lower) ?? keyMap.get(ch);
     }
-    // Symbol not on letters layer — try switching to symbols layer.
+    // Symbol not on letters layer — try symbols layer.
     if (!key) {
       await switchToSymbols();
       key = keyMap.get(ch);
@@ -6401,6 +6411,170 @@ export async function typeViaOnscreenKeyboard(
     }
     await _sleep(150 + Math.round(Math.random() * 100));
   }
+}
+
+// ─── Keyboard Calibration ─────────────────────────────────────────────────────
+//
+// One-time calibration: the user physically taps each key on the on-screen
+// keyboard while `adb shell getevent -l` captures the raw hardware touch
+// coordinates. Those are scaled to screen pixels and stored per device.
+// typeViaOnscreenKeyboard then uses `adb shell input tap x y` for each
+// keystroke — a real OS touch event, identical to a human pressing the key.
+
+/** Map from key label (e.g. "a", "@", "space", "delete") to screen coordinate. */
+export type KeyCalibrationMap = Record<string, { x: number; y: number }>;
+
+function _calibrationPath(serial: string): string {
+  const safeSerial = serial.replace(/[^a-z0-9]/gi, "-");
+  const dir = process.env.EQUINOX_DATA_DIR ?? process.cwd();
+  return path.join(dir, `keyboard-cal-${safeSerial}.json`);
+}
+
+/** Load the saved calibration map for a device. Returns null if none exists. */
+export function loadKeyCalibrationMap(serial: string): KeyCalibrationMap | null {
+  try {
+    const raw = fs.readFileSync(_calibrationPath(serial), "utf8");
+    return JSON.parse(raw) as KeyCalibrationMap;
+  } catch { return null; }
+}
+
+/** Persist a calibration map for a device. */
+export function saveKeyCalibrationMap(serial: string, map: KeyCalibrationMap): void {
+  fs.writeFileSync(_calibrationPath(serial), JSON.stringify(map, null, 2), "utf8");
+}
+
+/** Delete the calibration map for a device. */
+export function deleteKeyCalibrationMap(serial: string): void {
+  try { fs.unlinkSync(_calibrationPath(serial)); } catch { /**/ }
+}
+
+/**
+ * Discover the touchscreen event device and its ABS_MT_POSITION X/Y axis
+ * max values by parsing `adb shell getevent -lp`.
+ * Returns null if no suitable device is found.
+ */
+async function _getTouchDeviceInfo(
+  adb: string,
+  serial: string,
+): Promise<{ device: string; maxX: number; maxY: number } | null> {
+  const out = await runAdb(adb, ["-s", serial, "shell", "getevent", "-lp"], 8000);
+  if (!out) return null;
+  // Split on "add device N:" to get per-device blocks.
+  const blocks = out.split(/^add device \d+:/m).filter(Boolean);
+  for (const block of blocks) {
+    const deviceMatch = block.match(/^\s*(\/dev\/input\/\S+)/m);
+    if (!deviceMatch) continue;
+    const device = deviceMatch[1].trim();
+    const xMatch = block.match(/ABS_MT_POSITION_X\s*:.*?max\s+(\d+)/i);
+    const yMatch = block.match(/ABS_MT_POSITION_Y\s*:.*?max\s+(\d+)/i);
+    if (!xMatch || !yMatch) continue;
+    const maxX = parseInt(xMatch[1], 10);
+    const maxY = parseInt(yMatch[1], 10);
+    if (maxX > 0 && maxY > 0) return { device, maxX, maxY };
+  }
+  return null;
+}
+
+/**
+ * Wait for the user to physically tap the phone screen once and return the
+ * screen-pixel coordinate of that tap. Works by streaming `adb shell getevent`
+ * events, capturing the first ABS_MT_POSITION_X + ABS_MT_POSITION_Y pair
+ * before a SYN_REPORT, then scaling raw device values to screen pixels.
+ *
+ * @param timeoutMs  How long to wait for a tap (default 15 s).
+ * @returns Screen {x, y} of the tap, or null on timeout / error.
+ */
+export async function captureOneTap(
+  serial: string,
+  timeoutMs = 15_000,
+): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+
+  // Get screen dimensions from a UIAutomator dump.
+  const xml = await _uiDump(adb, serial);
+  const { w: screenW, h: screenH } = _getScreenSize(xml);
+  if (!screenW || !screenH) return null;
+
+  // Find the touchscreen event device and its axis ranges.
+  const devInfo = await _getTouchDeviceInfo(adb, serial);
+  if (!devInfo) return null;
+  const { device, maxX, maxY } = devInfo;
+
+  return new Promise<{ x: number; y: number } | null>((resolve) => {
+    let rawX: number | null = null;
+    let rawY: number | null = null;
+    let resolved = false;
+
+    const child = spawn(adb, ["-s", serial, "shell", "getevent", "-l", device]);
+
+    const finish = (result: { x: number; y: number } | null) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timer);
+      try { child.kill(); } catch { /**/ }
+      resolve(result);
+    };
+
+    const timer = setTimeout(() => finish(null), timeoutMs);
+
+    let buf = "";
+    child.stdout?.on("data", (chunk: Buffer) => {
+      buf += chunk.toString();
+      const lines = buf.split("\n");
+      buf = lines.pop() ?? "";
+      for (const line of lines) {
+        if (/ABS_MT_POSITION_X/.test(line)) {
+          const m = line.match(/([0-9a-f]{8})\s*$/i);
+          if (m) rawX = parseInt(m[1], 16);
+        } else if (/ABS_MT_POSITION_Y/.test(line)) {
+          const m = line.match(/([0-9a-f]{8})\s*$/i);
+          if (m) rawY = parseInt(m[1], 16);
+        } else if (/SYN_REPORT/.test(line) && rawX !== null && rawY !== null) {
+          // First complete touch-down event captured — scale to screen pixels.
+          const x = Math.round((rawX / maxX) * screenW);
+          const y = Math.round((rawY / maxY) * screenH);
+          finish({ x, y });
+        }
+      }
+    });
+
+    child.on("error", () => finish(null));
+    child.on("close", () => finish(null));
+  });
+}
+
+/**
+ * Type text using a pre-calibrated key map (getevent-captured coordinates).
+ * Each character is sent as `adb shell input tap x y` — a real OS touch event
+ * processed by Android exactly as if a finger pressed the key.
+ */
+export async function typeViaCalibrationMap(
+  serial: string,
+  text: string,
+  map: KeyCalibrationMap,
+  onLog?: (msg: string) => void,
+): Promise<{ ok: boolean; missing: string[] }> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const missing: string[] = [];
+
+  for (const ch of text) {
+    const label = ch === " " ? "space" : ch === "\n" ? "enter" : ch.toLowerCase();
+    const pos = map[label] ?? map[ch];
+
+    if (!pos) {
+      missing.push(ch);
+      onLog?.(`[cal-keyboard] '${ch}' not in calibration map — skipping`);
+      continue;
+    }
+
+    _adbTap(adb, serial, pos.x, pos.y);
+    onLog?.(`[cal-keyboard] tapped '${ch}' at (${pos.x},${pos.y})`);
+    await _sleep(120 + Math.round(Math.random() * 80));
+  }
+
+  return { ok: missing.length === 0, missing };
 }
 
 /**
