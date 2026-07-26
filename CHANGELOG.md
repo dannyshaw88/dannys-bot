@@ -4,6 +4,36 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.175 — 2026-07-26
+
+### Bug Fix — Account switching no longer leaves the selector covering the feed
+
+When a Phone Farm cycle selected the Instagram account that was already active,
+Instagram could leave the account selector open after the row was tapped. The
+next automation actions then landed on the selector instead of the feed.
+
+The account-switch flow now:
+
+- Continues to use the requested username to find and select the correct account.
+- Uses positive Home/feed navigation markers to confirm that the selector closed.
+- Retries a transient accessibility-tree dump failure once.
+- Presses Android Back only when a valid dump shows the selector is still open.
+- Avoids using the username alone for the post-tap dismissal check, because the
+  normal feed's profile-tab description also contains that username.
+- Avoids a blind Back press after an empty or failed dump, preventing accidental
+  navigation out of Instagram.
+
+### Windows Installer Delivery
+
+The canonical `.github/workflows/build-windows-installer.yml` workflow remains
+the single active Windows installer workflow. It builds the API and frontend,
+packages the Electron desktop app on Windows, and uploads the
+`Aura-Farming-Windows-Installer` artifact to the GitHub Actions run. Deprecated
+duplicate workflow files remain inert so one push does not create competing
+installer builds.
+
+---
+
 ## v1.2.174 — 2026-07-26
 
 ### Bug Fix — Make a Post "My Computer" directory path no longer resets
