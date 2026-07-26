@@ -4,6 +4,29 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.192 — 2026-07-26
+
+### Bug Fix — View Stories emoji key: node-anchored position for MIUI (key nodes absent from dump)
+
+The UIAutomator `--include-ime` dump on MIUI/Xiaomi does **not** expose keyboard key
+nodes at all — only Instagram UI nodes plus a few thin MIUI system strips appear.
+The previous code picked the bottommost "container", which turned out to be the
+Instagram story toolbar at y=2089–2226 (below the keyboard), so the tap landed
+in dead space and never opened the emoji picker.
+
+The fix derives the emoji key position from two nodes that **are** present in the dump:
+
+- **Keyboard top** — `reel_viewer_message_composer.y2` (compose bar sits immediately above the keyboard)
+- **Keyboard bottom** — topmost full-width, thin (<50 px tall), non-Instagram strip in the dump (the MIUI system node that sits right at the bottom edge of the key rows)
+
+`bottomRowCY = kbTop + (kbBottom − kbTop) × 0.89`
+
+On the test device this resolves to y ≈ 2000 (inside the keyboard) instead of y = 2158
+(below it). The only remaining estimate is x = 27 % of screen width for the emoji key
+column — key column widths are not exposed in the dump on any MIUI keyboard tested.
+
+---
+
 ## v1.2.191 — 2026-07-26
 
 ### Debug — View Stories emoji key: raw node dump to find per-key MIUI nodes

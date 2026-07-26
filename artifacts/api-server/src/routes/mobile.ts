@@ -3722,28 +3722,70 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 // Android keyboard the emoji key centre sits at ~27% of screen
                 // width. Use the container's y as the row centre.
                 if (_spaceBarNode.x1 === 0 && _spaceBarNode.x2 >= w * 0.90) {
-                  // All exposed nodes are full-width row containers. Pick the
-                  // BOTTOMMOST one (highest y1) — that is the keyboard's bottom
-                  // row (?123 | , | 😊 | space | . | ↵) where the emoji key lives.
-                  // The previous reduce returned _kbNodes[0] when all widths were
-                  // equal, which happened to be the ZXC row, tapping X instead.
-                  const _bottomRow = _kbNodes.reduce(
-                    (best, n) => (n.y1 > best.y1 ? n : best),
-                    _kbNodes[0],
+                  // MIUI does NOT expose keyboard key nodes in the accessibility
+                  // tree — uiautomator dump --include-ime returns Instagram nodes +
+                  // a few MIUI system strips, but zero per-key nodes.
+                  //
+                  // We derive the emoji key position from two nodes that ARE in
+                  // the dump — no hardcoded pixel offsets:
+                  //
+                  //   Keyboard top  = reel_viewer_message_composer.y2
+                  //                   (compose bar sits immediately above the keyboard)
+                  //
+                  //   Keyboard bottom = topmost full-width strip whose height < 50 px
+                  //                     and has no Instagram resource-id.  This thin
+                  //                     MIUI system node sits right at the bottom edge
+                  //                     of the keyboard key rows.
+                  //
+                  // The keyboard key area spans [kbTop, kbBottom].  The bottom row
+                  // (?123 | , | 😊 | space | . | ↵) occupies the last ~20 % of
+                  // that range; its centre is at kbTop + kbHeight × 0.90.
+                  //
+                  // For x: MIUI keyboard bottom row has 6 keys; the emoji key
+                  // (position 3) sits at ~27 % of screen width on every MIUI
+                  // layout we have tested.  This is the only value that cannot be
+                  // read from a node — the keyboard key columns are not in the dump.
+
+                  // --- anchor 1: keyboard top from compose bar ---
+                  const _composerBar = _allNodes.find(n =>
+                    n.resourceId === "com.instagram.android:id/reel_viewer_message_composer",
                   );
-                  const _kbRowCY = Math.round((_bottomRow.y1 + _bottomRow.y2) / 2);
-                  _emojiButton = { x: Math.round(w * 0.27), y: _kbRowCY };
+                  const _kbTop = _composerBar ? _composerBar.y2 : Math.round(h * 0.65);
+
+                  // --- anchor 2: keyboard bottom from topmost thin MIUI strip ---
+                  const _thinStrip = _allNodes
+                    .filter(n =>
+                      n.x1 === 0 && n.x2 >= w * 0.90 &&
+                      (n.y2 - n.y1) < 50 &&
+                      !n.resourceId.startsWith("com.instagram.android:") &&
+                      n.y1 > _kbTop,
+                    )
+                    .sort((a, b) => a.y1 - b.y1)[0];          // topmost such strip
+                  const _kbBottom = _thinStrip ? _thinStrip.y1 : Math.round(h * 0.84);
+
+                  // --- derive bottom-row centre ---
+                  const _kbHeight = _kbBottom - _kbTop;
+                  // Layout: suggestion bar (~10 %) + 4 key rows (~22.5 % each).
+                  // Bottom key-row centre = 10 % + 3.5 × 22.5 % = 88.75 % from top.
+                  const _bottomRowCY = Math.round(_kbTop + _kbHeight * 0.89);
+                  const _emojiX = Math.round(w * 0.27);
+
+                  _emojiButton = { x: _emojiX, y: _bottomRowCY };
                   onLog?.(
-                    `Story ${s + 1}: MIUI keyboard — only full-width container nodes found;` +
-                    ` picked bottommost row [${_bottomRow.x1},${_bottomRow.y1}][${_bottomRow.x2},${_bottomRow.y2}] of ${_kbNodes.length} container(s);` +
-                    ` coordinate-estimate emoji key at (${_emojiButton.x},${_kbRowCY})`,
+                    `Story ${s + 1}: MIUI keyboard — key nodes absent from dump;` +
+                    ` kbTop=${_kbTop} (from compose bar y2=${_composerBar?.y2 ?? "est"})` +
+                    ` kbBottom=${_kbBottom} (from thin-strip y1=${_thinStrip?.y1 ?? "est"})` +
+                    ` kbHeight=${_kbHeight} → bottomRowCY=${_bottomRowCY};` +
+                    ` emoji key → (${_emojiX},${_bottomRowCY})`,
                   );
                   logger.info(
                     {
-                      serial, story: s + 1, tap: _emojiButton, kbNodeCount: _kbNodes.length,
-                      containers: _kbNodes.map(n => ({ x1: n.x1, y1: n.y1, x2: n.x2, y2: n.y2, rid: n.resourceId, desc: n.contentDesc })),
+                      serial, story: s + 1, tap: _emojiButton,
+                      kbTop: _kbTop, kbBottom: _kbBottom, kbHeight: _kbHeight,
+                      composerBarFound: !!_composerBar,
+                      thinStripFound: !!_thinStrip,
                     },
-                    "[view-stories] emoji key via coordinate estimate (MIUI container-only keyboard)",
+                    "[view-stories] emoji key via node-anchored estimate (MIUI — no key nodes in dump)",
                   );
                 } else {
                   // Normal geometry path: look for a node in the same row as the
