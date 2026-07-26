@@ -2964,6 +2964,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Parse a UIAutomator XML dump and extract story-tray bubble nodes.
     // Returns every node whose content-desc or resource-id indicates a story
     // tray item, using multiple patterns to cover all known Instagram builds.
+    //
+    // Instagram's first tray item is always the signed-in user's own upload
+    // bubble ("Your story"). On some builds that bubble exposes only the same
+    // generic story-tray resource-id as real stories, or its label is attached
+    // to a wrapper node rather than the node carrying the bounds. Therefore
+    // label filtering alone is not sufficient: after collecting the live
+    // bounds, we sort left-to-right and explicitly remove the first physical
+    // bubble before returning candidates.
     const extractStoryBubbles = (xml: string): Array<{ cx: number; cy: number; desc: string }> => {
       const bubbles: Array<{ cx: number; cy: number; desc: string }> = [];
       if (!xml) return bubbles;
@@ -2994,14 +3002,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
         if (!isStoryDesc) continue;
 
-        // Exclude the "Your Story / Add" bubble — tapping it opens the camera
-        if (/\badd\b/i.test(desc) || /^your story$/i.test(desc)) continue;
-
         const cx = Math.round((Number(bm[1]) + Number(bm[3])) / 2);
         const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
         bubbles.push({ cx, cy, desc: desc || rid });
       }
-      return bubbles;
+
+      // A tray bubble commonly has both a labelled parent and an avatar child
+      // in the dump. Collapse those nested/overlapping nodes so "first bubble"
+      // means the first physical tray item, not whichever XML node appeared
+      // first.
+      bubbles.sort((a, b) => a.cx - b.cx || a.cy - b.cy);
+      const deduped: typeof bubbles = [];
+      for (const bubble of bubbles) {
+        const duplicate = deduped.some(existing =>
+          Math.abs(existing.cx - bubble.cx) <= 24 &&
+          Math.abs(existing.cy - bubble.cy) <= 24,
+        );
+        if (!duplicate) deduped.push(bubble);
+      }
+
+      if (deduped.length > 0) {
+        const ownStory = deduped.shift()!;
+        onLog?.(`Story tray: ignoring first bubble "${ownStory.desc}" at (${ownStory.cx},${ownStory.cy}) — upload-your-own-story control`);
+      }
+      return deduped;
     };
 
     // First attempt.
