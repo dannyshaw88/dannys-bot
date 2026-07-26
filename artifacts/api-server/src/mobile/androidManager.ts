@@ -4928,6 +4928,17 @@ export async function switchToInstagramAccount(
     return false;
   }
 
+  // The profile tab can appear in the accessibility tree before Instagram has
+  // finished rendering the feed/navigation surface (especially when this
+  // coordinate came from the launch-time preload dump).  Starting the hold at
+  // that point can be consumed by the still-settling navigation view instead
+  // of opening the account switcher.  Give the surface one short, bounded
+  // settle window after the tab is detected; this is deliberately a wait, not
+  // a second gesture or a retry.
+  const PROFILE_TAB_SETTLE_MS = 1500;
+  onLog?.(`  ↳ Profile tab found — waiting ${PROFILE_TAB_SETTLE_MS / 1000}s for Instagram to finish rendering…`);
+  await _sleep(PROFILE_TAB_SETTLE_MS);
+
   // 2. Long-press the profile tab (a zero-distance swipe with a 2 s duration
   //    is the standard ADB idiom for a long-press gesture).
   onLog?.(`  ↳ Long-pressing profile tab to open account switcher…`);

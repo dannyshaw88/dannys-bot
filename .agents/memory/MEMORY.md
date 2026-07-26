@@ -45,3 +45,4 @@
 - [Collision Preventer turn priority](collision-preventer-turn-priority.md) — preserve each HST due time through collision rest; queued slots run next, then receive a fresh interval only after completion.
 - [Trust Score mobile settings](trust-score-mobile-settings.md) — Trust Score tiers use the mobile-engine Human Session Tool surface, not browser-tool settings, and must not start live device cycles.
 - [Story comment composer detection](story-comment-composer-detection.md) — use message_composer_container resource-id as the reply signal; labels vary by Instagram build and dump format
+- [Account switcher render settling](account-switcher-render-settle.md) — profile-tab accessibility can precede visible Instagram navigation; wait briefly before the long-press
