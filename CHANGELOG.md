@@ -4,6 +4,41 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.193 — 2026-07-26
+
+### Bug Fix — View Stories emoji comment: replace all coordinate paths with KEYCODE_PICTSYMBOLS + node fallback
+
+**Root cause of every previous failure:** the keyboard is an Android IME window
+(separate process from Instagram). Instagram cannot observe touch events that hit
+the keyboard window — only touches on Instagram's own window are visible to it.
+Trying to locate and tap the emoji key on the keyboard was both unreliable (MIUI
+doesn't expose key nodes) and unnecessary (Instagram never saw those taps anyway).
+
+**New flow — zero coordinates, zero pixel offsets:**
+
+1. **Strategy A — KEYCODE_PICTSYMBOLS (keycode 94):** Android's standard OS-level
+   event telling the active IME to switch to emoji/pictographic input mode.
+   Identical to tapping the emoji key as far as the keyboard process is concerned,
+   and invisible to Instagram either way since both happen inside the keyboard window.
+   Works on MIUI, Gboard, Samsung, and any keyboard that implements standard Android
+   input routing.
+
+2. **Strategy B — label-based node tap (fallback):** If PICTSYMBOLS doesn't open
+   the picker (some keyboards ignore it), dump the IME accessibility tree, find the
+   emoji key node by its `content-desc`/`text` label ("emoji", "smiley", etc.), and
+   tap it by its exact node bounds. Purely node-based; works on Gboard and Samsung
+   which do expose key nodes.
+
+3. **Picker verification + emoji tap:** after whichever strategy opens the picker,
+   dump Instagram's UI and find emoji cells by their unicode content-desc. The scroll
+   and emoji tap that follow are the real touch events Instagram observes — fully
+   node-based, device-agnostic.
+
+All coordinate-based paths (space-bar geometry, MIUI container estimate, thin-strip
+anchoring) removed entirely.
+
+---
+
 ## v1.2.192 — 2026-07-26
 
 ### Bug Fix — View Stories emoji key: node-anchored position for MIUI (key nodes absent from dump)

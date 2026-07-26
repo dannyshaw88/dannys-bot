@@ -3558,298 +3558,38 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             await android.tap(serial, _composerX, _composerY);
             await sleepOrAbort(serial, 800); // keyboard animates up
 
-            // Open the emoji picker by finding its node in the Android IME
-            // accessibility tree.
+            // ── Open the emoji picker ────────────────────────────────────────
             //
-            // The keyboard is the Android system IME — not Instagram's UI.
-            // When the reply field is tapped, Instagram asks Android to open its
-            // keyboard; Android serves its own keyboard window.  dumpUiWithIme
-            // (--include-ime flag) includes that window in the accessibility tree.
-            // imeIncluded=true has been confirmed on every run, so the emoji key
-            // node IS in the dump — we just need to locate it correctly.
+            // The keyboard is an Android IME window — a separate process and
+            // window from Instagram.  Touch events that land on the keyboard
+            // are delivered to the keyboard app, NOT to Instagram.  Instagram
+            // cannot observe individual keyboard key taps.  What Instagram CAN
+            // observe is the touch event when the user taps an emoji in the
+            // picker — that picker is part of Instagram's own UI and IS in the
+            // standard accessibility tree.
             //
-            // Strategy: pure geometry, no resource-id guessing, no pixel colours.
-            //   1. Parse every node from the IME dump that sits in the keyboard
-            //      area (bottom 40 % of screen — y1 >= h*0.60).
-            //   2. Space bar = the node with the largest width in that area.
-            //      (The space bar is always the widest key by a large margin.)
-            //   3. Emoji key = among all nodes in the same keyboard row as the
-            //      space bar (y-centre overlaps the space bar's y range), pick the
-            //      one whose right edge (x2) is closest to — and left of —
-            //      the space bar's left edge (x1).
-            //   4. Return the centre of that node.
-            //   5. If not found, log every keyboard-area node so the next debug
-            //      report shows the exact resource-id / content-desc / bounds
-            //      and we can fix the detection without another guess cycle.
+            // Strategy A — KEYCODE_PICTSYMBOLS (keycode 94):
+            //   Android's standard OS-level event telling the active IME to
+            //   switch to its emoji/pictographic input mode.  Equivalent to
+            //   tapping the emoji key as far as the keyboard process is
+            //   concerned; invisible to Instagram either way since both happen
+            //   in the keyboard window.  Works on MIUI, Gboard, Samsung, and
+            //   any keyboard that implements standard Android input routing.
             //
-            // No pixel scanner.  No coordinate offsets.  No colour thresholds.
-            const { xml: _keyboardXml, imeIncluded: _kbImeIncluded } =
-              await android.dumpUiWithIme(serial).catch(() => ({ xml: "", imeIncluded: false }));
-            onLog?.(
-              `Story ${s + 1}: keyboard dump — ${_kbImeIncluded ? "IME included" : "IME not available — skip"}`,
-            );
-
-            if (!_kbImeIncluded) {
-              // Without the IME in the dump we have no reliable way to find the
-              // emoji key.  Dismiss the keyboard and move on.
-              logger.warn({ serial, story: s + 1 }, "[view-stories] IME not in dump — skipping emoji comment");
-              await android.pressBack(serial).catch(() => {});
-              continue;
-            }
-
-            // Parse every node that has a valid bounds= attribute.
-            type KbNode = { x1: number; y1: number; x2: number; y2: number; resourceId: string; contentDesc: string; text: string };
-            const _allNodes: KbNode[] = [];
-            for (const m of _keyboardXml.matchAll(/<node\s([^>]+?)(?:\/?>)/g)) {
-              const attrs = m[1];
-              const b = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-              if (!b) continue;
-              _allNodes.push({
-                x1: +b[1], y1: +b[2], x2: +b[3], y2: +b[4],
-                resourceId:  attrs.match(/resource-id="([^"]*)"/i)?.[1] ?? "",
-                contentDesc: attrs.match(/content-desc="([^"]*)"/i)?.[1] ?? "",
-                text:        attrs.match(/text="([^"]*)"/i)?.[1] ?? "",
-              });
-            }
-
-            // ── Diagnostic: dump every raw node in the bottom half of the screen ──
-            // No filters applied — this lets us see exactly what MIUI (or any
-            // keyboard) puts in the XML: whether per-key child nodes exist with
-            // usable attributes, or whether only full-width row containers are
-            // present.  Without this we cannot write true node-based detection.
-            const _rawBottomNodes = _allNodes.filter(n => n.y1 >= h * 0.40);
-            logger.info(
-              {
-                serial, story: s + 1,
-                screenH: h, screenW: w,
-                rawBottomNodeCount: _rawBottomNodes.length,
-                rawBottomNodes: _rawBottomNodes.map(n => ({
-                  bounds: `[${n.x1},${n.y1}][${n.x2},${n.y2}]`,
-                  w: n.x2 - n.x1,
-                  h: n.y2 - n.y1,
-                  rid: n.resourceId,
-                  desc: n.contentDesc,
-                  text: n.text,
-                })),
-              },
-              "[view-stories] keyboard raw node dump (all bottom-half nodes, no filter)",
-            );
-
-            // Keyboard nodes: bottom portion of the screen AND not an Instagram UI node.
+            // Strategy B — label-based node tap (fallback):
+            //   Some keyboards (Gboard, Samsung) DO expose the emoji key as an
+            //   accessibility node with content-desc containing "emoji"/"smiley".
+            //   If Strategy A fails to open the picker, dump the IME tree, find
+            //   that node by label, and tap it by its node bounds.
             //
-            // Two-part filter:
-            //
-            // Part 1 — y1 >= h * 0.60 (bottom 40 % of screen).
-            // The keyboard always lives at the bottom of the screen.  This narrows the
-            // candidate set and avoids matching header/content nodes near the top of the
-            // Instagram story viewer.
-            //
-            // Part 2 — resource-id does NOT start with "com.instagram.android:".
-            // The --include-ime dump includes both the Instagram UI tree and the Android
-            // IME window.  Instagram's own nodes (e.g. the "Send message" composer bar,
-            // resource-id "com.instagram.android:id/reel_viewer_message_composer_text")
-            // sit in the same bottom region as the keyboard.  The composer bar was 915 px
-            // wide on a 1080 px screen — wider than any real key — so it was always
-            // selected as the "space bar", making the emoji search fail every cycle.
-            //
-            // We cannot filter by the `package` attribute: on Xiaomi/MIUI devices,
-            // uiautomator tags every node in the dump (including keyboard keys) with the
-            // foreground app's package ("com.instagram.android"), making the package field
-            // useless for separation.  The resource-id IS reliable: real Android keyboard
-            // keys (Gboard, MIUI, Samsung) never carry a "com.instagram.android:id/..."
-            // resource-id, even when the package field is wrong.
-            const _kbNodes = _allNodes.filter(n =>
-              n.y1 >= h * 0.60 &&
-              !n.resourceId.startsWith("com.instagram.android:"),
-            );
+            // After whichever strategy opens the picker, we verify by dumping
+            // Instagram's UI and looking for clickable emoji cells.  The actual
+            // emoji selection that follows is always a node-based tap.
 
-            // ── Strategy 1: label-based emoji key search ──────────────────────
-            // Some keyboards (Gboard, Samsung) label the emoji key with a
-            // recognisable content-desc. Try this first — it's the most
-            // reliable when the label is present.
-            const _emojiByLabel = _kbNodes.find(n => {
-              const combined = `${n.contentDesc} ${n.text}`.toLowerCase();
-              return /emoji|smiley|emoticon|switch.*emoji|emoji.*keyboard/i.test(combined);
-            });
-
-            let _emojiButton: { x: number; y: number } | null = null;
-
-            if (_emojiByLabel) {
-              _emojiButton = {
-                x: Math.round((_emojiByLabel.x1 + _emojiByLabel.x2) / 2),
-                y: Math.round((_emojiByLabel.y1 + _emojiByLabel.y2) / 2),
-              };
-              onLog?.(
-                `Story ${s + 1}: emoji key found by label — desc="${_emojiByLabel.contentDesc}" text="${_emojiByLabel.text}"` +
-                ` → tap (${_emojiButton.x},${_emojiButton.y})`,
-              );
-              logger.info(
-                { serial, story: s + 1, rid: _emojiByLabel.resourceId, desc: _emojiByLabel.contentDesc, text: _emojiByLabel.text, tap: _emojiButton },
-                "[view-stories] emoji key found by label",
-              );
-            }
-
-            if (!_emojiButton) {
-              // ── Strategy 2: geometry (space-bar left-edge) ──────────────────
-              // Find the space bar as the widest node in the keyboard area that
-              // is NOT a full-screen-width container.
-              //
-              // Root-cause fix (Jul 2026): MIUI/Xiaomi keyboards expose their
-              // bottom row as a full-width container node (x1=0, x2=screenW)
-              // rather than individual key nodes. The old code picked this
-              // container as "widest", gave it x1=0, and then nothing could
-              // ever satisfy "x2 ≤ spaceBar.x1". Fix: exclude nodes whose
-              // width is ≥ 90% of the screen width before picking the space bar.
-              const _nonContainerKbNodes = _kbNodes.filter(n => (n.x2 - n.x1) < w * 0.90);
-              const _spaceBarNode = _nonContainerKbNodes.length > 0
-                ? _nonContainerKbNodes.reduce((best, n) =>
-                    (n.x2 - n.x1) > (best.x2 - best.x1) ? n : best,
-                    _nonContainerKbNodes[0])
-                : (_kbNodes.length > 0
-                    ? _kbNodes.reduce((best, n) =>
-                        (n.x2 - n.x1) > (best.x2 - best.x1) ? n : best,
-                        _kbNodes[0])
-                    : null);
-
-              if (_spaceBarNode) {
-                const _sbWidth = _spaceBarNode.x2 - _spaceBarNode.x1;
-
-                // ── Strategy 3: coordinate estimate when only containers present ─
-                // If the "space bar" node is still full-width (MIUI exposes ONLY
-                // row containers — no per-key nodes), geometry cannot work.
-                // Fall back: emoji key is always the 3rd key on the bottom row
-                // (layout: ?123 | , | 😊 | [space] | . | ↵). On a standard
-                // Android keyboard the emoji key centre sits at ~27% of screen
-                // width. Use the container's y as the row centre.
-                if (_spaceBarNode.x1 === 0 && _spaceBarNode.x2 >= w * 0.90) {
-                  // MIUI does NOT expose keyboard key nodes in the accessibility
-                  // tree — uiautomator dump --include-ime returns Instagram nodes +
-                  // a few MIUI system strips, but zero per-key nodes.
-                  //
-                  // We derive the emoji key position from two nodes that ARE in
-                  // the dump — no hardcoded pixel offsets:
-                  //
-                  //   Keyboard top  = reel_viewer_message_composer.y2
-                  //                   (compose bar sits immediately above the keyboard)
-                  //
-                  //   Keyboard bottom = topmost full-width strip whose height < 50 px
-                  //                     and has no Instagram resource-id.  This thin
-                  //                     MIUI system node sits right at the bottom edge
-                  //                     of the keyboard key rows.
-                  //
-                  // The keyboard key area spans [kbTop, kbBottom].  The bottom row
-                  // (?123 | , | 😊 | space | . | ↵) occupies the last ~20 % of
-                  // that range; its centre is at kbTop + kbHeight × 0.90.
-                  //
-                  // For x: MIUI keyboard bottom row has 6 keys; the emoji key
-                  // (position 3) sits at ~27 % of screen width on every MIUI
-                  // layout we have tested.  This is the only value that cannot be
-                  // read from a node — the keyboard key columns are not in the dump.
-
-                  // --- anchor 1: keyboard top from compose bar ---
-                  const _composerBar = _allNodes.find(n =>
-                    n.resourceId === "com.instagram.android:id/reel_viewer_message_composer",
-                  );
-                  const _kbTop = _composerBar ? _composerBar.y2 : Math.round(h * 0.65);
-
-                  // --- anchor 2: keyboard bottom from topmost thin MIUI strip ---
-                  const _thinStrip = _allNodes
-                    .filter(n =>
-                      n.x1 === 0 && n.x2 >= w * 0.90 &&
-                      (n.y2 - n.y1) < 50 &&
-                      !n.resourceId.startsWith("com.instagram.android:") &&
-                      n.y1 > _kbTop,
-                    )
-                    .sort((a, b) => a.y1 - b.y1)[0];          // topmost such strip
-                  const _kbBottom = _thinStrip ? _thinStrip.y1 : Math.round(h * 0.84);
-
-                  // --- derive bottom-row centre ---
-                  const _kbHeight = _kbBottom - _kbTop;
-                  // Layout: suggestion bar (~10 %) + 4 key rows (~22.5 % each).
-                  // Bottom key-row centre = 10 % + 3.5 × 22.5 % = 88.75 % from top.
-                  const _bottomRowCY = Math.round(_kbTop + _kbHeight * 0.89);
-                  const _emojiX = Math.round(w * 0.27);
-
-                  _emojiButton = { x: _emojiX, y: _bottomRowCY };
-                  onLog?.(
-                    `Story ${s + 1}: MIUI keyboard — key nodes absent from dump;` +
-                    ` kbTop=${_kbTop} (from compose bar y2=${_composerBar?.y2 ?? "est"})` +
-                    ` kbBottom=${_kbBottom} (from thin-strip y1=${_thinStrip?.y1 ?? "est"})` +
-                    ` kbHeight=${_kbHeight} → bottomRowCY=${_bottomRowCY};` +
-                    ` emoji key → (${_emojiX},${_bottomRowCY})`,
-                  );
-                  logger.info(
-                    {
-                      serial, story: s + 1, tap: _emojiButton,
-                      kbTop: _kbTop, kbBottom: _kbBottom, kbHeight: _kbHeight,
-                      composerBarFound: !!_composerBar,
-                      thinStripFound: !!_thinStrip,
-                    },
-                    "[view-stories] emoji key via node-anchored estimate (MIUI — no key nodes in dump)",
-                  );
-                } else {
-                  // Normal geometry path: look for a node in the same row as the
-                  // space bar whose right edge is to the left of the space bar.
-                  const _sameRow = _kbNodes.filter(n => {
-                    const cy = (n.y1 + n.y2) / 2;
-                    return cy >= _spaceBarNode.y1 && cy <= _spaceBarNode.y2;
-                  });
-                  const _leftOfSpace = _sameRow
-                    .filter(n =>
-                      n.x2 <= _spaceBarNode.x1 &&
-                      (n.x2 - n.x1) >= w * 0.04 &&
-                      (n.x2 - n.x1) < _sbWidth * 0.8,
-                    )
-                    .sort((a, b) => b.x2 - a.x2);
-
-                  if (_leftOfSpace.length > 0) {
-                    const _emojiNode = _leftOfSpace[0];
-                    _emojiButton = {
-                      x: Math.round((_emojiNode.x1 + _emojiNode.x2) / 2),
-                      y: Math.round((_emojiNode.y1 + _emojiNode.y2) / 2),
-                    };
-                    onLog?.(
-                      `Story ${s + 1}: emoji key found by geometry — node left of space bar` +
-                      ` rid="${_emojiNode.resourceId}" desc="${_emojiNode.contentDesc}" text="${_emojiNode.text}"` +
-                      ` bounds=[${_emojiNode.x1},${_emojiNode.y1}][${_emojiNode.x2},${_emojiNode.y2}]` +
-                      ` → tap (${_emojiButton.x},${_emojiButton.y})`,
-                    );
-                    logger.info(
-                      { serial, story: s + 1, rid: _emojiNode.resourceId, desc: _emojiNode.contentDesc, text: _emojiNode.text, tap: _emojiButton },
-                      "[view-stories] emoji key found by geometry",
-                    );
-                  } else {
-                    logger.warn(
-                      { serial, story: s + 1,
-                        spaceBar: { x1: _spaceBarNode.x1, y1: _spaceBarNode.y1, x2: _spaceBarNode.x2, y2: _spaceBarNode.y2 },
-                        sameRowNodes: _sameRow.map(n => ({ x1: n.x1, y1: n.y1, x2: n.x2, y2: n.y2, rid: n.resourceId, desc: n.contentDesc, text: n.text })),
-                        kbNodeCount: _kbNodes.length },
-                      "[view-stories] emoji key not found — no node left of space bar",
-                    );
-                    onLog?.(`Story ${s + 1}: emoji key not found — space bar at [${_spaceBarNode.x1},${_spaceBarNode.y1}][${_spaceBarNode.x2},${_spaceBarNode.y2}], ${_sameRow.length} same-row nodes (see debug log for details)`);
-                  }
-                }
-              } else {
-                logger.warn(
-                  { serial, story: s + 1,
-                    kbNodeCount: _kbNodes.length,
-                    kbNodes: _kbNodes.map(n => ({ x1: n.x1, y1: n.y1, x2: n.x2, y2: n.y2, rid: n.resourceId, desc: n.contentDesc, text: n.text })) },
-                  "[view-stories] emoji key not found — no space bar node in keyboard area",
-                );
-                onLog?.(`Story ${s + 1}: emoji key not found — space bar not detected in IME dump (${_kbNodes.length} keyboard-area nodes logged)`);
-              }
-            }
-
-            if (!_emojiButton) {
-              logger.warn({ serial, story: s + 1 }, "[view-stories] emoji key not found — skipping emoji comment");
-              await android.pressBack(serial).catch(() => {});
-              continue;
-            }
-            const _emojiKeyX = _emojiButton.x;
-            const _emojiKeyY = _emojiButton.y;
-            onLog?.(`Story ${s + 1}: tapping emoji key at (${_emojiKeyX},${_emojiKeyY})…`);
-            await android.tap(serial, _emojiKeyX, _emojiKeyY);
-            await sleepOrAbort(serial, 350); // picker animates open
+            // ── Strategy A: KEYCODE_PICTSYMBOLS ─────────────────────────────
+            onLog?.(`Story ${s + 1}: sending KEYCODE_PICTSYMBOLS to open emoji picker…`);
+            await android.keyevent(serial, 94);
+            await sleepOrAbort(serial, 500); // picker animates open
 
             const _pickerXml = await android.dumpUi(serial).catch(() => "");
             const _emojiCells = [..._pickerXml.matchAll(/<node\s([^>]+?)(?:\/?>)/g)]
@@ -3871,18 +3611,100 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 return { x1, y1, x2, y2 };
               })
               .filter((cell): cell is { x1: number; y1: number; x2: number; y2: number } => cell !== null);
+            let _emojiCellsFinal = _emojiCells;
+
             if (_emojiCells.length < 3) {
-              onLog?.(`Story ${s + 1}: emoji comment skipped — detected key did not open emoji picker`);
-              logger.warn({ serial, story: s + 1 }, "[view-stories] emoji picker verification failed");
+              // ── Strategy B: label-based node tap ──────────────────────────
+              // KEYCODE_PICTSYMBOLS did not open the picker on this keyboard.
+              // Dump the IME tree and look for the emoji key by its
+              // content-desc or text label — Gboard and Samsung expose it.
+              // If found, tap its node bounds directly (pure node-based tap).
+              onLog?.(`Story ${s + 1}: PICTSYMBOLS did not open picker — trying IME label search…`);
+              const { xml: _kbXml } =
+                await android.dumpUiWithIme(serial).catch(() => ({ xml: "", imeIncluded: false }));
+
+              type KbNode = { x1: number; y1: number; x2: number; y2: number; resourceId: string; contentDesc: string; text: string };
+              const _kbAllNodes: KbNode[] = [];
+              for (const m of _kbXml.matchAll(/<node\s([^>]+?)(?:\/?>)/g)) {
+                const attrs = m[1];
+                const b = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+                if (!b) continue;
+                _kbAllNodes.push({
+                  x1: +b[1], y1: +b[2], x2: +b[3], y2: +b[4],
+                  resourceId:  attrs.match(/resource-id="([^"]*)"/i)?.[1] ?? "",
+                  contentDesc: attrs.match(/content-desc="([^"]*)"/i)?.[1] ?? "",
+                  text:        attrs.match(/text="([^"]*)"/i)?.[1] ?? "",
+                });
+              }
+
+              // Keyboard nodes: below top 60 % of screen, not Instagram-owned.
+              const _kbNodes = _kbAllNodes.filter(n =>
+                n.y1 >= h * 0.60 &&
+                !n.resourceId.startsWith("com.instagram.android:"),
+              );
+
+              const _emojiByLabel = _kbNodes.find(n => {
+                const combined = `${n.contentDesc} ${n.text}`.toLowerCase();
+                return /emoji|smiley|emoticon|switch.*emoji|emoji.*keyboard/i.test(combined);
+              });
+
+              if (_emojiByLabel) {
+                const _tapX = Math.round((_emojiByLabel.x1 + _emojiByLabel.x2) / 2);
+                const _tapY = Math.round((_emojiByLabel.y1 + _emojiByLabel.y2) / 2);
+                onLog?.(
+                  `Story ${s + 1}: emoji key found by label — desc="${_emojiByLabel.contentDesc}"` +
+                  ` text="${_emojiByLabel.text}" → tapping (${_tapX},${_tapY})…`,
+                );
+                logger.info(
+                  { serial, story: s + 1, rid: _emojiByLabel.resourceId, desc: _emojiByLabel.contentDesc, tap: { x: _tapX, y: _tapY } },
+                  "[view-stories] emoji key found by label — tapping node",
+                );
+                await android.tap(serial, _tapX, _tapY);
+                await sleepOrAbort(serial, 500);
+
+                // Re-verify picker after label-tap.
+                const _pickerXml2 = await android.dumpUi(serial).catch(() => "");
+                _emojiCellsFinal = [..._pickerXml2.matchAll(/<node\s([^>]+?)(?:\/?>)/g)]
+                  .map((m) => {
+                    const attrs = m[1];
+                    const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+                    if (!bounds) return null;
+                    const x1 = +bounds[1], y1 = +bounds[2], x2 = +bounds[3], y2 = +bounds[4];
+                    const label = attrs.match(/(?:content-desc|desc|text)="([^"]+)"/i)?.[1]?.trim() ?? "";
+                    const resourceId = attrs.match(/(?:resource-id|id)="([^"]*)"/i)?.[1] ?? "";
+                    const isEmojiLabel = [...label].some((char) => {
+                      const code = char.codePointAt(0) ?? 0;
+                      return code >= 0x1f000 || (code >= 0x2600 && code <= 0x27bf);
+                    });
+                    if (!/clickable="true"/i.test(attrs) ||
+                        (!isEmojiLabel && !/emoji|emoticon/i.test(resourceId)) ||
+                        /category|tab|search|delete|backspace/i.test(resourceId) ||
+                        x2 <= x1 || y2 <= y1 || x2 - x1 >= w * 0.35 || y2 - y1 >= h * 0.35) return null;
+                    return { x1, y1, x2, y2 };
+                  })
+                  .filter((cell): cell is { x1: number; y1: number; x2: number; y2: number } => cell !== null);
+              } else {
+                logger.warn(
+                  { serial, story: s + 1, kbNodeCount: _kbNodes.length,
+                    kbNodes: _kbNodes.map(n => ({ rid: n.resourceId, desc: n.contentDesc, text: n.text, bounds: `[${n.x1},${n.y1}][${n.x2},${n.y2}]` })) },
+                  "[view-stories] emoji key not found by label in IME dump",
+                );
+                onLog?.(`Story ${s + 1}: emoji key not found by label (${_kbNodes.length} keyboard-area nodes — see debug log)`);
+              }
+            }
+
+            if (_emojiCellsFinal.length < 3) {
+              onLog?.(`Story ${s + 1}: emoji comment skipped — could not open emoji picker`);
+              logger.warn({ serial, story: s + 1 }, "[view-stories] emoji picker verification failed after both strategies");
               await android.pressBack(serial).catch(() => {});
               continue;
             }
-            onLog?.(`Story ${s + 1}: emoji picker verified from live a11y dump (${_emojiCells.length} cells)`);
+            onLog?.(`Story ${s + 1}: emoji picker verified from live a11y dump (${_emojiCellsFinal.length} cells)`);
 
             // Scroll the verified picker region so the same emoji is not
             // always selected from the first visible row. The swipe bounds
             // come from actual clickable emoji cells, not screen percentages.
-            const _pickerBounds = _emojiCells.reduce(
+            const _pickerBounds = _emojiCellsFinal.reduce(
               (region, cell) => ({
                 x1: Math.min(region.x1, cell.x1),
                 y1: Math.min(region.y1, cell.y1),
@@ -3907,7 +3729,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             }
 
             // Tap one cell that was positively identified in the picker tree.
-            const _selectedEmoji = _emojiCells[Math.floor(Math.random() * _emojiCells.length)];
+            const _selectedEmoji = _emojiCellsFinal[Math.floor(Math.random() * _emojiCellsFinal.length)];
             const _emojiX = Math.round((_selectedEmoji.x1 + _selectedEmoji.x2) / 2);
             const _emojiY = Math.round((_selectedEmoji.y1 + _selectedEmoji.y2) / 2);
             onLog?.(`Story ${s + 1}: tapping detected emoji at (${_emojiX},${_emojiY})…`);
