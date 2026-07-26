@@ -4,6 +4,13 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.180
+
+- **Fix: account switcher no longer presses BACK after a successful switch tap.** The dismiss-with-BACK is now reserved exclusively for the "already active account" path where no tap was fired and the switcher is still open. Previously a post-tap UIAutomator dump (which can lag while the UI settles) falsely detected the switcher as "still open" and sent an unnecessary BACK that could close a welcome interstitial or exit Instagram.
+- **Fix: story tray tap now reads the real Y position from UIAutomator instead of a hardcoded percentage.** The "Your story" bubble (content-desc="Add") is located via accessibility dump and its centre-Y is used directly, so the tap lands on the correct bubble regardless of device model or screen height. The previous hardcoded 14% value (calibrated on a 1080×2226 device) landed in the feed area on the 1080×2460 Xiaomi Redmi 12 5G, causing audio tracks on feed posts to be tapped instead of stories. Falls back to 11% if the dump fails or the element is absent.
+
+---
+
 ## v1.2.179 — 2026-07-26
 
 ### Bug Fix — View Stories emoji key: found by pure geometry in the Android IME tree, no pixel scanning

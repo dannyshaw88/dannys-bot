@@ -5026,37 +5026,14 @@ export async function switchToInstagramAccount(
   // 4. Tap the username row to switch accounts.
   onLog?.(`  ✓ Found @${clean} in switcher — switching…`);
   _adbTap(adbPath, serial, coords.x, coords.y);
-  await _sleep(600); // short wait before verifying the switcher closed
 
-  // 5. Verify that the switcher actually closed before waiting for the feed.
+  // 5. Wait for the feed to reload.
   //
-  // Instagram can render the active account as a row that looks tappable but
-  // does not dismiss the sheet on every build.  Do not use the username to
-  // decide whether the sheet is still open: the home feed's profile-tab
-  // content-desc also contains that username.  Instead, positively detect
-  // the Home/feed navigation controls, which only exist after the sheet has
-  // closed.
-  //
-  // A dump can transiently fail while the UI is settling. Retry once, and
-  // never send a blind BACK when both dumps failed; that could exit Instagram
-  // rather than dismissing the switcher.
-  let postTapXml = await _uiDump(adbPath, serial).catch(() => "");
-  let homeFeedVisible =
-    /content-desc="Home[^"]*"/.test(postTapXml) ||
-    !!_findByResId(postTapXml, ":id/feed_tab", ":id/home_tab");
-  if (!homeFeedVisible && !postTapXml) {
-    await _sleep(500);
-    postTapXml = await _uiDump(adbPath, serial).catch(() => "");
-    homeFeedVisible =
-      /content-desc="Home[^"]*"/.test(postTapXml) ||
-      !!_findByResId(postTapXml, ":id/feed_tab", ":id/home_tab");
-  }
-  if (!homeFeedVisible && postTapXml) {
-    onLog?.(`  ↳ Account switcher still open — dismissing with BACK`);
-    await pressBack(serial).catch(() => {});
-  }
-
-  // 6. Wait for the feed to reload.
+  // Do NOT send a BACK keyevent here. The tap above is what closes the
+  // switcher sheet; a post-tap BACK risks exiting Instagram entirely or
+  // dismissing a "Welcome back" interstitial that the next step should see.
+  // Dismiss-with-BACK only belongs in the "already-active" path above,
+  // where no tap was fired and the switcher is still open.
   await _sleep(2000); // give Instagram time to reload the new account's feed
   return true;
 }

@@ -2943,24 +2943,51 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
    * Returns the 1-based position that was opened (for logging only).
    */
   async function pickAndOpenRandomStory(serial: string, w: number, h: number, onLog?: (msg: string) => void): Promise<{ slot: number; opened: boolean }> {
-    // ── Coordinate calibration (from real 1080×2226 screenshot, Jul 2026) ──
+    // ── Story tray Y detection via UIAutomator dump ──
     //
-    // Story tray sits between the Instagram header and the feed. On the
-    // device the user has (1080×2226), the tray Y centre is ~14 % of
-    // screen height (~311 px). Previous values of 8.5 % landed in the
-    // Instagram header bar above the tray, which is why nothing opened.
+    // The "Your story" bubble always carries content-desc="Add" and sits at
+    // the true centre of the story tray. Reading its y-coordinate from the
+    // accessibility dump gives us the exact tray position on any device,
+    // regardless of screen height, status-bar size, or Instagram header
+    // height. Hardcoded percentages (we tried 8.5 % and 14 %) only work on
+    // the specific reference device they were calibrated on: on a
+    // 1080×2460 Xiaomi Redmi 12 5G, 14 % (≈ 344 px) lands in the feed
+    // content below the tray, which is why an audio track on a post got
+    // tapped instead of a story bubble.
     //
-    // X positions measured from the same screenshot:
+    // Fallback (dump failure or element not found): 11 % of screen height.
+    // This is more conservative than the old 14 % and errs toward the
+    // header rather than the feed on tall phones.
+    //
+    // X positions (device-independent percentages):
     //   Slot 0 – "Your story" (+)  ≈ 20 % of width  (skip — opens camera)
     //   Slot 1 – first friend      ≈ 37 % of width
     //   Slot 2 – second friend     ≈ 55 % of width
     //   Slot 3 – third friend      ≈ 73 % of width
-    //   … and so on; spacing ≈ 18.5 % per slot.
-    //
-    // Opening a story requires a TAP on the bubble, not a swipe. The
-    // previous "hold-and-slide-right" swipe was scrolling the tray
-    // (or navigating to Reels) instead of opening anything.
-    const storyBarYCenter = Math.round(h * 0.14);
+    //   … spacing ≈ 18.5 % per slot.
+    let storyBarYCenter: number;
+    {
+      const trayXml = await android.dumpUi(serial).catch(() => "");
+      const nodeRe2 = /<node\b([^>]*\/?>) */g;
+      let addY: number | null = null;
+      let nm2: RegExpExecArray | null;
+      while ((nm2 = nodeRe2.exec(trayXml)) !== null) {
+        const attrs2 = nm2[1];
+        if (!attrs2.includes('content-desc="Add"')) continue;
+        const bm2 = attrs2.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+        if (!bm2) continue;
+        const cy2 = Math.round((Number(bm2[2]) + Number(bm2[4])) / 2);
+        // Accept only if it's in a plausible tray band (4 %–22 % of height).
+        if (cy2 > h * 0.04 && cy2 < h * 0.22) { addY = cy2; break; }
+      }
+      if (addY !== null) {
+        storyBarYCenter = addY;
+        onLog?.(`Story tray: detected Y centre ${addY} px from UIAutomator (${Math.round(addY / h * 100)}% of ${h}px screen)`);
+      } else {
+        storyBarYCenter = Math.round(h * 0.11);
+        onLog?.(`Story tray: "Add" element not found in dump — falling back to 11% (${storyBarYCenter} px)`);
+      }
+    }
     const firstStoryX = Math.round(w * 0.37); // first *friend's* story (skip "Your story")
     const spacing      = Math.round(w * 0.185);
 
