@@ -2018,6 +2018,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     };
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TOOL: VIEW FEED
+  // Functions: runCheckFeedLoop()
+  // Route:     POST /api/mobile/devices/:serial/check-feed
+  //            (also called directly from automation-cycle)
+  // Isolation: all like/share/save/DM logic is self-contained here.
+  //            Do not import helpers added for other tools into this section.
+  // ═══════════════════════════════════════════════════════════════════════════
+
   // Shared by the standalone `/check-feed` route and the full
   // `/automation-cycle` route below — the scroll/like/share loop.
   async function runCheckFeedLoop(serial: string, params: {
@@ -3105,6 +3114,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     return { slot: maxAttempts, opened: false };
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TOOL: VIEW STORIES
+  // Functions: pickAndOpenRandomStory(), runViewStoriesFromFeedLoop()
+  // Route:     (called from automation-cycle only)
+  // Isolation: story slide navigation, emoji comment, DM share are all here.
+  //            Do not apply keyboard-mapping or typing helpers from other tools
+  //            to this section without explicit intent.
+  // ═══════════════════════════════════════════════════════════════════════════
+
   async function runViewStoriesFromFeedLoop(serial: string, params: {
     slidesMin: number; slidesMax: number;
     slideWatchPctMin: number; slideWatchPctMax: number;
@@ -3745,6 +3763,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     return { storiesWatched };
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TOOL: VIEW EXPLORE PAGE
+  // Functions: runViewExplorePage()
+  // Route:     (called from automation-cycle only)
+  // Isolation: Explore grid scroll + post open + action-bar interactions.
+  //            Fully isolated — no code shared with any other tool.
+  // ═══════════════════════════════════════════════════════════════════════════
+
   // ── View Reels — taps the Reels tab, then snap-swipes through N reels,
   // acting on each via the right-side vertical icon column (Like/Comment/
   // Repost/Send) instead of the feed's horizontal bottom action bar. See
@@ -4222,6 +4248,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     return { postsScrolled, postsClicked, likes, sharesFeed, sharesDm, saves };
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TOOL: VIEW REELS
+  // Functions: runViewReelsLoop()
+  // Route:     (called from automation-cycle only)
+  // Isolation: Reels tab navigation, swipe, like/share/save are all here.
+  //            Action-icon detection uses the Reels-specific vertical column
+  //            layout — do not conflate with the feed's horizontal bar.
+  // ═══════════════════════════════════════════════════════════════════════════
 
   async function runViewReelsLoop(serial: string, params: {
     scrollMin: number; scrollMax: number;
@@ -4972,6 +5007,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
    * blind tap — this flow has never been exercised against a real device,
    * so failing loudly here is much safer than silently mis-tapping.
    */
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TOOL: MAKE A POST
+  // Functions: pickLocalFolderImage(), runMakePostStep()
+  // Route:     (called from automation-cycle only)
+  // Isolation: local-folder image pick, IG composer open, caption, upload.
+  //            Caption input uses android.inputText() (direct adb paste) —
+  //            do NOT route caption through typeViaOnscreenKeyboard.
+  // ═══════════════════════════════════════════════════════════════════════════
+
   async function runMakePostStep(serial: string, opts: {
     localFolderPath: string; localFolderRandom: boolean; localFolderNoRepeat: boolean;
     deleteAfterUpload: boolean; captionText: string;
@@ -5317,7 +5362,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     return { posted: true, fileName };
   }
 
-  // ── Random Jitter helpers ─────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TOOL: RANDOM JITTER
+  // Functions: runCheckNotifications(), runCheckDmLoop(), runVisitOwnProfile(),
+  //            runVisitSaved(), runVisitSettings(), runAppSwitch()
+  // Route:     (called from automation-cycle only, interleaved between tools)
+  // Isolation: human-behaviour padding actions. None of these functions should
+  //            contain tool-specific logic (follow, post, story, etc.).
+  // ═══════════════════════════════════════════════════════════════════════════
 
   /** Check Instagram notifications: tap heart icon → scroll → optionally tap item. */
   async function runCheckNotifications(serial: string, opts: {
@@ -5716,6 +5768,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     onLog?.("Random Jitter: ✓ returned to Instagram after app switch");
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TOOL: FOLLOW
+  // Functions: runProfileBrowsingSequence() [inject browsing],
+  //            tapOneProfileHighlight(), runFollowUsersStep()
+  // Route:     POST /api/mobile/devices/:serial/slots/:slotIdx/follow-users
+  //            (also called from automation-cycle)
+  // Isolation: HikerAPI candidate fetch, Instagram search, profile nav, follow
+  //            tap are all here. Search bar input uses android.inputText()
+  //            (direct adb paste) — NOT typeViaOnscreenKeyboard. If you are
+  //            adding a new text-input method to this tool, change only the
+  //            lines inside runFollowUsersStep(); do not touch View Stories or
+  //            any other tool's input path.
+  // ═══════════════════════════════════════════════════════════════════════════
 
   // ── HikerAPI-driven follow step ──────────────────────────────────────────
   interface InjectBrowsingParams {

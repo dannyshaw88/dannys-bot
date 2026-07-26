@@ -4,6 +4,34 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.201 — 2026-07-26
+
+### Improved — Tool boundary markers added to routes/mobile.ts
+
+Added clear `═══` section divider comments at the start of every tool's code block inside `routes/mobile.ts`. This is a structural documentation change — no logic was altered.
+
+Each marker identifies:
+- The tool name
+- Which functions belong to it
+- Which API route(s) it serves
+- An explicit isolation note calling out what input methods that tool uses and warning against cross-tool contamination
+
+The seven marked sections are:
+
+| Tool | Entry function(s) |
+|---|---|
+| View Feed | `runCheckFeedLoop` |
+| View Stories | `pickAndOpenRandomStory`, `runViewStoriesFromFeedLoop` |
+| View Explore Page | `runViewExplorePage` |
+| View Reels | `runViewReelsLoop` |
+| Make a Post | `pickLocalFolderImage`, `runMakePostStep` |
+| Random Jitter | `runCheckNotifications`, `runCheckDmLoop`, `runVisitOwnProfile`, `runVisitSaved`, `runVisitSettings`, `runAppSwitch` |
+| Follow | `runProfileBrowsingSequence`, `tapOneProfileHighlight`, `runFollowUsersStep` |
+
+The Follow and Make a Post markers explicitly state that search bar / caption input must use `android.inputText()` (direct `adb shell input text` paste) and must not be routed through `typeViaOnscreenKeyboard`. This documents the root cause of the v1.2.200 regression so the same cross-tool contamination cannot happen silently again.
+
+---
+
 ## v1.2.200 — 2026-07-26
 
 ### Fixed — Follow tool search bar typing restored to direct paste
