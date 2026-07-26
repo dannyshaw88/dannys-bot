@@ -4,6 +4,31 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.194 — 2026-07-26
+
+### Bug Fix — Follow tool: chip rows (search/clock) no longer block the target user's profile
+
+**Problem:** Instagram's search results page sometimes renders one or two "chip" rows at the top of the results list before the real user-profile rows. A search-keyword chip (magnifying-glass icon) re-runs the search when tapped; a recent-search chip (clock icon) does the same. Both chips display the searched `@username` as their visible text, so the old code treated them as valid candidates and tapped them instead of the actual profile row. The result was a missed follow — the chip re-ran the search, the bot detected no profile page, and the cycle moved on without following anyone.
+
+**Root cause of the broken chip filter:** The previous guard checked for the string `id="row_search_keyword_title"` in each UIAutomator XML segment. Raw UIAutomator XML writes element identifiers as `resource-id="com.instagram.android:id/row_search_keyword_title"` — the substring `id="row_search_keyword_title"` (with equals-sign and quote) never appears in that format, so the filter matched nothing and every chip sailed through undetected.
+
+**Fix — avatar-ring positive signal:** Instead of trying to *exclude* chip rows (which is fragile whenever Instagram changes its chip markup), the code now *positively identifies* real user-profile rows by scanning the accessibility tree for `row_search_avatar_in_ring` / `row_search_avatar_with_ring` nodes. These resource-IDs are present **only** in real user-profile result rows — they carry the circular avatar image with the story ring. Chip rows display a search icon or clock icon via a completely different node subtree and never contain these IDs. Confirmed from a live UIAutomator dump captured during a failing follow cycle (26 Jul 2026).
+
+**How the detection works:**
+- Scan every `<node>` in the accessibility tree for `row_search_avatar_in_ring` / `row_search_avatar_with_ring`.
+- Extract each matching node's vertical centre (the ring node's Y centre equals its containing row's Y centre — verified in the dump: ring bounds `[904,600][1025,721]` → cy=661, enclosing row bounds `[0,578][1080,743]` → cy=661).
+- Tap at screen-horizontal-centre × ring-vertical-centre.
+- Sort by Y ascending so the topmost (highest-ranked) real profile row is tapped first — since Instagram always ranks the exact username match first, this is always the target account.
+
+**What stays the same:**
+- The existing text-match candidate logic (fix 1–4) is kept as a secondary fallback for the rare case where a device/IG build does not expose avatar-ring nodes in the accessibility tree.
+- The chip filter in the text-match fallback path now also uses the correct raw-XML substring `/row_search_keyword_title"` instead of the broken `id="row_search_keyword_title"`.
+- The post-tap profile-page verification loop (Follow / Following / Requested button check) is preserved as a final safety net in case any chip variant bypasses both filters.
+
+**User-visible impact:** Follow cycles on accounts where Instagram serves a chip row (search suggestion or recent-search) above the results now follow the correct user instead of silently doing nothing.
+
+---
+
 ## v1.2.193 — 2026-07-26
 
 ### Bug Fix — View Stories emoji comment: replace all coordinate paths with KEYCODE_PICTSYMBOLS + node fallback
