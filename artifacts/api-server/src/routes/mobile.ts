@@ -2611,15 +2611,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // We exclude action-bar verbs (Like, Comment, Share, Save) so the
           // action-bar icons never count as an audio affordance.
           let _atNode: { x: number; y: number } | null = null;
+          // Collect candidate nodes from the lower half of the screen for
+          // diagnostic logging when nothing matches.
+          const _atCandidates: string[] = [];
           for (const _atSeg of _atXml.split("<node ")) {
             const _rid  = (_atSeg.match(/resource-id="([^"]*)"/) ?? [])[1] ?? "";
             const _desc = (_atSeg.match(/content-desc="([^"]*)"/) ?? [])[1] ?? "";
             const _txt  = (_atSeg.match(/\btext="([^"]*)"/) ?? [])[1] ?? "";
-            // Resource-id match (most reliable, language-independent).
-            const _isAudioRid  = /audio/i.test(_rid) && !/action_bar|like_button|comment|share|send|save/.test(_rid);
-            // Content-desc / text fallback (localised builds may lack a stable ID).
-            const _isAudioDesc = /\baudio\b/i.test(_desc) || /\baudio\b/i.test(_txt);
-            if (!_isAudioRid && !_isAudioDesc) continue;
             const _atBb = _atSeg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
             if (!_atBb) continue;
             const _atX = Math.round((parseInt(_atBb[1]) + parseInt(_atBb[3])) / 2);
@@ -2628,12 +2626,34 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // sits below the post media and above the action bar.
             // Nodes near the very top (status bar / header) are never audio.
             if (_atY < h * 0.40) continue;
-            _atNode = { x: _atX, y: _atY };
-            break;
+            // Resource-id match — Instagram uses "audio", "music", or "sound"
+            // in resource IDs for the audio affordance (e.g. clips_music_icon,
+            // row_feed_audio_icon, music_attribution_container).  Action-bar
+            // verbs (Like, Comment, Share, Save) are always excluded.
+            const _isAudioRid = /audio|music|sound|song/i.test(_rid) &&
+              !/action_bar|like_button|comment_|share_|send_|save_/.test(_rid);
+            // Content-desc / text fallback — matches "Original audio",
+            // "Music by …", "Song by …", artist-tagged audio labels, etc.
+            const _isAudioDesc =
+              /\b(audio|music|song|original)\b/i.test(_desc) ||
+              /\b(audio|music|song|original)\b/i.test(_txt);
+            if (_atNode === null && (_isAudioRid || _isAudioDesc)) {
+              _atNode = { x: _atX, y: _atY };
+              // Don't break — keep collecting candidates for diagnostics.
+            }
+            // Record lower-screen nodes for diagnostics (up to 12).
+            if (_atCandidates.length < 12 && (_rid || _desc || _txt)) {
+              _atCandidates.push(`rid=${_rid || "(none)"} desc=${_desc || "(none)"} txt=${_txt || "(none)"} y=${_atY}`);
+            }
           }
 
           if (!_atNode) {
             onLog?.(`Scroll ${i + 1}/${count}: tap-audio rolled but no audio affordance on this post — skipping`);
+            if (_atCandidates.length > 0) {
+              onLog?.(`Scroll ${i + 1}/${count}: lower-screen nodes (diagnostic): ${_atCandidates.join(" | ")}`);
+            } else {
+              onLog?.(`Scroll ${i + 1}/${count}: lower-screen nodes (diagnostic): (none found)`);
+            }
           } else {
             onLog?.(`Scroll ${i + 1}/${count}: tapping audio affordance at (${_atNode.x},${_atNode.y})…`);
             await android.tap(serial, _atNode.x, _atNode.y);

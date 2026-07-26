@@ -4522,7 +4522,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">🎵 Tap Audio % of posts</Label>
+            <Label className="text-sm text-muted-foreground">Tap Audio % of posts</Label>
             <div className="flex items-center gap-3">
               <Input
                 type="number"
