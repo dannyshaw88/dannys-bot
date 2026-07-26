@@ -7178,7 +7178,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
 
   // Device quick-controls (Standby / Restart / Brightness)
   const [screenOn,    setScreenOn]    = React.useState(true);
-  const [dimmed,      setDimmed]      = React.useState(false);
+  const [brightLevel, setBrightLevel] = React.useState<0 | 50 | 100>(100);
   const [rebooting,   setRebooting]   = React.useState(false);
 
   const handleStandby = React.useCallback(async () => {
@@ -7201,27 +7201,28 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     setTimeout(() => { setRebooting(false); setScreenOn(true); }, 15000);
   }, [serial, rebooting]);
 
-  // Sync dimmed state from the actual device brightness on serial change
+  // Sync brightness level from the actual device on serial change
   React.useEffect(() => {
     if (!serial) return;
     fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/brightness`)
       .then(r => r.json())
       .then((d: { percent?: number }) => {
-        // Consider anything ≤10% as "dimmed" (0% target was set)
-        setDimmed(typeof d.percent === "number" ? d.percent <= 10 : false);
+        if (typeof d.percent !== "number") return;
+        setBrightLevel(d.percent <= 10 ? 0 : d.percent <= 75 ? 50 : 100);
       })
       .catch(() => {});
   }, [serial]);
 
   const handleBrightness = React.useCallback(async () => {
     if (!serial) return;
-    const next = !dimmed;
-    setDimmed(next);
+    // Cycle: 100 → 0 → 50 → 100 → ...
+    const next: 0 | 50 | 100 = brightLevel === 100 ? 0 : brightLevel === 0 ? 50 : 100;
+    setBrightLevel(next);
     await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/brightness`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ percent: next ? 0 : 50 }),
+      body: JSON.stringify({ percent: next }),
     }).catch(() => {});
-  }, [serial, dimmed]);
+  }, [serial, brightLevel]);
 
   // App close gesture (dismiss direction)
   const [dismissDir,    setDismissDir]    = React.useState<"auto" | "left" | "up">("auto");
@@ -7484,15 +7485,17 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
           <button
             onClick={handleBrightness}
             disabled={!serial}
-            title={dimmed ? "Restore 50% brightness" : "Set brightness to 0%"}
+            title={`Brightness: ${brightLevel}% — click to cycle`}
             className={`w-12 h-12 rounded-full flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md
-              ${dimmed
-                ? "bg-white/10 border border-white/20 text-white/40 hover:bg-white/15"
+              ${brightLevel === 0
+                ? "bg-white/10 border border-white/20 text-white/30 hover:bg-white/15"
+                : brightLevel === 50
+                ? "bg-white/60 text-gray-700 hover:bg-white/70"
                 : "bg-white text-gray-900 hover:bg-gray-100"}`}
           >
             <Sun className="w-5 h-5" />
           </button>
-          <span className="text-[10px] text-muted-foreground">{dimmed ? "0% — tap to restore" : "Brightness"}</span>
+          <span className="text-[10px] text-muted-foreground">{brightLevel}%</span>
         </div>
       </div>
 

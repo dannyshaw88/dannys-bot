@@ -4,6 +4,26 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.203 — 2026-07-26
+
+### Improved — Dashboard device column is now clickable; Brightness button cycles through fixed levels
+
+#### Dashboard — DEVICE column clickable
+
+Clicking a device name in the DEVICE column of the Dashboard activity log now navigates directly to that device's Phone Farm page (Accounts tab). Previously the text was static. "System" rows (boot events, etc.) remain plain text with no link since they have no device page.
+
+#### My Device — Brightness button rewritten as a 3-step cycle
+
+The old brightness button was a two-state toggle (full brightness ↔ 0%) that also changed its label text to "0% — tap to restore" when dimmed, which cluttered the control area.
+
+New behaviour:
+- Each click cycles through three fixed levels: **100% → 0% → 50% → 100% → ...**
+- The label below the button always shows the current level as a percentage (e.g. `0%`, `50%`, `100%`) — no expanding text, no contextual messages
+- Button appearance reflects the level: full white at 100%, semi-transparent at 50%, near-invisible at 0%
+- On load the button reads the actual device brightness and snaps to the nearest level (≤10% → 0%, 11–75% → 50%, >75% → 100%)
+
+---
+
 ## v1.2.202 — 2026-07-26
 
 ### Improved — Account Switch and Check DM tool markers added; Random Jitter corrected
