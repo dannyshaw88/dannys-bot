@@ -6302,6 +6302,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
        *  has no matching EB profile. Surplus is keyed by this when profileId
        *  is absent. */
       phoneSlotKey?: string;
+      /** When true, any candidate rejected by a filter (HikerAPI metadata pre-
+       *  filter or profile-visit quality gate) is written to the global
+       *  skipped_users table so every account skips that user on future cycles.
+       *  Tied to the "Skip Already Skipped Users" toggle in Settings → Automation.
+       *  When false/absent no writes are made to skipped_users. */
+      writeSkippedUsers?: boolean;
       /** Spread-Follows mode: pre-fetched candidates from the automation cycle.
        *  When provided the entire HikerAPI/surplus fetch phase is skipped and
        *  these candidates are used directly. Surplus save is also skipped (the
@@ -6465,19 +6471,33 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Free — uses data already returned by the batch scrape; no extra calls.
     // Only skips candidates where the metadata is definitively present and
     // matches a filter; absent metadata passes through to the profile check.
+    // When writeSkippedUsers is true, each pre-filtered user is also written
+    // to the global skipped_users table so future cycles skip them cheaply.
     if (filters && (filters.skipVerified || filters.skipPrivate || filters.maxFollowers !== undefined || filters.minFollowers !== undefined)) {
       const before = filtered.length;
-      filtered = filtered.filter(u => {
+      const preFiltered_kept: string[] = [];
+      for (const u of filtered) {
         const meta = candidateMeta.get(u);
-        if (!meta) return true;
-        if (filters.skipVerified  && meta.isVerified === true) return false;
-        if (filters.skipPrivate   && meta.isPrivate  === true) return false;
-        if (filters.maxFollowers !== undefined && meta.followerCount !== undefined && meta.followerCount >= filters.maxFollowers) return false;
-        if (filters.minFollowers !== undefined && meta.followerCount !== undefined && meta.followerCount <  filters.minFollowers) return false;
-        return true;
-      });
-      const preFiltered = before - filtered.length;
-      if (preFiltered > 0) onLog?.(`Follow: pre-filtered ${preFiltered} candidate${preFiltered !== 1 ? "s" : ""} via HikerAPI metadata`);
+        let reason: string | null = null;
+        if (meta) {
+          if (filters.skipVerified  && meta.isVerified === true)           reason = "verified-badge";
+          else if (filters.skipPrivate && meta.isPrivate === true)         reason = "private-account";
+          else if (filters.maxFollowers !== undefined && meta.followerCount !== undefined && meta.followerCount >= filters.maxFollowers)
+                                                                            reason = "too-many-followers";
+          else if (filters.minFollowers !== undefined && meta.followerCount !== undefined && meta.followerCount < filters.minFollowers)
+                                                                            reason = "too-few-followers";
+        }
+        if (reason) {
+          if (params.writeSkippedUsers) {
+            storage.addSkippedUser(u, reason).catch(() => {});
+          }
+        } else {
+          preFiltered_kept.push(u);
+        }
+      }
+      const preFiltered = before - preFiltered_kept.length;
+      filtered = preFiltered_kept;
+      if (preFiltered > 0) onLog?.(`Follow: pre-filtered ${preFiltered} candidate${preFiltered !== 1 ? "s" : ""} via HikerAPI metadata${params.writeSkippedUsers ? " (added to global skip list)" : ""}`);
     }
 
     // Mutable candidate pool. Extended automatically by re-scraping HikerAPI
@@ -6738,7 +6758,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 profileXml.includes(":id/verified_checkmark");
               if (isVerified) {
                 onLog?.(`Follow: @${username} is verified — skipping (Skip Verified filter)`);
-                storage.addSkippedUser(username, "verified-badge").catch(() => {});
+                if (params.writeSkippedUsers) storage.addSkippedUser(username, "verified-badge").catch(() => {});
                 await android.pressBack(serial);
                 await sleepOrAbort(serial, 500);
                 continue;
@@ -6753,7 +6773,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 profileXml.includes("This Account is Private");
               if (isPrivate) {
                 onLog?.(`Follow: @${username} is private — skipping (Private Users filter)`);
-                storage.addSkippedUser(username, "private-account").catch(() => {});
+                if (params.writeSkippedUsers) storage.addSkippedUser(username, "private-account").catch(() => {});
                 await android.pressBack(serial);
                 await sleepOrAbort(serial, 500);
                 continue;
@@ -6774,14 +6794,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 if (!isNaN(count)) {
                   if (filters.maxFollowers !== undefined && count >= filters.maxFollowers) {
                     onLog?.(`Follow: @${username} has ${count.toLocaleString()} followers (≥25K) — skipping (-25K filter)`);
-                    storage.addSkippedUser(username, "too-many-followers").catch(() => {});
+                    if (params.writeSkippedUsers) storage.addSkippedUser(username, "too-many-followers").catch(() => {});
                     await android.pressBack(serial);
                     await sleepOrAbort(serial, 500);
                     continue;
                   }
                   if (filters.minFollowers !== undefined && count < filters.minFollowers) {
                     onLog?.(`Follow: @${username} has ${count.toLocaleString()} followers (<${filters.minFollowers}) — skipping (50 Followers+ filter)`);
-                    storage.addSkippedUser(username, "too-few-followers").catch(() => {});
+                    if (params.writeSkippedUsers) storage.addSkippedUser(username, "too-few-followers").catch(() => {});
                     await android.pressBack(serial);
                     await sleepOrAbort(serial, 500);
                     continue;
@@ -6840,7 +6860,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               }
               if (skipForEnglish) {
                 onLog?.(`Follow: @${username} bio contains non-allowed script — skipping (English Speaking filter)`);
-                storage.addSkippedUser(username, "non-english").catch(() => {});
+                if (params.writeSkippedUsers) storage.addSkippedUser(username, "non-english").catch(() => {});
                 await android.pressBack(serial);
                 await sleepOrAbort(serial, 500);
                 continue;
@@ -7851,6 +7871,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               recordFollow: (u, src) => recordMobileFollow(serial, slotIdx, u, src),
               skipFollowedUsernames: _ssSkipFollowed,
               skipSkippedUsernames:  _ssSkipSkipped,
+              writeSkippedUsers:     globalSkipSkipped,
               browsing: _ssBrowsing,
               filters:  _ssFilters,
               profileId: mobileProfileId ?? undefined,
@@ -7987,6 +8008,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                       requireEnglish: followFilterEnglishSpeaking,
                     }
                   : undefined,
+                writeSkippedUsers: globalSkipSkipped,
                 profileId: mobileProfileId ?? undefined,
                 phoneSlotKey: mobileProfileId ? undefined : (slotUsername || undefined),
               });

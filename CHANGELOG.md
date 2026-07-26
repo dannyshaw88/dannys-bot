@@ -4,6 +4,48 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.169 — 2026-07-26
+
+### Added — Global Skip List writes from Follow Tool filters + Tap Audio detection improvements
+
+#### Global Skip List — Filter rejections now written to shared list
+
+When **Skip Already Skipped Users** is enabled in Settings → Automation, any user rejected by a Follow Tool filter is now automatically added to the global skip list (`skipped_users` table) so that **every account on the farm skips that user on all future cycles** without re-processing them.
+
+Previously the skip list was only _read_ to avoid re-visiting known bad users; now it is also _written_ when a filter makes a rejection decision. If the toggle is off, no writes occur — behaviour is unchanged.
+
+**Two filter stages now write to the list (when toggle is on):**
+
+1. **HikerAPI metadata pre-filter** — users filtered _before_ profile navigation (verified, private, follower count) are written immediately. This is the most valuable path: these users are scraped again and again by HikerAPI from shared hashtag/follower sources. Once one account deems them unfit they are permanently excluded for the whole farm, saving scrape quota and cycle time.
+
+2. **Profile-visit quality gates** — users filtered _after_ navigating to their profile (verified badge, private account, follower count, English Speaking script check) are also written, gated by the same toggle.
+
+**What changed:**
+- `artifacts/api-server/src/routes/mobile.ts`
+  - `runFollowUsersStep` params: new `writeSkippedUsers?: boolean` flag
+  - HikerAPI metadata pre-filter rewritten to iterate candidates individually and call `storage.addSkippedUser()` for each rejection (reason: `verified-badge` / `private-account` / `too-many-followers` / `too-few-followers`) when `writeSkippedUsers` is true
+  - All five profile-visit filter `addSkippedUser` calls gated behind `if (params.writeSkippedUsers)`
+  - Both `runFollowUsersStep` call sites (standard Follow and Spread Follows) pass `writeSkippedUsers: globalSkipSkipped`
+
+No new UI settings — the existing **Skip Already Skipped Users** toggle in Settings → Automation controls the feature completely.
+
+#### Tap Audio % — Audio node detection broadened + diagnostic logging
+
+The "Tap Audio % of posts" action was always reporting "no audio affordance found" even on posts that have audio, because the detector only matched nodes containing the literal word `"audio"` in their resource-id or content-desc. Instagram frequently exposes the audio disc with resource-ids like `clips_music_icon`, `music_attribution_container`, or `row_feed_audio_icon` (keyword: **music**, not **audio**) and content-descs like "Original audio", "Music by …", "Song by …".
+
+**Fixes:**
+- Resource-id pattern broadened from `/audio/i` to `/audio|music|sound|song/i`
+- Content-desc/text pattern broadened to match `audio`, `music`, `song`, or `original` as whole words (catches "Original audio", "Music by [artist]", etc.)
+- When no audio node is found, the log now prints up to 12 lower-screen nodes with their full `rid=`, `desc=`, and `txt=` values so the exact Instagram tree is visible in the debug log
+
+Label in Phone Farm → Human Session Tool → View Feed renamed from "🎵 Tap Audio % of posts" to "Tap Audio % of posts".
+
+**What changed:**
+- `artifacts/api-server/src/routes/mobile.ts` — broadened audio node selector + diagnostic candidate dump
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — removed emoji from label
+
+---
+
 ## v1.2.168 — 2026-07-25
 
 ### Fix: Tap Audio % — now correctly in Phone Farm Human Session Tool → View Feed
