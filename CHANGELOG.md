@@ -4,6 +4,56 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.198 — 2026-07-26
+
+### Improved — Keyboard calibration edit map, capture delay fix, and emoji key wired into View Stories
+
+#### Keyboard Calibration — Edit Map (view and fix individual keys)
+
+Previously, if a single key was captured at the wrong coordinate during calibration, the only option was to redo the entire calibration from scratch — walking through all 80+ keys again. A new **Edit Map** mode removes that requirement entirely.
+
+- The calibration dialog now has three modes: **Intro**, **Full Wizard**, and **Edit Map**.
+- When an existing calibration map is saved for a device, the intro screen shows how many keys are mapped and exposes a **"View & fix individual keys →"** button.
+- Clicking it opens the Edit Map view: a scrollable list of every key grouped by keyboard layer (ABC, ?123, =\\< extended symbols).
+- Each row shows whether the key is mapped (✓) or missing (✗), its current recorded screen coordinate, and a **Re-tap** button.
+- Clicking Re-tap on any row immediately starts a 12-second listen window for that one key only. Tap the correct key on the phone and the coordinate is updated.
+- The updated map is **saved automatically** as soon as the new tap is captured — no separate Save step needed — so all other keys remain intact even if the dialog is closed immediately after.
+- Multiple keys can be fixed in sequence without leaving the Edit Map view.
+
+#### Keyboard Calibration — Full wizard preserves existing keys
+
+Previously, starting a full re-calibration initialised the in-memory map as empty, so any keys that were skipped during the run were permanently lost when the map was saved. The wizard now loads the existing saved map at startup and merges new captures into it. Keys that are skipped during a re-run retain their previously captured coordinates rather than being cleared.
+
+#### Keyboard Calibration — 5-second listen delay eliminated
+
+Each "Capture tap" call previously spent 3–5 seconds running two slow setup queries before the `getevent` listener even started:
+
+1. A UIAutomator dump to read the screen dimensions.
+2. A `getevent -lp` scan to discover the hardware touch device and its axis max values.
+
+Both queries are now cached in server memory per device serial the first time they run. A new background **prefetch** call is fired automatically when the calibration dialog opens, warming both caches before the user clicks the first "Capture tap". Subsequent captures start listening almost immediately instead of burning 3–5 seconds on setup each time. The cache persists for the lifetime of the server process; it resets on server restart but is re-warmed on the next dialog open.
+
+A new API endpoint supports this: `POST /api/mobile/devices/:serial/keyboard-calibration/prefetch`. It returns `{ ok: true }` once both caches are populated and `{ ok: false }` if the device is unreachable.
+
+#### View Stories — Emoji comment now uses calibrated emoji key coordinate
+
+The View Stories tool sends a random emoji as a story reply when the comment percentage fires. Opening the emoji picker requires tapping the emoji key on the Android system keyboard — an IME window in a separate process that Instagram cannot observe. Two strategies had previously been implemented for this:
+
+- **Strategy A** — `KEYCODE_PICTSYMBOLS` (keycode 94): sends an Android OS event telling the active IME to switch to emoji mode. Has never reliably opened the picker on the farm's Xiaomi MIUI devices.
+- **Strategy B** — Label-based IME accessibility scan: dumps the keyboard accessibility tree and locates the emoji key by `content-desc` or `text` label ("emoji", "smiley", etc.). Also unreliable on MIUI where the IME window is not visible to UIAutomator.
+
+Both strategies have been exhausted without success, which is why the keyboard calibration emoji key was introduced. The flow now uses the calibrated coordinate as the **primary** strategy:
+
+- When the emoji comment block fires, the server loads the device's keyboard calibration map via `loadKeyCalibrationMap(serial)`.
+- If the map contains an `"emoji"` entry (captured during calibration), the server calls `adb shell input tap x y` at those exact coordinates — a real hardware touch event delivered directly to the keyboard process.
+- KEYCODE_PICTSYMBOLS is only sent if **no calibration map exists at all** for the device.
+- Strategy B (label-based IME scan) remains as a final fallback if the picker verification dump finds fewer than 3 clickable emoji cells after whichever opening strategy ran.
+- The log message distinguishes the path taken: `"tapping calibrated emoji key at (x, y)…"` vs `"no calibration map — sending KEYCODE_PICTSYMBOLS…"`.
+
+The emoji key coordinate is captured during the keyboard calibration wizard. It is the last key in the extended-symbols (=\\<) group — captured after returning to the ABC layer so the emoji picker does not open mid-calibration. The map key is `"emoji"`.
+
+---
+
 ## v1.2.197 — 2026-07-26
 
 ### Improved — Complete keyboard calibration and readable prompts

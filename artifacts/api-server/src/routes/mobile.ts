@@ -3568,6 +3568,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // picker — that picker is part of Instagram's own UI and IS in the
             // standard accessibility tree.
             //
+            // Strategy 0 — calibrated emoji key tap (preferred):
+            //   If the device has a keyboard calibration map with an "emoji"
+            //   entry, use the exact screen coordinate captured during
+            //   calibration.  This is a real finger-down event delivered to
+            //   the keyboard process at the pixel the user physically tapped,
+            //   making it indistinguishable from a human press on that device.
+            //   More reliable than keycodes or label-scans because it requires
+            //   no accessibility tree visibility of the keyboard window.
+            //
             // Strategy A — KEYCODE_PICTSYMBOLS (keycode 94):
             //   Android's standard OS-level event telling the active IME to
             //   switch to its emoji/pictographic input mode.  Equivalent to
@@ -3586,9 +3595,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // Instagram's UI and looking for clickable emoji cells.  The actual
             // emoji selection that follows is always a node-based tap.
 
-            // ── Strategy A: KEYCODE_PICTSYMBOLS ─────────────────────────────
-            onLog?.(`Story ${s + 1}: sending KEYCODE_PICTSYMBOLS to open emoji picker…`);
-            await android.keyevent(serial, 94);
+            // ── Strategy 0: calibrated emoji key coordinate ──────────────────
+            const _calMap = android.loadKeyCalibrationMap(serial);
+            const _calEmojiCoord = _calMap?.["emoji"];
+            if (_calEmojiCoord) {
+              onLog?.(
+                `Story ${s + 1}: tapping calibrated emoji key at (${_calEmojiCoord.x},${_calEmojiCoord.y})…`,
+              );
+              await android.tap(serial, _calEmojiCoord.x, _calEmojiCoord.y);
+            } else {
+              // ── Strategy A: KEYCODE_PICTSYMBOLS ─────────────────────────────
+              onLog?.(`Story ${s + 1}: no calibration map — sending KEYCODE_PICTSYMBOLS to open emoji picker…`);
+              await android.keyevent(serial, 94);
+            }
             await sleepOrAbort(serial, 500); // picker animates open
 
             const _pickerXml = await android.dumpUi(serial).catch(() => "");
