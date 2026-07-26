@@ -4,6 +4,50 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.182 — 2026-07-26
+
+### Bug Fix — Account switcher not dismissed when target account is already selected
+
+**What was wrong.**
+
+v1.2.180 removed the post-tap BACK press entirely to stop it firing after a
+successful switch. That fix was incomplete.
+
+Instagram renders the currently-active account as a tappable row in the switcher
+on some builds. When that happens, `_findElem` finds coords for the account, the
+code taps it, but Instagram ignores the tap (the account is already selected) —
+the sheet does not close. With the post-tap BACK removed, nothing dismissed the
+sheet. The next automation tool (e.g. View Stories) then executed against the
+open switcher rather than the feed.
+
+**Fix.**
+
+Restored the post-tap verification dump and BACK press, with one change: the
+wait before dumping is increased from 600 ms to 1500 ms. This gives a genuine
+account switch enough time to animate and show the home-feed nav controls before
+the check fires. A tap on an already-selected account produces no animation, so
+the switcher is still open after the same 1500 ms delay and the BACK fires
+correctly.
+
+The BACK is only sent when the dump succeeds (non-empty). An empty dump means
+the UI was mid-transition — in that case the BACK is skipped rather than fired
+blindly.
+
+**Summary of the three BACK-press cases (all correct after this fix):**
+1. Account already active, rendered without a tappable row → `_findElem` returns
+   null → BACK sent immediately (already-active path, no tap fired).
+2. Account already active, rendered as a tappable row → `_findElem` returns
+   coords → tap fires, switcher stays open → post-tap check: home feed not
+   visible after 1500 ms → BACK sent.
+3. Account needed switching → tap fires, feed reloads → post-tap check: home
+   feed nav visible after 1500 ms → no BACK sent.
+
+**Files changed:**
+- `artifacts/api-server/src/mobile/androidManager.ts` — `switchToInstagramAccount`,
+  step 5 (post-tap verify restored with 1500 ms delay)
+
+---
+
 ## v1.2.181 — 2026-07-26
 
 ### Bug Fix — View Stories emoji key: MIUI/Xiaomi keyboard container node breaks geometry

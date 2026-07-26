@@ -5027,14 +5027,36 @@ export async function switchToInstagramAccount(
   onLog?.(`  ✓ Found @${clean} in switcher — switching…`);
   _adbTap(adbPath, serial, coords.x, coords.y);
 
-  // 5. Wait for the feed to reload.
+  // 5. Check whether the switcher actually closed after the tap.
   //
-  // Do NOT send a BACK keyevent here. The tap above is what closes the
-  // switcher sheet; a post-tap BACK risks exiting Instagram entirely or
-  // dismissing a "Welcome back" interstitial that the next step should see.
-  // Dismiss-with-BACK only belongs in the "already-active" path above,
-  // where no tap was fired and the switcher is still open.
-  await _sleep(2000); // give Instagram time to reload the new account's feed
+  // Two distinct cases reach this point:
+  //   a) Account needed switching → tap closes the sheet, feed reloads.
+  //   b) Account was ALREADY SELECTED but Instagram rendered it as a tappable
+  //      row anyway → tap does nothing, sheet stays open.
+  //
+  // Wait 1500 ms before dumping so a genuine account switch has time to
+  // animate and load the home-feed nav controls. A tap on an already-selected
+  // account produces no animation, so the switcher will still be open after
+  // the same delay. If the home feed is not yet visible after 1500 ms, press
+  // BACK once to dismiss the sheet.
+  //
+  // Guard: only send BACK when the dump succeeds. A failed dump (empty string)
+  // means the UI was still settling — skip the BACK rather than risk pressing
+  // it blindly into an unknown screen state.
+  await _sleep(1500);
+  const postTapXml = await _uiDump(adbPath, serial).catch(() => "");
+  if (postTapXml) {
+    const homeFeedVisible =
+      /content-desc="Home[^"]*"/.test(postTapXml) ||
+      !!_findByResId(postTapXml, ":id/feed_tab", ":id/home_tab");
+    if (!homeFeedVisible) {
+      onLog?.(`  ↳ Switcher still open after tap (account was already selected) — dismissing with BACK`);
+      await pressBack(serial).catch(() => {});
+    }
+  }
+
+  // 6. Give Instagram time to finish loading the feed.
+  await _sleep(1500);
   return true;
 }
 
