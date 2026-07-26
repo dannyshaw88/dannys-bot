@@ -53,6 +53,30 @@ Aura Farming — Instagram automation tool for real Android phones connected via
 - `lib/db/src/` — Drizzle schema + SQLite client
 - `database.db` — SQLite database
 
+## Editing boundary — frozen profile Human Session Tool
+
+When the user asks for a Human Session Tool change, the default target is always
+the newer mobile/Android tool:
+
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx`
+- `artifacts/api-server/src/routes/mobile.ts`
+- `artifacts/api-server/src/mobile/androidManager.ts`
+
+The older profile/browser Human Session Tool is frozen. Do not edit its UI,
+route, or engine during mobile work:
+
+- `artifacts/dannys-bot/src/components/tools/HumanSessionPanel.tsx`
+- `artifacts/dannys-bot/src/pages/ProfileDetailsPage.tsx`
+- `artifacts/api-server/src/instagram/automationEngine.ts`
+
+Do not edit the duplicate legacy tree under
+`artifacts/api-server/src/src/instagram/` unless the user explicitly names the
+profile/browser implementation. Before changing code, verify that the request
+follows `MobilePage.tsx` → `POST /api/mobile/devices/:serial/automation-cycle`
+→ `routes/mobile.ts` → `mobile/androidManager.ts`. If it follows
+`/api/profiles/:id/tools` or `instagram/automationEngine.ts`, stop: that is the
+frozen legacy path, not the mobile tool.
+
 ---
 
 ## Rules that must never be broken

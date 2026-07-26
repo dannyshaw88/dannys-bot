@@ -43,6 +43,41 @@ Workflows are managed as Replit artifacts (`artifacts/api-server: API Server`, `
 - `lib/db/src/` — Drizzle schema + SQLite DB client
 - `database.db` — SQLite database (workspace root)
 
+## Editing boundary — Mobile Human Session Tool only
+
+**The default target for Human Session Tool changes is the mobile/Android
+implementation.** Unless the user explicitly names the profile/browser version,
+edit only this live path:
+
+```text
+artifacts/dannys-bot/src/pages/MobilePage.tsx
+artifacts/api-server/src/routes/mobile.ts
+artifacts/api-server/src/mobile/androidManager.ts
+```
+
+The profile/browser Human Session Tool is a **frozen legacy implementation**.
+Do not edit, refactor, rename, migrate, or sync these files during mobile work:
+
+```text
+artifacts/dannys-bot/src/components/tools/HumanSessionPanel.tsx
+artifacts/dannys-bot/src/pages/ProfileDetailsPage.tsx
+artifacts/api-server/src/instagram/automationEngine.ts
+```
+
+The duplicate tree below is also legacy and is not the live API-server build
+entrypoint:
+
+```text
+artifacts/api-server/src/src/instagram/automationEngine.ts
+artifacts/api-server/src/src/routes/instagram.ts
+```
+
+Before editing, trace the request from `MobilePage.tsx` through
+`POST /api/mobile/devices/:serial/automation-cycle`. If the proposed change
+instead leads to `HumanSessionPanel.tsx`, `/api/profiles/:id/tools`, or
+`instagram/automationEngine.ts`, stop: that is the frozen profile/browser
+implementation. Edit that path only when the user explicitly names it.
+
 ---
 
 ## Phone display settings — PERMANENTLY BANNED
