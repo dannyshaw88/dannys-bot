@@ -4,6 +4,56 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.177 — 2026-07-26
+
+### Bug Fix — View Stories emoji comment: smiley key now found by node scan, not coordinate guess
+
+**Root cause.** When the keyboard opened for a story emoji reply, the code ran
+`dumpUiWithIme` to find the space bar node, then derived the emoji key position
+as a hard offset:
+
+```
+emojiKey.x = spaceBar.x1 − Math.round(keyHeight / 2)
+```
+
+On Xiaomi/MIUI keyboards the key height does not equal the emoji key width, so
+this offset reliably landed in the inter-key gap or on the space bar itself
+instead of the centre of the smiley key. The keyboard appeared (confirming the
+composer tap worked) but the emoji picker never opened because the smiley key
+was never actually pressed.
+
+The pixel scanner (`findKeyboardEmojiButton`) was the accurate path all along —
+it measures the actual key segments from the screen capture — but it was only
+reached when the space bar was *not* in the dump. Since MIUI does include the
+space bar node, the offset path always ran and always missed.
+
+**Fix.** Detection now follows a strict priority order:
+
+1. **a11y node scan (exact bounds)** — scan the dump for an emoji/symbol key
+   node positioned to the left of the space bar, identified by resource-id
+   (`emoji`, `emoticon`, `smiley`, `pictsym`, `symbol`) or content-desc/text.
+   Gboard exposes this node; use its measured centre directly.
+
+2. **Pixel scanner (measured geometry)** — `findKeyboardEmojiButton()` captures
+   the screen, finds the keyboard band, locates the widest key segment (space
+   bar), and returns the measured centre of the adjacent left-side key. This is
+   geometrically accurate on every keyboard theme and layout and is now the
+   primary fallback for MIUI and any keyboard that doesn't expose individual key
+   nodes.
+
+3. **Skip** — if neither path produces a confirmed location, the emoji comment
+   is skipped and the keyboard is dismissed. No blind taps.
+
+The old `spaceBar.x1 − halfKeyHeight` offset calculation is removed entirely.
+
+**Files changed.**
+
+- `artifacts/api-server/src/routes/mobile.ts` — story comment flow: replaced
+  the offset derivation with the two-step node-scan → pixel-scanner approach;
+  updated all log messages to reflect which path succeeded.
+
+---
+
 ## v1.2.176 — 2026-07-26
 
 ### Bug Fix — View Stories no longer taps the audio/music icon on feed posts
