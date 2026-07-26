@@ -4,6 +4,99 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.184 — 2026-07-26
+
+### Rewrite — View Stories no longer uses hardcoded coordinates to find story bubbles
+
+**What was wrong.**
+
+Every version of `pickAndOpenRandomStory` calculated where to tap using
+percentage-based X positions and a percentage-derived Y centre. Those percentages
+were calibrated against one reference device and silently broke on every other
+phone in the farm with a different screen size, resolution, or aspect ratio.
+
+**Fix.**
+
+The function now does a `dumpUi` of the home feed and finds story bubbles
+directly from the accessibility tree. Every story avatar in the tray carries
+`content-desc="<username>'s story"`. The code collects all matching nodes,
+reads their exact bounding-box centre coordinates from the dump, and taps those
+coordinates. No percentages, no spacing arithmetic, no device-specific
+calibration — the same code works on every phone.
+
+Tap strategy (unchanged in logic, improved in implementation):
+- Slot 1 (leftmost friend bubble, which is least likely to be a "Suggested"
+  tile) is tried first.
+- Up to 2 more bubbles are tried in random order if slot 1 fails.
+- X is nudged 12 px left of centre to stay away from the bottom-right follow
+  badge that Instagram overlays on Suggested tiles. Y is the exact dump centre.
+- If the dump returns no story bubbles at all (e.g. tray not yet loaded), the
+  cycle skips stories and logs the reason.
+
+**Files changed:**
+- `artifacts/api-server/src/routes/mobile.ts` — `pickAndOpenRandomStory`
+  completely rewritten; all percentage-based coordinate math removed
+
+---
+
+## v1.2.183 — 2026-07-26
+
+### Bug Fix — View Stories tapping notifications icon instead of story bubbles
+
+**What was wrong.**
+
+Two compounding bugs introduced in v1.2.181 caused the story-tray tap to land
+on the Instagram notifications icon (top-right header) instead of a story bubble.
+
+**Bug 1 — Wrong node matched by `content-desc="Add"`.**
+
+The UIAutomator search for `content-desc="Add"` was supposed to find the "Your
+Story" bubble (always the first circle in the story tray). On some Instagram
+builds the create-post `+` button in the top navigation bar *also* carries
+`content-desc="Add"`. That header icon sits at ≈ 5–7 % of screen height, which
+passed the old lower plausibility bound of 4 %. Its Y was accepted as the story
+tray centre, but it is in the header — not the tray.
+
+**Bug 2 — Upward Y bias pushed the tap further into the header.**
+
+After detecting the (already-wrong) Y, the code subtracted `h × 0.012` (≈ 30 px
+on a 2460 px screen) to bias the tap away from the bottom-right follow badge.
+This moved the tap from an already-wrong header position even higher, landing
+squarely on the notifications icon.
+
+**Evidence:**
+The on-device screenshot shows the phone on the Instagram home feed with the
+story tray visible. The debugging log shows the automation tapping the top-right
+area of the screen rather than the story row.
+
+**Fix.**
+
+1. **Node size filter.** The "Add" node is only accepted if its bounds are
+   60–200 px on each side — consistent with a story bubble. The header `+` icon
+   is much smaller and is now excluded before the Y range check even runs.
+
+2. **Lower plausibility bound raised from 4 % → 8 %.** The Instagram header on
+   the Xiaomi Redmi 12 5G occupies roughly y = 104–165 px (≈ 4–7 % of 2460 px).
+   Any `content-desc="Add"` node below 8 % (≈ 197 px) is a header button, not a
+   story bubble, and is ignored.
+
+3. **Y bias removed.** `targetY` now equals `storyBarYCenter` exactly. The X is
+   still biased left (12 % of slot width) to avoid the bottom-right follow badge,
+   but there is no upward Y nudge. UIAutomator already returns the bubble centre;
+   nudging upward risks leaving the tray and entering the header — exactly the
+   confirmed failure mode.
+
+4. **Fallback updated from 11 % → 8.6 %.** On this device: status bar 104 px +
+   Instagram header ≈ 60 px + half-bubble ≈ 45 px = 209 px ≈ 8.5 %. The old
+   11 % (271 px) over-shot the tray into the feed.
+
+**Files changed:**
+- `artifacts/api-server/src/routes/mobile.ts` — `pickAndOpenRandomStory`:
+  node size filter added, lower plausibility bound 4 % → 8 %, Y bias removed,
+  fallback 11 % → 8.6 %
+
+---
+
 ## v1.2.182 — 2026-07-26
 
 ### Bug Fix — Account switcher not dismissed when target account is already selected

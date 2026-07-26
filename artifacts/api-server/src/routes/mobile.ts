@@ -2943,128 +2943,89 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
    * Returns the 1-based position that was opened (for logging only).
    */
   async function pickAndOpenRandomStory(serial: string, w: number, h: number, onLog?: (msg: string) => void): Promise<{ slot: number; opened: boolean }> {
-    // ── Story tray Y detection via UIAutomator dump ──
+    // ── Find story bubbles directly from UIAutomator dump ──
     //
-    // The "Your story" bubble always carries content-desc="Add" and sits at
-    // the true centre of the story tray. Reading its y-coordinate from the
-    // accessibility dump gives us the exact tray position on any device,
-    // regardless of screen height, status-bar size, or Instagram header
-    // height. Hardcoded percentages (we tried 8.5 % and 14 %) only work on
-    // the specific reference device they were calibrated on: on a
-    // 1080×2460 Xiaomi Redmi 12 5G, 14 % (≈ 344 px) lands in the feed
-    // content below the tray, which is why an audio track on a post got
-    // tapped instead of a story bubble.
+    // Every story bubble in the home-feed tray carries a content-desc of the
+    // form "<username>'s story" (Instagram sets this on the avatar ImageView or
+    // its parent FrameLayout). We parse the dump, collect ALL such nodes, and
+    // tap their exact centre coordinates — no hardcoded percentages, no spacing
+    // math, no device-specific calibration. This works identically on every
+    // phone in the farm regardless of screen size, resolution, or DPI.
     //
-    // Fallback (dump failure or element not found): 11 % of screen height.
-    // This is more conservative than the old 14 % and errs toward the
-    // header rather than the feed on tall phones.
-    //
-    // X positions (device-independent percentages):
-    //   Slot 0 – "Your story" (+)  ≈ 20 % of width  (skip — opens camera)
-    //   Slot 1 – first friend      ≈ 37 % of width
-    //   Slot 2 – second friend     ≈ 55 % of width
-    //   Slot 3 – third friend      ≈ 73 % of width
-    //   … spacing ≈ 18.5 % per slot.
-    let storyBarYCenter: number;
+    // Tap strategy:
+    //   • Try slot 1 (first friend) first — real friends are always sorted
+    //     before "Suggested" tiles, so slot 1 is the least likely to be a
+    //     suggested-account chip that would dismiss rather than open.
+    //   • If slot 1 fails, try up to 2 more randomly-ordered slots.
+    //   • X is biased 12 px left of centre to land away from the bottom-right
+    //     follow badge that Instagram overlays on "Suggested" tiles.
+    //   • Y is the exact centre from the dump — no upward/downward nudge.
+
+    const trayXml = await android.dumpUi(serial).catch(() => "");
+
+    // Collect nodes whose content-desc ends with "'s story".
+    // Each node gives us the exact on-screen bounding box.
+    const storyBubbles: Array<{ cx: number; cy: number; desc: string }> = [];
     {
-      const trayXml = await android.dumpUi(serial).catch(() => "");
-      const nodeRe2 = /<node\b([^>]*\/?>) */g;
-      let addY: number | null = null;
-      let nm2: RegExpExecArray | null;
-      while ((nm2 = nodeRe2.exec(trayXml)) !== null) {
-        const attrs2 = nm2[1];
-        if (!attrs2.includes('content-desc="Add"')) continue;
-        const bm2 = attrs2.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-        if (!bm2) continue;
-        const cy2 = Math.round((Number(bm2[2]) + Number(bm2[4])) / 2);
-        // Accept only if it's in a plausible tray band (4 %–22 % of height).
-        if (cy2 > h * 0.04 && cy2 < h * 0.22) { addY = cy2; break; }
-      }
-      if (addY !== null) {
-        storyBarYCenter = addY;
-        onLog?.(`Story tray: detected Y centre ${addY} px from UIAutomator (${Math.round(addY / h * 100)}% of ${h}px screen)`);
-      } else {
-        storyBarYCenter = Math.round(h * 0.11);
-        onLog?.(`Story tray: "Add" element not found in dump — falling back to 11% (${storyBarYCenter} px)`);
+      const nodeRe = /<node\b([^>]*\/?>) */g;
+      let nm: RegExpExecArray | null;
+      while ((nm = nodeRe.exec(trayXml)) !== null) {
+        const attrs = nm[1];
+        const descM = attrs.match(/content-desc="([^"]*)"/);
+        if (!descM) continue;
+        const desc = descM[1];
+        // Match "<anything>'s story" — covers both ASCII apostrophe and the
+        // Unicode right-single-quotation-mark Instagram uses on some builds.
+        if (!/'s story$/i.test(desc) && !/\u2019s story$/i.test(desc)) continue;
+        const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+        if (!bm) continue;
+        const cx = Math.round((Number(bm[1]) + Number(bm[3])) / 2);
+        const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
+        storyBubbles.push({ cx, cy, desc });
       }
     }
-    const firstStoryX = Math.round(w * 0.37); // first *friend's* story (skip "Your story")
-    const spacing      = Math.round(w * 0.185);
 
-    // How many friend bubbles fit on screen from firstStoryX to the right edge.
-    const maxVisible = Math.max(1, Math.min(4, Math.floor((w * 0.96 - firstStoryX) / spacing) + 1));
+    if (storyBubbles.length === 0) {
+      onLog?.(`Story tray: no story bubbles found in UIAutomator dump — no stories to open this cycle`);
+      return { slot: 0, opened: false };
+    }
 
-    // Instagram renders some tray bubbles as "Suggested for you" accounts
-    // rather than a friend's actual story — these carry a small circular
-    // "+"/follow badge overlaid on the BOTTOM-RIGHT of the avatar so the
-    // same tile can either open a story (tap the avatar) or follow the
-    // badge/dismiss a "suggested for you" chip instead of viewing a story —
-    // user-confirmed from a live run (11 Jul 2026): the tap dismissed a
-    // suggested-friend chip, not a story. Bias the tap toward the
-    // upper-left quadrant of the bubble (away from the bottom-right corner
-    // where the badge sits) so it lands on open-story territory instead.
-    //
-    // Root-cause fix (11 Jul 2026): a single random slot with no retry meant
-    // that whenever the *one* slot picked happened to be a suggested/
-    // discover tile (which — unlike real friends' stories — can appear at
-    // ANY position in the tray, not just the end), the whole cycle gave up
-    // with zero stories watched even though other slots on the same tray
-    // very likely held a real story. Real friends' stories are also always
-    // sorted before suggested content, so slot 1 (first friend, right after
-    // "Your story") is the least likely to be a suggestion — try it first,
-    // then fall back to random remaining slots if it fails, up to 3
-    // distinct attempts total, before giving up on the whole cycle.
-    const slotOrder: number[] = [1];
-    const remaining = Array.from({ length: maxVisible }, (_, i) => i + 1).filter(s => s !== 1);
-    for (let i = remaining.length - 1; i > 0; i--) {
+    onLog?.(`Story tray: found ${storyBubbles.length} story bubble(s) in dump: ${storyBubbles.map(b => b.desc).join(", ")}`);
+
+    // Try slot 1 first, then the rest in random order, up to 3 attempts total.
+    const [first, ...rest] = storyBubbles;
+    for (let i = rest.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [remaining[i], remaining[j]] = [remaining[j], remaining[i]];
+      [rest[i], rest[j]] = [rest[j], rest[i]];
     }
-    slotOrder.push(...remaining);
-    const maxAttempts = Math.min(3, slotOrder.length);
+    const ordered = [first, ...rest];
+    const maxAttempts = Math.min(3, ordered.length);
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const target = slotOrder[attempt];
-      const bubbleCenterX = Math.round(firstStoryX + (target - 1) * spacing);
+      const bubble = ordered[attempt];
+      // Bias X slightly left (12 px) to land away from the bottom-right
+      // follow badge on "Suggested" tiles. Y is untouched.
+      const tapX = bubble.cx - 12;
+      const tapY = bubble.cy;
 
-      // Kept small (±6% of one bubble's width/height) so it stays well
-      // inside the ring — the tray's usable Y band is narrow, and
-      // overcorrecting risks landing above the tray in the header again (a
-      // real past bug).
-      const targetX = bubbleCenterX - Math.round(spacing * 0.12);
-      const targetY = storyBarYCenter - Math.round(h * 0.012);
+      onLog?.(`Story tray: tapping "${bubble.desc}" at (${tapX},${tapY}) — attempt ${attempt + 1}/${maxAttempts}`);
 
-      onLog?.(`Story tray: tapping slot ${target}/${maxVisible} at (${targetX},${targetY}) — attempt ${attempt + 1}/${maxAttempts}, biased away from bottom-right follow badge`);
+      await android.tap(serial, tapX, tapY);
+      await new Promise(r => setTimeout(r, 600));
 
-      // Single tap on the chosen bubble — that's all Instagram needs to open it.
-      await android.tap(serial, targetX, targetY);
-      await new Promise(r => setTimeout(r, 600)); // let the story viewer (or a follow toast) finish appearing
-
-      // Verify a story actually opened instead of blindly assuming it did.
-      // Fast path: pixel-scan for the story progress-bar strip.
-      // Slow path: isInStoryViewerSlow — checks for positive story-viewer
-      // resource IDs (toolbar_like_button, reel_viewer, etc.) first, then
-      // home-tab via content-desc/resource-id ONLY (no positional fallback).
-      //
-      // The old slow fallback used findHomeTab, whose positional strategy 3
-      // picks up the story viewer's reply bar and action icons at y > 88%,
-      // returns non-null, and concludes "home tab visible = story didn't open"
-      // — a false negative that caused retry taps to fire inside a live story.
-      // isInStoryViewerSlow was written specifically to fix that bug and must
-      // be used here instead.
       const stillOnFeedFast = await android.isStoryViewerOpenFast(serial).catch(() => null);
       const storyOpen = stillOnFeedFast === true
         ? true
         : await android.isInStoryViewerSlow(serial).catch(() => false);
       if (storyOpen) {
-        onLog?.(`Story tray: slot ${target} opened successfully`);
-        return { slot: target, opened: true };
+        onLog?.(`Story tray: "${bubble.desc}" opened successfully`);
+        return { slot: attempt + 1, opened: true };
       }
-      onLog?.(`Story tray: tap on slot ${target} did NOT open a story — story viewer not detected (likely hit a follow/suggestion badge or missed the bubble)`);
+      onLog?.(`Story tray: tap on "${bubble.desc}" did NOT open a story — story viewer not detected (likely hit a follow/suggestion badge)`);
     }
 
-    onLog?.(`Story tray: exhausted ${maxAttempts} slot attempts — no story opened this cycle`);
-    return { slot: slotOrder[maxAttempts - 1], opened: false };
+    onLog?.(`Story tray: exhausted ${maxAttempts} attempt(s) — no story opened this cycle`);
+    return { slot: maxAttempts, opened: false };
   }
 
   async function runViewStoriesFromFeedLoop(serial: string, params: {
