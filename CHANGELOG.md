@@ -4,6 +4,80 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.188 — 2026-07-26
+
+### Bug Fix — View Stories emoji key never pressed: Android keyboard nodes misidentified
+
+**What was wrong.**
+
+The emoji key detection in View Stories (story comment feature) was failing 100%
+of the time on every device in the farm. The debug log confirmed it on every story
+cycle:
+
+```
+emoji key not found — no node left of space bar
+sameRowNodes: [{"rid":"com.instagram.android:id/reel_viewer_message_composer_text",
+                "text":"Send message", "x1":33,"y1":1518,"x2":948,"y2":1564}]
+kbNodeCount: 13
+```
+
+The node identified as the "space bar" was Instagram's own "Send message" composer
+bar, not the Android keyboard space bar. Here is why:
+
+The code collected keyboard-area nodes using a screen-position filter
+(`y1 >= h * 0.60`). The `--include-ime` UIAutomator dump includes both the
+Instagram UI tree and the Android keyboard (IME) window in the same XML. No
+separation was made between the two. Instagram's "Send message" bar sat in the
+same screen region and, at 915 px wide on a 1080 px screen (84.7%), was the
+widest node that passed the prior 90%-container filter. It was selected as the
+space bar. The real space bar — an actual keyboard key — was smaller in width
+and was never reached. With the wrong "space bar" chosen, the same-row search
+found only the Instagram bar itself and reported "no node left of space bar",
+skipping the emoji tap for every single story, on every device.
+
+**Root cause of all previous attempts failing.**
+
+All previous attempts tried to fix the width threshold or the position threshold.
+These are the wrong lever. The Instagram composer bar will always exist in the
+dump, will always be in the keyboard screen region, and its width will always
+shift depending on device and Android version. There is no width or position value
+that reliably excludes it on all devices in the farm.
+
+**Fix.**
+
+Parse the `package` attribute that every UIAutomator node carries. The OS sets
+this to the app the node belongs to. Instagram nodes are always
+`package="com.instagram.android"`. Android keyboard keys belong to the IME app
+package (`com.miui.mma` on Xiaomi/MIUI, `com.google.android.inputmethod.latin`
+on Gboard, `com.samsung.android.honeyboard` on Samsung, etc.). Filtering on
+`package != "com.instagram.android"` completely separates the keyboard nodes
+from the Instagram UI nodes — no screen-position math, no width thresholds,
+no device-specific calibration.
+
+```typescript
+// Before (coordinate-based — broke on every device in the farm):
+const _kbNodes = _allNodes.filter(n => n.y1 >= h * 0.60);
+
+// After (package-based — works on any Android device, any screen size):
+const _kbNodes = _allNodes.filter(n => n.pkg !== "com.instagram.android");
+```
+
+The existing Strategy 1 (label-based: find a node whose content-desc contains
+"emoji" / "smiley" / "emoticon") and Strategy 2 (geometry: space bar = widest
+key, emoji = node immediately left) now operate on the correct set of nodes.
+
+**Files changed:**
+
+- `artifacts/api-server/src/routes/mobile.ts` — `package` attribute now parsed
+  for every node; `_kbNodes` filter changed from screen-position to package
+  exclusion; old coordinate-threshold comments removed and replaced with
+  explanation of the actual fix.
+- `package.json` — version `1.2.187` → `1.2.188`.
+- `artifacts/electron/package.json` — version `1.2.187` → `1.2.188`.
+- `CHANGELOG.md` — this entry.
+
+---
+
 ## v1.2.187 — 2026-07-26
 
 ### Bug Fix — View Stories: "Add to story" upload control selected instead of a friend's bubble
