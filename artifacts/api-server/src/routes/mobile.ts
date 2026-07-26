@@ -2558,11 +2558,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 let _ecTapped = false;
                 for (const _ecSeg of _ecXml.split("<node ")) {
                   if (_ecTapped) break;
-                  const _hasMoreText = _ecSeg.includes('text="more"');
-                  const _hasMoreDesc = _ecSeg.includes('content-desc="more"');
+                  // Instagram renders the truncated-caption link as text="more"
+                  // on most builds, but some versions capitalise it as "More".
+                  // Lower-case the segment for the attribute check so both pass.
+                  // The original segment is still used for bounds extraction.
+                  const _ecLower = _ecSeg.toLowerCase();
+                  const _hasMoreText = _ecLower.includes('text="more"');
+                  const _hasMoreDesc = _ecLower.includes('content-desc="more"');
                   if (!_hasMoreText && !_hasMoreDesc) continue;
                   // Reject CTA buttons on sponsored posts — they are Buttons, not TextViews.
-                  if (!_ecSeg.includes('class="android.widget.TextView"')) continue;
+                  if (!_ecLower.includes('class="android.widget.textview"')) continue;
                   const _ecBb = _ecSeg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
                   if (!_ecBb) continue;
                   const _ecX = Math.round((parseInt(_ecBb[1]) + parseInt(_ecBb[3])) / 2);

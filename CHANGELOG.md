@@ -4,6 +4,26 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.170 — 2026-07-26
+
+### Fix: Expand Caption "more" button missed on some IG builds + Switcher poll reduced
+
+#### Expand Caption — case-insensitive "more" match
+
+The caption "more" link was only matched against the exact lowercase string `text="more"`. Some Instagram builds render it as `text="More"` (capital M), causing the action to always report "not visible — skipping" even when the button was clearly on screen. The node check is now case-insensitive, matching both `"more"` and `"More"` (and any other capitalisation) on both the `text` and `content-desc` attributes. The sponsored-post CTA guard (`class="android.widget.TextView"`) is also compared case-insensitively for consistency.
+
+**What changed:**
+- `artifacts/api-server/src/routes/mobile.ts` — expand-caption node check lowercases the segment before attribute matching
+
+#### Account Switcher — poll limit reduced from 5 to 2
+
+The switcher "not fully populated" poll loop was retrying up to 5 times (7.5 s of extra wait) before concluding the target wasn't in the initial dump and moving to the scroll phase. The maximum is now **2 polls** (3 s). On warm devices the account appears on the first dump; on cold launches the second poll is sufficient. The scroll phase (up to 2 swipes) handles the rare case where the account sits below the visible fold.
+
+**What changed:**
+- `artifacts/api-server/src/mobile/androidManager.ts` — `SWITCHER_MAX_POLL` changed from `5` to `2`
+
+---
+
 ## v1.2.169 — 2026-07-26
 
 ### Added — Global Skip List writes from Follow Tool filters + Tap Audio detection improvements

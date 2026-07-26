@@ -4919,7 +4919,7 @@ export async function switchToInstagramAccount(
   let xml = "";
   let coords: { x: number; y: number } | null = null;
   const SWITCHER_POLL_MS  = 1500;
-  const SWITCHER_MAX_POLL = 5;
+  const SWITCHER_MAX_POLL = 2;
   for (let p = 0; p < SWITCHER_MAX_POLL; p++) {
     xml = await _uiDump(adbPath, serial).catch(() => "");
     coords = _findElem(xml, clean, `@${clean}`);
