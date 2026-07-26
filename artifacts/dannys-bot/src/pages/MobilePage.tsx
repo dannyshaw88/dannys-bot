@@ -1721,14 +1721,21 @@ function CalibrationDialog({
   onLog?: (msg: string) => void;
 }) {
   const [step, setStep] = useState(0);
+  // Starts pre-populated with the saved map so the wizard merges into it rather
+  // than wiping previously captured keys when you redo calibration partially.
   const [map, setMap] = useState<Record<string, { x: number; y: number }>>({});
   const [capturing, setCapturing] = useState(false);
   const [lastResult, setLastResult] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  const [existingCount, setExistingCount] = useState<number | null>(null);
-  const [started, setStarted] = useState(false);
+  // "intro" → start screen | "wizard" → full step-through | "editMap" → view/fix individual keys
+  const [mode, setMode] = useState<"intro" | "wizard" | "editMap">("intro");
+  // editMap: which key is currently being re-captured (null = none active)
+  const [editTarget, setEditTarget] = useState<CalibKey | null>(null);
+  const [editResult, setEditResult] = useState<string | null>(null);
+  // editMap: tracking row-level capturing state (by mapKey)
+  const [editCapturing, setEditCapturing] = useState<string | null>(null);
 
-  // Reset state whenever the dialog opens.
+  // Reset state and load existing map whenever the dialog opens.
   useEffect(() => {
     if (!open) return;
     setStep(0);
@@ -1736,12 +1743,24 @@ function CalibrationDialog({
     setCapturing(false);
     setLastResult(null);
     setSaved(false);
-    setStarted(false);
+    setMode("intro");
+    setEditTarget(null);
+    setEditResult(null);
+    setEditCapturing(null);
+
+    // Load full existing map so the wizard can merge into it and editMap can
+    // display current coords without wiping anything.
     fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/keyboard-calibration`)
       .then(r => r.json())
-      .then(body => setExistingCount(body.ok && body.map ? Object.keys(body.map).length : null))
-      .catch(() => setExistingCount(null));
+      .then(body => { if (body.ok && body.map) setMap(body.map); })
+      .catch(() => {});
+
+    // Pre-warm device-info + screen-size caches so the first capture is fast.
+    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/keyboard-calibration/prefetch`, { method: "POST" })
+      .catch(() => {});
   }, [open, serial]);
+
+  const existingCount = Object.keys(map).length;
 
   const currentKey = step < CALIB_KEYS.length ? CALIB_KEYS[step] : null;
   const prevGroupIdx = step > 0 ? CALIB_KEYS[step - 1].groupIdx : -1;
@@ -1778,16 +1797,16 @@ function CalibrationDialog({
 
   const skipKey = () => { setLastResult(null); setStep(s => s + 1); };
 
-  const saveMap = async () => {
+  const saveMap = async (mapToSave = map) => {
     try {
       const resp = await fetch(
         `/api/mobile/devices/${encodeURIComponent(serial)}/keyboard-calibration/save`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ map }) }
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ map: mapToSave }) }
       );
       const body = await resp.json();
       if (body.ok) {
         setSaved(true);
-        onLog?.(`[calibration] Saved ${Object.keys(map).length} keys for ${serial}`);
+        onLog?.(`[calibration] Saved ${Object.keys(mapToSave).length} keys for ${serial}`);
       }
     } catch { /**/ }
   };
@@ -1795,19 +1814,123 @@ function CalibrationDialog({
   const clearExisting = async () => {
     try {
       await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/keyboard-calibration`, { method: "DELETE" });
-      setExistingCount(null);
+      setMap({});
       onLog?.("[calibration] Existing map cleared");
     } catch { /**/ }
   };
 
+  // Re-capture a single key from the Edit Map view and immediately save.
+  const captureEditKey = async (key: CalibKey) => {
+    if (editCapturing) return;
+    const mapKey = key.mapKey ?? key.label;
+    setEditCapturing(mapKey);
+    setEditTarget(key);
+    setEditResult(null);
+    try {
+      const resp = await fetch(
+        `/api/mobile/devices/${encodeURIComponent(serial)}/keyboard-calibration/capture`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ timeoutMs: 12000 }) }
+      );
+      const body = await resp.json();
+      if (body.ok && body.x != null && body.y != null) {
+        const newMap = { ...map, [mapKey]: { x: body.x, y: body.y } };
+        setMap(newMap);
+        setEditResult(`✓ ${key.display} → (${body.x}, ${body.y})`);
+        onLog?.(`[calibration] re-captured '${key.display}' → (${body.x}, ${body.y})`);
+        // Auto-save so existing keys for other letters are never lost.
+        await saveMap(newMap);
+      } else {
+        setEditResult(`✗ ${body.error ?? "No tap detected — try again"}`);
+      }
+    } catch {
+      setEditResult("✗ Request failed — check server logs");
+    } finally {
+      setEditCapturing(null);
+      setEditTarget(null);
+    }
+  };
+
   return (
-    <Dialog open={open} onOpenChange={v => { if (!capturing) onOpenChange(v); }}>
+    <Dialog open={open} onOpenChange={v => { if (!capturing && !editCapturing) onOpenChange(v); }}>
       <DialogContent className="max-w-md border-slate-700 bg-slate-950 text-slate-100">
         <DialogHeader>
-          <DialogTitle className="text-sm">Keyboard Calibration</DialogTitle>
+          <DialogTitle className="text-sm">
+            {mode === "editMap" ? "Edit Calibration Map" : "Keyboard Calibration"}
+          </DialogTitle>
         </DialogHeader>
 
-        {!started ? (
+        {/* ── Edit Map view ── */}
+        {mode === "editMap" ? (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-slate-400">
+                {existingCount} / {CALIB_KEYS.length} keys mapped — click Re-tap to fix any wrong one
+              </p>
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-slate-300 hover:bg-slate-800"
+                onClick={() => { setMode("intro"); setEditResult(null); }} disabled={!!editCapturing}>
+                ← Back
+              </Button>
+            </div>
+            {editResult && (
+              <p className={`text-xs font-mono px-2 ${editResult.startsWith("✓") ? "text-green-400" : "text-red-400"}`}>
+                {editResult}
+              </p>
+            )}
+            {editCapturing && (
+              <div className="flex items-center gap-2 rounded-lg border border-blue-700/60 bg-blue-950/60 px-3 py-2">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-300 flex-shrink-0" />
+                <p className="text-xs text-blue-200">
+                  Listening for tap on <strong>{editTarget?.display}</strong> — tap the key on the phone now…
+                </p>
+              </div>
+            )}
+            <div className="max-h-[52vh] overflow-y-auto space-y-4 pr-1">
+              {CALIB_GROUPS.map(group => (
+                <div key={group.name}>
+                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">{group.name}</p>
+                  <div className="space-y-1">
+                    {group.keys.map(k => {
+                      const mk = k.mapKey ?? k.label;
+                      const coord = map[mk];
+                      const isActive = editCapturing === mk;
+                      return (
+                        <div key={mk}
+                          className={`flex items-center justify-between rounded-md px-2.5 py-1.5 ${isActive ? "bg-blue-950/70 border border-blue-700/60" : "bg-slate-900 border border-slate-800"}`}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={`text-[10px] font-bold flex-shrink-0 ${coord ? "text-green-400" : "text-slate-600"}`}>
+                              {coord ? "✓" : "✗"}
+                            </span>
+                            <span className="text-xs text-slate-200 truncate">{k.display}</span>
+                            {coord && (
+                              <span className="text-[10px] text-slate-500 font-mono flex-shrink-0">
+                                ({coord.x}, {coord.y})
+                              </span>
+                            )}
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className={`h-6 px-2 text-[10px] flex-shrink-0 ml-2 ${isActive ? "text-blue-300" : "text-slate-400 hover:text-slate-200 hover:bg-slate-700"}`}
+                            onClick={() => captureEditKey({ ...k, groupIdx: CALIB_GROUPS.indexOf(group), groupName: group.name, instructions: group.instructions })}
+                            disabled={!!editCapturing}
+                          >
+                            {isActive ? <Loader2 className="w-3 h-3 animate-spin" /> : "Re-tap"}
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <Button variant="outline" className="w-full border-slate-600 text-slate-200 hover:bg-slate-800"
+              onClick={() => onOpenChange(false)} disabled={!!editCapturing}>
+              Done
+            </Button>
+          </div>
+
+        ) : mode === "intro" ? (
+        /* ── Intro / start screen ── */
           <div className="space-y-4">
             <div className="rounded-lg border border-amber-500/50 bg-amber-950/50 px-3 py-3">
               <p className="text-xs font-bold uppercase tracking-wide text-amber-200">Do this first</p>
@@ -1821,30 +1944,41 @@ function CalibrationDialog({
               <li>Keep the phone screen awake while calibration runs.</li>
               <li>After each prompt, tap the matching key on the phone.</li>
             </ol>
-            {existingCount != null && (
-              <div className="flex items-center justify-between rounded-lg border border-amber-700/60 bg-amber-950/40 px-3 py-2">
-                <span className="text-xs text-amber-200">
-                  Existing map: {existingCount} keys — this run will replace it
-                </span>
+            {existingCount > 0 && (
+              <div className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-300">
+                    Saved map: <span className="text-green-400 font-semibold">{existingCount}</span> / {CALIB_KEYS.length} keys
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2 text-xs text-red-400 hover:bg-red-950/50 hover:text-red-300"
+                    onClick={clearExisting}
+                  >
+                    Clear all
+                  </Button>
+                </div>
                 <Button
                   size="sm"
-                  variant="ghost"
-                  className="h-7 px-2 text-xs text-amber-200 hover:bg-red-950/50 hover:text-red-200"
-                  onClick={clearExisting}
+                  variant="outline"
+                  className="w-full h-7 text-xs border-slate-600 text-slate-200 hover:bg-slate-800"
+                  onClick={() => { setSaved(false); setMode("editMap"); }}
                 >
-                  Clear
+                  View & fix individual keys →
                 </Button>
               </div>
             )}
             <div className="flex gap-2">
-              <Button className="flex-1" onClick={() => setStarted(true)}>
-                Keyboard is open — Start
+              <Button className="flex-1" onClick={() => setMode("wizard")}>
+                {existingCount > 0 ? "Re-run full calibration" : "Keyboard is open — Start"}
               </Button>
               <Button variant="outline" className="border-slate-600 text-slate-200 hover:bg-slate-800" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
             </div>
           </div>
+
         ) : isDone ? (
           /* ── Done ── */
           <div className="space-y-3">
@@ -1864,14 +1998,14 @@ function CalibrationDialog({
             ) : (
               <div className="flex gap-2">
                 {Object.keys(map).length > 0 && (
-                  <Button className="flex-1" onClick={saveMap}>Save calibration</Button>
+                  <Button className="flex-1" onClick={() => saveMap()}>Save calibration</Button>
                 )}
                 <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>Discard</Button>
               </div>
             )}
           </div>
         ) : (
-          /* ── Step-through ── */
+          /* ── Step-through wizard ── */
           <div className="space-y-3">
             {/* Layer instructions */}
             {showGroupHeader && (

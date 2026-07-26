@@ -9930,6 +9930,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // Captures one physical tap via getevent so the UI can build a per-device
   // key map for real-tap keyboard typing (each keystroke = real OS touch event).
 
+  /** Pre-warm device-info + screen-size caches so subsequent captures are instant. */
+  app.post("/api/mobile/devices/:serial/keyboard-calibration/prefetch", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const ok = await android.prefetchCalibrationData(serial);
+      res.json({ ok });
+    } catch (e: any) { res.status(400).json({ ok: false, error: e?.message }); }
+  });
+
   /** Wait for a single physical tap and return its screen-pixel coordinate. */
   app.post("/api/mobile/devices/:serial/keyboard-calibration/capture", async (req: Request, res: Response) => {
     try {

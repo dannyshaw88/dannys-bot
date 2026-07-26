@@ -6424,6 +6424,32 @@ export async function typeViaOnscreenKeyboard(
 /** Map from key label (e.g. "a", "@", "space", "delete") to screen coordinate. */
 export type KeyCalibrationMap = Record<string, { x: number; y: number }>;
 
+// Per-session caches so repeated captureOneTap calls during a calibration
+// session skip the slow getevent -lp and UIAutomator dump queries.
+// Keyed by device serial. Cleared automatically when the server restarts.
+const _calDeviceInfoCache = new Map<string, { device: string; maxX: number; maxY: number }>();
+const _calScreenSizeCache = new Map<string, { w: number; h: number }>();
+
+/**
+ * Pre-warm the per-device calibration caches (touch device info + screen size).
+ * Call once when the calibration dialog opens so all subsequent captureOneTap
+ * calls return almost immediately instead of spending 3-5 s on setup queries.
+ */
+export async function prefetchCalibrationData(serial: string): Promise<boolean> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  if (!_calScreenSizeCache.has(serial)) {
+    const xml = await _uiDump(adb, serial);
+    const { w, h } = _getScreenSize(xml);
+    if (w && h) _calScreenSizeCache.set(serial, { w, h });
+  }
+  if (!_calDeviceInfoCache.has(serial)) {
+    const devInfo = await _getTouchDeviceInfo(adb, serial);
+    if (devInfo) _calDeviceInfoCache.set(serial, devInfo);
+  }
+  return _calScreenSizeCache.has(serial) && _calDeviceInfoCache.has(serial);
+}
+
 function _calibrationPath(serial: string): string {
   const safeSerial = serial.replace(/[^a-z0-9]/gi, "-");
   const dir = process.env.EQUINOX_DATA_DIR ?? process.cwd();
@@ -6491,14 +6517,28 @@ export async function captureOneTap(
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
 
-  // Get screen dimensions from a UIAutomator dump.
-  const xml = await _uiDump(adb, serial);
-  const { w: screenW, h: screenH } = _getScreenSize(xml);
-  if (!screenW || !screenH) return null;
+  // Use cached screen size if available (populated by prefetchCalibrationData),
+  // otherwise fall back to a fresh UIAutomator dump.
+  let screenW: number, screenH: number;
+  const cachedSize = _calScreenSizeCache.get(serial);
+  if (cachedSize) {
+    screenW = cachedSize.w; screenH = cachedSize.h;
+  } else {
+    const xml = await _uiDump(adb, serial);
+    const { w, h } = _getScreenSize(xml);
+    if (!w || !h) return null;
+    _calScreenSizeCache.set(serial, { w, h });
+    screenW = w; screenH = h;
+  }
 
-  // Find the touchscreen event device and its axis ranges.
-  const devInfo = await _getTouchDeviceInfo(adb, serial);
-  if (!devInfo) return null;
+  // Use cached device info if available, otherwise discover it now.
+  let devInfo = _calDeviceInfoCache.get(serial);
+  if (!devInfo) {
+    const discovered = await _getTouchDeviceInfo(adb, serial);
+    if (!discovered) return null;
+    _calDeviceInfoCache.set(serial, discovered);
+    devInfo = discovered;
+  }
   const { device, maxX, maxY } = devInfo;
 
   return new Promise<{ x: number; y: number } | null>((resolve) => {
