@@ -4,6 +4,61 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.186 — 2026-07-26
+
+### Bug Fix — View Stories skips the account’s own upload bubble
+
+**What was wrong.**
+
+The View Stories tool correctly located the story tray, but it treated the
+leftmost bubble as a story to watch. Instagram always places the signed-in
+account’s own “Your story” / upload control first. Opening it entered the
+add-to-story flow instead of viewing another account’s story.
+
+**Fix.**
+
+Story candidates are now read from the live UIAutomator bounds, sorted from
+left to right, and deduplicated when Instagram exposes both a wrapper node and
+its avatar child. The leftmost physical bubble is explicitly excluded before
+the normal story-opening attempts begin. This works even when the upload label
+is attached to a wrapper or omitted from the node carrying the resource ID.
+
+### Improvement — Start every Windows debug log with a clean session
+
+**What was wrong.**
+
+`aura-farming-debug.log` was opened in append mode by the API server, so every
+Electron restart carried old sessions into the new log. That made it difficult
+to isolate the events from the most recent software launch.
+
+**Fix.**
+
+The server now truncates `aura-farming-debug.log` when it starts and continues
+writing normally for the duration of that session. The existing 5 MB
+in-session limit remains unchanged.
+
+### GitHub Actions — Windows installer
+
+The existing canonical `.github/workflows/build-windows-installer.yml`
+workflow remains the only Windows installer workflow. Every push to `main`
+builds the web and API bundles, packages the Electron application on
+`windows-latest`, and uploads the resulting
+`Aura-Farming-Windows-Installer` artifact. No duplicate installer workflow was
+created.
+
+**Files changed:**
+
+- `artifacts/api-server/src/routes/mobile.ts` — exclude Instagram’s own
+  leftmost upload bubble from View Stories candidates.
+- `artifacts/api-server/src/index.ts` — truncate the server debug log at
+  startup while preserving normal session logging and size limiting.
+- `package.json` — version `1.2.185` → `1.2.186`.
+- `artifacts/electron/package.json` — version `1.2.185` → `1.2.186`.
+- `.github/workflows/build-windows-installer.yml` — verified as the canonical
+  Windows installer Actions workflow; no duplicate was added.
+
+---
+
 ## v1.2.185 — 2026-07-26
 
 ### Bug Fix — View Stories finds no bubbles even though stories are visible on screen

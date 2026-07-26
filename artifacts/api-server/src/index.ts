@@ -14,11 +14,13 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${process.env["PORT"]}"`);
 }
 
-// ── Rolling server log file ───────────────────────────────────────────────────
+// ── Per-session server log file ───────────────────────────────────────────────
 // Tees every console.log / console.error line to an on-disk log file so the
 // user can inspect what happened in the Windows production app without needing
 // DevTools or a command prompt.  The file is capped at 5 MB and rotates by
-// discarding the oldest half when the limit is reached.
+// discarding the oldest half when the limit is reached. It starts empty on
+// every server launch so a fresh Electron restart never mixes old sessions
+// into the current debug log.
 const SERVER_LOG_PATH = process.env.DATABASE_PATH
   ? path.join(path.dirname(process.env.DATABASE_PATH), "aura-farming-debug.log")
   : path.join(process.cwd(), "aura-farming-debug.log");
@@ -30,7 +32,7 @@ const MAX_LOG_BYTES = 5 * 1024 * 1024;
 
 let _logFd: number | null = null;
 try {
-  _logFd = fs.openSync(SERVER_LOG_PATH, "a");
+  _logFd = fs.openSync(SERVER_LOG_PATH, "w");
 } catch {}
 
 function _formatLogTs(): string {
