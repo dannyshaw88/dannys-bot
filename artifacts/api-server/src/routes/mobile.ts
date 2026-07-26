@@ -3592,6 +3592,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             await sleepOrAbort(serial, 500); // picker animates open
 
             const _pickerXml = await android.dumpUi(serial).catch(() => "");
+
+            // Derive the compose bar's current y2 from the fresh dump so we can
+            // exclude the story quick-reaction row (always rendered ABOVE the
+            // compose bar) from the cell scan.  After the keyboard animates up
+            // the compose bar shifts upward; its y2 in this dump is the boundary
+            // between the story UI above and the picker/keyboard area below.
+            const _composerNodeAfter = [..._pickerXml.matchAll(/<node\s([^>]+?)(?:\/?>)/g)]
+              .find(m => /(?:id|resource-id)="[^"]*message_composer_container"/.test(m[1]));
+            const _composerY2After = (() => {
+              const b = _composerNodeAfter?.[1].match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+              return b ? +b[4] : Math.round(h * 0.55); // fallback: 55 % of screen
+            })();
+            onLog?.(`Story ${s + 1}: picker area floor y=${_composerY2After} (compose bar y2 after keyboard open)`);
+
             const _emojiCells = [..._pickerXml.matchAll(/<node\s([^>]+?)(?:\/?>)/g)]
               .map((m) => {
                 const attrs = m[1];
@@ -3604,6 +3618,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   const code = char.codePointAt(0) ?? 0;
                   return code >= 0x1f000 || (code >= 0x2600 && code <= 0x27bf);
                 });
+                // y1 must be AT OR BELOW the compose bar's bottom edge — this
+                // excludes the story quick-reaction row which always sits above it.
+                if (y1 < _composerY2After) return null;
                 if (!/clickable="true"/i.test(attrs) ||
                     (!isEmojiLabel && !/emoji|emoticon/i.test(resourceId)) ||
                     /category|tab|search|delete|backspace/i.test(resourceId) ||
@@ -3664,6 +3681,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
                 // Re-verify picker after label-tap.
                 const _pickerXml2 = await android.dumpUi(serial).catch(() => "");
+                // Reuse the same compose-bar floor derived before the PICTSYMBOLS
+                // attempt — same exclusion of the quick-reaction row applies here.
                 _emojiCellsFinal = [..._pickerXml2.matchAll(/<node\s([^>]+?)(?:\/?>)/g)]
                   .map((m) => {
                     const attrs = m[1];
@@ -3676,6 +3695,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                       const code = char.codePointAt(0) ?? 0;
                       return code >= 0x1f000 || (code >= 0x2600 && code <= 0x27bf);
                     });
+                    if (y1 < _composerY2After) return null;
                     if (!/clickable="true"/i.test(attrs) ||
                         (!isEmojiLabel && !/emoji|emoticon/i.test(resourceId)) ||
                         /category|tab|search|delete|backspace/i.test(resourceId) ||

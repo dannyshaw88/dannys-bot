@@ -4,6 +4,16 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.194 — 2026-07-26
+
+### Bug Fix — View Stories emoji comment: exclude quick-reaction row from emoji picker cell scan
+
+After `KEYCODE_PICTSYMBOLS` the code dumped Instagram's UI and matched the story quick-reaction row (😂 🤩 😭 👋 🔥 — always rendered above the compose bar) as "emoji picker cells". Tapping those nodes sent a direct story reaction instead of entering text in the compose bar, so the send button never appeared.
+
+Fix: derive the compose bar's `y2` position from the same post-PICTSYMBOLS dump and require every emoji cell to have `y1 >= composerY2`. This excludes the quick-reaction row (above the compose bar) and limits the cell scan to the picker/keyboard area below it. The same y-floor is applied to the Strategy B re-verify scan. Falls back to 55 % of screen height if the compose bar node is absent from the dump.
+
+---
+
 ## v1.2.193 — 2026-07-26
 
 ### Bug Fix — View Stories emoji comment: replace all coordinate paths with KEYCODE_PICTSYMBOLS + node fallback
