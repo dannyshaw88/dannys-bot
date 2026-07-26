@@ -4,6 +4,58 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.195 — 2026-07-26
+
+### Feature — On-screen keyboard fully rebuilt: IME-inclusive dump, no label-length cap, no adb fallbacks, Shift for uppercase
+
+**Background — why the keyboard never actually worked on this farm:**
+Every Xiaomi MIUI device in the farm uses a system IME keyboard whose keys are rendered in a separate Android window (the IME window). The standard `uiautomator dump` command only walks the foreground app window — on MIUI it never surfaces the keyboard's key nodes. As a result `typeViaOnscreenKeyboard` always found 0 keys, silently fell through to `adb input text` for the whole string, and **real per-key tapping has never fired on any device in this farm**. The function appeared to work (text was typed) but it was always via the direct text-injection shortcut, not the simulated human key-press path.
+
+**Root cause — dump command:**
+`_uiDump` (the old call) runs `uiautomator dump` without any flags. On MIUI the IME is a distinct window excluded from that walk. The fix is `uiautomator dump --include-ime`, which exists in `dumpUiWithIme` but was never wired into the keyboard function.
+
+**Root cause — label-length cap:**
+The old `refreshKeyMap` pattern only matched nodes whose `text` or `content-desc` was 1–3 characters. This blocked every multi-character key label: `Delete`, `Space`, `Return`, `?123`, `shift`, the emoji key, etc. — none of these were ever stored in the map.
+
+**Root cause — `adb input text` fallbacks:**
+When any key was not found (which was always, given the two bugs above), the code silently called `_adbType` — a direct text-injection command. This is not a tap. It bypasses the keyboard entirely and sends the text as if pasted. Real user simulation requires individual key taps.
+
+**What was changed — `androidManager.ts` → `typeViaOnscreenKeyboard`:**
+
+1. **`dumpUiWithIme` replaces `_uiDump`** — `refreshKeyMap` now calls `dumpUiWithIme(serial)` which runs `uiautomator dump --include-ime`. The IME keyboard window is included in the XML walk. On devices where the flag is not supported the function falls back to a standard dump automatically (no crash). When working correctly you will see log lines like `[keyboard] letters layer: 32 keys found (IME dump)`.
+
+2. **No label-length limit** — the old 1–3 character cap is removed. The node walker now accepts any non-empty label, capturing `Delete`, `Space`, `Return`, `?123`, `!#1`, `Shift`, `⇧`, `emoji` and every other long-label key alongside the single-letter keys.
+
+3. **No `adb input text` fallback anywhere** — all `_adbType` calls inside this function are gone. If a key is genuinely not in the dump the character is **logged and skipped** (`[keyboard] 'x' not found in key map — skipping`). This makes failures visible in the log instead of hiding them behind a shortcut that looks like it worked.
+
+4. **Uppercase via Shift** — when a character is uppercase the function first looks up `shift` / `Shift` / `⇧` in the key map, taps it, waits 150 ms, re-dumps the keyboard (which may now show capital-letter nodes), then taps the letter. Previously uppercase characters either silently fell through or were text-injected.
+
+5. **Space handled explicitly** — looks for `" "` (raw space), `"space"`, or `"Space"` in the key map. Previously space had no dedicated path and would only have worked if the IME dump ever surfaced a space node (it didn't, because the IME window wasn't included).
+
+6. **Symbol-layer fallback for non-letter characters** — if a character is not found on the letters layer the function now automatically calls `switchToSymbols()`, checks the symbol layer, and switches back to letters afterward. Previously this only applied to `@` and digits.
+
+7. **When 0 keys found at startup** — if the IME dump returns fewer than 5 keys the function logs `[keyboard] 0 keys found in IME dump — keyboard not visible or --include-ime unsupported; skipping type` and returns immediately. No text is typed, which is the honest outcome when the keyboard cannot be read. The log line clearly signals whether this is a device-version issue (unsupported flag) or a timing issue (keyboard not yet visible when the function was called).
+
+**What to watch in the log when the Follow tool types a username:**
+- Working: `[keyboard] letters layer: 32 keys found (IME dump)` followed by `[keyboard] tapped 'e' at (213,1987)` etc.
+- Unsupported flag: `[keyboard] 0 keys found in IME dump — keyboard not visible or --include-ime unsupported; skipping type` → indicates the Android version on that device needs the `getevent` approach instead.
+
+---
+
+### Bug Fix — View Stories emoji comment: IME-local coordinate guard added to both picker scans
+
+**Problem:** After `KEYCODE_PICTSYMBOLS` opened the emoji picker the bot tapped at the wrong location on screen. For example on a 2460 px tall Xiaomi device a cell would be detected at y≈429 and the bot would tap (x, 429) — landing 17% from the top of the screen, inside the story content area, far from any emoji.
+
+**Root cause:** The Android IME serves the emoji picker inside the IME window, not the Instagram app window. `uiautomator dump` (without `--include-ime`) reports IME-window nodes in IME-window-local coordinates where y=0 is the top of the keyboard, not the top of the screen. A picker cell at IME-local y=429 translates to approximately screen y=2031 on a 2460 px screen, but the bot was tapping the raw IME-local value directly on the full screen.
+
+**Fix:** Both emoji-cell scans now reject any cell whose centre y is less than 55% of screen height. Cells in the real keyboard area (bottom 45% of the screen) have an absolute screen-y above that threshold; IME-local coordinate artefacts cluster near the top of the screen and are discarded. The guard is applied identically in:
+- **Strategy A scan** (after `KEYCODE_PICTSYMBOLS`) — new field `cellCenterY`, rejected if `cellCenterY < h * 0.55`
+- **Strategy B re-verification scan** (after label-based emoji-key tap) — new field `cellCenterY2`, same threshold
+
+**Effect:** When the emoji percentage is turned back up from 0, detected cells will be in the correct screen-coordinate range and taps will land inside the picker.
+
+---
+
 ## v1.2.194 — 2026-07-26
 
 ### Bug Fix — Follow tool: chip rows (search/clock) no longer block the target user's profile

@@ -6231,45 +6231,44 @@ export async function typeViaOnscreenKeyboard(
   let keyMap = new Map<string, { x: number; y: number }>();
   let keyMapMode: "letters" | "symbols" = "letters";
 
-  /** Rebuild the key-position map from the current UIAutomator dump. */
+  /**
+   * Rebuild the key-position map using dumpUiWithIme so MIUI/Gboard/Samsung
+   * keyboard nodes actually appear (the old _uiDump missed the IME window on
+   * Xiaomi devices). No label-length cap — "Delete", "Space", "Return",
+   * "?123", "shift", emoji key, etc. are all captured.
+   */
   const refreshKeyMap = async (mode: "letters" | "symbols") => {
     keyMapMode = mode;
     keyMap.clear();
-    const xml = await _uiDump(adb, serial);
+    const { xml } = await dumpUiWithIme(serial).catch(() => ({ xml: "", imeIncluded: false }));
     if (!xml) return;
     const { h } = _getScreenSize(xml);
     // Keyboard occupies the bottom ~45 % of the screen.
     const keyboardTopY = Math.round(h * 0.55);
-    // Parse every clickable node with 1-3 char label in the keyboard zone.
-    // The regex covers both attribute orderings produced by different Android versions.
-    const patterns = [
-      /<node[^>]*\btext="([^"]{1,3})"[^>]*\bclickable="true"[^>]*\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^/]*\/>/gi,
-      /<node[^>]*\bcontent-desc="([^"]{1,3})"[^>]*\bclickable="true"[^>]*\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^/]*\/>/gi,
-      /<node[^>]*\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^>]*\bclickable="true"[^>]*\btext="([^"]{1,3})"[^/]*\/>/gi,
-      /<node[^>]*\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^>]*\bclickable="true"[^>]*\bcontent-desc="([^"]{1,3})"[^/]*\/>/gi,
-    ];
-    for (const re of patterns) {
-      let m: RegExpExecArray | null;
-      while ((m = re.exec(xml)) !== null) {
-        // Groups differ by pattern: either (label, x1,y1,x2,y2) or (x1,y1,x2,y2,label)
-        let label: string, x1: string, y1: string, x2: string, y2: string;
-        if (m.length === 6) {
-          if (patterns.indexOf(re) < 2) {
-            [, label, x1, y1, x2, y2] = m;
-          } else {
-            [, x1, y1, x2, y2, label] = m;
-          }
-        } else continue;
-        const centerY = (Number(y1) + Number(y2)) / 2;
-        if (centerY < keyboardTopY) continue;
-        const key = label.trim();
-        if (!key || key.length > 3) continue;
-        const cx = Math.round((Number(x1) + Number(x2)) / 2);
-        const cy = Math.round(centerY);
-        if (!keyMap.has(key)) keyMap.set(key, { x: cx, y: cy });
-      }
+    // Walk every node — no label-length limit.
+    const nodeRe = /<node\s([^>]+?)(?:\/?>)/g;
+    let m: RegExpExecArray | null;
+    while ((m = nodeRe.exec(xml)) !== null) {
+      const attrs = m[1];
+      if (!/clickable="true"/i.test(attrs)) continue;
+      const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (!bounds) continue;
+      const x1 = +bounds[1], y1 = +bounds[2], x2 = +bounds[3], y2 = +bounds[4];
+      const centerY = (y1 + y2) / 2;
+      if (centerY < keyboardTopY) continue;
+      const label = (
+        attrs.match(/\btext="([^"]+)"/i)?.[1] ??
+        attrs.match(/\bcontent-desc="([^"]+)"/i)?.[1] ?? ""
+      ).trim();
+      if (!label) continue;
+      const cx = Math.round((x1 + x2) / 2);
+      const cy = Math.round(centerY);
+      if (!keyMap.has(label)) keyMap.set(label, { x: cx, y: cy });
+      // Also index by lowercase so lookup is case-insensitive for letters.
+      const low = label.toLowerCase();
+      if (!keyMap.has(low)) keyMap.set(low, { x: cx, y: cy });
     }
-    onLog?.(`[keyboard] ${mode}: ${keyMap.size} keys mapped`);
+    onLog?.(`[keyboard] ${mode} layer: ${keyMap.size} keys found (IME dump)`);
   };
 
   const switchToSymbols = async () => {
@@ -6278,8 +6277,7 @@ export async function typeViaOnscreenKeyboard(
     if (sym) {
       _adbTap(adb, serial, sym.x, sym.y);
     } else {
-      // Try a fresh dump for the symbol-switch key
-      const xml2 = await _uiDump(adb, serial);
+      const { xml: xml2 } = await dumpUiWithIme(serial).catch(() => ({ xml: "", imeIncluded: false }));
       const symKey = _findByResId(xml2, ":id/sym_keyboard_key", ":id/key_switch_alpha_numeric", ":id/numberswitch_key") ||
         _findElem(xml2, "?123", "123", "!#1");
       if (symKey) _adbTap(adb, serial, symKey.x, symKey.y);
@@ -6294,7 +6292,7 @@ export async function typeViaOnscreenKeyboard(
     if (abc) {
       _adbTap(adb, serial, abc.x, abc.y);
     } else {
-      const xml2 = await _uiDump(adb, serial);
+      const { xml: xml2 } = await dumpUiWithIme(serial).catch(() => ({ xml: "", imeIncluded: false }));
       const abcKey = _findByResId(xml2, ":id/alpha_keyboard_key", ":id/key_switch_alpha_numeric") ||
         _findElem(xml2, "ABC", "abc");
       if (abcKey) _adbTap(adb, serial, abcKey.x, abcKey.y);
@@ -6305,31 +6303,29 @@ export async function typeViaOnscreenKeyboard(
 
   await refreshKeyMap("letters");
 
-  // Verify the keyboard actually opened — a real soft-keyboard has ≥ 20
-  // mappable keys. Fewer means the field wasn't focused yet (the bar tap
-  // landed below the field, the Explore page settled late, etc.).
-  // One check, no retries (per project rule, 15 Jul 2026): if it fails
-  // once, fall straight through to the IME fallback below instead of
-  // polling again — callers that need the keyboard to have settled first
-  // must add their own upfront wait before calling this function.
   if (keyMap.size < 5) {
-    // The accessibility dump never surfaced the on-screen keyboard's keys —
-    // on some devices/IME builds uiautomator's window walk misses the IME
-    // window (or a slow dump gets truncated) even though the keyboard is
-    // genuinely visible and focused. Previously this returned here having
-    // typed NOTHING, which silently dropped the whole username. Since the
-    // field is confirmed focused (that's a precondition of this function),
-    // fall back to injecting the text directly via the device's input
-    // method instead of aborting — better a real IME-driven type than no
-    // type at all. Per-character tap mode remains the default path
-    // whenever key positions ARE discoverable, since that's the more
-    // human-like gesture this tool is built around.
-    onLog?.(`[keyboard] keyboard keys not found in accessibility tree after retries — falling back to IME text injection for the whole string`);
-    _adbType(adb, serial, text);
+    // --include-ime not supported on this device or keyboard not yet visible.
+    // No fallback to adb input text — log and bail so the caller knows.
+    onLog?.(`[keyboard] 0 keys found in IME dump — keyboard not visible or --include-ime unsupported; skipping type`);
     return;
   }
 
   for (const ch of text) {
+    // ── Space ───────────────────────────────────────────────────────────────
+    if (ch === " ") {
+      if (keyMapMode !== "letters") await switchToLetters();
+      const spaceKey = keyMap.get(" ") ?? keyMap.get("space") ?? keyMap.get("Space");
+      if (spaceKey) {
+        _adbTap(adb, serial, spaceKey.x, spaceKey.y);
+        onLog?.(`[keyboard] tapped space at (${spaceKey.x},${spaceKey.y})`);
+      } else {
+        onLog?.(`[keyboard] space key not found — skipping`);
+      }
+      await _sleep(150 + Math.round(Math.random() * 100));
+      continue;
+    }
+
+    // ── @ ────────────────────────────────────────────────────────────────────
     if (ch === "@") {
       await switchToSymbols();
       const atKey = keyMap.get("@");
@@ -6337,14 +6333,14 @@ export async function typeViaOnscreenKeyboard(
         _adbTap(adb, serial, atKey.x, atKey.y);
         onLog?.(`[keyboard] tapped @ at (${atKey.x},${atKey.y})`);
       } else {
-        _adbType(adb, serial, "@");
-        onLog?.(`[keyboard] @ not found — used adb input text fallback`);
+        onLog?.(`[keyboard] @ not found — skipping`);
       }
       await _sleep(200 + Math.round(Math.random() * 100));
       await switchToLetters();
       continue;
     }
 
+    // ── Digits ───────────────────────────────────────────────────────────────
     if (ch >= "0" && ch <= "9") {
       await switchToSymbols();
       const numKey = keyMap.get(ch);
@@ -6352,28 +6348,56 @@ export async function typeViaOnscreenKeyboard(
         _adbTap(adb, serial, numKey.x, numKey.y);
         onLog?.(`[keyboard] tapped '${ch}' at (${numKey.x},${numKey.y})`);
       } else {
-        _adbType(adb, serial, ch);
-        onLog?.(`[keyboard] '${ch}' not found — used adb input text fallback`);
+        onLog?.(`[keyboard] '${ch}' not found — skipping`);
       }
       await _sleep(200 + Math.round(Math.random() * 100));
       continue;
     }
 
-    // Letters — ensure letter layer
+    // ── Letters (lower + upper) ───────────────────────────────────────────────
     if (keyMapMode !== "letters") await switchToLetters();
+
+    const isUpper = ch !== ch.toLowerCase();
     const lower = ch.toLowerCase();
+
+    if (isUpper) {
+      // Tap Shift to capitalise the next letter.
+      const shiftKey = keyMap.get("shift") ?? keyMap.get("Shift") ?? keyMap.get("⇧");
+      if (shiftKey) {
+        _adbTap(adb, serial, shiftKey.x, shiftKey.y);
+        onLog?.(`[keyboard] tapped Shift at (${shiftKey.x},${shiftKey.y})`);
+        await _sleep(150);
+        // Refresh — keyboard may swap to its capitalised-letters layout.
+        await refreshKeyMap("letters");
+      } else {
+        onLog?.(`[keyboard] Shift key not found — will try uppercase label directly`);
+      }
+    }
+
     let key = keyMap.get(lower) ?? keyMap.get(ch);
     if (!key) {
-      // Refresh once — keyboard may have re-rendered
+      // Refresh once in case the keyboard re-rendered.
       await refreshKeyMap("letters");
       key = keyMap.get(lower) ?? keyMap.get(ch);
+    }
+    // Symbol not on letters layer — try switching to symbols layer.
+    if (!key) {
+      await switchToSymbols();
+      key = keyMap.get(ch);
+      if (key) {
+        _adbTap(adb, serial, key.x, key.y);
+        onLog?.(`[keyboard] tapped '${ch}' at (${key.x},${key.y}) (symbols layer)`);
+        await _sleep(150 + Math.round(Math.random() * 100));
+        await switchToLetters();
+        continue;
+      }
+      await switchToLetters();
     }
     if (key) {
       _adbTap(adb, serial, key.x, key.y);
       onLog?.(`[keyboard] tapped '${ch}' at (${key.x},${key.y})`);
     } else {
-      _adbType(adb, serial, ch);
-      onLog?.(`[keyboard] '${ch}' not found — used adb input text fallback`);
+      onLog?.(`[keyboard] '${ch}' not found in key map — skipping`);
     }
     await _sleep(150 + Math.round(Math.random() * 100));
   }

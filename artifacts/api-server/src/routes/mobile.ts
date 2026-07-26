@@ -3604,10 +3604,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   const code = char.codePointAt(0) ?? 0;
                   return code >= 0x1f000 || (code >= 0x2600 && code <= 0x27bf);
                 });
+                // Reject cells whose centre is above 55 % of screen height —
+                // the Android IME reports its picker nodes in IME-window-local
+                // coordinates (y=0 = top of keyboard), so a cell at y≈429 on a
+                // 2460-px screen is actually inside the keyboard, not near the
+                // top of the display. Any cell with centre y < 55 % of screen
+                // height is in the wrong coordinate space and must be discarded.
+                const cellCenterY = (y1 + y2) / 2;
                 if (!/clickable="true"/i.test(attrs) ||
                     (!isEmojiLabel && !/emoji|emoticon/i.test(resourceId)) ||
                     /category|tab|search|delete|backspace/i.test(resourceId) ||
-                    x2 <= x1 || y2 <= y1 || x2 - x1 >= w * 0.35 || y2 - y1 >= h * 0.35) return null;
+                    x2 <= x1 || y2 <= y1 || x2 - x1 >= w * 0.35 || y2 - y1 >= h * 0.35 ||
+                    cellCenterY < h * 0.55) return null;
                 return { x1, y1, x2, y2 };
               })
               .filter((cell): cell is { x1: number; y1: number; x2: number; y2: number } => cell !== null);
@@ -3676,10 +3684,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                       const code = char.codePointAt(0) ?? 0;
                       return code >= 0x1f000 || (code >= 0x2600 && code <= 0x27bf);
                     });
+                    const cellCenterY2 = (y1 + y2) / 2;
                     if (!/clickable="true"/i.test(attrs) ||
                         (!isEmojiLabel && !/emoji|emoticon/i.test(resourceId)) ||
                         /category|tab|search|delete|backspace/i.test(resourceId) ||
-                        x2 <= x1 || y2 <= y1 || x2 - x1 >= w * 0.35 || y2 - y1 >= h * 0.35) return null;
+                        x2 <= x1 || y2 <= y1 || x2 - x1 >= w * 0.35 || y2 - y1 >= h * 0.35 ||
+                        cellCenterY2 < h * 0.55) return null;
                     return { x1, y1, x2, y2 };
                   })
                   .filter((cell): cell is { x1: number; y1: number; x2: number; y2: number } => cell !== null);
