@@ -4988,25 +4988,35 @@ export async function switchToInstagramAccount(
   _adbTap(adbPath, serial, coords.x, coords.y);
   await _sleep(600); // short wait before verifying the switcher closed
 
-  // 5. Wait for the feed to reload.
+  // 5. Verify that the switcher actually closed before waiting for the feed.
   //
-  // Tapping any account row in the switcher ALWAYS closes the sheet —
-  // confirmed on real-device captures.  The original step here tried to
-  // detect whether the switcher was still open after tapping the already-
-  // active account row, and sent KEYCODE_BACK if so.  That was wrong on two
-  // counts:
+  // Instagram can render the active account as a row that looks tappable but
+  // does not dismiss the sheet on every build.  Do not use the username to
+  // decide whether the sheet is still open: the home feed's profile-tab
+  // content-desc also contains that username.  Instead, positively detect
+  // the Home/feed navigation controls, which only exist after the sheet has
+  // closed.
   //
-  //   a) The assumption ("IG ignores a tap on the active row") is false.
-  //      Instagram closes the switcher regardless of which row is tapped.
-  //
-  //   b) The "still open?" check used _findElem() with a partial-substring
-  //      regex, which matched home-feed nodes that merely contain the
-  //      username as a substring (e.g. the profile-tab nav button's
-  //      content-desc).  This caused KEYCODE_BACK to fire at the home feed,
-  //      producing the "Tap again to exit" toast.
-  //
-  // Correct approach: unconditionally wait for the feed to settle.
-  // No back-key needed — Instagram already dismissed the sheet.
+  // A dump can transiently fail while the UI is settling. Retry once, and
+  // never send a blind BACK when both dumps failed; that could exit Instagram
+  // rather than dismissing the switcher.
+  let postTapXml = await _uiDump(adbPath, serial).catch(() => "");
+  let homeFeedVisible =
+    /content-desc="Home[^"]*"/.test(postTapXml) ||
+    !!_findByResId(postTapXml, ":id/feed_tab", ":id/home_tab");
+  if (!homeFeedVisible && !postTapXml) {
+    await _sleep(500);
+    postTapXml = await _uiDump(adbPath, serial).catch(() => "");
+    homeFeedVisible =
+      /content-desc="Home[^"]*"/.test(postTapXml) ||
+      !!_findByResId(postTapXml, ":id/feed_tab", ":id/home_tab");
+  }
+  if (!homeFeedVisible && postTapXml) {
+    onLog?.(`  ↳ Account switcher still open — dismissing with BACK`);
+    await pressBack(serial).catch(() => {});
+  }
+
+  // 6. Wait for the feed to reload.
   await _sleep(2000); // give Instagram time to reload the new account's feed
   return true;
 }
