@@ -4,6 +4,86 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.196 — 2026-07-26
+
+### Revert — Undo v1.2.195 IME keyboard rewrite and emoji picker coordinate guards
+
+**Why reverted:**
+The v1.2.195 changes were built on an incorrect assumption about MIUI keyboard behaviour. The `--include-ime` flag approach and the emoji picker `cellCenterY < h * 0.55` guard were both speculative fixes that were not confirmed to work on the farm's actual devices. The user confirmed that no keyboard tapping has ever worked on these devices regardless of what was coded, making the IME-dump rewrite pointless. The emoji picker guard was also an unasked-for change that introduced new filtering logic without user request.
+
+**What was reverted in `androidManager.ts` → `typeViaOnscreenKeyboard`:**
+
+1. **`dumpUiWithIme` removed** — the function no longer calls `uiautomator dump --include-ime`. It reverts to `_uiDump` (standard UIAutomator dump, no IME flag). The IME-inclusive dump was added speculatively; it was never confirmed to surface keyboard nodes on MIUI.
+
+2. **Label-length cap restored** — the 1–3 character label limit is back. This prevents app-UI node labels (long strings like button names, content-desc paragraphs) from being misidentified as keyboard keys when they happen to sit in the lower 45% of the screen. Single-character and short labels (`a`, `@`, `?`, `123`, etc.) are the only valid key labels from a standard UIAutomator dump.
+
+3. **`adb input text` fallback restored** — when fewer than 5 keys are found in the dump (which is the common outcome on MIUI where the keyboard is invisible to UIAutomator), the function now falls back to `adb shell input text` so text is still entered rather than silently skipped. The caller sees something typed even if it is not per-key simulated. The log line now also directs to the Keyboard Calibration tool: `[keyboard] 0 keys found — falling back to adb input text (use Keyboard Calibration for real taps)`.
+
+**What was reverted in `mobile.ts` → View Stories emoji comment:**
+
+Both emoji picker cell-detection scans previously rejected any cell whose centre Y was below 55% of screen height (`cellCenterY < h * 0.55`). This was based on the assumption that the Android IME reports picker nodes in IME-window-local coordinates. That assumption was speculative and not confirmed. Both guards are now removed — cells are accepted based on the existing size, clickability, and label checks only.
+
+---
+
+### Feature — Keyboard Calibration tool (getevent-based, per-device key maps)
+
+**Background and motivation:**
+The root problem with keyboard typing on MIUI is that UIAutomator cannot see the system IME keyboard at all — its window is invisible to the standard dump. Every approach that relies on finding key nodes in the accessibility tree is dead on arrival on these devices. The only reliable path is to capture where each key actually sits on the physical screen, store those coordinates, and replay them as real OS touch events (`adb shell input tap x y`). Instagram sees a real finger tap at the key's screen position — identical to a human pressing the key. There is no spoofing possible at this level.
+
+**How calibration works:**
+1. The user opens a phone slot in the Farm page and clicks the new **Keyboard** button in the phone's nav bar.
+2. The Calibration Dialog walks through 48 keys across two keyboard layers (Letters and Numbers/Symbols).
+3. For each key, the user clicks **"Capture tap"** in the dialog, then immediately taps that key on the physical phone screen.
+4. The backend starts `adb shell getevent -l <touchscreen-device>`, which streams raw hardware touch events from the Linux input subsystem at the OS level — no accessibility tree, no UIAutomator, no Android window system involved.
+5. The first complete touch-down event (`ABS_MT_POSITION_X` + `ABS_MT_POSITION_Y` followed by `SYN_REPORT`) is captured.
+6. Raw device coordinates are scaled to screen pixels: `screen_x = raw_x / maxX * screenW`, `screen_y = raw_y / maxY * screenH`. The touchscreen axis ranges (`maxX`, `maxY`) come from `adb shell getevent -lp`; screen dimensions come from a UIAutomator dump (not `wm size` — that command remains banned).
+7. The label → `{x, y}` mapping is stored in memory and displayed in the dialog. The user works through all keys, skipping any they cannot locate, then saves.
+8. The map is persisted to `keyboard-cal-{serial}.json` (in `EQUINOX_DATA_DIR` on Windows, `process.cwd()` on Replit). It survives app restarts.
+
+**Automatic use in the automation cycle:**
+`typeViaOnscreenKeyboard` now checks for a saved calibration map at the start:
+- If a map exists with more than 5 keys: routes directly through `typeViaCalibrationMap`, which fires `adb shell input tap x y` for every character. Each tap is a real OS touch event.
+- If no map exists: falls through to the existing UIAutomator path (with adb fallback). The calibration tool is the upgrade path — nothing breaks without it.
+
+**New backend functions (`androidManager.ts`):**
+
+- `captureOneTap(serial, timeoutMs)` — starts `adb shell getevent -l <device>`, waits for first touch-down, kills the getevent process, returns `{x, y}`. Returns `null` on timeout.
+- `loadKeyCalibrationMap(serial)` — reads `keyboard-cal-{serial}.json`, returns parsed map or `null`.
+- `saveKeyCalibrationMap(serial, map)` — writes map to disk.
+- `deleteKeyCalibrationMap(serial)` — removes the saved map file.
+- `typeViaCalibrationMap(serial, text, map, onLog)` — iterates characters, looks each up by label (`space` for ` `, `enter` for `\n`, lowercase otherwise), fires `_adbTap`, sleeps 120–200 ms between keys. Returns `{ok, missing[]}`.
+- `_getTouchDeviceInfo(adb, serial)` — internal helper: parses `getevent -lp` output to find the first input device that exposes `ABS_MT_POSITION_X` and `ABS_MT_POSITION_Y`, returns `{device, maxX, maxY}`.
+
+**New API routes (`mobile.ts`):**
+
+- `POST /api/mobile/devices/:serial/keyboard-calibration/capture` — holds the HTTP request open (up to 30 s, UI sends 12 s) while `captureOneTap` streams getevent. Returns `{ok, x, y}` or HTTP 408 on timeout.
+- `GET /api/mobile/devices/:serial/keyboard-calibration` — returns `{ok, map}` where `map` is the saved key map or `null`.
+- `POST /api/mobile/devices/:serial/keyboard-calibration/save` — accepts `{map}`, persists it, returns `{ok, count}`.
+- `DELETE /api/mobile/devices/:serial/keyboard-calibration` — removes the saved map.
+
+**New UI (`MobilePage.tsx` → `CalibrationDialog` + `PhoneSlot`):**
+
+- **Keyboard button** — added to every phone slot's nav bar (next to Vol−), shows the keyboard icon (lucide `Keyboard`). Only appears when the slot has a connected `device`-state phone (same condition as the rest of the nav bar).
+- **`CalibrationDialog`** — full-screen dialog with:
+  - Shows any existing saved map with key count and a "Clear now" option.
+  - Groups keys by keyboard layer (Letters / Numbers+Symbols) with layer-switch instructions shown at group boundaries.
+  - Progress bar and key counter (`step / 48 keys, N%`).
+  - Large key display (the key to tap, 64×64 px tile).
+  - **Capture tap** button — makes the long-poll request, shows a 12 s spinner. On success displays `✓ Captured at (x, y)` for 700 ms then auto-advances to the next key.
+  - **Skip** button — skips the current key without capturing.
+  - Done screen — shows total captured count, Save / Discard buttons.
+  - Disabling the dialog's close button while a capture is in flight (prevents accidentally closing mid-getevent).
+- **`CALIB_KEYS`** — flat array of 48 `{label, display, groupIdx, groupName, instructions}` entries. Letters group: q–m + shift, space, delete, enter (30 keys). Numbers/symbols group: 0–9, @, ., comma, -, _, !, ?, # (18 keys).
+
+**Key groups:**
+
+| Group | Keys | Instruction shown |
+|-------|------|-------------------|
+| Letters (ABC layer) | q w e r t y u i o p / a s d f g h j k l / z x c v b n m / Shift Space Delete Enter | Keep phone on LETTERS keyboard (ABC / qwerty mode) |
+| Numbers & Symbols (?123 layer) | 1 2 3 4 5 6 7 8 9 0 @ . , - _ ! ? # | Press the ?123 key on your phone now to switch to the NUMBERS layer |
+
+---
+
 ## v1.2.195 — 2026-07-26
 
 ### Feature — On-screen keyboard fully rebuilt: IME-inclusive dump, no label-length cap, no adb fallbacks, Shift for uppercase
