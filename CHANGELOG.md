@@ -4,6 +4,55 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.185 — 2026-07-26
+
+### Bug Fix — View Stories finds no bubbles even though stories are visible on screen
+
+**What was wrong.**
+
+Two separate problems combined to produce "no story bubbles found" on every run:
+
+**Problem 1 — story tray not finished loading when the dump ran.**
+
+When Stories is the first tool in a cycle, the code previously waited only 800 ms
+after "already on home feed" before calling `pickAndOpenRandomStory`. The
+UIAutomator dump ran during that window. Instagram's story tray takes 1–2 s to
+finish populating its avatar images after the home feed first renders, so the
+dump consistently captured an empty or incomplete tray.
+
+Fix: the wait is increased from 800 ms to 2 500 ms so the tray has time to
+finish loading before the dump runs.
+
+**Problem 2 — pattern only matched one exact content-desc format.**
+
+The detection looked only for nodes whose `content-desc` ended with `'s story`
+(ASCII apostrophe) or `\u2019s story` (Unicode right-single-quote). Instagram
+uses several other formats across builds and locales — the device running this
+cycle outputs a different format. Because no node matched, the function bailed
+out immediately with "no stories to open" even though the bubbles were clearly
+visible on screen.
+
+Fix: the detection now tries every known Instagram story-tray pattern:
+- `<username>'s story` / `<username>\u2019s story` (current and most common)
+- `View <username>'s story` (some builds prefix with "View ")
+- `<username>, story` / `<username> - story` (punctuation variants)
+- `resource-id` containing `reel_tray_item` or `story_tray` (builds where the
+  avatar ViewGroup carries no useful content-desc at all)
+
+If none of those match, the function now waits 2 s and retries the dump once
+(tray may still be loading). If still nothing, the full list of `content-desc`
+and `resource-id` values seen in the dump is written to the log so the next
+failure is immediately self-diagnosing — no need to guess what Instagram is
+outputting.
+
+**Files changed:**
+- `artifacts/api-server/src/routes/mobile.ts` — `pickAndOpenRandomStory`:
+  multi-pattern `extractStoryBubbles()` helper, 2 s retry on empty dump,
+  diagnostic node log on repeated failure; pre-dump wait raised 800 ms → 2 500 ms
+  in the "first tool" Stories path
+
+---
+
 ## v1.2.184 — 2026-07-26
 
 ### Rewrite — View Stories no longer uses hardcoded coordinates to find story bubbles

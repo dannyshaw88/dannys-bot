@@ -2961,32 +2961,77 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     //     follow badge that Instagram overlays on "Suggested" tiles.
     //   • Y is the exact centre from the dump — no upward/downward nudge.
 
-    const trayXml = await android.dumpUi(serial).catch(() => "");
-
-    // Collect nodes whose content-desc ends with "'s story".
-    // Each node gives us the exact on-screen bounding box.
-    const storyBubbles: Array<{ cx: number; cy: number; desc: string }> = [];
-    {
+    // Parse a UIAutomator XML dump and extract story-tray bubble nodes.
+    // Returns every node whose content-desc or resource-id indicates a story
+    // tray item, using multiple patterns to cover all known Instagram builds.
+    const extractStoryBubbles = (xml: string): Array<{ cx: number; cy: number; desc: string }> => {
+      const bubbles: Array<{ cx: number; cy: number; desc: string }> = [];
+      if (!xml) return bubbles;
       const nodeRe = /<node\b([^>]*\/?>) */g;
       let nm: RegExpExecArray | null;
-      while ((nm = nodeRe.exec(trayXml)) !== null) {
+      while ((nm = nodeRe.exec(xml)) !== null) {
         const attrs = nm[1];
-        const descM = attrs.match(/content-desc="([^"]*)"/);
-        if (!descM) continue;
-        const desc = descM[1];
-        // Match "<anything>'s story" — covers both ASCII apostrophe and the
-        // Unicode right-single-quotation-mark Instagram uses on some builds.
-        if (!/'s story$/i.test(desc) && !/\u2019s story$/i.test(desc)) continue;
-        const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+        const desc  = (attrs.match(/content-desc="([^"]*)"/)  ?? [])[1] ?? "";
+        const rid   = (attrs.match(/resource-id="([^"]*)"/)   ?? [])[1] ?? "";
+        const bm    = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
         if (!bm) continue;
+
+        // ── Pattern 1: content-desc ending in "'s story" (ASCII or Unicode) ──
+        // e.g. "fruitthchaz's story"  "lyrics_mood_0_'s story"
+        const isStoryDesc =
+          /'s story\b/i.test(desc) ||
+          /\u2019s story\b/i.test(desc) ||
+          // Pattern 2: "View <username>'s story" (some builds prefix with "View ")
+          /^view .+'s story$/i.test(desc) ||
+          /^view .+\u2019s story$/i.test(desc) ||
+          // Pattern 3: content-desc is exactly "<username>, story" or
+          // "<username> story" or "<username> - story" (less common variants)
+          /[,\-–]?\s*story$/i.test(desc) ||
+          // Pattern 4: resource-id contains "reel_tray_item" or "story_tray"
+          // (covers builds where the avatar ViewGroup has no useful content-desc)
+          /reel_tray_item/i.test(rid) ||
+          /story_tray/i.test(rid);
+
+        if (!isStoryDesc) continue;
+
+        // Exclude the "Your Story / Add" bubble — tapping it opens the camera
+        if (/\badd\b/i.test(desc) || /^your story$/i.test(desc)) continue;
+
         const cx = Math.round((Number(bm[1]) + Number(bm[3])) / 2);
         const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
-        storyBubbles.push({ cx, cy, desc });
+        bubbles.push({ cx, cy, desc: desc || rid });
       }
+      return bubbles;
+    };
+
+    // First attempt.
+    let trayXml = await android.dumpUi(serial).catch(() => "");
+    let storyBubbles = extractStoryBubbles(trayXml);
+
+    // If the first dump finds nothing, wait 2 s and retry once — the story
+    // tray sometimes finishes populating slightly after the feed renders.
+    if (storyBubbles.length === 0) {
+      onLog?.(`Story tray: first dump found no story bubbles — waiting 2 s and retrying…`);
+      await new Promise(r => setTimeout(r, 2000));
+      trayXml = await android.dumpUi(serial).catch(() => "");
+      storyBubbles = extractStoryBubbles(trayXml);
     }
 
     if (storyBubbles.length === 0) {
-      onLog?.(`Story tray: no story bubbles found in UIAutomator dump — no stories to open this cycle`);
+      // Diagnostic: log every content-desc and resource-id in the dump so we
+      // can see exactly what Instagram is outputting on this build.  Limited
+      // to 40 entries so the log stays readable.
+      const diagEntries: string[] = [];
+      const diagRe = /<node\b([^>]*\/?>) */g;
+      let dm: RegExpExecArray | null;
+      while ((dm = diagRe.exec(trayXml)) !== null && diagEntries.length < 40) {
+        const a = dm[1];
+        const d = (a.match(/content-desc="([^"]*)"/) ?? [])[1] ?? "";
+        const r = (a.match(/resource-id="([^"]*)"/)  ?? [])[1] ?? "";
+        if (d || r) diagEntries.push(`desc="${d}" rid="${r}"`);
+      }
+      onLog?.(`Story tray: still no bubbles after retry — dump node sample: ${diagEntries.slice(0, 20).join(" | ") || "(dump was empty)"}`);
+      onLog?.(`Story tray: no story bubbles found — no stories to open this cycle`);
       return { slot: 0, opened: false };
     }
 
@@ -7917,11 +7962,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         } else if (_tool === 'stories') {
           if (_toolActivated[_tool]) { // pre-rolled above
             if (_isFirst) {
-              // First tool — Instagram just opened, already on the home feed
-              // with the story tray loaded. Tapping Home again would trigger
-              // a feed refresh and force a 5 s tray-repopulate wait.
-              tLog("▶ Stories: already on home feed — story tray ready");
-              await sleepOrAbort(serial, 800);
+              // First tool — Instagram just opened, already on the home feed.
+              // The story tray takes ~1–2 s to populate after the feed renders,
+              // so we wait long enough for the bubbles to appear before dumping.
+              tLog("▶ Stories: already on home feed — waiting for story tray to load…");
+              await sleepOrAbort(serial, 2500);
             } else {
               // Another tool ran before Stories and may have left the phone
               // anywhere (Reels full-screen, Search, profile, etc.). Always
