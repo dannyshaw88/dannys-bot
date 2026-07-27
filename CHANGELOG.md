@@ -4,6 +4,45 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.223 — 2026-07-27
+
+### Fixed — Debugging Log: all sub-messages within the active tool now inherit the tool's colour
+
+Added stateful tool tracking to the log renderer. Previously only log lines that
+literally contained the tool name (e.g. "Explore") were coloured; every other
+sub-action line (taps, scrolls, etc.) reverted to white.
+
+The renderer now detects the `▶ View Explore`, `▶ View Feed`, `▶ View Reels`,
+`▶ Make a Post`, and `▶ Follow Users` header lines and keeps a `currentTool`
+variable. All subsequent sub-messages inherit that tool's colour until the next
+tool header or a `Cycle complete / failed / aborted` boundary line resets it.
+
+- **View Explore** → green (`text-green-400`) — all sub-messages
+- **View Feed** → orange (`text-orange-400`) — all sub-messages
+- **View Reels** → rose (`text-rose-500`) — all sub-messages
+- **Make a Post** → purple (`text-purple-400`) — all sub-messages
+- **Follow Users** → blue (`text-blue-400`) — all sub-messages
+
+### Fixed — Human Session Tool: min/max field label alignment and consistent size
+
+All field labels that sit above a min/max (two-input) row are now:
+
+1. **Centred** over the two inputs using `text-center` + `block` — previously they
+   were left-aligned, so labels like "Save % of posts" appeared anchored to the
+   left edge while the inputs were centred in their card.
+
+2. **Consistent size** (`text-sm`) across every section — the View Feed, View
+   Explore, View Stories from Feed, View Reels, Direct Messaging, and Follow
+   Users sections already used `text-sm`; the Inject Browsing, Random Actions,
+   and Make a Post sections were using `text-xs`, making those labels visibly
+   smaller than the rest of the tool. All min/max labels are now `text-sm`.
+
+Affected sections: View Feed, View Explore Page, View Stories from Feed, View
+Reels, Direct Messaging, Follow Users, Inject Browsing, Random Actions, Make a
+Post (Activate Percentage, Posts per session, Post to Profile %, Post to Story %).
+
+---
+
 ## v1.2.222 — 2026-07-27
 
 ### Fixed — Make a Post: Post to Profile % and Post to Story % now included in Copy Settings

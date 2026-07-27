@@ -4801,7 +4801,7 @@ export function AutomationSettingsPanel({
         </div>
         {settings.feedEnabled && <div className="flex items-start gap-6 flex-wrap">
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Activate Percentage</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Activate Percentage</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.feedActivatePctMin}
@@ -4817,7 +4817,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Scroll this many times</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Scroll this many times</Label>
             <div className="flex items-center gap-3">
               <Input
                 type="number"
@@ -4842,7 +4842,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Delay between actions in s</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Delay between actions in s</Label>
             <div className="flex items-center gap-3">
               <Input
                 type="number"
@@ -4865,7 +4865,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Like % of posts</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Like % of posts</Label>
             <div className="flex items-center gap-3">
               <Input
                 type="number"
@@ -4895,7 +4895,7 @@ export function AutomationSettingsPanel({
         {/* Share to Feed + Share via DM — second row */}
         {settings.feedEnabled && <div className="flex items-start gap-6 flex-wrap">
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Share to Feed % of posts</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Share to Feed % of posts</Label>
             <div className="flex items-center gap-3">
               <Input
                 type="number"
@@ -4923,7 +4923,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Share via DM % of posts</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Share via DM % of posts</Label>
             <div className="flex items-center gap-3">
               <Input
                 type="number"
@@ -4951,7 +4951,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Save % of posts</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Save % of posts</Label>
             <div className="flex items-center gap-3">
               <Input
                 type="number"
@@ -4979,7 +4979,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Expand Caption % of posts</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Expand Caption % of posts</Label>
             <div className="flex items-center gap-3">
               <Input
                 type="number"
@@ -5006,7 +5006,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Tap Audio % of posts</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Tap Audio % of posts</Label>
             <div className="flex items-center gap-3">
               <Input
                 type="number"
@@ -5033,7 +5033,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Click Hashtag % of posts</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Click Hashtag % of posts</Label>
             <div className="flex items-center gap-3">
               <Input
                 type="number"
@@ -5060,7 +5060,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Click Author % of posts</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Click Author % of posts</Label>
             <div className="flex items-center gap-3">
               <Input
                 type="number"
@@ -5108,7 +5108,7 @@ export function AutomationSettingsPanel({
 
         {settings.viewExploreEnabled && <div className="flex items-start gap-6 flex-wrap">
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Activate Percentage</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Activate Percentage</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewExploreActivatePctMin}
@@ -5123,7 +5123,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Scroll this many times</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Scroll this many times</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewExploreScrollMin}
@@ -5138,7 +5138,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Delay between actions in s</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Delay between actions in s</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewExploreActionDelayMin}
@@ -5153,7 +5153,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Click posts %</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Click posts %</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewExploreClickPostPctMin}
@@ -5168,7 +5168,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Click Author % of posts</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Click Author % of posts</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewExploreClickAuthorPercentMin}
@@ -5183,7 +5183,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Like % of posts</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Like % of posts</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewExploreLikePercentMin}
@@ -5198,7 +5198,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Share to Feed % of posts</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Share to Feed % of posts</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewExploreShareFeedPercentMin}
@@ -5213,7 +5213,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Share via DM % of posts</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Share via DM % of posts</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewExploreShareDmPercentMin}
@@ -5228,7 +5228,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Save % of posts</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Save % of posts</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewExploreSavePercentMin}
@@ -5263,7 +5263,7 @@ export function AutomationSettingsPanel({
 
         {settings.storiesEnabled && <div className="flex items-start gap-6 flex-wrap">
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Activate Percentage</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Activate Percentage</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewStoriesActivatePctMin}
@@ -5279,7 +5279,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Stories to watch</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Stories to watch</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewStoriesSlidesMin}
@@ -5294,7 +5294,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">% to watch</Label>
+            <Label className="text-sm text-muted-foreground block text-center">% to watch</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={1} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewStoriesSlideWatchPctMin}
@@ -5310,7 +5310,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Like %</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Like %</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewStoriesLikePercentMin}
@@ -5326,7 +5326,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Share DM %</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Share DM %</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewStoriesShareDmPercentMin}
@@ -5342,7 +5342,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Comment %</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Comment %</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewStoriesCommentPercentMin}
@@ -5358,7 +5358,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Click Author %</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Click Author %</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewStoriesClickAuthorPercentMin}
@@ -5395,7 +5395,7 @@ export function AutomationSettingsPanel({
 
         {settings.viewReelsEnabled && <div className="flex items-start gap-6 flex-wrap">
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Activate Percentage</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Activate Percentage</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewReelsActivatePctMin}
@@ -5411,7 +5411,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Scroll amount</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Scroll amount</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewReelsScrollMin}
@@ -5426,7 +5426,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Watch %</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Watch %</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={1} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewReelsWatchPctMin}
@@ -5442,7 +5442,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Like %</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Like %</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewReelsLikePercentMin}
@@ -5458,7 +5458,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Share Feed %</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Share Feed %</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewReelsShareFeedPercentMin}
@@ -5474,7 +5474,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Save %</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Save %</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewReelsSavePercentMin}
@@ -5490,7 +5490,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Share DM %</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Share DM %</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewReelsShareDmPercentMin}
@@ -5506,7 +5506,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Click Author %</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Click Author %</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewReelsClickAuthorPercentMin}
@@ -5541,7 +5541,7 @@ export function AutomationSettingsPanel({
 
         {settings.checkDmEnabled && <div className="flex items-start gap-6 flex-wrap">
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Activate Percentage</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Activate Percentage</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.checkDmActivatePctMin}
@@ -5556,7 +5556,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Scroll amount</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Scroll amount</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={50} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.checkDmScrollMin}
@@ -5571,7 +5571,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Click Thread %</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Click Thread %</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.checkDmClickPctMin}
@@ -5628,7 +5628,7 @@ export function AutomationSettingsPanel({
         {/* ── Activate Percentage + Users to follow per operation ────── */}
         {settings.followEnabled && <div className="flex items-start gap-6 flex-wrap">
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Activate Percentage</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Activate Percentage</Label>
             <div className="flex items-center gap-3">
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.followActivatePctMin}
@@ -5644,7 +5644,7 @@ export function AutomationSettingsPanel({
           </div>
 
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground">Users to follow per operation</Label>
+            <Label className="text-sm text-muted-foreground block text-center">Users to follow per operation</Label>
             <div className="flex items-center gap-3 flex-wrap">
               <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.followUsersMin}
@@ -5862,7 +5862,7 @@ export function AutomationSettingsPanel({
           {/* Row 2: Activate Percentage (first field) / Browse before follow / Feed chance / Feed posts / Click posts % */}
           <div className="flex items-start flex-wrap gap-6">
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground block text-center">Activate Percentage</Label>
+              <Label className="text-sm text-muted-foreground block text-center">Activate Percentage</Label>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingActivatePctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingActivatePctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
                 <span className="text-muted-foreground text-sm">to</span>
@@ -5870,7 +5870,7 @@ export function AutomationSettingsPanel({
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground block text-center">Browse before follow %</Label>
+              <Label className="text-sm text-muted-foreground block text-center">Browse before follow %</Label>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingBeforeFollowPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingBeforeFollowPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
                 <span className="text-muted-foreground text-sm">to</span>
@@ -5878,7 +5878,7 @@ export function AutomationSettingsPanel({
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground block text-center">Tap Highlights %</Label>
+              <Label className="text-sm text-muted-foreground block text-center">Tap Highlights %</Label>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingTapHighlightsPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingTapHighlightsPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
                 <span className="text-muted-foreground text-sm">to</span>
@@ -5886,7 +5886,7 @@ export function AutomationSettingsPanel({
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground block text-center">Feed posts</Label>
+              <Label className="text-sm text-muted-foreground block text-center">Feed posts</Label>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={50} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
                 <span className="text-muted-foreground text-sm">to</span>
@@ -5894,7 +5894,7 @@ export function AutomationSettingsPanel({
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground block text-center">Click posts %</Label>
+              <Label className="text-sm text-muted-foreground block text-center">Click posts %</Label>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingClickPostPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingClickPostPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
                 <span className="text-muted-foreground text-sm">to</span>
@@ -5902,7 +5902,7 @@ export function AutomationSettingsPanel({
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground block text-center">Like %</Label>
+              <Label className="text-sm text-muted-foreground block text-center">Like %</Label>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingLikePctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingLikePctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
                 <span className="text-muted-foreground text-sm">to</span>
@@ -5910,7 +5910,7 @@ export function AutomationSettingsPanel({
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground block text-center">Share feed %</Label>
+              <Label className="text-sm text-muted-foreground block text-center">Share feed %</Label>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingShareFeedPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareFeedPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
                 <span className="text-muted-foreground text-sm">to</span>
@@ -5918,7 +5918,7 @@ export function AutomationSettingsPanel({
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground block text-center">Share to DM %</Label>
+              <Label className="text-sm text-muted-foreground block text-center">Share to DM %</Label>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingShareDmPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareDmPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
                 <span className="text-muted-foreground text-sm">to</span>
@@ -5928,7 +5928,7 @@ export function AutomationSettingsPanel({
           </div>
           <div className="flex items-start flex-wrap gap-6 mt-2">
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground block text-center">Abandon Follow %</Label>
+              <Label className="text-sm text-muted-foreground block text-center">Abandon Follow %</Label>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingAbandonFollowPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingAbandonFollowPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
                 <span className="text-muted-foreground text-sm">to</span>
@@ -6033,7 +6033,7 @@ export function AutomationSettingsPanel({
 
               {/* ── Activate % ── */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground block text-center">Activate %</Label>
+                <Label className="text-sm text-muted-foreground block text-center">Activate %</Label>
                 <div className="flex items-center gap-2">
                   <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.randomJitterActivatePctMin}
@@ -6049,7 +6049,7 @@ export function AutomationSettingsPanel({
 
               {/* ── Notifications ── */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground block text-center">Notifications %</Label>
+                <Label className="text-sm text-muted-foreground block text-center">Notifications %</Label>
                 <div className="flex items-center gap-2">
                   <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.checkNotificationsPctMin}
@@ -6065,7 +6065,7 @@ export function AutomationSettingsPanel({
 
               {/* ── Scrolls ── */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground block text-center">Scrolls</Label>
+                <Label className="text-sm text-muted-foreground block text-center">Scrolls</Label>
                 <div className="flex items-center gap-2">
                   <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.checkNotificationsScrollsMin}
@@ -6081,7 +6081,7 @@ export function AutomationSettingsPanel({
 
               {/* ── Click % ── */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground block text-center">Click %</Label>
+                <Label className="text-sm text-muted-foreground block text-center">Click %</Label>
                 <div className="flex items-center gap-2">
                   <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.checkNotificationsClickPctMin}
@@ -6097,7 +6097,7 @@ export function AutomationSettingsPanel({
 
               {/* ── Visit Profile ── */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground block text-center">Visit Profile %</Label>
+                <Label className="text-sm text-muted-foreground block text-center">Visit Profile %</Label>
                 <div className="flex items-center gap-2">
                   <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.visitProfilePctMin}
@@ -6113,7 +6113,7 @@ export function AutomationSettingsPanel({
 
               {/* ── Visit Saved ── */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground block text-center">Visit Saved %</Label>
+                <Label className="text-sm text-muted-foreground block text-center">Visit Saved %</Label>
                 <div className="flex items-center gap-2">
                   <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.visitSavedPctMin}
@@ -6129,7 +6129,7 @@ export function AutomationSettingsPanel({
 
               {/* ── Visit Random Settings ── */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground block text-center">Visit Random Settings %</Label>
+                <Label className="text-sm text-muted-foreground block text-center">Visit Random Settings %</Label>
                 <div className="flex items-center gap-2">
                   <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.visitSettingsPctMin}
@@ -6145,7 +6145,7 @@ export function AutomationSettingsPanel({
 
               {/* ── App Switch ── */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground block text-center">App Switch %</Label>
+                <Label className="text-sm text-muted-foreground block text-center">App Switch %</Label>
                 <div className="flex items-center gap-2">
                   <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.appSwitchPctMin}
@@ -6193,7 +6193,7 @@ export function AutomationSettingsPanel({
               {/* Activate Percentage / Order % / Skip Chance % / Posts per session */}
               <div className="flex items-start gap-8 flex-wrap">
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground block text-center">Activate Percentage</Label>
+                  <Label className="text-sm text-muted-foreground block text-center">Activate Percentage</Label>
                   <div className="flex items-center gap-2">
                     <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                       value={settings.makePostActivatePctMin}
@@ -6207,7 +6207,7 @@ export function AutomationSettingsPanel({
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground block text-center">Posts per session</Label>
+                  <Label className="text-sm text-muted-foreground block text-center">Posts per session</Label>
                   <div className="flex items-center gap-2">
                     <Input type="number" min={1} max={20} maxLength={4} className={NUM_INPUT_CLASS}
                       value={settings.makePostPerSessionMin}
@@ -6486,7 +6486,7 @@ export function AutomationSettingsPanel({
                   </div>
                   {/* Post to Profile % */}
                   <div className="space-y-3">
-                    <Label className="text-xs text-muted-foreground block text-center">Post to Profile %</Label>
+                    <Label className="text-sm text-muted-foreground block text-center">Post to Profile %</Label>
                     <div className="flex items-center gap-2">
                       <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                         value={settings.makePostPostToProfilePctMin}
@@ -6501,7 +6501,7 @@ export function AutomationSettingsPanel({
                   </div>
                   {/* Post to Story % */}
                   <div className="space-y-3">
-                    <Label className="text-xs text-muted-foreground block text-center">Post to Story %</Label>
+                    <Label className="text-sm text-muted-foreground block text-center">Post to Story %</Label>
                     <div className="flex items-center gap-2">
                       <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                         value={settings.makePostPostToStoryPctMin}
@@ -8320,7 +8320,9 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
       <div ref={scrollRef} onScroll={handleScroll} className="flex-1 min-h-0 overflow-y-auto bg-black/90 border border-border rounded-xl p-3 font-mono text-[11px] leading-relaxed">
         {lines.length === 0
           ? <p className="text-white/30">No activity yet — taps, swipes, keys, and automation cycles will show up here.</p>
-          : lines.map((l, i) => {
+          : (() => {
+            let currentTool: string | null = null;
+            return lines.map((l, i) => {
               // Parse:  [HH:MM:SS AM/PM]  [Xm Ys / Xs]  message
               //         [HH:MM:SS AM/PM]               message   (no duration)
               const m   = l.match(/^\[([^\]]+)\]\s*(?:\[(\d+m \d+(?:\.\d+)?s|\d+(?:\.\d+)?s)\]\s*)?([\s\S]*)$/);
@@ -8328,26 +8330,42 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
               const dur = m?.[2] ?? '';
               const msg = m ? (m[3] ?? '') : l;
 
+              // Track the active tool from ▶ header lines so ALL sub-messages
+              // that follow inherit the tool's colour (e.g. every explore
+              // sub-action is green, not just lines that contain "Explore").
+              if      (/▶ View Explore/.test(msg))  currentTool = 'explore';
+              else if (/▶ View Feed/.test(msg))     currentTool = 'feed';
+              else if (/▶ View Reels/.test(msg))    currentTool = 'reels';
+              else if (/▶ Make a Post/.test(msg))   currentTool = 'makepost';
+              else if (/▶ Follow Users/.test(msg))  currentTool = 'follow';
+              else if (/^▶/.test(msg))              currentTool = null;
+              if (/Cycle\s+(complete|failed|aborted)/i.test(msg)) currentTool = null;
+
               // Colour the message based on its tool / prefix.
               // Tool-specific colours take priority over general prefix colours.
               // System / untagged messages are white. Tool messages keep their tool colour.
               let msgClass = 'text-white';
-              if (/\bView Feed\b|▶ View Feed/.test(msg))      msgClass = 'text-orange-400';
+              if      (/\bView Feed\b|▶ View Feed/.test(msg))      msgClass = 'text-orange-400';
               else if (/▶ Follow Users|▶ Follow done|▶ Spread Follow|Spread Follow →|^Inject Browsing/.test(msg))
-                                                           msgClass = 'text-blue-400';
+                                                                    msgClass = 'text-blue-400';
               else if (/\bView Explore\b|▶ View Explore|[Ee]xplore/.test(msg))
-                                                           msgClass = 'text-green-400';
+                                                                    msgClass = 'text-green-400';
               else if (/\bView Reels\b|▶ View Reels|Reels/.test(msg))
-                                                           msgClass = 'text-rose-500';
-              else if (/\bMake a Post\b|▶ Make a Post/.test(msg))
-                                                           msgClass = 'text-purple-400';
+                                                                    msgClass = 'text-rose-500';
+              else if (/\bMake a Post\b|▶ Make a Post/.test(msg))  msgClass = 'text-purple-400';
               else if (/Switching to Instagram account|account switcher|Long-pressing profile tab|Profile tab found/.test(msg))
-                                                           msgClass = 'text-amber-400';
-              else if (/^(ERROR|FAILED|✗)/.test(msg))     msgClass = 'text-rose-500';
-              else if (/^⚠/.test(msg))                    msgClass = 'text-yellow-400';
-              else if (/^[✓✅]/.test(msg))                msgClass = 'text-white/90';
-              else if (/shuffled/.test(msg))              msgClass = 'text-blue-400';
-              else if (/^▶/.test(msg))                    msgClass = 'text-white/90';
+                                                                    msgClass = 'text-amber-400';
+              else if (/^(ERROR|FAILED|✗)/.test(msg))              msgClass = 'text-rose-500';
+              else if (/^⚠/.test(msg))                             msgClass = 'text-yellow-400';
+              else if (/^[✓✅]/.test(msg))                         msgClass = 'text-white/90';
+              else if (/shuffled/.test(msg))                       msgClass = 'text-blue-400';
+              else if (/^▶/.test(msg))                             msgClass = 'text-white/90';
+              // Sub-messages: fall back to the active tool's colour.
+              else if (currentTool === 'explore')  msgClass = 'text-green-400';
+              else if (currentTool === 'feed')     msgClass = 'text-orange-400';
+              else if (currentTool === 'reels')    msgClass = 'text-rose-500';
+              else if (currentTool === 'makepost') msgClass = 'text-purple-400';
+              else if (currentTool === 'follow')   msgClass = 'text-blue-400';
 
               return (
                 <div key={i} className="flex min-w-0 py-[1px]">
@@ -8356,7 +8374,8 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                   <span className={`flex-1 min-w-0 break-words ${msgClass}`}>{msg}</span>
                 </div>
               );
-            })
+            });
+          })()
         }
         <div ref={bottomRef} />
       </div>
