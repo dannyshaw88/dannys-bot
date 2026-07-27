@@ -4,6 +4,46 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.220 — 2026-07-27
+
+### Fixed — Make a Post Story flow now finds the real editor action
+
+The mobile **Make a Post → Story** flow no longer relies on Instagram’s generic
+`igds_media_button` identifier, which could not distinguish the blue forward
+action from the **Your story** and **Close Friends** destination controls.
+
+The flow now reads the live accessibility tree and recognizes the editor action
+through the observed `next_button`, `button_next`, `action_next`,
+`share_story_button`, and exact **Next** / **Continue** attributes. It also
+handles Instagram layouts that combine the editor and Share screens, avoiding a
+second Share tap.
+
+If Instagram exposes the combined layout without a separate arrow node, the
+flow falls through to the accessibility-based Share button lookup instead of
+aborting immediately. No color-based, pixel-based, or guessed coordinate
+matching was added.
+
+### Windows installer workflow
+
+The canonical `.github/workflows/build-windows-installer.yml` remains the only
+active Windows installer workflow. It runs for pushes to `main`, version tags,
+and manual workflow dispatch; builds the API and web bundles, creates the
+Windows installer, and uploads the `Aura-Farming-Windows-Installer` artifact.
+The older duplicate workflow files remain deprecated to prevent duplicate
+installer builds.
+
+**Files included in this release:**
+
+- `artifacts/api-server/src/mobile/androidManager.ts`
+- `artifacts/api-server/src/routes/mobile.ts`
+- `.agents/memory/make-a-post-log.md`
+- `attached_assets/download_1785178295509.png`
+- `package.json`
+- `artifacts/electron/package.json`
+- `CHANGELOG.md`
+
+---
+
 ## v1.2.219 — 2026-07-27
 
 ### Added — Make a Post: Post to Story option
