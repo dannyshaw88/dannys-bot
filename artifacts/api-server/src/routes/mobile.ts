@@ -1348,6 +1348,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostUseChatGpt: z.boolean().default(false),
     makePostFixAiSlop: z.boolean().default(false),
     makePostMakeUnique: z.boolean().default(false),
+    makePostPostToProfilePctMin: z.number().min(0).max(100).default(100),
+    makePostPostToProfilePctMax: z.number().min(0).max(100).default(100),
+    makePostPostToStoryPctMin: z.number().min(0).max(100).default(0),
+    makePostPostToStoryPctMax: z.number().min(0).max(100).default(0),
     makePostCaptionText: z.string().default(""),
     makePostImageSettings: z.object({
       contrast: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
@@ -1561,6 +1565,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostLocalFolderNoRepeat: false, makePostLocalFolderRandom: false,
         makePostLocalFolderDeleteAfterUpload: false,
         makePostUseChatGpt: false, makePostFixAiSlop: false, makePostMakeUnique: false,
+        makePostPostToProfilePctMin: 100, makePostPostToProfilePctMax: 100,
+        makePostPostToStoryPctMin: 0, makePostPostToStoryPctMax: 0,
         makePostCaptionText: "",
         makePostImageSettings: {
           contrast: { enabled: true, min: 5, max: 250 },
@@ -5165,6 +5171,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // undefined (falsy) regardless of what the frontend sends.
     makePostFixAiSlop: z.boolean().default(false),
     makePostMakeUnique: z.boolean().default(false),
+    // Post destination: probability that a given Make a Post attempt goes to
+    // the profile feed vs. to a Story.  Defaults keep existing behaviour
+    // (profile=100%, story=0%).  If story is rolled first (random < storyPct),
+    // the story flow runs; otherwise the profile flow runs if profilePct allows.
+    makePostPostToProfilePctMin: z.number().min(0).max(100).default(100),
+    makePostPostToProfilePctMax: z.number().min(0).max(100).default(100),
+    makePostPostToStoryPctMin: z.number().min(0).max(100).default(0),
+    makePostPostToStoryPctMax: z.number().min(0).max(100).default(0),
     // Which Instagram account slot is driving this cycle. When set the cycle
     // switches to that account via the built-in Instagram switcher before
     // running any tools, so each slot's settings are always applied to the
@@ -5704,6 +5718,167 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // for the picker/upload. Leaving it behind fills up the camera roll.
     await android.removeDeviceFile(serial, devicePath).catch(() => {});
     onLog?.(`Make a Post: ✓ posted "${fileName}"`);
+    return { posted: true, fileName };
+  }
+
+  // ── Make a Post — Story flow ──────────────────────────────────────────────
+  // Posts the chosen image as an Instagram Story instead of a profile feed post.
+  // Flow: + tap → STORY tab → story camera → Gallery icon → pick newest photo
+  //       → forward arrow → Share → Finished → dismiss Stories archive popup.
+  async function runMakePostStoryStep(serial: string, opts: {
+    localFolderPath: string; localFolderRandom: boolean; localFolderNoRepeat: boolean;
+    deleteAfterUpload: boolean;
+    doFixAiSlop?: boolean;
+    onLog?: (msg: string) => void;
+  }): Promise<{ posted: boolean; fileName?: string }> {
+    const { localFolderPath, localFolderRandom, localFolderNoRepeat, deleteAfterUpload, doFixAiSlop, onLog } = opts;
+
+    const fileName = await pickLocalFolderImage(serial, {
+      folderPath: localFolderPath, random: localFolderRandom, noRepeat: localFolderNoRepeat, onLog,
+    });
+    if (!fileName) return { posted: false };
+    const localFilePath = path.join(localFolderPath, fileName);
+
+    // Fix AI Slop — same pre-push step as the profile post flow
+    let pushFilePath = localFilePath;
+    if (doFixAiSlop) {
+      onLog?.("Make a Post (Story): Fix AI Slop — stripping metadata & AI fingerprints…");
+      try {
+        pushFilePath = await fixAiSlop(localFilePath);
+        if (pushFilePath !== localFilePath) {
+          onLog?.("Make a Post (Story): Fix AI Slop ✓ — metadata stripped, DCT watermarks scrambled");
+        } else {
+          onLog?.("Make a Post (Story): Fix AI Slop — sharp unavailable, skipped");
+        }
+      } catch (e: any) {
+        onLog?.(`Make a Post (Story): Fix AI Slop error — ${e?.message ?? "unknown"}, continuing with original`);
+        pushFilePath = localFilePath;
+      }
+    }
+
+    onLog?.(`Make a Post (Story): pushing "${fileName}" to device…`);
+    let devicePath: string;
+    try {
+      devicePath = await android.pushFileToDevice(serial, pushFilePath, fileName);
+    } catch (e: any) {
+      await cleanupAiSlopTemp(pushFilePath, localFilePath).catch(() => {});
+      onLog?.(`Make a Post (Story): adb push failed — ${e?.message ?? "unknown error"}`);
+      return { posted: false };
+    }
+    await cleanupAiSlopTemp(pushFilePath, localFilePath).catch(() => {});
+    onLog?.(`Make a Post (Story): ✓ pushed to ${devicePath}`);
+    await sleepOrAbort(serial, 1200);
+
+    // Step 1 — Tap the "+" compose button (same entry point as profile post)
+    onLog?.("Make a Post (Story): looking for the \"+\" compose icon…");
+    const composeBtn = await android.findComposeButton(serial).catch(() => null);
+    if (!composeBtn) {
+      onLog?.("Make a Post (Story): compose \"+\" icon not found — aborting");
+      await android.removeDeviceFile(serial, devicePath).catch(() => {});
+      return { posted: false };
+    }
+    onLog?.("Make a Post (Story): tapping the \"+\" compose icon…");
+    await android.tap(serial, composeBtn.x, composeBtn.y);
+    await sleepOrAbort(serial, 3500);
+    await android.logScreenLayout(serial, "Make a Post (Story): after '+' tap", onLog);
+    await android.dismissInstagramInterstitials(serial).catch(() => null);
+
+    // Step 2 — Tap the STORY tab in the compose sheet bottom bar
+    onLog?.("Make a Post (Story): looking for the STORY tab…");
+    const storyTab = await android.findButtonByLabel(serial, "STORY").catch(() => null)
+      ?? await android.findButtonByLabel(serial, "Story").catch(() => null);
+    if (!storyTab) {
+      onLog?.("Make a Post (Story): STORY tab not found in compose sheet — aborting");
+      await android.pressBack(serial);
+      await android.removeDeviceFile(serial, devicePath).catch(() => {});
+      return { posted: false };
+    }
+    onLog?.(`Make a Post (Story): tapping STORY tab at (${storyTab.x}, ${storyTab.y})…`);
+    await android.tap(serial, storyTab.x, storyTab.y);
+    await sleepOrAbort(serial, 2500);
+    await android.logScreenLayout(serial, "Make a Post (Story): after STORY tab tap", onLog);
+
+    // Step 3 — Tap the gallery icon (bottom-left of the story camera screen)
+    onLog?.("Make a Post (Story): looking for gallery icon…");
+    const galleryBtn = await android.findStoryGalleryButton(serial).catch(() => null);
+    if (!galleryBtn) {
+      onLog?.("Make a Post (Story): gallery icon not found — aborting");
+      await android.pressBack(serial);
+      await android.removeDeviceFile(serial, devicePath).catch(() => {});
+      return { posted: false };
+    }
+    onLog?.(`Make a Post (Story): tapping gallery icon at (${galleryBtn.x}, ${galleryBtn.y})…`);
+    await android.tap(serial, galleryBtn.x, galleryBtn.y);
+    await sleepOrAbort(serial, 1500);
+    await android.logScreenLayout(serial, "Make a Post (Story): after gallery tap", onLog);
+
+    // Step 4 — Tap the most recent photo thumbnail in the "Add to story" gallery
+    onLog?.("Make a Post (Story): looking for most recent photo thumbnail…");
+    const thumbnail = await android.findFirstStoryGalleryThumbnail(serial).catch(() => null);
+    if (!thumbnail) {
+      onLog?.("Make a Post (Story): no photo thumbnail found in story gallery — aborting");
+      await android.pressBack(serial);
+      await android.pressBack(serial);
+      await android.removeDeviceFile(serial, devicePath).catch(() => {});
+      return { posted: false };
+    }
+    onLog?.(`Make a Post (Story): tapping thumbnail at (${thumbnail.x}, ${thumbnail.y})…`);
+    await android.tap(serial, thumbnail.x, thumbnail.y);
+    await sleepOrAbort(serial, 1500);
+    await android.logScreenLayout(serial, "Make a Post (Story): after thumbnail tap", onLog);
+
+    // Step 5 — Tap the forward-arrow button in the story editor bottom bar
+    // (the small rightmost igds_media_button — not "Your story" / "Close Friends")
+    onLog?.("Make a Post (Story): looking for the forward arrow button…");
+    const arrowBtn = await android.findStoryNextArrowButton(serial).catch(() => null);
+    if (!arrowBtn) {
+      onLog?.("Make a Post (Story): forward arrow button not found — aborting");
+      await android.pressBack(serial);
+      await android.pressBack(serial);
+      await android.removeDeviceFile(serial, devicePath).catch(() => {});
+      return { posted: false };
+    }
+    onLog?.(`Make a Post (Story): tapping forward arrow at (${arrowBtn.x}, ${arrowBtn.y})…`);
+    await android.tap(serial, arrowBtn.x, arrowBtn.y);
+    await sleepOrAbort(serial, 1500);
+    await android.logScreenLayout(serial, "Make a Post (Story): after arrow tap", onLog);
+
+    // Step 6 — Tap the blue "Share" button on the story share destination screen
+    onLog?.("Make a Post (Story): looking for Share button…");
+    const shareBtn = await android.findStoryShareButton(serial).catch(() => null);
+    if (!shareBtn) {
+      onLog?.("Make a Post (Story): Share button not found — aborting");
+      await android.pressBack(serial);
+      await android.removeDeviceFile(serial, devicePath).catch(() => {});
+      return { posted: false };
+    }
+    onLog?.(`Make a Post (Story): tapping Share at (${shareBtn.x}, ${shareBtn.y})…`);
+    await android.tap(serial, shareBtn.x, shareBtn.y);
+    await sleepOrAbort(serial, 2000);
+    await android.logScreenLayout(serial, "Make a Post (Story): after Share tap", onLog);
+
+    // Step 7 — Tap "Finished" on the "Also share to" screen
+    onLog?.("Make a Post (Story): looking for Finished button…");
+    const finishedBtn = await android.findStoryFinishedButton(serial).catch(() => null);
+    if (finishedBtn) {
+      onLog?.(`Make a Post (Story): tapping Finished at (${finishedBtn.x}, ${finishedBtn.y})…`);
+      await android.tap(serial, finishedBtn.x, finishedBtn.y);
+      await sleepOrAbort(serial, 1500);
+    } else {
+      onLog?.("Make a Post (Story): Finished button not found — story may already be live");
+    }
+
+    // Step 8 — Dismiss "Stories archive" popup if it appears, then general interstitials
+    const archiveDismissed = await android.dismissStoriesArchivePopup(serial).catch(() => false);
+    if (archiveDismissed) onLog?.("Make a Post (Story): dismissed Stories archive popup");
+    await android.dismissInstagramInterstitials(serial).catch(() => null);
+
+    recordPostedLocalFile(serial, fileName);
+    if (deleteAfterUpload) {
+      try { await fsPromises.unlink(localFilePath); } catch { /* best effort */ }
+    }
+    await android.removeDeviceFile(serial, devicePath).catch(() => {});
+    onLog?.(`Make a Post (Story): ✓ story posted "${fileName}"`);
     return { posted: true, fileName };
   }
 
@@ -7718,6 +7893,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostLocalFolderEnabled, makePostLocalFolderPath,
         makePostLocalFolderNoRepeat, makePostLocalFolderRandom, makePostLocalFolderDeleteAfterUpload,
         makePostFixAiSlop, makePostCaptionText,
+        makePostPostToProfilePctMin, makePostPostToProfilePctMax,
+        makePostPostToStoryPctMin, makePostPostToStoryPctMax,
         slotUsername, slotIdx,
         shuffleToolOrder,
         dismissDirection,
@@ -8567,17 +8744,43 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               let posted = 0;
               for (let i = 0; i < postCount; i++) {
                 try {
-                  const result = await runMakePostStep(serial, {
-                    localFolderPath: resolvedFolderPath,
-                    localFolderRandom: makePostLocalFolderRandom,
-                    localFolderNoRepeat: makePostLocalFolderNoRepeat,
-                    deleteAfterUpload: makePostLocalFolderDeleteAfterUpload,
-                    doFixAiSlop: makePostFixAiSlop,
-                    captionText: makePostCaptionText,
-                    onLog: (msg) => tLog(`  ${msg}`),
-                  });
-                  if (result.posted) posted++;
-                  else break;
+                  // ── Destination roll ─────────────────────────────────────
+                  // Story is checked first. If that roll misses, profile is
+                  // tried. Both default to 100%/0% so existing behaviour
+                  // (always profile) is preserved unless the user changes them.
+                  const storyPct = rollRange(makePostPostToStoryPctMin, makePostPostToStoryPctMax);
+                  const profilePct = rollRange(makePostPostToProfilePctMin, makePostPostToProfilePctMax);
+                  const postToStory = storyPct > 0 && Math.random() * 100 < storyPct;
+                  const postToProfile = !postToStory && Math.random() * 100 < profilePct;
+                  if (postToStory) {
+                    tLog(`  Make a Post: destination → Story (rolled ${storyPct}%)`);
+                    const result = await runMakePostStoryStep(serial, {
+                      localFolderPath: resolvedFolderPath,
+                      localFolderRandom: makePostLocalFolderRandom,
+                      localFolderNoRepeat: makePostLocalFolderNoRepeat,
+                      deleteAfterUpload: makePostLocalFolderDeleteAfterUpload,
+                      doFixAiSlop: makePostFixAiSlop,
+                      onLog: (msg) => tLog(`  ${msg}`),
+                    });
+                    if (result.posted) posted++;
+                    else break;
+                  } else if (postToProfile) {
+                    tLog(`  Make a Post: destination → Profile (rolled ${profilePct}%)`);
+                    const result = await runMakePostStep(serial, {
+                      localFolderPath: resolvedFolderPath,
+                      localFolderRandom: makePostLocalFolderRandom,
+                      localFolderNoRepeat: makePostLocalFolderNoRepeat,
+                      deleteAfterUpload: makePostLocalFolderDeleteAfterUpload,
+                      doFixAiSlop: makePostFixAiSlop,
+                      captionText: makePostCaptionText,
+                      onLog: (msg) => tLog(`  ${msg}`),
+                    });
+                    if (result.posted) posted++;
+                    else break;
+                  } else {
+                    tLog(`  Make a Post: both story (${storyPct}%) and profile (${profilePct}%) rolls missed — skipping this post`);
+                    break;
+                  }
                 } catch (e: any) {
                   if (e?.message === "cycle-aborted") throw e;
                   tLog(`▶ Make a Post attempt error — ${e?.message}`);

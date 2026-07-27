@@ -4,6 +4,49 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.219 — 2026-07-27
+
+### Added — Make a Post: Post to Story option
+
+The **Make a Post** tool now supports posting as an Instagram Story in addition to the existing profile feed post.
+
+**How it works:**
+
+Two new percentage rows appear in the Make a Post settings section (below Fix AI Slop / Make it unique):
+
+- **Post to Profile %** — min/max chance each post attempt goes to the profile feed (default 100 / 100 — preserves existing behaviour)
+- **Post to Story %** — min/max chance each post attempt goes to a Story instead (default 0 / 0 — off)
+
+For each post attempt the story roll fires first; if it hits, the story flow runs. If it misses, the profile roll fires. If both miss, that post attempt is skipped. Setting Profile to 100/100 and Story to 0/0 is identical to the previous behaviour.
+
+**Story automation flow (all detection uses accessibility tree — no hardcoded coordinates):**
+
+1. Tap the "+" compose icon (same entry point as profile post)
+2. Tap the **STORY** tab in the compose sheet bottom bar (`cam_dest_story` resource-id / "STORY" label)
+3. Story camera opens → tap the **Gallery** icon bottom-left (`gallery_preview_button` resource-id)
+4. Story gallery ("Add to story") opens → tap the **most recent photo thumbnail** (`gallery_grid_item_thumbnail`)
+5. Story editor shows the selected photo → tap the **forward arrow** button (rightmost `igds_media_button`, excludes "Your story" / "Close Friends" buttons)
+6. Share destination screen → tap the blue **Share** button (`share_story_button`)
+7. "Also share to" screen → tap the blue **Finished** button (`send_button` desc="Finished")
+8. Dismiss **Stories archive** popup if it appears (`primary_button` text="OK")
+
+The story flow reuses the same local folder, Fix AI Slop, and delete-after-upload logic as the profile post flow. No caption is entered for stories (Instagram Stories don't have a caption field in this flow).
+
+**New helper functions in `androidManager.ts`:**
+- `findStoryGalleryButton` — gallery icon on story camera screen
+- `findFirstStoryGalleryThumbnail` — newest photo in "Add to story" gallery (broader Y range than post gallery)
+- `findStoryNextArrowButton` — rightmost `igds_media_button` (the arrow, not the share targets)
+- `findStoryShareButton` — blue Share button on share destination screen
+- `findStoryFinishedButton` — blue Finished button on "Also share to" screen
+- `dismissStoriesArchivePopup` — dismisses the Stories archive info dialog via `primary_button` OK
+
+**Files changed:**
+- `artifacts/api-server/src/mobile/androidManager.ts` — 6 new story helper functions
+- `artifacts/api-server/src/routes/mobile.ts` — `runMakePostStoryStep` function; new `makePostPostToProfilePct*` / `makePostPostToStoryPct*` fields in both Zod schemas and defaults; execution block updated to roll destination per post attempt
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — two new "Post to Profile %" and "Post to Story %" rows in the Make a Post settings panel; new fields in interface and defaults
+
+---
+
 ## v1.2.218 — 2026-07-27
 
 ### Added — Skip Click Author on ad posts (all three tools)

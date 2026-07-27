@@ -4086,6 +4086,172 @@ export function postGalleryThumbnailPositionalFallback(serial: string): { x: num
   return { x: Math.round(w * 0.38), y: Math.round(h * 0.69) };
 }
 
+// ── Story post helpers ────────────────────────────────────────────────────────
+
+/**
+ * Finds the gallery icon on the Instagram story camera screen.
+ * resource-id="gallery_preview_button", desc="Gallery" — bottom-left of screen.
+ */
+export async function findStoryGalleryButton(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+  let m: RegExpExecArray | null;
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    const rid = attrs.match(/resource-id="([^"]*)"/)?.[1] ?? "";
+    const desc = attrs.match(/content-desc="([^"]*)"/)?.[1] ?? "";
+    if (rid.includes("gallery_preview_button") || desc.toLowerCase() === "gallery") {
+      const bm = attrs.match(/bounds="([^"]+)"/);
+      if (bm) { const c = _parseCenter(bm[1]); if (c) return c; }
+    }
+  }
+  return null;
+}
+
+/**
+ * Finds the first non-camera photo thumbnail in the Instagram story gallery picker
+ * ("Add to story"). Uses resource-id="gallery_grid_item_thumbnail" with a broad
+ * Y search range — the story gallery sits higher on screen than the post gallery.
+ */
+export async function findFirstStoryGalleryThumbnail(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+  const { w } = getScreenSize(serial);
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+  const candidates: { x: number; y: number; y1: number }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    const rid = attrs.match(/resource-id="([^"]*)"/)?.[1] ?? "";
+    const desc = attrs.match(/content-desc="([^"]*)"/)?.[1] ?? "";
+    if (!rid.includes("gallery_grid_item_thumbnail")) continue;
+    if (desc.toLowerCase().includes("camera")) continue;
+    const bm = attrs.match(/bounds="(\[(\d+),(\d+)\]\[(\d+),(\d+)\])"/);
+    if (!bm) continue;
+    const x1 = Number(bm[2]), y1 = Number(bm[3]), x2 = Number(bm[4]), y2 = Number(bm[5]);
+    const bw = x2 - x1;
+    if (bw < w * 0.15 || bw > w * 0.50) continue;
+    const c = _parseCenter(bm[1]);
+    if (c) candidates.push({ x: c.x, y: c.y, y1 });
+  }
+  if (!candidates.length) return null;
+  // Top-left first = newest photo
+  candidates.sort((a, b) => Math.abs(a.y1 - b.y1) > 20 ? a.y1 - b.y1 : a.x - b.x);
+  return { x: candidates[0].x, y: candidates[0].y };
+}
+
+/**
+ * Finds the forward-arrow button in the Instagram story editor bottom bar.
+ * This is the small rightmost igds_media_button — NOT "Your story" or "Close Friends".
+ */
+export async function findStoryNextArrowButton(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+  const candidates: { x: number; y: number; cx: number }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    const rid = attrs.match(/resource-id="([^"]*)"/)?.[1] ?? "";
+    if (!rid.includes("igds_media_button")) continue;
+    const text = attrs.match(/\btext="([^"]*)"/)?.[1] ?? "";
+    const desc = attrs.match(/content-desc="([^"]*)"/)?.[1] ?? "";
+    const label = `${text} ${desc}`.toLowerCase();
+    if (label.includes("story") || label.includes("friends")) continue;
+    const bm = attrs.match(/bounds="([^"]+)"/);
+    if (bm) {
+      const c = _parseCenter(bm[1]);
+      if (c) candidates.push({ x: c.x, y: c.y, cx: c.x });
+    }
+  }
+  if (!candidates.length) return null;
+  // The arrow is the rightmost button in the bottom bar
+  candidates.sort((a, b) => b.cx - a.cx);
+  return { x: candidates[0].x, y: candidates[0].y };
+}
+
+/**
+ * Finds the blue "Share" button on the story share destination screen.
+ * resource-id="share_story_button", desc="Share".
+ */
+export async function findStoryShareButton(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+  let m: RegExpExecArray | null;
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    const rid = attrs.match(/resource-id="([^"]*)"/)?.[1] ?? "";
+    const desc = attrs.match(/content-desc="([^"]*)"/)?.[1] ?? "";
+    if (rid.includes("share_story_button") || desc === "Share") {
+      const bm = attrs.match(/bounds="([^"]+)"/);
+      if (bm) { const c = _parseCenter(bm[1]); if (c) return c; }
+    }
+  }
+  return null;
+}
+
+/**
+ * Finds the "Finished" button on the "Also share to" screen after a story is shared.
+ * resource-id="send_button", desc="Finished".
+ */
+export async function findStoryFinishedButton(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+  let m: RegExpExecArray | null;
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    const rid = attrs.match(/resource-id="([^"]*)"/)?.[1] ?? "";
+    const desc = attrs.match(/content-desc="([^"]*)"/)?.[1] ?? "";
+    const text = attrs.match(/\btext="([^"]*)"/)?.[1] ?? "";
+    if (rid.includes("send_button") && (desc.toLowerCase().includes("finished") || text.toLowerCase().includes("finished"))) {
+      const bm = attrs.match(/bounds="([^"]+)"/);
+      if (bm) { const c = _parseCenter(bm[1]); if (c) return c; }
+    }
+  }
+  return null;
+}
+
+/**
+ * Dismisses the Instagram "Stories archive" informational popup that can appear
+ * immediately after a story is shared. Taps the "OK" primary button.
+ * Returns true if the popup was found and dismissed.
+ */
+export async function dismissStoriesArchivePopup(serial: string): Promise<boolean> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return false;
+  if (!xml.includes("Stories archive")) return false;
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+  let m: RegExpExecArray | null;
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    const rid = attrs.match(/resource-id="([^"]*)"/)?.[1] ?? "";
+    const text = attrs.match(/\btext="([^"]*)"/)?.[1] ?? "";
+    if (rid.includes("primary_button") && text === "OK") {
+      const bm = attrs.match(/bounds="([^"]+)"/);
+      if (bm) {
+        const c = _parseCenter(bm[1]);
+        if (c) { _adbTap(adb, serial, c.x, c.y); await _sleep(400); return true; }
+      }
+    }
+  }
+  return false;
+}
+
 /**
  * Dumps every node in the current UI as human-readable lines so Make-a-Post
  * can log exactly what's on screen at each step.
