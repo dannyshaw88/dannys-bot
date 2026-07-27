@@ -2965,6 +2965,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           if (isCycleAborted(serial)) throw new Error("cycle-aborted");
           await sleepOrAbort(serial, 300);
           const _caXml = await android.dumpUi(serial).catch(() => "");
+          // Skip author click if Instagram labels this as a sponsored post.
+          // Ads carry an exact standalone text="Ad" or content-desc="Ad" node.
+          // Quoted attribute matching prevents false positives on words like
+          // "Add", "Adidas", etc. whose text values differ from the bare "Ad".
+          const _caIsAd = _caXml.includes('text="Ad"') || _caXml.includes('content-desc="Ad"');
+          if (_caIsAd) {
+            onLog?.(`Scroll ${i + 1}/${count}: ad post detected — skipping click author`);
+          } else {
           // Find row_feed_photo_profile_name in the a11y tree.
           let _caNode: { x: number; y: number; name: string } | null = null;
           for (const _caSeg of _caXml.split("<node ")) {
@@ -3008,6 +3016,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             authorVisits++;
             onLog?.(`Scroll ${i + 1}/${count}: ✓ author profile visited (${_caNode.name})`);
           }
+          } // end ad-skip else
         } catch (e: any) {
           if (e?.message === "cycle-aborted") throw e;
           onLog?.(`Scroll ${i + 1}/${count}: click-author error — ${e?.message}`);
@@ -4388,6 +4397,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               if (isCycleAborted(serial)) throw new Error("cycle-aborted");
               await sleepOrAbort(serial, 300);
               const _aeXml = await android.dumpUi(serial).catch(() => "");
+              // Skip author click if Instagram labels this as a sponsored post.
+              // Ads carry an exact standalone text="Ad" or content-desc="Ad" node.
+              // Quoted attribute matching prevents false positives on words like
+              // "Add", "Adidas", etc. whose text values differ from the bare "Ad".
+              const _aeIsAd = _aeXml.includes('text="Ad"') || _aeXml.includes('content-desc="Ad"');
+              if (_aeIsAd) {
+                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: ad post detected — skipping click author`);
+              } else {
               // Find author button — covers Reels viewer (clips_author_username)
               // and photo-post viewer (row_feed_photo_profile_name).
               //
@@ -4460,6 +4477,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   onLog?.(`Explore scroll ${i + 1}/${scrollCount}: ✓ author profile visited (${_aeNode.name})`);
                 }
               }
+              } // end ad-skip else
             } catch (e: any) {
               if (e?.message === "cycle-aborted") throw e;
               onLog?.(`Explore scroll ${i + 1}/${scrollCount}: click-author error — ${e?.message}`);
@@ -4867,6 +4885,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           if (isCycleAborted(serial)) throw new Error("cycle-aborted");
           onLog?.(`${_vrCaPfx}: clicking author profile…`);
           const _vrCaXml = await android.dumpUi(serial).catch(() => "");
+          // Skip author click if Instagram labels this as a sponsored post.
+          // Ads carry an exact standalone text="Ad" or content-desc="Ad" node.
+          // Quoted attribute matching prevents false positives on words like
+          // "Add", "Adidas", etc. whose text values differ from the bare "Ad".
+          const _vrCaIsAd = _vrCaXml.includes('text="Ad"') || _vrCaXml.includes('content-desc="Ad"');
+          if (_vrCaIsAd) {
+            onLog?.(`${_vrCaPfx}: ad post detected — skipping click author`);
+          } else {
           // Try clips_author_username first, then clips_author_info_component.
           // Raw UIAutomator XML uses resource-id="com.instagram.android:id/<name>"
           // so we match the plain name fragment (same approach as all polling code)
@@ -4905,6 +4931,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             onLog?.(`${_vrCaPfx}: ✓ visited author profile (${_vrCaScrolls} scroll(s)) — pressed Back`);
             await sleepOrAbort(serial, 800);
           }
+          } // end ad-skip else
         } catch (e: any) {
           if (e?.message === "cycle-aborted") throw e;
           onLog?.(`Reel ${i + 1}/${totalReels}: click-author error — ${e?.message}`);
