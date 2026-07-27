@@ -4306,8 +4306,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // row_feed_photo_profile_name (photo-post viewer) — whichever is
           // present — to open the author's profile.  Scrolls 1–10 times with
           // a 2.5–10 s swipe per scroll to let images render, then presses
-          // Back twice after the profile visit: once to return to the post
-          // viewer, then the existing Back press below returns to Explore.
+          // Back once after the profile visit to return to the post viewer;
+          // the existing Back press below then returns to Explore.
           // This block is intentionally isolated to runViewExplorePage.
           if (wantClickAuthor) {
             try {
@@ -4381,8 +4381,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   onLog?.(`Explore scroll ${i + 1}/${scrollCount}: returning from author profile…`);
                   await android.pressBack(serial);
                   await sleepOrAbort(serial, 700);
-                  await android.pressBack(serial);
-                  await sleepOrAbort(serial, 800);
                   authorVisits++;
                   onLog?.(`Explore scroll ${i + 1}/${scrollCount}: ✓ author profile visited (${_aeNode.name})`);
                 }

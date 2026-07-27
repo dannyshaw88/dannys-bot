@@ -4,6 +4,28 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.210 — 2026-07-27
+
+### Fixed — View Explore: author visits now return through the correct screens
+
+The **View Explore → Click Author % of posts** flow was pressing Back one time
+too many after scrolling an author's profile. The profile visit now performs
+exactly two Back presses in total:
+
+- The first Back leaves the author's profile and returns to the opened
+  post/reel.
+- The second Back leaves the post/reel and returns to the Explore grid.
+
+The existing outer Explore navigation remains responsible for the second step,
+so the flow no longer overshoots the Explore grid or lands on an unexpected
+screen before the next Explore scroll.
+
+The canonical `.github/workflows/build-windows-installer.yml` workflow remains
+the only active Windows installer workflow and continues to run on pushes to
+`main`.
+
+---
+
 ## v1.2.209 — 2026-07-27
 
 ### Fixed — View Explore: author visits return to Explore and save their settings
