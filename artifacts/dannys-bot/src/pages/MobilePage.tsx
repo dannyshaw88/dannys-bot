@@ -8350,7 +8350,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
               return (
                 <div key={i} className="flex gap-x-2 min-w-0 py-[1px]">
                   <span className="text-white whitespace-nowrap shrink-0 select-none">[{ts}]</span>
-                  {dur && <span className="shrink-0 text-right whitespace-nowrap text-amber-400/80">{`[${dur}]`}</span>}
+                  {dur && <span className="shrink-0 text-right whitespace-nowrap text-white">{`[${dur}]`}</span>}
                   <span className={`flex-1 min-w-0 break-words ${msgClass}`}>{msg}</span>
                 </div>
               );
