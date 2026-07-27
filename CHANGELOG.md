@@ -4,6 +4,20 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.208 — 2026-07-27
+
+### Fixed — View Explore: Click Author skips collab posts correctly
+
+Two bugs in the author-click logic for the View Explore tool:
+
+**Bug 1 — Wrong node tapped (root cause of the collaborators sheet appearing)**
+`clips_author_info_component` was included in the scan. That node is a parent *container* — it appears before its children in the UIAutomator XML dump, has no `content-desc` or `text` (name logged as `"unknown"`), and tapping it on a collab post opens the Collaborators sheet instead of navigating to a profile. Fix: removed `clips_author_info_component` from the scan entirely. Added a mandatory non-empty name check (`if (!_aeDesc) continue`) so any remaining nameless container nodes are also skipped. Only `clips_author_username` and `row_feed_photo_profile_name` nodes with a real username are accepted.
+
+**Bug 2 — No post-tap guard (scrolled the Collaborators sheet as if it were a profile)**
+Even after the correct node is picked, a collab post can still open the sheet if Instagram routes the tap to the collab overlay. Added a post-tap dump check: if `text="Collaborators"`, `clips_collab`, or the reel viewer + Follow buttons are still on screen after the tap, the bot presses Back to dismiss the sheet and skips the author visit for that post (logged clearly). Single-author posts proceed to the profile scroll as normal.
+
+---
+
 ## v1.2.207 — 2026-07-27
 
 ### Added — View Explore Page: Click Author % of posts

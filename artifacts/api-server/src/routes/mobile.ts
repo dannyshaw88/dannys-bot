@@ -4312,50 +4312,75 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               if (isCycleAborted(serial)) throw new Error("cycle-aborted");
               await sleepOrAbort(serial, 300);
               const _aeXml = await android.dumpUi(serial).catch(() => "");
-              // Find author button — covers Reels viewer (clips_author_username /
-              // clips_author_info_component) and photo-post viewer
-              // (row_feed_photo_profile_name).
+              // Find author button — covers Reels viewer (clips_author_username)
+              // and photo-post viewer (row_feed_photo_profile_name).
+              //
+              // clips_author_info_component is deliberately excluded: it is a
+              // container node that appears before its children in the XML dump.
+              // It has no text/content-desc, so the name would be "unknown", and
+              // tapping it on a collab post opens a Collaborators sheet instead
+              // of navigating to the author's profile.
+              //
+              // Require a non-empty name: collab posts expose multiple
+              // clips_author_username nodes (one per collaborator). Taking the
+              // first one with a non-empty text/content-desc gives us the
+              // original (topmost) author — later nodes are collaborators.
+              // An empty name means we hit a container; skip it.
               let _aeNode: { x: number; y: number; name: string } | null = null;
               for (const _aeSeg of _aeXml.split("<node ")) {
                 const _aeRid = (_aeSeg.match(/resource-id="([^"]*)"/) ?? [])[1] ?? "";
                 const _isAuthor =
                   _aeRid.includes("clips_author_username") ||
-                  _aeRid.includes("clips_author_info_component") ||
                   _aeRid.includes("row_feed_photo_profile_name");
                 if (!_isAuthor) continue;
                 const _aeDesc = (_aeSeg.match(/(?:content-desc|text)="([^"]*)"/) ?? [])[1] ?? "";
+                // Skip nodes with no name — containers and collab groupings.
+                if (!_aeDesc) continue;
                 const _aeBb = _aeSeg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
                 if (!_aeBb) continue;
                 const _aeX = Math.round((parseInt(_aeBb[1]) + parseInt(_aeBb[3])) / 2);
                 const _aeY = Math.round((parseInt(_aeBb[2]) + parseInt(_aeBb[4])) / 2);
-                _aeNode = { x: _aeX, y: _aeY, name: _aeDesc || "unknown" };
+                _aeNode = { x: _aeX, y: _aeY, name: _aeDesc };
                 break;
               }
               if (!_aeNode) {
-                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: click-author rolled but no author button visible — skipping`);
+                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: click-author rolled but no named author button visible — skipping`);
               } else {
                 onLog?.(`Explore scroll ${i + 1}/${scrollCount}: tapping author "${_aeNode.name}" at (${_aeNode.x},${_aeNode.y})…`);
                 await android.tap(serial, _aeNode.x, _aeNode.y);
                 await sleepOrAbort(serial, 1500);
-                // Scroll the author's profile 1–10 times with 2.5–10 s dwell
-                // per swipe so images have time to render.
-                const _aeScrolls = 1 + Math.floor(Math.random() * 10);
-                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: on author profile "${_aeNode.name}" — scrolling ${_aeScrolls}x…`);
-                const { w: _aeW, h: _aeH } = getScreenSize(serial);
-                for (let _aeS = 0; _aeS < _aeScrolls; _aeS++) {
-                  if (isCycleAborted(serial)) throw new Error("cycle-aborted");
-                  const _aeSY1 = Math.round(_aeH * 0.75);
-                  const _aeSY2 = Math.round(_aeH * 0.30);
-                  const _aeDur = 2500 + Math.round(Math.random() * 7500);
-                  await android.swipe(serial, Math.round(_aeW / 2), _aeSY1, Math.round(_aeW / 2), _aeSY2, _aeDur);
-                  await sleepOrAbort(serial, 280);
+                // Guard: collab posts can open a Collaborators sheet instead of
+                // a profile. Check the post-tap dump and bail if the sheet appeared.
+                const _aeChkXml = await android.dumpUi(serial).catch(() => "");
+                const _aeIsCollab =
+                  _aeChkXml.includes('text="Collaborators"') ||
+                  _aeChkXml.includes('clips_collab') ||
+                  // Still in reel viewer with Follow buttons = sheet over the top
+                  (_aeChkXml.includes("clips_viewer_container") && _aeChkXml.includes("Follow"));
+                if (_aeIsCollab) {
+                  onLog?.(`Explore scroll ${i + 1}/${scrollCount}: click-author — Collaborators sheet appeared (collab post) — pressing Back, skipping`);
+                  await android.pressBack(serial);
+                  await sleepOrAbort(serial, 500);
+                } else {
+                  // Normal single-author profile — scroll it.
+                  const _aeScrolls = 1 + Math.floor(Math.random() * 10);
+                  onLog?.(`Explore scroll ${i + 1}/${scrollCount}: on author profile "${_aeNode.name}" — scrolling ${_aeScrolls}x…`);
+                  const { w: _aeW, h: _aeH } = getScreenSize(serial);
+                  for (let _aeS = 0; _aeS < _aeScrolls; _aeS++) {
+                    if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+                    const _aeSY1 = Math.round(_aeH * 0.75);
+                    const _aeSY2 = Math.round(_aeH * 0.30);
+                    const _aeDur = 2500 + Math.round(Math.random() * 7500);
+                    await android.swipe(serial, Math.round(_aeW / 2), _aeSY1, Math.round(_aeW / 2), _aeSY2, _aeDur);
+                    await sleepOrAbort(serial, 280);
+                  }
+                  // Back once — returns to the post/reel viewer.
+                  onLog?.(`Explore scroll ${i + 1}/${scrollCount}: returning from author profile…`);
+                  await android.pressBack(serial);
+                  await sleepOrAbort(serial, 700);
+                  authorVisits++;
+                  onLog?.(`Explore scroll ${i + 1}/${scrollCount}: ✓ author profile visited (${_aeNode.name})`);
                 }
-                // Back once — returns to the post/reel viewer.
-                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: returning from author profile…`);
-                await android.pressBack(serial);
-                await sleepOrAbort(serial, 700);
-                authorVisits++;
-                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: ✓ author profile visited (${_aeNode.name})`);
               }
             } catch (e: any) {
               if (e?.message === "cycle-aborted") throw e;
