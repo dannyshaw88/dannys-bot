@@ -2975,7 +2975,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               if (isCycleAborted(serial)) throw new Error("cycle-aborted");
               const _caSY1 = Math.round(_caH * 0.75);
               const _caSY2 = Math.round(_caH * 0.30);
-              const _caDur = 300 + Math.round(Math.random() * 400);
+              const _caDur = 2500 + Math.round(Math.random() * 7500);
               await android.swipe(serial, Math.round(_caW / 2), _caSY1, Math.round(_caW / 2), _caSY2, _caDur);
               await sleepOrAbort(serial, 280);
             }
