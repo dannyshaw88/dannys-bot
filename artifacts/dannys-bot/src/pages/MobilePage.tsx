@@ -5862,7 +5862,7 @@ export function AutomationSettingsPanel({
           {/* Row 2: Activate Percentage (first field) / Browse before follow / Feed chance / Feed posts / Click posts % */}
           <div className="flex items-start flex-wrap gap-6">
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Activate Percentage</Label>
+              <Label className="text-xs text-muted-foreground block text-center">Activate Percentage</Label>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingActivatePctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingActivatePctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
                 <span className="text-muted-foreground text-sm">to</span>
@@ -5870,7 +5870,7 @@ export function AutomationSettingsPanel({
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Browse before follow %</Label>
+              <Label className="text-xs text-muted-foreground block text-center">Browse before follow %</Label>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingBeforeFollowPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingBeforeFollowPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
                 <span className="text-muted-foreground text-sm">to</span>
@@ -5878,7 +5878,7 @@ export function AutomationSettingsPanel({
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Tap Highlights %</Label>
+              <Label className="text-xs text-muted-foreground block text-center">Tap Highlights %</Label>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingTapHighlightsPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingTapHighlightsPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
                 <span className="text-muted-foreground text-sm">to</span>
@@ -5886,7 +5886,7 @@ export function AutomationSettingsPanel({
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Feed posts</Label>
+              <Label className="text-xs text-muted-foreground block text-center">Feed posts</Label>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={50} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
                 <span className="text-muted-foreground text-sm">to</span>
@@ -5894,7 +5894,7 @@ export function AutomationSettingsPanel({
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Click posts %</Label>
+              <Label className="text-xs text-muted-foreground block text-center">Click posts %</Label>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingClickPostPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingClickPostPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
                 <span className="text-muted-foreground text-sm">to</span>
@@ -5902,7 +5902,7 @@ export function AutomationSettingsPanel({
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Like %</Label>
+              <Label className="text-xs text-muted-foreground block text-center">Like %</Label>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingLikePctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingLikePctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
                 <span className="text-muted-foreground text-sm">to</span>
@@ -5910,7 +5910,7 @@ export function AutomationSettingsPanel({
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Share feed %</Label>
+              <Label className="text-xs text-muted-foreground block text-center">Share feed %</Label>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingShareFeedPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareFeedPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
                 <span className="text-muted-foreground text-sm">to</span>
@@ -5918,7 +5918,7 @@ export function AutomationSettingsPanel({
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Share to DM %</Label>
+              <Label className="text-xs text-muted-foreground block text-center">Share to DM %</Label>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingShareDmPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingShareDmPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
                 <span className="text-muted-foreground text-sm">to</span>
@@ -5928,7 +5928,7 @@ export function AutomationSettingsPanel({
           </div>
           <div className="flex items-start flex-wrap gap-6 mt-2">
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Abandon Follow %</Label>
+              <Label className="text-xs text-muted-foreground block text-center">Abandon Follow %</Label>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingAbandonFollowPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingAbandonFollowPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
                 <span className="text-muted-foreground text-sm">to</span>
@@ -6033,7 +6033,7 @@ export function AutomationSettingsPanel({
 
               {/* ── Activate % ── */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Activate %</Label>
+                <Label className="text-xs text-muted-foreground block text-center">Activate %</Label>
                 <div className="flex items-center gap-2">
                   <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.randomJitterActivatePctMin}
@@ -6049,7 +6049,7 @@ export function AutomationSettingsPanel({
 
               {/* ── Notifications ── */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Notifications %</Label>
+                <Label className="text-xs text-muted-foreground block text-center">Notifications %</Label>
                 <div className="flex items-center gap-2">
                   <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.checkNotificationsPctMin}
@@ -6065,7 +6065,7 @@ export function AutomationSettingsPanel({
 
               {/* ── Scrolls ── */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Scrolls</Label>
+                <Label className="text-xs text-muted-foreground block text-center">Scrolls</Label>
                 <div className="flex items-center gap-2">
                   <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.checkNotificationsScrollsMin}
@@ -6081,7 +6081,7 @@ export function AutomationSettingsPanel({
 
               {/* ── Click % ── */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Click %</Label>
+                <Label className="text-xs text-muted-foreground block text-center">Click %</Label>
                 <div className="flex items-center gap-2">
                   <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.checkNotificationsClickPctMin}
@@ -6097,7 +6097,7 @@ export function AutomationSettingsPanel({
 
               {/* ── Visit Profile ── */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Visit Profile %</Label>
+                <Label className="text-xs text-muted-foreground block text-center">Visit Profile %</Label>
                 <div className="flex items-center gap-2">
                   <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.visitProfilePctMin}
@@ -6113,7 +6113,7 @@ export function AutomationSettingsPanel({
 
               {/* ── Visit Saved ── */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Visit Saved %</Label>
+                <Label className="text-xs text-muted-foreground block text-center">Visit Saved %</Label>
                 <div className="flex items-center gap-2">
                   <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.visitSavedPctMin}
@@ -6129,7 +6129,7 @@ export function AutomationSettingsPanel({
 
               {/* ── Visit Random Settings ── */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Visit Random Settings %</Label>
+                <Label className="text-xs text-muted-foreground block text-center">Visit Random Settings %</Label>
                 <div className="flex items-center gap-2">
                   <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.visitSettingsPctMin}
@@ -6145,7 +6145,7 @@ export function AutomationSettingsPanel({
 
               {/* ── App Switch ── */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">App Switch %</Label>
+                <Label className="text-xs text-muted-foreground block text-center">App Switch %</Label>
                 <div className="flex items-center gap-2">
                   <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.appSwitchPctMin}
@@ -6193,7 +6193,7 @@ export function AutomationSettingsPanel({
               {/* Activate Percentage / Order % / Skip Chance % / Posts per session */}
               <div className="flex items-start gap-8 flex-wrap">
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Activate Percentage</Label>
+                  <Label className="text-xs text-muted-foreground block text-center">Activate Percentage</Label>
                   <div className="flex items-center gap-2">
                     <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                       value={settings.makePostActivatePctMin}
@@ -6207,7 +6207,7 @@ export function AutomationSettingsPanel({
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Posts per session</Label>
+                  <Label className="text-xs text-muted-foreground block text-center">Posts per session</Label>
                   <div className="flex items-center gap-2">
                     <Input type="number" min={1} max={20} maxLength={4} className={NUM_INPUT_CLASS}
                       value={settings.makePostPerSessionMin}
@@ -6240,14 +6240,14 @@ export function AutomationSettingsPanel({
                 {!settings.makePostDisableUsernameSource && (
                   <div className="flex flex-wrap items-end gap-4">
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Account username <span className="text-muted-foreground/60">(without @)</span></Label>
+                      <Label className="text-xs text-muted-foreground block text-center">Account username <span className="text-muted-foreground/60">(without @)</span></Label>
                       <Input type="text" placeholder="username" className="h-8 text-xs max-w-[220px]"
                         value={settings.makePostSourceUsername}
                         onChange={e => setSettings(s => ({ ...s, makePostSourceUsername: e.target.value.replace(/^@/, '') }))}
                         disabled={loading} />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Disable when my posts reach <span className="text-muted-foreground/60">(0 = off)</span></Label>
+                      <Label className="text-xs text-muted-foreground block text-center">Disable when my posts reach <span className="text-muted-foreground/60">(0 = off)</span></Label>
                       <Input type="number" min={0} maxLength={5} className="w-20 h-8 text-xs text-center"
                         value={settings.makePostDisableAtPostCount}
                         onChange={e => setSettings(s => ({ ...s, makePostDisableAtPostCount: clamp4(Number(e.target.value)) }))}
@@ -6486,7 +6486,7 @@ export function AutomationSettingsPanel({
                   </div>
                   {/* Post to Profile % */}
                   <div className="space-y-3">
-                    <Label className="text-xs text-muted-foreground">Post to Profile %</Label>
+                    <Label className="text-xs text-muted-foreground block text-center">Post to Profile %</Label>
                     <div className="flex items-center gap-2">
                       <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                         value={settings.makePostPostToProfilePctMin}
@@ -6501,7 +6501,7 @@ export function AutomationSettingsPanel({
                   </div>
                   {/* Post to Story % */}
                   <div className="space-y-3">
-                    <Label className="text-xs text-muted-foreground">Post to Story %</Label>
+                    <Label className="text-xs text-muted-foreground block text-center">Post to Story %</Label>
                     <div className="flex items-center gap-2">
                       <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                         value={settings.makePostPostToStoryPctMin}
@@ -7122,7 +7122,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
               <div className="flex items-end gap-3 flex-wrap">
                 {/* Username */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Username</Label>
+                  <Label className="text-xs text-muted-foreground block text-center">Username</Label>
                   <Input
                     value={slot.username}
                     onChange={e => updateSlot(i, { username: e.target.value })}
@@ -7134,7 +7134,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
 
                 {/* Password */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Password</Label>
+                  <Label className="text-xs text-muted-foreground block text-center">Password</Label>
                   <div className="flex items-center gap-1.5">
                     <Input
                       type={showPassword[i] ? "text" : "password"}
@@ -7153,7 +7153,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
 
                 {/* 2FA OTP Secret */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">2FA OTP Secret</Label>
+                  <Label className="text-xs text-muted-foreground block text-center">2FA OTP Secret</Label>
                   <div className="flex items-center gap-1.5">
                     <Input
                       value={slot.totpSecret}
@@ -7185,7 +7185,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
               <div className="flex items-end gap-3 flex-wrap">
                 {/* Email Address */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Email Address</Label>
+                  <Label className="text-xs text-muted-foreground block text-center">Email Address</Label>
                   <Input
                     value={slot.emailAddress}
                     onChange={e => updateSlot(i, { emailAddress: e.target.value })}
@@ -7197,7 +7197,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
 
                 {/* Email Password */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Email Password</Label>
+                  <Label className="text-xs text-muted-foreground block text-center">Email Password</Label>
                   <div className="flex items-center gap-1.5">
                     <Input
                       type={showEmailPassword[i] ? "text" : "password"}
@@ -7216,7 +7216,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
 
                 {/* Phone Number */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Phone Number</Label>
+                  <Label className="text-xs text-muted-foreground block text-center">Phone Number</Label>
                   <Input
                     value={slot.phoneNumber}
                     onChange={e => updateSlot(i, { phoneNumber: e.target.value })}
@@ -7669,12 +7669,12 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
         </div>
         <div className="flex items-end gap-3 flex-wrap">
           <div className="space-y-1.5 flex-1 min-w-[180px]">
-            <Label className="text-xs text-muted-foreground">Email Address</Label>
+            <Label className="text-xs text-muted-foreground block text-center">Email Address</Label>
             <Input value={gpEmail} onChange={e => setGpEmail(e.target.value)}
               placeholder="example@gmail.com" autoComplete="off" />
           </div>
           <div className="space-y-1.5 flex-1 min-w-[180px]">
-            <Label className="text-xs text-muted-foreground">Password</Label>
+            <Label className="text-xs text-muted-foreground block text-center">Password</Label>
             <Input type="password" value={gpPassword} onChange={e => setGpPassword(e.target.value)}
               placeholder="••••••••" autoComplete="new-password" />
           </div>
@@ -7789,7 +7789,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
             </p>
             <div className="flex items-center gap-4 flex-wrap">
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Rest between slots (min)</Label>
+                <Label className="text-xs text-muted-foreground block text-center">Rest between slots (min)</Label>
                 <div className="flex items-center gap-2">
                   <Input type="number" min={0} max={60} value={csMinMin}
                     onChange={e => setCsMinMin(Math.max(0, Math.min(60, parseInt(e.target.value) || 0)))}
@@ -7889,17 +7889,17 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
             {/* ── Schedule controls ─────────────────────────────────── */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Stop charging for (minutes)</Label>
+                <Label className="text-xs text-muted-foreground block text-center">Stop charging for (minutes)</Label>
                 <Input type="number" min={1} max={1440} value={unplugMinutes}
                   onChange={e => setUnplugMinutes(Math.max(1, parseInt(e.target.value) || 1))} className="w-full" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Every (hours)</Label>
+                <Label className="text-xs text-muted-foreground block text-center">Every (hours)</Label>
                 <Input type="number" min={0.5} max={24} step={0.5} value={cycleHours}
                   onChange={e => setCycleHours(Math.max(0.5, parseFloat(e.target.value) || 0.5))} className="w-full" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">
+                <Label className="text-xs text-muted-foreground block text-center">
                   {isReal ? "App-visible level (%) — cosmetic only" : "Show battery level (%) while stopped"}
                 </Label>
                 <Input type="number" min={1} max={100} value={spoofLevel}
@@ -8349,9 +8349,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
               return (
                 <div key={i} className="flex gap-x-2 min-w-0 py-[1px]">
                   <span className="text-white whitespace-nowrap shrink-0 select-none">[{ts}]</span>
-                  <span className={`shrink-0 w-[4.5rem] text-right whitespace-nowrap ${dur ? 'text-amber-400/80' : ''}`}>
-                    {dur ? `[${dur}]` : ''}
-                  </span>
+                  {dur && <span className="shrink-0 text-right whitespace-nowrap text-amber-400/80">{`[${dur}]`}</span>}
                   <span className={`flex-1 min-w-0 break-words ${msgClass}`}>{msg}</span>
                 </div>
               );
