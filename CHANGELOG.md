@@ -4,6 +4,55 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.214 — 2026-07-27
+
+### Added — View Stories from Feed: Click Author % feature
+
+New **Click Author %** (min/max) fields added to the View Stories from Feed
+tool, mirroring the same feature already present on View Explore and View Feed.
+
+**What it does:**
+
+When rolled, the automation taps the author's name button at the top-left of
+the story viewer (the `reel_viewer_text_container` node confirmed via
+UIAutomator dump — e.g. `desc="jo.alixis's story, 14 hours ago"`), navigates
+to the author's profile, scrolls it **1–10 times** with a **2.5–8 second
+dwell** between each scroll, then presses **Back once** to return to the story
+viewer flow.
+
+**Implementation details:**
+
+- Author header detection: primary signal is `resource-id` containing
+  `reel_viewer_text_container`; fallback is `reel_viewer_profile_picture`
+  (avatar circle). Both confirmed present in the story viewer header strip.
+- Story viewer open-check runs before the tap (`stillInStoryViewer(true)`)
+  to avoid blind taps if the slide already auto-closed.
+- Scroll gesture: swipe from 75 % → 30 % height, 350–700 ms duration.
+- Dwell: `sleepOrAbort` 2 500–8 000 ms per scroll (cycle-abort aware).
+- Exit: single `pressBack` + 700 ms settle; returns to the story viewer.
+  The existing end-of-slide `stillInStoryViewer` guard then handles any
+  slide that auto-advanced or auto-closed during the profile visit.
+- `willClickAuthor` is included in the no-watch-delay gate alongside
+  `willLike`, `willShare`, and `willComment` so actions fire immediately
+  without burning the slide timer on a pre-action watch delay.
+
+**Schema — all three layers updated per schema-drift rule:**
+
+| Layer | Location |
+|---|---|
+| Persistence (`automationSchema`) | `mobile.ts` ~line 1205 |
+| GET-handler defaults (×2) | `mobile.ts` ~lines 1390, 1496 |
+| Execution (`automationCycleSchema`) | `mobile.ts` ~line 4917 |
+| Frontend type + defaults | `MobilePage.tsx` |
+| Save mapping | `MobilePage.tsx` |
+| UI rows config | `MobilePage.tsx` (storiesClickAuthor row after Comment %) |
+
+**Files changed:**
+- `artifacts/api-server/src/routes/mobile.ts` — schema, defaults, loop logic
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — type, defaults, UI row, save mapping
+
+---
+
 ## v1.2.213 — 2026-07-27
 
 ### Fixed — View Explore click-author: author profile mistaken for Collaborators sheet

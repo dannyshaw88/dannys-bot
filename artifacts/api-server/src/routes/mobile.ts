@@ -181,6 +181,8 @@ type AutomationSettings = {
   viewStoriesShareDmPercentMax: number;
   viewStoriesCommentPercentMin: number;
   viewStoriesCommentPercentMax: number;
+  viewStoriesClickAuthorPercentMin: number;
+  viewStoriesClickAuthorPercentMax: number;
   // View Reels — taps the Reels tab, snap-swipes through N reels, and acts
   // on each via the right-side vertical icon column (see findReelActionIcons
   // in androidManager.ts, distinct from the feed's horizontal action bar).
@@ -1200,6 +1202,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     viewStoriesShareDmPercentMax: z.number().min(0).max(100).default(0),
     viewStoriesCommentPercentMin: z.number().min(0).max(100).default(0),
     viewStoriesCommentPercentMax: z.number().min(0).max(100).default(0),
+    viewStoriesClickAuthorPercentMin: z.number().min(0).max(100).default(0),
+    viewStoriesClickAuthorPercentMax: z.number().min(0).max(100).default(0),
     viewReelsEnabled: z.boolean().default(false),
     viewReelsScrollMin: z.number().min(0).max(100).default(0),
     viewReelsScrollMax: z.number().min(0).max(100).default(0),
@@ -1383,6 +1387,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       viewStoriesLikePercentMin: 0, viewStoriesLikePercentMax: 0,
       viewStoriesShareDmPercentMin: 0, viewStoriesShareDmPercentMax: 0,
       viewStoriesCommentPercentMin: 0, viewStoriesCommentPercentMax: 0,
+      viewStoriesClickAuthorPercentMin: 0, viewStoriesClickAuthorPercentMax: 0,
       viewReelsEnabled: false, viewReelsScrollMin: 0, viewReelsScrollMax: 0,
       viewReelsLikePercentMin: 0, viewReelsLikePercentMax: 0,
       viewReelsShareFeedPercentMin: 0, viewReelsShareFeedPercentMax: 0,
@@ -1488,6 +1493,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewStoriesLikePercentMin: 0, viewStoriesLikePercentMax: 0,
         viewStoriesShareDmPercentMin: 0, viewStoriesShareDmPercentMax: 0,
         viewStoriesCommentPercentMin: 0, viewStoriesCommentPercentMax: 0,
+        viewStoriesClickAuthorPercentMin: 0, viewStoriesClickAuthorPercentMax: 0,
         viewReelsEnabled: false, viewReelsScrollMin: 0, viewReelsScrollMax: 0,
         viewReelsLikePercentMin: 0, viewReelsLikePercentMax: 0,
         viewReelsShareFeedPercentMin: 0, viewReelsShareFeedPercentMax: 0,
@@ -3217,6 +3223,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     likePercentMin: number; likePercentMax: number;
     shareDmPercentMin: number; shareDmPercentMax: number;
     commentPercentMin: number; commentPercentMax: number;
+    clickAuthorPercentMin: number; clickAuthorPercentMax: number;
     onLog?: (msg: string) => void;
   }): Promise<{ storiesWatched: number }> {
     const {
@@ -3225,6 +3232,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       likePercentMin, likePercentMax,
       shareDmPercentMin, shareDmPercentMax,
       commentPercentMin, commentPercentMax,
+      clickAuthorPercentMin, clickAuthorPercentMax,
       onLog,
     } = params;
 
@@ -3250,6 +3258,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       Math.random() * Math.abs(shareDmPercentMax - shareDmPercentMin)) / 100;
     const commentChance = (Math.min(commentPercentMin, commentPercentMax) +
       Math.random() * Math.abs(commentPercentMax - commentPercentMin)) / 100;
+    const clickAuthorChance = (Math.min(clickAuthorPercentMin, clickAuthorPercentMax) +
+      Math.random() * Math.abs(clickAuthorPercentMax - clickAuthorPercentMin)) / 100;
 
     // Returns true only while the story viewer is genuinely still on screen.
     // Root-cause fix (Jul 2026): every prior fix in this loop assumed that
@@ -3358,9 +3368,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
 
       // Like, share, and/or comment on this story?
-      const willLike    = likeChance    > 0 && Math.random() < likeChance;
-      const willShare   = shareChance   > 0 && Math.random() < shareChance;
-      const willComment = commentChance > 0 && Math.random() < commentChance;
+      const willLike        = likeChance        > 0 && Math.random() < likeChance;
+      const willShare       = shareChance       > 0 && Math.random() < shareChance;
+      const willComment     = commentChance     > 0 && Math.random() < commentChance;
+      const willClickAuthor = clickAuthorChance > 0 && Math.random() < clickAuthorChance;
 
       // Watch this story for a random percentage of its ~6s duration — but
       // ONLY when no action is scheduled on this slide. When a like and/or
@@ -3374,7 +3385,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // ago, nothing has navigated away). Post-action checks (pre-advance
       // at line ~2076, pre-exit at ~2106) still guard against blind taps
       // after the slide timer expires.
-      if (!(willLike || willShare || willComment)) {
+      if (!(willLike || willShare || willComment || willClickAuthor)) {
         const watchPct = Math.min(slideWatchPctMin, slideWatchPctMax) +
           Math.random() * Math.abs(slideWatchPctMax - slideWatchPctMin);
         const watchMs = Math.max(1500, Math.round((watchPct / 100) * 6000));
@@ -3723,6 +3734,60 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           if (e?.message === "cycle-aborted") throw e;
           onLog?.(`Story ${s + 1}: emoji comment error — ${e?.message}`);
           await android.pressBack(serial).catch(() => {}); // safety dismiss
+        }
+      }
+
+      // ── Click author — visit the story author's profile ──────────────────────
+      if (willClickAuthor) {
+        try {
+          if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+          const _saStillIn = await stillInStoryViewer(true);
+          if (!_saStillIn) {
+            onLog?.(`Story ${s + 1}: click-author — story viewer already closed, skipping`);
+          } else {
+            // Dump the story viewer to locate the author header button.
+            // Primary target: reel_viewer_text_container (the username/time label
+            // that sits top-left and is always clickable).
+            // Fallback: reel_viewer_profile_picture (the avatar circle).
+            // Both are confirmed present in the UIAutomator dump at the top of
+            // the story viewer header strip.
+            const _saXml = await android.dumpUi(serial).catch(() => "");
+            const _saNodeMatch =
+              _saXml.match(/resource-id="[^"]*reel_viewer_text_container"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ??
+              _saXml.match(/resource-id="[^"]*reel_viewer_profile_picture"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+            if (!_saNodeMatch) {
+              onLog?.(`Story ${s + 1}: click-author — author header not found in dump, skipping`);
+            } else {
+              const _saX = Math.round((+_saNodeMatch[1] + +_saNodeMatch[3]) / 2);
+              const _saY = Math.round((+_saNodeMatch[2] + +_saNodeMatch[4]) / 2);
+              onLog?.(`Story ${s + 1}: click-author — tapping author header at (${_saX},${_saY})…`);
+              await android.tap(serial, _saX, _saY);
+              await sleepOrAbort(serial, 1800); // profile page animates in
+              // Scroll the profile 1–10 times; 2.5–8 s dwell after each scroll.
+              const _saScrolls = 1 + Math.floor(Math.random() * 10);
+              onLog?.(`Story ${s + 1}: click-author — scrolling author profile ${_saScrolls}x…`);
+              const { w: _saW, h: _saH } = getScreenSize(serial);
+              for (let _saI = 0; _saI < _saScrolls; _saI++) {
+                if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+                await android.swipe(
+                  serial,
+                  Math.round(_saW / 2), Math.round(_saH * 0.75),
+                  Math.round(_saW / 2), Math.round(_saH * 0.30),
+                  350 + Math.round(Math.random() * 350),
+                );
+                await sleepOrAbort(serial, 2500 + Math.round(Math.random() * 5500)); // 2.5–8 s
+              }
+              // Back once → returns to the story viewer.
+              onLog?.(`Story ${s + 1}: click-author — returning from author profile…`);
+              await android.pressBack(serial);
+              await sleepOrAbort(serial, 700);
+              onLog?.(`Story ${s + 1}: click-author — ✓ author profile visited`);
+            }
+          }
+        } catch (e: any) {
+          if (e?.message === "cycle-aborted") throw e;
+          onLog?.(`Story ${s + 1}: click-author error — ${e?.message}`);
+          await android.pressBack(serial).catch(() => {}); // safety return to story
         }
       }
 
@@ -4849,6 +4914,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     viewStoriesShareDmPercentMax: z.number().min(0).max(100).default(0),
     viewStoriesCommentPercentMin: z.number().min(0).max(100).default(0),
     viewStoriesCommentPercentMax: z.number().min(0).max(100).default(0),
+    viewStoriesClickAuthorPercentMin: z.number().min(0).max(100).default(0),
+    viewStoriesClickAuthorPercentMax: z.number().min(0).max(100).default(0),
     // View Reels — see AutomationSettings type above for full comment.
     viewReelsEnabled: z.boolean().default(false),
     viewReelsScrollMin: z.number().min(0).max(100).default(0),
@@ -7506,6 +7573,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewStoriesLikePercentMin, viewStoriesLikePercentMax,
         viewStoriesShareDmPercentMin, viewStoriesShareDmPercentMax,
         viewStoriesCommentPercentMin, viewStoriesCommentPercentMax,
+        viewStoriesClickAuthorPercentMin, viewStoriesClickAuthorPercentMax,
         viewReelsEnabled, viewReelsScrollMin, viewReelsScrollMax,
         viewReelsWatchPctMin, viewReelsWatchPctMax,
         viewReelsLikePercentMin, viewReelsLikePercentMax,
@@ -8036,6 +8104,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               likePercentMin: viewStoriesLikePercentMin, likePercentMax: viewStoriesLikePercentMax,
               shareDmPercentMin: viewStoriesShareDmPercentMin, shareDmPercentMax: viewStoriesShareDmPercentMax,
               commentPercentMin: viewStoriesCommentPercentMin, commentPercentMax: viewStoriesCommentPercentMax,
+              clickAuthorPercentMin: viewStoriesClickAuthorPercentMin, clickAuthorPercentMax: viewStoriesClickAuthorPercentMax,
               onLog: (msg) => tLog(`  ${msg}`),
             });
             // runViewStoriesFromFeedLoop exits the viewer internally (ad-

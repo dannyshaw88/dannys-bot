@@ -2899,6 +2899,8 @@ export interface AutomationSettingsData {
   viewStoriesShareDmPercentMax: number;
   viewStoriesCommentPercentMin: number;
   viewStoriesCommentPercentMax: number;
+  viewStoriesClickAuthorPercentMin: number;
+  viewStoriesClickAuthorPercentMax: number;
   // View Explore Page — taps the Search/Explore tab, scrolls the grid N times,
   // and optionally clicks individual posts to like / share / save them.
   viewExploreEnabled: boolean;
@@ -3047,6 +3049,7 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   viewStoriesLikePercentMin: 0, viewStoriesLikePercentMax: 0,
   viewStoriesShareDmPercentMin: 0, viewStoriesShareDmPercentMax: 0,
   viewStoriesCommentPercentMin: 0, viewStoriesCommentPercentMax: 0,
+  viewStoriesClickAuthorPercentMin: 0, viewStoriesClickAuthorPercentMax: 0,
   viewExploreEnabled: false,
   viewExploreActivatePctMin: 100, viewExploreActivatePctMax: 100,
   viewExploreScrollMin: 0, viewExploreScrollMax: 0,
@@ -3595,6 +3598,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             viewStoriesShareDmPercentMax: s.viewStoriesShareDmPercentMax,
             viewStoriesCommentPercentMin: s.viewStoriesCommentPercentMin,
             viewStoriesCommentPercentMax: s.viewStoriesCommentPercentMax,
+            viewStoriesClickAuthorPercentMin: s.viewStoriesClickAuthorPercentMin,
+            viewStoriesClickAuthorPercentMax: s.viewStoriesClickAuthorPercentMax,
             viewExploreEnabled: s.viewExploreEnabled,
             viewExploreActivatePctMin: s.viewExploreActivatePctMin,
             viewExploreActivatePctMax: s.viewExploreActivatePctMax,
@@ -4088,6 +4093,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'storiesLike',       label: 'Like %',                        fields: ['viewStoriesLikePercentMin','viewStoriesLikePercentMax'] },
     { key: 'storiesShareDm',    label: 'Share DM %',                    fields: ['viewStoriesShareDmPercentMin','viewStoriesShareDmPercentMax'] },
     { key: 'storiesComment',    label: 'Comment %',                     fields: ['viewStoriesCommentPercentMin','viewStoriesCommentPercentMax'] },
+    { key: 'storiesClickAuthor', label: 'Click Author %',              fields: ['viewStoriesClickAuthorPercentMin','viewStoriesClickAuthorPercentMax'] },
   ]},
   { key: 'explore',       label: 'View Explore Page', sub: [
     { key: 'exploreEnabled',    label: 'Enabled',                       fields: ['viewExploreEnabled'] },
