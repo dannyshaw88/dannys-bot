@@ -1214,11 +1214,12 @@ async function createWindow() {
 
   // Open a native OS folder-picker dialog and return the selected directory path.
   // Used by the Repost Local Folder feature to reliably get the full Windows path.
-  ipcMain.handle("open-folder-dialog", async () => {
+  ipcMain.handle("open-folder-dialog", async (_e, defaultPath?: string) => {
     try {
       const result = await dialog.showOpenDialog({
         title: "Select media folder",
         properties: ["openDirectory"],
+        ...(defaultPath ? { defaultPath } : {}),
       });
       if (result.canceled || !result.filePaths.length) return { canceled: true };
       return { canceled: false, folder: result.filePaths[0] };

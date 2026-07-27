@@ -34,6 +34,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   settingsGet: (key: string) => ipcRenderer.invoke("settings-get", key),
   settingsSet: (key: string, value: unknown) => ipcRenderer.invoke("settings-set", key, value),
   settingsGetAll: () => ipcRenderer.invoke("settings-get-all"),
-  openFolderDialog: () => ipcRenderer.invoke("open-folder-dialog"),
+  openFolderDialog: (defaultPath?: string) => ipcRenderer.invoke("open-folder-dialog", defaultPath),
   countFolderFiles: (folderPath: string) => ipcRenderer.invoke("count-folder-files", folderPath),
 });

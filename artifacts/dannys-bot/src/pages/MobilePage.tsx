@@ -6185,7 +6185,9 @@ export function AutomationSettingsPanel({
                         onClick={async () => {
                           const api = (window as any).electronAPI;
                           if (!api?.openFolderDialog) return;
-                          const result = await api.openFolderDialog();
+                          // Pass the currently-assigned path as the defaultPath so
+                          // the native dialog opens there instead of Desktop.
+                          const result = await api.openFolderDialog(settings.makePostLocalFolderPath || undefined);
                           if (result?.canceled || !result?.folder) return;
                           const updatedSettings = { ...settings, makePostLocalFolderPath: result.folder };
                           setSettings(() => updatedSettings);

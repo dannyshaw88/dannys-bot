@@ -1577,7 +1577,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         feedScrollMin:  5, feedScrollMax:  10,
         ...existing,
       };
-      const input = automationSchema.parse({ ...base, ...req.body });
+      // Never let an empty string from the client overwrite a saved folder
+      // path.  The frontend's autosave fires every ~500 ms and may send "" if
+      // React state was stale at the moment of capture (hydration glitch,
+      // settings loaded before the dedicated file was ready, Copy Settings
+      // wipe, etc.).  Stripping the empty value here means the existing saved
+      // path in `base` (from mobile-instances.json) is preserved instead.
+      const body = { ...req.body };
+      if (body.makePostLocalFolderPath === "") delete body.makePostLocalFolderPath;
+      const input = automationSchema.parse({ ...base, ...body });
       logger.info(`[TOGGLE-DBG] POST slot settings serial=${serial} slotIdx=${slotIdx} enabled=${input.enabled} (all slots after save: ${JSON.stringify(Object.entries({ ...cfg[serial]?.slotAutomation, [String(slotIdx)]: input }).map(([k,v]: [string,any]) => ({ slot: k, enabled: v?.enabled })))})`);
       cfg[serial] = {
         ...cfg[serial],
