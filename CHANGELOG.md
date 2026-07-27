@@ -4,6 +4,28 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.207 — 2026-07-27
+
+### Added — View Explore Page: Click Author % of posts
+
+New **Click Author % of posts** min/max setting in the View Explore Page section (appears after "Click posts %"). When a post is clicked and the roll hits, the bot taps the author's name button to open their profile, scrolls it 1–10 times with a **2.5–10 second swipe dwell** (matching the View Feed author visit speed, giving images time to render), then presses Back once to return to the post viewer. The existing Back press then returns to the Explore grid as normal.
+
+**Author button detection covers both layouts:**
+- **Reels viewer** (the most common Explore result) — uses `clips_author_username` / `clips_author_info_component` resource-id from the reel overlay UI (confirmed via UIAutomator dump)
+- **Photo-post viewer** — uses `row_feed_photo_profile_name` as fallback, matching the same node the View Feed author-visit feature uses
+
+**Applies only inside `runViewExplorePage`** — fully isolated from View Feed, View Reels, and every other tool. The author-click chance is pre-rolled once per Explore session (same pattern as like/save/share chances) and is independent of whether like/share/save fire on the same post.
+
+`authorVisits` count is included in the explore step log entry (e.g. `explore(5 scrolls, 3 clicked, 2 likes, … 1 author-visits)`).
+
+Defaults to 0% (off) — existing saved settings are unaffected. Also included in Copy Settings under the View Explore Page section.
+
+### Changed — View Feed: Click Author scroll dwell increased to 2.5–10 s
+
+Raised the author-profile scroll swipe duration from 300–700 ms to **2500–7500 ms** (2.5–10 s) so images have time to render before the next scroll fires. Only the swipe duration changed — scroll count (1–10), post-swipe gap (280 ms), tap delay (1500 ms), and Back-press delay (700 ms) are unchanged.
+
+---
+
 ## v1.2.206 — 2026-07-27
 
 ### Added — View Feed: Click Author % of posts

@@ -2918,6 +2918,8 @@ export interface AutomationSettingsData {
   viewExploreShareDmPercentMax: number;
   viewExploreSavePercentMin: number;
   viewExploreSavePercentMax: number;
+  viewExploreClickAuthorPercentMin: number;
+  viewExploreClickAuthorPercentMax: number;
   // View Reels — taps the Reels tab, then snap-swipes through N reels,
   // acting on each via the right-side vertical icon column instead of the
   // feed's horizontal bottom action bar.
@@ -3054,6 +3056,7 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   viewExploreShareFeedPercentMin: 0, viewExploreShareFeedPercentMax: 0,
   viewExploreShareDmPercentMin: 0, viewExploreShareDmPercentMax: 0,
   viewExploreSavePercentMin: 0, viewExploreSavePercentMax: 0,
+  viewExploreClickAuthorPercentMin: 0, viewExploreClickAuthorPercentMax: 0,
   viewReelsEnabled: false,
   viewReelsScrollMin: 0, viewReelsScrollMax: 0,
   viewReelsLikePercentMin: 0, viewReelsLikePercentMax: 0,
@@ -3609,6 +3612,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             viewExploreShareDmPercentMax: s.viewExploreShareDmPercentMax,
             viewExploreSavePercentMin: s.viewExploreSavePercentMin,
             viewExploreSavePercentMax: s.viewExploreSavePercentMax,
+            viewExploreClickAuthorPercentMin: s.viewExploreClickAuthorPercentMin,
+            viewExploreClickAuthorPercentMax: s.viewExploreClickAuthorPercentMax,
             viewReelsEnabled: s.viewReelsEnabled,
             viewReelsScrollMin: s.viewReelsScrollMin,
             viewReelsScrollMax: s.viewReelsScrollMax,
@@ -4094,6 +4099,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'exploreShareFeed',  label: 'Share to Feed %',               fields: ['viewExploreShareFeedPercentMin','viewExploreShareFeedPercentMax'] },
     { key: 'exploreShareDm',    label: 'Share via DM %',                fields: ['viewExploreShareDmPercentMin','viewExploreShareDmPercentMax'] },
     { key: 'exploreSave',       label: 'Save %',                        fields: ['viewExploreSavePercentMin','viewExploreSavePercentMax'] },
+    { key: 'exploreClickAuthor', label: 'Click Author %',               fields: ['viewExploreClickAuthorPercentMin','viewExploreClickAuthorPercentMax'] },
   ]},
   { key: 'reels',         label: 'View Reels', sub: [
     { key: 'reelsEnabled',      label: 'Enabled',                       fields: ['viewReelsEnabled'] },
@@ -5136,6 +5142,21 @@ export function AutomationSettingsPanel({
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewExploreClickPostPctMax}
                 onChange={e => setSettings(s => ({ ...s, viewExploreClickPostPctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Click Author % of posts</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewExploreClickAuthorPercentMin}
+                onChange={e => setSettings(s => ({ ...s, viewExploreClickAuthorPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewExploreClickAuthorPercentMax}
+                onChange={e => setSettings(s => ({ ...s, viewExploreClickAuthorPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
             </div>
           </div>

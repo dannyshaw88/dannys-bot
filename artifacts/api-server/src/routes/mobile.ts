@@ -218,6 +218,8 @@ type AutomationSettings = {
   viewExploreShareDmPercentMax?: number;
   viewExploreSavePercentMin?: number;
   viewExploreSavePercentMax?: number;
+  viewExploreClickAuthorPercentMin?: number;
+  viewExploreClickAuthorPercentMax?: number;
   // Follow Filters — profile-quality gates. Persisted so Copy Settings
   // can apply them to other slots without the fields being stripped.
   followFiltersEnabled?: boolean;
@@ -1394,6 +1396,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       viewExploreShareFeedPercentMin: 0, viewExploreShareFeedPercentMax: 0,
       viewExploreShareDmPercentMin: 0, viewExploreShareDmPercentMax: 0,
       viewExploreSavePercentMin: 0, viewExploreSavePercentMax: 0,
+      viewExploreClickAuthorPercentMin: 0, viewExploreClickAuthorPercentMax: 0,
       followEnabled: false, followUsersMin: 1, followUsersMax: 3, followSpreadFollows: false, followSources: [],
       injectBrowsingEnabled: false,
       injectBrowsingActivatePctMin: 0, injectBrowsingActivatePctMax: 0,
@@ -1498,6 +1501,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewExploreShareFeedPercentMin: 0, viewExploreShareFeedPercentMax: 0,
         viewExploreShareDmPercentMin: 0, viewExploreShareDmPercentMax: 0,
         viewExploreSavePercentMin: 0, viewExploreSavePercentMax: 0,
+        viewExploreClickAuthorPercentMin: 0, viewExploreClickAuthorPercentMax: 0,
         followEnabled: false, followUsersMin: 1, followUsersMax: 3, followSpreadFollows: false, followSources: [],
         injectBrowsingEnabled: false,
         injectBrowsingActivatePctMin: 0, injectBrowsingActivatePctMax: 0,
@@ -3871,8 +3875,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     shareFeedPercentMin: number; shareFeedPercentMax: number;
     shareDmPercentMin: number; shareDmPercentMax: number;
     savePercentMin: number; savePercentMax: number;
+    clickAuthorPctMin: number; clickAuthorPctMax: number;
     onLog?: (msg: string) => void;
-  }): Promise<{ postsScrolled: number; postsClicked: number; likes: number; sharesFeed: number; sharesDm: number; saves: number }> {
+  }): Promise<{ postsScrolled: number; postsClicked: number; likes: number; sharesFeed: number; sharesDm: number; saves: number; authorVisits: number }> {
     const {
       scrollCount, delayMinSec, delayMaxSec,
       clickPostPctMin, clickPostPctMax,
@@ -3880,6 +3885,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       shareFeedPercentMin, shareFeedPercentMax,
       shareDmPercentMin, shareDmPercentMax,
       savePercentMin, savePercentMax,
+      clickAuthorPctMin, clickAuthorPctMax,
       onLog,
     } = params;
 
@@ -3891,7 +3897,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (!searchTab) {
       onLog?.("View Explore Page: Search tab not found — skipping");
       logger.warn({ serial }, "[view-explore] Search tab not found");
-      return { postsScrolled: 0, postsClicked: 0, likes: 0, sharesFeed: 0, sharesDm: 0, saves: 0 };
+      return { postsScrolled: 0, postsClicked: 0, likes: 0, sharesFeed: 0, sharesDm: 0, saves: 0, authorVisits: 0 };
     }
     await android.tap(serial, searchTab.x, searchTab.y);
     // Same 2500ms settle used by Follow — enough for the Explore grid to render.
@@ -3902,12 +3908,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const likeChance      = (Math.min(likePercentMin, likePercentMax) + Math.random() * Math.abs(likePercentMax - likePercentMin)) / 100;
     const shareFeedChance = (Math.min(shareFeedPercentMin, shareFeedPercentMax) + Math.random() * Math.abs(shareFeedPercentMax - shareFeedPercentMin)) / 100;
     const shareDmChance   = (Math.min(shareDmPercentMin, shareDmPercentMax) + Math.random() * Math.abs(shareDmPercentMax - shareDmPercentMin)) / 100;
-    const saveChance      = (Math.min(savePercentMin, savePercentMax) + Math.random() * Math.abs(savePercentMax - savePercentMin)) / 100;
+    const saveChance        = (Math.min(savePercentMin, savePercentMax) + Math.random() * Math.abs(savePercentMax - savePercentMin)) / 100;
+    const clickAuthorChance = (Math.min(clickAuthorPctMin, clickAuthorPctMax) + Math.random() * Math.abs(clickAuthorPctMax - clickAuthorPctMin)) / 100;
 
     const delayLoSec = Math.min(delayMinSec, delayMaxSec);
     const delayHiSec = Math.max(delayMinSec, delayMaxSec);
 
-    let postsScrolled = 0, postsClicked = 0, likes = 0, sharesFeed = 0, sharesDm = 0, saves = 0;
+    let postsScrolled = 0, postsClicked = 0, likes = 0, sharesFeed = 0, sharesDm = 0, saves = 0, authorVisits = 0;
 
     // Scroll geometry: same safe band as runCheckFeedLoop.
     const x  = Math.round(w / 2);
@@ -3976,10 +3983,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           await sleepOrAbort(serial, 1800); // let post detail view animate open
           postsClicked++;
 
-          const wantLike      = likeChance     > 0 && Math.random() < likeChance;
-          const wantShareFeed = shareFeedChance > 0 && Math.random() < shareFeedChance;
-          const wantShareDm   = shareDmChance  > 0 && Math.random() < shareDmChance;
-          const wantSave      = saveChance     > 0 && Math.random() < saveChance;
+          const wantLike        = likeChance        > 0 && Math.random() < likeChance;
+          const wantShareFeed   = shareFeedChance   > 0 && Math.random() < shareFeedChance;
+          const wantShareDm     = shareDmChance     > 0 && Math.random() < shareDmChance;
+          const wantSave        = saveChance        > 0 && Math.random() < saveChance;
+          const wantClickAuthor = clickAuthorChance > 0 && Math.random() < clickAuthorChance;
 
           if (wantLike || wantShareFeed || wantShareDm || wantSave) {
             await sleepOrAbort(serial, 600); // settle before scanning action bar
@@ -4291,6 +4299,70 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             }
           }
 
+          // ── Click Author (visit post author's profile) ─────────────────
+          // Taps clips_author_username (Reels viewer) or
+          // row_feed_photo_profile_name (photo-post viewer) — whichever is
+          // present — to open the author's profile.  Scrolls 1–10 times with
+          // a 2.5–10 s swipe per scroll to let images render, then presses
+          // Back once to return to the post viewer.  The existing Back press
+          // below then returns to the Explore grid as normal.
+          // This block is intentionally isolated to runViewExplorePage.
+          if (wantClickAuthor) {
+            try {
+              if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+              await sleepOrAbort(serial, 300);
+              const _aeXml = await android.dumpUi(serial).catch(() => "");
+              // Find author button — covers Reels viewer (clips_author_username /
+              // clips_author_info_component) and photo-post viewer
+              // (row_feed_photo_profile_name).
+              let _aeNode: { x: number; y: number; name: string } | null = null;
+              for (const _aeSeg of _aeXml.split("<node ")) {
+                const _aeRid = (_aeSeg.match(/resource-id="([^"]*)"/) ?? [])[1] ?? "";
+                const _isAuthor =
+                  _aeRid.includes("clips_author_username") ||
+                  _aeRid.includes("clips_author_info_component") ||
+                  _aeRid.includes("row_feed_photo_profile_name");
+                if (!_isAuthor) continue;
+                const _aeDesc = (_aeSeg.match(/(?:content-desc|text)="([^"]*)"/) ?? [])[1] ?? "";
+                const _aeBb = _aeSeg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+                if (!_aeBb) continue;
+                const _aeX = Math.round((parseInt(_aeBb[1]) + parseInt(_aeBb[3])) / 2);
+                const _aeY = Math.round((parseInt(_aeBb[2]) + parseInt(_aeBb[4])) / 2);
+                _aeNode = { x: _aeX, y: _aeY, name: _aeDesc || "unknown" };
+                break;
+              }
+              if (!_aeNode) {
+                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: click-author rolled but no author button visible — skipping`);
+              } else {
+                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: tapping author "${_aeNode.name}" at (${_aeNode.x},${_aeNode.y})…`);
+                await android.tap(serial, _aeNode.x, _aeNode.y);
+                await sleepOrAbort(serial, 1500);
+                // Scroll the author's profile 1–10 times with 2.5–10 s dwell
+                // per swipe so images have time to render.
+                const _aeScrolls = 1 + Math.floor(Math.random() * 10);
+                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: on author profile "${_aeNode.name}" — scrolling ${_aeScrolls}x…`);
+                const { w: _aeW, h: _aeH } = getScreenSize(serial);
+                for (let _aeS = 0; _aeS < _aeScrolls; _aeS++) {
+                  if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+                  const _aeSY1 = Math.round(_aeH * 0.75);
+                  const _aeSY2 = Math.round(_aeH * 0.30);
+                  const _aeDur = 2500 + Math.round(Math.random() * 7500);
+                  await android.swipe(serial, Math.round(_aeW / 2), _aeSY1, Math.round(_aeW / 2), _aeSY2, _aeDur);
+                  await sleepOrAbort(serial, 280);
+                }
+                // Back once — returns to the post/reel viewer.
+                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: returning from author profile…`);
+                await android.pressBack(serial);
+                await sleepOrAbort(serial, 700);
+                authorVisits++;
+                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: ✓ author profile visited (${_aeNode.name})`);
+              }
+            } catch (e: any) {
+              if (e?.message === "cycle-aborted") throw e;
+              onLog?.(`Explore scroll ${i + 1}/${scrollCount}: click-author error — ${e?.message}`);
+            }
+          }
+
           // Press Back to return to the Explore grid after viewing the post.
           await android.pressBack(serial);
           await sleepOrAbort(serial, 800);
@@ -4325,7 +4397,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     await sleepOrAbort(serial, 1000);
 
-    return { postsScrolled, postsClicked, likes, sharesFeed, sharesDm, saves };
+    return { postsScrolled, postsClicked, likes, sharesFeed, sharesDm, saves, authorVisits };
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -4779,6 +4851,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     viewExploreShareDmPercentMax: z.number().min(0).max(100).default(0),
     viewExploreSavePercentMin: z.number().min(0).max(100).default(0),
     viewExploreSavePercentMax: z.number().min(0).max(100).default(0),
+    viewExploreClickAuthorPercentMin: z.number().min(0).max(100).default(0),
+    viewExploreClickAuthorPercentMax: z.number().min(0).max(100).default(0),
     // Check DMs — opens the inbox, scrolls through it, and optionally taps one
     // conversation thread. Positioned between View Reels and Follow Users in the
     // tool sequence to mimic the natural human habit of checking messages mid-session.
@@ -7415,6 +7489,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewExploreShareFeedPercentMin, viewExploreShareFeedPercentMax,
         viewExploreShareDmPercentMin, viewExploreShareDmPercentMax,
         viewExploreSavePercentMin, viewExploreSavePercentMax,
+        viewExploreClickAuthorPercentMin, viewExploreClickAuthorPercentMax,
         checkDmEnabled, checkDmActivatePctMin, checkDmActivatePctMax,
         checkDmScrollMin, checkDmScrollMax, checkDmClickPctMin, checkDmClickPctMax,
         followEnabled, followUsersMin, followUsersMax, followSpreadFollows, followSources,
@@ -7966,10 +8041,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               shareDmPercentMax: viewExploreShareDmPercentMax ?? 0,
               savePercentMin: viewExploreSavePercentMin ?? 0,
               savePercentMax: viewExploreSavePercentMax ?? 0,
+              clickAuthorPctMin: viewExploreClickAuthorPercentMin ?? 0,
+              clickAuthorPctMax: viewExploreClickAuthorPercentMax ?? 0,
               onLog: (msg) => tLog(`  ${msg}`),
             });
             exploreScrolled = exploreResult.postsScrolled;
-            steps.push(`explore(${exploreResult.postsScrolled} scrolls, ${exploreResult.postsClicked} clicked, ${exploreResult.likes} likes, ${exploreResult.sharesFeed} feed-shares, ${exploreResult.sharesDm} dm-shares, ${exploreResult.saves} saves)`);
+            steps.push(`explore(${exploreResult.postsScrolled} scrolls, ${exploreResult.postsClicked} clicked, ${exploreResult.likes} likes, ${exploreResult.sharesFeed} feed-shares, ${exploreResult.sharesDm} dm-shares, ${exploreResult.saves} saves, ${exploreResult.authorVisits} author-visits)`);
             tLog(`▶ View Explore Page done — ${exploreResult.postsScrolled} scrolls, ${exploreResult.postsClicked} clicked, ${exploreResult.likes} likes`);
           } else if (!viewExploreEnabled) {
             steps.push("explore(skipped — View Explore Page disabled)");
