@@ -6984,12 +6984,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             if (filters.requireEnglish) {
               // eslint-disable-next-line no-misleading-character-class
               const BLOCKED_SCRIPT_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF\u0B00-\u0B7F\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F\u0D80-\u0DFF\u0E00-\u0E7F\u0E80-\u0EFF\u0F00-\u0FFF\u1000-\u109F]/g;
+              // UIAutomator XML dumps encode non-Latin characters as XML
+              // character references (e.g. Hindi "स" → "&#x938;" or "&#2360;")
+              // rather than raw Unicode.  The regex above tests raw codepoints,
+              // so it would silently miss every encoded char.  Decode both hex
+              // (&#xNNNN;) and decimal (&#NNNN;) entity references before testing.
+              const decodeXmlEntities = (s: string) =>
+                s.replace(/&#x([0-9A-Fa-f]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+                 .replace(/&#([0-9]+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)));
               let skipForEnglish = false;
               const contentDescNodes = profileXml.match(/content-desc="([^"]{3,300})"/g) ?? [];
               const textNodes        = profileXml.match(/\btext="([^"]{3,300})"/g) ?? [];
               const allNodes = [...contentDescNodes, ...textNodes];
               for (const m of allNodes) {
-                const val = m.replace(/^(?:content-desc|text)="/, "").replace(/"$/, "");
+                const rawVal = m.replace(/^(?:content-desc|text)="/, "").replace(/"$/, "");
+                const val = decodeXmlEntities(rawVal);
                 if (val.length < 3) continue;
                 const blockedChars = (val.match(BLOCKED_SCRIPT_RE) ?? []).length;
                 if (blockedChars >= 3) { skipForEnglish = true; break; }

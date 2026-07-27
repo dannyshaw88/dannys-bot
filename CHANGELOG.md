@@ -4,6 +4,30 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.204 — 2026-07-27
+
+### Fixed — Follow tool: chip-row detection, inline_follow_button resource-id, English filter XML encoding
+
+#### Fix 1 — Chip detection: tapping the wrong row
+
+**Root cause:** The search-results chip row (the magnifying-glass "@username" tile) contains an `avatar_in_ring` node in the UIAutomator tree — the same resource-id (`row_search_avatar_in_ring`) that was supposed to mark *real* profile rows only. This meant 1 chip was counted as 1 ring, pushing the first real user row to ring-position 2. When the code tapped ring-position 1 (the chip), it stayed on the search results page. The search results page has inline "Follow" buttons for every listed user, so the *positive* profile-verification check (`text="Follow"` present) passed immediately — the function returned `true` while still on the search results page. The caller then ran `tapFollowButtonOnProfilePage` against the search list, tapping the inline Follow button of whichever row happened to be first in the XML (not the intended user).
+
+**Fix:** Added a *negative gate* before the positive check. After tapping a candidate row the verify dump is checked for `row_search_avatar_in_ring` / `row_search_avatar_with_ring` nodes and for the EditText search bar. If either is present the search results page is still on screen — we mark the candidate as a miss and try the next row. Only when those signals are absent AND Follow/Following is present do we call it a profile page. Also added `:id/inline_follow_button` to the positive check here so this profile-landing verification is consistent with Fix 2.
+
+#### Fix 2 — Follow button not found by node: `inline_follow_button` resource-id missing
+
+**Root cause:** Profiles with many action buttons (Call, Email, Message, YouTube etc.) use `resource-id="com.instagram.android:id/inline_follow_button"` for the blue Follow button instead of the standard `follow_button` / `follow_btn` IDs. That ID was not in the `_findByResId` call in `tapFollowButtonOnProfilePage`, so the function returned `false` ("Follow button not found") and logged "already following?" even though the button was visible and the user had never been followed.
+
+**Fix:** Added `:id/inline_follow_button` as the *first* candidate in the `_findByResId` call so it is tried before the fallback IDs.
+
+#### Fix 3 — English-only filter not triggering on Hindi bio
+
+**Root cause:** UIAutomator XML dumps encode all non-Latin characters as XML character references — Devanagari "स" becomes `&#x938;` (hex) or `&#2360;` (decimal) in the raw XML string. The `BLOCKED_SCRIPT_RE` regex tests raw Unicode codepoints (`\u0900`–`\u097F` etc.) which never appear in the dump as literal chars. Every Hindi/Arabic/etc. bio therefore silently passed the filter regardless of content.
+
+**Fix:** Added a `decodeXmlEntities` step that expands both hex (`&#xNNNN;`) and decimal (`&#NNNN;`) references to real Unicode chars before applying `BLOCKED_SCRIPT_RE`. The decoder is applied per-node value (not to the whole XML) so it is fast and cannot accidentally decode XML structural characters.
+
+---
+
 ## v1.2.203 — 2026-07-26
 
 ### Improved — Dashboard device column is now clickable; Brightness button cycles through fixed levels

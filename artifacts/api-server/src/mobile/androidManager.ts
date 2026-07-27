@@ -6827,12 +6827,24 @@ export async function findAndTapUserInSearch(
         _adbTap(adb, serial, pos.x, pos.y);
         await _sleep(2000);
         const verifyXml = await _uiDump(adb, serial).catch(() => "");
-        const onProfile =
+        // Negative gate first: if the search results page is still on screen
+        // (avatar-ring nodes present OR EditText search bar present), we did NOT
+        // navigate to a profile — we hit a chip or something that kept us on the
+        // results page.  The inline Follow buttons visible in each search result
+        // row would otherwise fool the positive check below into thinking we
+        // landed on a profile page.
+        const stillOnSearchResults =
+          verifyXml.includes("/row_search_avatar_in_ring\"") ||
+          verifyXml.includes("/row_search_avatar_with_ring\"") ||
+          /class="android\.widget\.EditText"[^>]*resource-id="[^"]*search/i.test(verifyXml);
+        const onProfile = !stillOnSearchResults && (
           /(?:text|content-desc)="Follow(?:ing|ed)?"/.test(verifyXml) ||
           /(?:text|content-desc)="Requested"/.test(verifyXml) ||
           /(?:text|content-desc)="Follow"/.test(verifyXml) ||
           verifyXml.includes(":id/follow_button") ||
-          verifyXml.includes(":id/follow_btn");
+          verifyXml.includes(":id/follow_btn") ||
+          verifyXml.includes(":id/inline_follow_button")
+        );
         if (onProfile) return true; // landed on a profile page — caller handles Follow tap
         // Not on a profile page — likely hit a chip; dismiss / back and try next row
         if (ci < finalCandidates.length - 1) {
@@ -6895,7 +6907,10 @@ export async function tapFollowButtonOnProfilePage(serial: string): Promise<bool
   const exactFollowRe = /(?:text|content-desc)="Follow"[^>]*bounds="([^"]+)"/;
   const exactM = xml.match(exactFollowRe);
   const btn = (exactM ? _parseCenter(exactM[1]) : null) ||
-    _findByResId(xml, ":id/follow_button", ":id/follow_btn", ":id/button_follow");
+    // inline_follow_button: used on profiles with many action buttons (Call, Email,
+    // Message, YouTube etc.) where the Follow button has this resource-id instead
+    // of the standard follow_button / follow_btn ids.
+    _findByResId(xml, ":id/inline_follow_button", ":id/follow_button", ":id/follow_btn", ":id/button_follow");
   if (!btn) return false;
   _adbTap(adb, serial, btn.x, btn.y);
   // Verify the Follow tap actually worked by confirming the button label
