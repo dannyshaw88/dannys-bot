@@ -190,3 +190,4 @@ Every push must include a new entry at the top of `CHANGELOG.md` describing what
 
 - Do not skip any file during imports — every file matters for git
 - Never push to GitHub unless the user explicitly says to
+- Keep progress updates minimal; do the work first and provide a concise overview at the end
