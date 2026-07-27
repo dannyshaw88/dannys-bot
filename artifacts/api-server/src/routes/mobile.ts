@@ -167,6 +167,8 @@ type AutomationSettings = {
   tapAudioPercentMax: number;
   clickHashtagPercentMin: number;
   clickHashtagPercentMax: number;
+  clickAuthorPercentMin: number;
+  clickAuthorPercentMax: number;
   feedScrollMin: number;
   feedScrollMax: number;
   viewStoriesSlidesMin: number;
@@ -1182,6 +1184,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     tapAudioPercentMax: z.number().min(0).max(100).default(0),
     clickHashtagPercentMin: z.number().min(0).max(100).default(0),
     clickHashtagPercentMax: z.number().min(0).max(100).default(0),
+    clickAuthorPercentMin: z.number().min(0).max(100).default(0),
+    clickAuthorPercentMax: z.number().min(0).max(100).default(0),
     feedScrollMin: z.number().min(1).max(50),
     feedScrollMax: z.number().min(1).max(50),
     viewStoriesSlidesMin: z.number().min(0).max(100).default(0),
@@ -1368,6 +1372,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       expandCaptionPercentMin: 0, expandCaptionPercentMax: 0,
       tapAudioPercentMin: 0, tapAudioPercentMax: 0,
       clickHashtagPercentMin: 0, clickHashtagPercentMax: 0,
+      clickAuthorPercentMin: 0, clickAuthorPercentMax: 0,
       feedScrollMin: 5, feedScrollMax: 10,
       viewStoriesSlidesMin: 0, viewStoriesSlidesMax: 0,
       viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
@@ -1471,6 +1476,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         expandCaptionPercentMin: 0, expandCaptionPercentMax: 0,
         tapAudioPercentMin: 0, tapAudioPercentMax: 0,
         clickHashtagPercentMin: 0, clickHashtagPercentMax: 0,
+        clickAuthorPercentMin: 0, clickAuthorPercentMax: 0,
         feedScrollMin: 5, feedScrollMax: 10,
         viewStoriesSlidesMin: 0, viewStoriesSlidesMax: 0,
         viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
@@ -2046,8 +2052,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     expandCaptionPercentMin?: number; expandCaptionPercentMax?: number;
     tapAudioPercentMin?: number; tapAudioPercentMax?: number;
     clickHashtagPercentMin?: number; clickHashtagPercentMax?: number;
+    clickAuthorPercentMin?: number; clickAuthorPercentMax?: number;
     onLog?: (msg: string) => void;
-  }): Promise<{ count: number; likes: number; likeFailures: number; sharesFeed: number; sharesDm: number; saves: number; captionExpands: number; strayNavRecoveries: number; audioTaps: number; hashtagTaps: number }> {
+  }): Promise<{ count: number; likes: number; likeFailures: number; sharesFeed: number; sharesDm: number; saves: number; captionExpands: number; strayNavRecoveries: number; audioTaps: number; hashtagTaps: number; authorVisits: number }> {
     const {
       count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
       shareFeedPercentMin = 0, shareFeedPercentMax = 0,
@@ -2056,6 +2063,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       expandCaptionPercentMin = 0, expandCaptionPercentMax = 0,
       tapAudioPercentMin = 0, tapAudioPercentMax = 0,
       clickHashtagPercentMin = 0, clickHashtagPercentMax = 0,
+      clickAuthorPercentMin = 0, clickAuthorPercentMax = 0,
       onLog,
     } = params;
     const delayLoSec = Math.min(delayMinSec, delayMaxSec);
@@ -2081,7 +2089,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const clickHashtagLo = Math.min(clickHashtagPercentMin, clickHashtagPercentMax);
     const clickHashtagHi = Math.max(clickHashtagPercentMin, clickHashtagPercentMax);
     const clickHashtagChance = (clickHashtagLo + Math.random() * (clickHashtagHi - clickHashtagLo)) / 100;
-    onLog?.(`Feed settings — like:${Math.round(likeChance * 100)}% expandCaption:${Math.round(captionExpandChance * 100)}% tapAudio:${Math.round(tapAudioChance * 100)}% clickHashtag:${Math.round(clickHashtagChance * 100)}% save:${Math.round(saveChance * 100)}% shareFeed:${Math.round(shareFeedChance * 100)}% shareDm:${Math.round(shareDmChance * 100)}%`);
+    const clickAuthorLo = Math.min(clickAuthorPercentMin, clickAuthorPercentMax);
+    const clickAuthorHi = Math.max(clickAuthorPercentMin, clickAuthorPercentMax);
+    const clickAuthorChance = (clickAuthorLo + Math.random() * (clickAuthorHi - clickAuthorLo)) / 100;
+    onLog?.(`Feed settings — like:${Math.round(likeChance * 100)}% expandCaption:${Math.round(captionExpandChance * 100)}% tapAudio:${Math.round(tapAudioChance * 100)}% clickHashtag:${Math.round(clickHashtagChance * 100)}% clickAuthor:${Math.round(clickAuthorChance * 100)}% save:${Math.round(saveChance * 100)}% shareFeed:${Math.round(shareFeedChance * 100)}% shareDm:${Math.round(shareDmChance * 100)}%`);
 
     const { w, h } = getScreenSize(serial);
     const x  = Math.round(w / 2);
@@ -2124,6 +2135,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let strayNavRecoveries = 0;
     let audioTaps = 0;
     let hashtagTaps = 0;
+    let authorVisits = 0;
     // Sponsored posts ("Ads") render a full-width CTA button ("Shop Now",
     // "Install Now", "Learn More") overlaid near the bottom of the media —
     // right where our double-tap-to-like jitter can land after a scroll that
@@ -2223,6 +2235,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const wantExpandCaption = captionExpandChance > 0 && Math.random() < captionExpandChance;
       const wantTapAudio = tapAudioChance > 0 && Math.random() < tapAudioChance;
       const wantClickHashtag = clickHashtagChance > 0 && Math.random() < clickHashtagChance;
+      const wantClickAuthor = clickAuthorChance > 0 && Math.random() < clickAuthorChance;
 
       if (wantLike || wantShareFeed || wantShareDm || wantSave || wantExpandCaption) {
         const feedbackCard = await android.isFeedbackOrSurveyCard(serial).catch(() => null);
@@ -2922,6 +2935,64 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
       }
 
+      // ── Click Author (visit post author's profile) ───────────────────
+      // Taps row_feed_photo_profile_name — the author name label that sits
+      // immediately to the right of the avatar bubble in every feed post
+      // header.  Present on single-author posts and collab posts alike
+      // (collabs show both names combined; the tap opens the first-listed
+      // author's profile, which is the one visually beside the avatar ring).
+      // Once on the profile, scrolls 1–10 times then presses Back to return.
+      if (wantClickAuthor) {
+        try {
+          if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+          await sleepOrAbort(serial, 300);
+          const _caXml = await android.dumpUi(serial).catch(() => "");
+          // Find row_feed_photo_profile_name in the a11y tree.
+          let _caNode: { x: number; y: number; name: string } | null = null;
+          for (const _caSeg of _caXml.split("<node ")) {
+            const _caRid = (_caSeg.match(/resource-id="([^"]*)"/) ?? [])[1] ?? "";
+            if (!_caRid.includes("row_feed_photo_profile_name")) continue;
+            const _caDesc = (_caSeg.match(/content-desc="([^"]*)"/) ?? [])[1] ?? "";
+            const _caBb = _caSeg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+            if (!_caBb) continue;
+            const _caX = Math.round((parseInt(_caBb[1]) + parseInt(_caBb[3])) / 2);
+            const _caY = Math.round((parseInt(_caBb[2]) + parseInt(_caBb[4])) / 2);
+            _caNode = { x: _caX, y: _caY, name: _caDesc || "unknown" };
+            break; // only need the first (topmost) visible post header
+          }
+          if (!_caNode) {
+            onLog?.(`Scroll ${i + 1}/${count}: click-author rolled but no profile name button visible — skipping`);
+          } else {
+            onLog?.(`Scroll ${i + 1}/${count}: tapping author "${_caNode.name}" at (${_caNode.x},${_caNode.y})…`);
+            await android.tap(serial, _caNode.x, _caNode.y);
+            await sleepOrAbort(serial, 1500);
+            await verifyStillInInstagram();
+            // Scroll the author's profile 1–10 times.
+            const _caScrolls = 1 + Math.floor(Math.random() * 10);
+            onLog?.(`Scroll ${i + 1}/${count}: on author profile "${_caNode.name}" — scrolling ${_caScrolls}x…`);
+            const { w: _caW, h: _caH } = getScreenSize(serial);
+            for (let _caS = 0; _caS < _caScrolls; _caS++) {
+              if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+              const _caSY1 = Math.round(_caH * 0.75);
+              const _caSY2 = Math.round(_caH * 0.30);
+              const _caDur = 300 + Math.round(Math.random() * 400);
+              await android.swipe(serial, Math.round(_caW / 2), _caSY1, Math.round(_caW / 2), _caSY2, _caDur);
+              await sleepOrAbort(serial, 280);
+            }
+            // Return to the feed — one Back press from the author's profile.
+            onLog?.(`Scroll ${i + 1}/${count}: returning from author profile…`);
+            await android.pressBack(serial);
+            await sleepOrAbort(serial, 700);
+            await verifyStillInInstagram();
+            authorVisits++;
+            onLog?.(`Scroll ${i + 1}/${count}: ✓ author profile visited (${_caNode.name})`);
+          }
+        } catch (e: any) {
+          if (e?.message === "cycle-aborted") throw e;
+          onLog?.(`Scroll ${i + 1}/${count}: click-author error — ${e?.message}`);
+        }
+      }
+
       if (i < count - 1) {
         const delaySec = delayLoSec + Math.random() * (delayHiSec - delayLoSec);
         await sleepOrAbort(serial, Math.round(delaySec * 1000));
@@ -2931,7 +3002,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       logger.warn({ serial, strayNavRecoveries }, "[check-feed] recovered from stray navigation (ad CTA) during this run");
       onLog?.(`⚠ Recovered from ${strayNavRecoveries} stray navigation(s) — likely tapped an ad CTA during scroll`);
     }
-    return { count, likes, likeFailures, sharesFeed, sharesDm, saves, captionExpands, strayNavRecoveries, audioTaps, hashtagTaps };
+    return { count, likes, likeFailures, sharesFeed, sharesDm, saves, captionExpands, strayNavRecoveries, audioTaps, hashtagTaps, authorVisits };
   }
 
   // View stories from the stories bar at the top of the feed.
@@ -4662,6 +4733,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     tapAudioPercentMax: z.number().min(0).max(100).default(0),
     clickHashtagPercentMin: z.number().min(0).max(100).default(0),
     clickHashtagPercentMax: z.number().min(0).max(100).default(0),
+    clickAuthorPercentMin: z.number().min(0).max(100).default(0),
+    clickAuthorPercentMax: z.number().min(0).max(100).default(0),
     viewStoriesSlidesMin: z.number().min(0).max(100).default(0),
     viewStoriesSlidesMax: z.number().min(0).max(100).default(0),
     viewStoriesSlideWatchPctMin: z.number().min(1).max(100).default(50),
@@ -7298,7 +7371,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let reelsLikes = 0;
     // Hoisted so the catch block can include partial stats in the COMPLETE log
     // even when the cycle is aborted or errors mid-run.
-    let likes = 0, likeFailures = 0, sharesFeed = 0, sharesDm = 0, saves = 0, captionExpands = 0, strayNavRecoveries = 0, audioTaps = 0, hashtagTaps = 0;
+    let likes = 0, likeFailures = 0, sharesFeed = 0, sharesDm = 0, saves = 0, captionExpands = 0, strayNavRecoveries = 0, audioTaps = 0, hashtagTaps = 0, authorVisits = 0;
     let feedScrolled = 0; // number of feed posts requested to scroll this cycle
     let exploreScrolled = 0; // number of explore scrolls this cycle
     let _slotUsername = "";       // captured from schema parse for catch-block use
@@ -7321,6 +7394,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         expandCaptionPercentMin, expandCaptionPercentMax,
         tapAudioPercentMin, tapAudioPercentMax,
         clickHashtagPercentMin, clickHashtagPercentMax,
+        clickAuthorPercentMin, clickAuthorPercentMax,
         viewStoriesSlidesMin, viewStoriesSlidesMax,
         viewStoriesSlideWatchPctMin, viewStoriesSlideWatchPctMax,
         viewStoriesLikePercentMin, viewStoriesLikePercentMax,
@@ -7795,7 +7869,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               await sleepOrAbort(serial, 2000);
             }
             tLog(`▶ Starting feed scroll — ${count} posts`);
-            ({ likes, likeFailures, sharesFeed, sharesDm, saves, captionExpands, strayNavRecoveries, audioTaps, hashtagTaps } = await runCheckFeedLoop(serial, {
+            ({ likes, likeFailures, sharesFeed, sharesDm, saves, captionExpands, strayNavRecoveries, audioTaps, hashtagTaps, authorVisits } = await runCheckFeedLoop(serial, {
               count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
               shareFeedPercentMin, shareFeedPercentMax,
               shareDmPercentMin, shareDmPercentMax,
@@ -7803,10 +7877,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               expandCaptionPercentMin, expandCaptionPercentMax,
               tapAudioPercentMin, tapAudioPercentMax,
               clickHashtagPercentMin, clickHashtagPercentMax,
+              clickAuthorPercentMin, clickAuthorPercentMax,
               onLog: (msg) => tLog(`  ${msg}`),
             }));
             feedScrolled = count;
-            steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${saves} saves, ${captionExpands} caption-expands, ${audioTaps} audio-taps, ${hashtagTaps} hashtag-taps, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
+            steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${saves} saves, ${captionExpands} caption-expands, ${audioTaps} audio-taps, ${hashtagTaps} hashtag-taps, ${authorVisits} author-visits, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
             tLog(`▶ Feed done — ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} DM-shares, ${saves} saves, ${captionExpands} caption-expands`);
           } else if (!feedEnabled) {
             steps.push("feed(skipped — View Feed disabled)");

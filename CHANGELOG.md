@@ -4,6 +4,18 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.206 — 2026-07-27
+
+### Added — View Feed: Click Author % of posts
+
+New **Click Author % of posts** min/max setting in the View Feed section. On each scrolled post, if the roll hits, the bot taps the author name button (`row_feed_photo_profile_name`) beside the avatar bubble to open their profile, scrolls it 1–10 times, then presses Back to return to the feed.
+
+- Works on single-author posts and collab posts alike (collabs show both usernames in the button; tapping opens the first-listed author's profile)
+- `authorVisits` count is included in the feed step log entry (e.g. `feed(10 scrolls, 3 likes, … 2 author-visits, …)`)
+- Defaults to 0% (off) — existing saved settings are unaffected
+
+---
+
 ## v1.2.205 — 2026-07-27
 
 ### Fixed — Make a Post: "My PC" assigned directory resets to Desktop after a few hours
