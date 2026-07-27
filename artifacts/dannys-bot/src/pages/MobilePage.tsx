@@ -6480,30 +6480,34 @@ export function AutomationSettingsPanel({
                     <label htmlFor={`make-a-post-make-unique-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Make it unique</label>
                   </div>
                   {/* Post to Profile % */}
-                  <Label className="text-xs text-muted-foreground">Post to Profile %</Label>
-                  <div className="flex items-center gap-2">
-                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                      value={settings.makePostPostToProfilePctMin}
-                      onChange={e => setSettings(s => ({ ...s, makePostPostToProfilePctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
-                      disabled={loading} />
-                    <span className="text-muted-foreground text-sm">to</span>
-                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                      value={settings.makePostPostToProfilePctMax}
-                      onChange={e => setSettings(s => ({ ...s, makePostPostToProfilePctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
-                      disabled={loading} />
+                  <div className="space-y-3">
+                    <Label className="text-xs text-muted-foreground">Post to Profile %</Label>
+                    <div className="flex items-center gap-2">
+                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                        value={settings.makePostPostToProfilePctMin}
+                        onChange={e => setSettings(s => ({ ...s, makePostPostToProfilePctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                        disabled={loading} />
+                      <span className="text-muted-foreground text-sm">to</span>
+                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                        value={settings.makePostPostToProfilePctMax}
+                        onChange={e => setSettings(s => ({ ...s, makePostPostToProfilePctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                        disabled={loading} />
+                    </div>
                   </div>
                   {/* Post to Story % */}
-                  <Label className="text-xs text-muted-foreground">Post to Story %</Label>
-                  <div className="flex items-center gap-2">
-                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                      value={settings.makePostPostToStoryPctMin}
-                      onChange={e => setSettings(s => ({ ...s, makePostPostToStoryPctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
-                      disabled={loading} />
-                    <span className="text-muted-foreground text-sm">to</span>
-                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                      value={settings.makePostPostToStoryPctMax}
-                      onChange={e => setSettings(s => ({ ...s, makePostPostToStoryPctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
-                      disabled={loading} />
+                  <div className="space-y-3">
+                    <Label className="text-xs text-muted-foreground">Post to Story %</Label>
+                    <div className="flex items-center gap-2">
+                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                        value={settings.makePostPostToStoryPctMin}
+                        onChange={e => setSettings(s => ({ ...s, makePostPostToStoryPctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                        disabled={loading} />
+                      <span className="text-muted-foreground text-sm">to</span>
+                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                        value={settings.makePostPostToStoryPctMax}
+                        onChange={e => setSettings(s => ({ ...s, makePostPostToStoryPctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                        disabled={loading} />
+                    </div>
                   </div>
                 </div>
               </div>
