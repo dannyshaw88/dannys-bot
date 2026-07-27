@@ -4,6 +4,34 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.225 — 2026-07-27
+
+### Fixed — Follow tool: search bar accumulates previous usernames (root cause: KEYCODE_CTRL_A broken on Android)
+
+**Root cause:** Before typing each new username, the code sent `KEYCODE_CTRL_A` via `adb shell input keyevent` expecting "select all then overwrite". That command cannot send modifier+key chords on Android — it is silently ignored or does nothing, so the previous username is never cleared. Every subsequent search appends the new username after the old one (e.g. `@ameliahou0814@crossbravo.es`), causing the wrong search results to appear and the tool to be unable to find the intended account.
+
+**Fix:** New `clearInstagramSearchBar()` function in `androidManager.ts` (node-based, no coordinates):
+1. Dumps UI and looks for Instagram's search-bar clear (×) button by resource-id (`search_bar_delete_icon`, `search_bar_clear_button`, `clear_button`). Taps it if found — this is the fastest and most reliable path.
+2. If no clear button is visible, reads the EditText node's `text` attribute to measure the leftover content, then sends `KEYCODE_MOVE_END` followed by N × `KEYCODE_DEL` to delete every character. Capped at 120 keystrokes.
+
+`mobile.ts` Follow loop now calls `android.clearInstagramSearchBar()` before `inputText()` instead of the broken `KEYCODE_CTRL_A`.
+
+### Improved — Follow tool: one extra node scan before the last-resort coordinate tap
+
+The positional fallback in `findAndTapUserInSearch` (used when UIAutomator exposes zero result nodes on certain device/IG combinations) now first tries resource-ids `row_search_user_container`, `search_result_user`, `row_search_result_container`, and `search_result_item` before committing to the `h × 0.27` coordinate tap. The coordinate tap is kept as a final safety net only — it is documented as a known device/UIAutomator limitation, not a normal code path.
+
+### Added — View Feed: Suggestions % setting
+
+New min/max percent setting on the View Feed tool. When Instagram serves a horizontal suggestion shelf (Suggested for you, People you may know, Suggested Reels) during feed scrolling, and the percentage roll hits, the tool swipes left 1–10 times to browse the suggestion cards. Detected via accessibility-tree text nodes (`"Suggested for you"`, `"People you may know"`, `"Suggested Reels"`) and resource-id signals — no coordinates used.
+
+The setting is exposed in the View Feed section of the Human Session Tool UI as "Suggestions % of slots" (min/max pair, default 0/0 = disabled). The feed settings log line and the post-run step summary both include the suggestion browse count.
+
+### Fixed — View Feed / View Explore / View Reels Click Author: expanded ad-detection word list
+
+The ad-post skip for Click Author previously only matched `text="Ad"` / `content-desc="Ad"`. It now also skips on `"Sponsored"` and `"Advert"` in either attribute, covering the full range of Instagram-sponsored-post labels. Change applies to all three Click Author implementations (View Feed, View Explore, View Reels).
+
+---
+
 ## v1.2.224 — 2026-07-27
 
 ### Fixed — View Reels: coordinate fallback removed; Send button now found via resource-id

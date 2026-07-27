@@ -3195,6 +3195,64 @@ export async function findDmSendButton(serial: string): Promise<{ x: number; y: 
 }
 
 /**
+ * Clear the Instagram search bar before typing a new username.
+ *
+ * The previous approach sent `KEYCODE_CTRL_A` via `adb shell input keyevent`
+ * expecting a "select all" then typed over the selection — but that command
+ * cannot send modifier+key chords on Android.  `KEYCODE_CTRL_A` is silently
+ * ignored (or does something unrelated), so old search text is never cleared
+ * and the new username gets appended after it instead of replacing it.
+ *
+ * Fix strategy (node-first, no coordinates):
+ *  1. Dump UI and look for Instagram's search-bar clear button by resource-id
+ *     (search_bar_delete_icon).  Tap it if present.
+ *  2. If no clear button is visible (bar empty or button not yet rendered),
+ *     read the EditText node's `text` attribute to measure the existing content
+ *     and send KEYCODE_MOVE_END + N × KEYCODE_DEL to delete it character by
+ *     character.  Capped at 120 keystrokes to avoid any runaway loop.
+ */
+export async function clearInstagramSearchBar(
+  serial: string,
+  onLog?: (msg: string) => void,
+): Promise<void> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return;
+
+  // Strategy 1 — node-based clear button (no coordinates needed)
+  const clearBtn =
+    _findByResId(xml,
+      ":id/search_bar_delete_icon",
+      ":id/search_bar_clear_button",
+      ":id/clear_search_button",
+      ":id/clear_button",
+    ) ??
+    _findElem(xml, "Clear search");
+
+  if (clearBtn) {
+    onLog?.(`Follow: tapping search bar clear button at (${clearBtn.x},${clearBtn.y})`);
+    _adbTap(adb, serial, clearBtn.x, clearBtn.y);
+    await _sleep(300);
+    return;
+  }
+
+  // Strategy 2 — measure existing text from the EditText node and backspace over it
+  const etMatch = xml.match(/class="android\.widget\.EditText"[^>]*\btext="([^"]*)"/);
+  const existing = etMatch?.[1] ?? "";
+  if (existing.length === 0) return; // bar already empty — nothing to do
+
+  onLog?.(`Follow: search bar contains ${existing.length}-char leftover text — clearing with KEYCODE_DEL`);
+  runInputShell(serial, ["keyevent", "123"], "keyevent"); // KEYCODE_MOVE_END → cursor to end
+  await _sleep(80);
+  const deleteCount = Math.min(existing.length + 3, 120); // +3 safety margin
+  for (let i = 0; i < deleteCount; i++) {
+    runInputShell(serial, ["keyevent", "67"], "keyevent"); // KEYCODE_DEL (backspace)
+  }
+  await _sleep(200);
+}
+
+/**
  * Finds the Share footer button on Instagram's "New post" caption screen.
  *
  * Uses resource-id as the primary signal (confirmed from real-device dump,
@@ -7071,32 +7129,45 @@ export async function findAndTapUserInSearch(
     }
   }
 
-  // ── Positional fallback (Follow tool only) ────────────────────────────────
+  // ── Last-resort fallback (Follow tool only) ─────────────────────────────
   // Some devices/IG builds don't expose search result rows in the a11y tree
   // (confirmed on Xiaomi Redmi 12 5G: keyboard and results both absent from
   // UIAutomator dump even while visibly rendered). Since we typed the exact
-  // username, Instagram always ranks the matching account first, so tapping
-  // the first result row is correct regardless of label visibility.
+  // username, Instagram always ranks the matching account first.
   //
-  // Verify Instagram is still the foreground app before committing to a
-  // positional tap — if the dump has no IG nodes at all, something went
-  // wrong and we should not blindly tap.
+  // Try one more node scan with generic row container resource-ids before
+  // resorting to a coordinate tap — these ids appear on builds that do
+  // expose containers but not individual avatar-ring or text nodes.
   {
     const verifyXml = await _uiDump(adb, serial).catch(() => "");
     if (!verifyXml.includes("com.instagram.android")) {
-      onLog?.(`Follow: positional fallback skipped — Instagram not in foreground`);
+      onLog?.(`Follow: fallback skipped — Instagram not in foreground`);
       return false;
     }
-    // Instagram now shows a "search suggestion chip" (@username) as the first
-    // visual row (~22 % screen height), pushing the first real user profile row
-    // down to ~27 %.  Tapping at 22 % hits the chip (which just re-runs the
-    // search) instead of the profile — confirmed from screenshot 24 Jul 2026.
-    // 27 % lands on the first actual user result across 720×1280, 1080×2400,
-    // and 1080×2460 devices observed so far.
+
+    // Extra node scan: look for any search-result row container by resource-id.
+    const rowNode =
+      _findByResId(verifyXml,
+        ":id/row_search_user_container",
+        ":id/search_result_user",
+        ":id/row_search_result_container",
+        ":id/search_result_item",
+      );
+    if (rowNode) {
+      onLog?.(`Follow: @${clean} found via row-container id at (${rowNode.x},${rowNode.y}) — tapping`);
+      _adbTap(adb, serial, rowNode.x, rowNode.y);
+      await _sleep(1500);
+      return true;
+    }
+
+    // Coordinate fallback — only reached when UIAutomator exposes zero result
+    // nodes (confirmed device/IG limitation, not a code error).  The chip row
+    // sits at ~22 % of screen height; the first real user profile row is at
+    // ~27 % on all tested devices (720×1280, 1080×2400, 1080×2460).
     const { w: fbW, h: fbH } = getScreenSize(serial);
     const fbX = Math.round(fbW * 0.50);
     const fbY = Math.round(fbH * 0.27);
-    onLog?.(`Follow: @${clean} not in a11y tree — positional fallback: tapping first user result at (${fbX},${fbY})`);
+    onLog?.(`Follow: @${clean} not in a11y tree — last-resort coordinate tap at (${fbX},${fbY})`);
     _adbTap(adb, serial, fbX, fbY);
     await _sleep(1500);
     return true;
