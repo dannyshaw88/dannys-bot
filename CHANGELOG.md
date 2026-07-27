@@ -4,6 +4,23 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.215 — 2026-07-27
+
+### Fixed — View Stories Click Author % fields not appearing in UI
+
+The `storiesClickAuthor` entry added to the `storiesRows` config array in
+v1.2.214 had no effect because the View Stories from Feed section renders via
+explicit JSX, not the generic config-driven renderer. The backend wiring
+(schema, defaults, loop logic) was correct; only the UI was missing.
+
+Added the Click Author % min/max input pair directly into the JSX block, after
+the Comment % row, matching the layout of every other stories field.
+
+**File changed:**
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — explicit JSX added after Comment % block (~line 5343)
+
+---
+
 ## v1.2.214 — 2026-07-27
 
 ### Added — View Stories from Feed: Click Author % feature

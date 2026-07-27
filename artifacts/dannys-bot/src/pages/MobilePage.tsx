@@ -5341,6 +5341,22 @@ export function AutomationSettingsPanel({
 
             </div>
           </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Click Author %</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewStoriesClickAuthorPercentMin}
+                onChange={e => setSettings(s => ({ ...s, viewStoriesClickAuthorPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewStoriesClickAuthorPercentMax}
+                onChange={e => setSettings(s => ({ ...s, viewStoriesClickAuthorPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+
+            </div>
+          </div>
         </div>}
 
         {/* Border separator between View Stories from Feed above and View
