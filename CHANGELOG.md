@@ -4,6 +4,14 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.224 — 2026-07-27
+
+### Fixed — View Reels: coordinate fallback removed; Send button now found via resource-id
+
+The DM-share Send button is now located using `direct_send_button_multi_select` / `send_button` resource-ids before falling back to label search. The previous coordinate fallback (`h * 0.982` ≈ y=1610) was landing in the Android navigation bar, hitting the Home button, and dismissing Instagram — causing the tool to falsely declare a successful share. If the Send button still cannot be found via nodes, the tool now presses Back and skips cleanly instead of firing a blind tap.
+
+---
+
 ## v1.2.223 — 2026-07-27
 
 ### Fixed — Debugging Log: all sub-messages within the active tool now inherit the tool's colour

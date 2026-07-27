@@ -4836,7 +4836,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     // (direct_send_button_multi_select) only appears once a recipient is
                     // selected, so _vrSendBtn0 (from the pre-selection scan) is stale and
                     // will have matched the wrong element (e.g. "Send message" text box).
-                    const _vrSb = await android.findButtonByLabel(serial, "Send").catch(() => null);
+                    // findDmSendButton tries resource-ids first before the label fallback.
+                    const _vrSb = await android.findDmSendButton(serial).catch(() => null);
                     if (_vrSb) {
                       await android.tap(serial, _vrSb.x, _vrSb.y);
                       await sleepOrAbort(serial, 1000);
@@ -4857,18 +4858,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                       onLog?.(`${_vrPfx}: ✓ shared via DM — sheet auto-dismissed (sent by recipient tap)`);
                       await sleepOrAbort(serial, 200);
                     } else {
-                      const _vrFbX = Math.round(w * 0.50), _vrFbY = Math.round(h * 0.982);
-                      onLog?.(`${_vrPfx}: Send button not found via a11y — tapping coordinate fallback (${_vrFbX},${_vrFbY})`);
-                      await android.tap(serial, _vrFbX, _vrFbY);
-                      await sleepOrAbort(serial, 300);
-                      if (!(await _vrIsOpen())) {
-                        _vrDmSent = true;
-                        onLog?.(`${_vrPfx}: ✓ shared via DM — sent via coordinate fallback`);
-                        await sleepOrAbort(serial, 300);
-                      } else {
-                        await android.pressBack(serial);
-                        await sleepOrAbort(serial, 200);
-                      }
+                      // Send button not found and sheet still open — press Back and skip.
+                      // No coordinate fallback: tapping a blind Y-fraction risks hitting
+                      // the Android nav bar (Home button) and dismissing Instagram.
+                      logger.info({ serial }, "[view-reels] Send button not found — pressing Back and skipping DM share");
+                      onLog?.(`${_vrPfx}: Send button not found via a11y — pressing Back and skipping`);
+                      await android.pressBack(serial);
+                      await sleepOrAbort(serial, 200);
                     }
                   }
                 }

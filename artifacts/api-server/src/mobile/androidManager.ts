@@ -3177,6 +3177,24 @@ export async function findButtonByLabel(serial: string, label: string): Promise<
 }
 
 /**
+ * Finds the DM-share Send button on the share sheet after a recipient has been
+ * selected.  Tries resource-ids first (direct_send_button_multi_select and
+ * send_button are the two known ids) before falling back to the label "Send".
+ * More reliable than findButtonByLabel("Send") which can miss the button when
+ * IG uses a custom view with no text/content-desc attribute.
+ */
+export async function findDmSendButton(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+  return (
+    _findByResId(xml, ":id/direct_send_button_multi_select", ":id/send_button") ??
+    _findElem(xml, "Send")
+  );
+}
+
+/**
  * Finds the Share footer button on Instagram's "New post" caption screen.
  *
  * Uses resource-id as the primary signal (confirmed from real-device dump,
