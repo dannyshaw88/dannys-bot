@@ -4,6 +4,41 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.222 — 2026-07-27
+
+### Fixed — Make a Post: Post to Profile % and Post to Story % now included in Copy Settings
+
+The two destination-percentage fields (`Post to Profile %` and `Post to Story %`)
+were missing from the Copy Settings sub-key list, so they were never copied when
+using Copy Settings to other slots.
+
+Added a new `Post to Profile / Story %` entry to the Make a Post section of
+`COPY_SECTIONS`. Ticking it copies all four fields:
+`makePostPostToProfilePctMin`, `makePostPostToProfilePctMax`,
+`makePostPostToStoryPctMin`, `makePostPostToStoryPctMax`.
+
+### Fixed — Debugging Log: system messages now white; Inject Browsing logs now blue
+
+All untagged / system log lines are now white (`text-white/70`) instead of green.
+`Inject Browsing:` log lines are now coloured blue, matching the Follow Users
+tool they belong to. The sky-blue system-message class has been removed.
+
+### Fixed — My Device: Brightness button cycle is now fixed and predictable
+
+The brightness button no longer syncs its state from the device on load.
+Syncing caused the cycle to snap to a mid-value (e.g. 50%) so the first press
+went to 100% instead of 0%. The button now uses a fixed step index initialised
+at 100%, giving a deterministic sequence every time:
+press 1 → 0%  ·  press 2 → 50%  ·  press 3 → 100%  ·  press 4 → 0% …
+
+**Files changed:**
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx`
+- `package.json`
+- `artifacts/electron/package.json`
+- `CHANGELOG.md`
+
+---
+
 ## v1.2.221 — 2026-07-27
 
 ### Fixed — Make a Post (Story): forward arrow button now found on Redmi A5

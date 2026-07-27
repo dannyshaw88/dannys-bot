@@ -4191,6 +4191,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'postDisableAt',     label: 'Disable at post count',         fields: ['makePostDisableAtPostCount','makePostDisableWhenExhausted'] },
     { key: 'postLocalFolder',   label: 'Local Folder source',           fields: ['makePostLocalFolderEnabled','makePostLocalFolderNoRepeat','makePostLocalFolderRandom','makePostLocalFolderDeleteAfterUpload'] },
     { key: 'postCaption',       label: 'ChatGPT / caption settings',    fields: ['makePostUseChatGpt','makePostFixAiSlop','makePostMakeUnique','makePostCaptionText'] },
+    { key: 'postDestination',   label: 'Post to Profile / Story %',     fields: ['makePostPostToProfilePctMin','makePostPostToProfilePctMax','makePostPostToStoryPctMin','makePostPostToStoryPctMax'] },
   ]},
 ];
 
