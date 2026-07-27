@@ -4,6 +4,45 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.205 — 2026-07-27
+
+### Fixed — Make a Post: "My PC" assigned directory resets to Desktop after a few hours
+
+This was the 10th attempt at fixing this recurring issue. Root-cause analysis traced three independent failure paths all conspiring at once.
+
+#### Root cause 1 — POST handler let `""` overwrite the saved path (primary cause)
+
+**What happened:** The autosave in the React frontend fires every ~500 ms whenever any setting changes. At the moment of the save, the frontend sends the entire settings object — including `makePostLocalFolderPath` — taken directly from React state. If that state was stale or empty at the moment of capture (due to a hydration race on page load, a Copy Settings operation that blanked the field, or a settings refresh that resolved before the dedicated folder-path file was read), the autosave would POST `makePostLocalFolderPath: ""` to `/api/mobile/devices/:serial/slots/:slotIdx/automation-settings`.
+
+The POST handler merged the request body on top of the existing saved settings with `{ ...base, ...req.body }`. Because the empty string `""` is a valid JavaScript/JSON value (not `undefined`), it passed through Zod's `.default("")` without substitution, and the spread put `""` at the end — silently overwriting the previously saved, non-empty folder path in `mobile-instances.json` every single autosave tick.
+
+**Fix (`artifacts/api-server/src/routes/mobile.ts`):** Before merging, the POST handler now strips `makePostLocalFolderPath` from the request body if its value is `""`. This means an empty value from the frontend is treated as "not provided" rather than "explicitly cleared", so the existing saved path in the base object always wins. A non-empty value (the user actively picked a folder) still passes through and saves normally.
+
+```ts
+// Strip empty string so stale React state never overwrites a saved path
+const body = { ...req.body };
+if (body.makePostLocalFolderPath === "") delete body.makePostLocalFolderPath;
+const input = automationSchema.parse({ ...base, ...body });
+```
+
+#### Root cause 2 — Folder picker dialog always opened to Desktop, obscuring whether a path was already set
+
+**What happened:** The "Browse" button called `api.openFolderDialog()` with no arguments. Electron's `dialog.showOpenDialog` defaulted to the Desktop every time, even when a folder was already assigned. This made it easy to accidentally "re-browse" and pick a different folder thinking you were confirming the existing one.
+
+**Fix — three-layer change:**
+
+1. **`artifacts/electron/src/main.ts`** — `open-folder-dialog` IPC handler now accepts an optional `defaultPath` argument and forwards it to `dialog.showOpenDialog`. When provided, Windows opens the picker at that directory instead of Desktop.
+
+2. **`artifacts/electron/src/preload.ts`** — `openFolderDialog` in the preload bridge now accepts and forwards the optional `defaultPath` string to the IPC channel.
+
+3. **`artifacts/dannys-bot/src/pages/MobilePage.tsx`** — The Browse button now passes the currently saved `settings.makePostLocalFolderPath` as the `defaultPath` to `openFolderDialog`. If a folder is already assigned, the picker opens directly inside it. If no folder is set yet, `undefined` is passed and the picker defaults to Desktop as before.
+
+#### Why the dedicated-file fallback alone wasn't enough
+
+A previous fix (v1.2.203 era) introduced a dedicated folder-path file as a second store, independent of `mobile-instances.json`, that survives Copy Settings and schema drift. The GET handler reads it authoritatively. However, because the POST handler was still writing `""` into `mobile-instances.json` on every autosave tick, the next GET would correctly restore the path from the dedicated file — but only after a full settings reload. During the gap between the bad autosave and the next reload, the in-memory state was blank, which could cause the automation cycle to skip the Make a Post step with "no Local Folder path configured". The fix to root cause 1 closes this gap permanently: `mobile-instances.json` is never written with `""`, so the dedicated file and the JSON store stay in sync at all times.
+
+---
+
 ## v1.2.204 — 2026-07-27
 
 ### Fixed — Follow tool: chip-row detection, inline_follow_button resource-id, English filter XML encoding
