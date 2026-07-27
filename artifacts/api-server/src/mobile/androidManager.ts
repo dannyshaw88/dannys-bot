@@ -4184,8 +4184,8 @@ export async function findStoryNextArrowButton(
     const isNextResource = ridName.includes("next_button") ||
       ridName.includes("button_next") ||
       ridName.includes("action_next");
-    const isNextLabel = /^(next|next button|continue)$/.test(desc.trim().toLowerCase()) ||
-      /^(next|next button|continue)$/.test(text.trim().toLowerCase());
+    const isNextLabel = /^(next|next button|continue|share to)$/.test(desc.trim().toLowerCase()) ||
+      /^(next|next button|continue|share to)$/.test(text.trim().toLowerCase());
     if (!isDirectShare && !isNextResource && !isNextLabel) continue;
 
     // Destination pills can contain "story" / "friends" in their labels.

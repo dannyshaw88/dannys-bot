@@ -4,6 +4,34 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.221 — 2026-07-27
+
+### Fixed — Make a Post (Story): forward arrow button now found on Redmi A5
+
+The story editor's blue forward chevron button was not being tapped because
+Instagram on the Redmi A5 labels it `desc="Share to"` — a label the detection
+code did not recognise. The code accepted only `"Next"`, `"Next button"`, and
+`"Continue"` as valid labels for the forward arrow, so the node was always
+skipped and the flow aborted.
+
+**Root cause confirmed from UIAutomator dump:**
+Node `[58] Button desc="Share to" [608,1438][696,1526]` is the blue rightmost
+button in `story_share_controls_action_bar`. It carries no `resource-id`. The
+only way to identify it is by its `content-desc`.
+
+**Fix:** Added `"share to"` to the recognised `isNextLabel` pattern in
+`findStoryNextArrowButton()` in `androidManager.ts`. The exclusion guard for
+destination pills (`"your story"`, `"close friends"`, `"add to story"`) still
+applies, so the fix cannot accidentally tap one of those.
+
+**Files changed:**
+- `artifacts/api-server/src/mobile/androidManager.ts` — `findStoryNextArrowButton` label regex
+- `package.json`
+- `artifacts/electron/package.json`
+- `CHANGELOG.md`
+
+---
+
 ## v1.2.220 — 2026-07-27
 
 ### Fixed — Make a Post Story flow now finds the real editor action
