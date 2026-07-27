@@ -8286,20 +8286,29 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
         {lines.length === 0
           ? <p className="text-white/30">No activity yet — taps, swipes, keys, and automation cycles will show up here.</p>
           : lines.map((l, i) => {
-              // Parse:  [HH:MM:SS AM/PM]  [Xs]  message
-              //         [HH:MM:SS AM/PM]        message   (no duration)
-              const m   = l.match(/^\[([^\]]+)\]\s*(?:\[(\d+(?:\.\d+)?s)\]\s*)?([\s\S]*)$/);
+              // Parse:  [HH:MM:SS AM/PM]  [Xm Ys / Xs]  message
+              //         [HH:MM:SS AM/PM]               message   (no duration)
+              const m   = l.match(/^\[([^\]]+)\]\s*(?:\[(\d+m \d+(?:\.\d+)?s|\d+(?:\.\d+)?s)\]\s*)?([\s\S]*)$/);
               const ts  = m?.[1] ?? '';
               const dur = m?.[2] ?? '';
               const msg = m ? (m[3] ?? '') : l;
 
-              // Colour the message based on its prefix
+              // Colour the message based on its tool / prefix.
+              // Tool-specific colours take priority over general prefix colours.
               let msgClass = 'text-green-400/80';
-              if (/^(ERROR|FAILED|✗)/.test(msg))           msgClass = 'text-red-400';
-              else if (/^⚠/.test(msg))                     msgClass = 'text-yellow-400';
-              else if (/^[✓✅]/.test(msg))                 msgClass = 'text-green-300';
-              else if (/shuffled/.test(msg))               msgClass = 'text-blue-400';
-              else if (/^▶/.test(msg))                     msgClass = 'text-white/90';
+              if (/▶ Follow Users|▶ Follow done|▶ Spread Follow|Spread Follow →/.test(msg))
+                                                           msgClass = 'text-blue-400';
+              else if (/\bView Explore\b|▶ View Explore/.test(msg))
+                                                           msgClass = 'text-green-400';
+              else if (/\bView Reels\b|▶ View Reels/.test(msg))
+                                                           msgClass = 'text-red-400';
+              else if (/\bMake a Post\b|▶ Make a Post/.test(msg))
+                                                           msgClass = 'text-purple-400';
+              else if (/^(ERROR|FAILED|✗)/.test(msg))     msgClass = 'text-red-400';
+              else if (/^⚠/.test(msg))                    msgClass = 'text-yellow-400';
+              else if (/^[✓✅]/.test(msg))                msgClass = 'text-green-300';
+              else if (/shuffled/.test(msg))              msgClass = 'text-blue-400';
+              else if (/^▶/.test(msg))                    msgClass = 'text-white/90';
               else if (/^(WS |First frame|Frame |Decoder|Wake )/.test(msg)) msgClass = 'text-sky-400/70';
 
               return (

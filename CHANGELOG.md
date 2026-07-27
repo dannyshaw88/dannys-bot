@@ -4,6 +4,75 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.218 — 2026-07-27
+
+### Added — Skip Click Author on ad posts (all three tools)
+
+Instagram marks sponsored posts with a standalone **"Ad"** label in the accessibility tree. Previously, when Click Author was rolled on an ad post, the automation would attempt to tap the author name but the author was the advertiser — opening a sponsored profile and breaking the flow for that iteration.
+
+All three loops that support Click Author now check the live UIAutomator dump for an exact `text="Ad"` or `content-desc="Ad"` attribute immediately after the dump is taken. The check uses quoted-attribute matching so partial words like "Add", "Adidas", or "Adobe" never trigger it. If an ad label is found, the author tap is skipped entirely and logged:
+
+- `View Feed X/Y: ad post detected — skipping click author`
+- `View Explore X/Y: ad post detected — skipping click author`
+- `View Reels X/Y: ad post detected — skipping click author`
+
+No new settings are needed — the guard is always active when Click Author % is in use.
+
+**Files changed:**
+- `artifacts/api-server/src/routes/mobile.ts` — ad-skip guard added to all three `wantClickAuthor` blocks (View Feed loop, View Explore loop, View Reels loop)
+
+---
+
+### Improved — Debugging Log timer now shows minutes and seconds
+
+The elapsed-time counter in every device's Debugging Log tab previously showed raw seconds (`[155.4s]`), which made it hard to read at a glance during long cycles. It now formats as minutes and seconds:
+
+- Under 60 s: `[23.4s]` (unchanged)
+- 60 s and over: `[2m 35.4s]`, `[12m 4.1s]`, etc.
+
+The frontend duration column regex was also updated to match both formats, so display is correct for old and new log lines.
+
+**Files changed:**
+- `artifacts/api-server/src/routes/mobile.ts` — `tLog` elapsed formatter updated
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — `LogPanel` duration regex widened
+
+---
+
+### Improved — Debugging Log: tool colour-coding and proper tool name stamps
+
+**Colour-coding:**
+
+Each tool's log lines are now highlighted in a distinct colour so it is easy to see at a glance which tool produced each line:
+
+| Tool | Colour |
+|---|---|
+| Follow Users | Blue |
+| View Explore Page | Green |
+| View Reels | Red |
+| Make a Post | Purple |
+
+Colour is applied to both the high-level `▶ Tool started / done` lines and every per-iteration detail line from that tool. General status colours (yellow for warnings, green for ✓ successes, red for errors) still apply inside lines that do not match a tool prefix.
+
+**Tool name stamps:**
+
+Per-iteration log lines previously used internal loop variable labels that didn't match the tool names shown in the UI. All four affected tools have been renamed:
+
+| Before | After |
+|---|---|
+| `Scroll 1/5: …` | `View Feed 1/5: …` |
+| `Reel 1/8: …` | `View Reels 1/8: …` |
+| `Explore scroll 1/6: …` | `View Explore 1/6: …` |
+| `Story 1: …` | `View Stories 1: …` |
+
+This applies to every per-post, per-reel, per-story, and per-scroll log line produced inside those loops — including action results, skip reasons, author-click outcomes, and error lines.
+
+**Files changed:**
+- `artifacts/api-server/src/routes/mobile.ts` — all `onLog` prefixes renamed; `_vrCaPfx` definition updated
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx` — `LogPanel` colour logic extended with tool-specific rules
+
+---
+
+
 ## v1.2.217 — 2026-07-27
 
 ### Fixed — View Reels Click Author node not found

@@ -2196,7 +2196,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     for (let i = 0; i < count; i++) {
       if (isCycleAborted(serial)) throw new Error("cycle-aborted");
       const sv = rollScrollVelocity(h, feedScrollWeights, /*allowBack=*/true, /*safeStartFrac=*/0.88);
-      onLog?.(`Scroll ${i + 1}/${count} [${sv.mode}]`);
+      onLog?.(`View Feed ${i + 1}/${count} [${sv.mode}]`);
       logger.info({ serial, target: "feed-scroll", mode: sv.mode, from: [x, sv.fromY], to: [x, sv.toY], durationMs: sv.duration }, "[check-feed] swipe");
       await android.swipe(serial, x, sv.fromY, x, sv.toY, sv.duration);
       await sleepOrAbort(serial, 180);
@@ -2211,7 +2211,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (/Add a comment|add a comment|Comments/i.test(xml) && /EditText|class="android\.widget\.EditText"/.test(xml)) {
           // Comments sheet accidentally opened by the swipe — press Back.
           logger.warn({ serial }, "[check-feed] comments sheet opened by scroll — pressing Back to recover");
-          onLog?.(`Scroll ${i + 1}/${count}: comments accidentally opened — recovering with Back`);
+          onLog?.(`View Feed ${i + 1}/${count}: comments accidentally opened — recovering with Back`);
           await android.pressBack(serial);
           await sleepOrAbort(serial, 600);
         } else if (xml.includes("Hide")) {
@@ -2220,7 +2220,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // dismiss-label nodes while the sheet is still open and tap something
           // unintended.
           logger.warn({ serial }, "[check-feed] post options sheet ('Hide') detected mid-scroll — pressing Back to recover");
-          onLog?.(`Scroll ${i + 1}/${count}: post options sheet detected — recovering with Back`);
+          onLog?.(`View Feed ${i + 1}/${count}: post options sheet detected — recovering with Back`);
           await android.pressBack(serial);
           await sleepOrAbort(serial, 400);
         } else {
@@ -2229,7 +2229,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           const midPopup = await android.dismissInstagramInterstitials(serial, xml).catch(() => null);
           if (midPopup) {
             logger.info({ serial, dismissed: midPopup }, "[check-feed] dismissed mid-scroll popup");
-            onLog?.(`Scroll ${i + 1}/${count}: dismissed mid-scroll popup (${midPopup})`);
+            onLog?.(`View Feed ${i + 1}/${count}: dismissed mid-scroll popup (${midPopup})`);
             await sleepOrAbort(serial, 400);
           }
         }
@@ -2261,7 +2261,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // This card replaced the post entirely — there is nothing safe to
           // tap for like/share/share-DM. Skip all three and just scroll on.
           logger.info({ serial, marker: feedbackCard }, "[check-feed] skip card detected in place of a post — skipping like/share/share-DM, scrolling past");
-          onLog?.(`Scroll ${i + 1}/${count}: skip card detected ("${feedbackCard}") — skipping like/share`);
+          onLog?.(`View Feed ${i + 1}/${count}: skip card detected ("${feedbackCard}") — skipping like/share`);
           if (wantLike) likeFailures++;
         } else {
           // Settle wait: give the feed post's action bar time to fully render
@@ -2275,7 +2275,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // absence — a page/profile owner can disable comments and/or
           // shares per post) is resolved fresh per post instead of assuming
           // a fixed layout. See findFeedActionIcons()'s doc comment.
-          onLog?.(`Scroll ${i + 1}/${count}: scanning action bar…`);
+          onLog?.(`View Feed ${i + 1}/${count}: scanning action bar…`);
           const icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
           if (!icons) {
             // No Like button found — this isn't a normal in-feed post right
@@ -2284,17 +2284,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // like AND share AND share-DM rather than firing share taps at
             // coordinates that assume an action bar exists.
             logger.info({ serial, target: "action-bar", matched: false }, "[check-feed] skipped like/share/share-DM — no Like button visible on screen");
-            onLog?.(`Scroll ${i + 1}/${count}: no Like button visible — skipping actions (Reel/ad/animating)`);
+            onLog?.(`View Feed ${i + 1}/${count}: no Like button visible — skipping actions (Reel/ad/animating)`);
             if (wantLike) likeFailures++;
           } else {
             const likeBtn = icons.like;
             const iconSummary = `like=(${likeBtn.x},${likeBtn.y}) comment=${icons.comment ? `(${icons.comment.x},${icons.comment.y})` : "n/a"} shareFeed=${icons.shareFeed ? `(${icons.shareFeed.x},${icons.shareFeed.y})` : "n/a"} shareDM=${icons.shareDm ? `(${icons.shareDm.x},${icons.shareDm.y})` : "n/a"}`;
             logger.info({ serial, hasComment: !!icons.comment, hasShareFeed: !!icons.shareFeed, hasShareDm: !!icons.shareDm }, "[check-feed] action-bar icons detected for this post");
-            onLog?.(`Scroll ${i + 1}/${count}: action bar found — ${iconSummary}`);
+            onLog?.(`View Feed ${i + 1}/${count}: action bar found — ${iconSummary}`);
 
             if (wantLike) {
               if (icons.alreadyLiked) {
-                onLog?.(`Scroll ${i + 1}/${count}: already liked — skipping like`);
+                onLog?.(`View Feed ${i + 1}/${count}: already liked — skipping like`);
               } else {
                 // ~93 % of likes use a double-tap on the post image — the
                 // natural human gesture.  The remaining ~7 % tap the heart
@@ -2311,27 +2311,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     const dtX = Math.round(_fW / 2) + Math.round((Math.random() - 0.5) * 20);
                     const dtY = likeBtn.y - 300 + Math.round((Math.random() - 0.5) * 40);
                     logger.info({ serial, target: "image-double-tap", x: dtX, y: dtY }, "[check-feed] double-tap like");
-                    onLog?.(`Scroll ${i + 1}/${count}: double-tapping image at (${dtX},${dtY})…`);
+                    onLog?.(`View Feed ${i + 1}/${count}: double-tapping image at (${dtX},${dtY})…`);
                     await android.doubleTap(serial, dtX, dtY);
                   } else {
                     // Heart-icon tap — used ~7 % of the time for variety.
                     const jx = likeBtn.x + Math.round((Math.random() - 0.5) * 6);
                     const jy = likeBtn.y + Math.round((Math.random() - 0.5) * 6);
                     logger.info({ serial, target: "like-button", x: jx, y: jy }, "[check-feed] heart-icon like");
-                    onLog?.(`Scroll ${i + 1}/${count}: tapping heart icon at (${jx},${jy})…`);
+                    onLog?.(`View Feed ${i + 1}/${count}: tapping heart icon at (${jx},${jy})…`);
                     await android.tap(serial, jx, jy);
                   }
                   likes++;
-                  onLog?.(`Scroll ${i + 1}/${count}: ✓ liked`);
+                  onLog?.(`View Feed ${i + 1}/${count}: ✓ liked`);
                 } catch {
                   likeFailures++;
-                  onLog?.(`Scroll ${i + 1}/${count}: ✗ like threw an error`);
+                  onLog?.(`View Feed ${i + 1}/${count}: ✗ like threw an error`);
                 }
                 await sleepOrAbort(serial, 300);
                 await verifyStillInInstagram();
               }
             } else {
-              onLog?.(`Scroll ${i + 1}/${count}: like roll missed (chance ${Math.round(likeChance * 100)}%) — scrolling without like`);
+              onLog?.(`View Feed ${i + 1}/${count}: like roll missed (chance ${Math.round(likeChance * 100)}%) — scrolling without like`);
             }
 
             // Share to Feed (repost): tap the circular-arrows icon, find
@@ -2346,7 +2346,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // risking a tap on the wrong control (e.g. Comment).
             if (wantShareFeed && !icons.shareFeed) {
               logger.info({ serial }, "[check-feed] skipped share-to-feed — icon not identifiable on this post (disabled or ambiguous layout)");
-              onLog?.(`Scroll ${i + 1}/${count}: skipped repost — share-to-feed icon not found on this post`);
+              onLog?.(`View Feed ${i + 1}/${count}: skipped repost — share-to-feed icon not found on this post`);
             }
             if (wantShareFeed && icons.shareFeed) {
               const shareFeedIconX = icons.shareFeed.x, rowY = icons.shareFeed.y;
@@ -2363,7 +2363,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 // matches that same relabelled icon via substring and this
                 // code taps it AGAIN — undoing the repost it just made.
                 const beforeCd = await android.getContentDescNear(serial, shareFeedIconX, rowY).catch(() => null);
-                onLog?.(`Scroll ${i + 1}/${count}: tapping share-to-feed icon at (${shareFeedIconX},${rowY})…`);
+                onLog?.(`View Feed ${i + 1}/${count}: tapping share-to-feed icon at (${shareFeedIconX},${rowY})…`);
                 await android.tap(serial, shareFeedIconX, rowY);
                 logger.info({ serial, x: shareFeedIconX, y: rowY, beforeCd }, "[check-feed] tapped share-to-feed icon");
                 await sleepOrAbort(serial, 400); // wait for repost sheet
@@ -2380,7 +2380,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 const sameCoords = !!repostBtn && _rDx < 60 && _rDy < 60;
                 if (sameCoords) logger.info({ serial, repostBtn, shareFeedIconX, rowY, dx: _rDx, dy: _rDy }, "[check-feed] 'Repost' node within 60 px of icon — treated as same icon (single-tap path)");
                 if (repostBtn && !sameCoords) {
-                  onLog?.(`Scroll ${i + 1}/${count}: Repost sheet opened — tapping Repost at (${repostBtn.x},${repostBtn.y})…`);
+                  onLog?.(`View Feed ${i + 1}/${count}: Repost sheet opened — tapping Repost at (${repostBtn.x},${repostBtn.y})…`);
                   await android.tap(serial, repostBtn.x, repostBtn.y);
                   logger.info({ serial }, "[check-feed] tapped Repost in sheet");
                   await sleepOrAbort(serial, 300);
@@ -2391,11 +2391,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   if (closeBtn) {
                     await android.tap(serial, closeBtn.x, closeBtn.y);
                     logger.info({ serial }, "[check-feed] dismissed repost confirmation popup (Close)");
-                    onLog?.(`Scroll ${i + 1}/${count}: dismissed "You reposted" popup`);
+                    onLog?.(`View Feed ${i + 1}/${count}: dismissed "You reposted" popup`);
                     await sleepOrAbort(serial, 150);
                   }
                   sharesFeed++;
-                  onLog?.(`Scroll ${i + 1}/${count}: ✓ reposted to feed (total reposts: ${sharesFeed})`);
+                  onLog?.(`View Feed ${i + 1}/${count}: ✓ reposted to feed (total reposts: ${sharesFeed})`);
                 } else if (sameCoords) {
                   // The a11y tree returned a "Repost"-labelled node at the same
                   // position as the icon we just tapped (single-tap repost path
@@ -2405,7 +2405,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   // dump says happened afterward. Do NOT press Back — that
                   // navigates away from the feed.
                   logger.info({ serial, beforeCd }, "[check-feed] sameCoords repost tap accepted without label re-check");
-                  onLog?.(`Scroll ${i + 1}/${count}: repost tapped (single-tap path, no sheet check)`);
+                  onLog?.(`View Feed ${i + 1}/${count}: repost tapped (single-tap path, no sheet check)`);
                   sharesFeed++;
                 } else {
                   // No Repost button found in the dump after the tap. The dump is
@@ -2413,7 +2413,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   // before the dump ran, or the button may be outside the capture
                   // window. Accept the tap and continue — do NOT press Back.
                   logger.info({ serial }, "[check-feed] no Repost-labelled node found after tap — accepting tap, not pressing Back");
-                  onLog?.(`Scroll ${i + 1}/${count}: repost tap sent (sheet not confirmed in dump — continuing)`);
+                  onLog?.(`View Feed ${i + 1}/${count}: repost tap sent (sheet not confirmed in dump — continuing)`);
                 }
                 await verifyStillInInstagram();
               } catch (e: any) { if (e?.message === "cycle-aborted") throw e; /* else non-fatal */ }
@@ -2430,7 +2430,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // findFeedActionIcons), so the action is skipped.
             if (wantShareDm && !icons.shareDm) {
               logger.info({ serial }, "[check-feed] skipped share-via-DM — icon not identifiable on this post (disabled or ambiguous layout)");
-              onLog?.(`Scroll ${i + 1}/${count}: skipped share-via-DM — paper-plane icon not found on this post`);
+              onLog?.(`View Feed ${i + 1}/${count}: skipped share-via-DM — paper-plane icon not found on this post`);
             }
             // Guard: if icon detection resolved shareDm to the same screen
             // position as shareFeed (ambiguous layout on this post/build),
@@ -2441,11 +2441,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               Math.abs(icons.shareDm.y - icons.shareFeed.y) < 15;
             if (wantShareDm && icons.shareDm && _cfDmOverlap) {
               logger.warn({ serial, shareDm: icons.shareDm, shareFeed: icons.shareFeed }, "[check-feed] shareDm coord overlaps shareFeed — skipping DM to prevent double-tap of repost icon");
-              onLog?.(`Scroll ${i + 1}/${count}: share-to-DM skipped — icon at (${icons.shareDm.x},${icons.shareDm.y}) overlaps share-to-feed icon — detection ambiguous, preventing double-tap`);
+              onLog?.(`View Feed ${i + 1}/${count}: share-to-DM skipped — icon at (${icons.shareDm.x},${icons.shareDm.y}) overlaps share-to-feed icon — detection ambiguous, preventing double-tap`);
             }
             if (wantShareDm && icons.shareDm && !_cfDmOverlap) {
               // ── View Feed — Share via DM (isolated; not shared with any other tool) ──
-              const _cfPfx = `Scroll ${i + 1}/${count}`;
+              const _cfPfx = `View Feed ${i + 1}/${count}`;
               let _cfDmSent = false;
               try {
                 if (isCycleAborted(serial)) throw new Error("cycle-aborted");
@@ -2561,12 +2561,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               const _saveBtn = icons.save;
               if (!_saveBtn) {
                 logger.info({ serial }, "[check-feed] save button not found on this post — skipping save");
-                onLog?.(`Scroll ${i + 1}/${count}: save skipped — ribbon icon not found on this post`);
+                onLog?.(`View Feed ${i + 1}/${count}: save skipped — ribbon icon not found on this post`);
               } else {
                 try {
                   if (isCycleAborted(serial)) throw new Error("cycle-aborted");
                   await sleepOrAbort(serial, 200 + Math.round(Math.random() * 200));
-                  onLog?.(`Scroll ${i + 1}/${count}: tapping save (ribbon) icon at (${_saveBtn.x},${_saveBtn.y})…`);
+                  onLog?.(`View Feed ${i + 1}/${count}: tapping save (ribbon) icon at (${_saveBtn.x},${_saveBtn.y})…`);
                   await android.tap(serial, _saveBtn.x, _saveBtn.y);
                   await sleepOrAbort(serial, 600);
                   // Instagram may show a "Collect the posts you love" bottom
@@ -2580,17 +2580,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     if (_fsSaveXml.includes('pinned_save_row') || _fsSaveXml.includes('Collect the posts you love')) {
                       const { w: _fsW, h: _fsH } = getScreenSize(serial);
                       await android.tap(serial, Math.round(_fsW * 0.50), Math.round(_fsH * 0.12));
-                      onLog?.(`Scroll ${i + 1}/${count}: dismissed "Save to collection?" popup`);
+                      onLog?.(`View Feed ${i + 1}/${count}: dismissed "Save to collection?" popup`);
                       await sleepOrAbort(serial, 300);
                     }
                   }
                   saves++;
                   logger.info({ serial }, "[check-feed] saved post via ribbon icon");
-                  onLog?.(`Scroll ${i + 1}/${count}: ✓ post saved`);
+                  onLog?.(`View Feed ${i + 1}/${count}: ✓ post saved`);
                   await verifyStillInInstagram();
                 } catch (e: any) {
                   if (e?.message === "cycle-aborted") throw e;
-                  onLog?.(`Scroll ${i + 1}/${count}: save error — ${e?.message}`);
+                  onLog?.(`View Feed ${i + 1}/${count}: save error — ${e?.message}`);
                 }
               }
             }
@@ -2640,29 +2640,29 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   if (!_ecBb) continue;
                   const _ecX = Math.round((parseInt(_ecBb[1]) + parseInt(_ecBb[3])) / 2);
                   const _ecY = Math.round((parseInt(_ecBb[2]) + parseInt(_ecBb[4])) / 2);
-                  onLog?.(`Scroll ${i + 1}/${count}: tapping caption "more" at (${_ecX},${_ecY}) [matched via ${_hasMoreText ? "text" : "content-desc"}]`);
+                  onLog?.(`View Feed ${i + 1}/${count}: tapping caption "more" at (${_ecX},${_ecY}) [matched via ${_hasMoreText ? "text" : "content-desc"}]`);
                   await android.tap(serial, _ecX, _ecY);
                   await verifyStillInInstagram();
                   // Dwell after expanding — simulate reading the caption.
                   // 2–10 s, rolled fresh each time so the duration looks human.
                   const _ecDwellMs = 2000 + Math.round(Math.random() * 8000);
-                  onLog?.(`Scroll ${i + 1}/${count}: ✓ caption expanded — dwelling ${(_ecDwellMs / 1000).toFixed(1)}s`);
+                  onLog?.(`View Feed ${i + 1}/${count}: ✓ caption expanded — dwelling ${(_ecDwellMs / 1000).toFixed(1)}s`);
                   await sleepOrAbort(serial, _ecDwellMs);
                   captionExpands++;
                   _ecTapped = true;
                 }
                 if (!_ecTapped) {
-                  onLog?.(`Scroll ${i + 1}/${count}: caption "more" not visible — skipping expand`);
+                  onLog?.(`View Feed ${i + 1}/${count}: caption "more" not visible — skipping expand`);
                 }
               } catch (e: any) {
                 if (e?.message === "cycle-aborted") throw e;
-                onLog?.(`Scroll ${i + 1}/${count}: expand caption error — ${e?.message}`);
+                onLog?.(`View Feed ${i + 1}/${count}: expand caption error — ${e?.message}`);
               }
             }
           }
         }
       } else {
-        onLog?.(`Scroll ${i + 1}/${count}: no actions rolled this scroll`);
+        onLog?.(`View Feed ${i + 1}/${count}: no actions rolled this scroll`);
       }
 
       // ── Tap Audio (music/song page) — independent of action bar ──────
@@ -2721,14 +2721,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           }
 
           if (!_atNode) {
-            onLog?.(`Scroll ${i + 1}/${count}: tap-audio rolled but no audio affordance on this post — skipping`);
+            onLog?.(`View Feed ${i + 1}/${count}: tap-audio rolled but no audio affordance on this post — skipping`);
             if (_atCandidates.length > 0) {
-              onLog?.(`Scroll ${i + 1}/${count}: lower-screen nodes (diagnostic): ${_atCandidates.join(" | ")}`);
+              onLog?.(`View Feed ${i + 1}/${count}: lower-screen nodes (diagnostic): ${_atCandidates.join(" | ")}`);
             } else {
-              onLog?.(`Scroll ${i + 1}/${count}: lower-screen nodes (diagnostic): (none found)`);
+              onLog?.(`View Feed ${i + 1}/${count}: lower-screen nodes (diagnostic): (none found)`);
             }
           } else {
-            onLog?.(`Scroll ${i + 1}/${count}: tapping audio affordance at (${_atNode.x},${_atNode.y})…`);
+            onLog?.(`View Feed ${i + 1}/${count}: tapping audio affordance at (${_atNode.x},${_atNode.y})…`);
             await android.tap(serial, _atNode.x, _atNode.y);
             await sleepOrAbort(serial, 1000);
             await verifyStillInInstagram();
@@ -2738,7 +2738,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
             if (_atXml2.toLowerCase().includes("level up")) {
               // Meta Edits promotional popup — dismiss and try once more.
-              onLog?.(`Scroll ${i + 1}/${count}: Meta Edits popup detected — dismissing and retrying…`);
+              onLog?.(`View Feed ${i + 1}/${count}: Meta Edits popup detected — dismissing and retrying…`);
               await android.pressBack(serial);
               await sleepOrAbort(serial, 600);
               await android.tap(serial, _atNode.x, _atNode.y);
@@ -2746,7 +2746,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               await verifyStillInInstagram();
               const _atXml3 = await android.dumpUi(serial).catch(() => "");
               if (_atXml3.toLowerCase().includes("level up")) {
-                onLog?.(`Scroll ${i + 1}/${count}: Meta Edits popup still showing after retry — aborting audio tap`);
+                onLog?.(`View Feed ${i + 1}/${count}: Meta Edits popup still showing after retry — aborting audio tap`);
                 await android.pressBack(serial);
                 await sleepOrAbort(serial, 400);
               } else {
@@ -2754,7 +2754,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               }
             } else if (_atXml2.toLowerCase().includes("view song details")) {
               // Bottom sheet — tap "View song details" to proceed to the page.
-              onLog?.(`Scroll ${i + 1}/${count}: "View song details" sheet detected — tapping…`);
+              onLog?.(`View Feed ${i + 1}/${count}: "View song details" sheet detected — tapping…`);
               let _atSheetTapped = false;
               for (const _atSeg2 of _atXml2.split("<node ")) {
                 const _atT2 = (_atSeg2.match(/\btext="([^"]*)"/) ?? [])[1] ?? "";
@@ -2764,7 +2764,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 if (!_atBb2) break;
                 const _atX2 = Math.round((parseInt(_atBb2[1]) + parseInt(_atBb2[3])) / 2);
                 const _atY2 = Math.round((parseInt(_atBb2[2]) + parseInt(_atBb2[4])) / 2);
-                onLog?.(`Scroll ${i + 1}/${count}: tapping "View song details" at (${_atX2},${_atY2})…`);
+                onLog?.(`View Feed ${i + 1}/${count}: tapping "View song details" at (${_atX2},${_atY2})…`);
                 await android.tap(serial, _atX2, _atY2);
                 await sleepOrAbort(serial, 1200);
                 await verifyStillInInstagram();
@@ -2774,7 +2774,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               }
               if (!_atSheetTapped) {
                 // Sheet visible but couldn't resolve the node — press Back.
-                onLog?.(`Scroll ${i + 1}/${count}: "View song details" node not found in sheet — pressing Back`);
+                onLog?.(`View Feed ${i + 1}/${count}: "View song details" node not found in sheet — pressing Back`);
                 await android.pressBack(serial);
                 await sleepOrAbort(serial, 400);
               }
@@ -2787,7 +2787,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               // Scroll the song grid 1–20 times with a 1–10% per-scroll tap chance.
               const _atScrolls = 1 + Math.floor(Math.random() * 20);
               const _atTapChance = 0.01 + Math.random() * 0.09; // 1–10%
-              onLog?.(`Scroll ${i + 1}/${count}: on song page — scrolling ${_atScrolls}x (tap chance ${Math.round(_atTapChance * 100)}%)…`);
+              onLog?.(`View Feed ${i + 1}/${count}: on song page — scrolling ${_atScrolls}x (tap chance ${Math.round(_atTapChance * 100)}%)…`);
               const { w: _atW, h: _atH } = getScreenSize(serial);
               let _atDidTap = false;
               for (let _atS = 0; _atS < _atScrolls; _atS++) {
@@ -2813,7 +2813,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   }
                   if (_atItems.length > 0) {
                     const _atPicked = _atItems[Math.floor(Math.random() * _atItems.length)];
-                    onLog?.(`Scroll ${i + 1}/${count}: song-page tap at (${_atPicked.x},${_atPicked.y})…`);
+                    onLog?.(`View Feed ${i + 1}/${count}: song-page tap at (${_atPicked.x},${_atPicked.y})…`);
                     await android.tap(serial, _atPicked.x, _atPicked.y);
                     await sleepOrAbort(serial, 1000);
                     await verifyStillInInstagram();
@@ -2827,17 +2827,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 }
               }
               // Return to the feed — one Back press from the song/audio page.
-              onLog?.(`Scroll ${i + 1}/${count}: returning from song page…`);
+              onLog?.(`View Feed ${i + 1}/${count}: returning from song page…`);
               await android.pressBack(serial);
               await sleepOrAbort(serial, 700);
               await verifyStillInInstagram();
               audioTaps++;
-              onLog?.(`Scroll ${i + 1}/${count}: ✓ audio page visited`);
+              onLog?.(`View Feed ${i + 1}/${count}: ✓ audio page visited`);
             }
           }
         } catch (e: any) {
           if (e?.message === "cycle-aborted") throw e;
-          onLog?.(`Scroll ${i + 1}/${count}: tap-audio error — ${e?.message}`);
+          onLog?.(`View Feed ${i + 1}/${count}: tap-audio error — ${e?.message}`);
         }
       }
 
@@ -2875,10 +2875,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           }
 
           if (_chHashtags.length === 0) {
-            onLog?.(`Scroll ${i + 1}/${count}: click-hashtag rolled but no hashtag buttons visible — skipping`);
+            onLog?.(`View Feed ${i + 1}/${count}: click-hashtag rolled but no hashtag buttons visible — skipping`);
           } else {
             const _chPick = _chHashtags[Math.floor(Math.random() * _chHashtags.length)];
-            onLog?.(`Scroll ${i + 1}/${count}: tapping hashtag "${_chPick.tag}" at (${_chPick.x},${_chPick.y})…`);
+            onLog?.(`View Feed ${i + 1}/${count}: tapping hashtag "${_chPick.tag}" at (${_chPick.x},${_chPick.y})…`);
             await android.tap(serial, _chPick.x, _chPick.y);
             await sleepOrAbort(serial, 1500);
             await verifyStillInInstagram();
@@ -2890,14 +2890,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               _chGridXml.includes("swipeable_tab_view_pager");
 
             if (!_chOnGrid) {
-              onLog?.(`Scroll ${i + 1}/${count}: hashtag grid not confirmed — pressing Back and continuing`);
+              onLog?.(`View Feed ${i + 1}/${count}: hashtag grid not confirmed — pressing Back and continuing`);
               await android.pressBack(serial);
               await sleepOrAbort(serial, 600);
             } else {
               // Scroll the hashtag grid 1–10 times; 1–10% per-scroll tap chance.
               const _chScrolls = 1 + Math.floor(Math.random() * 10);
               const _chTapChance = 0.01 + Math.random() * 0.09; // 1–10%
-              onLog?.(`Scroll ${i + 1}/${count}: on hashtag grid "${_chPick.tag}" — scrolling ${_chScrolls}x (tap chance ${Math.round(_chTapChance * 100)}%)…`);
+              onLog?.(`View Feed ${i + 1}/${count}: on hashtag grid "${_chPick.tag}" — scrolling ${_chScrolls}x (tap chance ${Math.round(_chTapChance * 100)}%)…`);
               const { w: _chW, h: _chH } = getScreenSize(serial);
               let _chDidTapPost = false;
               for (let _chS = 0; _chS < _chScrolls; _chS++) {
@@ -2925,7 +2925,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   }
                   if (_chPosts.length > 0) {
                     const _chPostPick = _chPosts[Math.floor(Math.random() * _chPosts.length)];
-                    onLog?.(`Scroll ${i + 1}/${count}: tapping grid post at (${_chPostPick.x},${_chPostPick.y})…`);
+                    onLog?.(`View Feed ${i + 1}/${count}: tapping grid post at (${_chPostPick.x},${_chPostPick.y})…`);
                     await android.tap(serial, _chPostPick.x, _chPostPick.y);
                     await sleepOrAbort(serial, 1200);
                     await verifyStillInInstagram();
@@ -2939,17 +2939,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 }
               }
               // Return to the feed — one Back press from the hashtag grid.
-              onLog?.(`Scroll ${i + 1}/${count}: returning from hashtag grid…`);
+              onLog?.(`View Feed ${i + 1}/${count}: returning from hashtag grid…`);
               await android.pressBack(serial);
               await sleepOrAbort(serial, 700);
               await verifyStillInInstagram();
               hashtagTaps++;
-              onLog?.(`Scroll ${i + 1}/${count}: ✓ hashtag grid visited (${_chPick.tag}${_chDidTapPost ? ", tapped a post" : ""})`);
+              onLog?.(`View Feed ${i + 1}/${count}: ✓ hashtag grid visited (${_chPick.tag}${_chDidTapPost ? ", tapped a post" : ""})`);
             }
           }
         } catch (e: any) {
           if (e?.message === "cycle-aborted") throw e;
-          onLog?.(`Scroll ${i + 1}/${count}: click-hashtag error — ${e?.message}`);
+          onLog?.(`View Feed ${i + 1}/${count}: click-hashtag error — ${e?.message}`);
         }
       }
 
@@ -2971,7 +2971,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // "Add", "Adidas", etc. whose text values differ from the bare "Ad".
           const _caIsAd = _caXml.includes('text="Ad"') || _caXml.includes('content-desc="Ad"');
           if (_caIsAd) {
-            onLog?.(`Scroll ${i + 1}/${count}: ad post detected — skipping click author`);
+            onLog?.(`View Feed ${i + 1}/${count}: ad post detected — skipping click author`);
           } else {
           // Find row_feed_photo_profile_name in the a11y tree.
           let _caNode: { x: number; y: number; name: string } | null = null;
@@ -2987,9 +2987,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             break; // only need the first (topmost) visible post header
           }
           if (!_caNode) {
-            onLog?.(`Scroll ${i + 1}/${count}: click-author rolled but no profile name button visible — skipping`);
+            onLog?.(`View Feed ${i + 1}/${count}: click-author rolled but no profile name button visible — skipping`);
           } else {
-            onLog?.(`Scroll ${i + 1}/${count}: tapping author "${_caNode.name}" at (${_caNode.x},${_caNode.y})…`);
+            onLog?.(`View Feed ${i + 1}/${count}: tapping author "${_caNode.name}" at (${_caNode.x},${_caNode.y})…`);
             await android.tap(serial, _caNode.x, _caNode.y);
             await sleepOrAbort(serial, 1500);
             await verifyStillInInstagram();
@@ -2997,7 +2997,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // be a normal short gesture; the human-like pause belongs AFTER
             // the scroll so the newly revealed profile posts can render.
             const _caScrolls = 1 + Math.floor(Math.random() * 10);
-            onLog?.(`Scroll ${i + 1}/${count}: on author profile "${_caNode.name}" — scrolling ${_caScrolls}x…`);
+            onLog?.(`View Feed ${i + 1}/${count}: on author profile "${_caNode.name}" — scrolling ${_caScrolls}x…`);
             const { w: _caW, h: _caH } = getScreenSize(serial);
             for (let _caS = 0; _caS < _caScrolls; _caS++) {
               if (isCycleAborted(serial)) throw new Error("cycle-aborted");
@@ -3009,17 +3009,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               await sleepOrAbort(serial, _caRenderWaitMs);
             }
             // Return to the feed — one Back press from the author's profile.
-            onLog?.(`Scroll ${i + 1}/${count}: returning from author profile…`);
+            onLog?.(`View Feed ${i + 1}/${count}: returning from author profile…`);
             await android.pressBack(serial);
             await sleepOrAbort(serial, 700);
             await verifyStillInInstagram();
             authorVisits++;
-            onLog?.(`Scroll ${i + 1}/${count}: ✓ author profile visited (${_caNode.name})`);
+            onLog?.(`View Feed ${i + 1}/${count}: ✓ author profile visited (${_caNode.name})`);
           }
           } // end ad-skip else
         } catch (e: any) {
           if (e?.message === "cycle-aborted") throw e;
-          onLog?.(`Scroll ${i + 1}/${count}: click-author error — ${e?.message}`);
+          onLog?.(`View Feed ${i + 1}/${count}: click-author error — ${e?.message}`);
         }
       }
 
@@ -3377,7 +3377,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // have none yet at the top of the iteration.
       const _storySlidePopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
       if (_storySlidePopup) {
-        onLog?.(`Story ${s + 1}: mid-story popup dismissed (${_storySlidePopup})`);
+        onLog?.(`View Stories ${s + 1}: mid-story popup dismissed (${_storySlidePopup})`);
         logger.info({ serial, story: s + 1, dismissed: _storySlidePopup }, "[view-stories] mid-story interstitial dismissed");
         await sleepOrAbort(serial, 400);
       }
@@ -3423,7 +3423,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (likeBtn) {
           await android.tap(serial, likeBtn.x, likeBtn.y);
           logger.info({ serial, story: s + 1, x: likeBtn.x, y: likeBtn.y }, "[view-stories] liked story via a11y toolbar_like_button");
-          onLog?.(`Story ${s + 1}: liked via a11y at (${likeBtn.x},${likeBtn.y})`);
+          onLog?.(`View Stories ${s + 1}: liked via a11y at (${likeBtn.x},${likeBtn.y})`);
         } else {
           // Like button not found in accessibility tree — skip the like entirely.
           //
@@ -3438,7 +3438,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // Skipping the like on this slide is always safer than a blind
           // centre-screen tap that can and does cause unintended navigation.
           logger.info({ serial, story: s + 1 }, "[view-stories] like button not found via a11y — skipping like (no fallback tap)");
-          onLog?.(`Story ${s + 1}: like skipped — toolbar_like_button not found in a11y tree (no centre-screen tap; fallback removed)`);
+          onLog?.(`View Stories ${s + 1}: like skipped — toolbar_like_button not found in a11y tree (no centre-screen tap; fallback removed)`);
         }
         // When a share is also scheduled on this slide, don't linger here —
         // every extra ms is runway the DM-share sequence won't have.
@@ -3446,7 +3446,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
 
       if (willShare && !(await stillInStoryViewer(/* fastOnly= */ true))) {
-        onLog?.(`Story ${s + 1}: story viewer closed before share could start — skipping share`);
+        onLog?.(`View Stories ${s + 1}: story viewer closed before share could start — skipping share`);
         logger.info({ serial, story: s + 1 }, "[view-stories] story viewer gone before share attempt");
       } else if (willShare) {
         // Scan for icons BEFORE tapping — skip share entirely if the
@@ -3484,12 +3484,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const a11yPos = await android.findStoryShareButtonViaA11y(serial, (msg) => onLog?.(msg)).catch(() => null);
         if (a11yPos) {
           shareIconPos = a11yPos;
-          onLog?.(`Story ${s + 1}: share button located via a11y at (${a11yPos.x},${a11yPos.y})`);
+          onLog?.(`View Stories ${s + 1}: share button located via a11y at (${a11yPos.x},${a11yPos.y})`);
         } else {
           // Strategy 2: pixel scan.
           const iconScan = await android.findStoryActionIcons(serial).catch(() => null);
           const rawPos = (iconScan && iconScan.length >= 2) ? iconScan[iconScan.length - 1] : null;
-          onLog?.(`Story ${s + 1}: pixel scan — ${iconScan == null ? "screenshot unavailable" : `${iconScan.length} cluster(s) found`}${rawPos ? ` — rightmost at (${rawPos.x},${rawPos.y})` : " — <2 clusters (sharing disabled or scan miss)"}`);
+          onLog?.(`View Stories ${s + 1}: pixel scan — ${iconScan == null ? "screenshot unavailable" : `${iconScan.length} cluster(s) found`}${rawPos ? ` — rightmost at (${rawPos.x},${rawPos.y})` : " — <2 clusters (sharing disabled or scan miss)"}`);
           // Sanity check: the paper-plane is always in the rightmost ~15–20 %
           // of the screen.  The v1.1.580 threshold of 40 % was too permissive
           // and would accept false content-cluster matches in the centre of the
@@ -3498,7 +3498,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           if (rawPos && rawPos.x > w * 0.65) {
             shareIconPos = rawPos;
           } else if (rawPos) {
-            onLog?.(`Story ${s + 1}: pixel scan result rejected — x=${rawPos.x} < 65% of w=${w}; false content match — skipping share`);
+            onLog?.(`View Stories ${s + 1}: pixel scan result rejected — x=${rawPos.x} < 65% of w=${w}; false content match — skipping share`);
             logger.warn({ serial, story: s + 1, rawX: rawPos.x, w }, "[view-stories] share pixel-scan rejected — x too far left");
           }
         }
@@ -3507,7 +3507,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (!shareIconPos) {
           // no usable position — skip without touching the screen
           logger.info({ serial, story: s + 1 }, "[view-stories] share skipped — paper-plane not found");
-          onLog?.(`Story ${s + 1}: share skipped — owner has sharing disabled (no paper-plane detected)`);
+          onLog?.(`View Stories ${s + 1}: share skipped — owner has sharing disabled (no paper-plane detected)`);
         } else {
           // Tap the paper-plane once and wait for the share sheet — identical
           // to the feed share-to-DM flow which does not use a keyboard check.
@@ -3525,7 +3525,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // resource-id (the same signal sendShareSheet uses), which
           // unambiguously distinguishes "sheet open" from "nothing happened".
           await android.tap(serial, shareIconPos.x, shareIconPos.y);
-          onLog?.(`Story ${s + 1}: tapped paper-plane at (${shareIconPos.x},${shareIconPos.y}) — waiting for share sheet`);
+          onLog?.(`View Stories ${s + 1}: tapped paper-plane at (${shareIconPos.x},${shareIconPos.y}) — waiting for share sheet`);
           await sleepOrAbort(serial, 200); // just enough for the sheet to render
           opened = true;
         }
@@ -3561,21 +3561,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           const sheetSendBtn = storyShareScan?.sendBtn ?? null;
           if (!sheetSendBtn) {
             logger.warn({ serial, story: s + 1 }, "[view-stories] share sheet not confirmed open (no Send button found) — skipping recipient tap to avoid a blind tap on the story underneath");
-            onLog?.(`Story ${s + 1}: share aborted — could not confirm the share sheet actually opened (no Send button found) — skipped recipient tap rather than risk tapping the story underneath`);
+            onLog?.(`View Stories ${s + 1}: share aborted — could not confirm the share sheet actually opened (no Send button found) — skipped recipient tap rather than risk tapping the story underneath`);
           } else {
           // ── View Stories — Share via DM: recipient pick + send (isolated; not shared with any other tool) ──
           const _stRecipients = storyShareScan?.recipients ?? [];
           if (_stRecipients.length === 0) {
             await android.pressBack(serial);
             logger.warn({ serial, story: s + 1 }, "[view-stories] no recipient found — closed share sheet without sending");
-            onLog?.(`Story ${s + 1}: share skipped — no recipient avatars found in sheet (closed without sending)`);
+            onLog?.(`View Stories ${s + 1}: share skipped — no recipient avatars found in sheet (closed without sending)`);
           } else {
             const _stLast = _viewStoriesLastDmRecipient.get(serial);
             const _stPool = _stLast ? _stRecipients.filter(r => !(r.x === _stLast.x && r.y === _stLast.y)) : _stRecipients;
             const _stCands = _stPool.length > 0 ? _stPool : _stRecipients;
             const _stPick = _stCands[Math.floor(Math.random() * _stCands.length)];
             _viewStoriesLastDmRecipient.set(serial, { x: _stPick.x, y: _stPick.y });
-            onLog?.(`Story ${s + 1}: tapping recipient at (${_stPick.x},${_stPick.y})${(_stPick as any).name ? ` (${(_stPick as any).name})` : ""}`);
+            onLog?.(`View Stories ${s + 1}: tapping recipient at (${_stPick.x},${_stPick.y})${(_stPick as any).name ? ` (${(_stPick as any).name})` : ""}`);
             await android.tap(serial, _stPick.x, _stPick.y);
             await sleepOrAbort(serial, 200); // brief pause for selection to register
             // No "still in story viewer?" check here — sheetSendBtn already confirms
@@ -3593,25 +3593,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               await sleepOrAbort(serial, 300);
               if (!(await _stIsOpen())) {
                 logger.info({ serial, story: s + 1 }, "[view-stories] shared story via DM — Send tapped");
-                onLog?.(`Story ${s + 1}: shared via DM — Send tapped`);
+                onLog?.(`View Stories ${s + 1}: shared via DM — Send tapped`);
                 await sleepOrAbort(serial, 200);
               } else {
                 await android.pressBack(serial);
                 logger.info({ serial, story: s + 1 }, "[view-stories] Send button not found — closed DM picker");
-                onLog?.(`Story ${s + 1}: Send button not found — closed DM picker`);
+                onLog?.(`View Stories ${s + 1}: Send button not found — closed DM picker`);
                 await sleepOrAbort(serial, 200);
               }
             } else if (!(await _stIsOpen())) {
               logger.info({ serial, story: s + 1 }, "[view-stories] share sheet already closed — DM likely sent by recipient tap");
-              onLog?.(`Story ${s + 1}: shared via DM — sheet auto-dismissed (sent by recipient tap)`);
+              onLog?.(`View Stories ${s + 1}: shared via DM — sheet auto-dismissed (sent by recipient tap)`);
               await sleepOrAbort(serial, 150);
             } else {
               const _stFbX = Math.round(w * 0.50), _stFbY = Math.round(h * 0.982);
-              onLog?.(`Story ${s + 1}: Send button not found via a11y — tapping coordinate fallback (${_stFbX},${_stFbY})`);
+              onLog?.(`View Stories ${s + 1}: Send button not found via a11y — tapping coordinate fallback (${_stFbX},${_stFbY})`);
               await android.tap(serial, _stFbX, _stFbY);
               await sleepOrAbort(serial, 300);
               if (!(await _stIsOpen())) {
-                onLog?.(`Story ${s + 1}: ✓ shared via DM — sent via coordinate fallback`);
+                onLog?.(`View Stories ${s + 1}: ✓ shared via DM — sent via coordinate fallback`);
                 await sleepOrAbort(serial, 200);
               } else {
                 await android.pressBack(serial);
@@ -3662,13 +3662,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // omit them, or localize them between Instagram builds.
           const _composerPresent = _hasComposerContainer;
           onLog?.(
-            `Story ${s + 1}: message composer probe — ` +
+            `View Stories ${s + 1}: message composer probe — ` +
             `container=${_hasComposerContainer ? "yes" : "no"}, ` +
             `legacy-label=${_hasLegacyComposerLabel ? "yes" : "no"}, ` +
             `visible-label=${_hasVisibleComposerLabel ? "yes" : "no"}`,
           );
           if (!_composerPresent) {
-            onLog?.(`Story ${s + 1}: emoji comment skipped — author has message replies disabled`);
+            onLog?.(`View Stories ${s + 1}: emoji comment skipped — author has message replies disabled`);
             logger.info({ serial, story: s + 1 }, "[view-stories] emoji comment skipped — no message_composer_container");
           } else {
             // Parse the composer tap coords from the matching node.  The live
@@ -3680,13 +3680,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               /bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/,
             );
             if (!_composerMatch) {
-              onLog?.(`Story ${s + 1}: emoji comment skipped — composer bounds not found in a11y node`);
+              onLog?.(`View Stories ${s + 1}: emoji comment skipped — composer bounds not found in a11y node`);
               logger.warn({ serial, story: s + 1 }, "[view-stories] emoji comment skipped — composer bounds missing");
               continue;
             }
             const _composerX = Math.round((+_composerMatch[1] + +_composerMatch[3]) / 2);
             const _composerY = Math.round((+_composerMatch[2] + +_composerMatch[4]) / 2);
-            onLog?.(`Story ${s + 1}: tapping message composer at (${_composerX},${_composerY})…`);
+            onLog?.(`View Stories ${s + 1}: tapping message composer at (${_composerX},${_composerY})…`);
             await android.tap(serial, _composerX, _composerY);
             await sleepOrAbort(serial, 800); // keyboard animates up
 
@@ -3709,11 +3709,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               "😘","🤙","💫","⚡","🌟","😆","🥳","👌","💥","🫠",
             ];
             const _chosenEmoji = _STORY_EMOJI_POOL[Math.floor(Math.random() * _STORY_EMOJI_POOL.length)];
-            onLog?.(`Story ${s + 1}: injecting emoji "${_chosenEmoji}" via input text…`);
+            onLog?.(`View Stories ${s + 1}: injecting emoji "${_chosenEmoji}" via input text…`);
             try {
               await android.inputText(serial, _chosenEmoji);
             } catch (e: any) {
-              onLog?.(`Story ${s + 1}: emoji input failed — ${e?.message}`);
+              onLog?.(`View Stories ${s + 1}: emoji input failed — ${e?.message}`);
               logger.warn({ serial, story: s + 1, err: e?.message }, "[view-stories] emoji inputText failed");
               await android.pressBack(serial).catch(() => {});
               continue;
@@ -3731,23 +3731,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             if (_sendMatch) {
               const _sbX = Math.round((+_sendMatch[1] + +_sendMatch[3]) / 2);
               const _sbY = Math.round((+_sendMatch[2] + +_sendMatch[4]) / 2);
-              onLog?.(`Story ${s + 1}: tapping send at (${_sbX},${_sbY})…`);
+              onLog?.(`View Stories ${s + 1}: tapping send at (${_sbX},${_sbY})…`);
               await android.tap(serial, _sbX, _sbY);
               await sleepOrAbort(serial, 300);
-              onLog?.(`Story ${s + 1}: ✓ emoji reply sent`);
+              onLog?.(`View Stories ${s + 1}: ✓ emoji reply sent`);
               logger.info({ serial, story: s + 1 }, "[view-stories] emoji comment sent");
             } else {
               // Send button not found — emoji may not have been entered or
               // keyboard is still showing. Press BACK to dismiss cleanly.
               await android.pressBack(serial).catch(() => {});
               await sleepOrAbort(serial, 300);
-              onLog?.(`Story ${s + 1}: emoji comment — send button not found, dismissed keyboard`);
+              onLog?.(`View Stories ${s + 1}: emoji comment — send button not found, dismissed keyboard`);
               logger.warn({ serial, story: s + 1 }, "[view-stories] emoji comment — send button not found after emoji tap");
             }
           }
         } catch (e: any) {
           if (e?.message === "cycle-aborted") throw e;
-          onLog?.(`Story ${s + 1}: emoji comment error — ${e?.message}`);
+          onLog?.(`View Stories ${s + 1}: emoji comment error — ${e?.message}`);
           await android.pressBack(serial).catch(() => {}); // safety dismiss
         }
       }
@@ -3758,7 +3758,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           if (isCycleAborted(serial)) throw new Error("cycle-aborted");
           const _saStillIn = await stillInStoryViewer(true);
           if (!_saStillIn) {
-            onLog?.(`Story ${s + 1}: click-author — story viewer already closed, skipping`);
+            onLog?.(`View Stories ${s + 1}: click-author — story viewer already closed, skipping`);
           } else {
             // Dump the story viewer to locate the author header button.
             // Primary target: reel_viewer_text_container (the username/time label
@@ -3771,16 +3771,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               _saXml.match(/resource-id="[^"]*reel_viewer_text_container"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ??
               _saXml.match(/resource-id="[^"]*reel_viewer_profile_picture"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
             if (!_saNodeMatch) {
-              onLog?.(`Story ${s + 1}: click-author — author header not found in dump, skipping`);
+              onLog?.(`View Stories ${s + 1}: click-author — author header not found in dump, skipping`);
             } else {
               const _saX = Math.round((+_saNodeMatch[1] + +_saNodeMatch[3]) / 2);
               const _saY = Math.round((+_saNodeMatch[2] + +_saNodeMatch[4]) / 2);
-              onLog?.(`Story ${s + 1}: click-author — tapping author header at (${_saX},${_saY})…`);
+              onLog?.(`View Stories ${s + 1}: click-author — tapping author header at (${_saX},${_saY})…`);
               await android.tap(serial, _saX, _saY);
               await sleepOrAbort(serial, 1800); // profile page animates in
               // Scroll the profile 1–10 times; 2.5–8 s dwell after each scroll.
               const _saScrolls = 1 + Math.floor(Math.random() * 10);
-              onLog?.(`Story ${s + 1}: click-author — scrolling author profile ${_saScrolls}x…`);
+              onLog?.(`View Stories ${s + 1}: click-author — scrolling author profile ${_saScrolls}x…`);
               const { w: _saW, h: _saH } = getScreenSize(serial);
               for (let _saI = 0; _saI < _saScrolls; _saI++) {
                 if (isCycleAborted(serial)) throw new Error("cycle-aborted");
@@ -3793,15 +3793,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 await sleepOrAbort(serial, 2500 + Math.round(Math.random() * 5500)); // 2.5–8 s
               }
               // Back once → returns to the story viewer.
-              onLog?.(`Story ${s + 1}: click-author — returning from author profile…`);
+              onLog?.(`View Stories ${s + 1}: click-author — returning from author profile…`);
               await android.pressBack(serial);
               await sleepOrAbort(serial, 700);
-              onLog?.(`Story ${s + 1}: click-author — ✓ author profile visited`);
+              onLog?.(`View Stories ${s + 1}: click-author — ✓ author profile visited`);
             }
           }
         } catch (e: any) {
           if (e?.message === "cycle-aborted") throw e;
-          onLog?.(`Story ${s + 1}: click-author error — ${e?.message}`);
+          onLog?.(`View Stories ${s + 1}: click-author error — ${e?.message}`);
           await android.pressBack(serial).catch(() => {}); // safety return to story
         }
       }
@@ -3810,7 +3810,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // viewer — that tap would land on the feed and register as a like/
       // navigation there instead of harmlessly advancing a story slide.
       if (!(await stillInStoryViewer())) {
-        onLog?.(`Story ${s + 1}: story viewer already closed — stopping story loop`);
+        onLog?.(`View Stories ${s + 1}: story viewer already closed — stopping story loop`);
         logger.info({ serial, story: s + 1 }, "[view-stories] story viewer gone at end of slide — stopping loop");
         storiesWatched++;
         break;
@@ -4015,7 +4015,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     for (let i = 0; i < scrollCount; i++) {
       if (isCycleAborted(serial)) throw new Error("cycle-aborted");
-      onLog?.(`Explore scroll ${i + 1}/${scrollCount}`);
+      onLog?.(`View Explore ${i + 1}/${scrollCount}`);
 
       // Optionally click a post from the currently visible grid.
       if (clickChance > 0 && Math.random() < clickChance) {
@@ -4058,12 +4058,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             const cy = gridTop + Math.round(cellH * (row + 0.5));
             for (const cx of colXs) gridCells.push({ x: cx, y: cy });
           }
-          onLog?.(`Explore scroll ${i + 1}/${scrollCount}: a11y grid empty — coordinate fallback (${gridCells.length} cells)`);
+          onLog?.(`View Explore ${i + 1}/${scrollCount}: a11y grid empty — coordinate fallback (${gridCells.length} cells)`);
         }
 
         if (gridCells.length > 0) {
           const cell = gridCells[Math.floor(Math.random() * gridCells.length)];
-          onLog?.(`Explore scroll ${i + 1}/${scrollCount}: clicking grid post at (${cell.x},${cell.y})`);
+          onLog?.(`View Explore ${i + 1}/${scrollCount}: clicking grid post at (${cell.x},${cell.y})`);
           await android.tap(serial, cell.x, cell.y);
           await sleepOrAbort(serial, 1800); // let post detail view animate open
           postsClicked++;
@@ -4105,16 +4105,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 const pollXml = await android.dumpUi(serial).catch(() => "");
                 if (POST_NODES.some(n => pollXml.includes(n))) {
                   postReady = true;
-                  if (p > 0) onLog?.(`Explore scroll ${i + 1}/${scrollCount}: post viewer ready after ${p * POLL_MS / 1000}s extra wait`);
+                  if (p > 0) onLog?.(`View Explore ${i + 1}/${scrollCount}: post viewer ready after ${p * POLL_MS / 1000}s extra wait`);
                 } else {
-                  onLog?.(`Explore scroll ${i + 1}/${scrollCount}: viewer not ready yet — retrying in ${POLL_MS / 1000}s (poll ${p + 1}/${MAX_POLLS})`);
+                  onLog?.(`View Explore ${i + 1}/${scrollCount}: viewer not ready yet — retrying in ${POLL_MS / 1000}s (poll ${p + 1}/${MAX_POLLS})`);
                   await sleepOrAbort(serial, POLL_MS);
                 }
               }
-              if (!postReady) onLog?.(`Explore scroll ${i + 1}/${scrollCount}: viewer never appeared in tree — proceeding anyway`);
+              if (!postReady) onLog?.(`View Explore ${i + 1}/${scrollCount}: viewer never appeared in tree — proceeding anyway`);
             }
 
-            onLog?.(`Explore scroll ${i + 1}/${scrollCount}: scanning action bar…`);
+            onLog?.(`View Explore ${i + 1}/${scrollCount}: scanning action bar…`);
             let icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
 
             // ── Explore-only: Reels column fallback (null path) ─────────────
@@ -4128,7 +4128,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // This block is intentionally isolated to runViewExplorePage and
             // has no effect on any other tool.
             if (!icons) {
-              onLog?.(`Explore scroll ${i + 1}/${scrollCount}: feed scan found nothing — trying Reels column scan`);
+              onLog?.(`View Explore ${i + 1}/${scrollCount}: feed scan found nothing — trying Reels column scan`);
               const _veReelIcons = await android.findReelActionIcons(serial, onLog).catch(() => null);
               if (_veReelIcons) {
                 icons = {
@@ -4139,7 +4139,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   save:       null,
                   alreadyLiked: _veReelIcons.alreadyLiked,
                 };
-                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: Reels column found — like=(${_veReelIcons.like.x},${_veReelIcons.like.y}) shareFeed=${_veReelIcons.shareFeed ? `(${_veReelIcons.shareFeed.x},${_veReelIcons.shareFeed.y})` : "null"} shareDm=${_veReelIcons.shareDm ? `(${_veReelIcons.shareDm.x},${_veReelIcons.shareDm.y})` : "null"}`);
+                onLog?.(`View Explore ${i + 1}/${scrollCount}: Reels column found — like=(${_veReelIcons.like.x},${_veReelIcons.like.y}) shareFeed=${_veReelIcons.shareFeed ? `(${_veReelIcons.shareFeed.x},${_veReelIcons.shareFeed.y})` : "null"} shareDm=${_veReelIcons.shareDm ? `(${_veReelIcons.shareDm.x},${_veReelIcons.shareDm.y})` : "null"}`);
               }
             }
 
@@ -4148,7 +4148,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // column (x > 80%), the horizontal row scan will have returned null
             // for shareFeed/shareDm. Overlay those from findReelActionIcons.
             if (icons && icons.like.x > Math.round(w * 0.80)) {
-              onLog?.(`Explore scroll ${i + 1}/${scrollCount}: vertical column layout detected (like.x=${icons.like.x}) — re-scanning shareFeed/shareDm via column scan`);
+              onLog?.(`View Explore ${i + 1}/${scrollCount}: vertical column layout detected (like.x=${icons.like.x}) — re-scanning shareFeed/shareDm via column scan`);
               const _veColIcons = await android.findReelActionIcons(serial, onLog).catch(() => null);
               if (_veColIcons) {
                 icons = { ...icons, shareFeed: _veColIcons.shareFeed, shareDm: _veColIcons.shareDm };
@@ -4182,13 +4182,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             }
 
             if (!icons) {
-              onLog?.(`Explore scroll ${i + 1}/${scrollCount}: no action bar found — skipping actions`);
+              onLog?.(`View Explore ${i + 1}/${scrollCount}: no action bar found — skipping actions`);
               logger.info({ serial }, "[view-explore] opened post has no action bar");
             } else {
               // ── Like ──────────────────────────────────────────────────────
               if (wantLike) {
                 if (icons.alreadyLiked) {
-                  onLog?.(`Explore scroll ${i + 1}/${scrollCount}: already liked — skipping like`);
+                  onLog?.(`View Explore ${i + 1}/${scrollCount}: already liked — skipping like`);
                 } else {
                   // ~93 % double-tap on image; ~7 % heart-icon tap for variety.
                   const useDoubleTap = Math.random() < 0.93;
@@ -4196,30 +4196,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     const { w: _eW } = getScreenSize(serial);
                     const dtX = Math.round(_eW / 2) + Math.round((Math.random() - 0.5) * 20);
                     const dtY = icons.like.y - 300 + Math.round((Math.random() - 0.5) * 40);
-                    onLog?.(`Explore scroll ${i + 1}/${scrollCount}: double-tapping image at (${dtX},${dtY})…`);
+                    onLog?.(`View Explore ${i + 1}/${scrollCount}: double-tapping image at (${dtX},${dtY})…`);
                     await android.doubleTap(serial, dtX, dtY);
                   } else {
                     const jx = icons.like.x + Math.round((Math.random() - 0.5) * 6);
                     const jy = icons.like.y + Math.round((Math.random() - 0.5) * 6);
-                    onLog?.(`Explore scroll ${i + 1}/${scrollCount}: tapping heart icon at (${jx},${jy})…`);
+                    onLog?.(`View Explore ${i + 1}/${scrollCount}: tapping heart icon at (${jx},${jy})…`);
                     await android.tap(serial, jx, jy);
                   }
                   likes++;
-                  onLog?.(`Explore scroll ${i + 1}/${scrollCount}: ✓ liked`);
+                  onLog?.(`View Explore ${i + 1}/${scrollCount}: ✓ liked`);
                   await sleepOrAbort(serial, 300);
                 }
               }
 
               // ── Share to Feed (repost) ─────────────────────────────────────
               if (wantShareFeed && !icons.shareFeed) {
-                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: skipped repost — share-to-feed icon not found`);
+                onLog?.(`View Explore ${i + 1}/${scrollCount}: skipped repost — share-to-feed icon not found`);
               }
               if (wantShareFeed && icons.shareFeed) {
                 try {
                   if (isCycleAborted(serial)) throw new Error("cycle-aborted");
                   await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
                   const _eSfX = icons.shareFeed.x, _eSfY = icons.shareFeed.y;
-                  onLog?.(`Explore scroll ${i + 1}/${scrollCount}: tapping share-to-feed at (${_eSfX},${_eSfY})…`);
+                  onLog?.(`View Explore ${i + 1}/${scrollCount}: tapping share-to-feed at (${_eSfX},${_eSfY})…`);
                   await android.tap(serial, _eSfX, _eSfY);
                   await sleepOrAbort(serial, 400);
                   const _eRpBtn = await android.findButtonByLabel(serial, "Repost").catch(() => null);
@@ -4232,17 +4232,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     const _eClose = await android.findButtonByLabel(serial, "Close").catch(() => null);
                     if (_eClose) { await android.tap(serial, _eClose.x, _eClose.y); await sleepOrAbort(serial, 150); }
                     sharesFeed++;
-                    onLog?.(`Explore scroll ${i + 1}/${scrollCount}: ✓ reposted to feed`);
+                    onLog?.(`View Explore ${i + 1}/${scrollCount}: ✓ reposted to feed`);
                   } else if (_eRpSame) {
                     sharesFeed++;
-                    onLog?.(`Explore scroll ${i + 1}/${scrollCount}: ✓ reposted to feed (single-tap)`);
+                    onLog?.(`View Explore ${i + 1}/${scrollCount}: ✓ reposted to feed (single-tap)`);
                   } else {
                     await android.pressBack(serial).catch(() => {});
-                    onLog?.(`Explore scroll ${i + 1}/${scrollCount}: repost — Repost button not found after tap`);
+                    onLog?.(`View Explore ${i + 1}/${scrollCount}: repost — Repost button not found after tap`);
                   }
                 } catch (e: any) {
                   if (e?.message === "cycle-aborted") throw e;
-                  onLog?.(`Explore scroll ${i + 1}/${scrollCount}: share-to-feed error — ${e?.message}`);
+                  onLog?.(`View Explore ${i + 1}/${scrollCount}: share-to-feed error — ${e?.message}`);
                 }
               }
 
@@ -4251,13 +4251,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 Math.abs(icons.shareDm.x - icons.shareFeed.x) < 15 &&
                 Math.abs(icons.shareDm.y - icons.shareFeed.y) < 15;
               if (wantShareDm && !icons.shareDm) {
-                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: skipped share-via-DM — paper-plane icon not found`);
+                onLog?.(`View Explore ${i + 1}/${scrollCount}: skipped share-via-DM — paper-plane icon not found`);
               }
               if (wantShareDm && icons.shareDm && _veOverlap) {
-                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: share-via-DM skipped — icon overlaps share-to-feed (ambiguous layout)`);
+                onLog?.(`View Explore ${i + 1}/${scrollCount}: share-via-DM skipped — icon overlaps share-to-feed (ambiguous layout)`);
               }
               if (wantShareDm && icons.shareDm && !_veOverlap) {
-                const _vePfx = `Explore scroll ${i + 1}/${scrollCount}`;
+                const _vePfx = `View Explore ${i + 1}/${scrollCount}`;
                 let _veDmSent = false;
                 try {
                   if (isCycleAborted(serial)) throw new Error("cycle-aborted");
@@ -4351,12 +4351,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               if (wantSave) {
                 const _eSaveBtn = icons.save;
                 if (!_eSaveBtn) {
-                  onLog?.(`Explore scroll ${i + 1}/${scrollCount}: save skipped — ribbon icon not found`);
+                  onLog?.(`View Explore ${i + 1}/${scrollCount}: save skipped — ribbon icon not found`);
                 } else {
                   try {
                     if (isCycleAborted(serial)) throw new Error("cycle-aborted");
                     await sleepOrAbort(serial, 200 + Math.round(Math.random() * 200));
-                    onLog?.(`Explore scroll ${i + 1}/${scrollCount}: tapping save (ribbon) at (${_eSaveBtn.x},${_eSaveBtn.y})…`);
+                    onLog?.(`View Explore ${i + 1}/${scrollCount}: tapping save (ribbon) at (${_eSaveBtn.x},${_eSaveBtn.y})…`);
                     await android.tap(serial, _eSaveBtn.x, _eSaveBtn.y);
                     await sleepOrAbort(serial, 600);
                     // Dismiss "Save to collection?" bottom sheet by tapping the
@@ -4374,10 +4374,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     }
                     saves++;
                     logger.info({ serial }, "[view-explore] saved post via ribbon icon");
-                    onLog?.(`Explore scroll ${i + 1}/${scrollCount}: ✓ saved`);
+                    onLog?.(`View Explore ${i + 1}/${scrollCount}: ✓ saved`);
                   } catch (e: any) {
                     if (e?.message === "cycle-aborted") throw e;
-                    onLog?.(`Explore scroll ${i + 1}/${scrollCount}: save error — ${e?.message}`);
+                    onLog?.(`View Explore ${i + 1}/${scrollCount}: save error — ${e?.message}`);
                   }
                 }
               }
@@ -4403,7 +4403,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               // "Add", "Adidas", etc. whose text values differ from the bare "Ad".
               const _aeIsAd = _aeXml.includes('text="Ad"') || _aeXml.includes('content-desc="Ad"');
               if (_aeIsAd) {
-                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: ad post detected — skipping click author`);
+                onLog?.(`View Explore ${i + 1}/${scrollCount}: ad post detected — skipping click author`);
               } else {
               // Find author button — covers Reels viewer (clips_author_username)
               // and photo-post viewer (row_feed_photo_profile_name).
@@ -4437,9 +4437,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 break;
               }
               if (!_aeNode) {
-                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: click-author rolled but no named author button visible — skipping`);
+                onLog?.(`View Explore ${i + 1}/${scrollCount}: click-author rolled but no named author button visible — skipping`);
               } else {
-                onLog?.(`Explore scroll ${i + 1}/${scrollCount}: tapping author "${_aeNode.name}" at (${_aeNode.x},${_aeNode.y})…`);
+                onLog?.(`View Explore ${i + 1}/${scrollCount}: tapping author "${_aeNode.name}" at (${_aeNode.x},${_aeNode.y})…`);
                 await android.tap(serial, _aeNode.x, _aeNode.y);
                 await sleepOrAbort(serial, 1500);
                 // Guard: collab posts can open a Collaborators sheet instead of
@@ -4449,7 +4449,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   _aeChkXml.includes('text="Collaborators"') ||
                   _aeChkXml.includes('clips_collab');
                 if (_aeIsCollab) {
-                  onLog?.(`Explore scroll ${i + 1}/${scrollCount}: click-author — Collaborators sheet appeared (collab post) — pressing Back, skipping`);
+                  onLog?.(`View Explore ${i + 1}/${scrollCount}: click-author — Collaborators sheet appeared (collab post) — pressing Back, skipping`);
                   await android.pressBack(serial);
                   await sleepOrAbort(serial, 500);
                 } else {
@@ -4457,7 +4457,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   // short and natural, then wait for the profile posts to render
                   // before starting another scroll.
                   const _aeScrolls = 1 + Math.floor(Math.random() * 10);
-                  onLog?.(`Explore scroll ${i + 1}/${scrollCount}: on author profile "${_aeNode.name}" — scrolling ${_aeScrolls}x…`);
+                  onLog?.(`View Explore ${i + 1}/${scrollCount}: on author profile "${_aeNode.name}" — scrolling ${_aeScrolls}x…`);
                   const { w: _aeW, h: _aeH } = getScreenSize(serial);
                   for (let _aeS = 0; _aeS < _aeScrolls; _aeS++) {
                     if (isCycleAborted(serial)) throw new Error("cycle-aborted");
@@ -4470,17 +4470,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   }
                   // Back once — returns to the post/reel viewer. The outer
                   // Back below then returns from the post/reel to Explore.
-                  onLog?.(`Explore scroll ${i + 1}/${scrollCount}: returning from author profile…`);
+                  onLog?.(`View Explore ${i + 1}/${scrollCount}: returning from author profile…`);
                   await android.pressBack(serial);
                   await sleepOrAbort(serial, 700);
                   authorVisits++;
-                  onLog?.(`Explore scroll ${i + 1}/${scrollCount}: ✓ author profile visited (${_aeNode.name})`);
+                  onLog?.(`View Explore ${i + 1}/${scrollCount}: ✓ author profile visited (${_aeNode.name})`);
                 }
               }
               } // end ad-skip else
             } catch (e: any) {
               if (e?.message === "cycle-aborted") throw e;
-              onLog?.(`Explore scroll ${i + 1}/${scrollCount}: click-author error — ${e?.message}`);
+              onLog?.(`View Explore ${i + 1}/${scrollCount}: click-author error — ${e?.message}`);
             }
           }
 
@@ -4488,7 +4488,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           await android.pressBack(serial);
           await sleepOrAbort(serial, 800);
         } else {
-          onLog?.(`Explore scroll ${i + 1}/${scrollCount}: no grid posts visible — skipping click`);
+          onLog?.(`View Explore ${i + 1}/${scrollCount}: no grid posts visible — skipping click`);
         }
       }
 
@@ -4500,7 +4500,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (delaySec > 0) await sleepOrAbort(serial, Math.round(delaySec * 1000));
         // Swipe up to reveal more Explore posts.
         const esv = rollScrollVelocity(h, exploreScrollWeights, /*allowBack=*/true, /*safeStartFrac=*/0.80);
-        onLog?.(`Explore scroll ${i + 1}/${scrollCount}: next swipe [${esv.mode}]`);
+        onLog?.(`View Explore ${i + 1}/${scrollCount}: next swipe [${esv.mode}]`);
         logger.info({ serial, source: "explore-scroll", mode: esv.mode, from: [x, esv.fromY], to: [x, esv.toY], durationMs: esv.duration }, "[mobile-input] swipe");
         await android.swipe(serial, x, esv.fromY, x, esv.toY, esv.duration);
         await sleepOrAbort(serial, 800);
@@ -4880,7 +4880,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Independent of the icon scan: uses the XML dump to locate
       // clips_author_username (bottom-left of the Reels viewer) directly.
       if (wantClickAuthor) {
-        const _vrCaPfx = `Reel ${i + 1}/${totalReels}`;
+        const _vrCaPfx = `View Reels ${i + 1}/${totalReels}`;
         try {
           if (isCycleAborted(serial)) throw new Error("cycle-aborted");
           onLog?.(`${_vrCaPfx}: clicking author profile…`);
@@ -7644,8 +7644,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // tLog prefixes every log line with elapsed seconds so the user can see
     // exactly where each chunk of time is going in the Log tab.
     const tLog = (msg: string) => {
-      const elapsed = ((Date.now() - cycleStart) / 1000).toFixed(1);
-      sendVideoLog(serial, `[${elapsed}s] ${msg}`);
+      const totalSec = (Date.now() - cycleStart) / 1000;
+      const mins = Math.floor(totalSec / 60);
+      const secs = (totalSec % 60).toFixed(1);
+      const elapsed = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+      sendVideoLog(serial, `[${elapsed}] ${msg}`);
     };
     try {
       const {
