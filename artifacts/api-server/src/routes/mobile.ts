@@ -2972,10 +2972,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           await sleepOrAbort(serial, 300);
           const _caXml = await android.dumpUi(serial).catch(() => "");
           // Skip author click if Instagram labels this as a sponsored post.
-          // Ads carry an exact standalone text="Ad" or content-desc="Ad" node.
           // Quoted attribute matching prevents false positives on words like
           // "Add", "Adidas", etc. whose text values differ from the bare "Ad".
-          const _caIsAd = _caXml.includes('text="Ad"') || _caXml.includes('content-desc="Ad"');
+          const _caIsAd =
+            _caXml.includes('text="Ad"')         || _caXml.includes('content-desc="Ad"') ||
+            _caXml.includes('text="Sponsored"')  || _caXml.includes('content-desc="Sponsored"') ||
+            _caXml.includes('text="Advert"')     || _caXml.includes('content-desc="Advert"');
           if (_caIsAd) {
             onLog?.(`View Feed ${i + 1}/${count}: ad post detected — skipping click author`);
           } else {
@@ -4404,10 +4406,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               await sleepOrAbort(serial, 300);
               const _aeXml = await android.dumpUi(serial).catch(() => "");
               // Skip author click if Instagram labels this as a sponsored post.
-              // Ads carry an exact standalone text="Ad" or content-desc="Ad" node.
               // Quoted attribute matching prevents false positives on words like
               // "Add", "Adidas", etc. whose text values differ from the bare "Ad".
-              const _aeIsAd = _aeXml.includes('text="Ad"') || _aeXml.includes('content-desc="Ad"');
+              const _aeIsAd =
+                _aeXml.includes('text="Ad"')         || _aeXml.includes('content-desc="Ad"') ||
+                _aeXml.includes('text="Sponsored"')  || _aeXml.includes('content-desc="Sponsored"') ||
+                _aeXml.includes('text="Advert"')     || _aeXml.includes('content-desc="Advert"');
               if (_aeIsAd) {
                 onLog?.(`View Explore ${i + 1}/${scrollCount}: ad post detected — skipping click author`);
               } else {
@@ -4888,10 +4892,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           onLog?.(`${_vrCaPfx}: clicking author profile…`);
           const _vrCaXml = await android.dumpUi(serial).catch(() => "");
           // Skip author click if Instagram labels this as a sponsored post.
-          // Ads carry an exact standalone text="Ad" or content-desc="Ad" node.
           // Quoted attribute matching prevents false positives on words like
           // "Add", "Adidas", etc. whose text values differ from the bare "Ad".
-          const _vrCaIsAd = _vrCaXml.includes('text="Ad"') || _vrCaXml.includes('content-desc="Ad"');
+          const _vrCaIsAd =
+            _vrCaXml.includes('text="Ad"')         || _vrCaXml.includes('content-desc="Ad"') ||
+            _vrCaXml.includes('text="Sponsored"')  || _vrCaXml.includes('content-desc="Sponsored"') ||
+            _vrCaXml.includes('text="Advert"')     || _vrCaXml.includes('content-desc="Advert"');
           if (_vrCaIsAd) {
             onLog?.(`${_vrCaPfx}: ad post detected — skipping click author`);
           } else {
