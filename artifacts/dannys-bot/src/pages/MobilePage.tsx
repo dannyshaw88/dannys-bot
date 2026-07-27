@@ -2936,6 +2936,8 @@ export interface AutomationSettingsData {
   viewReelsShareDmPercentMax: number;
   viewReelsSavePercentMin: number;
   viewReelsSavePercentMax: number;
+  viewReelsClickAuthorPercentMin: number;
+  viewReelsClickAuthorPercentMax: number;
   viewReelsActivatePctMin: number;
   viewReelsActivatePctMax: number;
   viewReelsWatchPctMin: number;
@@ -3066,6 +3068,7 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   viewReelsShareFeedPercentMin: 0, viewReelsShareFeedPercentMax: 0,
   viewReelsShareDmPercentMin: 0, viewReelsShareDmPercentMax: 0,
   viewReelsSavePercentMin: 0, viewReelsSavePercentMax: 0,
+  viewReelsClickAuthorPercentMin: 0, viewReelsClickAuthorPercentMax: 0,
   viewReelsActivatePctMin: 100, viewReelsActivatePctMax: 100,
   viewReelsWatchPctMin: 30, viewReelsWatchPctMax: 70,
   checkDmEnabled: false,
@@ -3630,6 +3633,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             viewReelsShareDmPercentMax: s.viewReelsShareDmPercentMax,
             viewReelsSavePercentMin: s.viewReelsSavePercentMin,
             viewReelsSavePercentMax: s.viewReelsSavePercentMax,
+            viewReelsClickAuthorPercentMin: s.viewReelsClickAuthorPercentMin,
+            viewReelsClickAuthorPercentMax: s.viewReelsClickAuthorPercentMax,
             viewReelsActivatePctMin: s.viewReelsActivatePctMin,
             viewReelsActivatePctMax: s.viewReelsActivatePctMax,
             viewReelsWatchPctMin: s.viewReelsWatchPctMin,
@@ -4116,6 +4121,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'reelsShareFeed',    label: 'Share to Feed %',               fields: ['viewReelsShareFeedPercentMin','viewReelsShareFeedPercentMax'] },
     { key: 'reelsSave',         label: 'Save %',                        fields: ['viewReelsSavePercentMin','viewReelsSavePercentMax'] },
     { key: 'reelsShareDm',      label: 'Share via DM %',                fields: ['viewReelsShareDmPercentMin','viewReelsShareDmPercentMax'] },
+    { key: 'reelsClickAuthor',  label: 'Click Author %',                fields: ['viewReelsClickAuthorPercentMin','viewReelsClickAuthorPercentMax'] },
   ]},
   { key: 'checkDm',       label: 'Direct Messaging', sub: [
     { key: 'checkDmEnabled',    label: 'Enabled',                       fields: ['checkDmEnabled'] },
@@ -5485,6 +5491,22 @@ export function AutomationSettingsPanel({
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.viewReelsShareDmPercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewReelsShareDmPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground">Click Author %</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewReelsClickAuthorPercentMin}
+                onChange={e => setSettings(s => ({ ...s, viewReelsClickAuthorPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewReelsClickAuthorPercentMax}
+                onChange={e => setSettings(s => ({ ...s, viewReelsClickAuthorPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
 
             </div>

@@ -4,6 +4,22 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.216 — 2026-07-27
+
+### Added — Click Author % for View Reels
+
+New **Click Author %** (min/max) field in the View Reels tool, appearing after Share DM %.
+
+When rolled, the automation:
+1. Dumps the UI and finds the `clips_author_username` node (bottom-left of the Reels viewer), falling back to `clips_author_info_component` if needed
+2. Taps the author, waits 1.8 s for the profile to animate in
+3. Scrolls the profile 1–10 times with a 2.5–10 s dwell between each scroll
+4. Presses Back once to return to the Reels viewer
+
+All three schema layers updated (interface, persistence, execution) so the setting saves and loads correctly across restarts. Included in Copy Settings.
+
+---
+
 ## v1.2.215 — 2026-07-27
 
 ### Fixed — View Stories Click Author % fields not appearing in UI

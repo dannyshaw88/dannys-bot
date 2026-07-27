@@ -197,6 +197,8 @@ type AutomationSettings = {
   viewReelsShareDmPercentMax?: number;
   viewReelsSavePercentMin?: number;
   viewReelsSavePercentMax?: number;
+  viewReelsClickAuthorPercentMin?: number;
+  viewReelsClickAuthorPercentMax?: number;
   viewReelsActivatePctMin?: number;
   viewReelsActivatePctMax?: number;
   viewReelsWatchPctMin?: number;
@@ -1223,6 +1225,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // to disk and always reset to the 30-70 default on the next page load.
     viewReelsWatchPctMin: z.number().min(1).max(100).default(30),
     viewReelsWatchPctMax: z.number().min(1).max(100).default(70),
+    viewReelsClickAuthorPercentMin: z.number().min(0).max(100).default(0),
+    viewReelsClickAuthorPercentMax: z.number().min(0).max(100).default(0),
     // View Explore Page — see AutomationSettings type above for full comment.
     viewExploreEnabled: z.boolean().default(false),
     viewExploreActivatePctMin: z.number().min(0).max(100).default(100),
@@ -1395,6 +1399,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       viewReelsSavePercentMin: 0, viewReelsSavePercentMax: 0,
       viewReelsActivatePctMin: 100, viewReelsActivatePctMax: 100,
       viewReelsWatchPctMin: 30, viewReelsWatchPctMax: 70,
+      viewReelsClickAuthorPercentMin: 0, viewReelsClickAuthorPercentMax: 0,
       viewExploreEnabled: false, viewExploreActivatePctMin: 100, viewExploreActivatePctMax: 100,
       viewExploreScrollMin: 0, viewExploreScrollMax: 0,
       viewExploreActionDelayMin: 3, viewExploreActionDelayMax: 6,
@@ -1501,6 +1506,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewReelsSavePercentMin: 0, viewReelsSavePercentMax: 0,
         viewReelsActivatePctMin: 100, viewReelsActivatePctMax: 100,
         viewReelsWatchPctMin: 30, viewReelsWatchPctMax: 70,
+        viewReelsClickAuthorPercentMin: 0, viewReelsClickAuthorPercentMax: 0,
         viewExploreEnabled: false, viewExploreActivatePctMin: 100, viewExploreActivatePctMax: 100,
         viewExploreScrollMin: 0, viewExploreScrollMax: 0,
         viewExploreActionDelayMin: 3, viewExploreActionDelayMax: 6,
@@ -4513,6 +4519,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     shareFeedPercentMin: number; shareFeedPercentMax: number;
     shareDmPercentMin: number; shareDmPercentMax: number;
     savePercentMin: number; savePercentMax: number;
+    clickAuthorPctMin: number; clickAuthorPctMax: number;
     onLog?: (msg: string) => void;
   }): Promise<{ reelsViewed: number; likes: number; sharesFeed: number; sharesDm: number; saves: number }> {
     const {
@@ -4522,6 +4529,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       shareFeedPercentMin, shareFeedPercentMax,
       shareDmPercentMin, shareDmPercentMax,
       savePercentMin, savePercentMax,
+      clickAuthorPctMin, clickAuthorPctMax,
       onLog,
     } = params;
 
@@ -4583,7 +4591,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const wantLike      = likePercentMax > 0 && Math.random() * 100 < rollRange(likePercentMin, likePercentMax);
       const wantShareFeed = shareFeedPercentMax > 0 && Math.random() * 100 < rollRange(shareFeedPercentMin, shareFeedPercentMax);
       const wantSave      = savePercentMax > 0 && Math.random() * 100 < rollRange(savePercentMin, savePercentMax);
-      const wantShareDm   = shareDmPercentMax > 0 && Math.random() * 100 < rollRange(shareDmPercentMin, shareDmPercentMax);
+      const wantShareDm     = shareDmPercentMax > 0 && Math.random() * 100 < rollRange(shareDmPercentMin, shareDmPercentMax);
+      const wantClickAuthor = clickAuthorPctMax > 0 && Math.random() * 100 < rollRange(clickAuthorPctMin, clickAuthorPctMax);
 
       if (wantLike || wantShareFeed || wantSave || wantShareDm) {
         // ── View Reels: wait for reel player nodes to appear ────────────────
@@ -4849,6 +4858,56 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
       }
 
+      // ── Click Author — navigate to creator profile, scroll, then Back ──────
+      // Independent of the icon scan: uses the XML dump to locate
+      // clips_author_username (bottom-left of the Reels viewer) directly.
+      if (wantClickAuthor) {
+        const _vrCaPfx = `Reel ${i + 1}/${totalReels}`;
+        try {
+          if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+          onLog?.(`${_vrCaPfx}: clicking author profile…`);
+          const _vrCaXml = await android.dumpUi(serial).catch(() => "");
+          // Try clips_author_username first, then clips_author_info_component.
+          const _findNode = (rid: string): { x: number; y: number } | null => {
+            const _idx = _vrCaXml.indexOf(`id="${rid}"`);
+            if (_idx === -1) return null;
+            const _seg = _vrCaXml.slice(_idx);
+            const _bm = _seg.match(/\[(\d+),(\d+)\]\[(\d+),(\d+)\]/);
+            if (!_bm) return null;
+            return {
+              x: Math.round((parseInt(_bm[1]) + parseInt(_bm[3])) / 2),
+              y: Math.round((parseInt(_bm[2]) + parseInt(_bm[4])) / 2),
+            };
+          };
+          const _vrCaNode = _findNode("clips_author_username") ?? _findNode("clips_author_info_component");
+          if (!_vrCaNode) {
+            onLog?.(`${_vrCaPfx}: author node not found in dump — skipping click author`);
+          } else {
+            onLog?.(`${_vrCaPfx}: tapping author at (${_vrCaNode.x},${_vrCaNode.y})…`);
+            await android.tap(serial, _vrCaNode.x, _vrCaNode.y);
+            await sleepOrAbort(serial, 1800);
+            const _vrCaScrolls = Math.floor(rollRange(1, 10));
+            onLog?.(`${_vrCaPfx}: on author profile — scrolling ${_vrCaScrolls} time(s)…`);
+            const _cx = Math.round(w / 2);
+            for (let _s = 0; _s < _vrCaScrolls; _s++) {
+              if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+              const _cfY = Math.round(h * 0.75);
+              const _ctY = Math.round(h * 0.30);
+              await android.swipe(serial, _cx, _cfY, _cx, _ctY, 400 + Math.round(Math.random() * 200));
+              const _dwell = 2500 + Math.round(Math.random() * 7500);
+              onLog?.(`${_vrCaPfx}: author scroll ${_s + 1}/${_vrCaScrolls} — dwell ${(_dwell / 1000).toFixed(1)}s`);
+              await sleepOrAbort(serial, _dwell);
+            }
+            await android.pressBack(serial);
+            onLog?.(`${_vrCaPfx}: ✓ visited author profile (${_vrCaScrolls} scroll(s)) — pressed Back`);
+            await sleepOrAbort(serial, 800);
+          }
+        } catch (e: any) {
+          if (e?.message === "cycle-aborted") throw e;
+          onLog?.(`Reel ${i + 1}/${totalReels}: click-author error — ${e?.message}`);
+        }
+      }
+
       reelsViewed++;
 
       if (i < totalReels - 1) {
@@ -4932,6 +4991,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     viewReelsActivatePctMax: z.number().min(0).max(100).default(100),
     viewReelsWatchPctMin: z.number().min(1).max(100).default(30),
     viewReelsWatchPctMax: z.number().min(1).max(100).default(70),
+    viewReelsClickAuthorPercentMin: z.number().min(0).max(100).default(0),
+    viewReelsClickAuthorPercentMax: z.number().min(0).max(100).default(0),
     // View Explore Page — see AutomationSettings type for full comment.
     viewExploreEnabled: z.boolean().default(false),
     viewExploreActivatePctMin: z.number().min(0).max(100).default(100),
@@ -7580,6 +7641,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewReelsShareFeedPercentMin, viewReelsShareFeedPercentMax,
         viewReelsShareDmPercentMin, viewReelsShareDmPercentMax,
         viewReelsSavePercentMin, viewReelsSavePercentMax,
+        viewReelsClickAuthorPercentMin, viewReelsClickAuthorPercentMax,
         viewReelsActivatePctMin, viewReelsActivatePctMax,
         viewExploreEnabled, viewExploreActivatePctMin, viewExploreActivatePctMax,
         viewExploreScrollMin, viewExploreScrollMax,
@@ -8169,6 +8231,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               shareFeedPercentMin: viewReelsShareFeedPercentMin, shareFeedPercentMax: viewReelsShareFeedPercentMax,
               shareDmPercentMin: viewReelsShareDmPercentMin, shareDmPercentMax: viewReelsShareDmPercentMax,
               savePercentMin: viewReelsSavePercentMin ?? 0, savePercentMax: viewReelsSavePercentMax ?? 0,
+              clickAuthorPctMin: viewReelsClickAuthorPercentMin ?? 0, clickAuthorPctMax: viewReelsClickAuthorPercentMax ?? 0,
               onLog: (msg) => tLog(`  ${msg}`),
             });
             reelsViewed = reelsResult.reelsViewed;
