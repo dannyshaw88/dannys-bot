@@ -4,6 +4,16 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.217 — 2026-07-27
+
+### Fixed — View Reels Click Author node not found
+
+`_findNode` was searching for `id="clips_author_username"` in the raw UIAutomator XML, but raw dumps use `resource-id="com.instagram.android:id/clips_author_username"` — so the literal string never matched and every click-author roll was silently skipped with "author node not found in dump".
+
+Fix: search for the plain name fragment (`clips_author_username`) the same way all other node-polling code works, then extract the first `[x1,y1][x2,y2]` bounds that follow it in the XML. Confirmed present in live dump from Redmi A5.
+
+---
+
 ## v1.2.216 — 2026-07-27
 
 ### Added — Click Author % for View Reels

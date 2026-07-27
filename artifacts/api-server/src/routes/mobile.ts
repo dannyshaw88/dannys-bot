@@ -4868,8 +4868,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           onLog?.(`${_vrCaPfx}: clicking author profile…`);
           const _vrCaXml = await android.dumpUi(serial).catch(() => "");
           // Try clips_author_username first, then clips_author_info_component.
+          // Raw UIAutomator XML uses resource-id="com.instagram.android:id/<name>"
+          // so we match the plain name fragment (same approach as all polling code)
+          // then grab the first bounds="[x1,y1][x2,y2]" that follows it.
           const _findNode = (rid: string): { x: number; y: number } | null => {
-            const _idx = _vrCaXml.indexOf(`id="${rid}"`);
+            const _idx = _vrCaXml.indexOf(rid);
             if (_idx === -1) return null;
             const _seg = _vrCaXml.slice(_idx);
             const _bm = _seg.match(/\[(\d+),(\d+)\]\[(\d+),(\d+)\]/);
