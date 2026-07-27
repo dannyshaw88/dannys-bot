@@ -4,6 +4,53 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.213 — 2026-07-27
+
+### Fixed — View Explore click-author: author profile mistaken for Collaborators sheet
+
+**Bug:** After tapping an author's name in the Explore post/Reels viewer, the
+automation would immediately press Back and skip the profile visit — logging
+"Collaborators sheet appeared (collab post)" — even though no Collaborators
+sheet had appeared and the device had navigated correctly to the author's
+profile.
+
+**Root cause:** The collab-sheet detection block (in `runViewExplorePage`,
+`artifacts/api-server/src/routes/mobile.ts`) contained three conditions:
+
+```
+text="Collaborators"   ← correct: the real sheet's title node
+clips_collab           ← correct: Instagram's collab container resource-id
+clips_viewer_container + Follow  ← FALSE POSITIVE (removed)
+```
+
+The third condition was intended as a fallback for the case where a
+Collaborators sheet overlays the Reels viewer (both `clips_viewer_container`
+and a Follow button visible together). In practice, a normal author profile
+reached *from* the Reels viewer can also satisfy both sub-conditions at the
+same time:
+
+- The author's profile page has a **Follow** button (visiting a non-followed
+  account).
+- The XML dump taken 1 500 ms after the tap can still contain residual
+  `clips_viewer_container` nodes from the transition animation or from the
+  back-stack the OS keeps in memory.
+
+This caused every profile visit to trigger the false-positive branch, press
+Back immediately, and skip the scroll — making the click-author feature
+entirely non-functional even though the account selection logic was working
+correctly.
+
+**Fix:** Removed the `(clips_viewer_container && Follow)` fallback condition.
+The remaining two conditions (`text="Collaborators"` and `clips_collab`) are
+sufficient and accurate for detecting a real Instagram Collaborators sheet.
+No existing collab-post handling is affected — only the false-positive path is
+gone.
+
+**Files changed:**
+- `artifacts/api-server/src/routes/mobile.ts` — collab-sheet guard, ~line 4360
+
+---
+
 ## v1.2.212 — 2026-07-27
 
 ### Audited — Comprehensive scroll-gesture timing review (all mobile tools)
