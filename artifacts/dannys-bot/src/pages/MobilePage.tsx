@@ -7316,8 +7316,14 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
 
   // Device quick-controls (Standby / Restart / Brightness)
   const [screenOn,    setScreenOn]    = React.useState(true);
-  const [brightLevel, setBrightLevel] = React.useState<0 | 50 | 100>(100);
+  // brightStep: 0=0%, 1=50%, 2=100%. Starts at 2 so first press always → 0%.
+  // Not synced from device — sync would snap to a mid-value and break the fixed cycle.
+  const [brightStep,  setBrightStep]  = React.useState<0 | 1 | 2>(2);
   const [rebooting,   setRebooting]   = React.useState(false);
+
+  const BRIGHT_LEVELS: [0 | 1 | 2, number, string][] = [[0, 0, '0%'], [1, 50, '50%'], [2, 100, '100%']];
+  const brightPercent = BRIGHT_LEVELS[brightStep][1];
+  const brightLabel   = BRIGHT_LEVELS[brightStep][2];
 
   const handleStandby = React.useCallback(async () => {
     if (!serial) return;
@@ -7339,28 +7345,18 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     setTimeout(() => { setRebooting(false); setScreenOn(true); }, 15000);
   }, [serial, rebooting]);
 
-  // Sync brightness level from the actual device on serial change
-  React.useEffect(() => {
-    if (!serial) return;
-    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/brightness`)
-      .then(r => r.json())
-      .then((d: { percent?: number }) => {
-        if (typeof d.percent !== "number") return;
-        setBrightLevel(d.percent <= 10 ? 0 : d.percent <= 75 ? 50 : 100);
-      })
-      .catch(() => {});
-  }, [serial]);
-
   const handleBrightness = React.useCallback(async () => {
     if (!serial) return;
-    // Cycle: 100 → 0 → 50 → 100 → ...
-    const next: 0 | 50 | 100 = brightLevel === 100 ? 0 : brightLevel === 0 ? 50 : 100;
-    setBrightLevel(next);
+    // Fixed cycle: 100% → 0% → 50% → 100% → …
+    // Press 1: 0%  Press 2: 50%  Press 3: 100%  Press 4: 0% …
+    const nextStep: 0 | 1 | 2 = brightStep === 2 ? 0 : brightStep === 0 ? 1 : 2;
+    setBrightStep(nextStep);
+    const percent = BRIGHT_LEVELS[nextStep][1];
     await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/brightness`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ percent: next }),
+      body: JSON.stringify({ percent }),
     }).catch(() => {});
-  }, [serial, brightLevel]);
+  }, [serial, brightStep]);
 
   // App close gesture (dismiss direction)
   const [dismissDir,    setDismissDir]    = React.useState<"auto" | "left" | "up">("auto");
@@ -7623,17 +7619,17 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
           <button
             onClick={handleBrightness}
             disabled={!serial}
-            title={`Brightness: ${brightLevel}% — click to cycle`}
+            title={`Brightness: ${brightLabel} — click to cycle (0% → 50% → 100% → 0%)`}
             className={`w-12 h-12 rounded-full flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md
-              ${brightLevel === 0
+              ${brightStep === 0
                 ? "bg-white/10 border border-white/20 text-white/30 hover:bg-white/15"
-                : brightLevel === 50
+                : brightStep === 1
                 ? "bg-white/60 text-gray-700 hover:bg-white/70"
                 : "bg-white text-gray-900 hover:bg-gray-100"}`}
           >
             <Sun className="w-5 h-5" />
           </button>
-          <span className="text-[10px] text-muted-foreground">{brightLevel}%</span>
+          <span className="text-[10px] text-muted-foreground">{brightLabel}</span>
         </div>
       </div>
 
@@ -8333,8 +8329,9 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
 
               // Colour the message based on its tool / prefix.
               // Tool-specific colours take priority over general prefix colours.
-              let msgClass = 'text-green-400/80';
-              if (/▶ Follow Users|▶ Follow done|▶ Spread Follow|Spread Follow →/.test(msg))
+              // System / untagged messages are white. Tool messages keep their tool colour.
+              let msgClass = 'text-white/70';
+              if (/▶ Follow Users|▶ Follow done|▶ Spread Follow|Spread Follow →|^Inject Browsing/.test(msg))
                                                            msgClass = 'text-blue-400';
               else if (/\bView Explore\b|▶ View Explore/.test(msg))
                                                            msgClass = 'text-green-400';
@@ -8344,10 +8341,9 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                                                            msgClass = 'text-purple-400';
               else if (/^(ERROR|FAILED|✗)/.test(msg))     msgClass = 'text-red-400';
               else if (/^⚠/.test(msg))                    msgClass = 'text-yellow-400';
-              else if (/^[✓✅]/.test(msg))                msgClass = 'text-green-300';
+              else if (/^[✓✅]/.test(msg))                msgClass = 'text-white/90';
               else if (/shuffled/.test(msg))              msgClass = 'text-blue-400';
               else if (/^▶/.test(msg))                    msgClass = 'text-white/90';
-              else if (/^(WS |First frame|Frame |Decoder|Wake )/.test(msg)) msgClass = 'text-sky-400/70';
 
               return (
                 <div key={i} className="flex gap-x-2 min-w-0 py-[1px]">
