@@ -4,6 +4,33 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.211 — 2026-07-27
+
+### Fixed — Human Session Explore author-profile scrolling
+
+The **Mobile Human Session Tool → View Explore Page → Click Author** flow no
+longer uses a 2.5–10 second swipe gesture. That made each scroll itself take
+far too long and did not match normal phone interaction.
+
+Author-profile browsing now:
+
+- Performs a normal short swipe of roughly 350–700 ms.
+- Waits 2.5–10 seconds after the swipe for the newly revealed posts to render.
+- Repeats that scroll-then-render-wait sequence for the selected 1–10 scrolls.
+- Preserves cycle-abort handling, profile navigation, and the existing Back
+  navigation back through the opened post to Explore.
+
+The same timing correction is applied to the Mobile Human Session Tool’s
+View Feed author-profile path so both mobile author-browsing flows behave
+consistently.
+
+The existing `.github/workflows/build-windows-installer.yml` remains the single
+canonical GitHub Actions workflow. It builds the web/API artifacts on Ubuntu,
+packages the Electron Windows installer on Windows, and uploads
+`Aura-Farming-Windows-Installer`.
+
+---
+
 ## v1.2.210 — 2026-07-27
 
 ### Fixed — View Explore: author visits now return through the correct screens

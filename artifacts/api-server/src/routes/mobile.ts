@@ -2973,7 +2973,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             await android.tap(serial, _caNode.x, _caNode.y);
             await sleepOrAbort(serial, 1500);
             await verifyStillInInstagram();
-            // Scroll the author's profile 1–10 times.
+            // Scroll the author's profile 1–10 times. The swipe itself should
+            // be a normal short gesture; the human-like pause belongs AFTER
+            // the scroll so the newly revealed profile posts can render.
             const _caScrolls = 1 + Math.floor(Math.random() * 10);
             onLog?.(`Scroll ${i + 1}/${count}: on author profile "${_caNode.name}" — scrolling ${_caScrolls}x…`);
             const { w: _caW, h: _caH } = getScreenSize(serial);
@@ -2981,9 +2983,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               if (isCycleAborted(serial)) throw new Error("cycle-aborted");
               const _caSY1 = Math.round(_caH * 0.75);
               const _caSY2 = Math.round(_caH * 0.30);
-              const _caDur = 2500 + Math.round(Math.random() * 7500);
+              const _caDur = 350 + Math.round(Math.random() * 350);
               await android.swipe(serial, Math.round(_caW / 2), _caSY1, Math.round(_caW / 2), _caSY2, _caDur);
-              await sleepOrAbort(serial, 280);
+              const _caRenderWaitMs = 2500 + Math.round(Math.random() * 7500);
+              await sleepOrAbort(serial, _caRenderWaitMs);
             }
             // Return to the feed — one Back press from the author's profile.
             onLog?.(`Scroll ${i + 1}/${count}: returning from author profile…`);
@@ -4304,8 +4307,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // ── Click Author (visit post author's profile) ─────────────────
           // Taps clips_author_username (Reels viewer) or
           // row_feed_photo_profile_name (photo-post viewer) — whichever is
-          // present — to open the author's profile.  Scrolls 1–10 times with
-          // a 2.5–10 s swipe per scroll to let images render, then presses
+          // present — to open the author's profile. Scrolls 1–10 times with
+          // a normal swipe followed by a 2.5–10 s render wait, then presses
           // Back once after the profile visit to return to the post viewer;
           // the existing Back press below then returns to Explore.
           // This block is intentionally isolated to runViewExplorePage.
@@ -4364,7 +4367,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   await android.pressBack(serial);
                   await sleepOrAbort(serial, 500);
                 } else {
-                  // Normal single-author profile — scroll it.
+                  // Normal single-author profile — scroll it. Keep the gesture
+                  // short and natural, then wait for the profile posts to render
+                  // before starting another scroll.
                   const _aeScrolls = 1 + Math.floor(Math.random() * 10);
                   onLog?.(`Explore scroll ${i + 1}/${scrollCount}: on author profile "${_aeNode.name}" — scrolling ${_aeScrolls}x…`);
                   const { w: _aeW, h: _aeH } = getScreenSize(serial);
@@ -4372,9 +4377,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     if (isCycleAborted(serial)) throw new Error("cycle-aborted");
                     const _aeSY1 = Math.round(_aeH * 0.75);
                     const _aeSY2 = Math.round(_aeH * 0.30);
-                    const _aeDur = 2500 + Math.round(Math.random() * 7500);
+                    const _aeDur = 350 + Math.round(Math.random() * 350);
                     await android.swipe(serial, Math.round(_aeW / 2), _aeSY1, Math.round(_aeW / 2), _aeSY2, _aeDur);
-                    await sleepOrAbort(serial, 280);
+                    const _aeRenderWaitMs = 2500 + Math.round(Math.random() * 7500);
+                    await sleepOrAbort(serial, _aeRenderWaitMs);
                   }
                   // Back once — returns to the post/reel viewer. The outer
                   // Back below then returns from the post/reel to Explore.
