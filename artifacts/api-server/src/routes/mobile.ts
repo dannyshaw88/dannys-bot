@@ -5827,33 +5827,54 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     await sleepOrAbort(serial, 1500);
     await android.logScreenLayout(serial, "Make a Post (Story): after thumbnail tap", onLog);
 
-    // Step 5 — Tap the forward-arrow button in the story editor bottom bar
-    // (the small rightmost igds_media_button — not "Your story" / "Close Friends")
+    // Step 5 — Tap the forward-arrow/share node in the story editor bottom bar.
+    // The node finder uses the live accessibility attributes. Some Instagram
+    // builds expose the blue chevron as share_story_button and submit directly,
+    // skipping the separate Share screen.
     onLog?.("Make a Post (Story): looking for the forward arrow button…");
     const arrowBtn = await android.findStoryNextArrowButton(serial).catch(() => null);
+    let shareTappedDirectly = false;
     if (!arrowBtn) {
-      onLog?.("Make a Post (Story): forward arrow button not found — aborting");
-      await android.pressBack(serial);
-      await android.pressBack(serial);
-      await android.removeDeviceFile(serial, devicePath).catch(() => {});
-      return { posted: false };
+      // On the combined editor/share layout there is no separate "Next"
+      // node. Fall through to the actual Share node instead of treating that
+      // valid layout as a failure.
+      onLog?.("Make a Post (Story): forward arrow node not found — checking for direct Share node…");
+      const directShareBtn = await android.findStoryShareButton(serial).catch(() => null);
+      if (!directShareBtn) {
+        onLog?.("Make a Post (Story): forward arrow/Share node not found — aborting");
+        await android.pressBack(serial);
+        await android.pressBack(serial);
+        await android.removeDeviceFile(serial, devicePath).catch(() => {});
+        return { posted: false };
+      }
+      onLog?.(`Make a Post (Story): tapping direct Share at (${directShareBtn.x}, ${directShareBtn.y})…`);
+      await android.tap(serial, directShareBtn.x, directShareBtn.y);
+      shareTappedDirectly = true;
+    } else {
+      onLog?.(`Make a Post (Story): tapping forward/share node at (${arrowBtn.x}, ${arrowBtn.y})…`);
+      await android.tap(serial, arrowBtn.x, arrowBtn.y);
+      shareTappedDirectly = !!arrowBtn.directShare;
     }
-    onLog?.(`Make a Post (Story): tapping forward arrow at (${arrowBtn.x}, ${arrowBtn.y})…`);
-    await android.tap(serial, arrowBtn.x, arrowBtn.y);
-    await sleepOrAbort(serial, 1500);
+    if (!shareTappedDirectly) {
+      await sleepOrAbort(serial, 1500);
+    }
     await android.logScreenLayout(serial, "Make a Post (Story): after arrow tap", onLog);
 
     // Step 6 — Tap the blue "Share" button on the story share destination screen
-    onLog?.("Make a Post (Story): looking for Share button…");
-    const shareBtn = await android.findStoryShareButton(serial).catch(() => null);
-    if (!shareBtn) {
-      onLog?.("Make a Post (Story): Share button not found — aborting");
-      await android.pressBack(serial);
-      await android.removeDeviceFile(serial, devicePath).catch(() => {});
-      return { posted: false };
+    if (!shareTappedDirectly) {
+      onLog?.("Make a Post (Story): looking for Share button…");
+      const shareBtn = await android.findStoryShareButton(serial).catch(() => null);
+      if (!shareBtn) {
+        onLog?.("Make a Post (Story): Share button not found — aborting");
+        await android.pressBack(serial);
+        await android.removeDeviceFile(serial, devicePath).catch(() => {});
+        return { posted: false };
+      }
+      onLog?.(`Make a Post (Story): tapping Share at (${shareBtn.x}, ${shareBtn.y})…`);
+      await android.tap(serial, shareBtn.x, shareBtn.y);
+    } else {
+      onLog?.("Make a Post (Story): direct Share node submitted the story");
     }
-    onLog?.(`Make a Post (Story): tapping Share at (${shareBtn.x}, ${shareBtn.y})…`);
-    await android.tap(serial, shareBtn.x, shareBtn.y);
     await sleepOrAbort(serial, 2000);
     await android.logScreenLayout(serial, "Make a Post (Story): after Share tap", onLog);
 

@@ -47,6 +47,12 @@ Additionally: the mobile API client session may be expired by the time the post 
 
 ## Chronological entries (newest first)
 
+### 2026-07-27 — Story editor arrow lookup used the wrong generic node id
+- The mobile Story Make a Post flow stopped after selecting the image because `findStoryNextArrowButton` only searched for `igds_media_button`, which did not identify the blue chevron shown in the supplied editor screenshot.
+- The lookup now uses the live accessibility node attributes (`next_button`, `button_next`, `action_next`, `share_story_button`, or an exact Next/Continue label). A `share_story_button` match is marked as direct submission so the flow does not tap Share twice.
+- If a build exposes neither a Next node nor the combined editor/share node to the first finder, the route falls through to the existing accessibility-based Share finder instead of aborting.
+- Status: code-level fix applied; physical-device confirmation is still required because Replit cannot access the user’s USB-connected Android phone.
+
 ### 2026-07-14 — Manual debugging loop itself was the blocker, not any single tap bug — added in-app self-diagnostic tooling (v1.1.547)
 - Context: after the v1.1.546 expand-toggle fix, the user reported it failed the exact same way on the very next real-device test ("YOU PRESSED THE CAMERA SO I DONT FUCKING CARE"). The user was, correctly, furious that every fix in this file has depended on THEM manually pulling a fresh device log + screenshot after burning ~30 min on a rebuild, every single time, with no way for the agent to verify a fix before shipping it.
 - The user then explicitly refused two proposed paths: (1) sending another log/screenshot ("just like the rest of the debugging" — implying they've done this "hundreds of times" with no lasting fix), and (2) running ANY terminal/command-prompt step, including a proposed faster Electron dev-mode script and a proposed one-line `adb shell wm size` diagnostic command. **Lesson: this user will not use a terminal under any circumstances, for any purpose — every diagnostic must ship as an in-app button.**

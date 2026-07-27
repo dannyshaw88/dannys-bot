@@ -4146,35 +4146,64 @@ export async function findFirstStoryGalleryThumbnail(serial: string): Promise<{ 
 }
 
 /**
- * Finds the forward-arrow button in the Instagram story editor bottom bar.
- * This is the small rightmost igds_media_button — NOT "Your story" or "Close Friends".
+ * Finds the forward/share node in the Instagram story editor bottom bar.
+ *
+ * Instagram uses more than one layout for this screen. Some builds expose
+ * the blue chevron as `next_button`, while others expose that same control as
+ * `share_story_button` (the latter submits directly without a separate Share
+ * screen). The old implementation guessed with the generic
+ * `igds_media_button` id, which could not distinguish the destination pills
+ * ("Your story"/"Close Friends") from the chevron.
+ *
+ * The `directShare` flag is deliberately returned with the node so the caller
+ * does not tap the same share action a second time after a combined editor /
+ * share screen.
  */
-export async function findStoryNextArrowButton(serial: string): Promise<{ x: number; y: number } | null> {
+export async function findStoryNextArrowButton(
+  serial: string,
+): Promise<{ x: number; y: number; directShare?: boolean } | null> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial).catch(() => "");
   if (!xml) return null;
   const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
-  const candidates: { x: number; y: number; cx: number }[] = [];
+  const candidates: { x: number; y: number; priority: number; directShare: boolean }[] = [];
   let m: RegExpExecArray | null;
   while ((m = nodeRe.exec(xml)) !== null) {
     const attrs = m[1];
     const rid = attrs.match(/resource-id="([^"]*)"/)?.[1] ?? "";
-    if (!rid.includes("igds_media_button")) continue;
     const text = attrs.match(/\btext="([^"]*)"/)?.[1] ?? "";
     const desc = attrs.match(/content-desc="([^"]*)"/)?.[1] ?? "";
-    const label = `${text} ${desc}`.toLowerCase();
-    if (label.includes("story") || label.includes("friends")) continue;
+    const ridName = rid.split("/").pop()?.toLowerCase() ?? "";
+    const label = `${text} ${desc}`.toLowerCase().trim();
+
+    // These are the actual accessibility identifiers for the forward/share
+    // control across the observed Instagram layouts. Do not use color,
+    // screen position, or a generic media-button id here.
+    const isDirectShare = ridName.includes("share_story_button");
+    const isNextResource = ridName.includes("next_button") ||
+      ridName.includes("button_next") ||
+      ridName.includes("action_next");
+    const isNextLabel = /^(next|next button|continue)$/.test(desc.trim().toLowerCase()) ||
+      /^(next|next button|continue)$/.test(text.trim().toLowerCase());
+    if (!isDirectShare && !isNextResource && !isNextLabel) continue;
+
+    // Destination pills can contain "story" / "friends" in their labels.
+    // Keep this guard even when a future build reuses a resource id.
+    if (label.includes("your story") || label.includes("close friends") || label.includes("add to story")) continue;
     const bm = attrs.match(/bounds="([^"]+)"/);
     if (bm) {
       const c = _parseCenter(bm[1]);
-      if (c) candidates.push({ x: c.x, y: c.y, cx: c.x });
+      if (c) {
+        const priority = isDirectShare ? 1 : isNextResource ? 2 : 3;
+        candidates.push({ x: c.x, y: c.y, priority, directShare: isDirectShare });
+      }
     }
   }
   if (!candidates.length) return null;
-  // The arrow is the rightmost button in the bottom bar
-  candidates.sort((a, b) => b.cx - a.cx);
-  return { x: candidates[0].x, y: candidates[0].y };
+  candidates.sort((a, b) => a.priority - b.priority);
+  const match = candidates[0];
+  return { x: match.x, y: match.y, ...(match.directShare ? { directShare: true } : {}) };
 }
 
 /**
