@@ -4359,9 +4359,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 const _aeChkXml = await android.dumpUi(serial).catch(() => "");
                 const _aeIsCollab =
                   _aeChkXml.includes('text="Collaborators"') ||
-                  _aeChkXml.includes('clips_collab') ||
-                  // Still in reel viewer with Follow buttons = sheet over the top
-                  (_aeChkXml.includes("clips_viewer_container") && _aeChkXml.includes("Follow"));
+                  _aeChkXml.includes('clips_collab');
                 if (_aeIsCollab) {
                   onLog?.(`Explore scroll ${i + 1}/${scrollCount}: click-author — Collaborators sheet appeared (collab post) — pressing Back, skipping`);
                   await android.pressBack(serial);
