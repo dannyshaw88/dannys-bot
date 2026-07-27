@@ -8335,7 +8335,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
               if (/\bView Feed\b|▶ View Feed/.test(msg))      msgClass = 'text-orange-400';
               else if (/▶ Follow Users|▶ Follow done|▶ Spread Follow|Spread Follow →|^Inject Browsing/.test(msg))
                                                            msgClass = 'text-blue-400';
-              else if (/\bView Explore\b|▶ View Explore/.test(msg))
+              else if (/\bView Explore\b|▶ View Explore|[Ee]xplore/.test(msg))
                                                            msgClass = 'text-green-400';
               else if (/\bView Reels\b|▶ View Reels|Reels/.test(msg))
                                                            msgClass = 'text-rose-500';
