@@ -4,6 +4,19 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.209 — 2026-07-27
+
+### Fixed — View Explore: author visits return to Explore and save their settings
+
+Two issues in the new **View Explore → Click Author % of posts** feature are now fixed:
+
+- **Correct navigation after visiting an author:** after scrolling the selected author's profile, the bot now presses Back twice — first to leave the profile and return to the opened post/reel, then to leave that post/reel and return to the Explore grid. The existing Explore flow continues from the correct screen instead of remaining inside the post viewer.
+- **Percentage settings persist across restarts:** the View Explore **Click Author %** minimum and maximum fields are now included in the server's persistence schema. Values entered in the UI are no longer silently stripped during autosave, so they remain in place after restarting the app and are also retained when copying settings.
+
+The canonical `.github/workflows/build-windows-installer.yml` workflow remains the only Windows installer workflow. It already runs on pushes to `main`, so this release will trigger the existing Actions installer build without creating a duplicate workflow.
+
+---
+
 ## v1.2.208 — 2026-07-27
 
 ### Fixed — View Explore: Click Author skips collab posts correctly

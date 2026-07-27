@@ -1237,6 +1237,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     viewExploreShareDmPercentMax: z.number().min(0).max(100).default(0),
     viewExploreSavePercentMin: z.number().min(0).max(100).default(0),
     viewExploreSavePercentMax: z.number().min(0).max(100).default(0),
+    viewExploreClickAuthorPercentMin: z.number().min(0).max(100).default(0),
+    viewExploreClickAuthorPercentMax: z.number().min(0).max(100).default(0),
     followEnabled: z.boolean().default(false),
     followUsersMin: z.number().min(0).max(9999).default(1),
     followUsersMax: z.number().min(0).max(9999).default(3),
@@ -4304,8 +4306,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // row_feed_photo_profile_name (photo-post viewer) — whichever is
           // present — to open the author's profile.  Scrolls 1–10 times with
           // a 2.5–10 s swipe per scroll to let images render, then presses
-          // Back once to return to the post viewer.  The existing Back press
-          // below then returns to the Explore grid as normal.
+          // Back twice after the profile visit: once to return to the post
+          // viewer, then the existing Back press below returns to Explore.
           // This block is intentionally isolated to runViewExplorePage.
           if (wantClickAuthor) {
             try {
@@ -4374,10 +4376,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     await android.swipe(serial, Math.round(_aeW / 2), _aeSY1, Math.round(_aeW / 2), _aeSY2, _aeDur);
                     await sleepOrAbort(serial, 280);
                   }
-                  // Back once — returns to the post/reel viewer.
+                  // Back once — returns to the post/reel viewer. The outer
+                  // Back below then returns from the post/reel to Explore.
                   onLog?.(`Explore scroll ${i + 1}/${scrollCount}: returning from author profile…`);
                   await android.pressBack(serial);
                   await sleepOrAbort(serial, 700);
+                  await android.pressBack(serial);
+                  await sleepOrAbort(serial, 800);
                   authorVisits++;
                   onLog?.(`Explore scroll ${i + 1}/${scrollCount}: ✓ author profile visited (${_aeNode.name})`);
                 }
