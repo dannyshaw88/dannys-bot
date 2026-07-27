@@ -4,6 +4,42 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.212 — 2026-07-27
+
+### Audited — Comprehensive scroll-gesture timing review (all mobile tools)
+
+Full audit of every `android.swipe` call across `mobile.ts` and
+`androidManager.ts` to confirm no scroll gesture uses a render-wait value
+(2.5–10 s) as its swipe duration.
+
+**Findings — all sites are correct:**
+
+| Tool / context | Swipe duration | Post-scroll wait |
+|---|---|---|
+| View Feed — main scroll (`rollScrollVelocity`) | 150–1 500 ms | 180 ms settle + 5–10 s end-of-loop delay |
+| View Feed — tap-audio sub-page scroll | 300–700 ms | 280 ms |
+| View Feed — hashtag sub-page scroll | 300–700 ms | 280 ms |
+| **View Feed — click-author profile scroll** | **350–700 ms** | **2 500–10 000 ms `sleepOrAbort`** |
+| View Explore — main grid scroll (`rollScrollVelocity`) | 150–1 500 ms | 800 ms settle + 3–6 s inter-scroll delay |
+| **View Explore — click-author profile scroll** | **350–700 ms** | **2 500–10 000 ms `sleepOrAbort`** |
+| View Reels — snap-swipe (`rollScrollVelocity`) | 150–1 500 ms | watch-time sleep |
+| Inject Browsing — profile scroll | 500–700 ms | 4 000–10 000 ms `sleepOrAbort` |
+| Check DM — scroll | 300 ms | settle |
+| `swipeUpFromBottom` utility | 300 ms | — |
+
+No instance of a 2.5–10 s value being passed as a swipe duration was found
+anywhere in the codebase. The fix first committed in v1.2.211 (View Explore
+and View Feed click-author profile scrolls) is correctly in place and
+consistent with all other scroll patterns.
+
+The existing `.github/workflows/build-windows-installer.yml` remains the
+single canonical GitHub Actions workflow. The other four `.yml` files in
+`.github/workflows/` are inert deprecated stubs that carry no triggers —
+they must not be given new triggers; all future pipeline changes belong in
+`build-windows-installer.yml`.
+
+---
+
 ## v1.2.211 — 2026-07-27
 
 ### Fixed — Human Session Explore author-profile scrolling
