@@ -8337,20 +8337,22 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                                                            msgClass = 'text-blue-400';
               else if (/\bView Explore\b|▶ View Explore/.test(msg))
                                                            msgClass = 'text-green-400';
-              else if (/\bView Reels\b|▶ View Reels/.test(msg))
-                                                           msgClass = 'text-red-400';
+              else if (/\bView Reels\b|▶ View Reels|Reels/.test(msg))
+                                                           msgClass = 'text-rose-500';
               else if (/\bMake a Post\b|▶ Make a Post/.test(msg))
                                                            msgClass = 'text-purple-400';
-              else if (/^(ERROR|FAILED|✗)/.test(msg))     msgClass = 'text-red-400';
+              else if (/Switching to Instagram account|account switcher|Long-pressing profile tab|Profile tab found/.test(msg))
+                                                           msgClass = 'text-amber-400';
+              else if (/^(ERROR|FAILED|✗)/.test(msg))     msgClass = 'text-rose-500';
               else if (/^⚠/.test(msg))                    msgClass = 'text-yellow-400';
               else if (/^[✓✅]/.test(msg))                msgClass = 'text-white/90';
               else if (/shuffled/.test(msg))              msgClass = 'text-blue-400';
               else if (/^▶/.test(msg))                    msgClass = 'text-white/90';
 
               return (
-                <div key={i} className="flex gap-x-2 min-w-0 py-[1px]">
-                  <span className="text-white whitespace-nowrap shrink-0 select-none">[{ts}]</span>
-                  {dur && <span className="shrink-0 text-right whitespace-nowrap text-white">{`[${dur}]`}</span>}
+                <div key={i} className="flex min-w-0 py-[1px]">
+                  <span className="text-white whitespace-nowrap shrink-0 select-none w-[6.5rem]">[{ts}]</span>
+                  <span className="shrink-0 whitespace-nowrap text-white w-[5.5rem]">{dur ? `[${dur}]` : ''}</span>
                   <span className={`flex-1 min-w-0 break-words ${msgClass}`}>{msg}</span>
                 </div>
               );
