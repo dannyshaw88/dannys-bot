@@ -4,6 +4,22 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.230 — 2026-07-28
+
+### Changed — Random Actions: Update Profile Picture layout overhaul
+
+Reworked the Update Profile Picture row in the Random Actions section of the Mobile Human Session Tool (`MobilePage.tsx`):
+
+- **Title row**: "Update Profile Picture  Activation %" is now a single left-aligned grey label (`text-muted-foreground`) displayed above the controls row, matching the visual style of all other tool titles in the section.
+- **Controls row**: the min/max Activation % inputs, Assign Directory button, Reset button, and Disable After Used checkbox are now all on a single `flex items-center` row — no wrapping, no separate lines.
+- **Spacing**: added 4 px of top padding (`pt-1`) above the title to give the block visual breathing room from the row above it.
+
+**Before:** the title sat on its own line in dark foreground colour, the Activation % label was a separate sub-label above the inputs, and the Assign Directory / Reset / Disable After Used controls rendered on a third line below the inputs due to a `flex-wrap` container.
+
+**After:** one grey title line, then one tight controls line — consistent with every other Random Actions tool in the panel.
+
+---
+
 ## v1.2.229 — 2026-07-28
 
 ### Fixed — Update Profile Picture: taps the correct "+" button, not the pencil
