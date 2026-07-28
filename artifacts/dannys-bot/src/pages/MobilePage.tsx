@@ -6312,7 +6312,7 @@ export function AutomationSettingsPanel({
                   <Input
                     type="text"
                     placeholder=""
-                    className="h-7 text-xs px-2 w-[14.5ch]"
+                    className="h-7 text-xs px-2 w-[17.5ch]"
                     value={settings.updateBioText}
                     onChange={e => setSettings(s => ({ ...s, updateBioText: e.target.value }))}
                     disabled={loading}
