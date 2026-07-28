@@ -6210,11 +6210,10 @@ export function AutomationSettingsPanel({
             <div className="mt-2">
               {/* No flex-wrap: controls always stay next to max field */}
               <div className="flex items-end gap-2">
-                {/* shrink-0 column: title centered above just the min/max inputs */}
-                <div className="shrink-0 space-y-1.5">
-                  <div className="flex items-center justify-center gap-2">
-                    <span className="text-sm text-muted-foreground select-none">Update Profile Picture</span>
-                    <span className="text-sm text-muted-foreground select-none">Activation %</span>
+                {/* Column fixed to inputs width; title overflows centred above */}
+                <div className="space-y-1.5" style={{width: "152px"}}>
+                  <div className="whitespace-nowrap text-center text-sm text-muted-foreground select-none" style={{marginLeft: "50%", transform: "translateX(-50%)"}}>
+                    Update Profile Picture&nbsp;&nbsp;Activation %
                   </div>
                   <div className="flex items-center gap-2">
                     <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
