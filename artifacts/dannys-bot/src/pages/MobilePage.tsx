@@ -6207,25 +6207,25 @@ export function AutomationSettingsPanel({
             </div>
 
             {/* ── Row 3: Update Profile Picture ── */}
-            <div className="mt-2 space-y-2">
-              {/* Activation Percentage */}
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-sm text-foreground select-none">Update Profile Picture</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-muted-foreground">Activation %</span>
-                  <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                    value={settings.updateProfilePicActivatePctMin}
-                    onChange={e => setSettings(s => ({ ...s, updateProfilePicActivatePctMin: clamp4(Number(e.target.value)) }))}
-                    disabled={loading} />
-                  <span className="text-muted-foreground text-sm">to</span>
-                  <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                    value={settings.updateProfilePicActivatePctMax}
-                    onChange={e => setSettings(s => ({ ...s, updateProfilePicActivatePctMax: clamp4(Number(e.target.value)) }))}
-                    disabled={loading} />
+            <div className="mt-2 space-y-1.5">
+              <span className="text-sm text-foreground select-none">Update Profile Picture</span>
+              <div className="flex items-end gap-4 flex-wrap">
+                {/* Activation % — label above, inputs below */}
+                <div className="space-y-1.5">
+                  <Label className="text-sm text-muted-foreground block text-center">Activation %</Label>
+                  <div className="flex items-center gap-2">
+                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.updateProfilePicActivatePctMin}
+                      onChange={e => setSettings(s => ({ ...s, updateProfilePicActivatePctMin: clamp4(Number(e.target.value)) }))}
+                      disabled={loading} />
+                    <span className="text-muted-foreground text-sm">to</span>
+                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.updateProfilePicActivatePctMax}
+                      onChange={e => setSettings(s => ({ ...s, updateProfilePicActivatePctMax: clamp4(Number(e.target.value)) }))}
+                      disabled={loading} />
+                  </div>
                 </div>
-              </div>
-              {/* Directory + Reset + Disable After Used */}
-              <div className="flex items-center gap-2 flex-wrap">
+                {/* Assign Directory */}
                 <button
                   type="button"
                   disabled={loading}
@@ -6254,6 +6254,7 @@ export function AutomationSettingsPanel({
                 >
                   {settings.updateProfilePicFolderPath ? "Assigned Directory" : "Assign Directory"}
                 </button>
+                {/* Reset — plain clickable text */}
                 <button
                   type="button"
                   disabled={loading}
@@ -6267,25 +6268,23 @@ export function AutomationSettingsPanel({
                       }).catch(() => {});
                     }
                   }}
-                  className="h-7 px-3 text-xs rounded border border-border bg-background hover:border-foreground/30 hover:bg-accent transition-colors shrink-0 font-medium text-foreground"
+                  className="text-xs text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border-0 p-0 disabled:opacity-40"
                 >
                   Reset
                 </button>
-                <input
-                  type="checkbox"
-                  id={`update-profile-pic-disable-after-used-${slotIdx ?? 0}`}
-                  checked={settings.updateProfilePicDisableAfterUsed}
-                  onChange={e => setSettings(s => ({ ...s, updateProfilePicDisableAfterUsed: e.target.checked }))}
-                  disabled={loading}
-                  className="w-4 h-4 accent-primary cursor-pointer"
-                />
-                <label htmlFor={`update-profile-pic-disable-after-used-${slotIdx ?? 0}`} className="text-xs text-foreground cursor-pointer select-none">Disable After Used</label>
+                {/* Disable After Used */}
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    id={`update-profile-pic-disable-after-used-${slotIdx ?? 0}`}
+                    checked={settings.updateProfilePicDisableAfterUsed}
+                    onChange={e => setSettings(s => ({ ...s, updateProfilePicDisableAfterUsed: e.target.checked }))}
+                    disabled={loading}
+                    className="w-4 h-4 accent-primary cursor-pointer"
+                  />
+                  <label htmlFor={`update-profile-pic-disable-after-used-${slotIdx ?? 0}`} className="text-xs text-foreground cursor-pointer select-none">Disable After Used</label>
+                </div>
               </div>
-              {settings.updateProfilePicFolderPath && (
-                <span className="text-xs text-muted-foreground truncate max-w-[300px] block" title={settings.updateProfilePicFolderPath}>
-                  {settings.updateProfilePicFolderPath}
-                </span>
-              )}
             </div>
 
             </div>

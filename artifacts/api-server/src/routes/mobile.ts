@@ -6016,13 +6016,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Find the notifications heart icon via accessibility tree scan.
     const icon = await android.findInstagramNotificationsIcon(serial).catch(() => null);
     if (!icon) {
-      onLog?.("Random Jitter: notifications icon not found — skipping check notifications");
+      onLog?.("Random Actions: notifications icon not found — skipping check notifications");
       logger.warn({ serial }, "[jitter-check-notif] notifications icon not found by scan");
       return;
     }
     await android.tap(serial, icon.x, icon.y);
     await sleepOrAbort(serial, 1800);
-    onLog?.("Random Jitter: ✓ opened notifications");
+    onLog?.("Random Actions: ✓ opened notifications");
     // Scroll down x–y times to browse through them.
     const scrollCount = rollRange(scrollsMin, scrollsMax);
     const { w, h } = getScreenSize(serial);
@@ -6041,20 +6041,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const item = await android.findRandomNotificationItem(serial).catch(() => null);
       if (item) {
         await android.tap(serial, item.x, item.y);
-        onLog?.("Random Jitter: ✓ tapped notification item");
+        onLog?.("Random Actions: ✓ tapped notification item");
         await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 1500));
         await android.pressBack(serial);
         await sleepOrAbort(serial, 600);
       } else {
-        onLog?.("Random Jitter: no clickable notification row found — skipping click");
+        onLog?.("Random Actions: no clickable notification row found — skipping click");
       }
     } else {
-      onLog?.("Random Jitter: click-notification roll missed — skipping click");
+      onLog?.("Random Actions: click-notification roll missed — skipping click");
     }
     // Return to home feed.
     await android.pressBack(serial);
     await sleepOrAbort(serial, 800);
-    onLog?.("Random Jitter: ✓ notifications check done");
+    onLog?.("Random Actions: ✓ notifications check done");
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -6158,7 +6158,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // coordinates which drift across screen resolutions and OEM skins.
     const profileTab = await android.findInstagramProfileTab(serial).catch(() => null);
     if (!profileTab) {
-      onLog?.("Random Jitter: profile tab not found — skipping visit profile");
+      onLog?.("Random Actions: profile tab not found — skipping visit profile");
       logger.warn({ serial }, "[jitter-visit-profile] profile tab not found by scan");
       return;
     }
@@ -6174,7 +6174,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await sleepOrAbort(serial, 600);
     }
 
-    onLog?.("Random Jitter: ✓ visited own profile");
+    onLog?.("Random Actions: ✓ visited own profile");
     // Return to home feed.
     const homeTab = await android.findHomeTab(serial).catch(() => null);
     if (homeTab) {
@@ -6390,7 +6390,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         "-d", "smsto:",
       ], { encoding: "utf8", timeout: 8000 });
     }
-    onLog?.("Random Jitter: ✓ opened SMS app");
+    onLog?.("Random Actions: ✓ opened SMS app");
 
     // 3. Dwell in the SMS app for a random 10–30 s.
     const dwellMs = 10_000 + Math.round(Math.random() * 20_000);
@@ -6410,7 +6410,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     await android.launchInstagram(serial);
     await sleepOrAbort(serial, 1500 + Math.round(Math.random() * 500));
 
-    onLog?.("Random Jitter: ✓ returned to Instagram after app switch");
+    onLog?.("Random Actions: ✓ returned to Instagram after app switch");
   }
 
   // ── Update Profile Picture ───────────────────────────────────────────────
@@ -9092,7 +9092,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             let _jitterFired = false;
             const notifChance = rollRange(checkNotificationsPctMin, checkNotificationsPctMax) / 100;
             if (notifChance > 0 && Math.random() < notifChance) {
-              tLog("▶ Random Jitter: checking notifications…");
+              tLog("▶ Random Actions: checking notifications…");
               await runCheckNotifications(serial, {
                 scrollsMin: checkNotificationsScrollsMin,
                 scrollsMax: checkNotificationsScrollsMax,
@@ -9105,28 +9105,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             }
             const profileChance = rollRange(visitProfilePctMin, visitProfilePctMax) / 100;
             if (profileChance > 0 && Math.random() < profileChance) {
-              tLog("▶ Random Jitter: visiting own profile…");
+              tLog("▶ Random Actions: visiting own profile…");
               await runVisitOwnProfile(serial, (msg) => tLog(`  ${msg}`));
               steps.push("jitter-visit-profile");
               _jitterFired = true;
             }
             const savedChance = rollRange(visitSavedPctMin, visitSavedPctMax) / 100;
             if (savedChance > 0 && Math.random() < savedChance) {
-              tLog("▶ Random Jitter: visiting saved posts…");
+              tLog("▶ Random Actions: visiting saved posts…");
               await runVisitSaved(serial, (msg) => tLog(`  ${msg}`));
               steps.push("jitter-visit-saved");
               _jitterFired = true;
             }
             const settingsChance = rollRange(visitSettingsPctMin, visitSettingsPctMax) / 100;
             if (settingsChance > 0 && Math.random() < settingsChance) {
-              tLog("▶ Random Jitter: visiting random settings…");
+              tLog("▶ Random Actions: visiting random settings…");
               await runVisitSettings(serial, (msg) => tLog(`  ${msg}`));
               steps.push("jitter-visit-settings");
               _jitterFired = true;
             }
             const appSwitchChance = rollRange(appSwitchPctMin, appSwitchPctMax) / 100;
             if (appSwitchChance > 0 && Math.random() < appSwitchChance) {
-              tLog("▶ Random Jitter: app switch (SMS)…");
+              tLog("▶ Random Actions: app switch (SMS)…");
               await runAppSwitch(serial, (msg) => tLog(`  ${msg}`));
               steps.push("jitter-app-switch");
               _jitterFired = true;
@@ -9134,7 +9134,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             const updatePicChance = rollRange(updateProfilePicActivatePctMin, updateProfilePicActivatePctMax) / 100;
             const resolvedPicFolder = getProfilePicFolderPath(serial, slotIdx) || _updateProfilePicFolderPath;
             if (updatePicChance > 0 && Math.random() < updatePicChance && resolvedPicFolder) {
-              tLog("▶ Random Jitter: updating profile picture…");
+              tLog("▶ Random Actions: updating profile picture…");
               await runUpdateProfilePicture(serial, resolvedPicFolder, (msg) => tLog(`  ${msg}`));
               steps.push("jitter-update-profile-pic");
               _jitterFired = true;
@@ -9155,12 +9155,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               }
             }
             if (!_jitterFired) {
-              tLog("▶ Random Jitter: activated — both action rolls missed this cycle");
+              tLog("▶ Random Actions: activated — both action rolls missed this cycle");
               steps.push("jitter(activated,no-actions-rolled)");
             }
           } else if (randomJitterEnabled) {
             steps.push("jitter(skipped — Activate Percentage roll missed this execution)");
-            tLog("▶ Random Jitter Activate Percentage roll missed — skipping jitter this execution");
+            tLog("▶ Random Actions Activate Percentage roll missed — skipping this execution");
           }
         }
 
