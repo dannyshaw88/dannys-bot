@@ -6208,11 +6208,13 @@ export function AutomationSettingsPanel({
 
             {/* ── Row 3: Update Profile Picture ── */}
             <div className="mt-2 space-y-1.5">
-              <span className="text-sm text-foreground select-none">Update Profile Picture</span>
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-sm text-muted-foreground select-none">Update Profile Picture</span>
+                <span className="text-sm text-muted-foreground select-none">Activation %</span>
+              </div>
               <div className="flex items-end gap-4 flex-wrap">
-                {/* Activation % — label above, inputs below */}
+                {/* Activation % inputs */}
                 <div className="space-y-1.5">
-                  <Label className="text-sm text-muted-foreground block text-center">Activation %</Label>
                   <div className="flex items-center gap-2">
                     <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                       value={settings.updateProfilePicActivatePctMin}
