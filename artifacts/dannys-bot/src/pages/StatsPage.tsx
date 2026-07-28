@@ -151,6 +151,7 @@ function ProfileStatsRow({
 // ─── Phone Farm tab ───────────────────────────────────────────────────────────
 
 const FARM_STAT_LABELS: { key: string; label: string; icon: React.ReactNode; color: string }[] = [
+  { key: "session_tool",    label: "Session Tool",   icon: <Fingerprint className="w-3 h-3" />, color: "text-cyan-500" },
   { key: "trustscore",      label: "Trust Score",    icon: <Shield className="w-3 h-3" />,      color: "text-indigo-500" },
   { key: "cycles",          label: "Cycles",         icon: <Activity className="w-3 h-3" />,   color: "text-cyan-500" },
   { key: "likes",           label: "Likes",          icon: <Heart className="w-3 h-3" />,       color: "text-rose-500" },
@@ -166,6 +167,7 @@ const FARM_STAT_LABELS: { key: string; label: string; icon: React.ReactNode; col
 
 const FARM_DEFAULT_COL_WIDTHS: Record<string, number> = {
   account:          224,
+  session_tool:     110,
   trustscore:       130,
   cycles:            80,
   likes:             80,
@@ -215,16 +217,38 @@ type MetricAccount = {
   slotIndex?: number;
 };
 
+function SlotSessionToggle({ profileId }: { profileId: number }) {
+  const { data: tools } = useQuery<Tool[]>({
+    queryKey: [`/api/profiles/${profileId}/tools`],
+  });
+  const updateToolMutation = useUpdateTool();
+  const tool = tools?.find(t => t.type === "human_sessions");
+  if (!tool) return <span className="text-muted-foreground text-[10px]">—</span>;
+  return (
+    <Switch
+      checked={tool.enabled}
+      onCheckedChange={val =>
+        updateToolMutation.mutate({ id: tool.id, profileId, enabled: val }, {
+          onSuccess: () => queryClient.invalidateQueries({ queryKey: [`/api/profiles/${profileId}/tools`] }),
+        })
+      }
+      className="scale-75 origin-center"
+    />
+  );
+}
+
 function PhoneFarmPhoneSection({
   phone,
   farmColOrder,
   farmSortKey,
   farmSortDir,
+  profiles,
 }: {
   phone: FarmPhone;
   farmColOrder: string[];
   farmSortKey: string | null;
   farmSortDir: "desc" | "asc";
+  profiles: Profile[];
 }) {
   const { data: account, isLoading } = useQuery<{ slots: { username: string }[] }>({
     queryKey: [`/api/mobile/devices/${encodeURIComponent(phone.serial)}/account`],
@@ -301,6 +325,22 @@ function PhoneFarmPhoneSection({
               </Link>
             </td>
             {orderedLabels.map(s => {
+              if (s.key === "session_tool") {
+                const profile = profiles.find(
+                  p => p.username.trim().toLowerCase() === slot.username.toLowerCase(),
+                );
+                return (
+                  <td key="session_tool" className="py-2.5 px-3 text-center">
+                    <div className="flex items-center justify-center">
+                      {profile ? (
+                        <SlotSessionToggle profileId={profile.id} />
+                      ) : (
+                        <span className="text-muted-foreground text-[10px]">—</span>
+                      )}
+                    </div>
+                  </td>
+                );
+              }
               if (s.key === "trustscore") {
                 return (
                   <td key="trustscore" className="py-2.5 px-3 text-center">
@@ -995,6 +1035,9 @@ export function StatsPage() {
 }
 
 function PhoneFarmTab() {
+  const { data: rawProfiles } = useProfiles();
+  const profiles = useMemo(() => rawProfiles?.filter(p => !p.isTemplate) ?? [], [rawProfiles]);
+
   const { data, isLoading, isError } = useQuery<{ phones: FarmPhone[]; adbFound: boolean }>({
     queryKey: ["/api/mobile/usb-phones"],
     refetchInterval: 15000,
@@ -1046,10 +1089,8 @@ function PhoneFarmTab() {
   );
 
   const nudgeFarmColWidth = (key: string, delta: number) => {
-    setFarmColWidths(prev => {
-      const v = Math.max(1, Math.min(600, (prev[key] ?? FARM_DEFAULT_COL_WIDTHS[key] ?? 80) + delta));
-      return { ...prev, [key]: v };
-    });
+    const v = Math.max(1, Math.min(600, (farmColWidths[key] ?? FARM_DEFAULT_COL_WIDTHS[key] ?? 80) + delta));
+    setFarmColWidths({ ...farmColWidths, [key]: v });
   };
 
   const [farmVisibleCols, setFarmVisibleCols] = usePersistentSetting<Record<string, boolean>>(
@@ -1066,6 +1107,7 @@ function PhoneFarmTab() {
     if (swapIdx < 0 || swapIdx >= next.length) return;
     [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
     setFarmColOrder(next);
+    localStorage.setItem("farm_col_order", JSON.stringify(next));
   };
 
   const orderedLabels = farmColOrder
@@ -1196,7 +1238,7 @@ function PhoneFarmTab() {
       </CardHeader>
       <CardContent className="p-0 flex flex-col">
         <div className="overflow-x-auto">
-          <table className="text-sm w-full table-fixed">
+          <table className="text-sm table-fixed">
             <colgroup>
               <col style={{ width: `${farmColWidths.account ?? FARM_DEFAULT_COL_WIDTHS.account}px` }} />
               {orderedLabels.map(s => (
@@ -1230,14 +1272,15 @@ function PhoneFarmTab() {
                         next.splice(fromIdx, 1);
                         next.splice(toIdx, 0, from);
                         setFarmColOrder(next);
+                        localStorage.setItem("farm_col_order", JSON.stringify(next));
                       }}
                       onDragEnd={() => { farmDragColRef.current = null; setFarmDragOverCol(null); }}
-                      onClick={() => { if (s.key !== "trustscore") cycleFarmSort(s.key); }}
-                      className={`px-3 py-3 font-bold text-center uppercase tracking-wide text-[10px] select-none ${s.key !== "trustscore" ? "cursor-pointer" : "cursor-default"} ${isDragTarget ? "bg-primary/5 border-l-2 border-l-primary" : ""}`}
+                      onClick={() => { if (s.key !== "trustscore" && s.key !== "session_tool") cycleFarmSort(s.key); }}
+                      className={`px-3 py-3 font-bold text-center uppercase tracking-wide text-[10px] select-none ${s.key !== "trustscore" && s.key !== "session_tool" ? "cursor-pointer" : "cursor-default"} ${isDragTarget ? "bg-primary/5 border-l-2 border-l-primary" : ""}`}
                     >
                       <span className={`inline-flex items-center gap-1 ${s.color}`}>
                         {s.icon} {s.label}
-                        {s.key !== "trustscore" && (isSorted
+                        {s.key !== "trustscore" && s.key !== "session_tool" && (isSorted
                           ? <span className="text-[9px]">{farmSortDir === "desc" ? "▼" : "▲"}</span>
                           : <span className="text-[9px] opacity-30">⇅</span>
                         )}
@@ -1281,9 +1324,10 @@ function PhoneFarmTab() {
                   <PhoneFarmPhoneSection
                     key={phone.serial}
                     phone={phone}
-                    farmColOrder={farmColOrder}
+                    farmColOrder={orderedLabels.map(s => s.key)}
                     farmSortKey={farmSortKey}
                     farmSortDir={farmSortDir}
+                    profiles={profiles}
                   />
                 ))
               )}

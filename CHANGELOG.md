@@ -4,6 +4,48 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.246 — 2026-07-28
+
+### New — Statistics page: Session Tool toggle column
+
+Added a **Session Tool** column to the Tool Performance table on the Statistics page. Each account row now shows the same on/off toggle that controls the Human Session Tool for that account — toggling it directly from the stats table enables or disables the tool exactly as if you had opened the account's settings and toggled it there. The column uses the fingerprint icon (cyan) and is positioned first (before Trust Score) by default.
+
+The toggle works by looking up the profile that matches the slot's username, fetching that profile's `human_sessions` tool record, and calling the same API endpoint used by the Human Session Tool settings page. If no matching profile is found for a slot username, a `—` placeholder is shown instead.
+
+The Session Tool column is fully manageable: it can be hidden, shown, resized, and reordered via the Manage Columns panel. It does not show sort arrows since it is a control, not a number.
+
+---
+
+### Fix — Statistics page: column width changes now save correctly
+
+Column width edits made via the ◀ ▶ nudge buttons in the Manage Columns panel were silently not persisting — after navigating away from the Statistics page and returning, all widths reverted to their defaults.
+
+**Root cause:** The `nudgeFarmColWidth` function was passing a functional updater (`prev => ...`) to the `setFarmColWidths` setter from `usePersistentSetting`. That hook's setter is typed to receive a plain value, not a function — it tried to `JSON.stringify` the updater function itself, which produces `undefined`. `localStorage.setItem` coerced that to the string `"undefined"`, which then failed to parse on the next page load and fell back to defaults.
+
+**Fix:** `nudgeFarmColWidth` now reads the current `farmColWidths` value directly from the closure and passes a plain object to the setter, which serialises correctly to localStorage and Electron settings.
+
+---
+
+### Fix — Statistics page: reducing column width no longer causes columns to expand
+
+When using the ◀ ▶ nudge buttons or typing a pixel value into the Manage Columns input, reducing a column's width appeared to make the columns grow wider the more you reduced them.
+
+**Root cause:** The Tool Performance table had both `table-layout: fixed` and `width: 100%` (Tailwind `w-full`) applied at the same time. In CSS fixed table layout, when the sum of all column pixel widths is less than the table's full container width, the browser scales every column upward proportionally to fill 100%. So narrowing one column reduced the total pixel sum, increased the scale-up factor applied to all columns, and made the column you just narrowed appear larger than before.
+
+**Fix:** Removed `w-full` from the table. The table now sizes to exactly the sum of its column widths. The existing `overflow-x-auto` wrapper on the container already handles horizontal scrolling when the table is wider than the viewport.
+
+---
+
+### Fix — Statistics page: column order changes now save correctly
+
+Reordering columns — either by using the ↑ ↓ arrows in the Manage Columns panel or by dragging column headers in the table — was not persisting. After navigating away from the Statistics page and returning, the column order always reverted to the default arrangement.
+
+**Root cause:** Both `moveFarmCol` (the Manage Columns up/down arrows) and the header drag-and-drop `onDrop` handler were calling `setFarmColOrder(next)` through the `usePersistentSetting` hook's setter, relying on that hook's internal `localStorage.setItem` call. The profile stats table's equivalent function (`moveStatCol`) also calls `localStorage.setItem` explicitly — that explicit call is what made profile column order persist while farm column order did not.
+
+**Fix:** Added an explicit `localStorage.setItem("farm_col_order", ...)` call after both `moveFarmCol` and the drag-and-drop `onDrop` handler, matching the pattern already established for profile stats columns.
+
+---
+
 ## v1.2.245 — 2026-07-28
 
 ### New — Statistics page: Trust Score column in Tool Performance table
