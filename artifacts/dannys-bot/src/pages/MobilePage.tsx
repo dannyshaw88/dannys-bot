@@ -6299,14 +6299,13 @@ export function AutomationSettingsPanel({
                   value={settings.updateBioActivatePctMax}
                   onChange={e => setSettings(s => ({ ...s, updateBioActivatePctMax: clamp4(Number(e.target.value)) }))}
                   disabled={loading} />
-                {/* Bio text + Spin button stacked */}
-                <div className="flex flex-col items-start gap-0.5 shrink-0">
-                  {/* Spin preview button — above the field, left-aligned */}
+                {/* Bio text + Spin button — spin floats above, input stays row-centered */}
+                <div className="relative shrink-0">
                   <button
                     type="button"
                     disabled={loading || !settings.updateBioText.trim()}
                     onClick={() => setSpinPreview(resolveSpinSyntax(settings.updateBioText))}
-                    className="text-xs font-medium text-sky-400 hover:text-sky-300 disabled:opacity-40 disabled:cursor-not-allowed px-1 leading-none"
+                    className="absolute -top-4 left-0 text-xs font-medium text-primary hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed px-1 leading-none"
                   >
                     Spin
                   </button>
