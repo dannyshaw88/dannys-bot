@@ -6211,7 +6211,7 @@ export function AutomationSettingsPanel({
               {/* Inputs + controls aligned to bottom of column */}
               <div className="flex items-end gap-2 flex-wrap">
                 {/* Title + inputs column — title centers above just these fields */}
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 w-fit">
                   <div className="flex items-center justify-center gap-2">
                     <span className="text-sm text-muted-foreground select-none">Update Profile Picture</span>
                     <span className="text-sm text-muted-foreground select-none">Activation %</span>
