@@ -6208,8 +6208,8 @@ export function AutomationSettingsPanel({
 
             {/* ── Row 3: Update Profile Picture ── */}
             <div className="mt-2 space-y-1.5">
-              {/* Inputs + controls all on one row, vertically centered */}
-              <div className="flex items-center gap-2 flex-wrap">
+              {/* Inputs + controls aligned to bottom of column */}
+              <div className="flex items-end gap-2 flex-wrap">
                 {/* Title + inputs column — title centers above just these fields */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-center gap-2">
