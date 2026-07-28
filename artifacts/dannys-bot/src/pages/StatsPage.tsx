@@ -217,21 +217,34 @@ type MetricAccount = {
   slotIndex?: number;
 };
 
-function SlotSessionToggle({ profileId }: { profileId: number }) {
-  const { data: tools } = useQuery<Tool[]>({
-    queryKey: [`/api/profiles/${profileId}/tools`],
-  });
-  const updateToolMutation = useUpdateTool();
-  const tool = tools?.find(t => t.type === "human_sessions");
-  if (!tool) return <span className="text-muted-foreground text-[10px]">—</span>;
+function MobileSlotSessionToggle({ serial, slotIdx }: { serial: string; slotIdx: number }) {
+  const qKey = [`/api/mobile/devices/${serial}/slots/${slotIdx}/automation-settings`];
+  const { data: settings, isLoading } = useQuery<{ enabled: boolean }>({ queryKey: qKey });
+  const [optimistic, setOptimistic] = useState<boolean | null>(null);
+
+  if (isLoading) return <span className="text-muted-foreground text-[10px]">…</span>;
+  if (!settings) return <span className="text-muted-foreground text-[10px]">—</span>;
+
+  const checked = optimistic ?? settings.enabled;
+
+  const toggle = async (val: boolean) => {
+    setOptimistic(val);
+    try {
+      await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: val }),
+      });
+      queryClient.invalidateQueries({ queryKey: qKey });
+    } catch {
+      setOptimistic(null);
+    }
+  };
+
   return (
     <Switch
-      checked={tool.enabled}
-      onCheckedChange={val =>
-        updateToolMutation.mutate({ id: tool.id, profileId, enabled: val }, {
-          onSuccess: () => queryClient.invalidateQueries({ queryKey: [`/api/profiles/${profileId}/tools`] }),
-        })
-      }
+      checked={checked}
+      onCheckedChange={toggle}
       className="scale-75 origin-center"
     />
   );
@@ -326,17 +339,10 @@ function PhoneFarmPhoneSection({
             </td>
             {orderedLabels.map(s => {
               if (s.key === "session_tool") {
-                const profile = profiles.find(
-                  p => p.username.trim().toLowerCase() === slot.username.toLowerCase(),
-                );
                 return (
                   <td key="session_tool" className="py-2.5 px-3 text-center">
                     <div className="flex items-center justify-center">
-                      {profile ? (
-                        <SlotSessionToggle profileId={profile.id} />
-                      ) : (
-                        <span className="text-muted-foreground text-[10px]">—</span>
-                      )}
+                      <MobileSlotSessionToggle serial={phone.serial} slotIdx={slot.idx} />
                     </div>
                   </td>
                 );
@@ -1065,8 +1071,8 @@ function PhoneFarmTab() {
     },
   );
 
-  const [farmSortKey, setFarmSortKey] = useState<string | null>(null);
-  const [farmSortDir, setFarmSortDir] = useState<"desc" | "asc">("desc");
+  const [farmSortKey, setFarmSortKey] = usePersistentSetting<string | null>("farm_sort_key", null);
+  const [farmSortDir, setFarmSortDir] = usePersistentSetting<"desc" | "asc">("farm_sort_dir", "desc");
 
   const cycleFarmSort = (key: string) => {
     if (farmSortKey === key) {
