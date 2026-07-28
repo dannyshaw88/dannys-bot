@@ -4,6 +4,22 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.226 — 2026-07-28
+
+### Added — Installer: "Launch Aura Farming" checkbox on finish page
+
+A **"Launch Aura Farming"** checkbox now appears on the final page of the Windows installer, checked by default. When the user clicks Finish with the box ticked, the application launches immediately.
+
+**Implementation detail:** electron-builder's `runAfterFinish: true` flag relies on the `$launchLink` variable (a start-menu `.lnk` path) which can be empty or point to a stale location on a first install. A `customFinishPage` macro is now defined explicitly in `installer.nsh`, which overrides the built-in finish page and launches `$INSTDIR\Aura Farming.exe` directly via `StdUtils.ExecShellAsUser`. This de-elevates the process so the app runs under the user's normal session token even when the installer was elevated. The `Function LaunchAuraFarming` and the macro are both guarded with `!ifndef BUILD_UNINSTALLER` so they compile only into the installer binary and add nothing to the uninstaller.
+
+### Added — Splash screen: version number displayed below loading bar
+
+The startup splash screen now shows the current version number (e.g. `v1.2.226`) in light grey below the animated loading bar. The version is read at runtime via `app.getVersion()` — which pulls directly from `artifacts/electron/package.json` — so it updates automatically every time a new version is built with no additional work required.
+
+Style: `font-size: 11px; color: #c0c0c0; letter-spacing: 0.04em`. A `margin-bottom: 14px` was added to the bar track so there is breathing room between the bar and the version text.
+
+---
+
 ## v1.2.225 — 2026-07-27
 
 ### Fixed — Follow tool: search bar accumulates previous usernames (root cause: KEYCODE_CTRL_A broken on Android)
