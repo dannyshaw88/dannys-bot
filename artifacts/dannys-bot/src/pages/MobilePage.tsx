@@ -6248,24 +6248,6 @@ export function AutomationSettingsPanel({
                 >
                   {settings.updateProfilePicFolderPath ? "Assigned Directory" : "Assign Directory"}
                 </button>
-                {/* Reset */}
-                <button
-                  type="button"
-                  disabled={loading}
-                  onClick={() => {
-                    setSettings(s => ({ ...s, updateProfilePicFolderPath: "" }));
-                    if (phone && slotIdx !== undefined) {
-                      fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/profile-pic-folder-path`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ path: "" }),
-                      }).catch(() => {});
-                    }
-                  }}
-                  className="text-xs text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border-0 p-0 disabled:opacity-40"
-                >
-                  Reset
-                </button>
                 {/* Disable After Used */}
                 <div className="flex items-center gap-1.5">
                   <input

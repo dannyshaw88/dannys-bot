@@ -4,6 +4,33 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.232 — 2026-07-28
+
+### Fixed — Suggested Reels shelf causing false "popup dismissed" log entries and swipes landing on the wrong post
+
+Three separate bugs in the View Feed automation involving the "Suggested Reels" / "Suggested for you" horizontal carousel shelf:
+
+**1. `dismissInstagramInterstitials` was tapping the shelf's own "Dismiss" button**
+The interstitial-dismissal logic scans the UI dump for a "Dismiss" button and skips it only if it is narrower than 100 px (that guard was designed to ignore the tiny ✕ icons on individual suggestion cards on profile pages). The suggestion shelf's own close button is wider than 100 px and was therefore being tapped as if it were a real popup. Tapping it caused Instagram to show a "Hide" snackbar, which was then detected on the *next* scroll iteration as a "post options sheet" and dismissed with Back — two unnecessary taps per shelf encounter, with side-effects on the feed state.
+
+**Fix:** added a secondary guard in `androidManager.ts` — when the "Dismiss" button is present but any suggestion-shelf indicator is also in the XML (`Suggested for you`, `People you may know`, `Suggested Reels`, `Suggested reels`, `suggested_users`, `suggestion_unit`), the button is skipped entirely.
+
+**2. Suggestion shelf swipe Y was hardcoded to the middle of the screen**
+The code used `h / 2` as the Y coordinate for the horizontal swipe across the suggestion carousel. The shelf renders near the top of the feed, not the middle, so every swipe was landing on whatever regular feed post happened to be at the screen centre rather than on the carousel. This caused no visible browsing of suggestions and occasionally triggered unintended interactions on the post beneath.
+
+**Fix:** the Y coordinate is now read from the shelf's own UIAutomator bounds in the XML dump (centre of the node's bounding box). Falls back to `h * 0.35` (upper third of the screen) if the bounds cannot be parsed. No hardcoded pixel values — works across all device sizes and resolutions.
+
+**3. "Suggested reels" (lowercase r) was not detected**
+The detection check listed `"Suggested Reels"` (capital R) but Instagram renders the shelf heading as `"Suggested reels"` (lowercase r) on at least some builds/locales. The shelf was not being recognised, so the swipe branch never ran even when the shelf was on screen.
+
+**Fix:** added `"Suggested reels"` (lowercase r) alongside `"Suggested Reels"` in both the detection check (`mobile.ts`) and the new interstitial-dismissal guard (`androidManager.ts`).
+
+### Changed — Update Profile Picture: removed Reset button
+
+Removed the "Reset" button from the Update Profile Picture row in the Random Actions section of the Mobile Human Session Tool. The Assign Directory button already shows "Assigned Directory" when a path is set, making the separate Reset button redundant.
+
+---
+
 ## v1.2.231 — 2026-07-28
 
 ### Fixed — Double-tap-to-like fires too slowly, opening the Reel player instead of liking
