@@ -3225,13 +3225,15 @@ export async function findDmSendButton(serial: string): Promise<{ x: number; y: 
  * ignored (or does something unrelated), so old search text is never cleared
  * and the new username gets appended after it instead of replacing it.
  *
- * Fix strategy (node-first, no coordinates):
+ * Fix strategy (node-first, belt-and-suspenders):
  *  1. Dump UI and look for Instagram's search-bar clear button by resource-id
- *     (search_bar_delete_icon).  Tap it if present.
- *  2. If no clear button is visible (bar empty or button not yet rendered),
- *     read the EditText node's `text` attribute to measure the existing content
- *     and send KEYCODE_MOVE_END + N × KEYCODE_DEL to delete it character by
- *     character.  Capped at 120 keystrokes to avoid any runaway loop.
+ *     or label.  Tap it if found (best-effort — catches most builds).
+ *  2. ALWAYS follow up with KEYCODE_MOVE_END + 60 × KEYCODE_DEL regardless of
+ *     whether the X button was found or tapped.  Instagram's EditText `text`
+ *     attribute frequently reports "" in the UIAutomator dump even when the
+ *     field has visible text, so reading text-length and bailing on 0 silently
+ *     leaves stale text in place.  60 backspaces on an already-empty field are
+ *     harmless; on a field with text they always clear it.
  */
 export async function clearInstagramSearchBar(
   serial: string,
@@ -3242,33 +3244,33 @@ export async function clearInstagramSearchBar(
   const xml = await _uiDump(adb, serial).catch(() => "");
   if (!xml) return;
 
-  // Strategy 1 — node-based clear button (no coordinates needed)
+  // Strategy 1 — node-based clear button (best-effort, no coordinates needed)
   const clearBtn =
     _findByResId(xml,
       ":id/search_bar_delete_icon",
       ":id/search_bar_clear_button",
       ":id/clear_search_button",
       ":id/clear_button",
+      ":id/action_clear_text",
+      ":id/search_close_btn",
+      ":id/query_refinement",
     ) ??
-    _findElem(xml, "Clear search");
+    _findElem(xml, "Clear search", "Clear text", "Clear");
 
   if (clearBtn) {
     onLog?.(`Follow: tapping search bar clear button at (${clearBtn.x},${clearBtn.y})`);
     _adbTap(adb, serial, clearBtn.x, clearBtn.y);
     await _sleep(300);
-    return;
   }
 
-  // Strategy 2 — measure existing text from the EditText node and backspace over it
-  const etMatch = xml.match(/class="android\.widget\.EditText"[^>]*\btext="([^"]*)"/);
-  const existing = etMatch?.[1] ?? "";
-  if (existing.length === 0) return; // bar already empty — nothing to do
-
-  onLog?.(`Follow: search bar contains ${existing.length}-char leftover text — clearing with KEYCODE_DEL`);
+  // Strategy 2 — unconditional KEYCODE_MOVE_END + backspace sweep.
+  // Always runs whether or not Strategy 1 fired.  Instagram's EditText `text`
+  // attribute is unreliable (often "" even with visible text), so we never
+  // use it to decide whether to skip — we just always sweep.
+  onLog?.(`Follow: sending KEYCODE_MOVE_END + 60× KEYCODE_DEL to ensure search bar is clear`);
   runInputShell(serial, ["keyevent", "123"], "keyevent"); // KEYCODE_MOVE_END → cursor to end
   await _sleep(80);
-  const deleteCount = Math.min(existing.length + 3, 120); // +3 safety margin
-  for (let i = 0; i < deleteCount; i++) {
+  for (let i = 0; i < 60; i++) {
     runInputShell(serial, ["keyevent", "67"], "keyevent"); // KEYCODE_DEL (backspace)
   }
   await _sleep(200);

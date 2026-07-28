@@ -4,6 +4,20 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.236 — 2026-07-28
+
+### Fixed — Follow tool: previous search text not cleared before typing next username
+
+`clearInstagramSearchBar` had two silent failure modes that caused new usernames to be appended to the previous one (e.g. `@sadiayansa@corp3titneh`) instead of replacing it:
+
+1. **Strategy 2 bailed when `text=""` in the EditText node.** Instagram's search bar EditText frequently reports an empty `text` attribute in the UIAutomator dump even when the field visibly has content. The old code read that attribute, saw length 0, and returned early — leaving the old username untouched.
+
+2. **Strategy 1 (X button tap) had no backup.** If the X button resource-id didn't match any of the listed ids, Strategy 1 skipped silently and Strategy 2 then bailed for the reason above, so nothing cleared the field at all.
+
+**Fix:** Strategy 2 is now unconditional — it always sends `KEYCODE_MOVE_END` + 60 × `KEYCODE_DEL` regardless of what the EditText `text` attribute says and regardless of whether Strategy 1 found and tapped the X button. 60 backspaces on an already-empty field are harmless; on a field with text they always clear it. Strategy 1 also gained three additional resource-id variants (`action_clear_text`, `search_close_btn`, `query_refinement`) and two additional label fallbacks ("Clear text", "Clear") to cover more Instagram builds.
+
+---
+
 ## v1.2.235 — 2026-07-28
 
 ### Changed — Debugging Log: tighter column spacing, back button, renamed Copy/Export buttons
