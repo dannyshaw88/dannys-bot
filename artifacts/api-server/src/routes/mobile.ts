@@ -3049,28 +3049,55 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             await android.tap(serial, _caNode.x, _caNode.y);
             await sleepOrAbort(serial, 1500);
             await verifyStillInInstagram();
-            // Scroll the author's profile 1–10 times. The swipe itself should
-            // be a normal short gesture; the human-like pause belongs AFTER
-            // the scroll so the newly revealed profile posts can render.
-            const _caScrolls = 1 + Math.floor(Math.random() * 10);
-            onLog?.(`View Feed ${i + 1}/${count}: on author profile "${_caNode.name}" — scrolling ${_caScrolls}x…`);
-            const { w: _caW, h: _caH } = getScreenSize(serial);
-            for (let _caS = 0; _caS < _caScrolls; _caS++) {
-              if (isCycleAborted(serial)) throw new Error("cycle-aborted");
-              const _caSY1 = Math.round(_caH * 0.75);
-              const _caSY2 = Math.round(_caH * 0.30);
-              const _caDur = 350 + Math.round(Math.random() * 350);
-              await android.swipe(serial, Math.round(_caW / 2), _caSY1, Math.round(_caW / 2), _caSY2, _caDur);
-              const _caRenderWaitMs = 2500 + Math.round(Math.random() * 7500);
-              await sleepOrAbort(serial, _caRenderWaitMs);
-            }
-            // Return to the feed — one Back press from the author's profile.
-            onLog?.(`View Feed ${i + 1}/${count}: returning from author profile…`);
-            await android.pressBack(serial);
-            await sleepOrAbort(serial, 700);
-            await verifyStillInInstagram();
-            authorVisits++;
-            onLog?.(`View Feed ${i + 1}/${count}: ✓ author profile visited (${_caNode.name})`);
+            // Post-tap verification — dump the UI and confirm we actually
+            // navigated to a profile page.  Without this the code blindly
+            // logs "on author profile" even when the tap did nothing (stale
+            // node coords, mid-animation feed, collab sheet, etc.).
+            const _caChkXml = await android.dumpUi(serial).catch(() => "");
+            // Collab posts can open a Collaborators sheet instead of a profile.
+            const _caIsCollab =
+              _caChkXml.includes('text="Collaborators"') ||
+              _caChkXml.includes('clips_collab');
+            if (_caIsCollab) {
+              onLog?.(`View Feed ${i + 1}/${count}: click-author — Collaborators sheet appeared (collab post) — pressing Back, skipping`);
+              await android.pressBack(serial);
+              await sleepOrAbort(serial, 500);
+            } else {
+              // A profile page always has Follow/Following/Message buttons or a
+              // profile_header node.  If none of those are present we are still
+              // in the feed — the tap missed or the node was stale.
+              const _caOnProfile =
+                _caChkXml.includes('text="Follow"')       || _caChkXml.includes('content-desc="Follow"') ||
+                _caChkXml.includes('text="Following"')    || _caChkXml.includes('content-desc="Following"') ||
+                _caChkXml.includes('text="Message"')      || _caChkXml.includes('content-desc="Message"') ||
+                _caChkXml.includes('text="Unfollow"')     || _caChkXml.includes('content-desc="Unfollow"') ||
+                _caChkXml.includes('profile_header')      ||
+                _caChkXml.includes('action_bar_title');
+              if (!_caOnProfile) {
+                onLog?.(`View Feed ${i + 1}/${count}: click-author — tap did not open a profile (feed still visible) — skipping`);
+              } else {
+              // Confirmed on profile — scroll it.
+              const _caScrolls = 1 + Math.floor(Math.random() * 10);
+              onLog?.(`View Feed ${i + 1}/${count}: on author profile "${_caNode.name}" — scrolling ${_caScrolls}x…`);
+              const { w: _caW, h: _caH } = getScreenSize(serial);
+              for (let _caS = 0; _caS < _caScrolls; _caS++) {
+                if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+                const _caSY1 = Math.round(_caH * 0.75);
+                const _caSY2 = Math.round(_caH * 0.30);
+                const _caDur = 350 + Math.round(Math.random() * 350);
+                await android.swipe(serial, Math.round(_caW / 2), _caSY1, Math.round(_caW / 2), _caSY2, _caDur);
+                const _caRenderWaitMs = 2500 + Math.round(Math.random() * 7500);
+                await sleepOrAbort(serial, _caRenderWaitMs);
+              }
+              // Return to the feed — one Back press from the author's profile.
+              onLog?.(`View Feed ${i + 1}/${count}: returning from author profile…`);
+              await android.pressBack(serial);
+              await sleepOrAbort(serial, 700);
+              await verifyStillInInstagram();
+              authorVisits++;
+              onLog?.(`View Feed ${i + 1}/${count}: ✓ author profile visited (${_caNode.name})`);
+              } // end _caOnProfile check
+            } // end collab-sheet else
           }
           } // end ad-skip else
         } catch (e: any) {

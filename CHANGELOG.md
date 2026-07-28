@@ -4,6 +4,23 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.233 — 2026-07-28
+
+### Fixed — View Feed click-author logged false success when the tap didn't open a profile
+
+The click-author action in View Feed had no post-tap verification. After tapping the author's name node and waiting 1.5 s, it immediately logged "on author profile" and began scrolling regardless of whether the tap had actually navigated anywhere. If the author node's bounds were stale (the feed moved between the UIAutomator dump and the tap), or if the tap hit a collab post that opened a Collaborators sheet instead of a profile, the code would scroll whatever was on screen and log "✓ author profile visited" — a false success.
+
+**Fix:** after the tap, a fresh UIAutomator dump is taken and the result is checked before any scrolling starts:
+
+1. **Collaborators sheet** — if `text="Collaborators"` or `clips_collab` is present, the sheet is dismissed with Back and the visit is skipped (same guard already present in View Explore click-author).
+2. **Profile not opened** — a valid Instagram profile page always contains at least one of: `Follow`, `Following`, `Unfollow`, `Message` buttons, a `profile_header` node, or an `action_bar_title` node. If none of these are found the feed is still on screen, the tap missed, and the code logs "tap did not open a profile" and skips the scroll/back entirely rather than blindly proceeding.
+
+Only when the profile is positively confirmed does the scroll + back sequence run and the visit count increment.
+
+The same pattern (post-tap dump → collab-sheet check) was already present in View Explore click-author; this fix brings View Feed into line with it and adds the stronger "actually on a profile" signal.
+
+---
+
 ## v1.2.232 — 2026-07-28
 
 ### Fixed — Suggested Reels shelf causing false "popup dismissed" log entries and swipes landing on the wrong post
