@@ -4,6 +4,16 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.235 — 2026-07-28
+
+### Changed — Debugging Log: tighter column spacing, back button, renamed Copy/Export buttons
+
+- **Column spacing:** reduced the fixed width of the timestamp column (col A) and elapsed-time column (col B) from `6.5rem`/`5.5rem` to `5rem`/`5rem`, closing the gap between them and shifting the message column (col C) left accordingly.
+- **Back button:** added a `←` arrow button to the left of the Inspect button in the Debugging Log toolbar. Clicking it calls `window.history.back()` to return to the previous page visited in the app.
+- **Button labels:** "Copy Log" renamed to "Copy", "Export Log" renamed to "Export".
+
+---
+
 ## v1.2.234 — 2026-07-28
 
 ### Fixed — View Feed click-author logged false success when the tap didn't open a profile

@@ -8400,6 +8400,15 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
             <Button
               type="button"
               variant="secondary"
+              onClick={() => window.history.back()}
+              title="Go back to the previous page"
+              className="px-2"
+            >
+              ←
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
               onClick={onToggleInspect}
               disabled={!serial}
               title="Inspect mode — hover the phone mirror to see element info (Chrome DevTools style)"
@@ -8408,10 +8417,10 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
               {inspectMode ? "🔍 Inspecting…" : "🔍 Inspect"}
             </Button>
             <Button type="button" variant="secondary" onClick={handleCopyLog} disabled={lines.length === 0}>
-              {copied ? "Copied!" : "📄 Copy Log"}
+              {copied ? "Copied!" : "📄 Copy"}
             </Button>
             <Button type="button" variant="secondary" onClick={handleExportLog} disabled={lines.length === 0} title="Save the full log as a .txt file — browser Save As dialog will appear">
-              💾 Export Log
+              💾 Export
             </Button>
             <Button type="button" variant="secondary" onClick={onClear} disabled={lines.length === 0}>
               Clear
@@ -8473,8 +8482,8 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
 
               return (
                 <div key={i} className="flex min-w-0 py-[1px]">
-                  <span className="text-white whitespace-nowrap shrink-0 select-none w-[6.5rem]">[{ts}]</span>
-                  <span className="shrink-0 whitespace-nowrap text-white w-[5.5rem]">{dur ? `[${dur}]` : ''}</span>
+                  <span className="text-white whitespace-nowrap shrink-0 select-none w-[5rem]">[{ts}]</span>
+                  <span className="shrink-0 whitespace-nowrap text-white w-[5rem]">{dur ? `[${dur}]` : ''}</span>
                   <span className={`flex-1 min-w-0 break-words ${msgClass}`}>{msg}</span>
                 </div>
               );
