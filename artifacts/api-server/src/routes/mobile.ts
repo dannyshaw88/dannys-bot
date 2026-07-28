@@ -6703,7 +6703,32 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await android.tap(serial, Math.round((+m[1] + +m[3]) / 2), Math.round((+m[2] + +m[4]) / 2));
       onLog?.("Update Bio: tapped bio field");
     }
-    await sleepOrAbort(serial, 800 + Math.round(Math.random() * 200));
+    // Wait for the dedicated Bio edit screen to open (it's a separate screen from Edit Profile).
+    await sleepOrAbort(serial, 1400 + Math.round(Math.random() * 300));
+
+    // 3b. Re-dump the Bio edit screen and tap the EditText directly to establish
+    //     a proper input connection. On MIUI/Android 13 the previous tap (on the
+    //     Edit Profile page) opens the Bio screen but the input method service
+    //     hasn't bound to the new field yet — calling inputText immediately causes
+    //     a NullPointerException in InputShellCommand.sendText. Tapping the field
+    //     from the Bio screen's own dump forces Android to initialise the input
+    //     connection before we try to type.
+    {
+      const bioXml = await android.dumpUi(serial);
+      // Bio edit screen is identified by edit_bio_layout or prism_form_field_container.
+      if (bioXml.includes("edit_bio_layout") || bioXml.includes("prism_form_field_container")) {
+        // Tap the EditText (the actual text field, not the outer container).
+        const et = bioXml.match(/\bEditText\b[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+        if (et) {
+          await android.tap(serial, Math.round((+et[1] + +et[3]) / 2), Math.round((+et[2] + +et[4]) / 2));
+          onLog?.("Update Bio: confirmed focus on Bio edit screen");
+          await sleepOrAbort(serial, 500);
+        }
+      } else {
+        onLog?.("Update Bio: ⚠ Bio edit screen did not open — pressing Back");
+        await android.pressBack(serial); return;
+      }
+    }
 
     // 4. Select all existing text and replace with the new bio.
     {
@@ -6713,35 +6738,41 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // Select all — Android supports keycombination on API 26+.
         spawnSync(adb, ["-s", serial, "shell", "input", "keycombination",
           "KEYCODE_CTRL_LEFT", "KEYCODE_A"], { encoding: "utf8", timeout: 2000 });
-        await sleepOrAbort(serial, 300);
+        await sleepOrAbort(serial, 400);
       }
       await android.inputText(serial, bioText);
       onLog?.(`Update Bio: typed bio text (${bioText.length} chars)`);
     }
     await sleepOrAbort(serial, 800 + Math.round(Math.random() * 200));
 
-    // 5. Tap the Save / Submit button (top-right of the Edit Profile action bar).
+    // 5. Tap the "Finished" tick in the top-right of the Bio edit screen action bar,
+    //    then fall back to broader Save/Submit/Done matches for other IG builds.
     {
       const xml = await android.dumpUi(serial);
-      // Look for a Submit or Done button in the action bar area.
-      const m = xml.match(/desc="Submit"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ||
+      // Primary: action_bar_button_action with desc="Finished" (Bio edit screen — confirmed via dump).
+      // Secondary: desc="Submit" or text="Done" for other IG builds.
+      const m = xml.match(/id="[^"]*action_bar_button_action[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ||
+                xml.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^>]*id="[^"]*action_bar_button_action[^"]*"/) ||
+                xml.match(/desc="Finished"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ||
+                xml.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^>]*desc="Finished"/) ||
+                xml.match(/desc="Submit"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ||
                 xml.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^>]*desc="Submit"/) ||
                 xml.match(/text="Done"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ||
                 xml.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^>]*text="Done"/);
       if (m) {
         await android.tap(serial, Math.round((+m[1] + +m[3]) / 2), Math.round((+m[2] + +m[4]) / 2));
-        onLog?.("Update Bio: tapped Save/Submit button");
+        onLog?.("Update Bio: tapped Finished/Save button");
       } else {
-        // Fallback: tap the right side of the action bar (Submit is always there).
+        // Fallback: tap the right side of the action bar (Finished tick is always there).
         const ab = xml.match(/resource-id="[^"]*action_bar\b[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
         if (ab) {
           // Right ~10% of the action bar, vertically centered.
           const x = Math.round(+ab[3] - (+ab[3] - +ab[1]) * 0.07);
           const y = Math.round((+ab[2] + +ab[4]) / 2);
           await android.tap(serial, x, y);
-          onLog?.("Update Bio: tapped action bar right edge (Submit fallback)");
+          onLog?.("Update Bio: tapped action bar right edge (Finished fallback)");
         } else {
-          onLog?.("Update Bio: ⚠ could not find Save button — pressing Back without saving");
+          onLog?.("Update Bio: ⚠ could not find Finished button — pressing Back without saving");
           await android.pressBack(serial); return;
         }
       }
