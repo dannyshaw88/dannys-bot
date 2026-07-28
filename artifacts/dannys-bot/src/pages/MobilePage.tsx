@@ -3024,6 +3024,8 @@ export interface AutomationSettingsData {
   makePostLocalFolderNoRepeat: boolean;
   makePostLocalFolderRandom: boolean;
   makePostLocalFolderDeleteAfterUpload: boolean;
+  updateProfilePicEnabled: boolean;
+  updateProfilePicFolderPath: string;
   makePostUseChatGpt: boolean;
   makePostFixAiSlop: boolean;
   makePostMakeUnique: boolean;
@@ -3129,6 +3131,8 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   makePostLocalFolderNoRepeat: false,
   makePostLocalFolderRandom: false,
   makePostLocalFolderDeleteAfterUpload: false,
+  updateProfilePicEnabled: false,
+  updateProfilePicFolderPath: "",
   makePostUseChatGpt: false,
   makePostFixAiSlop: false,
   makePostMakeUnique: false,
@@ -3728,6 +3732,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             makePostLocalFolderNoRepeat: s.makePostLocalFolderNoRepeat,
             makePostLocalFolderRandom: s.makePostLocalFolderRandom,
             makePostLocalFolderDeleteAfterUpload: s.makePostLocalFolderDeleteAfterUpload,
+            updateProfilePicEnabled: s.updateProfilePicEnabled,
+            updateProfilePicFolderPath: s.updateProfilePicFolderPath,
             makePostUseChatGpt: s.makePostUseChatGpt,
             makePostFixAiSlop: s.makePostFixAiSlop,
             makePostMakeUnique: s.makePostMakeUnique,
@@ -4185,6 +4191,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'jitterVisitSaved',     label: 'Visit Saved %',               fields: ['visitSavedPctMin','visitSavedPctMax'] },
     { key: 'jitterVisitSettings',  label: 'Visit Random Settings %',    fields: ['visitSettingsPctMin','visitSettingsPctMax'] },
     { key: 'jitterAppSwitch',      label: 'App Switch %',               fields: ['appSwitchPctMin','appSwitchPctMax'] },
+    { key: 'jitterUpdateProfilePic', label: 'Update Profile Picture',   fields: ['updateProfilePicEnabled','updateProfilePicFolderPath'] },
   ]},
   { key: 'makePost',      label: 'Make a Post', sub: [
     { key: 'postEnabled',       label: 'Enabled',                       fields: ['makePostEnabled'] },
@@ -6062,6 +6069,7 @@ export function AutomationSettingsPanel({
           </div>
 
           {settings.randomJitterEnabled && (
+            <div className="space-y-3">
             <div className="flex items-start flex-wrap gap-6">
 
               {/* ── Activate % ── */}
@@ -6191,6 +6199,54 @@ export function AutomationSettingsPanel({
                     disabled={loading} />
                 </div>
               </div>
+
+            </div>
+
+            {/* ── Row 3: Update Profile Picture ── */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <input
+                type="checkbox"
+                id={`update-profile-pic-enabled-${slotIdx ?? 0}`}
+                checked={settings.updateProfilePicEnabled}
+                onChange={e => setSettings(s => ({ ...s, updateProfilePicEnabled: e.target.checked }))}
+                disabled={loading}
+                className="w-4 h-4 accent-primary cursor-pointer"
+              />
+              <label htmlFor={`update-profile-pic-enabled-${slotIdx ?? 0}`} className="text-sm text-foreground cursor-pointer select-none">Update Profile Picture</label>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={async () => {
+                  const api = (window as any).electronAPI;
+                  if (!api?.openFolderDialog) return;
+                  const result = await api.openFolderDialog(settings.updateProfilePicFolderPath || undefined);
+                  if (result?.canceled || !result?.folder) return;
+                  const updatedSettings = { ...settings, updateProfilePicFolderPath: result.folder };
+                  setSettings(() => updatedSettings);
+                  if (phone && slotIdx !== undefined) {
+                    fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/profile-pic-folder-path`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ path: result.folder }),
+                    }).catch(() => {});
+                  } else if (phone) {
+                    fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/automation-settings`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(updatedSettings),
+                    }).catch(() => {});
+                  }
+                }}
+                className="h-7 px-3 text-xs rounded border border-border bg-background hover:border-foreground/30 hover:bg-accent transition-colors shrink-0 font-medium text-foreground"
+              >
+                {settings.updateProfilePicFolderPath ? "Assigned Directory" : "Assign Directory"}
+              </button>
+              {settings.updateProfilePicFolderPath && (
+                <span className="text-xs text-muted-foreground truncate max-w-[300px]" title={settings.updateProfilePicFolderPath}>
+                  {settings.updateProfilePicFolderPath}
+                </span>
+              )}
+            </div>
 
             </div>
           )}

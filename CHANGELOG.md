@@ -4,6 +4,22 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.227 — 2026-07-28
+
+### Added — Random Actions: Update Profile Picture checkbox + Assign Directory button
+
+A new third row has been added to the Random Actions section of the Human Session Tool settings panel.
+
+**What's new:**
+- **Update Profile Picture** checkbox — enables/disables the profile picture update action. Saved to `updateProfilePicEnabled` in automation settings.
+- **Assign Directory** button — opens the native Windows folder-picker dialog (same `electronAPI.openFolderDialog` used by Make a Post). Once a folder is selected, the button label changes to **"Assigned Directory"** and the selected path is shown in light grey truncated text to the right of the button. The path is saved to `updateProfilePicFolderPath`.
+
+**Persistence:** the folder path saves via the dedicated `/slots/${slotIdx}/profile-pic-folder-path` endpoint (primary) and falls back to the general `automation-settings` endpoint — the same two-save pattern used by Make a Post. Both fields are included in Copy Settings under the Random Actions group.
+
+The automation logic for what the tool does with the assigned folder will be wired up separately. This change is UI + state only.
+
+---
+
 ## v1.2.226 — 2026-07-28
 
 ### Added — Installer: "Launch Aura Farming" checkbox on finish page
