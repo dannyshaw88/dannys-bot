@@ -6651,10 +6651,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   }
 
   // ── Update Bio ─────────────────────────────────────────────────────────────
+  /** Resolve Jarvee-style spin syntax: every {a|b|c} group is independently
+   *  replaced with a randomly chosen variant. Multiple groups are each rolled
+   *  separately, so "{Hi|Hey} {there|you}" produces one of four sentences. */
+  function resolveSpinSyntax(text: string): string {
+    return text.replace(/\{([^{}]+)\}/g, (_, inner: string) => {
+      const parts = inner.split("|");
+      return parts[Math.floor(Math.random() * parts.length)];
+    });
+  }
+
   // Navigates to the user's own profile → Edit profile → taps the Bio field →
   // clears it → types the supplied text → taps the Save/Submit button.
   async function runUpdateBio(serial: string, bioText: string, onLog?: (msg: string) => void): Promise<void> {
     if (!bioText.trim()) { onLog?.("Update Bio: ✗ bio text is empty — skipping"); return; }
+    // Resolve spin syntax before typing — each {a|b|c} group is rolled independently.
+    bioText = resolveSpinSyntax(bioText);
 
     // 1. Tap the profile tab (bottom-right, tab_avatar).
     {
