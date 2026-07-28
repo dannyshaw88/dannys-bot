@@ -816,6 +816,16 @@ export async function dismissInstagramInterstitials(
       const boundsRe = /(?:text|content-desc)="Dismiss"[^>]*bounds="\[(\d+),\d+\]\[(\d+),\d+\]"/i;
       const bm = xml.match(boundsRe);
       if (!bm || (Number(bm[2]) - Number(bm[1])) < 100) continue;
+      // Skip if the "Dismiss" belongs to a suggestion shelf — tapping it opens
+      // a "Hide" snackbar instead of clearing a real popup.
+      const isSuggestionShelf =
+        xml.includes("Suggested for you") ||
+        xml.includes("People you may know") ||
+        xml.includes("Suggested Reels") ||
+        xml.includes("Suggested reels") ||
+        xml.includes('"suggested_users"') ||
+        xml.includes("suggestion_unit");
+      if (isSuggestionShelf) continue;
     }
 
     _adbTap(adb, serial, pos.x, pos.y);

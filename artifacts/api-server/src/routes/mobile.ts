@@ -3093,12 +3093,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             _sugXml.includes("Suggested for you") ||
             _sugXml.includes("People you may know") ||
             _sugXml.includes("Suggested Reels") ||
+            _sugXml.includes("Suggested reels") ||
             _sugXml.includes('"suggested_users"') ||
             _sugXml.includes("suggestion_unit");
           if (_isSuggestionSlot) {
             const _sugSwipes = 1 + Math.floor(Math.random() * 10);
             onLog?.(`View Feed ${i + 1}/${count}: suggestion slot detected — swiping left ${_sugSwipes}×`);
-            const _sugY  = Math.round(h / 2);
+            // Find the shelf's actual Y from the UIAutomator bounds so the
+            // swipe lands on the carousel, not whatever post is at h/2.
+            let _sugY = Math.round(h * 0.35); // safe fallback: upper third
+            const _sugLabelRe = /(?:text|content-desc)="(?:Suggested for you|People you may know|Suggested [Rr]eels)"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/;
+            const _sugLabelBm = _sugXml.match(_sugLabelRe);
+            if (_sugLabelBm) {
+              _sugY = Math.round((Number(_sugLabelBm[2]) + Number(_sugLabelBm[4])) / 2);
+            } else {
+              const _sugContRe = /resource-id="[^"]*(?:suggested_users|suggestion_unit)[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/;
+              const _sugContBm = _sugXml.match(_sugContRe);
+              if (_sugContBm) {
+                _sugY = Math.round((Number(_sugContBm[2]) + Number(_sugContBm[4])) / 2);
+              }
+            }
             const _sugX1 = Math.round(w * 0.72);
             const _sugX2 = Math.round(w * 0.28);
             for (let _s = 0; _s < _sugSwipes; _s++) {
