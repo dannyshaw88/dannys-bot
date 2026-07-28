@@ -24,8 +24,8 @@ const ERROR_ACTIONS = new Set([
 ]);
 
 const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string | React.ReactNode }> = {
-  human_session_start:     { label: "Started",         cls: "text-black",         icon: <Power size={11} className="text-red-500" /> },
-  tool_start:              { label: "Started",         cls: "text-black",         icon: <Power size={11} className="text-red-500" /> },
+  human_session_start:     { label: "Started",         cls: "text-black",         icon: <Power size={11} className="text-red-400" /> },
+  tool_start:              { label: "Started",         cls: "text-black",         icon: <Power size={11} className="text-red-400" /> },
   tool_complete:           { label: "Complete",        cls: "text-black",         icon: <span className="text-emerald-600">✓</span> },
   verified:                { label: "Verified",        cls: "text-green-700",     icon: "✓" },
   verification_failed:     { label: "Verify Fail",     cls: "text-red-700",       icon: "✗" },
@@ -69,7 +69,7 @@ const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string |
   visit_profile:           { label: "Visit Profile",   cls: "text-sky-700",       icon: "◉" },
   view_profile_post:       { label: "View Profile Post", cls: "text-cyan-700",    icon: "◈" },
   view_profile_feed:       { label: "View Profile Feed", cls: "text-cyan-600",    icon: "≡" },
-  collision_prevented:     { label: "Collision Prevented", cls: "text-orange-600", icon: "⛔" },
+  collision_prevented:     { label: "Collision Prevented", cls: "text-red-500", icon: "⛔" },
 };
 
 const DEFAULT_COL_WIDTHS = { account: 160, device_name: 140, account_slot: 100, event: 150, detail: 200, timestamp: 220, trustscore: 108 };
