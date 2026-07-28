@@ -4,6 +4,37 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.238 — 2026-07-28
+
+### Fixed — View Feed like: double-tap now lands in the upper portion of the image, away from ad banners
+
+**Problem:** When the View Feed tool double-tapped a post to like it, the tap coordinate was calculated as a flat 300 px above the Like button. On shorter posts (landscape images, news-style cards) or posts where scrolling left the media in a different position, this 300 px offset could still land at the very bottom of the media area — exactly where Instagram places sponsored-post CTA banners ("Shop Now", "Install Now", "Learn More"). Tapping one of those banners navigated out of Instagram entirely, breaking the rest of the automation cycle.
+
+**Fix:** `findFeedActionIcons()` in `androidManager.ts` now also extracts the media container's bounding box from the same accessibility-tree dump it already fetches (zero extra dump cost). Two resource-ids are tried in order: `carousel_media_group` (multi-image carousel posts) then `media_group` (single-photo posts). A safety filter ensures only elements sitting **above** the Like button row are accepted, preventing false matches from unrelated cards.
+
+When media bounds are found (primary path), the double-tap is placed at a randomly-chosen point between **25 % and 45 % down from the top of the media** — the upper quarter of the image, well clear of any bottom banner. When bounds cannot be found (fallback path), the upward offset is now scaled proportionally to the Like button's Y position (`likeBtn.y × 0.35`) rather than a flat 300 px, so it adapts correctly to every screen size instead of being too small on larger phones.
+
+The same fix was applied to all three double-tap-to-like call sites that share this pattern: **View Feed**, **View Explore**, and **Inject Browsing**.
+
+The debug log now shows `double-tap using media bounds (32% into media)` when the primary path fires, making it easy to confirm the fix is active in the field.
+
+**Interface update:** `isVideoPost` and the new `mediaBounds` field were added to the `FeedActionIcons` TypeScript interface (both were previously computed and returned but not declared in the type, causing a latent type mismatch).
+
+---
+
+### Fixed — Update Profile Picture: "Choose from library" bottom sheet now detected and handled
+
+**Problem:** On some Instagram builds (observed Jul 2026 on the Xiomi Redmi A5 test device), tapping "Edit picture or avatar" on the Edit Profile screen no longer opens the multi-profile-picture (mpp) overlay directly. Instead, Instagram shows a bottom sheet with three options: **Choose from library**, **Import from Facebook**, and **Take Photo**. The automation code expected to find the `mpp_left` "+" add-slot button immediately after tapping, so when this sheet appeared instead the step logged `mpp_left (+) button not found` and aborted, leaving the profile photo unchanged.
+
+**Fix:** Step 6 of `runUpdateProfilePicture()` now takes a single accessibility-tree dump and checks for **both** layouts before deciding what to tap:
+
+- **Layout B (new bottom sheet):** detected by the presence of `update_profile_options_list`, `update_profile_picture_tab_layout`, or `desc="Choose from library"` in the dump. When found, the "Choose from library" button is located by its `content-desc` attribute and tapped. The flow then continues directly to step 7 (gallery picker check), bypassing the mpp path entirely.
+- **Layout A (original mpp overlay):** if neither sheet marker is present, the existing `mpp_left` tap runs as before — no change to that path.
+
+Both paths share the same post-tap code (gallery picker → select most recent photo → Finished → Back), so no duplication was needed. Detection uses a single dump, matching the project's rule against taking unnecessary extra dumps.
+
+---
+
 ## v1.2.237 — 2026-07-28
 
 ### Fixed — Debugging Log: all Reel-related lines now coloured red

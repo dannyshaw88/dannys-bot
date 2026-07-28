@@ -1574,6 +1574,16 @@ export interface FeedActionIcons {
    *  Callers must skip the like tap to avoid accidental unlike, but MUST still
    *  continue with ShareFeed/ShareDM actions — the icon row is fully present. */
   alreadyLiked?: boolean;
+  /** True when the post is a video/Reel in-feed. Callers must NOT double-tap
+   *  the media area on video posts (that opens the full-screen Reel player);
+   *  they must fall back to the heart-icon tap instead. */
+  isVideoPost?: boolean;
+  /** Bounding box of the post's media area, when Instagram exposes a
+   *  carousel_media_group or media_group node above the action bar. Callers
+   *  use this to place the double-tap in the upper portion of the image,
+   *  staying away from sponsored-post CTA banners that appear at the bottom
+   *  of the media content. */
+  mediaBounds?: { x1: number; y1: number; x2: number; y2: number };
 }
 
 /**
@@ -1990,7 +2000,35 @@ export async function findFeedActionIcons(serial: string, onLog?: (msg: string) 
     xml.includes(":id/video_player") ||
     xml.includes(":id/row_feed_video");
 
-  return { like, comment, shareFeed, shareDm, save, alreadyLiked, isVideoPost };
+  // Find the media container bounding box from the same dump (zero extra cost).
+  // Used by callers to place the double-tap in the upper portion of the image,
+  // away from sponsored-post CTA banners that Instagram overlays near the
+  // bottom of the media area.
+  //
+  // Two resource-ids cover the common cases:
+  //   carousel_media_group — multi-image / carousel posts
+  //   media_group          — single-photo posts
+  //
+  // Safety filter: the bounds must lie ABOVE the Like button row (y2 < like.y)
+  // to avoid accidentally matching an element that is not the post's main media
+  // (e.g. a suggested-users or ad card further down the hierarchy).
+  let mediaBounds: { x1: number; y1: number; x2: number; y2: number } | undefined;
+  {
+    const mediaRids = [":id/carousel_media_group", ":id/media_group"];
+    for (const rid of mediaRids) {
+      const b = _findBoundsByResId(xml, rid);
+      if (b && b.y2 < like.y) {
+        mediaBounds = b;
+        onLog?.(`[feed-icons] media bounds found via "${rid}": [${b.x1},${b.y1}][${b.x2},${b.y2}]`);
+        break;
+      }
+    }
+    if (!mediaBounds) {
+      onLog?.("[feed-icons] media bounds not found — double-tap will use proportional fallback offset");
+    }
+  }
+
+  return { like, comment, shareFeed, shareDm, save, alreadyLiked, isVideoPost, mediaBounds };
 }
 
 export interface ReelActionIcons {

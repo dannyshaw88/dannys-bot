@@ -2358,13 +2358,34 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 const useDoubleTap = Math.random() < 0.93;
                 try {
                   if (useDoubleTap) {
-                    // Target the centre of the post image, which sits above
-                    // the action bar.  Stepping ~300 px above like.y lands
-                    // reliably inside the image on all common phone sizes.
+                    // Place the double-tap in the upper quarter of the post
+                    // image to stay clear of sponsored-post CTA banners
+                    // (e.g. "Shop Now", "Install Now") that Instagram overlays
+                    // near the bottom of the media area.
+                    //
+                    // Primary path: use the media container's real bounding
+                    // box (returned by findFeedActionIcons from the same a11y
+                    // dump, so no extra dump cost) and tap at a random point
+                    // between 25 % and 45 % down from the top of the media.
+                    //
+                    // Fallback (bounds not found): scale the upward offset
+                    // proportionally to likeBtn.y so it stays in the upper half
+                    // of the image across all screen sizes, rather than a flat
+                    // 300 px that can land near the bottom of shorter images.
                     const { w: _fW } = getScreenSize(serial);
                     const dtX = Math.round(_fW / 2) + Math.round((Math.random() - 0.5) * 20);
-                    const dtY = likeBtn.y - 300 + Math.round((Math.random() - 0.5) * 40);
-                    logger.info({ serial, target: "image-double-tap", x: dtX, y: dtY }, "[check-feed] double-tap like");
+                    let dtY: number;
+                    if (icons.mediaBounds) {
+                      const mb = icons.mediaBounds;
+                      const mediaH = mb.y2 - mb.y1;
+                      const fraction = 0.25 + Math.random() * 0.20; // 25–45 % from top
+                      dtY = Math.round(mb.y1 + mediaH * fraction) + Math.round((Math.random() - 0.5) * 20);
+                      onLog?.(`View Feed ${i + 1}/${count}: double-tap using media bounds (${Math.round(fraction * 100)}% into media)`);
+                    } else {
+                      // Proportional fallback: ~35 % of likeBtn.y upward.
+                      dtY = likeBtn.y - Math.round(likeBtn.y * 0.35) + Math.round((Math.random() - 0.5) * 40);
+                    }
+                    logger.info({ serial, target: "image-double-tap", x: dtX, y: dtY, mediaBoundsUsed: !!icons.mediaBounds }, "[check-feed] double-tap like");
                     onLog?.(`View Feed ${i + 1}/${count}: double-tapping image at (${dtX},${dtY})…`);
                     await android.doubleTap(serial, dtX, dtY);
                   } else {
@@ -4321,7 +4342,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   if (useDoubleTap) {
                     const { w: _eW } = getScreenSize(serial);
                     const dtX = Math.round(_eW / 2) + Math.round((Math.random() - 0.5) * 20);
-                    const dtY = icons.like.y - 300 + Math.round((Math.random() - 0.5) * 40);
+                    let dtY: number;
+                    if (icons.mediaBounds) {
+                      const mb = icons.mediaBounds;
+                      const fraction = 0.25 + Math.random() * 0.20;
+                      dtY = Math.round(mb.y1 + (mb.y2 - mb.y1) * fraction) + Math.round((Math.random() - 0.5) * 20);
+                      onLog?.(`View Explore ${i + 1}/${scrollCount}: double-tap using media bounds (${Math.round(fraction * 100)}% into media)`);
+                    } else {
+                      dtY = icons.like.y - Math.round(icons.like.y * 0.35) + Math.round((Math.random() - 0.5) * 40);
+                    }
                     onLog?.(`View Explore ${i + 1}/${scrollCount}: double-tapping image at (${dtX},${dtY})…`);
                     await android.doubleTap(serial, dtX, dtY);
                   } else {
@@ -6516,13 +6545,46 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     await sleepOrAbort(serial, 1800 + Math.round(Math.random() * 400));
 
-    // 6. Tap the "+" (dotted-ring add slot) — mpp_left — on the expanded profile picture overlay.
+    // 6. Handle whichever UI Instagram shows after "Edit picture or avatar".
+    //
+    //    Layout A (older builds): the mpp overlay opens directly, showing a
+    //    dotted-ring "+" add slot (resource-id mpp_left). Tap it to open the
+    //    gallery picker.
+    //
+    //    Layout B (newer builds — observed Jul 2026): a bottom sheet appears
+    //    first with three options: "Choose from library", "Import from
+    //    Facebook", "Take Photo" (resource-id update_profile_options_list).
+    //    We must tap "Choose from library" to reach the gallery picker;
+    //    the mpp_left button is never shown in this path.
+    //
+    //    Both layouts are detected from one dump so no extra round-trip is
+    //    needed. After handling either path, execution falls through to step 7
+    //    (gallery picker check), which is the same regardless of which layout
+    //    was shown.
     {
       const xml = await android.dumpUi(serial);
-      const m = xml.match(/resource-id="[^"]*mpp_left[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-      if (!m) { onLog?.("Update Profile Pic: ✗ mpp_left (+) button not found"); await android.pressBack(serial); return; }
-      await android.tap(serial, Math.round((+m[1] + +m[3]) / 2), Math.round((+m[2] + +m[4]) / 2));
-      onLog?.("Update Profile Pic: tapped + (mpp_left) button");
+      const hasPhotoSheet =
+        xml.includes("update_profile_options_list") ||
+        xml.includes("update_profile_picture_tab_layout") ||
+        xml.includes('desc="Choose from library"');
+
+      if (hasPhotoSheet) {
+        // Layout B — tap "Choose from library".
+        const m = xml.match(/desc="Choose from library"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ||
+                  xml.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^>]*desc="Choose from library"/);
+        if (!m) {
+          onLog?.("Update Profile Pic: ✗ 'Choose from library' button not found in photo sheet");
+          await android.pressBack(serial); return;
+        }
+        await android.tap(serial, Math.round((+m[1] + +m[3]) / 2), Math.round((+m[2] + +m[4]) / 2));
+        onLog?.("Update Profile Pic: tapped 'Choose from library' (photo sheet layout)");
+      } else {
+        // Layout A — tap the "+" add slot (mpp_left).
+        const m = xml.match(/resource-id="[^"]*mpp_left[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+        if (!m) { onLog?.("Update Profile Pic: ✗ mpp_left (+) button not found"); await android.pressBack(serial); return; }
+        await android.tap(serial, Math.round((+m[1] + +m[3]) / 2), Math.round((+m[2] + +m[4]) / 2));
+        onLog?.("Update Profile Pic: tapped + (mpp_left) button");
+      }
     }
     await sleepOrAbort(serial, 1800 + Math.round(Math.random() * 400));
 
@@ -7033,7 +7095,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           if (useDoubleTap) {
             const { w: _ibW } = getScreenSize(serial);
             const dtX = Math.round(_ibW / 2) + Math.round((Math.random() - 0.5) * 20);
-            const dtY = icons.like.y - 300 + Math.round((Math.random() - 0.5) * 40);
+            let dtY: number;
+            if (icons.mediaBounds) {
+              const mb = icons.mediaBounds;
+              const fraction = 0.25 + Math.random() * 0.20;
+              dtY = Math.round(mb.y1 + (mb.y2 - mb.y1) * fraction) + Math.round((Math.random() - 0.5) * 20);
+              onLog?.(`Inject Browsing: double-tap using media bounds (${Math.round(fraction * 100)}% into media)`);
+            } else {
+              dtY = icons.like.y - Math.round(icons.like.y * 0.35) + Math.round((Math.random() - 0.5) * 40);
+            }
             onLog?.(`Inject Browsing: double-tapping image at (${dtX},${dtY})…`);
             await android.doubleTap(serial, dtX, dtY);
           } else {
