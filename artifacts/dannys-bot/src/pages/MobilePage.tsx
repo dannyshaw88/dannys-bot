@@ -6306,7 +6306,7 @@ export function AutomationSettingsPanel({
                     type="button"
                     disabled={loading || !settings.updateBioText.trim()}
                     onClick={() => setSpinPreview(resolveSpinSyntax(settings.updateBioText))}
-                    className="text-xs font-medium text-blue-500 hover:text-blue-400 disabled:opacity-40 disabled:cursor-not-allowed px-1 leading-none"
+                    className="text-xs font-medium text-sky-400 hover:text-sky-300 disabled:opacity-40 disabled:cursor-not-allowed px-1 leading-none"
                   >
                     Spin
                   </button>
