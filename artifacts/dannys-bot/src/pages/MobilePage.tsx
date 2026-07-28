@@ -6299,25 +6299,27 @@ export function AutomationSettingsPanel({
                   value={settings.updateBioActivatePctMax}
                   onChange={e => setSettings(s => ({ ...s, updateBioActivatePctMax: clamp4(Number(e.target.value)) }))}
                   disabled={loading} />
-                {/* Bio text */}
-                <Input
-                  type="text"
-                  maxLength={500}
-                  placeholder=""
-                  className="h-7 text-xs px-2 w-[120px] shrink-0"
-                  value={settings.updateBioText}
-                  onChange={e => setSettings(s => ({ ...s, updateBioText: e.target.value.slice(0, 500) }))}
-                  disabled={loading}
-                />
-                {/* Spin preview button */}
-                <button
-                  type="button"
-                  disabled={loading || !settings.updateBioText.trim()}
-                  onClick={() => setSpinPreview(resolveSpinSyntax(settings.updateBioText))}
-                  className="text-xs font-medium text-blue-500 hover:text-blue-400 disabled:opacity-40 disabled:cursor-not-allowed shrink-0 px-1"
-                >
-                  Spin
-                </button>
+                {/* Bio text + Spin button stacked */}
+                <div className="flex flex-col items-start gap-0.5 shrink-0">
+                  {/* Spin preview button — above the field, left-aligned */}
+                  <button
+                    type="button"
+                    disabled={loading || !settings.updateBioText.trim()}
+                    onClick={() => setSpinPreview(resolveSpinSyntax(settings.updateBioText))}
+                    className="text-xs font-medium text-blue-500 hover:text-blue-400 disabled:opacity-40 disabled:cursor-not-allowed px-1 leading-none"
+                  >
+                    Spin
+                  </button>
+                  <Input
+                    type="text"
+                    maxLength={500}
+                    placeholder=""
+                    className="h-7 text-xs px-2 w-[18.5ch]"
+                    value={settings.updateBioText}
+                    onChange={e => setSettings(s => ({ ...s, updateBioText: e.target.value.slice(0, 500) }))}
+                    disabled={loading}
+                  />
+                </div>
                 {/* Disable After Used */}
                 <div className="flex items-center gap-1.5">
                   <input
