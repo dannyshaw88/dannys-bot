@@ -4,6 +4,50 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.247 — 2026-07-28
+
+### Fix — Statistics page: Session Tool toggle now works for phone farm accounts
+
+The Session Tool toggle in the Tool Performance table was always showing a `—` dash for every phone farm slot, making it impossible to enable or disable the Human Session Tool from the stats table.
+
+**Root cause:** The old `SlotSessionToggle` component was designed for the legacy browser-profile system. It looked up a matching Profile row by username and then fetched that profile's `human_sessions` tool record via `/api/profiles/:id/tools`. Phone farm slots are not browser profiles — they have no matching Profile row in the database — so `profiles.find()` always returned `undefined` and the component immediately returned `—` without ever rendering a toggle.
+
+**Fix:** Replaced `SlotSessionToggle` with a new `MobileSlotSessionToggle` component that reads and writes the mobile automation `enabled` setting directly via the device slot API (`GET /api/mobile/devices/:serial/slots/:slotIdx/automation-settings` and `POST` to update). The toggle now reflects and controls the real on/off state of each slot's automation cycle, exactly as if you toggled it from the Human Session Tool settings panel on the Mobile page. Optimistic UI keeps the switch feeling instant while the API call completes in the background.
+
+---
+
+### Fix — Statistics page: column sort arrangement now persists across navigation
+
+Clicking a column header to sort the phone farm table by that stat (e.g. Likes, Follows, Cycles) correctly sorted the rows, but the sort choice was forgotten the moment you clicked away to another page and came back — the table always reset to its default unsorted state.
+
+**Root cause:** The `farmSortKey` and `farmSortDir` state variables were plain React `useState`, which resets to defaults on component unmount. All other farm table preferences (column order, widths, visibility) already used `usePersistentSetting`, which serialises to localStorage and survives navigation — but sort state was missed.
+
+**Fix:** Both `farmSortKey` and `farmSortDir` are now backed by `usePersistentSetting` (keys `farm_sort_key` / `farm_sort_dir`). Your chosen sort column and direction now survive page navigation, tab switches, and app restarts.
+
+---
+
+### New — Debug log: Stories tool entries now highlighted in cyan
+
+Stories-related log lines in the automation debug log were rendering in the default white system colour, making them visually indistinguishable from general system messages.
+
+**Fix:** Added a dedicated cyan colour (`text-cyan-400`) for Stories log entries. Both the `▶ Stories` header line and all sub-messages that follow it inherit the cyan colour — the same "active tool colour" inheritance system already used by Feed (orange), Follow (blue), Explore (green), Reels (red), and Make a Post / Random Actions (purple).
+
+---
+
+### New — Automation cycle: automatic debug screenshot capture
+
+Added a per-device screenshot capture system to help diagnose automation misbehaviour (wrong taps, unexpected navigation, clicks in the wrong place) without needing to watch the phone mirror in real time.
+
+**How it works:**
+- After every `tLog` call during an automation cycle, the server fires a background ADB screencap (`adb -s <serial> exec-out screencap -p`) and saves the PNG to `{install dir}/debug-screenshots/{serial}/`
+- Screenshots are named `{unix_timestamp}_{log_label}.png` so they sort chronologically by filename — open the folder, select all, and use Windows Photo Viewer's arrow keys to play through them like a slideshow in exact order
+- A hard cap of **50 screenshots per device** is enforced: the oldest file is deleted before each new save so the folder never exceeds 50 frames
+- When a new account's Human Session cycle starts, the entire folder for that device is cleared first, giving each account its own fresh 50-frame sequence
+- The captures are completely independent of the phone mirror UI — they work whether or not you are viewing the mirror, regardless of what tab is open, and even when the PC is unattended on the other side of the room
+- A failed screencap (ADB error, device offline) is silently swallowed and never disrupts the running cycle
+
+---
+
 ## v1.2.246 — 2026-07-28
 
 ### New — Statistics page: Session Tool toggle column
