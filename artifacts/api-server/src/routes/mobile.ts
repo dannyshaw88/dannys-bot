@@ -6730,22 +6730,45 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
     }
 
-    // 4. Select all existing text and replace with the new bio.
-    //    `adb shell input text` throws a NullPointerException in InputShellCommand.sendText
-    //    on this MIUI/Android 13 build for the Bio field regardless of focus state — the
-    //    bug is in the on-device `input` binary itself. Use typeViaOnscreenKeyboard instead,
-    //    which taps individual keys on the visible keyboard and never calls `input text`.
+    // 4. Inject the bio text using the same "direct adb paste" approach as the
+    //    Follow tool's search bar (android.inputText → adb shell input text).
+    //
+    //    Root cause of previous crashes: InputShellCommand.sendText calls
+    //    KeyCharacterMap.getEvents(chars) on-device. For printable ASCII this
+    //    always returns a valid array. For emoji or non-ASCII Unicode it returns
+    //    null, and the next line (events.length) throws a NullPointerException.
+    //    Follow only types @usernames (pure ASCII) so it never hits this.
+    //
+    //    Fix: split the resolved bio text into printable-ASCII runs and skip any
+    //    non-ASCII characters (emoji, symbols, accented chars) that would crash
+    //    sendText. Each ASCII segment is injected with inputText, which appends
+    //    at the current cursor position — multiple calls build the full string.
     {
       const tools = android.detectToolset();
       const adb = tools.adb.path ?? "";
       if (adb) {
-        // Select all existing content so the first typed character replaces it.
+        // Select all existing content so the first injected segment replaces it.
         spawnSync(adb, ["-s", serial, "shell", "input", "keycombination",
           "KEYCODE_CTRL_LEFT", "KEYCODE_A"], { encoding: "utf8", timeout: 2000 });
         await sleepOrAbort(serial, 400);
       }
-      await android.typeViaOnscreenKeyboard(serial, bioText, (msg) => onLog?.(`Update Bio: ${msg}`));
-      onLog?.(`Update Bio: typed bio text (${bioText.length} chars)`);
+
+      // Split into printable-ASCII runs vs non-ASCII runs.
+      const segments = bioText.match(/[\x20-\x7E]+|[^\x20-\x7E]+/g) ?? [];
+      let droppedChars = 0;
+      for (const seg of segments) {
+        if (/^[\x20-\x7E]+$/.test(seg)) {
+          // Printable ASCII — safe to inject, same path as Follow search bar.
+          await android.inputText(serial, seg);
+        } else {
+          // Non-ASCII (emoji, Unicode symbols, etc.) — skip to avoid NPE.
+          droppedChars += [...seg].length;
+        }
+      }
+      if (droppedChars > 0) {
+        onLog?.(`Update Bio: ⚠ ${droppedChars} non-ASCII character(s) skipped (emoji/Unicode crash adb input text on this device)`);
+      }
+      onLog?.(`Update Bio: injected bio text (${bioText.length} chars)`);
     }
     await sleepOrAbort(serial, 800 + Math.round(Math.random() * 200));
 

@@ -4,6 +4,16 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.244 — 2026-07-28
+
+### Fix — Update Bio: switch to segment-based adb paste (same method as Follow tool)
+
+**Root cause of all previous crashes**: `adb shell input text` calls `KeyCharacterMap.getEvents(chars)` on the device. For printable ASCII text — like the `@username` strings the Follow tool types into the search bar — this always returns a valid key-event array. For emoji or any non-ASCII Unicode character it returns `null`, and the very next line (`events.length`) throws the `NullPointerException` seen in the debug log. The Bio text field allows spin-syntax strings that can resolve to emoji or Unicode symbols, which is why Bio crashed every time while Follow never did.
+
+**What changed**: The bio injection now mirrors the Follow search-bar approach exactly — `adb shell input text` (direct adb paste), never the on-screen keyboard. The resolved bio text is split into printable-ASCII segments; each segment is injected with `inputText()` so they append together into the full string. Non-ASCII characters (emoji, Unicode symbols) that would crash `sendText` are skipped and counted; a warning log line reports how many were dropped so the user knows if any emoji were lost. The "Finished" tick-tap and Bio-screen focus logic from v1.2.242 are retained.
+
+---
+
 ## v1.2.243 — 2026-07-28
 
 ### Fix — Update Bio: switch to on-screen keyboard typing to avoid MIUI `adb shell input text` crash
