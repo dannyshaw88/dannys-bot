@@ -4,6 +4,28 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.231 — 2026-07-28
+
+### Fixed — Double-tap-to-like fires too slowly, opening the Reel player instead of liking
+
+The `doubleTap` function in `androidManager.ts` used an 80 ms on-device gap between the two taps (`sleep 0.08`). On Reel posts — both in the feed and in the full-screen Reel viewer — this was long enough for Instagram's gesture recogniser to register the first tap as a standalone single tap, which opens/pauses the Reel player before the second tap ever lands. The double-tap like never registered and the automation was left with the Reel player open, breaking everything that followed.
+
+**Root cause:** `input tap` on Android has its own execution overhead (~20–50 ms) before the shell returns and the sleep begins. The real on-device gap between the two tap-down events was consistently higher than 80 ms — enough to miss Instagram's double-tap recognition window on video content.
+
+**Fix:** reduced the inter-tap gap from `sleep 0.08` (80 ms) to `sleep 0.05` (50 ms) in the single `doubleTap` function. Because every double-tap in the app goes through this one function, the fix covers all five call sites simultaneously:
+
+| Tool | Where |
+|---|---|
+| View Feed | double-tap-to-like on feed posts |
+| View Explore | double-tap-to-like on Explore posts |
+| View Reels | double-tap-to-like in full-screen Reel viewer |
+| Inject Browsing | double-tap-to-like on profile posts |
+| Manual mirror | operator double-tap via the phone mirror UI |
+
+No behaviour change for photo posts — 50 ms is still well within Instagram's double-tap window and the like registers correctly. The fix only eliminates the gap that was causing the Reel player to open on video content.
+
+---
+
 ## v1.2.230 — 2026-07-28
 
 ### Changed — Random Actions: Update Profile Picture layout overhaul
