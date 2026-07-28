@@ -6302,11 +6302,11 @@ export function AutomationSettingsPanel({
                 {/* Bio text */}
                 <Input
                   type="text"
-                  maxLength={150}
+                  maxLength={500}
                   placeholder=""
-                  className="h-7 text-xs px-2 w-56 shrink-0"
+                  className="h-7 text-xs px-2 w-40 shrink-0"
                   value={settings.updateBioText}
-                  onChange={e => setSettings(s => ({ ...s, updateBioText: e.target.value.slice(0, 150) }))}
+                  onChange={e => setSettings(s => ({ ...s, updateBioText: e.target.value.slice(0, 500) }))}
                   disabled={loading}
                 />
                 {/* Spin preview button */}
