@@ -4,6 +4,42 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.228 — 2026-07-28
+
+### Changed — Random Actions: Update Profile Picture row fully reworked
+
+The Update Profile Picture row in the Human Session Tool (Random Actions section) has been redesigned and wired end-to-end into the automation cycle.
+
+**UI changes (MobilePage.tsx):**
+- Removed the old enable/disable checkbox. Replaced with **Activation %** min/max number inputs (same pattern as App Switch, Visit Profile, etc.) — labelled "Activation %" with a min-to-max range.
+- Added a **Reset** text button next to "Assign Directory" — clears the folder path on both the UI state and the dedicated file via the new `/profile-pic-folder-path` endpoint.
+- Added a **Disable After Used** checkbox — when ticked, the server writes 0/0 back to `updateProfilePicActivatePctMin/Max` in the saved slot config immediately after the action fires, so it won't roll again next cycle.
+- Row is now spaced 2px further from whatever is above it (`mt-2`).
+
+**New schema fields (automationSchema × 2, GET defaults × 2, slot GET/POST):**
+- `updateProfilePicActivatePctMin` / `updateProfilePicActivatePctMax` — replaces `updateProfilePicEnabled`
+- `updateProfilePicFolderPath` — unchanged name, now backed by a dedicated file (same pattern as Make a Post)
+- `updateProfilePicDisableAfterUsed` — controls the one-shot disable behaviour
+
+**New backend (mobile.ts):**
+- `getProfilePicFolderPath` / `setProfilePicFolderPath` / `clearProfilePicFolderPath` — dedicated-file helpers using a separate `_slot{N}_profile_pic.txt` file under `FOLDER_PATHS_DIR`, so the path survives Copy Settings and schema drift.
+- `POST /api/mobile/devices/:serial/slots/:slotIdx/profile-pic-folder-path` — sets or clears the dedicated file; also patches `mobile-instances.json` as a secondary store (same dual-write as Make a Post folder path).
+- `runUpdateProfilePicture(serial, folderPath, onLog)` — full automation function:
+  1. Reads most recent `.jpg/.png/.webp` from the assigned PC folder.
+  2. `adb push` → `/sdcard/DCIM/Camera/` + media-scan broadcast so gallery sees it immediately.
+  3. Taps profile tab (`tab_avatar`) → waits for profile page.
+  4. Taps "Edit profile" (`desc="Edit profile"`) → waits for `edit_profile_fields`.
+  5. Taps "Edit pictures" (`change_avatar_button`) → waits for `expanded_profile_pic_container`.
+  6. Taps the "+" edit button (`expanded_profile_picture_edit_button`) → waits for gallery (`gallery_picker_view`).
+  7. Taps the first/most-recent thumbnail (`gallery_grid_item_thumbnail`).
+  8. Taps "Finished" (`next_button_textview`).
+  9. Presses Back once to exit the edit-profile view.
+  10. Deletes the file from the PC folder (`fs.unlinkSync`).
+  11. Deletes the file from the device (`android.removeDeviceFile`).
+- Jitter dispatcher: rolls `updateProfilePicActivatePctMin/Max`, resolves folder from dedicated file (falling back to saved config), calls `runUpdateProfilePicture`, and if `updateProfilePicDisableAfterUsed` is set writes 0/0 back to the slot.
+
+---
+
 ## v1.2.227 — 2026-07-28
 
 ### Added — Random Actions: Update Profile Picture checkbox + Assign Directory button

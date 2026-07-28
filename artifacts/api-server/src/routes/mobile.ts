@@ -409,6 +409,28 @@ function setMakePostFolderPath(serial: string, slotIdx: number, folderPath: stri
   } catch { /* best effort */ }
 }
 
+function _profilePicFolderPathFile(serial: string, slotIdx: number): string {
+  return path.join(FOLDER_PATHS_DIR, `${serial.replace(/[^a-zA-Z0-9_\-]/g, "_")}_slot${slotIdx}_profile_pic.txt`);
+}
+
+/** Returns the persisted Update Profile Picture local folder path for this slot, or "" if none. */
+function getProfilePicFolderPath(serial: string, slotIdx: number): string {
+  try { return fs.readFileSync(_profilePicFolderPathFile(serial, slotIdx), "utf8").trim(); }
+  catch { return ""; }
+}
+
+function setProfilePicFolderPath(serial: string, slotIdx: number, folderPath: string): void {
+  if (!folderPath) return;
+  try {
+    fs.mkdirSync(FOLDER_PATHS_DIR, { recursive: true });
+    fs.writeFileSync(_profilePicFolderPathFile(serial, slotIdx), folderPath, "utf8");
+  } catch { /* best effort */ }
+}
+
+function clearProfilePicFolderPath(serial: string, slotIdx: number): void {
+  try { fs.unlinkSync(_profilePicFolderPathFile(serial, slotIdx)); } catch { /* best effort */ }
+}
+
 /**
  * Strip CRLF pairs injected by Windows ADB exec-out into binary streams.
  * On Windows, ADB exec-out can convert \n (0x0A) bytes to \r\n (0x0D 0x0A),
@@ -1307,6 +1329,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // App Switch: press square button, open SMS for random dwell, return to Instagram.
     appSwitchPctMin: z.number().min(0).max(100).default(0),
     appSwitchPctMax: z.number().min(0).max(100).default(0),
+    // Update Profile Picture — navigates to own profile → Edit profile → Edit pictures → gallery.
+    updateProfilePicActivatePctMin: z.number().min(0).max(100).default(0),
+    updateProfilePicActivatePctMax: z.number().min(0).max(100).default(0),
+    updateProfilePicFolderPath: z.string().default(""),
+    updateProfilePicDisableAfterUsed: z.boolean().default(false),
     // ── Check DMs — opens the inbox, scrolls, optionally taps a thread.
     checkDmEnabled: z.boolean().default(false),
     checkDmActivatePctMin: z.number().min(0).max(100).default(100),
@@ -1438,6 +1465,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       visitSavedPctMin: 0, visitSavedPctMax: 0,
       visitSettingsPctMin: 0, visitSettingsPctMax: 0,
       appSwitchPctMin: 0, appSwitchPctMax: 0,
+      updateProfilePicActivatePctMin: 0, updateProfilePicActivatePctMax: 0,
+      updateProfilePicFolderPath: "", updateProfilePicDisableAfterUsed: false,
       checkDmEnabled: false,
       checkDmActivatePctMin: 100, checkDmActivatePctMax: 100,
       checkDmScrollMin: 1, checkDmScrollMax: 3,
@@ -1552,6 +1581,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         visitSavedPctMin: 0, visitSavedPctMax: 0,
         visitSettingsPctMin: 0, visitSettingsPctMax: 0,
         appSwitchPctMin: 0, appSwitchPctMax: 0,
+        updateProfilePicActivatePctMin: 0, updateProfilePicActivatePctMax: 0,
+        updateProfilePicFolderPath: "", updateProfilePicDisableAfterUsed: false,
         checkDmEnabled: false,
         checkDmActivatePctMin: 100, checkDmActivatePctMax: 100,
         checkDmScrollMin: 1, checkDmScrollMax: 3,
@@ -1591,6 +1622,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // race that could overwrite mobile-instances.json with a stale "".
       const dedicatedFolderPath = getMakePostFolderPath(serial, slotIdx);
       if (dedicatedFolderPath) merged.makePostLocalFolderPath = dedicatedFolderPath;
+      const dedicatedProfilePicPath = getProfilePicFolderPath(serial, slotIdx);
+      if (dedicatedProfilePicPath) merged.updateProfilePicFolderPath = dedicatedProfilePicPath;
       logger.info(`[TOGGLE-DBG] GET slot settings  serial=${serial} slotIdx=${slotIdx} enabled=${merged.enabled}`);
       res.json(merged);
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to load slot automation settings" }); }
@@ -1639,6 +1672,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // be lost on restart.
       if (input.makePostLocalFolderPath) {
         setMakePostFolderPath(serial, slotIdx, input.makePostLocalFolderPath);
+      }
+      if (input.updateProfilePicFolderPath) {
+        setProfilePicFolderPath(serial, slotIdx, input.updateProfilePicFolderPath);
       }
       res.json({ ok: true });
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to save slot automation settings" }); }
@@ -5189,6 +5225,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // App Switch: press square button, open SMS for random 10–30 s, return to Instagram.
     appSwitchPctMin: z.number().min(0).max(100).default(0),
     appSwitchPctMax: z.number().min(0).max(100).default(0),
+    // Update Profile Picture
+    updateProfilePicActivatePctMin: z.number().min(0).max(100).default(0),
+    updateProfilePicActivatePctMax: z.number().min(0).max(100).default(0),
+    updateProfilePicFolderPath: z.string().default(""),
+    updateProfilePicDisableAfterUsed: z.boolean().default(false),
     // ── Activate Percentage — see AutomationSettings type for full comment.
     // Rolled once per tool per automation-cycle execution, gating whether
     // that tool runs at all THIS cycle, on top of its own enabled toggle.
@@ -6370,6 +6411,134 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     await sleepOrAbort(serial, 1500 + Math.round(Math.random() * 500));
 
     onLog?.("Random Jitter: ✓ returned to Instagram after app switch");
+  }
+
+  // ── Update Profile Picture ───────────────────────────────────────────────
+  // Picks the most recent image from the PC folder, pushes it to the device,
+  // navigates: profile tab → Edit profile → Edit pictures → + button →
+  // gallery thumbnail → Finished → Back, then deletes from PC and device.
+  async function runUpdateProfilePicture(serial: string, folderPath: string, onLog?: (msg: string) => void): Promise<void> {
+    // 1. Pick the most recent image file from the PC folder.
+    let files: { name: string; mtime: number }[] = [];
+    try {
+      files = fs.readdirSync(folderPath)
+        .filter(f => /\.(jpe?g|png|webp)$/i.test(f))
+        .map(f => ({ name: f, mtime: fs.statSync(path.join(folderPath, f)).mtimeMs }))
+        .sort((a, b) => b.mtime - a.mtime);
+    } catch (e: any) {
+      onLog?.(`Update Profile Pic: ✗ could not read folder: ${e?.message}`); return;
+    }
+    if (!files.length) { onLog?.("Update Profile Pic: ✗ no images found in folder"); return; }
+    const localFile = files[0].name;
+    const localPath = path.join(folderPath, localFile);
+    const devicePath = `/sdcard/DCIM/Camera/${localFile}`;
+
+    // 2. Push the image to the device and trigger a media scan.
+    try {
+      await android.pushFileToDevice(serial, localPath, devicePath);
+      onLog?.(`Update Profile Pic: pushed ${localFile} to device`);
+    } catch (e: any) {
+      onLog?.(`Update Profile Pic: ✗ push failed: ${e?.message}`); return;
+    }
+    const tools = android.detectToolset();
+    const adb = tools.adb.path ?? "";
+    if (adb) {
+      spawnSync(adb, ["-s", serial, "shell", "am", "broadcast",
+        "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
+        "-d", `file://${devicePath}`], { encoding: "utf8", timeout: 5000 });
+    }
+    await sleepOrAbort(serial, 1000);
+
+    // 3. Tap the profile tab (bottom-right, tab_avatar).
+    {
+      const xml = await android.dumpUi(serial);
+      const m = xml.match(/resource-id="[^"]*tab_avatar[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (!m) { onLog?.("Update Profile Pic: ✗ profile tab not found"); return; }
+      await android.tap(serial, Math.round((+m[1] + +m[3]) / 2), Math.round((+m[2] + +m[4]) / 2));
+      onLog?.("Update Profile Pic: tapped profile tab");
+    }
+    await sleepOrAbort(serial, 1800 + Math.round(Math.random() * 400));
+
+    // 4. Tap the "Edit profile" button.
+    {
+      const xml = await android.dumpUi(serial);
+      const m = xml.match(/desc="Edit profile"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ||
+                xml.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^>]*desc="Edit profile"/);
+      if (!m) { onLog?.("Update Profile Pic: ✗ Edit profile button not found"); await android.pressBack(serial); return; }
+      await android.tap(serial, Math.round((+m[1] + +m[3]) / 2), Math.round((+m[2] + +m[4]) / 2));
+      onLog?.("Update Profile Pic: tapped Edit profile");
+    }
+    await sleepOrAbort(serial, 1800 + Math.round(Math.random() * 400));
+
+    // 5. Verify Edit Profile page is loaded, then tap "Edit pictures".
+    {
+      const xml = await android.dumpUi(serial);
+      if (!xml.includes("edit_profile_fields") && !xml.includes("change_avatar_button")) {
+        onLog?.("Update Profile Pic: ✗ Edit Profile page did not load"); await android.pressBack(serial); return;
+      }
+      const m = xml.match(/resource-id="[^"]*change_avatar_button[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (!m) { onLog?.("Update Profile Pic: ✗ Edit pictures button not found"); await android.pressBack(serial); return; }
+      await android.tap(serial, Math.round((+m[1] + +m[3]) / 2), Math.round((+m[2] + +m[4]) / 2));
+      onLog?.("Update Profile Pic: tapped Edit pictures");
+    }
+    await sleepOrAbort(serial, 1800 + Math.round(Math.random() * 400));
+
+    // 6. Tap the "+" / pencil edit button on the expanded profile picture overlay.
+    {
+      const xml = await android.dumpUi(serial);
+      const m = xml.match(/resource-id="[^"]*expanded_profile_picture_edit_button[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (!m) { onLog?.("Update Profile Pic: ✗ profile picture edit button not found"); await android.pressBack(serial); return; }
+      await android.tap(serial, Math.round((+m[1] + +m[3]) / 2), Math.round((+m[2] + +m[4]) / 2));
+      onLog?.("Update Profile Pic: tapped profile picture edit button");
+    }
+    await sleepOrAbort(serial, 1800 + Math.round(Math.random() * 400));
+
+    // 7. Confirm the "Add profile pictures" gallery screen loaded.
+    {
+      const xml = await android.dumpUi(serial);
+      if (!xml.includes("gallery_picker_view") && !xml.includes("Add profile pictures")) {
+        onLog?.("Update Profile Pic: ✗ gallery picker did not open"); await android.pressBack(serial); return;
+      }
+      onLog?.("Update Profile Pic: gallery picker opened");
+    }
+
+    // 8. Tap the most recent photo — first gallery_grid_item_thumbnail in the dump.
+    {
+      const xml = await android.dumpUi(serial);
+      const m = xml.match(/resource-id="[^"]*gallery_grid_item_thumbnail[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (!m) { onLog?.("Update Profile Pic: ✗ gallery thumbnail not found"); await android.pressBack(serial); return; }
+      await android.tap(serial, Math.round((+m[1] + +m[3]) / 2), Math.round((+m[2] + +m[4]) / 2));
+      onLog?.("Update Profile Pic: selected most recent photo");
+    }
+    await sleepOrAbort(serial, 1000 + Math.round(Math.random() * 500));
+
+    // 9. Tap "Finished".
+    {
+      const xml = await android.dumpUi(serial);
+      const m = xml.match(/resource-id="[^"]*next_button_textview[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ||
+                xml.match(/text="Finished"[^/]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (!m) { onLog?.("Update Profile Pic: ✗ Finished button not found"); await android.pressBack(serial); return; }
+      await android.tap(serial, Math.round((+m[1] + +m[3]) / 2), Math.round((+m[2] + +m[4]) / 2));
+      onLog?.("Update Profile Pic: tapped Finished");
+    }
+    await sleepOrAbort(serial, 2500 + Math.round(Math.random() * 1000));
+
+    // 10. Press Back once to leave the edit-profile view.
+    await android.pressBack(serial);
+    await sleepOrAbort(serial, 800 + Math.round(Math.random() * 400));
+    onLog?.("Update Profile Pic: pressed Back");
+
+    // 11. Delete the file from the PC folder.
+    try { fs.unlinkSync(localPath); onLog?.(`Update Profile Pic: deleted ${localFile} from PC`); }
+    catch (e: any) { onLog?.(`Update Profile Pic: ⚠ could not delete PC file: ${e?.message}`); }
+
+    // 12. Delete the file from the device.
+    try {
+      await android.removeDeviceFile(serial, devicePath);
+      onLog?.(`Update Profile Pic: deleted ${localFile} from device`);
+    } catch (e: any) { onLog?.(`Update Profile Pic: ⚠ could not delete device file: ${e?.message}`); }
+
+    onLog?.("Update Profile Pic: ✓ done");
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -7824,6 +7993,46 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     res.json({ ok: true });
   });
 
+  // ── Update Profile Picture folder-path endpoint ──────────────────────────────
+  // POST with a non-empty path sets the dedicated file; POST with "" clears both.
+  app.post("/api/mobile/devices/:serial/slots/:slotIdx/profile-pic-folder-path", (req: Request, res: Response) => {
+    const serial  = req.params.serial as string;
+    const slotIdx = parseInt(req.params.slotIdx, 10);
+    if (isNaN(slotIdx) || slotIdx < 0) { res.status(400).json({ error: "Invalid slot index" }); return; }
+    const folderPath = typeof req.body?.path === "string" ? req.body.path.trim() : "";
+    if (!folderPath) {
+      // Explicit clear: remove dedicated file and wipe field from mobile-instances.json.
+      clearProfilePicFolderPath(serial, slotIdx);
+      try {
+        const cfg = loadInstanceConfigs();
+        const existing = cfg[serial]?.slotAutomation?.[String(slotIdx)] ?? {};
+        cfg[serial] = {
+          ...cfg[serial],
+          slotAutomation: {
+            ...cfg[serial]?.slotAutomation,
+            [String(slotIdx)]: { ...existing, updateProfilePicFolderPath: "" },
+          },
+        };
+        saveInstanceConfigs(cfg);
+      } catch { /* best effort */ }
+      res.json({ ok: true }); return;
+    }
+    setProfilePicFolderPath(serial, slotIdx, folderPath);
+    try {
+      const cfg = loadInstanceConfigs();
+      const existing = cfg[serial]?.slotAutomation?.[String(slotIdx)] ?? {};
+      cfg[serial] = {
+        ...cfg[serial],
+        slotAutomation: {
+          ...cfg[serial]?.slotAutomation,
+          [String(slotIdx)]: { ...existing, updateProfilePicFolderPath: folderPath },
+        },
+      };
+      saveInstanceConfigs(cfg);
+    } catch { /* best effort */ }
+    res.json({ ok: true });
+  });
+
   // Posted Media — list of local-folder filenames that have already been posted
   // for this serial (the "Do not repost the same image" no-repeat tracking list).
   app.get("/api/mobile/devices/:serial/posted-media", (req: Request, res: Response) => {
@@ -7962,6 +8171,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         visitSavedPctMin, visitSavedPctMax,
         visitSettingsPctMin, visitSettingsPctMax,
         appSwitchPctMin, appSwitchPctMax,
+        updateProfilePicActivatePctMin, updateProfilePicActivatePctMax,
+        updateProfilePicFolderPath: _updateProfilePicFolderPath,
+        updateProfilePicDisableAfterUsed,
         feedActivatePctMin, feedActivatePctMax,
         viewStoriesActivatePctMin, viewStoriesActivatePctMax,
         followActivatePctMin, followActivatePctMax,
@@ -8918,6 +9130,29 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               await runAppSwitch(serial, (msg) => tLog(`  ${msg}`));
               steps.push("jitter-app-switch");
               _jitterFired = true;
+            }
+            const updatePicChance = rollRange(updateProfilePicActivatePctMin, updateProfilePicActivatePctMax) / 100;
+            const resolvedPicFolder = getProfilePicFolderPath(serial, slotIdx) || _updateProfilePicFolderPath;
+            if (updatePicChance > 0 && Math.random() < updatePicChance && resolvedPicFolder) {
+              tLog("▶ Random Jitter: updating profile picture…");
+              await runUpdateProfilePicture(serial, resolvedPicFolder, (msg) => tLog(`  ${msg}`));
+              steps.push("jitter-update-profile-pic");
+              _jitterFired = true;
+              if (updateProfilePicDisableAfterUsed) {
+                // Write 0/0 back to the saved slot so it won't fire again next cycle.
+                try {
+                  const _cfg = loadInstanceConfigs();
+                  const _existing = _cfg[serial]?.slotAutomation?.[String(slotIdx)] ?? {};
+                  _cfg[serial] = {
+                    ..._cfg[serial],
+                    slotAutomation: {
+                      ..._cfg[serial]?.slotAutomation,
+                      [String(slotIdx)]: { ..._existing, updateProfilePicActivatePctMin: 0, updateProfilePicActivatePctMax: 0 },
+                    },
+                  };
+                  saveInstanceConfigs(_cfg);
+                } catch { /* best effort */ }
+              }
             }
             if (!_jitterFired) {
               tLog("▶ Random Jitter: activated — both action rolls missed this cycle");
