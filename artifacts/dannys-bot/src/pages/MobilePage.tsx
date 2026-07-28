@@ -8550,6 +8550,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
               if      (/▶ View Explore/.test(msg))    currentTool = 'explore';
               else if (/▶ View Feed/.test(msg))       currentTool = 'feed';
               else if (/▶ View Reels/.test(msg))      currentTool = 'reels';
+              else if (/▶.*[Ss]tories/.test(msg))     currentTool = 'stories';
               else if (/▶ Make a Post/.test(msg))     currentTool = 'makepost';
               else if (/▶ Follow Users/.test(msg))    currentTool = 'follow';
               else if (/▶ Random Actions/.test(msg))  currentTool = 'randomactions';
@@ -8566,6 +8567,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
               else if (/\bView Explore\b|▶ View Explore|[Ee]xplore/.test(msg))
                                                                     msgClass = 'text-green-400';
               else if (/[Rr]eel/.test(msg))                          msgClass = 'text-rose-500';
+              else if (/▶.*[Ss]tories|\b[Ss]tories\b/.test(msg))  msgClass = 'text-cyan-400';
               else if (/\bMake a Post\b|▶ Make a Post/.test(msg))  msgClass = 'text-purple-400';
               else if (/\bRandom Actions\b|▶ Random Actions|^jitter-/.test(msg)) msgClass = 'text-purple-400';
               else if (/Switching to Instagram account|account switcher|Long-pressing profile tab|Profile tab found/.test(msg))
@@ -8579,6 +8581,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
               else if (currentTool === 'explore')  msgClass = 'text-green-400';
               else if (currentTool === 'feed')     msgClass = 'text-orange-400';
               else if (currentTool === 'reels')    msgClass = 'text-rose-500';
+              else if (currentTool === 'stories')  msgClass = 'text-cyan-400';
               else if (currentTool === 'makepost')      msgClass = 'text-purple-400';
               else if (currentTool === 'follow')        msgClass = 'text-blue-400';
               else if (currentTool === 'randomactions') msgClass = 'text-purple-400';

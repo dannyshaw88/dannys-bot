@@ -386,6 +386,47 @@ const FOLDER_PATHS_DIR: string = process.env.EQUINOX_DATA_DIR
   : path.join(path.dirname(path.resolve(process.argv[1] ?? ".")), "..", "mobile-folder-paths");
 try { fs.mkdirSync(FOLDER_PATHS_DIR, { recursive: true }); } catch { /* already exists */ }
 
+// Debug screenshots — one folder per device serial, max 50 PNG files, cleared
+// when a new account's Human Session cycle starts.  Named by Unix timestamp so
+// they sort chronologically and can be played back like a movie.
+const SCREENSHOTS_DIR: string = process.env.EQUINOX_DATA_DIR
+  ? path.join(process.env.EQUINOX_DATA_DIR, "debug-screenshots")
+  : path.join(path.dirname(path.resolve(process.argv[1] ?? ".")), "..", "debug-screenshots");
+
+async function captureDebugScreenshot(serial: string, label: string): Promise<void> {
+  try {
+    const adb = android.detectToolset().adb.path;
+    if (!adb) return;
+    const dir = path.join(SCREENSHOTS_DIR, serial.replace(/[^a-zA-Z0-9_\-]/g, "_"));
+    await fsPromises.mkdir(dir, { recursive: true });
+    // Enforce 50-file cap: delete oldest before writing the new one.
+    const existing = (await fsPromises.readdir(dir))
+      .filter(f => f.endsWith(".png"))
+      .sort(); // timestamp prefix → chronological order
+    for (let i = 0; i <= existing.length - 50; i++) {
+      await fsPromises.unlink(path.join(dir, existing[i])).catch(() => {});
+    }
+    const ts = Date.now();
+    const safeName = label.replace(/[^a-zA-Z0-9\s_\-]/g, "").replace(/\s+/g, "_").slice(0, 60);
+    const filename = `${ts}_${safeName}.png`;
+    await new Promise<void>((resolve) => {
+      const child = spawn(adb, ["-s", serial, "exec-out", "screencap", "-p"]);
+      const chunks: Buffer[] = [];
+      child.stdout.on("data", (d: Buffer) => chunks.push(d));
+      child.on("close", async () => {
+        const buf = Buffer.concat(chunks);
+        if (buf.length > 1000) { // ignore empty / error responses
+          await fsPromises.writeFile(path.join(dir, filename), buf).catch(() => {});
+        }
+        resolve();
+      });
+      child.on("error", () => resolve());
+    });
+  } catch {
+    // Never let a screenshot failure affect the automation cycle.
+  }
+}
+
 function _folderPathFile(serial: string, slotIdx: number): string {
   return path.join(FOLDER_PATHS_DIR, `${serial.replace(/[^a-zA-Z0-9_\-]/g, "_")}_slot${slotIdx}.txt`);
 }
@@ -8388,6 +8429,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const secs = (totalSec % 60).toFixed(1);
       const elapsed = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
       sendVideoLog(serial, `[${elapsed}] ${msg}`);
+      // Fire-and-forget: screenshot after every log entry so the user can
+      // play back exactly what the phone was doing at each step.
+      captureDebugScreenshot(serial, msg).catch(() => {});
     };
     try {
       const {
@@ -8509,6 +8553,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         sourceType: "phone",
         timestamp: new Date().toISOString(),
       }).catch(() => {});
+
+      // Clear debug screenshots from the previous account's cycle so the new
+      // account starts fresh with its own 50-frame sequence.
+      await fsPromises.rm(
+        path.join(SCREENSHOTS_DIR, serial.replace(/[^a-zA-Z0-9_\-]/g, "_")),
+        { recursive: true, force: true },
+      ).catch(() => {});
 
       // 1. Power on the phone.
       tLog("▶ Waking screen…");
