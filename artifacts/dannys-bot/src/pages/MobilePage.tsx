@@ -6207,11 +6207,11 @@ export function AutomationSettingsPanel({
             </div>
 
             {/* ── Row 3: Update Profile Picture ── */}
-            <div className="mt-2 space-y-1.5">
-              {/* Inputs + controls aligned to bottom of column */}
-              <div className="flex items-end gap-2 flex-wrap">
-                {/* Title + inputs column — title centers above just these fields */}
-                <div className="space-y-1.5 w-fit">
+            <div className="mt-2">
+              {/* No flex-wrap: controls always stay next to max field */}
+              <div className="flex items-center gap-2">
+                {/* shrink-0 column: title centered above just the min/max inputs */}
+                <div className="shrink-0 space-y-1.5">
                   <div className="flex items-center justify-center gap-2">
                     <span className="text-sm text-muted-foreground select-none">Update Profile Picture</span>
                     <span className="text-sm text-muted-foreground select-none">Activation %</span>
