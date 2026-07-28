@@ -1,5 +1,33 @@
 ; Custom NSIS hooks for Aura Farming installer
 ;
+; Finish page: "Launch Aura Farming" checkbox
+; ────────────────────────────────────────────
+; electron-builder exposes runAfterFinish:true but relies on the $launchLink
+; variable (a start-menu .lnk path) which can be empty or stale on first
+; install.  Defining customFinishPage here gives us full control: we launch
+; the exe directly from $INSTDIR so the checkbox always works.
+;
+; The Function must be at file scope (outside any macro) so MUI2 can resolve
+; it as a valid callback.  The !ifndef BUILD_UNINSTALLER guard keeps it out
+; of the uninstaller binary where it is not needed.
+;
+!ifndef BUILD_UNINSTALLER
+  ; Launch the app directly from $INSTDIR — avoids relying on $launchLink,
+  ; which is a start-menu .lnk path that may not exist on first install.
+  ; StdUtils.ExecShellAsUser de-elevates the launch so the user's session
+  ; token is used even when the installer ran with elevated privileges.
+  Function LaunchAuraFarming
+    ${StdUtils.ExecShellAsUser} $0 "$INSTDIR\Aura Farming.exe" "open" ""
+  FunctionEnd
+
+  !macro customFinishPage
+    !define MUI_FINISHPAGE_RUN_TEXT "Launch Aura Farming"
+    !define MUI_FINISHPAGE_RUN_FUNCTION "LaunchAuraFarming"
+    !define MUI_FINISHPAGE_RUN
+    !insertmacro MUI_PAGE_FINISH
+  !macroend
+!endif
+
 ; Desktop shortcut strategy
 ; ─────────────────────────
 ; CreateShortcut overwrites the .lnk file in-place on every install.

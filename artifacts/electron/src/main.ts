@@ -127,7 +127,7 @@ function getTrayIconPath(): string {
   return getIconPath();
 }
 
-function buildSplashHtml(label: string, iconDataUrl: string): string {
+function buildSplashHtml(label: string, iconDataUrl: string, version: string): string {
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -142,13 +142,14 @@ html,body{
 img{width:88px;height:88px;margin-bottom:28px;border-radius:16px;}
 .title{font-size:22px;font-weight:700;color:#0f172a;letter-spacing:0.02em;margin-bottom:6px;}
 .label{font-size:11px;color:rgba(0,0,0,0.38);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:28px;}
-.bar-track{width:220px;height:3px;background:rgba(0,0,0,0.10);border-radius:999px;overflow:hidden;}
+.bar-track{width:220px;height:3px;background:rgba(0,0,0,0.10);border-radius:999px;overflow:hidden;margin-bottom:14px;}
 .bar-fill{
   height:100%;width:45%;
   background:linear-gradient(90deg,transparent,#334155,transparent);
   border-radius:999px;
   animation:sweep 1.6s ease-in-out infinite;
 }
+.version{font-size:11px;color:#c0c0c0;letter-spacing:0.04em;}
 @keyframes sweep{
   0%{transform:translateX(-200%);}
   100%{transform:translateX(620%);}
@@ -159,6 +160,7 @@ img{width:88px;height:88px;margin-bottom:28px;border-radius:16px;}
   <div class="title">Aura Farming</div>
   <div class="label">${label}</div>
   <div class="bar-track"><div class="bar-fill"></div></div>
+  <div class="version">v${version}</div>
 </body></html>`;
 }
 
@@ -192,7 +194,7 @@ function createSplash(label = "Loading…"): void {
   });
 
   splashWin.loadURL(
-    `data:text/html;charset=utf-8,${encodeURIComponent(buildSplashHtml(label, splashIconDataUrl))}`
+    `data:text/html;charset=utf-8,${encodeURIComponent(buildSplashHtml(label, splashIconDataUrl, app.getVersion()))}`
   );
   splashWin.once("ready-to-show", () => splashWin?.show());
 }
