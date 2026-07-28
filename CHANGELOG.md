@@ -4,7 +4,7 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
-## v1.2.228 — 2026-07-28
+## v1.2.228 — 2026-07-28 (rev 2 — installer build fix)
 
 ### Changed — Random Actions: Update Profile Picture row fully reworked
 

@@ -14,10 +14,11 @@
 !ifndef BUILD_UNINSTALLER
   ; Launch the app directly from $INSTDIR — avoids relying on $launchLink,
   ; which is a start-menu .lnk path that may not exist on first install.
-  ; StdUtils.ExecShellAsUser de-elevates the launch so the user's session
-  ; token is used even when the installer ran with elevated privileges.
+  ; ExecShell is a built-in NSIS command (no plugin required) that goes
+  ; through ShellExecuteEx, which handles the UAC de-elevation correctly
+  ; in most Windows sessions without requiring the StdUtils plugin.
   Function LaunchAuraFarming
-    ${StdUtils.ExecShellAsUser} $0 "$INSTDIR\Aura Farming.exe" "open" ""
+    ExecShell "" "$INSTDIR\Aura Farming.exe"
   FunctionEnd
 
   !macro customFinishPage
