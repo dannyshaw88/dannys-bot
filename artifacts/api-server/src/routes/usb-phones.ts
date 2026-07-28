@@ -518,4 +518,19 @@ function downloadFile(url: string, destPath: string, redirectsLeft = 5): Promise
   });
 }
 
+/**
+ * Returns a filesystem-safe label for a device — uses the human-readable
+ * market name (e.g. "Redmi_Note_12") or model when available, falls back to
+ * the sanitized serial. Used as the per-device subfolder name under
+ * debug-screenshots/ so the folders read like "Redmi_Note_12" not a serial.
+ */
+export function getDeviceLabel(serial: string): string {
+  const cached = devicePropsCache.get(serial);
+  const name = cached?.marketName?.trim() || cached?.model?.trim();
+  if (name) {
+    return name.replace(/[^a-zA-Z0-9_\-]/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "");
+  }
+  return serial.replace(/[^a-zA-Z0-9_\-]/g, "_");
+}
+
 export default router;

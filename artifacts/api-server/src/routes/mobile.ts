@@ -11,6 +11,7 @@ import { WebSocketServer } from "ws";
 import * as android from "../mobile/androidManager";
 import * as proxyRelay from "../mobile/proxyRelay";
 import * as sessionRecorder from "../mobile/sessionRecorder";
+import { getDeviceLabel } from "./usb-phones";
 import { fixAiSlop, cleanupAiSlopTemp } from "../instagram/fixAiSlop";
 // NOTE: src/mobile/scrcpyServer.ts implements a real scrcpy-server protocol
 // client that was meant to replace the screenrecord-based mirror below (to
@@ -397,7 +398,7 @@ async function captureDebugScreenshot(serial: string, label: string): Promise<vo
   try {
     const adb = android.detectToolset().adb.path;
     if (!adb) return;
-    const dir = path.join(SCREENSHOTS_DIR, serial.replace(/[^a-zA-Z0-9_\-]/g, "_"));
+    const dir = path.join(SCREENSHOTS_DIR, getDeviceLabel(serial));
     await fsPromises.mkdir(dir, { recursive: true });
     // Enforce 50-file cap: delete oldest before writing the new one.
     const existing = (await fsPromises.readdir(dir))
@@ -6548,23 +6549,29 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (!files.length) { onLog?.("Update Profile Pic: ✗ no images found in folder"); return; }
     const localFile = files[0].name;
     const localPath = path.join(folderPath, localFile);
-    const devicePath = `/sdcard/DCIM/Camera/${localFile}`;
 
-    // 2. Push the image to the device and trigger a media scan.
+    // 2. Push the image to the device.
+    // pushFileToDevice builds its own on-device path (equinox_<ts>_<name>) and
+    // returns it — capture the actual path so removeDeviceFile targets the
+    // correct file.  Previously the caller constructed a separate devicePath
+    // variable and passed it as the fileName argument, which caused the file
+    // to land at a completely different mangled path, making the removeDeviceFile
+    // call a no-op (it tried to delete a file that never existed at that path).
+    let actualDevicePath: string;
     try {
-      await android.pushFileToDevice(serial, localPath, devicePath);
+      actualDevicePath = await android.pushFileToDevice(serial, localPath, localFile);
       onLog?.(`Update Profile Pic: pushed ${localFile} to device`);
     } catch (e: any) {
       onLog?.(`Update Profile Pic: ✗ push failed: ${e?.message}`); return;
     }
-    const tools = android.detectToolset();
-    const adb = tools.adb.path ?? "";
-    if (adb) {
-      spawnSync(adb, ["-s", serial, "shell", "am", "broadcast",
-        "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
-        "-d", `file://${devicePath}`], { encoding: "utf8", timeout: 5000 });
-    }
     await sleepOrAbort(serial, 1000);
+
+    // Steps 3–10: navigation.  Wrapped in try-finally so the device file is
+    // always removed regardless of whether navigation succeeds or bails early
+    // at any step — previously every early `return` left the image on the
+    // phone's storage indefinitely.
+    let uploadSucceeded = false;
+    try {
 
     // 3. Tap the profile tab (bottom-right, tab_avatar).
     {
@@ -6678,15 +6685,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     await sleepOrAbort(serial, 800 + Math.round(Math.random() * 400));
     onLog?.("Update Profile Pic: pressed Back");
 
-    // 11. Delete the file from the PC folder.
+    uploadSucceeded = true;
+
+    } finally {
+      // Always delete from device — regardless of whether any navigation step
+      // failed and returned early.  The image was already pushed in step 2 so
+      // it must be cleaned up unconditionally to avoid accumulating files on
+      // the phone's storage.
+      try {
+        await android.removeDeviceFile(serial, actualDevicePath!);
+        onLog?.(`Update Profile Pic: deleted ${localFile} from device`);
+      } catch (e: any) { onLog?.(`Update Profile Pic: ⚠ could not delete device file: ${e?.message}`); }
+    }
+
+    if (!uploadSucceeded) return;
+
+    // 11. Delete the file from the PC folder (only on successful upload).
     try { fs.unlinkSync(localPath); onLog?.(`Update Profile Pic: deleted ${localFile} from PC`); }
     catch (e: any) { onLog?.(`Update Profile Pic: ⚠ could not delete PC file: ${e?.message}`); }
-
-    // 12. Delete the file from the device.
-    try {
-      await android.removeDeviceFile(serial, devicePath);
-      onLog?.(`Update Profile Pic: deleted ${localFile} from device`);
-    } catch (e: any) { onLog?.(`Update Profile Pic: ⚠ could not delete device file: ${e?.message}`); }
 
     onLog?.("Update Profile Pic: ✓ done");
   }
@@ -8557,7 +8573,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Clear debug screenshots from the previous account's cycle so the new
       // account starts fresh with its own 50-frame sequence.
       await fsPromises.rm(
-        path.join(SCREENSHOTS_DIR, serial.replace(/[^a-zA-Z0-9_\-]/g, "_")),
+        path.join(SCREENSHOTS_DIR, getDeviceLabel(serial)),
         { recursive: true, force: true },
       ).catch(() => {});
 
@@ -10418,6 +10434,52 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       });
       res.end(frame);
     } catch { res.status(500).end(); }
+  });
+
+  // ── Debug screenshots ZIP download ───────────────────────────────────────
+  // Returns a ZIP archive containing all saved debug screenshots for this
+  // device plus the full server debug log.  Lets devs grab a complete
+  // snapshot for offline analysis with a single button click.
+  app.get("/api/mobile/devices/:serial/debug-screenshots.zip", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const label  = getDeviceLabel(serial);
+      const dir    = path.join(SCREENSHOTS_DIR, label);
+
+      const AdmZip = (await import("adm-zip")).default;
+      const zip = new AdmZip();
+
+      // Add all PNGs from the device's screenshot folder (sorted chronologically).
+      let screenshotCount = 0;
+      if (fs.existsSync(dir)) {
+        const files = fs.readdirSync(dir).filter(f => f.endsWith(".png")).sort();
+        for (const f of files) {
+          const buf = fs.readFileSync(path.join(dir, f));
+          zip.addFile(`screenshots/${f}`, buf);
+          screenshotCount++;
+        }
+      }
+
+      // Add the server debug log.
+      const logPath = (global as any).__SERVER_LOG_PATH as string | undefined;
+      if (logPath && fs.existsSync(logPath)) {
+        zip.addFile("aura-farming-debug.log", fs.readFileSync(logPath));
+      }
+
+      if (screenshotCount === 0 && (!logPath || !fs.existsSync(logPath))) {
+        res.status(404).json({ error: "No debug screenshots or log found for this device" });
+        return;
+      }
+
+      const zipBuf  = zip.toBuffer();
+      const filename = `debug-${label}-${Date.now()}.zip`;
+      res.set({
+        "Content-Type":        "application/zip",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Length":      String(zipBuf.length),
+      });
+      res.end(zipBuf);
+    } catch (e: any) { res.status(500).json({ error: e?.message }); }
   });
 
   // ── Mirror live state ─────────────────────────────────────────────────────

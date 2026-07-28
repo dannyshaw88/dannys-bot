@@ -8345,6 +8345,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
   const [copiedCapture,  setCopiedCapture]  = React.useState(false);
   const [lastCapture,    setLastCapture]    = React.useState<string[] | null>(null);
   const [checkingInfo,   setCheckingInfo]   = React.useState(false);
+  const [downloadingZip, setDownloadingZip] = React.useState(false);
 
   // Only auto-scroll when the user is already at (or near) the bottom.
   useEffect(() => {
@@ -8453,6 +8454,34 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
     onToggleLogRec?.();
   };
 
+  const handleDownloadDebugZip = async () => {
+    if (!serial || downloadingZip) return;
+    setDownloadingZip(true);
+    try {
+      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/debug-screenshots.zip`);
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        addLog?.(`Debug ZIP failed: ${body?.error ?? r.status}`);
+        return;
+      }
+      const blob = await r.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      const cd   = r.headers.get("Content-Disposition") ?? "";
+      const fnMatch = cd.match(/filename="([^"]+)"/);
+      a.download = fnMatch?.[1] ?? `debug-${serial}-${Date.now()}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      addLog?.(`Debug ZIP error: ${e?.message ?? "network error"}`);
+    } finally {
+      setDownloadingZip(false);
+    }
+  };
+
   const handleCopyLog = async () => {
     await writeToClipboard(lines.join("\n"));
     setCopied(true);
@@ -8522,6 +8551,9 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
             </Button>
             <Button type="button" variant="secondary" onClick={handleExportLog} disabled={lines.length === 0} title="Save the full log as a .txt file — browser Save As dialog will appear">
               💾 Export
+            </Button>
+            <Button type="button" variant="secondary" onClick={handleDownloadDebugZip} disabled={!serial || downloadingZip} title="Download debug screenshots + server log as a ZIP">
+              {downloadingZip ? "Zipping…" : <><Download className="w-3 h-3 mr-1 inline" />Debug ZIP</>}
             </Button>
             <Button type="button" variant="secondary" onClick={onClear} disabled={lines.length === 0}>
               Clear

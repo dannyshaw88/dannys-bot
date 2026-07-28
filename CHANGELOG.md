@@ -4,6 +4,37 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.249 — 2026-07-28
+
+### Fix — Update Profile Picture: image no longer stays on phone storage after upload
+
+Profile pictures pushed from the PC to the phone's DCIM/Camera folder were never being deleted after a successful upload — they accumulated on the device indefinitely.
+
+**Root cause — two bugs:**
+
+1. **Wrong device path.** `pushFileToDevice` builds its own on-device filename internally (`equinox_<timestamp>_<name>`) and returns that path. The caller was constructing a separate `devicePath` variable (`/sdcard/DCIM/Camera/photo.jpg`) and passing it as the `fileName` argument, which caused the file to land at a completely different mangled path. The subsequent `removeDeviceFile` call then tried to delete the manually-constructed path — which never existed — so nothing was ever removed.
+
+2. **Early-return paths skipped cleanup.** If any navigation step failed (profile tab not found, Edit profile button not found, gallery didn't open, etc.), the function returned early without deleting the file that had already been pushed to the device.
+
+**Fix:** `pushFileToDevice` is now called with just the filename and its return value (the actual device path) is captured and used throughout. All navigation steps are wrapped in a `try-finally` block so the device file is always removed regardless of success or failure. The PC-side file is still only deleted on a fully successful upload.
+
+---
+
+### New — Debugging Log: Download debug screenshots + log as a ZIP
+
+A **Debug ZIP** button is now in the Debugging Log toolbar. Clicking it hits a new server endpoint that:
+- Zips up all saved debug screenshots for that device (the rolling 50-frame sequence captured after every automation log line)
+- Appends the full `aura-farming-debug.log` server log
+- Serves the archive as a single `.zip` download (`debug-<device>-<timestamp>.zip`)
+
+This replaces the previous need to hunt through the server's filesystem to grab both the screenshots and the log separately.
+
+### Fix — Debug screenshot folders now use device name instead of serial number
+
+The per-device subfolders under `debug-screenshots/` were previously named after the raw ADB serial number (e.g. `R58N123ABC45`). They now use the human-readable device name — `Redmi_Note_12`, `Redmi_A5`, etc. — making them much easier to identify when browsing the folder directly. Falls back to the sanitized serial if the device name hasn't been read yet.
+
+---
+
 ## v1.2.247 — 2026-07-28
 
 ### Fix — Statistics page: Session Tool toggle now works for phone farm accounts
