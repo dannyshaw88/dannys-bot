@@ -975,7 +975,7 @@ export async function tap(serial: string, x: number, y: number, source?: "manual
 export async function doubleTap(serial: string, x: number, y: number): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  const cmd = `input tap ${x} ${y}; sleep 0.08; input tap ${x} ${y}`;
+  const cmd = `input tap ${x} ${y}; sleep 0.05; input tap ${x} ${y}`;
   const r = spawnSync(adb, ["-s", serial, "shell", cmd], { encoding: "utf8", timeout: 5000 });
   const out = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim();
   if (r.status !== 0 || r.error || /error|exception|permission denied/i.test(out)) {
@@ -1968,7 +1968,19 @@ export async function findFeedActionIcons(serial: string, onLog?: (msg: string) 
     }
   }
 
-  return { like, comment, shareFeed, shareDm, save, alreadyLiked };
+  // Detect video/Reel posts in the feed using the already-fetched xml dump.
+  // A video post exposes a SurfaceView, TextureView, or VideoView node for its
+  // player — none of these appear in a regular photo post.  When this flag is
+  // true callers MUST NOT double-tap the media area (that opens the full-screen
+  // Reel player); they must fall back to the heart-icon tap instead.
+  const isVideoPost =
+    xml.includes("android.view.SurfaceView") ||
+    xml.includes("android.view.TextureView") ||
+    xml.includes("android.widget.VideoView") ||
+    xml.includes(":id/video_player") ||
+    xml.includes(":id/row_feed_video");
+
+  return { like, comment, shareFeed, shareDm, save, alreadyLiked, isVideoPost };
 }
 
 export interface ReelActionIcons {
