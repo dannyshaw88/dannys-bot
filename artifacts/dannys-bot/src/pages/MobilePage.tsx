@@ -6230,8 +6230,8 @@ export function AutomationSettingsPanel({
             </div>
 
             {/* ── Row 3: Update Profile Picture ── */}
-            <div className="mt-2 pt-1 space-y-1.5">
-              <span className="text-sm text-muted-foreground select-none">Update Bio Avatar&nbsp;&nbsp;Activation %</span>
+            <div className="mt-2 pt-1 space-y-1.5" style={{marginTop:"10px"}}>
+              <span className="text-sm text-muted-foreground select-none">Update Avatar&nbsp;&nbsp;Activation %</span>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                   value={settings.updateProfilePicActivatePctMin}
