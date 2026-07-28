@@ -4,7 +4,7 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
-## v1.2.233 — 2026-07-28
+## v1.2.234 — 2026-07-28
 
 ### Fixed — View Feed click-author logged false success when the tap didn't open a profile
 

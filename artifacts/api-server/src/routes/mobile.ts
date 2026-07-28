@@ -3050,32 +3050,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             await sleepOrAbort(serial, 1500);
             await verifyStillInInstagram();
             // Post-tap verification — dump the UI and confirm we actually
-            // navigated to a profile page.  Without this the code blindly
-            // logs "on author profile" even when the tap did nothing (stale
-            // node coords, mid-animation feed, collab sheet, etc.).
+            // landed on a profile page before doing anything else.
+            // Without this the code stamps log entries as if everything is
+            // working even when the tap missed (stale node coords, feed was
+            // still animating, etc.).
+            // A profile page always has at least one of: Follow / Following /
+            // Unfollow / Message buttons, a profile_header node, or an
+            // action_bar_title node.  If none are present the feed is still
+            // on screen — the tap went astray.
             const _caChkXml = await android.dumpUi(serial).catch(() => "");
-            // Collab posts can open a Collaborators sheet instead of a profile.
-            const _caIsCollab =
-              _caChkXml.includes('text="Collaborators"') ||
-              _caChkXml.includes('clips_collab');
-            if (_caIsCollab) {
-              onLog?.(`View Feed ${i + 1}/${count}: click-author — Collaborators sheet appeared (collab post) — pressing Back, skipping`);
-              await android.pressBack(serial);
-              await sleepOrAbort(serial, 500);
+            const _caOnProfile =
+              _caChkXml.includes('text="Follow"')    || _caChkXml.includes('content-desc="Follow"') ||
+              _caChkXml.includes('text="Following"') || _caChkXml.includes('content-desc="Following"') ||
+              _caChkXml.includes('text="Unfollow"')  || _caChkXml.includes('content-desc="Unfollow"') ||
+              _caChkXml.includes('text="Message"')   || _caChkXml.includes('content-desc="Message"') ||
+              _caChkXml.includes('profile_header')   ||
+              _caChkXml.includes('action_bar_title');
+            if (!_caOnProfile) {
+              onLog?.(`View Feed ${i + 1}/${count}: click-author — tap did not open a profile (feed still visible) — skipping`);
             } else {
-              // A profile page always has Follow/Following/Message buttons or a
-              // profile_header node.  If none of those are present we are still
-              // in the feed — the tap missed or the node was stale.
-              const _caOnProfile =
-                _caChkXml.includes('text="Follow"')       || _caChkXml.includes('content-desc="Follow"') ||
-                _caChkXml.includes('text="Following"')    || _caChkXml.includes('content-desc="Following"') ||
-                _caChkXml.includes('text="Message"')      || _caChkXml.includes('content-desc="Message"') ||
-                _caChkXml.includes('text="Unfollow"')     || _caChkXml.includes('content-desc="Unfollow"') ||
-                _caChkXml.includes('profile_header')      ||
-                _caChkXml.includes('action_bar_title');
-              if (!_caOnProfile) {
-                onLog?.(`View Feed ${i + 1}/${count}: click-author — tap did not open a profile (feed still visible) — skipping`);
-              } else {
               // Confirmed on profile — scroll it.
               const _caScrolls = 1 + Math.floor(Math.random() * 10);
               onLog?.(`View Feed ${i + 1}/${count}: on author profile "${_caNode.name}" — scrolling ${_caScrolls}x…`);
@@ -3096,8 +3089,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               await verifyStillInInstagram();
               authorVisits++;
               onLog?.(`View Feed ${i + 1}/${count}: ✓ author profile visited (${_caNode.name})`);
-              } // end _caOnProfile check
-            } // end collab-sheet else
+            }
           }
           } // end ad-skip else
         } catch (e: any) {
