@@ -4,6 +4,35 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.240 — 2026-07-28
+
+### Fix — Spin syntax now resolves all groups, not just one
+
+The bio text field supports `{a|b|c}` spin syntax, but the resolution was only happening on the client-side Spin preview button — when the automation cycle actually fired, the raw unresolved text was typed onto the device. This meant phones were receiving literal `{Fitness enthusiast|Gym junkie|...}` strings as their bio instead of a randomly picked variant.
+
+**Fix:** `resolveSpinSyntax()` is now called server-side inside `runUpdateBio()` in `routes/mobile.ts` before the text is passed to `android.inputText()`. All `{…}` groups in the string are each rolled independently at execution time, so a bio like `{Fitness enthusiast|Gym junkie|Iron addict}, {chasing a new PR|building the physique} {💪🏻|⚡️|🔥}` correctly produces a single clean line such as `Gym junkie, building the physique ⚡️`.
+
+Multiple spin groups in one bio string are fully supported — each group is an independent random roll.
+
+### UI — Update Bio field & Spin button layout improvements
+
+Several visual tweaks to the Update Bio row in the Random Actions section:
+
+- **Text field width** set to `14.5ch` — sized to show a meaningful amount of bio text without crowding the row.
+- **Spin button repositioned** above the text field, left-aligned with it. Previously it sat inline to the right of the field; moving it above keeps the row compact and makes the button's relationship to the field obvious.
+- **Spin button colour** updated to `text-primary` (the same accent blue used by checkboxes throughout the UI) — previously it used a faint blue that was hard to read.
+- **Spin button disabled-faintness removed** — the button no longer dims when the field is empty; it stays full-brightness at all times.
+
+### UI — "Update Profile Picture" label renamed to "Update Avatar"
+
+The row label was shortened from **Update Profile Picture  Activation %** to **Update Avatar  Activation %** — same meaning, less visual noise.
+
+### UI — Vertical spacing fix for Update Avatar and Update Bio rows
+
+Both the Update Avatar and Update Bio rows were rendering closer together than the other Random Actions rows. The root cause was a Tailwind v4 specificity issue: the parent `space-y-3` selector (specificity 0,2,0) was overriding any `mt-*` class placed directly on the child (specificity 0,1,0), so changes to the child's margin class had no visible effect. Fixed by applying an explicit inline `style={{marginTop:"20px"}}` on both rows, which bypasses the CSS cascade entirely and gives them the same visual separation as the rows above.
+
+---
+
 ## v1.2.239 — 2026-07-28
 
 ### New — Update Bio random action
