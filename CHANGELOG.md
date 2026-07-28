@@ -4,6 +4,22 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.242 — 2026-07-28
+
+### Fix — Update Bio: crash when typing bio text on Xiaomi / MIUI (NullPointerException)
+
+Tapping the bio field on the Edit Profile page opens a separate dedicated Bio edit screen. The old code immediately called `adb shell input text` after that tap, but on MIUI / Android 13 the input method service had not yet bound to the new screen — this caused a Java `NullPointerException` in `InputShellCommand.sendText` and aborted the whole automation cycle.
+
+**What changed:** After the Bio screen opens, the code now re-dumps the UI, confirms the Bio edit screen is present (via `edit_bio_layout` / `prism_form_field_container`), taps the `EditText` directly on that screen, and waits 500 ms before typing. This forces Android to initialise the input connection before text is sent, eliminating the NPE.
+
+### Fix — Update Bio: "Finished" tick in top-right not tapped after bio is entered
+
+The Bio edit screen shows a checkmark/tick button (`action_bar_button_action`, `desc="Finished"`) in the top-right action bar. The old save-button lookup only matched `desc="Submit"` and `text="Done"` — neither of which appear on the Bio screen — so the tick was never tapped and the bio was not saved.
+
+**What changed:** `desc="Finished"` and `id="action_bar_button_action"` are now the primary matches checked first. The existing Submit / Done / action-bar-edge fallbacks are kept for other Instagram builds.
+
+---
+
 ## v1.2.241 — 2026-07-28
 
 ### UI — Update Bio text field: no character limit
