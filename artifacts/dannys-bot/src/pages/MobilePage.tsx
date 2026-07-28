@@ -6230,7 +6230,7 @@ export function AutomationSettingsPanel({
             </div>
 
             {/* ── Row 3: Update Profile Picture ── */}
-            <div className="space-y-1.5">
+            <div className="mt-4 space-y-1.5">
               <span className="text-sm text-muted-foreground select-none">Update Avatar&nbsp;&nbsp;Activation %</span>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
@@ -6287,7 +6287,7 @@ export function AutomationSettingsPanel({
             </div>
 
             {/* ── Row 4: Update Bio ── */}
-            <div className="space-y-1.5">
+            <div className="mt-4 space-y-1.5">
               <span className="text-sm text-muted-foreground select-none">Update Bio&nbsp;&nbsp;Activation %</span>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
