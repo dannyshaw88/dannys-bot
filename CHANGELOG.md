@@ -4,6 +4,44 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.245 — 2026-07-28
+
+### New — Statistics page: Trust Score column in Tool Performance table
+
+Added a **Trust Score** column to the Tool Performance table on the Statistics page. Each row in the table now shows a Trust Score badge for the corresponding phone slot, pulled from the same server storage used by the Human Session Tool's account slot view. Clicking the badge opens the same tier picker (same levels, same colours) so the score can be set or updated directly from the stats table without navigating away.
+
+The badge is implemented as a fully independent component (`StatsFarmTrustScoreBadge`) that shares no code with any other Trust Score badge in the software — editing its appearance or behaviour has no effect on the Human Session Tool badge, the Dashboard badge, or the Metrics badge.
+
+The Trust Score column is positioned first (after the account name), is managed via the existing Manage Columns panel (can be hidden, resized, reordered), and does not show sort arrows since the column contains labels rather than numbers.
+
+---
+
+### Fix — Debugging Log: back button restores exact previous location
+
+The `←` button on the Debugging Log tab now returns the user to wherever they were in the software before opening the log — including the specific account slot they had open inside the Human Session Tool.
+
+Previously the button called `window.history.back()`, which navigated to the previous browser history entry and could land on the wrong page entirely. The fix tracks the active tab and open slot index at the moment the Debugging Log tab is clicked, then restores both precisely when `←` is pressed.
+
+---
+
+### Improvement — Statistics page: Tool Performance column titles made bold
+
+Column title labels (Cycles, Likes, Follows, Stories, Reels, DMs, Feed Shares, Reel Scrolls, Feed Scrolls, Explore Scrolls) in the Tool Performance table were faint due to a `text-muted-foreground` class on the header row and `opacity-60` dimming applied to non-sorted columns. Both have been removed — all column titles now render at full weight and colour regardless of sort state.
+
+---
+
+### Fix — Debugging Log: Random Actions tool colour changed to purple
+
+Log lines produced during a Random Actions cycle are now coloured purple in the Debugging Log, consistent with the per-tool colour scheme used for Feed (orange), Explore (green), Follow (blue), Reels (rose), and Make a Post (purple). Previously these lines appeared in the default white because the tool was still identified internally as `jitter`.
+
+---
+
+### Fix — Automation cycle log: Random Actions tool name corrected
+
+The tool sequence log line (`▶ Tool order shuffled: …`) was still displaying the old internal name `jitter` for the Random Actions tool. The internal key has been updated to `Random Actions` in the tool sequence array, the activation gate map, and the dispatch branch so the log, the shuffle output, and the execution path all use the correct name.
+
+---
+
 ## v1.2.244 — 2026-07-28
 
 ### Fix — Update Bio: switch to segment-based adb paste (same method as Follow tool)

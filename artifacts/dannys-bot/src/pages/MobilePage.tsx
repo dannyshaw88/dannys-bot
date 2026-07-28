@@ -7013,7 +7013,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   );
 });
 
-type AccountSettingsPanelHandle = { backToSlots: () => void };
+type AccountSettingsPanelHandle = { backToSlots: () => void; backToSlot: (idx: number | null) => void };
 type AccountSettingsPanelProps  = { phone: UsbPhone | null; addLog: (msg: string) => void; onSlotChange?: (slotIdx: number | null) => void; initialSlot?: number | null; onAnyEnabled?: (anyEnabled: boolean) => void };
 
 const AccountSettingsPanel = React.forwardRef<AccountSettingsPanelHandle, AccountSettingsPanelProps>(
@@ -7067,7 +7067,10 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   // Human Session Tool directly on mount (e.g. ?slot=0 in the URL).
   const [openSlotTool, setOpenSlotTool] = useState<number | null>(initialSlot ?? null);
   useEffect(() => { onSlotChange?.(openSlotTool); }, [openSlotTool]);
-  useImperativeHandle(ref, () => ({ backToSlots: () => setOpenSlotTool(null) }));
+  useImperativeHandle(ref, () => ({
+    backToSlots: () => setOpenSlotTool(null),
+    backToSlot:  (idx: number | null) => setOpenSlotTool(idx),
+  }));
   const { config: collisionConfig, requestSlot, releaseSlot, cancelQueuedSlot } = useCollisionPreventer(phone?.serial ?? null);
   const hydratedRef = useRef(false);
   const lastSavedRef = useRef<string>(JSON.stringify(Array.from({ length: ACCT_SLOT_COUNT }, emptySlot)));
@@ -8305,12 +8308,14 @@ function MetricsPanel({ serial, actionLogLines }: { serial: string | null; actio
 
 // ─── Debugging Log Panel ───────────────────────────────────────────────────────
 
-function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, logRecMode, onToggleLogRec, logMarkers, phoneDims, inspectMode, onToggleInspect }: {
+function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, logRecMode, onToggleLogRec, logMarkers, phoneDims, inspectMode, onToggleInspect, onBack }: {
   lines: string[];
   onClear: () => void;
   serial?: string | null;
   /** Returns the captured lines so LogPanel can offer Copy Capture / Save. */
   onScanTray?: () => Promise<string[]>;
+  /** Called when the user presses ← — restores the exact location they came from. */
+  onBack?: () => void;
   addLog?: (msg: string) => void;
   /** Returns the mirror's current decoded video frame size, or null before
    *  the stream has produced a frame / while off. Used by Check Screen Info
@@ -8496,7 +8501,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
             <Button
               type="button"
               variant="secondary"
-              onClick={() => window.history.back()}
+              onClick={() => onBack ? onBack() : window.history.back()}
               title="Go back to the previous page"
               className="px-2"
             >
@@ -8542,12 +8547,13 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
               // Track the active tool from ▶ header lines so ALL sub-messages
               // that follow inherit the tool's colour (e.g. every explore
               // sub-action is green, not just lines that contain "Explore").
-              if      (/▶ View Explore/.test(msg))  currentTool = 'explore';
-              else if (/▶ View Feed/.test(msg))     currentTool = 'feed';
-              else if (/▶ View Reels/.test(msg))    currentTool = 'reels';
-              else if (/▶ Make a Post/.test(msg))   currentTool = 'makepost';
-              else if (/▶ Follow Users/.test(msg))  currentTool = 'follow';
-              else if (/^▶/.test(msg))              currentTool = null;
+              if      (/▶ View Explore/.test(msg))    currentTool = 'explore';
+              else if (/▶ View Feed/.test(msg))       currentTool = 'feed';
+              else if (/▶ View Reels/.test(msg))      currentTool = 'reels';
+              else if (/▶ Make a Post/.test(msg))     currentTool = 'makepost';
+              else if (/▶ Follow Users/.test(msg))    currentTool = 'follow';
+              else if (/▶ Random Actions/.test(msg))  currentTool = 'randomactions';
+              else if (/^▶/.test(msg))                currentTool = null;
               if (/Cycle\s+(complete|failed|aborted)/i.test(msg)) currentTool = null;
 
               // Colour the message based on its tool / prefix.
@@ -8561,6 +8567,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                                                                     msgClass = 'text-green-400';
               else if (/[Rr]eel/.test(msg))                          msgClass = 'text-rose-500';
               else if (/\bMake a Post\b|▶ Make a Post/.test(msg))  msgClass = 'text-purple-400';
+              else if (/\bRandom Actions\b|▶ Random Actions|^jitter-/.test(msg)) msgClass = 'text-purple-400';
               else if (/Switching to Instagram account|account switcher|Long-pressing profile tab|Profile tab found/.test(msg))
                                                                     msgClass = 'text-amber-400';
               else if (/^(ERROR|FAILED|✗)/.test(msg))              msgClass = 'text-rose-500';
@@ -8572,8 +8579,9 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
               else if (currentTool === 'explore')  msgClass = 'text-green-400';
               else if (currentTool === 'feed')     msgClass = 'text-orange-400';
               else if (currentTool === 'reels')    msgClass = 'text-rose-500';
-              else if (currentTool === 'makepost') msgClass = 'text-purple-400';
-              else if (currentTool === 'follow')   msgClass = 'text-blue-400';
+              else if (currentTool === 'makepost')      msgClass = 'text-purple-400';
+              else if (currentTool === 'follow')        msgClass = 'text-blue-400';
+              else if (currentTool === 'randomactions') msgClass = 'text-purple-400';
 
               return (
                 <div key={i} className="flex min-w-0 py-[1px]">
@@ -8658,6 +8666,9 @@ export function MobilePage() {
     return () => ro.disconnect();
   }, [paneEl]);
   const [activeTab, setActiveTab] = useState<MobileTab>("account");
+  // Remembers where the user was before opening the Debugging Log tab so the
+  // ← back button can return them to the exact same location (tab + slot).
+  const [prevLogLocation, setPrevLogLocation] = useState<{ tab: MobileTab; slotIdx: number | null } | null>(null);
   const accountPanelRef = useRef<AccountSettingsPanelHandle>(null);
   // Per-serial "user explicitly turned the live view on" flag. Visiting the
   // Mobile tab, or a phone simply being connected, must never by itself
@@ -8915,7 +8926,14 @@ export function MobilePage() {
                   <button
                     key={t.id}
                     type="button"
-                    onClick={() => { setActiveTab(t.id); if (t.id === "account") accountPanelRef.current?.backToSlots(); }}
+                    onClick={() => {
+                      if (t.id === "log") {
+                        // Snapshot where the user is right now so ← can restore it.
+                        setPrevLogLocation({ tab: activeTab, slotIdx: openAccountSlot });
+                      }
+                      setActiveTab(t.id);
+                      if (t.id === "account") accountPanelRef.current?.backToSlots();
+                    }}
                     className={`px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
                       activeTab === t.id
                         ? "border-primary text-foreground"
@@ -8975,6 +8993,13 @@ export function MobilePage() {
                         for (const line of (body.lines as string[])) addLog(line);
                         return body.lines as string[];
                       } catch (e: any) { addLog(`Capture error: ${e?.message ?? "network error"}`); return []; }
+                    } : undefined}
+                    onBack={prevLogLocation ? () => {
+                      const { tab, slotIdx } = prevLogLocation;
+                      setActiveTab(tab);
+                      if (tab === "account") {
+                        accountPanelRef.current?.backToSlot(slotIdx);
+                      }
                     } : undefined}
                   />
                 )}

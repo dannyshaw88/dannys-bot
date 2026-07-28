@@ -8659,11 +8659,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         checkDm: (checkDmEnabled ?? false) && rollActivate(checkDmActivatePctMin ?? 100, checkDmActivatePctMax ?? 100),
         follow:  followEnabled && rollActivate(followActivatePctMin, followActivatePctMax),
         post:    makePostEnabled && rollActivate(makePostActivatePctMin, makePostActivatePctMax),
-        jitter:  randomJitterEnabled && rollActivate(randomJitterActivatePctMin, randomJitterActivatePctMax),
+        'Random Actions':  randomJitterEnabled && rollActivate(randomJitterActivatePctMin, randomJitterActivatePctMax),
       };
 
       // Build the sequence from only the tools that passed their activate gate.
-      const _toolSeq = ['feed', 'stories', 'explore', 'reels', 'checkDm', 'follow', 'post', 'jitter']
+      const _toolSeq = ['feed', 'stories', 'explore', 'reels', 'checkDm', 'follow', 'post', 'Random Actions']
         .filter(t => _toolActivated[t]);
       if (shuffleToolOrder) {
         for (let _si = _toolSeq.length - 1; _si > 0; _si--) {
@@ -9368,7 +9368,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           }
 
         // ── Random Jitter ───────────────────────────────────────────────
-        } else if (_tool === 'jitter') {
+        } else if (_tool === 'Random Actions') {
           if (_toolActivated[_tool]) { // pre-rolled above
             let _jitterFired = false;
             const notifChance = rollRange(checkNotificationsPctMin, checkNotificationsPctMax) / 100;

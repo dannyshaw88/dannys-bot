@@ -5,6 +5,7 @@ import { useQuery, useQueries } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { TrustScoreBadge } from "@/components/TrustScoreBadge";
 import { MetricsSlotTrustScoreBadge } from "@/components/MetricsSlotTrustScoreBadge";
+import { StatsFarmTrustScoreBadge } from "@/components/StatsFarmTrustScoreBadge";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -19,7 +20,7 @@ import {
 import {
   User, Heart, MessageCircle, Eye, UserPlus, UserMinus, Mail, Activity,
   Settings2, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Fingerprint, ImagePlus,
-  BarChart2, Zap, Repeat2, ShieldAlert, PhoneOff, Lock, Flag,
+  BarChart2, Zap, Repeat2, ShieldAlert, PhoneOff, Lock, Flag, Shield,
   Smartphone,
 } from "lucide-react";
 import { type Profile, type Tool } from "@shared/schema";
@@ -150,6 +151,7 @@ function ProfileStatsRow({
 // ─── Phone Farm tab ───────────────────────────────────────────────────────────
 
 const FARM_STAT_LABELS: { key: string; label: string; icon: React.ReactNode; color: string }[] = [
+  { key: "trustscore",      label: "Trust Score",    icon: <Shield className="w-3 h-3" />,      color: "text-indigo-500" },
   { key: "cycles",          label: "Cycles",         icon: <Activity className="w-3 h-3" />,   color: "text-cyan-500" },
   { key: "likes",           label: "Likes",          icon: <Heart className="w-3 h-3" />,       color: "text-rose-500" },
   { key: "follows",         label: "Follows",        icon: <UserPlus className="w-3 h-3" />,    color: "text-blue-500" },
@@ -164,6 +166,7 @@ const FARM_STAT_LABELS: { key: string; label: string; icon: React.ReactNode; col
 
 const FARM_DEFAULT_COL_WIDTHS: Record<string, number> = {
   account:          224,
+  trustscore:       130,
   cycles:            80,
   likes:             80,
   follows:           80,
@@ -298,6 +301,13 @@ function PhoneFarmPhoneSection({
               </Link>
             </td>
             {orderedLabels.map(s => {
+              if (s.key === "trustscore") {
+                return (
+                  <td key="trustscore" className="py-2.5 px-3 text-center">
+                    <StatsFarmTrustScoreBadge serial={phone.serial} slotIdx={slot.idx} />
+                  </td>
+                );
+              }
               const daily = slot.daily[s.key] ?? 0;
               const lifetime = slot.lifetime[s.key] ?? 0;
               return (
@@ -1193,7 +1203,7 @@ function PhoneFarmTab() {
                 <col key={s.key} style={{ width: `${farmColWidths[s.key] ?? FARM_DEFAULT_COL_WIDTHS[s.key] ?? 80}px` }} />
               ))}
             </colgroup>
-            <thead className="text-xs bg-muted/30 text-muted-foreground border-b border-border/50">
+            <thead className="text-xs bg-muted/30 text-foreground border-b border-border/50">
               <tr>
                 <th className="px-4 py-3 font-bold uppercase tracking-wide text-left" style={{ width: `${farmColWidths.account ?? FARM_DEFAULT_COL_WIDTHS.account}px` }}>
                   Device / Account
@@ -1222,15 +1232,15 @@ function PhoneFarmTab() {
                         setFarmColOrder(next);
                       }}
                       onDragEnd={() => { farmDragColRef.current = null; setFarmDragOverCol(null); }}
-                      onClick={() => cycleFarmSort(s.key)}
-                      className={`px-3 py-3 font-bold text-center uppercase tracking-wide text-[10px] cursor-pointer select-none ${isDragTarget ? "bg-primary/5 border-l-2 border-l-primary" : ""}`}
+                      onClick={() => { if (s.key !== "trustscore") cycleFarmSort(s.key); }}
+                      className={`px-3 py-3 font-bold text-center uppercase tracking-wide text-[10px] select-none ${s.key !== "trustscore" ? "cursor-pointer" : "cursor-default"} ${isDragTarget ? "bg-primary/5 border-l-2 border-l-primary" : ""}`}
                     >
-                      <span className={`inline-flex items-center gap-1 transition-opacity ${s.color} ${isSorted ? "opacity-100" : "opacity-60 hover:opacity-100"}`}>
+                      <span className={`inline-flex items-center gap-1 ${s.color}`}>
                         {s.icon} {s.label}
-                        {isSorted
+                        {s.key !== "trustscore" && (isSorted
                           ? <span className="text-[9px]">{farmSortDir === "desc" ? "▼" : "▲"}</span>
                           : <span className="text-[9px] opacity-30">⇅</span>
-                        }
+                        )}
                       </span>
                     </th>
                   );
