@@ -6483,13 +6483,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     await sleepOrAbort(serial, 1800 + Math.round(Math.random() * 400));
 
-    // 6. Tap the "+" / pencil edit button on the expanded profile picture overlay.
+    // 6. Tap the "+" (dotted-ring add slot) — mpp_left — on the expanded profile picture overlay.
     {
       const xml = await android.dumpUi(serial);
-      const m = xml.match(/resource-id="[^"]*expanded_profile_picture_edit_button[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-      if (!m) { onLog?.("Update Profile Pic: ✗ profile picture edit button not found"); await android.pressBack(serial); return; }
+      const m = xml.match(/resource-id="[^"]*mpp_left[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (!m) { onLog?.("Update Profile Pic: ✗ mpp_left (+) button not found"); await android.pressBack(serial); return; }
       await android.tap(serial, Math.round((+m[1] + +m[3]) / 2), Math.round((+m[2] + +m[4]) / 2));
-      onLog?.("Update Profile Pic: tapped profile picture edit button");
+      onLog?.("Update Profile Pic: tapped + (mpp_left) button");
     }
     await sleepOrAbort(serial, 1800 + Math.round(Math.random() * 400));
 
