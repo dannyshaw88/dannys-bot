@@ -6731,16 +6731,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
 
     // 4. Select all existing text and replace with the new bio.
+    //    `adb shell input text` throws a NullPointerException in InputShellCommand.sendText
+    //    on this MIUI/Android 13 build for the Bio field regardless of focus state — the
+    //    bug is in the on-device `input` binary itself. Use typeViaOnscreenKeyboard instead,
+    //    which taps individual keys on the visible keyboard and never calls `input text`.
     {
       const tools = android.detectToolset();
       const adb = tools.adb.path ?? "";
       if (adb) {
-        // Select all — Android supports keycombination on API 26+.
+        // Select all existing content so the first typed character replaces it.
         spawnSync(adb, ["-s", serial, "shell", "input", "keycombination",
           "KEYCODE_CTRL_LEFT", "KEYCODE_A"], { encoding: "utf8", timeout: 2000 });
         await sleepOrAbort(serial, 400);
       }
-      await android.inputText(serial, bioText);
+      await android.typeViaOnscreenKeyboard(serial, bioText, (msg) => onLog?.(`Update Bio: ${msg}`));
       onLog?.(`Update Bio: typed bio text (${bioText.length} chars)`);
     }
     await sleepOrAbort(serial, 800 + Math.round(Math.random() * 200));

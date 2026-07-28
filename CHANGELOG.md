@@ -4,6 +4,14 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.243 — 2026-07-28
+
+### Fix — Update Bio: switch to on-screen keyboard typing to avoid MIUI `adb shell input text` crash
+
+The NullPointerException in `InputShellCommand.sendText` persisted even after re-establishing input focus — the bug is inside the on-device `input` binary itself on this MIUI / Android 13 build and cannot be worked around by focus tricks. The bio typing step now uses `typeViaOnscreenKeyboard` instead, which taps individual keys on the visible on-screen keyboard and never calls `adb shell input text`. This completely avoids the crash path.
+
+---
+
 ## v1.2.242 — 2026-07-28
 
 ### Fix — Update Bio: crash when typing bio text on Xiaomi / MIUI (NullPointerException)
