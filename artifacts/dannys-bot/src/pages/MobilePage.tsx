@@ -6208,22 +6208,26 @@ export function AutomationSettingsPanel({
 
             {/* ── Row 3: Update Profile Picture ── */}
             <div className="mt-2 space-y-1.5">
-              {/* Title + Activation % centered above inputs */}
-              <div className="flex items-center justify-center gap-2">
-                <span className="text-sm text-muted-foreground select-none">Update Profile Picture</span>
-                <span className="text-sm text-muted-foreground select-none">Activation %</span>
-              </div>
               {/* Inputs + controls all on one row, vertically centered */}
               <div className="flex items-center gap-2 flex-wrap">
-                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                  value={settings.updateProfilePicActivatePctMin}
-                  onChange={e => setSettings(s => ({ ...s, updateProfilePicActivatePctMin: clamp4(Number(e.target.value)) }))}
-                  disabled={loading} />
-                <span className="text-muted-foreground text-sm">to</span>
-                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                  value={settings.updateProfilePicActivatePctMax}
-                  onChange={e => setSettings(s => ({ ...s, updateProfilePicActivatePctMax: clamp4(Number(e.target.value)) }))}
-                  disabled={loading} />
+                {/* Title + inputs column — title centers above just these fields */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="text-sm text-muted-foreground select-none">Update Profile Picture</span>
+                    <span className="text-sm text-muted-foreground select-none">Activation %</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.updateProfilePicActivatePctMin}
+                      onChange={e => setSettings(s => ({ ...s, updateProfilePicActivatePctMin: clamp4(Number(e.target.value)) }))}
+                      disabled={loading} />
+                    <span className="text-muted-foreground text-sm">to</span>
+                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.updateProfilePicActivatePctMax}
+                      onChange={e => setSettings(s => ({ ...s, updateProfilePicActivatePctMax: clamp4(Number(e.target.value)) }))}
+                      disabled={loading} />
+                  </div>
+                </div>
                 {/* Assign Directory */}
                 <button
                   type="button"
