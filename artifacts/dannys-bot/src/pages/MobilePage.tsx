@@ -3027,6 +3027,9 @@ export interface AutomationSettingsData {
   updateProfilePicActivatePctMin: number; updateProfilePicActivatePctMax: number;
   updateProfilePicFolderPath: string;
   updateProfilePicDisableAfterUsed: boolean;
+  updateBioActivatePctMin: number; updateBioActivatePctMax: number;
+  updateBioText: string;
+  updateBioDisableAfterUsed: boolean;
   makePostUseChatGpt: boolean;
   makePostFixAiSlop: boolean;
   makePostMakeUnique: boolean;
@@ -3135,6 +3138,9 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   updateProfilePicActivatePctMin: 0, updateProfilePicActivatePctMax: 0,
   updateProfilePicFolderPath: "",
   updateProfilePicDisableAfterUsed: false,
+  updateBioActivatePctMin: 0, updateBioActivatePctMax: 0,
+  updateBioText: "",
+  updateBioDisableAfterUsed: false,
   makePostUseChatGpt: false,
   makePostFixAiSlop: false,
   makePostMakeUnique: false,
@@ -3153,6 +3159,17 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
 
 // 4-digit-wide number inputs, shared by every field in this panel.
 const NUM_INPUT_CLASS = "w-16 text-center";
+
+/** Resolve Jarvee-style spin syntax: {a|b|c} groups are each replaced with a
+ *  randomly chosen variant. Multiple groups in the same string are each rolled
+ *  independently, so "Hi {there|you} — {love|hate} it!" produces one of four
+ *  possible sentences. Nested braces are not supported. */
+function resolveSpinSyntax(text: string): string {
+  return text.replace(/\{([^{}]+)\}/g, (_, inner: string) => {
+    const parts = inner.split("|");
+    return parts[Math.floor(Math.random() * parts.length)];
+  });
+}
 // HTML `maxLength` isn't reliably enforced on type="number" inputs, so clamp
 // values to 4 digits (0-9999) in code as well.
 const clamp4 = (n: number) => Math.min(9999, Math.max(0, Math.trunc(Number.isFinite(n) ? n : 0)));
@@ -3738,6 +3755,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             updateProfilePicActivatePctMax: s.updateProfilePicActivatePctMax,
             updateProfilePicFolderPath: s.updateProfilePicFolderPath,
             updateProfilePicDisableAfterUsed: s.updateProfilePicDisableAfterUsed,
+            updateBioActivatePctMin: s.updateBioActivatePctMin,
+            updateBioActivatePctMax: s.updateBioActivatePctMax,
+            updateBioText: s.updateBioText,
+            updateBioDisableAfterUsed: s.updateBioDisableAfterUsed,
             makePostUseChatGpt: s.makePostUseChatGpt,
             makePostFixAiSlop: s.makePostFixAiSlop,
             makePostMakeUnique: s.makePostMakeUnique,
@@ -4196,6 +4217,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'jitterVisitSettings',  label: 'Visit Random Settings %',    fields: ['visitSettingsPctMin','visitSettingsPctMax'] },
     { key: 'jitterAppSwitch',      label: 'App Switch %',               fields: ['appSwitchPctMin','appSwitchPctMax'] },
     { key: 'jitterUpdateProfilePic', label: 'Update Profile Picture',   fields: ['updateProfilePicActivatePctMin','updateProfilePicActivatePctMax','updateProfilePicFolderPath','updateProfilePicDisableAfterUsed'] },
+    { key: 'jitterUpdateBio',        label: 'Update Bio',               fields: ['updateBioActivatePctMin','updateBioActivatePctMax','updateBioText','updateBioDisableAfterUsed'] },
   ]},
   { key: 'makePost',      label: 'Make a Post', sub: [
     { key: 'postEnabled',       label: 'Enabled',                       fields: ['makePostEnabled'] },
@@ -4599,6 +4621,7 @@ export function AutomationSettingsPanel({
   const [showFollowedUsers, setShowFollowedUsers] = useState(false);
   const [showSurplus, setShowSurplus] = useState(false);
   const [showSources, setShowSources] = useState(false);
+  const [spinPreview, setSpinPreview] = useState<string | null>(null);
   const [newFollowSourceType, setNewFollowSourceType] = useState<'hashtag' | 'target_followers'>('hashtag');
   const [newFollowSourceValue, setNewFollowSourceValue] = useState('');
   const importSourceFileRef = useRef<HTMLInputElement>(null);
@@ -6263,6 +6286,53 @@ export function AutomationSettingsPanel({
               </div>
             </div>
 
+            {/* ── Row 4: Update Bio ── */}
+            <div className="mt-2 pt-1 space-y-1.5">
+              <span className="text-sm text-muted-foreground select-none">Update Bio&nbsp;&nbsp;Activation %</span>
+              <div className="flex items-center gap-2">
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                  value={settings.updateBioActivatePctMin}
+                  onChange={e => setSettings(s => ({ ...s, updateBioActivatePctMin: clamp4(Number(e.target.value)) }))}
+                  disabled={loading} />
+                <span className="text-muted-foreground text-sm">to</span>
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                  value={settings.updateBioActivatePctMax}
+                  onChange={e => setSettings(s => ({ ...s, updateBioActivatePctMax: clamp4(Number(e.target.value)) }))}
+                  disabled={loading} />
+                {/* Bio text */}
+                <Input
+                  type="text"
+                  maxLength={150}
+                  placeholder="Bio text… or {option1|option2|option3}"
+                  className="h-7 text-xs px-2 w-56 shrink-0"
+                  value={settings.updateBioText}
+                  onChange={e => setSettings(s => ({ ...s, updateBioText: e.target.value.slice(0, 150) }))}
+                  disabled={loading}
+                />
+                {/* Spin preview button */}
+                <button
+                  type="button"
+                  disabled={loading || !settings.updateBioText.trim()}
+                  onClick={() => setSpinPreview(resolveSpinSyntax(settings.updateBioText))}
+                  className="text-xs font-medium text-blue-500 hover:text-blue-400 disabled:opacity-40 disabled:cursor-not-allowed shrink-0 px-1"
+                >
+                  Spin
+                </button>
+                {/* Disable After Used */}
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    id={`update-bio-disable-after-used-${slotIdx ?? 0}`}
+                    checked={settings.updateBioDisableAfterUsed}
+                    onChange={e => setSettings(s => ({ ...s, updateBioDisableAfterUsed: e.target.checked }))}
+                    disabled={loading}
+                    className="w-4 h-4 accent-primary cursor-pointer"
+                  />
+                  <label htmlFor={`update-bio-disable-after-used-${slotIdx ?? 0}`} className="text-xs text-foreground cursor-pointer select-none">Disable After Used</label>
+                </div>
+              </div>
+            </div>
+
             </div>
           )}
         </div>
@@ -6654,6 +6724,32 @@ export function AutomationSettingsPanel({
           onCopied={onCopied}
         />
       )}
+
+      {/* Spin syntax preview dialog */}
+      <Dialog open={spinPreview !== null} onOpenChange={open => { if (!open) setSpinPreview(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Spin Preview</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm break-words py-2">{spinPreview}</p>
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setSpinPreview(resolveSpinSyntax(settings.updateBioText))}
+              className="h-8 px-4 text-xs rounded border border-border bg-background hover:bg-accent transition-colors font-medium"
+            >
+              Roll Again
+            </button>
+            <button
+              type="button"
+              onClick={() => setSpinPreview(null)}
+              className="h-8 px-4 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium"
+            >
+              Close
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

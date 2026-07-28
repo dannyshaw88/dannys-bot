@@ -1334,6 +1334,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     updateProfilePicActivatePctMax: z.number().min(0).max(100).default(0),
     updateProfilePicFolderPath: z.string().default(""),
     updateProfilePicDisableAfterUsed: z.boolean().default(false),
+    // Update Bio — navigates to own profile → Edit profile → taps bio field → pastes bioText → saves.
+    updateBioActivatePctMin: z.number().min(0).max(100).default(0),
+    updateBioActivatePctMax: z.number().min(0).max(100).default(0),
+    updateBioText: z.string().default(""),
+    updateBioDisableAfterUsed: z.boolean().default(false),
     // ── Check DMs — opens the inbox, scrolls, optionally taps a thread.
     checkDmEnabled: z.boolean().default(false),
     checkDmActivatePctMin: z.number().min(0).max(100).default(100),
@@ -1467,6 +1472,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       appSwitchPctMin: 0, appSwitchPctMax: 0,
       updateProfilePicActivatePctMin: 0, updateProfilePicActivatePctMax: 0,
       updateProfilePicFolderPath: "", updateProfilePicDisableAfterUsed: false,
+      updateBioActivatePctMin: 0, updateBioActivatePctMax: 0,
+      updateBioText: "", updateBioDisableAfterUsed: false,
       checkDmEnabled: false,
       checkDmActivatePctMin: 100, checkDmActivatePctMax: 100,
       checkDmScrollMin: 1, checkDmScrollMax: 3,
@@ -1583,6 +1590,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         appSwitchPctMin: 0, appSwitchPctMax: 0,
         updateProfilePicActivatePctMin: 0, updateProfilePicActivatePctMax: 0,
         updateProfilePicFolderPath: "", updateProfilePicDisableAfterUsed: false,
+        updateBioActivatePctMin: 0, updateBioActivatePctMax: 0,
+        updateBioText: "", updateBioDisableAfterUsed: false,
         checkDmEnabled: false,
         checkDmActivatePctMin: 100, checkDmActivatePctMax: 100,
         checkDmScrollMin: 1, checkDmScrollMax: 3,
@@ -5292,6 +5301,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     updateProfilePicActivatePctMax: z.number().min(0).max(100).default(0),
     updateProfilePicFolderPath: z.string().default(""),
     updateProfilePicDisableAfterUsed: z.boolean().default(false),
+    // Update Bio
+    updateBioActivatePctMin: z.number().min(0).max(100).default(0),
+    updateBioActivatePctMax: z.number().min(0).max(100).default(0),
+    updateBioText: z.string().default(""),
+    updateBioDisableAfterUsed: z.boolean().default(false),
     // ── Activate Percentage — see AutomationSettings type for full comment.
     // Rolled once per tool per automation-cycle execution, gating whether
     // that tool runs at all THIS cycle, on top of its own enabled toggle.
@@ -6634,6 +6648,97 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { onLog?.(`Update Profile Pic: ⚠ could not delete device file: ${e?.message}`); }
 
     onLog?.("Update Profile Pic: ✓ done");
+  }
+
+  // ── Update Bio ─────────────────────────────────────────────────────────────
+  // Navigates to the user's own profile → Edit profile → taps the Bio field →
+  // clears it → types the supplied text → taps the Save/Submit button.
+  async function runUpdateBio(serial: string, bioText: string, onLog?: (msg: string) => void): Promise<void> {
+    if (!bioText.trim()) { onLog?.("Update Bio: ✗ bio text is empty — skipping"); return; }
+
+    // 1. Tap the profile tab (bottom-right, tab_avatar).
+    {
+      const xml = await android.dumpUi(serial);
+      const m = xml.match(/resource-id="[^"]*tab_avatar[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (!m) { onLog?.("Update Bio: ✗ profile tab not found"); return; }
+      await android.tap(serial, Math.round((+m[1] + +m[3]) / 2), Math.round((+m[2] + +m[4]) / 2));
+      onLog?.("Update Bio: tapped profile tab");
+    }
+    await sleepOrAbort(serial, 1800 + Math.round(Math.random() * 400));
+
+    // 2. Tap the "Edit profile" button.
+    {
+      const xml = await android.dumpUi(serial);
+      const m = xml.match(/desc="Edit profile"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ||
+                xml.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^>]*desc="Edit profile"/);
+      if (!m) { onLog?.("Update Bio: ✗ Edit profile button not found"); await android.pressBack(serial); return; }
+      await android.tap(serial, Math.round((+m[1] + +m[3]) / 2), Math.round((+m[2] + +m[4]) / 2));
+      onLog?.("Update Bio: tapped Edit profile");
+    }
+    await sleepOrAbort(serial, 1800 + Math.round(Math.random() * 400));
+
+    // 3. Verify Edit Profile page loaded, then tap the bio field.
+    {
+      const xml = await android.dumpUi(serial);
+      if (!xml.includes("edit_profile_fields") && !xml.includes("prism_form_field_container")) {
+        onLog?.("Update Bio: ✗ Edit Profile page did not load"); await android.pressBack(serial); return;
+      }
+      // The bio section is a Button with resource-id ending in "bio"; its
+      // EditText child is what we tap to place the cursor.
+      const m = xml.match(/resource-id="[^"]*\bbio\b[^"]*"[^/]*\/?>[\s\S]*?<[^>]*EditText[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ||
+                xml.match(/resource-id="[^"]*\bbio\b[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (!m) { onLog?.("Update Bio: ✗ bio field not found in Edit Profile"); await android.pressBack(serial); return; }
+      await android.tap(serial, Math.round((+m[1] + +m[3]) / 2), Math.round((+m[2] + +m[4]) / 2));
+      onLog?.("Update Bio: tapped bio field");
+    }
+    await sleepOrAbort(serial, 800 + Math.round(Math.random() * 200));
+
+    // 4. Select all existing text and replace with the new bio.
+    {
+      const tools = android.detectToolset();
+      const adb = tools.adb.path ?? "";
+      if (adb) {
+        // Select all — Android supports keycombination on API 26+.
+        spawnSync(adb, ["-s", serial, "shell", "input", "keycombination",
+          "KEYCODE_CTRL_LEFT", "KEYCODE_A"], { encoding: "utf8", timeout: 2000 });
+        await sleepOrAbort(serial, 300);
+      }
+      await android.inputText(serial, bioText);
+      onLog?.(`Update Bio: typed bio text (${bioText.length} chars)`);
+    }
+    await sleepOrAbort(serial, 800 + Math.round(Math.random() * 200));
+
+    // 5. Tap the Save / Submit button (top-right of the Edit Profile action bar).
+    {
+      const xml = await android.dumpUi(serial);
+      // Look for a Submit or Done button in the action bar area.
+      const m = xml.match(/desc="Submit"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ||
+                xml.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^>]*desc="Submit"/) ||
+                xml.match(/text="Done"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ||
+                xml.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^>]*text="Done"/);
+      if (m) {
+        await android.tap(serial, Math.round((+m[1] + +m[3]) / 2), Math.round((+m[2] + +m[4]) / 2));
+        onLog?.("Update Bio: tapped Save/Submit button");
+      } else {
+        // Fallback: tap the right side of the action bar (Submit is always there).
+        const ab = xml.match(/resource-id="[^"]*action_bar\b[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+        if (ab) {
+          // Right ~10% of the action bar, vertically centered.
+          const x = Math.round(+ab[3] - (+ab[3] - +ab[1]) * 0.07);
+          const y = Math.round((+ab[2] + +ab[4]) / 2);
+          await android.tap(serial, x, y);
+          onLog?.("Update Bio: tapped action bar right edge (Submit fallback)");
+        } else {
+          onLog?.("Update Bio: ⚠ could not find Save button — pressing Back without saving");
+          await android.pressBack(serial); return;
+        }
+      }
+    }
+    await sleepOrAbort(serial, 1500 + Math.round(Math.random() * 300));
+
+    // 6. Navigate back to the main feed.
+    await android.pressBack(serial);
+    onLog?.("Update Bio: ✓ done");
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -8277,6 +8382,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         updateProfilePicActivatePctMin, updateProfilePicActivatePctMax,
         updateProfilePicFolderPath: _updateProfilePicFolderPath,
         updateProfilePicDisableAfterUsed,
+        updateBioActivatePctMin, updateBioActivatePctMax,
+        updateBioText,
+        updateBioDisableAfterUsed,
         feedActivatePctMin, feedActivatePctMax,
         viewStoriesActivatePctMin, viewStoriesActivatePctMax,
         followActivatePctMin, followActivatePctMax,
@@ -9251,6 +9359,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     slotAutomation: {
                       ..._cfg[serial]?.slotAutomation,
                       [String(slotIdx)]: { ..._existing, updateProfilePicActivatePctMin: 0, updateProfilePicActivatePctMax: 0 },
+                    },
+                  };
+                  saveInstanceConfigs(_cfg);
+                } catch { /* best effort */ }
+              }
+            }
+            const updateBioChance = rollRange(updateBioActivatePctMin, updateBioActivatePctMax) / 100;
+            if (updateBioChance > 0 && Math.random() < updateBioChance && updateBioText.trim()) {
+              tLog("▶ Random Actions: updating profile bio…");
+              await runUpdateBio(serial, updateBioText, (msg) => tLog(`  ${msg}`));
+              steps.push("jitter-update-bio");
+              _jitterFired = true;
+              if (updateBioDisableAfterUsed) {
+                // Write 0/0 back to the saved slot so it won't fire again next cycle.
+                try {
+                  const _cfg = loadInstanceConfigs();
+                  const _existing = _cfg[serial]?.slotAutomation?.[String(slotIdx)] ?? {};
+                  _cfg[serial] = {
+                    ..._cfg[serial],
+                    slotAutomation: {
+                      ..._cfg[serial]?.slotAutomation,
+                      [String(slotIdx)]: { ..._existing, updateBioActivatePctMin: 0, updateBioActivatePctMax: 0 },
                     },
                   };
                   saveInstanceConfigs(_cfg);
