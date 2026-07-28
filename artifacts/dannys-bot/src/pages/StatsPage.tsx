@@ -1223,7 +1223,7 @@ function PhoneFarmTab() {
                       }}
                       onDragEnd={() => { farmDragColRef.current = null; setFarmDragOverCol(null); }}
                       onClick={() => cycleFarmSort(s.key)}
-                      className={`px-3 py-3 text-center uppercase tracking-wide text-[10px] cursor-pointer select-none ${isDragTarget ? "bg-primary/5 border-l-2 border-l-primary" : ""}`}
+                      className={`px-3 py-3 font-bold text-center uppercase tracking-wide text-[10px] cursor-pointer select-none ${isDragTarget ? "bg-primary/5 border-l-2 border-l-primary" : ""}`}
                     >
                       <span className={`inline-flex items-center gap-1 transition-opacity ${s.color} ${isSorted ? "opacity-100" : "opacity-60 hover:opacity-100"}`}>
                         {s.icon} {s.label}

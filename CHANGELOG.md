@@ -4,6 +4,26 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.241 — 2026-07-28
+
+### UI — Update Bio text field: no character limit
+
+The bio text field no longer has a 500-character cap. The `maxLength` HTML attribute and the `.slice(0, 500)` guard in the onChange handler have both been removed. You can now paste a full spin-syntax string of any length — the server already handles arbitrarily long bio text. Field width also widened slightly to `17.5ch`.
+
+### UI — Dashboard: Collision Prevented now red
+
+The **Collision Prevented** action badge colour was changed from orange (`text-orange-600`) to red (`text-red-500`) to match the severity of the event and improve visual distinction from normal-flow entries.
+
+### UI — Dashboard: Started icon brighter red
+
+The standby/power icon shown on **Started** entries was `text-red-500`. Changed to `text-red-400` for a brighter, more vivid red that reads more clearly against the dark background.
+
+### UI — Statistics page: column titles now bold
+
+Column header text in the Statistics table was rendering at normal weight. `font-bold` added to all dynamic column headers so they stand out clearly from the data rows below.
+
+---
+
 ## v1.2.240 — 2026-07-28
 
 ### Fix — Spin syntax now resolves all groups, not just one
