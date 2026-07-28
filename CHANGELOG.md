@@ -4,6 +4,14 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.237 — 2026-07-28
+
+### Fixed — Debugging Log: all Reel-related lines now coloured red
+
+The Reels colour regex only matched `"Reels"` (plural). Sub-messages emitted during the View Reels tool use the singular form — `"Reel 7/8: watching…"`, `"[reel-icons]…"`, `"reel_viewer…"` etc. — so they fell through to white. Changed the match to `/[Rr]eel/` which covers both singular and plural, both upper and lower case, and all reel-prefixed resource-id strings.
+
+---
+
 ## v1.2.236 — 2026-07-28
 
 ### Fixed — Follow tool: previous search text not cleared before typing next username

@@ -8463,8 +8463,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                                                                     msgClass = 'text-blue-400';
               else if (/\bView Explore\b|▶ View Explore|[Ee]xplore/.test(msg))
                                                                     msgClass = 'text-green-400';
-              else if (/\bView Reels\b|▶ View Reels|Reels/.test(msg))
-                                                                    msgClass = 'text-rose-500';
+              else if (/[Rr]eel/.test(msg))                          msgClass = 'text-rose-500';
               else if (/\bMake a Post\b|▶ Make a Post/.test(msg))  msgClass = 'text-purple-400';
               else if (/Switching to Instagram account|account switcher|Long-pressing profile tab|Profile tab found/.test(msg))
                                                                     msgClass = 'text-amber-400';
