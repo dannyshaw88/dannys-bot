@@ -6303,7 +6303,7 @@ export function AutomationSettingsPanel({
                 <Input
                   type="text"
                   maxLength={150}
-                  placeholder="Bio text… or {option1|option2|option3}"
+                  placeholder=""
                   className="h-7 text-xs px-2 w-56 shrink-0"
                   value={settings.updateBioText}
                   onChange={e => setSettings(s => ({ ...s, updateBioText: e.target.value.slice(0, 150) }))}
