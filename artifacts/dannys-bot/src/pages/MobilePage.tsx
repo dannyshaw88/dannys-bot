@@ -6304,7 +6304,7 @@ export function AutomationSettingsPanel({
                   type="text"
                   maxLength={500}
                   placeholder=""
-                  className="h-7 text-xs px-2 w-28 shrink-0"
+                  className="h-7 text-xs px-2 w-[120px] shrink-0"
                   value={settings.updateBioText}
                   onChange={e => setSettings(s => ({ ...s, updateBioText: e.target.value.slice(0, 500) }))}
                   disabled={loading}

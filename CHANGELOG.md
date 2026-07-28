@@ -4,6 +4,48 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.239 — 2026-07-28
+
+### New — Update Bio random action
+
+A new **Update Bio** action has been added to the Random Actions section, sitting directly below the existing Update Profile Picture row.
+
+**How it works:**
+- Set an activation percentage range (min → max) — the same roll system as every other Random Action. Leave both at 0 to keep it disabled.
+- Enter the bio text you want applied in the text field (up to 500 characters accepted, ~19 characters visible).
+- Enable **Disable After Used** if you only want the bio written once — after it fires, the percentages are automatically zeroed out in the saved slot so it never fires again until you re-enable it.
+
+**Automation sequence** (implemented in `runUpdateBio()` in `routes/mobile.ts`):
+1. Taps the profile tab (bottom-right `tab_avatar`).
+2. Taps the **Edit profile** button.
+3. Waits for the Edit Profile page to load, then locates the bio field by `resource-id="bio"` and taps into it.
+4. Selects all existing bio text (`KEYCODE_CTRL_LEFT + KEYCODE_A`) and replaces it by pasting the new text via ADB `inputText`.
+5. Taps the Submit / Done button in the action bar top-right to save. Falls back to tapping the right edge of the action bar if no labelled Save button is found in the dump.
+6. Presses Back to return to the main feed.
+
+All detection is dump-driven — no hardcoded coordinates.
+
+### New — Spin syntax support for Bio text field
+
+The bio text field supports **Jarvee-style spin syntax**: wrap alternatives in `{` `}` separated by `|` and each group is replaced with a randomly chosen variant when the automation cycle fires.
+
+Example:
+```
+{Fitness enthusiast|Gym junkie|Iron addict|Lifter|Powerlifter}
+```
+…picks one of the five options at random each time the action runs, so the bio varies naturally across accounts and cycles.
+
+Multiple spin groups in the same string are each rolled independently:
+```
+{Fitness|Gym|Iron} lover 💪 {DM for collabs|Link in bio}
+```
+
+A **Spin** button (plain blue text) sits to the right of the bio field. Clicking it resolves the spin syntax once and shows the result in a centred modal dialog. A **Roll Again** button inside the dialog lets you keep rolling to preview different outputs before closing — useful for checking your syntax is correct before enabling the action.
+
+The spin resolver (`resolveSpinSyntax()`) runs client-side; no server round-trip is needed.
+
+---
+
 ## v1.2.238 — 2026-07-28
 
 ### Fixed — View Feed like: double-tap now lands in the upper portion of the image, away from ad banners
