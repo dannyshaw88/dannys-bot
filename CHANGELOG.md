@@ -4,6 +4,52 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.229 — 2026-07-28
+
+### Fixed — Update Profile Picture: taps the correct "+" button, not the pencil
+
+The profile picture update automation was tapping `expanded_profile_picture_edit_button` (the pencil/edit overlay icon) instead of `mpp_left` (the dotted-ring "+" slot used to add a new profile picture from the device gallery). Detection is by `resource-id` node lookup — no coordinates.
+
+- **Before:** automation navigated to the expanded profile picture overlay then tapped the pencil icon, which opened the wrong flow.
+- **After:** step 6 of `runUpdateProfilePicture` now matches `mpp_left` and taps its center. If the node is absent the step logs `✗ mpp_left (+) button not found` and presses Back cleanly.
+
+### Changed — Random Actions: debug log prefix renamed from "Random Jitter" to "Random Actions"
+
+All `onLog` and `tLog` calls inside the Random Actions dispatcher and its sub-functions in `mobile.ts` previously showed `"Random Jitter: …"` in the Debugging Log tab. Renamed throughout to `"Random Actions: …"` to match the label displayed in the UI.
+
+Affected log lines (all in `artifacts/api-server/src/routes/mobile.ts`):
+- `onLog?.("Random Actions: notifications icon not found — skipping check notifications")`
+- `onLog?.("Random Actions: ✓ opened notifications")`
+- `onLog?.("Random Actions: ✓ tapped notification item")`
+- `onLog?.("Random Actions: no clickable notification row found — skipping click")`
+- `onLog?.("Random Actions: click-notification roll missed — skipping click")`
+- `onLog?.("Random Actions: ✓ notifications check done")`
+- `onLog?.("Random Actions: profile tab not found — skipping visit profile")`
+- `onLog?.("Random Actions: dismissed contacts popup (…)")`
+- `onLog?.("Random Actions: ✓ visited own profile")`
+- `onLog?.("Random Actions: ✓ opened SMS app")`
+- `onLog?.("Random Actions: staying in SMS for …s…")`
+- `onLog?.("Random Actions: ✓ returned to Instagram after app switch")`
+- `tLog("▶ Random Actions: checking notifications…")` and all other `▶` prefixed tLog calls
+- `tLog("▶ Random Actions Activate Percentage roll missed — skipping this execution")`
+
+### Changed — Update Profile Picture UI: all controls consolidated to one row
+
+Previously the Post Profile Picture section in the Human Session Tool (Random Actions panel) spread across two rows:
+- Row 1: section label + "Activation %" inline label + min/max inputs
+- Row 2: Assign Directory button + Reset button + Disable After Used checkbox
+
+**New layout — single row:**
+- `Activation %` label now sits **above** the two number inputs, centred, same `text-sm text-muted-foreground` style as every other field label in the panel (Notifications %, Scrolls, Click %, etc.)
+- The input group, Assign Directory button, Reset text, and Disable After Used checkbox are all on the same flex row (`items-end gap-4 flex-wrap`)
+- Reset changed from a bordered `<button>` element to unstyled clickable text (`text-xs text-muted-foreground hover:text-foreground`, no border, no background) — same behaviour, cleaner appearance
+
+### Removed — Update Profile Picture: assigned folder path no longer shown in UI
+
+The `{settings.updateProfilePicFolderPath && <span>…</span>}` path display that appeared below the controls after a directory was assigned has been removed. The path is still stored and used by the automation — it is simply no longer visible in the UI.
+
+---
+
 ## v1.2.228 — 2026-07-28 (rev 2 — installer build fix)
 
 ### Changed — Random Actions: Update Profile Picture row fully reworked
