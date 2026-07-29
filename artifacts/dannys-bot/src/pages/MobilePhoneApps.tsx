@@ -1,23 +1,28 @@
 /**
- * MobilePhoneApps — "Mobile Phone Apps" card rendered inside AccountSettingsPanel.
+ * MobilePhoneApps — "Mobile Phone Apps" card + tool panel.
  *
- * Kept in its own file so it is never accidentally touched by changes to the
- * surrounding Accounts / Settings UI.
+ * Two exports:
+ *   MobilePhoneApps      — the card shown in the slot list
+ *   MobilePhoneAppsPanel — the full tool panel (shown when fingerprint is clicked)
  *
- * Props
- *   serial     — ADB serial of the currently-selected device (null = no device)
- *   deviceName — Human-readable display name shown in the section heading
+ * Both are kept here so all Mobile Phone Apps code lives in one place and is
+ * never touched by changes to the surrounding Accounts / Settings UI.
+ *
+ * Props (MobilePhoneApps)
+ *   serial      — ADB serial of the current device (null = no device)
+ *   deviceName  — Human-readable display name shown in the section heading
+ *   onOpenTool  — Called when the fingerprint button is clicked
+ *
+ * Props (MobilePhoneAppsPanel)
+ *   onBack — Called when the back button is clicked
  */
 
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Fingerprint } from "lucide-react";
-
-interface MobilePhoneAppsProps {
-  serial:     string | null | undefined;
-  deviceName: string;
-}
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Fingerprint, ChevronLeft } from "lucide-react";
 
 // ── Brand icon SVGs ────────────────────────────────────────────────────────────
 
@@ -58,11 +63,16 @@ function WhatsAppIcon() {
   );
 }
 
-// ── Component ──────────────────────────────────────────────────────────────────
+// ── Card component ─────────────────────────────────────────────────────────────
 
-export function MobilePhoneApps({ serial: _serial, deviceName }: MobilePhoneAppsProps) {
-  const [enabled, setEnabled] = React.useState(false);
+interface MobilePhoneAppsProps {
+  serial:      string | null | undefined;
+  deviceName:  string;
+  enabled:     boolean;
+  onOpenTool:  () => void;
+}
 
+export function MobilePhoneApps({ serial: _serial, deviceName, enabled, onOpenTool }: MobilePhoneAppsProps) {
   return (
     <>
       {/* Section heading */}
@@ -73,39 +83,33 @@ export function MobilePhoneApps({ serial: _serial, deviceName }: MobilePhoneApps
 
       {/* Card */}
       <div className="bg-card border border-border rounded-xl p-5 space-y-3">
-        {/* Card header row */}
         <div className="flex items-center justify-between gap-2">
 
-          {/* Left: title + fingerprint button + toggle */}
+          {/* Left: title + fingerprint button + toggle status */}
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider min-w-[13rem]">
               Mobile Phone Apps
             </p>
 
-            {/* Fingerprint / Human Session Tool button */}
+            {/* Fingerprint / tool button */}
             <Button
               type="button"
               size="sm"
               className="px-2 text-[11px] gap-1.5 text-white hover:brightness-95 transition-all"
               style={{ background: "#1AD2F2", border: "none", height: 28, width: 28, padding: 0 }}
-              onClick={() => {}}
+              onClick={onOpenTool}
             >
               <Fingerprint className="w-3.5 h-3.5 text-white" />
             </Button>
 
-            {/* Toggle */}
+            {/* Toggle indicator (read-only on the card — edit inside the panel) */}
             <div className="flex items-center gap-2 pl-2 border-l border-border">
-              <Switch
-                checked={enabled}
-                onCheckedChange={setEnabled}
-              />
-              <div className="flex flex-col min-w-0">
-                <span className={`text-[11px] font-semibold leading-tight whitespace-nowrap ${
-                  enabled ? "text-green-600 dark:text-green-400" : "text-muted-foreground"
-                }`}>
-                  {enabled ? "Active" : "Disabled"}
-                </span>
-              </div>
+              <div className={`w-2 h-2 rounded-full shrink-0 ${enabled ? "bg-green-500" : "bg-muted-foreground/40"}`} />
+              <span className={`text-[11px] font-semibold leading-tight whitespace-nowrap ${
+                enabled ? "text-green-600 dark:text-green-400" : "text-muted-foreground"
+              }`}>
+                {enabled ? "Active" : "Disabled"}
+              </span>
             </div>
           </div>
 
@@ -119,5 +123,83 @@ export function MobilePhoneApps({ serial: _serial, deviceName }: MobilePhoneApps
         </div>
       </div>
     </>
+  );
+}
+
+// ── Panel component ────────────────────────────────────────────────────────────
+
+interface MobilePhoneAppsPanelProps {
+  onBack:      () => void;
+  onEnabled:   (v: boolean) => void;
+}
+
+const NUM_INPUT_CLASS = "w-16 text-center";
+
+export function MobilePhoneAppsPanel({ onBack, onEnabled }: MobilePhoneAppsPanelProps) {
+  const [enabled,     setEnabled]     = React.useState(false);
+  const [intervalMin, setIntervalMin] = React.useState(25);
+  const [intervalMax, setIntervalMax] = React.useState(99);
+
+  const handleEnabled = (v: boolean) => {
+    setEnabled(v);
+    onEnabled(v);
+  };
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* Top bar — back button */}
+      <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
+        <Button variant="outline" size="sm" onClick={onBack} className="gap-1 h-7 px-2">
+          <ChevronLeft className="w-3.5 h-3.5" />
+          Back
+        </Button>
+        <div className="flex-1" />
+        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+          Mobile Phone Apps
+        </span>
+      </div>
+
+      {/* Scrollable content */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
+        {/* (STEP 1) Toggle + Run every X to Y minutes */}
+        <div className="inline-flex self-start bg-card border border-border rounded-xl p-5">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+              (STEP1)
+            </span>
+            <Switch
+              checked={enabled}
+              onCheckedChange={handleEnabled}
+              className="shrink-0"
+            />
+            <div className="flex flex-col min-w-0">
+              <span className={`text-sm font-semibold text-foreground whitespace-nowrap ${
+                enabled ? "text-green-600 dark:text-green-400" : ""
+              }`}>
+                {enabled ? "Active" : "Disabled"}
+              </span>
+            </div>
+            <div className="w-px self-stretch bg-border mx-1" />
+            <Label className="text-sm text-muted-foreground whitespace-nowrap">Run every</Label>
+            <Input
+              type="number"
+              min={1}
+              className={NUM_INPUT_CLASS}
+              value={intervalMin}
+              onChange={e => setIntervalMin(Math.max(1, Number(e.target.value)))}
+            />
+            <span className="text-muted-foreground text-sm">to</span>
+            <Input
+              type="number"
+              min={1}
+              className={NUM_INPUT_CLASS}
+              value={intervalMax}
+              onChange={e => setIntervalMax(Math.max(1, Number(e.target.value)))}
+            />
+            <Label className="text-sm text-muted-foreground whitespace-nowrap">minutes</Label>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

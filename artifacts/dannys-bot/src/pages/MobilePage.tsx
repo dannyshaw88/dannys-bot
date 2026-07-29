@@ -25,7 +25,7 @@ import {
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
 import { ImageSettingsDialog, type ImageFilterSettings } from "@/components/tools/ImageSettingsDialog";
 import { getTrustLevels, type TrustLevelEntry } from "@/components/TrustScoreBadge";
-import { MobilePhoneApps } from "@/pages/MobilePhoneApps";
+import { MobilePhoneApps, MobilePhoneAppsPanel } from "@/pages/MobilePhoneApps";
 import {
   loadSlotTrustScore,
   readLocalSlotTrustScore,
@@ -7100,10 +7100,12 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   // null = show slot list; number = show Human Session Tool for that slot index
   // initialSlot lets the Dashboard (or any deep-link) open a specific slot's
   // Human Session Tool directly on mount (e.g. ?slot=0 in the URL).
-  const [openSlotTool, setOpenSlotTool] = useState<number | null>(initialSlot ?? null);
+  const [openSlotTool,      setOpenSlotTool]      = useState<number | null>(initialSlot ?? null);
+  const [openPhoneAppsTool, setOpenPhoneAppsTool] = useState(false);
+  const [phoneAppsEnabled,  setPhoneAppsEnabled]  = useState(false);
   useEffect(() => { onSlotChange?.(openSlotTool); }, [openSlotTool]);
   useImperativeHandle(ref, () => ({
-    backToSlots: () => setOpenSlotTool(null),
+    backToSlots: () => { setOpenSlotTool(null); setOpenPhoneAppsTool(false); },
     backToSlot:  (idx: number | null) => setOpenSlotTool(idx),
   }));
   const { config: collisionConfig, requestSlot, releaseSlot, cancelQueuedSlot } = useCollisionPreventer(phone?.serial ?? null);
@@ -7287,11 +7289,24 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
         </div>
       )}
 
-      {/* Slot list — hidden when a slot tool view is open or phone is null */}
-      <div className={phone && openSlotTool === null ? "h-full overflow-y-auto p-6 space-y-6" : "hidden"}>
+      {/* Mobile Phone Apps tool panel — shown when fingerprint is clicked */}
+      <div className={phone && openPhoneAppsTool ? "h-full" : "hidden"}>
+        <MobilePhoneAppsPanel
+          onBack={() => setOpenPhoneAppsTool(false)}
+          onEnabled={setPhoneAppsEnabled}
+        />
+      </div>
+
+      {/* Slot list — hidden when any tool view is open or phone is null */}
+      <div className={phone && openSlotTool === null && !openPhoneAppsTool ? "h-full overflow-y-auto p-6 space-y-6" : "hidden"}>
 
         {/* ── Mobile Phone Apps ─────────────────────────────────────────── */}
-        <MobilePhoneApps serial={phone?.serial} deviceName={deviceName} />
+        <MobilePhoneApps
+          serial={phone?.serial}
+          deviceName={deviceName}
+          enabled={phoneAppsEnabled}
+          onOpenTool={() => setOpenPhoneAppsTool(true)}
+        />
 
         {/* ── Instagram Accounts ────────────────────────────────────────── */}
         <h2 className="text-lg font-bold text-foreground">Instagram Accounts</h2>

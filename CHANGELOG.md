@@ -4,6 +4,46 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.253 — 2026-07-29
+
+### Fix — Crash on device click: "gpEmail is not defined"
+
+Clicking any device in the Phone Farm opened an error screen: `ReferenceError: gpEmail is not defined`. The `gpEmail` and `gpPassword` state declarations had been placed inside the JSX `return` block of `AccountSettingsPanel` instead of before it. Moved both declarations above the `return` so React finds them when the component renders.
+
+### Fix — MetaMask browser extension overlay blocking the UI
+
+The MetaMask Chrome extension throws a runtime error on every page load when it can't find a Web3 provider. Vite's `@replit/vite-plugin-runtime-error-modal` was catching this and showing it as a full-screen blocking overlay, making the UI unusable in that browser. Removed the runtime error modal plugin from `vite.config.ts` — it was only a dev convenience tool and is not needed for the app to function.
+
+### Change — Device name moved from "Instagram Accounts" heading to "Mobile Phone Apps" heading
+
+The device model name (e.g. "Xiaomi Redmi Note 12") was displayed in the header row next to the "Instagram Accounts" section title. Moved it to the "Mobile Phone Apps" section title instead, where it is more relevant as a label for the whole device-level apps block.
+
+### New — Mobile Phone Apps section extracted to its own file (`MobilePhoneApps.tsx`)
+
+The "Mobile Phone Apps" UI block inside the Accounts tab has been moved out of `MobilePage.tsx` into a dedicated file (`artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx`). All state, load, and save logic for this section lives exclusively in that file so future changes to Accounts, Settings, or the Instagram slot cards can never accidentally affect it.
+
+### New — Mobile Phone Apps card redesigned
+
+The Google Play Account card inside the Accounts tab has been fully redesigned:
+
+- **Renamed** — card title changed from "Google Play Account" to "Mobile Phone Apps"
+- **Fingerprint button** — cyan Human Session Tool fingerprint icon added to the card header, aligned in the same horizontal column as the Instagram slot fingerprint buttons so all cards line up vertically
+- **Toggle indicator** — Active/Disabled status dot + label on the card, reflecting the state set inside the tool panel
+- **App icons** — Google Play, Snapchat, YouTube, and WhatsApp brand icons shown on the right side of the card header
+- **Removed** — Email Address and Password input fields removed entirely
+
+### New — Mobile Phone Apps tool panel
+
+Clicking the fingerprint button on the Mobile Phone Apps card now opens a full-height tool panel (the same show/hide mechanism used by the Instagram slot Human Session Tool views). The panel contains:
+
+- **Back button** in the top bar to return to the slot list
+- **(STEP1) toggle** — enables/disables the tool; status reflects back on the card
+- **Run every X to Y minutes** — number inputs for the automation interval, matching the Human Session Tool layout exactly
+
+All panel logic is self-contained in `MobilePhoneApps.tsx` with no shared code with the Instagram slot HST implementation.
+
+---
+
 ## v1.2.252 — 2026-07-29
 
 ### Fix — Collision Preventer: My Device scheduling now correctly uses CP interval instead of HST interval
