@@ -4,6 +4,30 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.261] — 2026-07-29
+
+### Feature — YouTube: homepage scroll + video tap
+
+The YouTube card now runs a full automation flow when activated:
+
+1. **Launch & notification dialog** — opens `com.google.android.youtube/HomeActivity` and, if the Android OS notification-permission sheet appears ("Allow YouTube to send you notifications?"), taps **Don't allow** and waits for it to dismiss.
+
+2. **Homepage scroll** — a new **Scrolls X to Y** field appears on the YouTube row. After any dialog is cleared the tool waits for the homepage to settle, detects the `browse_fragment_layout_coordinator_layout` / `results` RecyclerView, then swipes down the feed the configured number of times (random within the range, 350–650 ms each swipe with a 700–1500 ms pause between).
+
+3. **Video tap (optional)** — a new **Tap video % X to Y** field lets you set a percentage chance that the tool will tap a video card after scrolling. Detection uses YouTube's own accessibility content-desc patterns (`– play video` suffix, or `Go to channel` + duration text). If the roll fires and a card is found, the tool taps it, waits 2.5–4 s, then dumps the UI to confirm a video actually opened (checks for `watch_while_layout_coordinator_layout` / `next_gen_watch_container_layout` or absence of the homepage scroll view). If confirmed, it watches for 1.5–3.5 s then presses **Back** to return to the feed. If the tap didn't land on a video the Back press is skipped.
+
+4. **Close via floating-windows recents** — always runs at the end. Opens the recent-apps overlay and performs the device-appropriate card-dismiss swipe: left-drag for MIUI/HyperOS floating-window carousel (Redmi 12 and similar), upward flick for stock Android recents (Redmi A5 and similar). The dismiss direction comes from the My Device tab override or the model-lookup table — the same source used by the Instagram and Chrome close steps.
+
+### Feature — Mobile Phone Apps: toggle-on fires immediately
+
+Toggling **any** Mobile Phone Apps slot on now fires the first cycle immediately instead of waiting a random interval. This matches the behaviour of the per-account Human Session Tool toggle. Restart with the toggle already on still uses the normal run-every interval so all devices don't fire simultaneously on software start.
+
+### Fix — Mobile Phone Apps: next-run timestamp in Run every block
+
+The "Next run at HH:MM on DD/MM/YYYY" timestamp now appears as a sub-line directly beneath the **Active** label inside the Step 1 / Run every block — both in the panel and in the card shown in the slot list — matching the layout used by the Human Session Tool on the main Mobile page.
+
+---
+
 ## [1.2.260] — 2026-07-29
 
 ### Feature — Chrome: Internal Links Clicked

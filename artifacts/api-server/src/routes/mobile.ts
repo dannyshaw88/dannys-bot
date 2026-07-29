@@ -11220,7 +11220,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const serial = p(req, "serial");
       const { app: appId, scrollMin, scrollMax, storyTapMin, storyTapMax,
               tappedStoryScrollMin, tappedStoryScrollMax,
-              internalLinkPctMin, internalLinkPctMax } = z.object({
+              internalLinkPctMin, internalLinkPctMax,
+              clickPctMin, clickPctMax } = z.object({
         app:                  z.enum(["chrome", "googlePlay", "snapchat", "youtube", "whatsapp"]),
         scrollMin:            z.number().int().min(0).max(50).optional(),
         scrollMax:            z.number().int().min(0).max(50).optional(),
@@ -11230,6 +11231,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         tappedStoryScrollMax: z.number().int().min(0).max(50).optional(),
         internalLinkPctMin:   z.number().int().min(0).max(100).optional(),
         internalLinkPctMax:   z.number().int().min(0).max(100).optional(),
+        // YouTube-specific: chance (0–100%) to tap a video item after scrolling.
+        clickPctMin:          z.number().int().min(0).max(100).optional(),
+        clickPctMax:          z.number().int().min(0).max(100).optional(),
       }).parse(req.body);
 
       // Resolve dismiss direction (used by Chrome recents close).
@@ -11253,7 +11257,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           dismissDirection: dismissDir,
         });
       } else if (appId === "youtube") {
-        result = await android.runYoutubeApp(serial);
+        result = await android.runYoutubeApp(serial, {
+          scrollMin, scrollMax,
+          clickPctMin, clickPctMax,
+          dismissDirection: dismissDir,
+        });
       } else {
         // Remaining apps are placeholders — will be implemented individually.
         result = { ok: true, steps: [`${appId}: not yet implemented`] };

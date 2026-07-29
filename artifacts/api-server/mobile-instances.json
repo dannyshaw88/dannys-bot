@@ -779,6 +779,39 @@
     "deviceSettings": {
       "googlePlayEmail": "",
       "googlePlayPassword": ""
+    },
+    "phoneApps": {
+      "enabled": false,
+      "intervalMin": 25,
+      "intervalMax": 99,
+      "chrome": {
+        "activatePctMin": 0,
+        "activatePctMax": 0,
+        "scrollMin": 1,
+        "scrollMax": 5,
+        "storyTapMin": 0,
+        "storyTapMax": 0,
+        "tappedStoryScrollMin": 0,
+        "tappedStoryScrollMax": 0,
+        "internalLinkPctMin": 0,
+        "internalLinkPctMax": 0
+      },
+      "googlePlay": {
+        "activatePctMin": 0,
+        "activatePctMax": 0
+      },
+      "snapchat": {
+        "activatePctMin": 0,
+        "activatePctMax": 0
+      },
+      "youtube": {
+        "activatePctMin": 0,
+        "activatePctMax": 0
+      },
+      "whatsapp": {
+        "activatePctMin": 0,
+        "activatePctMax": 0
+      }
     }
   }
 }

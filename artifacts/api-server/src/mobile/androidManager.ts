@@ -1004,17 +1004,62 @@ export async function runChromeApp(
 }
 
 /**
+ * Returns tappable YouTube homepage video cards from a UIAutomator dump.
+ * Identifies them by the content-desc patterns YouTube writes for video items:
+ * the string ends with "– play video" or contains "Go to channel" alongside a
+ * duration/upload-time component. Excludes nav bar, tiny icon nodes, and
+ * channel-avatar items.
+ */
+function _findYoutubeVideoCards(
+  xml: string,
+  screenH: number,
+): Array<{ x: number; y: number }> {
+  const results: Array<{ x: number; y: number }> = [];
+  const nodeRe = /<node[^>]*>/g;
+  let m: RegExpExecArray | null;
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const node = m[0];
+    if (!node.includes('clickable="true"')) continue;
+    const dm = node.match(/content-desc="([^"]*)"/);
+    const desc = dm ? dm[1] : "";
+    // "play video" is YouTube's own a11y suffix on every video card.
+    // "Go to channel" + a time component covers cards that render a full
+    // accessibility description but omit the "play video" suffix.
+    const isVideo =
+      desc.includes("play video") ||
+      (desc.includes("Go to channel") &&
+        (desc.includes("hour") || desc.includes("minute") ||
+         desc.includes("second") || desc.includes(" ago")));
+    if (!isVideo) continue;
+    const bm = node.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+    if (!bm) continue;
+    const y1 = parseInt(bm[2], 10), y2 = parseInt(bm[4], 10);
+    if (y2 - y1 < 80) continue; // skip tiny icon/badge nodes
+    const cy = Math.round((y1 + y2) / 2);
+    // Avoid system-bar and bottom-nav areas.
+    if (cy < screenH * 0.08 || cy > screenH * 0.92) continue;
+    results.push({ x: Math.round((parseInt(bm[1], 10) + parseInt(bm[3], 10)) / 2), y: cy });
+  }
+  return results;
+}
+
+/**
  * Opens the YouTube app on the device, dismisses the OS notification-
- * permission dialog if it appears ("Allow YouTube to send you
- * notifications?"), then returns.
+ * permission dialog if it appears, scrolls the homepage feed X–Y times,
+ * optionally taps a video (rolls a click %) and presses Back, then closes
+ * the app via the device's floating-windows recents gesture (same pattern
+ * as runChromeApp).
  *
- * Detection uses the standard Android permission dialog resource-ids
- * (permission_deny_button / permission_allow_button) rather than
- * YouTube-package-prefixed ids because this dialog is rendered by the
- * Android OS, not the app itself.
+ * Detection uses standard Android permission dialog resource-ids because
+ * that dialog is rendered by the OS, not the YouTube package.
  */
 export async function runYoutubeApp(
   serial: string,
+  opts?: {
+    scrollMin?: number; scrollMax?: number;
+    clickPctMin?: number; clickPctMax?: number;
+    dismissDirection?: "left" | "up";
+  },
 ): Promise<{ ok: boolean; steps: string[]; error?: string }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
@@ -1056,6 +1101,99 @@ export async function runYoutubeApp(
     } else {
       steps.push("YouTube: notification dialog not shown");
     }
+
+    // ── Scroll and optional video tap ─────────────────────────────────────────
+    const scrollMin   = opts?.scrollMin   ?? 0;
+    const scrollMax   = opts?.scrollMax   ?? 0;
+    const clickPctMin = opts?.clickPctMin ?? 0;
+    const clickPctMax = opts?.clickPctMax ?? 0;
+
+    const scrollCount = scrollMax > 0
+      ? Math.round(scrollMin + Math.random() * Math.max(0, scrollMax - scrollMin))
+      : 0;
+
+    if (scrollCount > 0 || clickPctMax > 0) {
+      // Let the homepage settle after launch / dialog dismissal.
+      await _sleep(1500);
+
+      const feedXml = await _uiDump(adb, serial);
+      const onHomepage =
+        feedXml.includes("browse_fragment_layout_coordinator_layout") ||
+        feedXml.includes('"results"');
+
+      if (!onHomepage) {
+        steps.push("YouTube: homepage not detected — skipping scroll/tap");
+      } else {
+        const { w: sw, h: sh } = _getScreenSize(feedXml);
+        const cx    = Math.round(sw / 2);
+        const fromY = Math.round(sh * 0.75);
+        const toY   = Math.round(sh * 0.25);
+
+        // ── Scroll loop ───────────────────────────────────────────────────────
+        if (scrollCount > 0) {
+          steps.push(`YouTube: scrolling homepage ${scrollCount}x`);
+          for (let i = 0; i < scrollCount; i++) {
+            const dur = 350 + Math.floor(Math.random() * 300); // 350–650 ms
+            await swipe(serial, cx, fromY, cx, toY, dur);
+            await _sleep(700 + Math.floor(Math.random() * 800)); // 700–1500 ms pause
+          }
+        }
+
+        // ── Optional video tap ────────────────────────────────────────────────
+        if (clickPctMax > 0) {
+          const pct = clickPctMin + Math.random() * Math.max(0, clickPctMax - clickPctMin);
+          if (Math.random() * 100 < pct) {
+            const cardXml = await _uiDump(adb, serial);
+            const { h: cardH } = _getScreenSize(cardXml);
+            const cards = _findYoutubeVideoCards(cardXml, cardH);
+            if (cards.length > 0) {
+              const card = cards[Math.floor(Math.random() * cards.length)];
+              _adbTap(adb, serial, card.x, card.y);
+              steps.push(`YouTube: tapped video card at (${card.x},${card.y})`);
+              // Wait for video player to open, then verify the tap landed.
+              await _sleep(2500 + Math.floor(Math.random() * 1500));
+              const afterXml = await _uiDump(adb, serial);
+              const openedVideo =
+                afterXml.includes("watch_while_layout_coordinator_layout") ||
+                afterXml.includes("next_gen_watch_container_layout") ||
+                !afterXml.includes("browse_fragment_layout_coordinator_layout");
+              if (openedVideo) {
+                // Brief watch time before pressing Back.
+                await _sleep(1500 + Math.floor(Math.random() * 2000));
+                spawnSync(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"],
+                  { encoding: "utf8", timeout: 5000 });
+                steps.push("YouTube: video confirmed opened — pressed Back");
+                await _sleep(800 + Math.floor(Math.random() * 600));
+              } else {
+                steps.push("YouTube: tap did not open a video — skipping Back press");
+              }
+            } else {
+              steps.push("YouTube: click roll fired but no video cards found in dump");
+            }
+          } else {
+            steps.push("YouTube: click roll not fired");
+          }
+        }
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // ── Close YouTube via floating-windows recents ────────────────────────────
+    // Always runs, same pattern as runChromeApp.
+    const dismissDir = opts?.dismissDirection
+      ?? getModelDismissDirection(getDeviceModel(serial));
+    const { w: rw, h: rh } = getScreenSize(serial);
+    await openRecentApps(serial);
+    await _sleep(1200); // wait for OEM recents overlay to settle
+    const rcx = Math.round(rw / 2);
+    if (dismissDir === "up") {
+      await swipe(serial, rcx, Math.round(rh * 0.65), rcx, 0, 150);
+    } else {
+      await swipe(serial, rcx, Math.round(rh * 0.45), Math.round(rw * 0.05), Math.round(rh * 0.45), 400);
+    }
+    steps.push(`YouTube: opened recents + swiped away (${dismissDir})`);
+    await _sleep(800);
+    // ─────────────────────────────────────────────────────────────────────────
 
     return { ok: true, steps };
   } catch (e: any) {
