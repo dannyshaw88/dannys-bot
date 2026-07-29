@@ -1408,7 +1408,28 @@ export async function runYoutubeApp(
                   (watchTimeMin + Math.random() * Math.max(0, watchTimeMax - watchTimeMin)) * 1000,
                 );
                 steps.push(`YouTube: watching video for ~${Math.round(watchMs / 1000)}s`);
-                await _sleep(watchMs);
+                // Poll for the skip-ad button during the watch window.
+                // id="skip_ad_button" / desc="Skip ad" appears after a
+                // countdown on skippable pre-roll ads.  We check every
+                // ~5 s; if found we tap immediately and continue watching
+                // so the session still looks natural.
+                {
+                  const skipPollMs = 4800 + Math.floor(Math.random() * 800);
+                  let watchedMs = 0;
+                  while (watchedMs < watchMs) {
+                    const chunkMs = Math.min(skipPollMs, watchMs - watchedMs);
+                    await _sleep(chunkMs);
+                    watchedMs += chunkMs;
+                    if (watchedMs >= watchMs) break; // done — skip the dump
+                    const adXml = await _uiDump(adb, serial);
+                    const skipBtn = _findElem(adXml, "skip_ad_button", "Skip ad", "Skip");
+                    if (skipBtn) {
+                      _adbTap(adb, serial, skipBtn.x, skipBtn.y);
+                      steps.push(`YouTube: skipped ad at ~${Math.round(watchedMs / 1000)}s`);
+                      await _sleep(500 + Math.floor(Math.random() * 300));
+                    }
+                  }
+                }
                 spawnSync(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"],
                   { encoding: "utf8", timeout: 5000 });
                 steps.push("YouTube: video confirmed opened — pressed Back");
