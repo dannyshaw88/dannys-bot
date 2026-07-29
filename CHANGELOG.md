@@ -4,6 +4,36 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.263] — 2026-07-29
+
+### Fix — Chrome: tap home button on launch to avoid resuming a stale page
+
+Chrome remembers the last page it was on across sessions. When the Phone Apps tool relaunches it, Chrome resumes that page instead of the Discover/NTP feed, which means the story-card finder (`feed_stream_recycler_view`) won't be present and scrolls / story taps silently do nothing.
+
+After confirming Chrome is in the foreground the tool now looks for `id="home_button"` (the house icon in the top-left toolbar, `desc="Open the homepage"`) and taps it before any FRE check, scrolling, or story tapping. It then waits 1.5 s for the feed to load and takes a fresh UI dump so the rest of the flow sees the correct NTP state. If the home button is not visible (e.g. the FRE screen is showing on first run) the tap is skipped silently.
+
+### Fix — Chrome: universal cookie / consent banner accepter
+
+When a story card is tapped and the article page loads, some sites immediately display a cookie or GDPR consent overlay that blocks all content beneath it. The tool now takes a UI dump right after the page-load wait and checks for consent-banner keywords (`cookie`, `consent`, `contentpass`, `personalised/personalized ads`, `gdpr`, `privacy policy`, `we and our`, `our partners`). If a banner is detected it searches for the accept button using a priority-ordered list of 20+ common button labels — starting with `Accept All & Continue` / `Accept All` and falling back through `Allow All`, `I Agree`, `Agree`, `Accept` — taps it, and waits 900 ms before continuing to scroll the article. If no recognised button label is found the flow continues normally without a blind tap. The Action Log records `Chrome story N: cookie/consent banner detected — tapped accept` whenever a dismissal fires.
+
+### Fix — Chrome: Google app opened instead of Chrome
+
+On some devices `am start -n com.android.chrome/...` returns an error and Android leaves the foreground unchanged (often the Google app). The launcher now inspects the `am start` stdout for error strings; on failure it immediately retries with `monkey -p com.android.chrome -c android.intent.category.LAUNCHER 1` (equivalent to tapping the Chrome icon). After the launch wait a UI dump additionally confirms `com.android.chrome` resource-ids are present; if they are not (any app in foreground) a second monkey call fires and the tool waits another 2.5 s. The Action Log shows which path was taken.
+
+### Fix — Chrome: "Chrome notifications make things easier" popup auto-dismissed
+
+After launch Chrome may show a two-button notification-promo sheet (`id="modal_dialog_view"`, title "Chrome notifications make things easier"). The tool detects it by `modal_dialog_view` / the title text / `negative_button` and taps `id="negative_button"` ("No, thanks") to dismiss it. Works whether or not the first-run experience (FRE) screens were shown.
+
+### Fix — Mobile Phone Apps toggle: device wakes and unlocks before app launch
+
+Toggling any Phone Apps slot on now wakes the screen (`KEYCODE_WAKEUP`) and swipes up to clear the keyguard before calling `am start`. Previously the device stayed dark and locked — `am start` accepted the command silently but nothing rendered on screen.
+
+### Fix — Mobile Phone Apps: mirror activates during Phone Apps execution
+
+The phone mirror (scrcpy stream) now lights up whenever a Phone Apps cycle is actively running, matching the behaviour of the Human Session Tool. Previously the mirror stayed dark even while Chrome or YouTube automation was executing on the device.
+
+---
+
 ## [1.2.262] — 2026-07-29
 
 ### Fix — Mobile Phone Apps: toggle-on now actually wakes and unlocks the device

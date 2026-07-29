@@ -795,8 +795,31 @@ export async function runChromeApp(
       await _sleep(2500);
     }
 
-    // Dump the UI tree and look for the Chrome FRE screen.
-    const xml = chromeInFg ? xmlPre : await _uiDump(adb, serial);
+    // Get the current UI state (reuse the foreground-check dump if Chrome was
+    // already in the foreground, otherwise take a fresh one after monkey launch).
+    let xml = chromeInFg ? xmlPre : await _uiDump(adb, serial);
+
+    // ── Tap home button to ensure Chrome is on its homepage ──────────────────
+    // Chrome remembers the last-visited page across sessions.  Tapping the home
+    // button (id="home_button", desc="Open the homepage") resets it to the New
+    // Tab / Discover feed before any scrolling or story tapping begins.
+    // If the home button isn't visible (e.g. FRE is showing) we skip silently.
+    {
+      const homePos = _findElem(xml,
+        "com.android.chrome:id/home_button",
+        "home_button",
+        "Open the homepage",
+      );
+      if (homePos) {
+        _adbTap(adb, serial, homePos.x, homePos.y);
+        steps.push("Chrome: tapped home button — navigating to homepage");
+        await _sleep(1500); // wait for NTP / Discover feed to load
+        xml = await _uiDump(adb, serial); // re-dump: page changed after home tap
+      } else {
+        steps.push("Chrome: home button not visible — skipping (FRE or custom NTP?)");
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     // Detection: id="fre_pager" is the unique ViewPager container for the
     // Chrome first-run experience.  id="signin_fre_continue_button" is the
