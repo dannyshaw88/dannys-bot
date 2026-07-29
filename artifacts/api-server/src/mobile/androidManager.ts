@@ -609,9 +609,40 @@ export async function launchInstagram(serial: string): Promise<void> {
  * This function detects that screen via UIAutomator and taps the button
  * automatically so the FRE never blocks subsequent automation.
  */
+/**
+ * Finds tappable article cards in the Chrome Discover feed from a UI-dump XML.
+ * Cards are clickable ViewGroups that span ~70–95 % of the screen width and are
+ * at least 150 px tall.  Share buttons and Card-menu buttons are excluded by
+ * their content-desc prefix.
+ */
+function _findChromeFeedCards(
+  xml: string,
+  screenW: number,
+): Array<{ x: number; y: number }> {
+  const results: Array<{ x: number; y: number }> = [];
+  const nodeRe = /<node[^>]*>/g;
+  let m: RegExpExecArray | null;
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const node = m[0];
+    if (!node.includes('clickable="true"')) continue;
+    const bm = node.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+    if (!bm) continue;
+    const x1 = parseInt(bm[1], 10), y1 = parseInt(bm[2], 10);
+    const x2 = parseInt(bm[3], 10), y2 = parseInt(bm[4], 10);
+    const w = x2 - x1, h = y2 - y1;
+    if (w < screenW * 0.70 || w > screenW * 0.95) continue; // too narrow or full-width container
+    if (h < 150) continue;                                   // ignore small buttons
+    const dm = node.match(/content-desc="([^"]*)"/);
+    const desc = dm ? dm[1] : "";
+    if (desc.startsWith("Share ") || desc.startsWith("Card menu ")) continue;
+    results.push({ x: Math.round((x1 + x2) / 2), y: Math.round((y1 + y2) / 2) });
+  }
+  return results;
+}
+
 export async function runChromeApp(
   serial: string,
-  opts?: { scrollMin?: number; scrollMax?: number },
+  opts?: { scrollMin?: number; scrollMax?: number; storyTapMin?: number; storyTapMax?: number },
 ): Promise<{ ok: boolean; steps: string[]; error?: string }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
@@ -765,23 +796,91 @@ export async function runChromeApp(
       steps.push("Chrome FRE: not shown");
     }
 
-    // ── Scroll the Chrome page ────────────────────────────────────────────────
-    const scrollMin = opts?.scrollMin ?? 0;
-    const scrollMax = opts?.scrollMax ?? 0;
-    if (scrollMax > 0) {
-      const count = Math.round(scrollMin + Math.random() * Math.max(0, scrollMax - scrollMin));
-      if (count > 0) {
-        await _sleep(1500); // let Chrome settle after FRE / launch
-        const scrollXml = await _uiDump(adb, serial);
-        const { w: sw, h: sh } = _getScreenSize(scrollXml);
+    // ── Scroll the Chrome feed + interleaved story taps ──────────────────────
+    const scrollMin    = opts?.scrollMin    ?? 0;
+    const scrollMax    = opts?.scrollMax    ?? 0;
+    const storyTapMin  = opts?.storyTapMin  ?? 0;
+    const storyTapMax  = opts?.storyTapMax  ?? 0;
+
+    const scrollCount   = scrollMax  > 0
+      ? Math.round(scrollMin  + Math.random() * Math.max(0, scrollMax  - scrollMin))  : 0;
+    const storyTapTotal = storyTapMax > 0
+      ? Math.round(storyTapMin + Math.random() * Math.max(0, storyTapMax - storyTapMin)) : 0;
+
+    if (scrollCount > 0 || storyTapTotal > 0) {
+      await _sleep(1500); // let Chrome settle after FRE / launch
+
+      const feedXml = await _uiDump(adb, serial);
+
+      if (!feedXml.includes("feed_stream_recycler_view")) {
+        steps.push("Chrome feed: feed_stream_recycler_view not detected — skipping scroll/tap");
+      } else {
+        const { w: sw, h: sh } = _getScreenSize(feedXml);
         const cx    = Math.round(sw / 2);
         const fromY = Math.round(sh * 0.75);
         const toY   = Math.round(sh * 0.25);
-        steps.push(`Chrome scroll: ${count} swipe(s)`);
-        for (let i = 0; i < count; i++) {
+
+        // Pick which scroll indices (0-based) trigger a story tap immediately after.
+        // Shuffle the index pool and pick the first storyTapTotal slots.
+        const tapAfterScroll = new Set<number>();
+        if (storyTapTotal > 0 && scrollCount > 0) {
+          const pool = Array.from({ length: scrollCount }, (_, i) => i);
+          for (let i = pool.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [pool[i], pool[j]] = [pool[j], pool[i]];
+          }
+          for (let i = 0; i < Math.min(storyTapTotal, scrollCount); i++) tapAfterScroll.add(pool[i]);
+        }
+
+        steps.push(`Chrome feed: ${scrollCount} scroll(s), ${storyTapTotal} story tap(s)`);
+
+        let tapsLeft = storyTapTotal;
+
+        // ── Main scroll loop ────────────────────────────────────────────────
+        for (let i = 0; i < scrollCount; i++) {
           const dur = 350 + Math.floor(Math.random() * 300); // 350–650 ms
           await swipe(serial, cx, fromY, cx, toY, dur);
           await _sleep(700 + Math.floor(Math.random() * 800)); // 700–1500 ms pause
+
+          if (tapAfterScroll.has(i) && tapsLeft > 0) {
+            const cardXml = await _uiDump(adb, serial);
+            const cards   = _findChromeFeedCards(cardXml, sw);
+            if (cards.length > 0) {
+              const card = cards[Math.floor(Math.random() * cards.length)];
+              _adbTap(adb, serial, card.x, card.y);
+              steps.push(`Chrome feed: story tap ${storyTapTotal - tapsLeft + 1}/${storyTapTotal}`);
+              await _sleep(2000 + Math.floor(Math.random() * 3000)); // 2–5 s reading time
+              spawnSync(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"],
+                { encoding: "utf8", timeout: 5000 });
+              await _sleep(800 + Math.floor(Math.random() * 700)); // 0.8–1.5 s for feed to re-render
+            } else {
+              steps.push(`Chrome feed: story tap ${storyTapTotal - tapsLeft + 1}/${storyTapTotal} — no cards found`);
+            }
+            tapsLeft--;
+          }
+        }
+
+        // ── If storyTapTotal > scrollCount, fire remaining taps with a scroll between each ──
+        while (tapsLeft > 0) {
+          const cardXml = await _uiDump(adb, serial);
+          const cards   = _findChromeFeedCards(cardXml, sw);
+          if (cards.length > 0) {
+            const card = cards[Math.floor(Math.random() * cards.length)];
+            _adbTap(adb, serial, card.x, card.y);
+            steps.push(`Chrome feed: story tap ${storyTapTotal - tapsLeft + 1}/${storyTapTotal}`);
+            await _sleep(2000 + Math.floor(Math.random() * 3000));
+            spawnSync(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"],
+              { encoding: "utf8", timeout: 5000 });
+            await _sleep(800 + Math.floor(Math.random() * 700));
+          } else {
+            steps.push(`Chrome feed: story tap ${storyTapTotal - tapsLeft + 1}/${storyTapTotal} — no cards found`);
+          }
+          tapsLeft--;
+          if (tapsLeft > 0) {
+            // Scroll to surface a fresh card before the next tap
+            await swipe(serial, cx, fromY, cx, toY, 400 + Math.floor(Math.random() * 200));
+            await _sleep(700 + Math.floor(Math.random() * 600));
+          }
         }
       }
     }

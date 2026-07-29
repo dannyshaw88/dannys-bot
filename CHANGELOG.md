@@ -4,6 +4,66 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.257] — 2026-07-29
+
+### New — Google Chrome: feed scroll + story taps automation
+
+The Chrome tool now has a full feed interaction engine that runs after any first-run-experience (FRE) screens are dismissed.
+
+#### Two new settings in the Mobile Phone Apps panel (Chrome card)
+
+| Field | What it controls |
+|-------|-----------------|
+| **Scrolls** min / max | How many times to scroll the Chrome Discover feed downward per activation (random value picked between min and max each cycle) |
+| **Story Taps** min / max | How many news article cards to tap and read per activation |
+
+Both field pairs appear **inline inside the Chrome card border**, to the right of the Activation % fields — no separate card, no extra borders.
+
+#### How the feed engine works (`runChromeApp` in `androidManager.ts`)
+
+1. After FRE handling, waits 1.5 s for the Chrome Discover feed to settle, then takes a UIAutomator dump and confirms `feed_stream_recycler_view` is present before doing anything. If the feed hasn't loaded, the step is logged and the function returns cleanly.
+2. Rolls a random scroll count and a random story-tap count from the respective min/max ranges.
+3. **Story taps are distributed evenly across the scroll sequence.** The scroll-index pool is shuffled and the first N indices are selected as tap points — so taps are spread naturally rather than all happening at the start or end.
+4. **Per scroll:** swipes from 75 % to 25 % of screen height at centre X, with 350–650 ms swipe duration and 700–1500 ms pause between scrolls.
+5. **Per story tap (at a selected scroll index):**
+   - Takes a fresh UIAutomator dump.
+   - Finds tappable article cards using `_findChromeFeedCards`: looks for `clickable="true"` ViewGroups that span 70–95 % of screen width and are at least 150 px tall — this matches the article card ViewGroups `[32,Y][688,Y2]` seen in the Discover feed while excluding share buttons and card-menu buttons (filtered by `content-desc` prefix).
+   - Taps a randomly chosen card.
+   - Waits 2–5 s (reading time).
+   - Presses `KEYCODE_BACK` to return to the feed.
+   - Waits 0.8–1.5 s for the feed to re-render before continuing.
+6. If Story Taps > Scrolls (or Scrolls is 0), remaining taps fire after the scroll loop with an extra scroll between each to surface fresh content.
+
+#### New helper: `_findChromeFeedCards(xml, screenW)`
+
+Module-private function added above `runChromeApp`. Parses raw UIAutomator XML with a `<node>` regex, filters to clickable ViewGroups whose width is 70–95 % of screen width and height ≥ 150 px, and excludes any node whose `content-desc` starts with `"Share "` or `"Card menu "`. Returns an array of `{ x, y }` centre coordinates ready for `_adbTap`.
+
+#### Route changes (`routes/mobile.ts`)
+
+`POST /api/mobile/devices/:serial/run-phone-app` now accepts two additional optional fields for Chrome:
+
+```json
+{ "app": "chrome", "scrollMin": 3, "scrollMax": 8, "storyTapMin": 1, "storyTapMax": 3 }
+```
+
+These are forwarded directly to `runChromeApp` as `opts`.
+
+### Fix — Phone Apps settings no longer silently discarded on save
+
+The `POST /api/mobile/devices/:serial/phone-apps-settings` Zod schema previously used the default strip behaviour, which dropped all per-app fields (`chrome`, `googlePlay`, `snapchat`, `youtube`, `whatsapp`) from the request body before merging with the stored config. Per-app settings (activation %, scroll counts, story taps) appeared to save in the UI but were never written to disk and reverted on page reload.
+
+Fixed by adding `.passthrough()` to the Zod object so unrecognised keys survive the parse and are included in the merged config saved to disk.
+
+### UI — Chrome card: Scrolls and Story Taps fields inline in the same row
+
+`AppSlotRow` now accepts an optional `rowExtras` prop (`React.ReactNode`) rendered inside the existing flex row after the `%` label. This lets Chrome-specific fields live **inside the card border** without a separate card or a horizontal dividing line.
+
+The Chrome slot passes its Scrolls and Story Taps min/max inputs as `rowExtras`, each pair separated by a thin vertical divider — matching the style of the Activation % divider.
+
+Files changed: `artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx`, `artifacts/api-server/src/routes/mobile.ts`, `artifacts/api-server/src/mobile/androidManager.ts`
+
+---
+
 ## [1.2.256] — 2026-07-29
 
 ### New — Mobile Phone Apps: Google Chrome activation fully implemented
