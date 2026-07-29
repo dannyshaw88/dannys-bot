@@ -694,17 +694,47 @@ export async function runChromeApp(
   const steps: string[] = [];
   try {
     // Launch Chrome — standard main activity, clear any existing task stack.
-    spawnSync(adb, ["-s", serial, "shell", "am", "start", "-n",
+    // On some devices am start returns an error (Chrome not found under the
+    // primary package name, or activity class mismatch) and Android leaves the
+    // current foreground app untouched — which is often the Google app.
+    // We inspect the am start stdout to detect failure and fall back to monkey,
+    // which simulates tapping the Chrome launcher icon and is always reliable.
+    const amResult = spawnSync(adb, ["-s", serial, "shell", "am", "start", "-n",
       "com.android.chrome/com.google.android.apps.chrome.Main",
       "--activity-clear-top",
     ], { encoding: "utf8", timeout: 10000 });
-    steps.push("Chrome launched");
+    const amOut = (amResult.stdout ?? "") + (amResult.stderr ?? "");
+    const amFailed = amOut.includes("Error") || amOut.includes("does not exist") || amResult.status !== 0;
+    if (amFailed) {
+      // Fallback: monkey tap — equivalent to pressing the Chrome icon in the launcher.
+      spawnSync(adb, ["-s", serial, "shell", "monkey",
+        "-p", "com.android.chrome",
+        "-c", "android.intent.category.LAUNCHER", "1",
+      ], { encoding: "utf8", timeout: 10000 });
+      steps.push(`Chrome: am start failed (${amOut.trim().slice(0, 80)}) — used monkey fallback`);
+    } else {
+      steps.push("Chrome launched");
+    }
 
     // Allow time for the app to render its first frame.
     await _sleep(2500);
 
+    // Verify Chrome is actually in the foreground by checking the UI dump for
+    // com.android.chrome resource-ids.  If the Google app (or anything else)
+    // opened instead, force-launch Chrome via monkey and wait again.
+    const xmlPre = await _uiDump(adb, serial);
+    const chromeInFg = xmlPre.includes("com.android.chrome");
+    if (!chromeInFg) {
+      steps.push("Chrome: not in foreground after launch — retrying with monkey");
+      spawnSync(adb, ["-s", serial, "shell", "monkey",
+        "-p", "com.android.chrome",
+        "-c", "android.intent.category.LAUNCHER", "1",
+      ], { encoding: "utf8", timeout: 10000 });
+      await _sleep(2500);
+    }
+
     // Dump the UI tree and look for the Chrome FRE screen.
-    const xml = await _uiDump(adb, serial);
+    const xml = chromeInFg ? xmlPre : await _uiDump(adb, serial);
 
     // Detection: id="fre_pager" is the unique ViewPager container for the
     // Chrome first-run experience.  id="signin_fre_continue_button" is the
@@ -840,6 +870,39 @@ export async function runChromeApp(
     } else {
       steps.push("Chrome FRE: not shown");
     }
+
+    // ── "Chrome notifications make things easier" promo dialog ───────────────
+    // Appears on devices where Chrome hasn't previously been granted the OS
+    // notification permission.  Shows a two-button sheet (modal_dialog_view)
+    // with "No, thanks" (negative_button) and "Continue" (positive_button).
+    // Always dismiss with "No, thanks" — we never want Chrome to request the
+    // OS notification permission on the device.
+    // If FRE pages were just processed the UI has changed, so take a fresh
+    // dump.  If FRE wasn't shown the original dump is still current.
+    {
+      const notifXml = isFre ? await _uiDump(adb, serial) : xml;
+      const isNotifDialog =
+        notifXml.includes("modal_dialog_view") ||
+        notifXml.includes("Chrome notifications make things easier") ||
+        notifXml.includes('"negative_button"');
+      if (isNotifDialog) {
+        steps.push("Chrome: notification promo dialog detected");
+        const noThanksPos = _findElem(notifXml,
+          "com.android.chrome:id/negative_button",
+          "negative_button",
+          "No, thanks",
+          "No thanks",
+        );
+        if (noThanksPos) {
+          _adbTap(adb, serial, noThanksPos.x, noThanksPos.y);
+          steps.push("Chrome: tapped No, thanks (notification promo)");
+          await _sleep(1000);
+        } else {
+          steps.push("Chrome: No-thanks button not found in notification dialog — no tap");
+        }
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     // ── Scroll the Chrome feed + interleaved story taps ──────────────────────
     const scrollMin             = opts?.scrollMin             ?? 0;

@@ -7104,6 +7104,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   const [openPhoneAppsTool,  setOpenPhoneAppsTool]  = useState(false);
   const [phoneAppsEnabled,   setPhoneAppsEnabled]   = useState(false);
   const [phoneAppsNextRunAt, setPhoneAppsNextRunAt] = useState<number | null>(null);
+  const [phoneAppsRunning,   setPhoneAppsRunning]   = useState(false);
   useEffect(() => { onSlotChange?.(openSlotTool); }, [openSlotTool]);
   useImperativeHandle(ref, () => ({
     backToSlots: () => { setOpenSlotTool(null); setOpenPhoneAppsTool(false); },
@@ -7297,6 +7298,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
           onBack={() => setOpenPhoneAppsTool(false)}
           onEnabled={setPhoneAppsEnabled}
           onNextRunAt={setPhoneAppsNextRunAt}
+          onRunning={setPhoneAppsRunning}
           requestSlot={requestSlot}
           releaseSlot={releaseSlot}
           cancelQueuedSlot={cancelQueuedSlot}
@@ -8984,10 +8986,11 @@ export function MobilePage() {
                   onDimensions={(w, h) => setPhoneDims({ w, h })}
                   phoneDims={phoneDims}
                   paneSize={paneSize}
-                  // Mirror activates under exactly two conditions — nothing else:
+                  // Mirror activates under exactly three conditions — nothing else:
                   //   • user clicked the Power button (liveOn) — manual override
                   //   • a HST cycle is actively executing right now (hstEnabled)
-                  live={!!(phone && (liveOn[phone.serial] || hstEnabled))}
+                  //   • a Phone Apps cycle is actively executing (phoneAppsRunning)
+                  live={!!(phone && (liveOn[phone.serial] || hstEnabled || phoneAppsRunning))}
                   onPower={() => { if (phone) setLiveOn(s => ({ ...s, [phone.serial]: true })); }}
                   ref={phone?.serial === activeSerial ? activeSlotRef : undefined}
                   inspectMode={inspectMode}

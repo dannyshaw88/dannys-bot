@@ -262,6 +262,7 @@ interface MobilePhoneAppsPanelProps {
   onBack:            () => void;  // no visible button; parent uses this to close
   onEnabled:         (v: boolean) => void;
   onNextRunAt:       (ts: number | null) => void;
+  onRunning?:        (running: boolean) => void;
   requestSlot?:      (idx: number, readyAt: number) => Promise<boolean>;
   releaseSlot?:      (idx: number, skipRest?: boolean) => void;
   cancelQueuedSlot?: (idx: number) => void;
@@ -270,7 +271,7 @@ interface MobilePhoneAppsPanelProps {
 const NUM_INPUT_CLASS = "w-16 text-center";
 
 export function MobilePhoneAppsPanel({
-  serial, onEnabled, onNextRunAt, requestSlot, releaseSlot, cancelQueuedSlot,
+  serial, onEnabled, onNextRunAt, onRunning, requestSlot, releaseSlot, cancelQueuedSlot,
 }: MobilePhoneAppsPanelProps) {
   const [settings,    setSettings]    = useState<PhoneAppsSettings>(DEFAULT_SETTINGS);
   const [nextRunAt,   setNextRunAt]   = useState<number | null>(null);
@@ -284,12 +285,14 @@ export function MobilePhoneAppsPanel({
   const runningRef         = useRef(false);
   const stopRef            = useRef(false);
   const serialRef          = useRef(serial);
+  const onRunningRef       = useRef(onRunning);
   // Set to true when the user explicitly toggles the tool on — causes the
   // scheduler to fire immediately (delay 0) rather than wait a random interval.
   const manualToggleOnRef  = useRef(false);
 
-  useEffect(() => { settingsRef.current = settings; }, [settings]);
-  useEffect(() => { serialRef.current   = serial;   }, [serial]);
+  useEffect(() => { settingsRef.current  = settings;  }, [settings]);
+  useEffect(() => { serialRef.current    = serial;    }, [serial]);
+  useEffect(() => { onRunningRef.current = onRunning; }, [onRunning]);
 
   // ── nextRunAt helper ──────────────────────────────────────────────────────
   const updateNextRunAt = useCallback((ts: number | null) => {
@@ -368,12 +371,13 @@ export function MobilePhoneAppsPanel({
   const runCycle = useCallback(async () => {
     if (!settingsRef.current.enabled || runningRef.current || stopRef.current) return;
     runningRef.current = true;
+    onRunningRef.current?.(true);
     updateNextRunAt(null);
 
     const hstTurnAt = nextRunAtRef.current ?? Date.now();
     if (requestSlot) {
       await requestSlot(PHONE_APPS_SLOT_IDX, hstTurnAt);
-      if (stopRef.current) { releaseSlot?.(PHONE_APPS_SLOT_IDX, true); runningRef.current = false; return; }
+      if (stopRef.current) { releaseSlot?.(PHONE_APPS_SLOT_IDX, true); runningRef.current = false; onRunningRef.current?.(false); return; }
     }
 
     // ── Execute app tools — each rolls its own activation % ──────────────────
@@ -409,6 +413,7 @@ export function MobilePhoneAppsPanel({
 
     releaseSlot?.(PHONE_APPS_SLOT_IDX);
     runningRef.current = false;
+    onRunningRef.current?.(false);
 
     if (!stopRef.current && settingsRef.current.enabled) {
       const s = settingsRef.current;
