@@ -4,6 +4,32 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.260] — 2026-07-29
+
+### Feature — Chrome: Internal Links Clicked
+
+A new **Internal Links Clicked %** min/max field appears on the Chrome card (third row). When set, each time the Chrome tool opens a story/article card it rolls the percentage once. If it fires, the tool dumps the article page's UI tree, finds a tappable inline text link (excluding Chrome's toolbar and nav-bar regions), taps it, waits for the linked page to load, presses Back to return to the article, then presses Back again to return to the Chrome feed — simulating authentic in-article browsing behaviour.
+
+### Feature — Chrome: always closes via recents (floaty windows + swipe)
+
+The Chrome flow now always ends by opening the recent-apps overlay and performing the device-appropriate card-dismiss swipe (left-drag for MIUI/HyperOS floating-window carousel; upward flick for stock Android). The dismiss direction is resolved from the device-prefs override (My Device tab) or the model-lookup table — the same logic used by the Instagram close step.
+
+### Feature — YouTube app implementation
+
+The YouTube card now runs a real flow when activated: launches `com.google.android.youtube/HomeActivity`, waits for the first frame, and checks for the Android OS notification-permission dialog ("Allow YouTube to send you notifications?"). If present, taps **Don't allow** (`permission_deny_button`) and settles before returning.
+
+### Fix — Chrome route schema dropped tappedStoryScrollMin/Max and internalLinkPctMin/Max
+
+The `run-phone-app` route was only parsing `scrollMin/Max` and `storyTapMin/Max` from the request body; `tappedStoryScrollMin`, `tappedStoryScrollMax`, `internalLinkPctMin`, and `internalLinkPctMax` were being sent by the frontend but silently ignored. The zod schema now parses all six Chrome opts and forwards them to `runChromeApp`.
+
+### UI — Mobile Phone Apps card layout redesign
+
+- Field titles now appear centered above their min/max input pairs (label-over-fields column layout).
+- The app icon and name anchor the left of the same flex row as all field groups — up to four groups fit alongside the name before wrapping.
+- YouTube and Google Play card order swapped (YouTube now above Snapchat; Google Play at the bottom).
+
+---
+
 ## [1.2.259] — 2026-07-29
 
 ### Feature — Chrome: Tapped Story Scrolls
