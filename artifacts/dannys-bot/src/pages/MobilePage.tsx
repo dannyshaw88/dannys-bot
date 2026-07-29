@@ -7584,6 +7584,10 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const csSaveRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const csHydratedSerialRef = React.useRef<string | null>(null);
 
+  // Google Play credentials
+  const [gpEmail,    setGpEmail]    = React.useState("");
+  const [gpPassword, setGpPassword] = React.useState("");
+
   // SIM phone number manual inputs (keyed by slot index)
   const [simPhoneInputs, setSimPhoneInputs] = React.useState<Record<number, string>>({});
 
