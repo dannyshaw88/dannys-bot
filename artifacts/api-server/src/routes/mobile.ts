@@ -11194,7 +11194,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         enabled:     z.boolean().optional(),
         intervalMin: z.number().min(1).max(9999).optional(),
         intervalMax: z.number().min(1).max(9999).optional(),
-      }).parse(req.body);
+      }).passthrough().parse(req.body);
       const merged = { ...existing, ...input };
       (cfg[serial] as any) = { ...cfg[serial], phoneApps: merged };
       saveInstanceConfigs(cfg);
@@ -11208,14 +11208,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.post("/api/mobile/devices/:serial/run-phone-app", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
-      const { app: appId } = z.object({
-        app: z.enum(["chrome", "googlePlay", "snapchat", "youtube", "whatsapp"]),
+      const { app: appId, scrollMin, scrollMax } = z.object({
+        app:       z.enum(["chrome", "googlePlay", "snapchat", "youtube", "whatsapp"]),
+        scrollMin: z.number().int().min(0).max(50).optional(),
+        scrollMax: z.number().int().min(0).max(50).optional(),
       }).parse(req.body);
 
       let result: { ok: boolean; steps: string[]; error?: string };
 
       if (appId === "chrome") {
-        result = await android.runChromeApp(serial);
+        result = await android.runChromeApp(serial, { scrollMin, scrollMax });
       } else {
         // Remaining apps are placeholders — will be implemented individually.
         result = { ok: true, steps: [`${appId}: not yet implemented`] };

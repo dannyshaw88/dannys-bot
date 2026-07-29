@@ -611,6 +611,7 @@ export async function launchInstagram(serial: string): Promise<void> {
  */
 export async function runChromeApp(
   serial: string,
+  opts?: { scrollMin?: number; scrollMax?: number },
 ): Promise<{ ok: boolean; steps: string[]; error?: string }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
@@ -763,6 +764,28 @@ export async function runChromeApp(
     } else {
       steps.push("Chrome FRE: not shown");
     }
+
+    // ── Scroll the Chrome page ────────────────────────────────────────────────
+    const scrollMin = opts?.scrollMin ?? 0;
+    const scrollMax = opts?.scrollMax ?? 0;
+    if (scrollMax > 0) {
+      const count = Math.round(scrollMin + Math.random() * Math.max(0, scrollMax - scrollMin));
+      if (count > 0) {
+        await _sleep(1500); // let Chrome settle after FRE / launch
+        const scrollXml = await _uiDump(adb, serial);
+        const { w: sw, h: sh } = _getScreenSize(scrollXml);
+        const cx    = Math.round(sw / 2);
+        const fromY = Math.round(sh * 0.75);
+        const toY   = Math.round(sh * 0.25);
+        steps.push(`Chrome scroll: ${count} swipe(s)`);
+        for (let i = 0; i < count; i++) {
+          const dur = 350 + Math.floor(Math.random() * 300); // 350–650 ms
+          await swipe(serial, cx, fromY, cx, toY, dur);
+          await _sleep(700 + Math.floor(Math.random() * 800)); // 700–1500 ms pause
+        }
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     return { ok: true, steps };
   } catch (e: any) {
