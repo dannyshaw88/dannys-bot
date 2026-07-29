@@ -4,6 +4,41 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.250 — 2026-07-29
+
+### Fix — Debug screenshots now capture phone mirror + Debugging Log side by side
+
+Previously the automatic debug screenshot feature only saved a raw ADB screencap — the phone screen in isolation. This was useful for seeing what Instagram was showing, but gave no context about where in the automation cycle the frame was captured.
+
+Screenshots now composite two panels into a single wide PNG on every capture:
+
+**Left panel — Phone screen**
+The ADB screencap as before, resized to a fixed 760 px tall (maintaining the phone's aspect ratio). The black letterbox fill keeps coordinates visually accurate.
+
+**Right panel — Debugging Log (580 px wide)**
+The last 40 log lines from the current automation cycle rendered on a dark (`#0f172a`) background using the same colour scheme as the in-app Debugging Log panel:
+
+| Colour | Meaning |
+|--------|---------|
+| Orange | Tool header lines (`▶ Follow`, `▶ Feed`, etc.) |
+| Green | Success confirmations (`✓`) |
+| Red | Failures / errors (`✗`, `error`, `failed`) |
+| Yellow | Reset-debug lines (`[RST-DBG]`) |
+| Purple | Cycle complete |
+| Blue | Follow/Follows actions |
+| Cyan | Inject Browsing steps |
+| Light grey | General log output |
+
+**How it works (server-side only — no Electron IPC needed):**
+- A new `debugLogBuffer` map (keyed by device serial) holds the last 40 lines in memory.
+- `tLog` pushes the formatted `[Xs] message` line into the buffer **before** firing `captureDebugScreenshot`, so the current line is always present in the composite.
+- `captureDebugScreenshot` builds the log panel as an inline SVG, rasterises it with `sharp` (already a dependency), then composites phone + panel side by side into the final PNG using `sharp`'s `composite()`.
+- The 50-file cap and device-name folder naming from the previous version are preserved.
+
+The result looks exactly like the Aura Farming window itself — mirror on the left, scrolling log on the right — making each frame immediately readable without needing to cross-reference a separate log file.
+
+---
+
 ## v1.2.249 — 2026-07-28
 
 ### Fix — Update Profile Picture: image no longer stays on phone storage after upload

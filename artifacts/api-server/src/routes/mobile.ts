@@ -7,6 +7,7 @@ import fsPromises from "fs/promises";
 import path from "path";
 import * as http from "http";
 import * as os from "os";
+import sharp from "sharp";
 import { WebSocketServer } from "ws";
 import * as android from "../mobile/androidManager";
 import * as proxyRelay from "../mobile/proxyRelay";
@@ -394,6 +395,43 @@ const SCREENSHOTS_DIR: string = process.env.EQUINOX_DATA_DIR
   ? path.join(process.env.EQUINOX_DATA_DIR, "debug-screenshots")
   : path.join(path.dirname(path.resolve(process.argv[1] ?? ".")), "..", "debug-screenshots");
 
+// Rolling per-device log buffer — last 40 lines, updated by pushDebugLogLine
+// which is called from tLog before captureDebugScreenshot so the current line
+// is already in the buffer when the composite is built.
+const debugLogBuffer = new Map<string, string[]>();
+const DEBUG_LOG_BUFFER_SIZE = 40;
+
+function pushDebugLogLine(serial: string, line: string): void {
+  let buf = debugLogBuffer.get(serial);
+  if (!buf) { buf = []; debugLogBuffer.set(serial, buf); }
+  buf.push(line);
+  if (buf.length > DEBUG_LOG_BUFFER_SIZE) buf.shift();
+}
+
+// Escape XML special characters for SVG text content.
+function escapeXmlSvg(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+// Pick a colour for a single log line based on its content — mirrors the
+// colour assignments used by the frontend Debugging Log panel.
+function debugLogLineColor(line: string): string {
+  if (line.includes("▶")) return "#f97316";          // tool header — orange
+  if (line.includes("✓")) return "#4ade80";           // success — green
+  if (line.includes("✗")) return "#f87171";           // failure — red
+  if (line.includes("[RST-DBG]")) return "#facc15";   // reset debug — yellow
+  if (/Cycle complete/i.test(line)) return "#c084fc"; // cycle end — purple
+  if (/Follow:|Follows:/i.test(line)) return "#60a5fa"; // follow — blue
+  if (/Inject/i.test(line)) return "#22d3ee";         // inject browsing — cyan
+  if (/error|failed/i.test(line)) return "#f87171";   // error words — red
+  return "#cbd5e1";                                   // default — light grey
+}
+
 async function captureDebugScreenshot(serial: string, label: string): Promise<void> {
   try {
     const adb = android.detectToolset().adb.path;
@@ -410,19 +448,75 @@ async function captureDebugScreenshot(serial: string, label: string): Promise<vo
     const ts = Date.now();
     const safeName = label.replace(/[^a-zA-Z0-9\s_\-]/g, "").replace(/\s+/g, "_").slice(0, 60);
     const filename = `${ts}_${safeName}.png`;
-    await new Promise<void>((resolve) => {
+
+    // ── 1. Capture the phone screen via ADB ──────────────────────────────────
+    const phonePngRaw = await new Promise<Buffer | null>((resolve) => {
       const child = spawn(adb, ["-s", serial, "exec-out", "screencap", "-p"]);
       const chunks: Buffer[] = [];
       child.stdout.on("data", (d: Buffer) => chunks.push(d));
-      child.on("close", async () => {
+      child.on("close", () => {
         const buf = Buffer.concat(chunks);
-        if (buf.length > 1000) { // ignore empty / error responses
-          await fsPromises.writeFile(path.join(dir, filename), buf).catch(() => {});
-        }
-        resolve();
+        resolve(buf.length > 1000 ? buf : null);
       });
-      child.on("error", () => resolve());
+      child.on("error", () => resolve(null));
     });
+
+    if (!phonePngRaw) return;
+
+    // ── 2. Resize phone screen to a fixed height ──────────────────────────────
+    const TARGET_H = 760;
+    const LOG_W    = 580;
+    const PADDING  = 10;
+    const LINE_H   = 16;
+
+    const phoneResized = await sharp(phonePngRaw)
+      .resize({ height: TARGET_H, fit: "contain", background: "#000000" })
+      .png()
+      .toBuffer();
+    const phoneMeta = await sharp(phoneResized).metadata();
+    const phoneW = phoneMeta.width ?? 360;
+
+    // ── 3. Render the debug log panel as SVG ──────────────────────────────────
+    const bufLines = debugLogBuffer.get(serial) ?? [];
+    const maxLines = Math.floor((TARGET_H - PADDING * 2) / LINE_H) - 1; // -1 for header
+    const visibleLines = bufLines.slice(-maxLines);
+
+    const headerY = PADDING + LINE_H;
+    const textRows = visibleLines.map((line, i) => {
+      const y = headerY + (i + 1) * LINE_H;
+      const color = debugLogLineColor(line);
+      // Truncate long lines so they don't overflow the panel width.
+      const display = escapeXmlSvg(line.length > 68 ? line.slice(0, 68) + "…" : line);
+      return `<text x="${PADDING}" y="${y}" fill="${color}">${display}</text>`;
+    }).join("\n    ");
+
+    const svgStr = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${LOG_W}" height="${TARGET_H}">
+  <rect width="${LOG_W}" height="${TARGET_H}" fill="#0f172a"/>
+  <text x="${PADDING}" y="${headerY}" fill="#94a3b8" font-weight="bold">── Debugging Log ──</text>
+  ${textRows}
+</svg>`;
+
+    // sharp rasterises SVG natively (libvips + librsvg).
+    const logPanelPng = await sharp(Buffer.from(svgStr, "utf8"))
+      .resize(LOG_W, TARGET_H)
+      .png()
+      .toBuffer();
+
+    // ── 4. Composite: phone (left) + log panel (right) ────────────────────────
+    const totalW = phoneW + LOG_W;
+    const composite = await sharp({
+      create: { width: totalW, height: TARGET_H, channels: 4 as const,
+                background: { r: 15, g: 23, b: 42, alpha: 1 } },
+    })
+      .composite([
+        { input: phoneResized, left: 0,      top: 0 },
+        { input: logPanelPng,  left: phoneW, top: 0 },
+      ])
+      .png()
+      .toBuffer();
+
+    await fsPromises.writeFile(path.join(dir, filename), composite).catch(() => {});
   } catch {
     // Never let a screenshot failure affect the automation cycle.
   }
@@ -8444,7 +8538,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const mins = Math.floor(totalSec / 60);
       const secs = (totalSec % 60).toFixed(1);
       const elapsed = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
-      sendVideoLog(serial, `[${elapsed}] ${msg}`);
+      const fullLine = `[${elapsed}] ${msg}`;
+      sendVideoLog(serial, fullLine);
+      // Push into the rolling buffer BEFORE capturing so the composite always
+      // includes the current line in the log panel on the right.
+      pushDebugLogLine(serial, fullLine);
       // Fire-and-forget: screenshot after every log entry so the user can
       // play back exactly what the phone was doing at each step.
       captureDebugScreenshot(serial, msg).catch(() => {});
