@@ -134,7 +134,7 @@ export function MobilePhoneApps({
 
           {/* Left: title + fingerprint button + toggle */}
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider min-w-[200px] shrink-0">
               Mobile Phone Apps
             </p>
 

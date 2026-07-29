@@ -7334,7 +7334,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
               {/* Slot header: title + Human Session Tool button + mirror toggle + Delete */}
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Instagram Account Slot {i + 1}</p>
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider min-w-[200px] shrink-0">Instagram Account Slot {i + 1}</p>
                   <Button
                     type="button"
                     size="sm"
