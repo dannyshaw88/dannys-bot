@@ -4,6 +4,20 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.255] — 2026-07-29
+
+### Fixed
+- **My Device tab crash** — `ReferenceError: gpEmail is not defined` when opening the Phone Settings panel. The two state variables (`gpEmail`, `gpPassword`) were referenced in the Google Play credential fields but never declared; added the missing `React.useState("")` pairs to `PhoneSettingsPanel`.
+
+### Added
+- **Mobile Phone Apps — app tool slots** (`MobilePhoneAppsPanel`). Five per-app activation-percentage slot rows are now shown in the panel under a new "(STEP 2) App Activation" section:
+  - Google Chrome · Google Play · Snapchat · YouTube · WhatsApp
+  - Each card shows the app's brand icon, app name, and two number inputs: **Activation % Min** / **Activation % Max** (0–100).
+  - All per-app settings are persisted via the existing `POST /api/mobile/devices/:serial/phone-apps-settings` endpoint (merge-on-write); loaded on panel open.
+  - Each cycle will roll every app's activation chance independently; apps with both fields set to 0 are skipped entirely. Tool implementations for each app will wire into the existing scheduler loop.
+
+---
+
 ## v1.2.254 — 2026-07-29
 
 ### Fix — Mobile Phone Apps fingerprint icon now vertically aligned with Instagram Account Slot fingerprint icons
