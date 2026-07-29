@@ -4,6 +4,18 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.259] — 2026-07-29
+
+### Feature — Chrome: Tapped Story Scrolls
+
+A new **Tapped Story Scrolls** min/max field pair appears on the Chrome card in Mobile Phone Apps (row 2, after Story Taps). When set, every time the Chrome tool taps and opens a story/article card it will scroll down the page a random number of times (between min and max) before pressing Back — simulating natural reading behaviour rather than immediately bouncing back to the feed. Each scroll is a natural-speed swipe (300–550 ms) with a 0.6–1.3 s pause between scrolls. If left at 0, the original flat reading pause is used.
+
+### UI — Chrome card: Story Taps border divider removed
+
+The horizontal divider line that was briefly added between row 1 (Activation % / Scrolls) and row 2 (Story Taps / Tapped Story Scrolls) of the Chrome card has been removed. The two rows now sit flush inside the card without a separator.
+
+---
+
 ## [1.2.258] — 2026-07-29
 
 ### Fix — Story viewer detection incorrectly confirmed Reels as "story open"

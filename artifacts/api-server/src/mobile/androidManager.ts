@@ -642,7 +642,7 @@ function _findChromeFeedCards(
 
 export async function runChromeApp(
   serial: string,
-  opts?: { scrollMin?: number; scrollMax?: number; storyTapMin?: number; storyTapMax?: number },
+  opts?: { scrollMin?: number; scrollMax?: number; storyTapMin?: number; storyTapMax?: number; tappedStoryScrollMin?: number; tappedStoryScrollMax?: number },
 ): Promise<{ ok: boolean; steps: string[]; error?: string }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
@@ -797,15 +797,40 @@ export async function runChromeApp(
     }
 
     // ── Scroll the Chrome feed + interleaved story taps ──────────────────────
-    const scrollMin    = opts?.scrollMin    ?? 0;
-    const scrollMax    = opts?.scrollMax    ?? 0;
-    const storyTapMin  = opts?.storyTapMin  ?? 0;
-    const storyTapMax  = opts?.storyTapMax  ?? 0;
+    const scrollMin             = opts?.scrollMin             ?? 0;
+    const scrollMax             = opts?.scrollMax             ?? 0;
+    const storyTapMin           = opts?.storyTapMin           ?? 0;
+    const storyTapMax           = opts?.storyTapMax           ?? 0;
+    const tappedStoryScrollMin  = opts?.tappedStoryScrollMin  ?? 0;
+    const tappedStoryScrollMax  = opts?.tappedStoryScrollMax  ?? 0;
 
     const scrollCount   = scrollMax  > 0
       ? Math.round(scrollMin  + Math.random() * Math.max(0, scrollMax  - scrollMin))  : 0;
     const storyTapTotal = storyTapMax > 0
       ? Math.round(storyTapMin + Math.random() * Math.max(0, storyTapMax - storyTapMin)) : 0;
+
+    // Helper: scroll inside a tapped article page then press Back.
+    // Called after every story-card tap regardless of which loop fires it.
+    const readAndBack = async (tapNum: number) => {
+      await _sleep(1800 + Math.floor(Math.random() * 1200)); // 1.8–3 s page load wait
+      const articleScrolls = tappedStoryScrollMax > 0
+        ? Math.round(tappedStoryScrollMin + Math.random() * Math.max(0, tappedStoryScrollMax - tappedStoryScrollMin))
+        : 0;
+      if (articleScrolls > 0) {
+        steps.push(`Chrome story ${tapNum}: scrolling article ${articleScrolls}x`);
+        for (let sc = 0; sc < articleScrolls; sc++) {
+          const aDur = 300 + Math.floor(Math.random() * 250); // 300–550 ms per swipe
+          await swipe(serial, cx, fromY, cx, toY, aDur);
+          await _sleep(600 + Math.floor(Math.random() * 700)); // 0.6–1.3 s between scrolls
+        }
+      } else {
+        // No article scrolls configured — keep the original flat reading pause
+        await _sleep(200 + Math.floor(Math.random() * 2000)); // 0.2–2.2 s extra reading time
+      }
+      spawnSync(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"],
+        { encoding: "utf8", timeout: 5000 });
+      await _sleep(800 + Math.floor(Math.random() * 700)); // 0.8–1.5 s for feed to re-render
+    };
 
     if (scrollCount > 0 || storyTapTotal > 0) {
       await _sleep(1500); // let Chrome settle after FRE / launch
@@ -845,16 +870,14 @@ export async function runChromeApp(
           if (tapAfterScroll.has(i) && tapsLeft > 0) {
             const cardXml = await _uiDump(adb, serial);
             const cards   = _findChromeFeedCards(cardXml, sw);
+            const tapNum  = storyTapTotal - tapsLeft + 1;
             if (cards.length > 0) {
               const card = cards[Math.floor(Math.random() * cards.length)];
               _adbTap(adb, serial, card.x, card.y);
-              steps.push(`Chrome feed: story tap ${storyTapTotal - tapsLeft + 1}/${storyTapTotal}`);
-              await _sleep(2000 + Math.floor(Math.random() * 3000)); // 2–5 s reading time
-              spawnSync(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"],
-                { encoding: "utf8", timeout: 5000 });
-              await _sleep(800 + Math.floor(Math.random() * 700)); // 0.8–1.5 s for feed to re-render
+              steps.push(`Chrome feed: story tap ${tapNum}/${storyTapTotal}`);
+              await readAndBack(tapNum);
             } else {
-              steps.push(`Chrome feed: story tap ${storyTapTotal - tapsLeft + 1}/${storyTapTotal} — no cards found`);
+              steps.push(`Chrome feed: story tap ${tapNum}/${storyTapTotal} — no cards found`);
             }
             tapsLeft--;
           }
@@ -864,16 +887,14 @@ export async function runChromeApp(
         while (tapsLeft > 0) {
           const cardXml = await _uiDump(adb, serial);
           const cards   = _findChromeFeedCards(cardXml, sw);
+          const tapNum  = storyTapTotal - tapsLeft + 1;
           if (cards.length > 0) {
             const card = cards[Math.floor(Math.random() * cards.length)];
             _adbTap(adb, serial, card.x, card.y);
-            steps.push(`Chrome feed: story tap ${storyTapTotal - tapsLeft + 1}/${storyTapTotal}`);
-            await _sleep(2000 + Math.floor(Math.random() * 3000));
-            spawnSync(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"],
-              { encoding: "utf8", timeout: 5000 });
-            await _sleep(800 + Math.floor(Math.random() * 700));
+            steps.push(`Chrome feed: story tap ${tapNum}/${storyTapTotal}`);
+            await readAndBack(tapNum);
           } else {
-            steps.push(`Chrome feed: story tap ${storyTapTotal - tapsLeft + 1}/${storyTapTotal} — no cards found`);
+            steps.push(`Chrome feed: story tap ${tapNum}/${storyTapTotal} — no cards found`);
           }
           tapsLeft--;
           if (tapsLeft > 0) {

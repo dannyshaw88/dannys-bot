@@ -88,6 +88,9 @@ interface AppSlotSettings {
   /** Number-of-story-taps range — only used by Chrome; other apps leave these undefined. */
   storyTapMin?: number;
   storyTapMax?: number;
+  /** Scrolls to do inside each tapped story page before pressing Back — only used by Chrome. */
+  tappedStoryScrollMin?: number;
+  tappedStoryScrollMax?: number;
 }
 
 interface PhoneAppsSettings {
@@ -105,7 +108,7 @@ const DEFAULT_APP_SLOT: AppSlotSettings = { activatePctMin: 0, activatePctMax: 0
 
 const DEFAULT_SETTINGS: PhoneAppsSettings = {
   enabled: false, intervalMin: 25, intervalMax: 99,
-  chrome:     { ...DEFAULT_APP_SLOT, scrollMin: 1, scrollMax: 5, storyTapMin: 0, storyTapMax: 0 },
+  chrome:     { ...DEFAULT_APP_SLOT, scrollMin: 1, scrollMax: 5, storyTapMin: 0, storyTapMax: 0, tappedStoryScrollMin: 0, tappedStoryScrollMax: 0 },
   googlePlay: { ...DEFAULT_APP_SLOT },
   snapchat:   { ...DEFAULT_APP_SLOT },
   youtube:    { ...DEFAULT_APP_SLOT },
@@ -299,7 +302,7 @@ export function MobilePhoneAppsPanel({
           enabled:     Boolean(d.enabled ?? false),
           intervalMin: Number(d.intervalMin ?? 25),
           intervalMax: Number(d.intervalMax ?? 99),
-          chrome:      { activatePctMin: d.chrome?.activatePctMin ?? 0,      activatePctMax: d.chrome?.activatePctMax ?? 0,      scrollMin: d.chrome?.scrollMin ?? 1, scrollMax: d.chrome?.scrollMax ?? 5, storyTapMin: d.chrome?.storyTapMin ?? 0, storyTapMax: d.chrome?.storyTapMax ?? 0 },
+          chrome:      { activatePctMin: d.chrome?.activatePctMin ?? 0,      activatePctMax: d.chrome?.activatePctMax ?? 0,      scrollMin: d.chrome?.scrollMin ?? 1, scrollMax: d.chrome?.scrollMax ?? 5, storyTapMin: d.chrome?.storyTapMin ?? 0, storyTapMax: d.chrome?.storyTapMax ?? 0, tappedStoryScrollMin: d.chrome?.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: d.chrome?.tappedStoryScrollMax ?? 0 },
           googlePlay:  { activatePctMin: d.googlePlay?.activatePctMin ?? 0,  activatePctMax: d.googlePlay?.activatePctMax ?? 0 },
           snapchat:    { activatePctMin: d.snapchat?.activatePctMin ?? 0,     activatePctMax: d.snapchat?.activatePctMax ?? 0 },
           youtube:     { activatePctMin: d.youtube?.activatePctMin ?? 0,      activatePctMax: d.youtube?.activatePctMax ?? 0 },
@@ -386,7 +389,7 @@ export function MobilePhoneAppsPanel({
         } catch { /* network error — ignore, don't crash the cycle */ }
       };
 
-      if (shouldActivate(s.chrome.activatePctMin,     s.chrome.activatePctMax))     await runApp("chrome", { scrollMin: s.chrome.scrollMin ?? 1, scrollMax: s.chrome.scrollMax ?? 5, storyTapMin: s.chrome.storyTapMin ?? 0, storyTapMax: s.chrome.storyTapMax ?? 0 });
+      if (shouldActivate(s.chrome.activatePctMin,     s.chrome.activatePctMax))     await runApp("chrome", { scrollMin: s.chrome.scrollMin ?? 1, scrollMax: s.chrome.scrollMax ?? 5, storyTapMin: s.chrome.storyTapMin ?? 0, storyTapMax: s.chrome.storyTapMax ?? 0, tappedStoryScrollMin: s.chrome.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: s.chrome.tappedStoryScrollMax ?? 0 });
       if (shouldActivate(s.googlePlay.activatePctMin, s.googlePlay.activatePctMax)) await runApp("googlePlay");
       if (shouldActivate(s.snapchat.activatePctMin,   s.snapchat.activatePctMax))   await runApp("snapchat");
       if (shouldActivate(s.youtube.activatePctMin,    s.youtube.activatePctMax))    await runApp("youtube");
@@ -572,6 +575,25 @@ export function MobilePhoneAppsPanel({
                     className={PCT_INPUT}
                     value={settings.chrome.storyTapMax ?? 0}
                     onChange={e => patchApp("chrome", { storyTapMax: Math.min(50, Math.max(0, Number(e.target.value))) })}
+                  />
+                  <div className="w-px self-stretch bg-border mx-1" />
+                  <Label className="text-sm text-muted-foreground whitespace-nowrap">Tapped Story Scrolls</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={50}
+                    className={PCT_INPUT}
+                    value={settings.chrome.tappedStoryScrollMin ?? 0}
+                    onChange={e => patchApp("chrome", { tappedStoryScrollMin: Math.min(50, Math.max(0, Number(e.target.value))) })}
+                  />
+                  <span className="text-muted-foreground text-sm">to</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={50}
+                    className={PCT_INPUT}
+                    value={settings.chrome.tappedStoryScrollMax ?? 0}
+                    onChange={e => patchApp("chrome", { tappedStoryScrollMax: Math.min(50, Math.max(0, Number(e.target.value))) })}
                   />
                 </>}
               />
