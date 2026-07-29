@@ -636,12 +636,12 @@ export function MobilePhoneAppsPanel({
                 }
               />
               <AppSlotRow
-                icon={<GooglePlayIcon size={22} />}
-                label="Google Play"
-                min={settings.googlePlay.activatePctMin}
-                max={settings.googlePlay.activatePctMax}
-                onMin={v => patchApp("googlePlay", { activatePctMin: v })}
-                onMax={v => patchApp("googlePlay", { activatePctMax: v })}
+                icon={<YouTubeIcon size={22} />}
+                label="YouTube"
+                min={settings.youtube.activatePctMin}
+                max={settings.youtube.activatePctMax}
+                onMin={v => patchApp("youtube", { activatePctMin: v })}
+                onMax={v => patchApp("youtube", { activatePctMax: v })}
               />
               <AppSlotRow
                 icon={<SnapchatIcon size={22} />}
@@ -652,12 +652,12 @@ export function MobilePhoneAppsPanel({
                 onMax={v => patchApp("snapchat", { activatePctMax: v })}
               />
               <AppSlotRow
-                icon={<YouTubeIcon size={22} />}
-                label="YouTube"
-                min={settings.youtube.activatePctMin}
-                max={settings.youtube.activatePctMax}
-                onMin={v => patchApp("youtube", { activatePctMin: v })}
-                onMax={v => patchApp("youtube", { activatePctMax: v })}
+                icon={<GooglePlayIcon size={22} />}
+                label="Google Play"
+                min={settings.googlePlay.activatePctMin}
+                max={settings.googlePlay.activatePctMax}
+                onMin={v => patchApp("googlePlay", { activatePctMin: v })}
+                onMax={v => patchApp("googlePlay", { activatePctMax: v })}
               />
               <AppSlotRow
                 icon={<WhatsAppIcon size={22} />}
