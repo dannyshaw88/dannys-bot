@@ -7222,15 +7222,43 @@ export async function findAndTapUserInSearch(
       return true;
     }
 
-    // Coordinate fallback — only reached when UIAutomator exposes zero result
-    // nodes (confirmed device/IG limitation, not a code error).  The chip row
-    // sits at ~22 % of screen height; the first real user profile row is at
-    // ~27 % on all tested devices (720×1280, 1080×2400, 1080×2460).
-    const { w: fbW, h: fbH } = getScreenSize(serial);
-    const fbX = Math.round(fbW * 0.50);
-    const fbY = Math.round(fbH * 0.27);
-    onLog?.(`Follow: @${clean} not in a11y tree — last-resort coordinate tap at (${fbX},${fbY})`);
-    _adbTap(adb, serial, fbX, fbY);
+    // DPAD fallback — only reached when UIAutomator exposes zero result nodes
+    // (confirmed Xiaomi Redmi 12 5G limitation: results render visually but
+    // never appear in the a11y tree).
+    //
+    // We typed the exact username so Instagram ranks the matching account first.
+    // Rather than a fixed-percentage coordinate tap (which lands on a wrong row
+    // because the first result is near the very top of the screen, not at 27%),
+    // we use DPAD navigation which operates at the Android OS input level and
+    // works regardless of what the accessibility tree exposes:
+    //
+    //   1. KEYCODE_DPAD_DOWN — moves focus from the search bar to the first
+    //      focusable element below it (may be a keyword/recent-search chip).
+    //   2. After a short settle, dump to check if the focused element is a chip
+    //      (chip nodes carry /row_search_keyword_title or /search_keyword).
+    //      If so, send another DPAD_DOWN to step past it onto the first real
+    //      user profile row.
+    //   3. KEYCODE_ENTER — activates the currently-focused item (the profile row).
+    //
+    // This avoids all pixel/percentage coordinates and works for any screen size.
+    onLog?.(`Follow: @${clean} not in a11y tree — using DPAD navigation to first result`);
+    runInputShell(serial, ["keyevent", "20"], "keyevent"); // KEYCODE_DPAD_DOWN (20)
+    await _sleep(350);
+
+    // Check if focus landed on a chip row — if so, step past it.
+    const dpadXml = await _uiDump(adb, serial).catch(() => "");
+    const onChip =
+      dpadXml.includes("/row_search_keyword_title\"") ||
+      dpadXml.includes("/search_keyword_title\"") ||
+      dpadXml.includes("/row_search_recent_chip\"") ||
+      dpadXml.includes("/search_recent_chip\"");
+    if (onChip) {
+      onLog?.(`Follow: DPAD landed on chip row — stepping past it`);
+      runInputShell(serial, ["keyevent", "20"], "keyevent"); // another DPAD_DOWN
+      await _sleep(300);
+    }
+
+    runInputShell(serial, ["keyevent", "66"], "keyevent"); // KEYCODE_ENTER (66)
     await _sleep(1500);
     return true;
   }
