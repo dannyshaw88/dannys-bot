@@ -237,7 +237,7 @@ function AppSlotRow({ icon, label, min, max, onMin, onMax, rowExtras, row2 }: Ap
         {rowExtras}
       </div>
       {row2 && (
-        <div className="flex items-center gap-3 flex-wrap mt-3 pt-3 border-t border-border">
+        <div className="flex items-center gap-3 flex-wrap mt-3">
           {row2}
         </div>
       )}
