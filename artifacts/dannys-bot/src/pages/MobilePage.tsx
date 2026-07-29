@@ -3584,9 +3584,11 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       _hstNextRunAt.delete(key);
       setNextRunAt(null);
       // Collision preventer: wait for device to be free before running.
+      // Hoisted so post-cycle scheduling can use it as a CP-active fallback.
+      let collisionPrevented = false;
       if (requestSlot && slotIdx !== undefined) {
         onLog?.(`[HST-DBG] ${_dbgTag} — awaiting collision-preventer slot…`);
-        const collisionPrevented = await requestSlot(slotIdx, hstTurnAt);
+        collisionPrevented = await requestSlot(slotIdx, hstTurnAt);
         if (_hstStop.has(key)) {
           onLog?.(`[HST-DBG] ${_dbgTag} — stopped while waiting for collision-preventer; releasing slot`);
           releaseSlot?.(slotIdx, true); return;
@@ -3848,7 +3850,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       // profile on My Device its rest window IS the profile's scheduling
       // interval.  Using the HST "Run every" value here (the old behaviour)
       // caused the CP min/max to be ignored entirely for scheduling purposes.
-      const useCP = cp2?.enabled && cp2.restMinMin > 0;
+      // collisionPrevented=true means CP was provably active when this cycle
+      // was queued — use CP interval even if the ref hasn't resolved yet
+      // (2-second poll race on first startup).
+      const useCP = (cp2?.enabled && cp2.restMinMin > 0) || collisionPrevented;
       const safeMin = useCP
         ? Math.max(1, Math.min(cp2!.restMinMin, cp2!.restMinMax))
         : Math.max(1, Math.min(s2.cycleIntervalMin, s2.cycleIntervalMax));
@@ -3892,14 +3897,22 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       srvLog(`${_startTag} — remounted, recovering timer (${(remainingMs / 60_000).toFixed(1)}min remaining)`);
     } else {
       const s0 = settingsRef.current;
-      const safeMin = Math.max(1, Math.min(s0.cycleIntervalMin, s0.cycleIntervalMax));
-      const safeMax = Math.max(1, Math.max(s0.cycleIntervalMin, s0.cycleIntervalMax));
+      const cp0 = collisionConfigRef.current;
+      // Use CP interval for the initial delay when CP is enabled — same logic
+      // as post-cycle so startup scheduling is consistent with cycle scheduling.
+      const useCP0 = cp0?.enabled && cp0.restMinMin > 0;
+      const safeMin = useCP0
+        ? Math.max(1, Math.min(cp0!.restMinMin, cp0!.restMinMax))
+        : Math.max(1, Math.min(s0.cycleIntervalMin, s0.cycleIntervalMax));
+      const safeMax = useCP0
+        ? Math.max(1, Math.max(cp0!.restMinMin, cp0!.restMinMax))
+        : Math.max(1, Math.max(s0.cycleIntervalMin, s0.cycleIntervalMax));
       const startDelayMs = (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
       const nextFireAt0 = Date.now() + Math.round(startDelayMs);
       _hstNextRunAt.set(key, nextFireAt0);
       setNextRunAt(nextFireAt0);
       scheduleNext(startDelayMs);
-      srvLog(`${_startTag} — effect started, timer set for ${(startDelayMs / 60_000).toFixed(1)}min (interval ${safeMin}-${safeMax}min)`);
+      srvLog(`${_startTag} — effect started, timer set for ${(startDelayMs / 60_000).toFixed(1)}min (interval ${safeMin}-${safeMax}min${useCP0 ? " [CP]" : ""})`);
     }
 
     return () => {
