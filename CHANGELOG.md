@@ -4,6 +4,14 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.270] — 2026-07-29
+
+### Fix — YouTube Shorts: scroll +2 extra to guarantee reaching the very top
+
+The scroll-back-to-top pass before tapping the Shorts nav button now does `scrollCount + 2` upward swipes instead of exactly `scrollCount`. This ensures the bottom nav bar is fully visible even when the feed drifted further down than the scroll counter tracked.
+
+---
+
 ## [1.2.269] — 2026-07-29
 
 ### Feature — YouTube: Watch Time, Click Shorts %, Shorts Scrolls, Shorts Watch Time

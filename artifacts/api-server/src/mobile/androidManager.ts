@@ -1430,16 +1430,15 @@ export async function runYoutubeApp(
           const shortsPct = clickShortsPctMin + Math.random() * Math.max(0, clickShortsPctMax - clickShortsPctMin);
           if (Math.random() * 100 < shortsPct) {
             // Scroll UP to return to the top of the homepage feed.
-            if (scrollCount > 0) {
-              steps.push(`YouTube: Shorts roll fired — scrolling back to top (${scrollCount}x up)`);
-              for (let i = 0; i < scrollCount; i++) {
-                const dur = 350 + Math.floor(Math.random() * 300);
-                // Reverse swipe direction: toY→fromY scrolls the feed upward.
-                await swipe(serial, cx, toY, cx, fromY, dur);
-                await _sleep(500 + Math.floor(Math.random() * 500));
-              }
-            } else {
-              steps.push("YouTube: Shorts roll fired (no feed scrolls to undo)");
+            // Add 2 extra scrolls on top of the feed scroll count to ensure
+            // we always reach the very top even if the feed drifted further.
+            const scrollBackCount = scrollCount + 2;
+            steps.push(`YouTube: Shorts roll fired — scrolling back to top (${scrollBackCount}x up)`);
+            for (let i = 0; i < scrollBackCount; i++) {
+              const dur = 350 + Math.floor(Math.random() * 300);
+              // Reverse swipe direction: toY→fromY scrolls the feed upward.
+              await swipe(serial, cx, toY, cx, fromY, dur);
+              await _sleep(500 + Math.floor(Math.random() * 500));
             }
 
             // Find and tap the Shorts nav button.
