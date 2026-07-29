@@ -227,7 +227,7 @@ interface AppSlotRowProps {
 
 function AppSlotRow({ icon, label, min, max, onMin, onMax, rowExtras, row2, row3 }: AppSlotRowProps) {
   return (
-    <div className="bg-card border border-border rounded-xl p-4">
+    <div className="p-4">
       {/* Single flex-wrap row: icon+name first, then all field groups flow inline */}
       <div className="flex items-center gap-4 flex-wrap">
         {/* Icon + label — anchors the left of the first visual row */}
@@ -571,14 +571,7 @@ export function MobilePhoneAppsPanel({
             </div>
 
             {/* ── (STEP 2) App tool slots ─────────────────────────────────── */}
-            <div className="space-y-1.5">
-              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3">
-                (STEP 2) App Activation
-              </p>
-              <p className="text-xs text-muted-foreground -mt-2 mb-3">
-                Each cycle, every app rolls its own activation chance. Set both values to 0 to skip that app entirely.
-              </p>
-
+            <div className="bg-card border border-border rounded-xl divide-y divide-border">
               <AppSlotRow
                 icon={<ChromeIcon size={22} />}
                 label="Google Chrome"
