@@ -91,6 +91,9 @@ interface AppSlotSettings {
   /** Scrolls to do inside each tapped story page before pressing Back — only used by Chrome. */
   tappedStoryScrollMin?: number;
   tappedStoryScrollMax?: number;
+  /** Per-article chance (0–100%) to tap an internal link before pressing Back — only used by Chrome. */
+  internalLinkPctMin?: number;
+  internalLinkPctMax?: number;
 }
 
 interface PhoneAppsSettings {
@@ -108,7 +111,7 @@ const DEFAULT_APP_SLOT: AppSlotSettings = { activatePctMin: 0, activatePctMax: 0
 
 const DEFAULT_SETTINGS: PhoneAppsSettings = {
   enabled: false, intervalMin: 25, intervalMax: 99,
-  chrome:     { ...DEFAULT_APP_SLOT, scrollMin: 1, scrollMax: 5, storyTapMin: 0, storyTapMax: 0, tappedStoryScrollMin: 0, tappedStoryScrollMax: 0 },
+  chrome:     { ...DEFAULT_APP_SLOT, scrollMin: 1, scrollMax: 5, storyTapMin: 0, storyTapMax: 0, tappedStoryScrollMin: 0, tappedStoryScrollMax: 0, internalLinkPctMin: 0, internalLinkPctMax: 0 },
   googlePlay: { ...DEFAULT_APP_SLOT },
   snapchat:   { ...DEFAULT_APP_SLOT },
   youtube:    { ...DEFAULT_APP_SLOT },
@@ -201,9 +204,10 @@ interface AppSlotRowProps {
   onMax:      (v: number) => void;
   rowExtras?: React.ReactNode; // optional inline fields rendered after the % label on row 1
   row2?:      React.ReactNode; // optional second row rendered below row 1, full width
+  row3?:      React.ReactNode; // optional third row rendered below row 2, full width
 }
 
-function AppSlotRow({ icon, label, min, max, onMin, onMax, rowExtras, row2 }: AppSlotRowProps) {
+function AppSlotRow({ icon, label, min, max, onMin, onMax, rowExtras, row2, row3 }: AppSlotRowProps) {
   return (
     <div className="bg-card border border-border rounded-xl p-4">
       <div className="flex items-center gap-3 flex-wrap">
@@ -242,6 +246,11 @@ function AppSlotRow({ icon, label, min, max, onMin, onMax, rowExtras, row2 }: Ap
       {row2 && (
         <div className="flex items-center gap-3 flex-wrap mt-3">
           {row2}
+        </div>
+      )}
+      {row3 && (
+        <div className="flex items-center gap-3 flex-wrap mt-3">
+          {row3}
         </div>
       )}
     </div>
@@ -302,7 +311,7 @@ export function MobilePhoneAppsPanel({
           enabled:     Boolean(d.enabled ?? false),
           intervalMin: Number(d.intervalMin ?? 25),
           intervalMax: Number(d.intervalMax ?? 99),
-          chrome:      { activatePctMin: d.chrome?.activatePctMin ?? 0,      activatePctMax: d.chrome?.activatePctMax ?? 0,      scrollMin: d.chrome?.scrollMin ?? 1, scrollMax: d.chrome?.scrollMax ?? 5, storyTapMin: d.chrome?.storyTapMin ?? 0, storyTapMax: d.chrome?.storyTapMax ?? 0, tappedStoryScrollMin: d.chrome?.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: d.chrome?.tappedStoryScrollMax ?? 0 },
+          chrome:      { activatePctMin: d.chrome?.activatePctMin ?? 0,      activatePctMax: d.chrome?.activatePctMax ?? 0,      scrollMin: d.chrome?.scrollMin ?? 1, scrollMax: d.chrome?.scrollMax ?? 5, storyTapMin: d.chrome?.storyTapMin ?? 0, storyTapMax: d.chrome?.storyTapMax ?? 0, tappedStoryScrollMin: d.chrome?.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: d.chrome?.tappedStoryScrollMax ?? 0, internalLinkPctMin: d.chrome?.internalLinkPctMin ?? 0, internalLinkPctMax: d.chrome?.internalLinkPctMax ?? 0 },
           googlePlay:  { activatePctMin: d.googlePlay?.activatePctMin ?? 0,  activatePctMax: d.googlePlay?.activatePctMax ?? 0 },
           snapchat:    { activatePctMin: d.snapchat?.activatePctMin ?? 0,     activatePctMax: d.snapchat?.activatePctMax ?? 0 },
           youtube:     { activatePctMin: d.youtube?.activatePctMin ?? 0,      activatePctMax: d.youtube?.activatePctMax ?? 0 },
@@ -389,7 +398,7 @@ export function MobilePhoneAppsPanel({
         } catch { /* network error — ignore, don't crash the cycle */ }
       };
 
-      if (shouldActivate(s.chrome.activatePctMin,     s.chrome.activatePctMax))     await runApp("chrome", { scrollMin: s.chrome.scrollMin ?? 1, scrollMax: s.chrome.scrollMax ?? 5, storyTapMin: s.chrome.storyTapMin ?? 0, storyTapMax: s.chrome.storyTapMax ?? 0, tappedStoryScrollMin: s.chrome.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: s.chrome.tappedStoryScrollMax ?? 0 });
+      if (shouldActivate(s.chrome.activatePctMin,     s.chrome.activatePctMax))     await runApp("chrome", { scrollMin: s.chrome.scrollMin ?? 1, scrollMax: s.chrome.scrollMax ?? 5, storyTapMin: s.chrome.storyTapMin ?? 0, storyTapMax: s.chrome.storyTapMax ?? 0, tappedStoryScrollMin: s.chrome.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: s.chrome.tappedStoryScrollMax ?? 0, internalLinkPctMin: s.chrome.internalLinkPctMin ?? 0, internalLinkPctMax: s.chrome.internalLinkPctMax ?? 0 });
       if (shouldActivate(s.googlePlay.activatePctMin, s.googlePlay.activatePctMax)) await runApp("googlePlay");
       if (shouldActivate(s.snapchat.activatePctMin,   s.snapchat.activatePctMax))   await runApp("snapchat");
       if (shouldActivate(s.youtube.activatePctMin,    s.youtube.activatePctMax))    await runApp("youtube");
@@ -595,6 +604,27 @@ export function MobilePhoneAppsPanel({
                     value={settings.chrome.tappedStoryScrollMax ?? 0}
                     onChange={e => patchApp("chrome", { tappedStoryScrollMax: Math.min(50, Math.max(0, Number(e.target.value))) })}
                   />
+                </>}
+                row3={<>
+                  <Label className="text-sm text-muted-foreground whitespace-nowrap">Internal Links Clicked</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    className={PCT_INPUT}
+                    value={settings.chrome.internalLinkPctMin ?? 0}
+                    onChange={e => patchApp("chrome", { internalLinkPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                  />
+                  <span className="text-muted-foreground text-sm">to</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    className={PCT_INPUT}
+                    value={settings.chrome.internalLinkPctMax ?? 0}
+                    onChange={e => patchApp("chrome", { internalLinkPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                  />
+                  <span className="text-muted-foreground text-sm">%</span>
                 </>}
               />
               <AppSlotRow

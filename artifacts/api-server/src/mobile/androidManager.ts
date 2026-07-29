@@ -615,6 +615,51 @@ export async function launchInstagram(serial: string): Promise<void> {
  * at least 150 px tall.  Share buttons and Card-menu buttons are excluded by
  * their content-desc prefix.
  */
+/**
+ * Find a tappable internal link inside a Chrome article page.
+ * Returns the centre of a random candidate, or null if none found.
+ *
+ * Strategy: scan all clickable nodes in the UIAutomator dump.  Exclude
+ * Chrome's own chrome-UI elements (address bar at top, nav bar at bottom)
+ * by bounding the candidate's centre-y to a mid-screen band.  Also skip
+ * nodes that are too wide (full-width banners/headers) or too small (icon
+ * buttons) — inline text links are typically narrow and short.
+ */
+function _findChromeInternalLink(
+  xml: string,
+  screenW: number,
+  screenH: number,
+): { x: number; y: number } | null {
+  const topGuard    = Math.round(screenH * 0.12); // skip top ~12 % (address bar + toolbar)
+  const bottomGuard = Math.round(screenH * 0.90); // skip bottom ~10 % (nav bar)
+  const minW = 20;
+  const maxW = Math.round(screenW * 0.88); // skip full-width containers
+
+  const candidates: { x: number; y: number }[] = [];
+  const nodeRe = /<node[^>]*>/g;
+  let m: RegExpExecArray | null;
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const tag = m[0];
+    if (!tag.includes('clickable="true"')) continue;
+    // Must have non-empty text — raw links in Chrome WebView carry their
+    // anchor text here; buttons and image-only tappables usually don't.
+    const textM = tag.match(/\btext="([^"]+)"/);
+    if (!textM || textM[1].trim().length === 0) continue;
+    const bm = tag.match(/\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+    if (!bm) continue;
+    const x1 = parseInt(bm[1], 10), y1 = parseInt(bm[2], 10);
+    const x2 = parseInt(bm[3], 10), y2 = parseInt(bm[4], 10);
+    const cx = Math.round((x1 + x2) / 2);
+    const cy = Math.round((y1 + y2) / 2);
+    const w  = x2 - x1;
+    if (cy < topGuard || cy > bottomGuard) continue;
+    if (w < minW || w > maxW) continue;
+    candidates.push({ x: cx, y: cy });
+  }
+  if (candidates.length === 0) return null;
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
 function _findChromeFeedCards(
   xml: string,
   screenW: number,
@@ -642,7 +687,7 @@ function _findChromeFeedCards(
 
 export async function runChromeApp(
   serial: string,
-  opts?: { scrollMin?: number; scrollMax?: number; storyTapMin?: number; storyTapMax?: number; tappedStoryScrollMin?: number; tappedStoryScrollMax?: number },
+  opts?: { scrollMin?: number; scrollMax?: number; storyTapMin?: number; storyTapMax?: number; tappedStoryScrollMin?: number; tappedStoryScrollMax?: number; internalLinkPctMin?: number; internalLinkPctMax?: number },
 ): Promise<{ ok: boolean; steps: string[]; error?: string }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
@@ -803,6 +848,8 @@ export async function runChromeApp(
     const storyTapMax           = opts?.storyTapMax           ?? 0;
     const tappedStoryScrollMin  = opts?.tappedStoryScrollMin  ?? 0;
     const tappedStoryScrollMax  = opts?.tappedStoryScrollMax  ?? 0;
+    const internalLinkPctMin    = opts?.internalLinkPctMin    ?? 0;
+    const internalLinkPctMax    = opts?.internalLinkPctMax    ?? 0;
 
     const scrollCount   = scrollMax  > 0
       ? Math.round(scrollMin  + Math.random() * Math.max(0, scrollMax  - scrollMin))  : 0;
@@ -827,6 +874,32 @@ export async function runChromeApp(
         // No article scrolls configured — keep the original flat reading pause
         await _sleep(200 + Math.floor(Math.random() * 2000)); // 0.2–2.2 s extra reading time
       }
+
+      // ── Internal link click (optional) ────────────────────────────────────
+      // Roll once per story visit.  If it fires, dump the article UI, find a
+      // tappable inline link, tap it, wait for the linked page to load, then
+      // press Back to return to the article — before the outer Back that
+      // returns to the Chrome feed.
+      if (internalLinkPctMax > 0) {
+        const linkPct = internalLinkPctMin + Math.random() * Math.max(0, internalLinkPctMax - internalLinkPctMin);
+        if (Math.random() * 100 < linkPct) {
+          const articleXml = await _uiDump(adb, serial);
+          const { w: alw, h: alh } = _getScreenSize(articleXml);
+          const linkPos = _findChromeInternalLink(articleXml, alw, alh);
+          if (linkPos) {
+            _adbTap(adb, serial, linkPos.x, linkPos.y);
+            steps.push(`Chrome story ${tapNum}: tapped internal link at (${linkPos.x},${linkPos.y})`);
+            await _sleep(1800 + Math.floor(Math.random() * 1200)); // wait for linked page to load
+            spawnSync(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"],
+              { encoding: "utf8", timeout: 5000 }); // back from internal link → article
+            await _sleep(700 + Math.floor(Math.random() * 600));
+          } else {
+            steps.push(`Chrome story ${tapNum}: internal link roll fired but no link found`);
+          }
+        }
+      }
+      // ──────────────────────────────────────────────────────────────────────
+
       spawnSync(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"],
         { encoding: "utf8", timeout: 5000 });
       await _sleep(800 + Math.floor(Math.random() * 700)); // 0.8–1.5 s for feed to re-render
