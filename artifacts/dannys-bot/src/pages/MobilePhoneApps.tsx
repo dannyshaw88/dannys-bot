@@ -1,66 +1,68 @@
 /**
- * MobilePhoneApps — "Mobile Phone Apps" section rendered inside AccountSettingsPanel.
+ * MobilePhoneApps — "Mobile Phone Apps" card rendered inside AccountSettingsPanel.
  *
- * Owns all state, load, and save logic for device-level app credentials
- * (Google Play account, etc.).  Kept in its own file so it is never
- * accidentally touched by changes to the surrounding Accounts/Settings UI.
+ * Kept in its own file so it is never accidentally touched by changes to the
+ * surrounding Accounts / Settings UI.
  *
  * Props
  *   serial     — ADB serial of the currently-selected device (null = no device)
- *   deviceName — Human-readable display name shown in the section header
+ *   deviceName — Human-readable display name shown in the section heading
  */
 
 import React from "react";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Fingerprint } from "lucide-react";
 
 interface MobilePhoneAppsProps {
   serial:     string | null | undefined;
   deviceName: string;
 }
 
-export function MobilePhoneApps({ serial, deviceName }: MobilePhoneAppsProps) {
-  const [gpEmail,    setGpEmail]    = React.useState("");
-  const [gpPassword, setGpPassword] = React.useState("");
+// ── Brand icon SVGs ────────────────────────────────────────────────────────────
 
-  // ── Load ──────────────────────────────────────────────────────────────────
-  React.useEffect(() => {
-    if (!serial) return;
-    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-settings`)
-      .then(r => r.json())
-      .then(d => {
-        setGpEmail(d.googlePlayEmail ?? "");
-        setGpPassword(d.googlePlayPassword ?? "");
-      })
-      .catch(() => {});
-  }, [serial]);
+function GooglePlayIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M3.18 23.76c.37.21.79.24 1.18.1l12.29-7.1-2.76-2.76-10.71 9.76z" fill="#EA4335"/>
+      <path d="M22.47 10.22 18.9 8.15 15.77 11l3.13 3.13 3.6-2.08a1.55 1.55 0 0 0 0-2.69-.24-.14z" fill="#FBBC04"/>
+      <path d="M2.36.24A1.55 1.55 0 0 0 2 1.22v21.56a1.55 1.55 0 0 0 .36.98l.12.11L14.89 11v-.29L2.48.13z" fill="#4285F4"/>
+      <path d="M16.65 14.85 4.36 21.96c-.36.22-.77.23-1.14.06l-.12.11.12.11c.37.17.78.16 1.14-.06l12.29-7.1z" fill="#34A853"/>
+    </svg>
+  );
+}
 
-  // ── Auto-save (debounced 800 ms) ──────────────────────────────────────────
-  const gpSaveRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const gpInitRef = React.useRef(false);
-  React.useEffect(() => {
-    if (!serial) return;
-    if (!gpInitRef.current) { gpInitRef.current = true; return; }
-    if (gpSaveRef.current) clearTimeout(gpSaveRef.current);
-    gpSaveRef.current = setTimeout(() => {
-      fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-settings`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ googlePlayEmail: gpEmail, googlePlayPassword: gpPassword }),
-      }).catch(() => {});
-    }, 800);
-    return () => { if (gpSaveRef.current) clearTimeout(gpSaveRef.current); };
-  }, [serial, gpEmail, gpPassword]);
+function SnapchatIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 2C8.5 2 6 4.9 6 8.3v1.2c-.4.1-.9.1-1.3.3-.4.2-.6.5-.5.9.1.5.6.8 1.2.9-.1.3-.3.6-.6.8-.7.5-1.8.7-2.8.8-.1 0-.3.1-.3.3 0 .5 1.5 1.1 1.8 1.2.1.5.5 2.4 2.7 2.4.7 0 1.4-.1 2.1-.3.8.8 1.8 1.2 3.7 1.2s2.9-.4 3.7-1.2c.7.2 1.4.3 2.1.3 2.2 0 2.6-1.9 2.7-2.4.3-.1 1.8-.7 1.8-1.2 0-.2-.2-.3-.3-.3-1-.1-2.1-.3-2.8-.8-.3-.2-.5-.5-.6-.8.6-.1 1.1-.4 1.2-.9.1-.4-.1-.7-.5-.9-.4-.2-.9-.2-1.3-.3V8.3C18 4.9 15.5 2 12 2z" fill="#FFFC00" stroke="#000" strokeWidth="0.5"/>
+    </svg>
+  );
+}
 
-  // Reset init-guard whenever the serial changes so the first hydration load
-  // doesn't immediately trigger an overwrite save on a different device.
-  React.useEffect(() => {
-    gpInitRef.current = false;
-    setGpEmail("");
-    setGpPassword("");
-  }, [serial]);
+function YouTubeIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M23 7s-.3-2-1.2-2.8c-1.1-1.2-2.4-1.2-3-1.3C16.6 2.8 12 2.8 12 2.8s-4.6 0-6.8.1c-.6.1-1.9.1-3 1.3C1.3 5 1 7 1 7S.7 9.3.7 11.5v2.1C.7 15.8 1 18 1 18s.3 2 1.2 2.8c1.1 1.2 2.6 1.1 3.3 1.2C7.6 22.2 12 22.2 12 22.2s4.6 0 6.8-.2c.6-.1 1.9-.1 3-1.3.9-.8 1.2-2.8 1.2-2.8s.3-2.2.3-4.5v-2.1C23.3 9.3 23 7 23 7z" fill="#FF0000"/>
+      <path d="M9.7 15.5V8.5l6.6 3.5-6.6 3.5z" fill="#fff"/>
+    </svg>
+  );
+}
 
-  // ── Render ────────────────────────────────────────────────────────────────
+function WhatsAppIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 2C6.5 2 2 6.5 2 12c0 1.8.5 3.5 1.3 5L2 22l5.2-1.4C8.6 21.5 10.3 22 12 22c5.5 0 10-4.5 10-10S17.5 2 12 2z" fill="#25D366"/>
+      <path d="M17.5 14.4c-.3-.1-1.7-.8-1.9-.9-.3-.1-.5-.1-.7.1-.2.3-.7.9-.9 1.1-.2.2-.3.2-.6.1-.3-.1-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6l.5-.6c.1-.2.2-.3.2-.5 0-.2-.1-1.1-.5-1.5-.3-.4-.7-.4-.9-.4h-.7c-.2 0-.6.1-.9.4-.3.3-1.1 1.1-1.1 2.6s1.1 3 1.3 3.2c.2.2 2.2 3.4 5.4 4.7.8.3 1.4.5 1.8.6.8.2 1.5.2 2 .1.6-.1 1.9-.8 2.1-1.5.3-.7.3-1.4.2-1.5-.1-.1-.3-.1-.6-.2z" fill="#fff"/>
+    </svg>
+  );
+}
+
+// ── Component ──────────────────────────────────────────────────────────────────
+
+export function MobilePhoneApps({ serial: _serial, deviceName }: MobilePhoneAppsProps) {
+  const [enabled, setEnabled] = React.useState(false);
+
   return (
     <>
       {/* Section heading */}
@@ -69,36 +71,50 @@ export function MobilePhoneApps({ serial, deviceName }: MobilePhoneAppsProps) {
         <span className="text-xs text-muted-foreground text-right shrink-0 pt-1">{deviceName}</span>
       </div>
 
-      {/* Google Play Account card */}
-      <div className="bg-card border border-border rounded-xl p-5 space-y-4">
-        <div className="flex items-center gap-2">
-          <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path d="M3.18 23.76c.37.21.79.24 1.18.1l12.29-7.1-2.76-2.76-10.71 9.76z" fill="#EA4335"/>
-            <path d="M22.47 10.22 18.9 8.15 15.77 11l3.13 3.13 3.6-2.08a1.55 1.55 0 0 0 0-2.69-.24-.14z" fill="#FBBC04"/>
-            <path d="M2.36.24A1.55 1.55 0 0 0 2 1.22v21.56a1.55 1.55 0 0 0 .36.98l.12.11L14.89 11v-.29L2.48.13z" fill="#4285F4"/>
-            <path d="M16.65 14.85 4.36 21.96c-.36.22-.77.23-1.14.06l-.12.11.12.11c.37.17.78.16 1.14-.06l12.29-7.1z" fill="#34A853"/>
-          </svg>
-          <p className="text-sm font-semibold text-foreground">Google Play Account</p>
-        </div>
-        <div className="flex items-end gap-3 flex-wrap">
-          <div className="space-y-1.5 flex-1 min-w-[180px]">
-            <Label className="text-xs text-muted-foreground block text-center">Email Address</Label>
-            <Input
-              value={gpEmail}
-              onChange={e => setGpEmail(e.target.value)}
-              placeholder="example@gmail.com"
-              autoComplete="off"
-            />
+      {/* Card */}
+      <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+        {/* Card header row */}
+        <div className="flex items-center justify-between gap-2">
+
+          {/* Left: title + fingerprint button + toggle */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+              Mobile Phone Apps
+            </p>
+
+            {/* Fingerprint / Human Session Tool button */}
+            <Button
+              type="button"
+              size="sm"
+              className="px-2 text-[11px] gap-1.5 text-white hover:brightness-95 transition-all"
+              style={{ background: "#1AD2F2", border: "none", height: 28, width: 28, padding: 0 }}
+              onClick={() => {}}
+            >
+              <Fingerprint className="w-3.5 h-3.5 text-white" />
+            </Button>
+
+            {/* Toggle */}
+            <div className="flex items-center gap-2 pl-2 border-l border-border">
+              <Switch
+                checked={enabled}
+                onCheckedChange={setEnabled}
+              />
+              <div className="flex flex-col min-w-0">
+                <span className={`text-[11px] font-semibold leading-tight whitespace-nowrap ${
+                  enabled ? "text-green-600 dark:text-green-400" : "text-muted-foreground"
+                }`}>
+                  {enabled ? "Active" : "Disabled"}
+                </span>
+              </div>
+            </div>
           </div>
-          <div className="space-y-1.5 flex-1 min-w-[180px]">
-            <Label className="text-xs text-muted-foreground block text-center">Password</Label>
-            <Input
-              type="password"
-              value={gpPassword}
-              onChange={e => setGpPassword(e.target.value)}
-              placeholder="••••••••"
-              autoComplete="new-password"
-            />
+
+          {/* Right: brand icons */}
+          <div className="flex items-center gap-2 shrink-0">
+            <GooglePlayIcon />
+            <SnapchatIcon />
+            <YouTubeIcon />
+            <WhatsAppIcon />
           </div>
         </div>
       </div>
