@@ -612,7 +612,7 @@ export function MobilePhoneAppsPanel({
                 </>}
                 row3={
                   <div className="flex flex-col items-center gap-1">
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">Internal Links Clicked</span>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Internal Links Clicked %</span>
                     <div className="flex items-center gap-1">
                       <Input
                         type="number"
@@ -631,7 +631,6 @@ export function MobilePhoneAppsPanel({
                         value={settings.chrome.internalLinkPctMax ?? 0}
                         onChange={e => patchApp("chrome", { internalLinkPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
                       />
-                      <span className="text-muted-foreground text-sm">%</span>
                     </div>
                   </div>
                 }
