@@ -7307,6 +7307,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
           onEnabled={setPhoneAppsEnabled}
           onNextRunAt={setPhoneAppsNextRunAt}
           onRunning={setPhoneAppsRunning}
+          onLog={addLog}
           requestSlot={requestSlot}
           releaseSlot={releaseSlot}
           cancelQueuedSlot={cancelQueuedSlot}

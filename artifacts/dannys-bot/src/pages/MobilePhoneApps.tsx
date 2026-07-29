@@ -263,6 +263,7 @@ interface MobilePhoneAppsPanelProps {
   onEnabled:         (v: boolean) => void;
   onNextRunAt:       (ts: number | null) => void;
   onRunning?:        (running: boolean) => void;
+  onLog?:            (msg: string) => void;
   requestSlot?:      (idx: number, readyAt: number) => Promise<boolean>;
   releaseSlot?:      (idx: number, skipRest?: boolean) => void;
   cancelQueuedSlot?: (idx: number) => void;
@@ -271,7 +272,7 @@ interface MobilePhoneAppsPanelProps {
 const NUM_INPUT_CLASS = "w-16 text-center";
 
 export function MobilePhoneAppsPanel({
-  serial, onEnabled, onNextRunAt, onRunning, requestSlot, releaseSlot, cancelQueuedSlot,
+  serial, onEnabled, onNextRunAt, onRunning, onLog, requestSlot, releaseSlot, cancelQueuedSlot,
 }: MobilePhoneAppsPanelProps) {
   const [settings,    setSettings]    = useState<PhoneAppsSettings>(DEFAULT_SETTINGS);
   const [nextRunAt,   setNextRunAt]   = useState<number | null>(null);
@@ -286,6 +287,7 @@ export function MobilePhoneAppsPanel({
   const stopRef            = useRef(false);
   const serialRef          = useRef(serial);
   const onRunningRef       = useRef(onRunning);
+  const onLogRef           = useRef(onLog);
   // Set to true when the user explicitly toggles the tool on — causes the
   // scheduler to fire immediately (delay 0) rather than wait a random interval.
   const manualToggleOnRef  = useRef(false);
@@ -293,6 +295,7 @@ export function MobilePhoneAppsPanel({
   useEffect(() => { settingsRef.current  = settings;  }, [settings]);
   useEffect(() => { serialRef.current    = serial;    }, [serial]);
   useEffect(() => { onRunningRef.current = onRunning; }, [onRunning]);
+  useEffect(() => { onLogRef.current     = onLog;     }, [onLog]);
 
   // ── nextRunAt helper ──────────────────────────────────────────────────────
   const updateNextRunAt = useCallback((ts: number | null) => {
@@ -395,11 +398,25 @@ export function MobilePhoneAppsPanel({
 
       const runApp = async (appId: string, extra?: Record<string, unknown>) => {
         try {
-          await fetch(
+          const res = await fetch(
             `/api/mobile/devices/${encodeURIComponent(serial)}/run-phone-app`,
             { method: "POST", headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ app: appId, ...extra }) },
           );
+          // Log each step the server recorded so the Action Log tab shows
+          // exactly what happened during the run (cookie banners, scrolls, etc.)
+          try {
+            const data: { ok?: boolean; steps?: string[]; error?: string } = await res.json();
+            const log = onLogRef.current;
+            if (log) {
+              if (Array.isArray(data.steps)) {
+                for (const step of data.steps) log(`Phone Apps [${appId}]: ${step}`);
+              }
+              if (!data.ok) {
+                log(`Phone Apps [${appId}]: ⚠ ${data.error ?? "unknown error"}`);
+              }
+            }
+          } catch { /* JSON parse error — response body unreadable, ignore */ }
         } catch { /* network error — ignore, don't crash the cycle */ }
       };
 

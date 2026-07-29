@@ -4,6 +4,28 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.266] — 2026-07-29
+
+### Feature — Phone Apps tool now logs every step to the Action Log
+
+The Phone Apps tool previously ran silently — the server recorded every action it took (Chrome launch, FRE dismissal, feed scrolls, story taps, cookie banner detection and acceptance, article scrolls, etc.) but the frontend discarded the entire response without displaying it. The mirror would go dark and the user had no way to know what had happened or whether it worked.
+
+Each step the server reports is now forwarded to the Action Log tab in real time under the label `Phone Apps [chrome]:`, `Phone Apps [youtube]:`, etc. For example:
+
+```
+Phone Apps [chrome]: Chrome launched
+Phone Apps [chrome]: Chrome: tapped home button — navigating to homepage
+Phone Apps [chrome]: Chrome FRE: not shown
+Phone Apps [chrome]: Chrome feed: 3 scroll(s), 1 story tap(s)
+Phone Apps [chrome]: Chrome feed: story tap 1/1
+Phone Apps [chrome]: Chrome story 1: cookie/consent banner detected — tapped accept
+Phone Apps [chrome]: Chrome: opened recents + swiped away (left)
+```
+
+If the run fails on the server side, the error message is also shown.
+
+---
+
 ## [1.2.265] — 2026-07-29
 
 ### Fix — Phone Farm device view crash ("Cannot access before initialization")
