@@ -4,6 +4,33 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.268] — 2026-07-29
+
+### Fix — Chrome Phone Apps: each story tap now gets its own full feed cycle
+
+Previously the code scattered all story taps across a single scroll pass — e.g. with Scrolls 5–10 and Story Taps 3–3, it would scroll 5–10 times total and fire all three taps somewhere within that one pass, then close. The result was one shared scroll run with taps dropped in, not three independent cycles.
+
+**New flow** — each story tap is now a complete, independent cycle:
+
+1. Press Chrome Home button (navigates back to the Discover feed homepage)
+2. Scroll the feed a fresh random number of times (drawn from Scrolls min–max each cycle)
+3. Tap one story card from the current feed
+4. Scroll the article (Tapped Story Scrolls min–max)
+5. Click an internal link if the roll fires (Internal Links Clicked %)
+6. Press Back to return to the feed
+
+This repeats once per configured story tap. With Story Taps 3–3, Scrolls 5–10, Tapped Story Scrolls 1–10, Internal Links 100%:
+- Cycle 1: Home → 5–10 feed scrolls → tap → 1–10 article scrolls → link click → Back
+- Cycle 2: Home → 5–10 feed scrolls → tap → 1–10 article scrolls → link click → Back
+- Cycle 3: Home → 5–10 feed scrolls → tap → 1–10 article scrolls → link click → Back
+- Close Chrome
+
+The first cycle skips the Home button press (Chrome is already on the homepage after launch). Subsequent cycles press Home to reset from wherever the previous article left the browser.
+
+Scroll-only runs (Story Taps = 0, Scrolls > 0) are unchanged — a single feed scroll pass with no taps.
+
+---
+
 ## [1.2.267] — 2026-07-29
 
 ### Fix — Chrome Phone Apps tool: cookie banner now exits article cleanly + Chrome always closes

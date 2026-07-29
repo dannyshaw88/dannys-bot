@@ -999,13 +999,18 @@ export async function runChromeApp(
     const internalLinkPctMin    = opts?.internalLinkPctMin    ?? 0;
     const internalLinkPctMax    = opts?.internalLinkPctMax    ?? 0;
 
-    const scrollCount   = scrollMax  > 0
-      ? Math.round(scrollMin  + Math.random() * Math.max(0, scrollMax  - scrollMin))  : 0;
     const storyTapTotal = storyTapMax > 0
       ? Math.round(storyTapMin + Math.random() * Math.max(0, storyTapMax - storyTapMin)) : 0;
 
+    // cx/fromY/toY are shared with readAndBack via closure.  They are set from
+    // the feed UI dump at the start of each tap cycle (and for scroll-only runs)
+    // so the article swipes always use the correct screen geometry.
+    let cx    = 0;
+    let fromY = 0;
+    let toY   = 0;
+
     // Helper: scroll inside a tapped article page then press Back.
-    // Called after every story-card tap regardless of which loop fires it.
+    // Uses cx/fromY/toY captured from the enclosing scope — updated each cycle.
     const readAndBack = async (tapNum: number) => {
       await _sleep(1800 + Math.floor(Math.random() * 1200)); // 1.8–3 s page load wait
 
@@ -1092,82 +1097,102 @@ export async function runChromeApp(
       await _sleep(800 + Math.floor(Math.random() * 700)); // 0.8–1.5 s for feed to re-render
     };
 
-    // Wrap the scroll/tap block in its own try/catch so any mid-run exception
-    // (e.g. a swipe timeout, a bad XML dump) is caught here and logged, and the
-    // Chrome close step below always executes regardless.
+    // ── Helper: press the Chrome Home button to return to the Discover feed ──
+    // Used at the start of each story-tap cycle so every cycle begins from the
+    // same known state rather than wherever the last article left the browser.
+    const pressHomeButton = async (label: string) => {
+      const hXml = await _uiDump(adb, serial);
+      const homePos = _findElem(hXml,
+        "com.android.chrome:id/home_button",
+        "home_button",
+        "Open the homepage",
+      );
+      if (homePos) {
+        _adbTap(adb, serial, homePos.x, homePos.y);
+        steps.push(`Chrome ${label}: pressed Home button — navigating to homepage`);
+        await _sleep(1500);
+      } else {
+        steps.push(`Chrome ${label}: Home button not visible — skipping (already on feed?)`);
+      }
+    };
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // ── Helper: scroll the Chrome Discover feed N times and return a fresh dump ─
+    const scrollFeedCycle = async (cycleScrolls: number, label: string): Promise<{ xml: string; sw: number; sh: number } | null> => {
+      await _sleep(1200); // let the feed settle after home-button nav
+      const feedXml = await _uiDump(adb, serial);
+      if (!feedXml.includes("feed_stream_recycler_view")) {
+        steps.push(`Chrome ${label}: feed_stream_recycler_view not detected — skipping`);
+        return null;
+      }
+      const { w: sw, h: sh } = _getScreenSize(feedXml);
+      // Update shared geometry used by readAndBack
+      cx    = Math.round(sw / 2);
+      fromY = Math.round(sh * 0.75);
+      toY   = Math.round(sh * 0.25);
+      if (cycleScrolls > 0) {
+        steps.push(`Chrome ${label}: scrolling feed ${cycleScrolls}x`);
+        for (let s = 0; s < cycleScrolls; s++) {
+          const dur = 350 + Math.floor(Math.random() * 300);
+          await swipe(serial, cx, fromY, cx, toY, dur);
+          await _sleep(700 + Math.floor(Math.random() * 800));
+        }
+      }
+      // Return a fresh dump after scrolling so card detection is current
+      const afterXml = cycleScrolls > 0 ? await _uiDump(adb, serial) : feedXml;
+      return { xml: afterXml, sw, sh };
+    };
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Wrap the entire scroll/tap block in its own try/catch so any mid-run
+    // exception is caught and logged here, and the Chrome close step below
+    // always executes regardless.
     try {
-      if (scrollCount > 0 || storyTapTotal > 0) {
+      if (storyTapTotal > 0) {
+        // ── Story-tap driven loop ─────────────────────────────────────────────
+        // Each iteration is one complete cycle:
+        //   Home button → N feed scrolls → tap card → article scroll + link → Back
+        // This repeats storyTapTotal times so every tap gets a fresh feed pass.
         await _sleep(1500); // let Chrome settle after FRE / launch
 
-        const feedXml = await _uiDump(adb, serial);
+        for (let t = 0; t < storyTapTotal; t++) {
+          const tapNum = t + 1;
+          const label  = `tap ${tapNum}/${storyTapTotal}`;
 
-        if (!feedXml.includes("feed_stream_recycler_view")) {
-          steps.push("Chrome feed: feed_stream_recycler_view not detected — skipping scroll/tap");
-        } else {
-          const { w: sw, h: sh } = _getScreenSize(feedXml);
-          const cx    = Math.round(sw / 2);
-          const fromY = Math.round(sh * 0.75);
-          const toY   = Math.round(sh * 0.25);
-
-          // Pick which scroll indices (0-based) trigger a story tap immediately after.
-          // Shuffle the index pool and pick the first storyTapTotal slots.
-          const tapAfterScroll = new Set<number>();
-          if (storyTapTotal > 0 && scrollCount > 0) {
-            const pool = Array.from({ length: scrollCount }, (_, i) => i);
-            for (let i = pool.length - 1; i > 0; i--) {
-              const j = Math.floor(Math.random() * (i + 1));
-              [pool[i], pool[j]] = [pool[j], pool[i]];
-            }
-            for (let i = 0; i < Math.min(storyTapTotal, scrollCount); i++) tapAfterScroll.add(pool[i]);
+          // On the first cycle the initial home-button tap at launch already
+          // positioned Chrome on the homepage; skip the extra press.
+          // On subsequent cycles press Home to reset from wherever the previous
+          // article left the browser.
+          if (t > 0) {
+            await pressHomeButton(label);
           }
 
-          steps.push(`Chrome feed: ${scrollCount} scroll(s), ${storyTapTotal} story tap(s)`);
+          // Roll a fresh scroll count for this cycle
+          const cycleScrolls = scrollMax > 0
+            ? Math.round(scrollMin + Math.random() * Math.max(0, scrollMax - scrollMin))
+            : 0;
 
-          let tapsLeft = storyTapTotal;
+          const feed = await scrollFeedCycle(cycleScrolls, label);
+          if (!feed) continue; // feed not detected — skip this tap, try next
 
-          // ── Main scroll loop ──────────────────────────────────────────────
-          for (let i = 0; i < scrollCount; i++) {
-            const dur = 350 + Math.floor(Math.random() * 300); // 350–650 ms
-            await swipe(serial, cx, fromY, cx, toY, dur);
-            await _sleep(700 + Math.floor(Math.random() * 800)); // 700–1500 ms pause
-
-            if (tapAfterScroll.has(i) && tapsLeft > 0) {
-              const cardXml = await _uiDump(adb, serial);
-              const cards   = _findChromeFeedCards(cardXml, sw);
-              const tapNum  = storyTapTotal - tapsLeft + 1;
-              if (cards.length > 0) {
-                const card = cards[Math.floor(Math.random() * cards.length)];
-                _adbTap(adb, serial, card.x, card.y);
-                steps.push(`Chrome feed: story tap ${tapNum}/${storyTapTotal}`);
-                await readAndBack(tapNum);
-              } else {
-                steps.push(`Chrome feed: story tap ${tapNum}/${storyTapTotal} — no cards found`);
-              }
-              tapsLeft--;
-            }
-          }
-
-          // ── If storyTapTotal > scrollCount, fire remaining taps with a scroll between each ──
-          while (tapsLeft > 0) {
-            const cardXml = await _uiDump(adb, serial);
-            const cards   = _findChromeFeedCards(cardXml, sw);
-            const tapNum  = storyTapTotal - tapsLeft + 1;
-            if (cards.length > 0) {
-              const card = cards[Math.floor(Math.random() * cards.length)];
-              _adbTap(adb, serial, card.x, card.y);
-              steps.push(`Chrome feed: story tap ${tapNum}/${storyTapTotal}`);
-              await readAndBack(tapNum);
-            } else {
-              steps.push(`Chrome feed: story tap ${tapNum}/${storyTapTotal} — no cards found`);
-            }
-            tapsLeft--;
-            if (tapsLeft > 0) {
-              // Scroll to surface a fresh card before the next tap
-              await swipe(serial, cx, fromY, cx, toY, 400 + Math.floor(Math.random() * 200));
-              await _sleep(700 + Math.floor(Math.random() * 600));
-            }
+          const cards = _findChromeFeedCards(feed.xml, feed.sw);
+          if (cards.length > 0) {
+            const card = cards[Math.floor(Math.random() * cards.length)];
+            _adbTap(adb, serial, card.x, card.y);
+            steps.push(`Chrome feed: story tap ${tapNum}/${storyTapTotal}`);
+            await readAndBack(tapNum);
+          } else {
+            steps.push(`Chrome feed: story tap ${tapNum}/${storyTapTotal} — no cards found`);
           }
         }
+        // ─────────────────────────────────────────────────────────────────────
+
+      } else if (scrollMax > 0) {
+        // ── Scroll-only run (no story taps configured) ────────────────────────
+        await _sleep(1500);
+        const scrollCount = Math.round(scrollMin + Math.random() * Math.max(0, scrollMax - scrollMin));
+        await scrollFeedCycle(scrollCount, "scroll-only");
+        // ─────────────────────────────────────────────────────────────────────
       }
     } catch (scrollErr: any) {
       // Log the error but do NOT re-throw — the Chrome close step must always run.
