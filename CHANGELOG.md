@@ -4,6 +4,20 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.264] — 2026-07-29
+
+### Fix — Phone Farm device view crash on startup ("phoneAppsRunning is not defined")
+
+Clicking a device in the Phone Farm grid opened the device panel but immediately crashed with `ReferenceError: phoneAppsRunning is not defined`.
+
+**Root cause:** `phoneAppsRunning` was a local state variable inside the `AccountSettingsPanel` component, but it was being referenced inside the parent `MobilePage` component — a completely separate scope. In the Vite development build the minifier doesn't rename variables, so the name happened to be readable across module scope boundaries in some conditions, but the production/Electron build's minification correctly isolated the scopes and exposed the real bug as a `ReferenceError`.
+
+**Fix:** Moved ownership of `phoneAppsRunning` up to `MobilePage` where it is used. `AccountSettingsPanel` now receives an `onPhoneAppsRunning` callback prop (matching the existing `onAnyEnabled` pattern used for the HST running state) and fires it via a `useEffect` whenever its internal running flag changes. `MobilePage` holds the state and passes the setter as the prop, so the mirror-activation logic at line 8993 (`live={!!(phone && (liveOn[phone.serial] || hstEnabled || phoneAppsRunning))}`) now always has `phoneAppsRunning` in scope.
+
+No behaviour change in the running app — the mirror activation logic is identical; only the scoping is corrected.
+
+---
+
 ## [1.2.263] — 2026-07-29
 
 ### Fix — Chrome: tap home button on launch to avoid resuming a stale page

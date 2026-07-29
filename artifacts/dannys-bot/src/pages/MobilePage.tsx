@@ -7049,10 +7049,10 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
 });
 
 type AccountSettingsPanelHandle = { backToSlots: () => void; backToSlot: (idx: number | null) => void };
-type AccountSettingsPanelProps  = { phone: UsbPhone | null; addLog: (msg: string) => void; onSlotChange?: (slotIdx: number | null) => void; initialSlot?: number | null; onAnyEnabled?: (anyEnabled: boolean) => void };
+type AccountSettingsPanelProps  = { phone: UsbPhone | null; addLog: (msg: string) => void; onSlotChange?: (slotIdx: number | null) => void; initialSlot?: number | null; onAnyEnabled?: (anyEnabled: boolean) => void; onPhoneAppsRunning?: (running: boolean) => void };
 
 const AccountSettingsPanel = React.forwardRef<AccountSettingsPanelHandle, AccountSettingsPanelProps>(
-function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyEnabled }, ref) {
+function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyEnabled, onPhoneAppsRunning }, ref) {
   const [slotRefreshKeys, setSlotRefreshKeys] = useState<Record<number, number>>({});
   const handleCopied = useCallback((targetSlotIdxs: number[]) => {
     setSlotRefreshKeys(prev => {
@@ -7081,6 +7081,16 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
     const anyEnabled = Object.values(slotAutomationStates).some(s => s.running);
     onAnyEnabledRef.current?.(anyEnabled);
   }, [slotAutomationStates]);
+
+  // Bubble Phone Apps running state up to MobilePage so it can activate the
+  // mirror. phoneAppsRunning is local state (set via MobilePhoneAppsPanel's
+  // onRunning prop) — without this effect MobilePage can't see it, causing
+  // a ReferenceError in the production build.
+  const onPhoneAppsRunningRef = useRef(onPhoneAppsRunning);
+  onPhoneAppsRunningRef.current = onPhoneAppsRunning;
+  useEffect(() => {
+    onPhoneAppsRunningRef.current?.(phoneAppsRunning);
+  }, [phoneAppsRunning]);
 
   // One ref per slot — each points to that slot's SlotHumanSessionView handle.
   // The mirror toggle calls slotHandleRefs.current[i]?.setEnabled(v) directly,
@@ -8853,6 +8863,10 @@ export function MobilePage() {
   // This is one of exactly two conditions that turn the mirror on; the other
   // is the manual Power button (liveOn). Nothing else may activate the mirror.
   const [hstEnabled, setHstEnabled] = useState(false);
+  // True while a Phone Apps cycle is actively executing — bubbled up from
+  // AccountSettingsPanel via onPhoneAppsRunning. Activates the mirror alongside
+  // hstEnabled and liveOn.
+  const [phoneAppsRunning, setPhoneAppsRunning] = useState(false);
 
   // Drop any previously-learned aspect ratio when the connected device
   // changes (or disconnects) — otherwise a stale ratio from the last phone
@@ -9030,7 +9044,7 @@ export function MobilePage() {
                 {/* Accounts panel: always mounted so each slot's automation
                     hook persists across tab switches and navigation. */}
                 <div className={activeTab === "account" ? "h-full" : "hidden"}>
-                  <AccountSettingsPanel ref={accountPanelRef} phone={stickySlot0Ref.current} addLog={addLog} onSlotChange={setOpenAccountSlot} initialSlot={initialSlot} onAnyEnabled={setHstEnabled} />
+                  <AccountSettingsPanel ref={accountPanelRef} phone={stickySlot0Ref.current} addLog={addLog} onSlotChange={setOpenAccountSlot} initialSlot={initialSlot} onAnyEnabled={setHstEnabled} onPhoneAppsRunning={setPhoneAppsRunning} />
                 </div>
                 {activeTab === "phonesettings" && (
                   <PhoneSettingsPanel serial={activeSerial} />
