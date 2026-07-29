@@ -196,10 +196,11 @@ interface AppSlotRowProps {
   max:        number;
   onMin:      (v: number) => void;
   onMax:      (v: number) => void;
-  rowExtras?: React.ReactNode; // optional inline fields rendered after the % label
+  rowExtras?: React.ReactNode; // optional inline fields rendered after the % label on row 1
+  row2?:      React.ReactNode; // optional second row rendered below row 1, full width
 }
 
-function AppSlotRow({ icon, label, min, max, onMin, onMax, rowExtras }: AppSlotRowProps) {
+function AppSlotRow({ icon, label, min, max, onMin, onMax, rowExtras, row2 }: AppSlotRowProps) {
   return (
     <div className="bg-card border border-border rounded-xl p-4">
       <div className="flex items-center gap-3 flex-wrap">
@@ -235,6 +236,11 @@ function AppSlotRow({ icon, label, min, max, onMin, onMax, rowExtras }: AppSlotR
 
         {rowExtras}
       </div>
+      {row2 && (
+        <div className="flex items-center gap-3 flex-wrap mt-3 pt-3 border-t border-border">
+          {row2}
+        </div>
+      )}
     </div>
   );
 }
@@ -547,7 +553,8 @@ export function MobilePhoneAppsPanel({
                     value={settings.chrome.scrollMax ?? 5}
                     onChange={e => patchApp("chrome", { scrollMax: Math.min(50, Math.max(0, Number(e.target.value))) })}
                   />
-                  <div className="w-px self-stretch bg-border mx-1" />
+                </>}
+                row2={<>
                   <Label className="text-sm text-muted-foreground whitespace-nowrap">Story Taps</Label>
                   <Input
                     type="number"

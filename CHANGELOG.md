@@ -4,6 +4,30 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.258] — 2026-07-29
+
+### Fix — Story viewer detection incorrectly confirmed Reels as "story open"
+
+**Root cause:** `isInStoryViewerSlow` used `reel_viewer` as a positive marker for being inside the Instagram story viewer. The standalone Reels player (opened by tapping a Reel in the feed) uses the exact same `reel_viewer_*` resource IDs internally. When the story-bubble tap missed and hit a Reel in the feed below instead, the "did the story open?" check came back `true` — a false positive. The automation then ran the entire story loop (like, share, click-author, advance taps) inside the Reels player, logging "opened successfully" even though no story was ever opened.
+
+**Fix:** `isInStoryViewerSlow` now runs a Reels-player exclusion check **before** the positive-marker scan. If any of the following are present in the accessibility dump, it immediately returns `false` (not in story viewer):
+- Resource IDs: `clips_tab`, `reels_tab`, `tab_clips`, `nav_clips`, `clips_viewer`, `reels_viewer`, `reels_player`
+- Header node with `content-desc="Reels"` or `text="Reels"`
+
+Only after confirming none of those exist does it proceed to check for `reel_viewer` and the remaining story-viewer markers. This makes the check correctly distinguish the story viewer from the Reels player on all known Instagram builds.
+
+### Fix — Post-story Reels auto-navigation not recovered
+
+**Root cause:** After all story slides ended naturally, Instagram on newer builds can auto-navigate to the full-screen Reels player instead of returning to the home feed. The post-story recovery block called `findHomeTab` and only pressed Back when it returned `null`. But the Reels full-screen player still shows the Instagram bottom nav (including the Home tab), so `findHomeTab` returned non-null and recovery was skipped entirely — the automation cycle continued inside Reels.
+
+**Fix:** The recovery block now **always taps the Home tab** when it is found, rather than using its presence as a pass/fail gate. Tapping Home from the home feed is harmless (Instagram stays/refreshes). Tapping Home from inside the Reels player or a profile page correctly navigates back to the home feed. The `null` branch is kept as a Back-press fallback for surfaces where the bottom nav is fully hidden (Chrome, deep links, etc.).
+
+### UI — Chrome card: Story Taps moved to its own second row
+
+The Google Chrome card in Mobile Phone Apps previously crammed Scrolls and Story Taps onto the same inline row as Activation %, making the row very wide. Story Taps (label + min/max fields) now appears on a dedicated second row inside the Chrome card, separated by a horizontal divider. Scrolls remains on the first row alongside Activation %. The `AppSlotRow` component gained an optional `row2` prop to support this pattern without duplicating card markup.
+
+---
+
 ## [1.2.257] — 2026-07-29
 
 ### New — Google Chrome: feed scroll + story taps automation
