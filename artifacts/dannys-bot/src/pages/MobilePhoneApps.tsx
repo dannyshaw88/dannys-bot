@@ -187,15 +187,16 @@ export function MobilePhoneApps({
 // ── App slot row ───────────────────────────────────────────────────────────────
 
 interface AppSlotRowProps {
-  icon:   React.ReactNode;
-  label:  string;
-  min:    number;
-  max:    number;
-  onMin:  (v: number) => void;
-  onMax:  (v: number) => void;
+  icon:      React.ReactNode;
+  label:     string;
+  min:       number;
+  max:       number;
+  onMin:     (v: number) => void;
+  onMax:     (v: number) => void;
+  children?: React.ReactNode; // optional extra rows rendered inside the same card
 }
 
-function AppSlotRow({ icon, label, min, max, onMin, onMax }: AppSlotRowProps) {
+function AppSlotRow({ icon, label, min, max, onMin, onMax, children }: AppSlotRowProps) {
   return (
     <div className="bg-card border border-border rounded-xl p-4">
       <div className="flex items-center gap-3 flex-wrap">
@@ -229,6 +230,7 @@ function AppSlotRow({ icon, label, min, max, onMin, onMax }: AppSlotRowProps) {
         />
         <span className="text-muted-foreground text-sm">%</span>
       </div>
+      {children}
     </div>
   );
 }
@@ -521,11 +523,10 @@ export function MobilePhoneAppsPanel({
                 max={settings.chrome.activatePctMax}
                 onMin={v => patchApp("chrome", { activatePctMin: v })}
                 onMax={v => patchApp("chrome", { activatePctMax: v })}
-              />
-              {/* Chrome-only: scroll amount */}
-              <div className="bg-card border border-border rounded-xl px-4 py-2.5 -mt-1 ml-4">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className="w-px self-stretch bg-transparent min-w-[10rem]" />
+              >
+                {/* Scroll amount row — lives inside the Chrome card */}
+                <div className="flex items-center gap-3 flex-wrap mt-2 pt-2 border-t border-border">
+                  <div className="flex items-center gap-2 min-w-[10rem]" />
                   <div className="w-px self-stretch bg-border mx-1" />
                   <Label className="text-sm text-muted-foreground whitespace-nowrap">Scrolls</Label>
                   <Input
@@ -546,7 +547,7 @@ export function MobilePhoneAppsPanel({
                     onChange={e => patchApp("chrome", { scrollMax: Math.min(50, Math.max(0, Number(e.target.value))) })}
                   />
                 </div>
-              </div>
+              </AppSlotRow>
               <AppSlotRow
                 icon={<GooglePlayIcon size={22} />}
                 label="Google Play"
