@@ -1286,6 +1286,8 @@ export async function runYoutubeApp(
     shortsScrollMin?: number; shortsScrollMax?: number;
     /** Seconds to spend on each Short. */
     shortsWatchTimeMin?: number; shortsWatchTimeMax?: number;
+    /** Chance (0–100%) to tap the Like button on each Short viewed. */
+    shortsLikePctMin?: number; shortsLikePctMax?: number;
     dismissDirection?: "left" | "up";
   },
 ): Promise<{ ok: boolean; steps: string[]; error?: string }> {
@@ -1341,6 +1343,8 @@ export async function runYoutubeApp(
     const shortsScrollMax    = opts?.shortsScrollMax    ?? 0;
     const shortsWatchTimeMin = opts?.shortsWatchTimeMin ?? 3;
     const shortsWatchTimeMax = opts?.shortsWatchTimeMax ?? 8;
+    const shortsLikePctMin   = opts?.shortsLikePctMin   ?? 0;
+    const shortsLikePctMax   = opts?.shortsLikePctMax   ?? 0;
 
     const scrollCount = scrollMax > 0
       ? Math.round(scrollMin + Math.random() * Math.max(0, scrollMax - scrollMin))
@@ -1458,12 +1462,30 @@ export async function runYoutubeApp(
               const sfromY = Math.round(ssh * 0.75);
               const stoY   = Math.round(ssh * 0.25);
 
+              // Helper: roll the Shorts like chance and tap if fired.
+              const rollShortsLike = async (shortLabel: string) => {
+                if (shortsLikePctMax <= 0) return;
+                const likePct = shortsLikePctMin + Math.random() * Math.max(0, shortsLikePctMax - shortsLikePctMin);
+                if (Math.random() * 100 < likePct) {
+                  const likeXml = await _uiDump(adb, serial);
+                  const likeBtn = _findElem(likeXml, " likes");
+                  if (likeBtn) {
+                    _adbTap(adb, serial, likeBtn.x, likeBtn.y);
+                    steps.push(`YouTube Shorts: liked ${shortLabel}`);
+                    await _sleep(500 + Math.floor(Math.random() * 300));
+                  } else {
+                    steps.push(`YouTube Shorts: like button not found on ${shortLabel} — skipping`);
+                  }
+                }
+              };
+
               // Watch the first Short that loads.
               const firstWatchMs = Math.round(
                 (shortsWatchTimeMin + Math.random() * Math.max(0, shortsWatchTimeMax - shortsWatchTimeMin)) * 1000,
               );
               steps.push(`YouTube Shorts: watching Short 1 for ~${Math.round(firstWatchMs / 1000)}s`);
               await _sleep(firstWatchMs);
+              await rollShortsLike("Short 1");
 
               // Swipe up through additional Shorts.
               for (let s = 0; s < shortsTotal; s++) {
@@ -1475,6 +1497,7 @@ export async function runYoutubeApp(
                 );
                 steps.push(`YouTube Shorts: watching Short ${s + 2}/${shortsTotal + 1} for ~${Math.round(watchMs / 1000)}s`);
                 await _sleep(watchMs);
+                await rollShortsLike(`Short ${s + 2}`);
               }
             } else {
               steps.push("YouTube: Shorts button not found in bottom nav — skipping");

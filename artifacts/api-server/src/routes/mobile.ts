@@ -11225,7 +11225,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               watchTimeMin, watchTimeMax,
               clickShortsPctMin, clickShortsPctMax,
               shortsScrollMin, shortsScrollMax,
-              shortsWatchTimeMin, shortsWatchTimeMax } = z.object({
+              shortsWatchTimeMin, shortsWatchTimeMax,
+              shortsLikePctMin, shortsLikePctMax } = z.object({
         app:                  z.enum(["chrome", "googlePlay", "snapchat", "youtube", "whatsapp"]),
         scrollMin:            z.number().min(0).max(50).optional(),
         scrollMax:            z.number().min(0).max(50).optional(),
@@ -11246,6 +11247,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         shortsScrollMax:      z.number().int().min(0).max(50).optional(),
         shortsWatchTimeMin:   z.number().min(0).max(600).optional(),
         shortsWatchTimeMax:   z.number().min(0).max(600).optional(),
+        shortsLikePctMin:     z.number().int().min(0).max(100).optional(),
+        shortsLikePctMax:     z.number().int().min(0).max(100).optional(),
       }).parse(req.body);
 
       // Resolve dismiss direction (used by Chrome recents close).
@@ -11282,6 +11285,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           clickShortsPctMin, clickShortsPctMax,
           shortsScrollMin, shortsScrollMax,
           shortsWatchTimeMin, shortsWatchTimeMax,
+          shortsLikePctMin, shortsLikePctMax,
           dismissDirection: dismissDir,
         });
       } else {

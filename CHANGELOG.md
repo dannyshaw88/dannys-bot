@@ -4,6 +4,14 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.271] — 2026-07-29
+
+### Feature — YouTube Shorts: Shorts Like % per Short
+
+New **Shorts Like %** (min/max) field added to the YouTube row in Phone Apps. After watching each Short (including the first one and every subsequent swipe), a percentage roll is performed. If it fires, the app dumps the UI tree, finds the Like button (identified by `content-desc` containing `" likes"`, e.g. `"3,015,732 likes"`) and taps it. If the button is not found in the dump the step is logged and skipped. The field appears between Shorts Scrolls and Shorts Watch Time in the second YouTube settings row. Defaults to 0–0 (disabled).
+
+---
+
 ## [1.2.270] — 2026-07-29
 
 ### Fix — YouTube Shorts: scroll +2 extra to guarantee reaching the very top
