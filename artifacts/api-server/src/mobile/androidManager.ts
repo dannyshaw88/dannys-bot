@@ -1020,6 +1020,29 @@ export async function runChromeApp(
           _adbTap(adb, serial, acceptPos.x, acceptPos.y);
           steps.push(`Chrome story ${tapNum}: cookie/consent banner detected — tapped accept`);
           await _sleep(900); // brief wait for banner to dismiss and page to settle
+        } else {
+          // Check if a banner keyword is present even though no accept button was
+          // found — means we're looking at an unusual banner layout we can't
+          // interact with.  Press Back to exit the article cleanly so the feed
+          // loop can continue rather than scrolling a banner-blocked page.
+          const low = cookieXml.toLowerCase();
+          const hasBanner =
+            low.includes("cookie") ||
+            low.includes("consent") ||
+            low.includes("contentpass") ||
+            low.includes("personalised ads") ||
+            low.includes("personalized ads") ||
+            low.includes("gdpr") ||
+            low.includes("privacy policy") ||
+            low.includes("we and our") ||
+            low.includes("our partners");
+          if (hasBanner) {
+            spawnSync(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"],
+              { encoding: "utf8", timeout: 5000 });
+            steps.push(`Chrome story ${tapNum}: cookie banner detected but no accept button found — pressed Back`);
+            await _sleep(800 + Math.floor(Math.random() * 400));
+            return; // skip article scroll; feed loop resumes normally
+          }
         }
       }
       // ──────────────────────────────────────────────────────────────────────
@@ -1069,42 +1092,63 @@ export async function runChromeApp(
       await _sleep(800 + Math.floor(Math.random() * 700)); // 0.8–1.5 s for feed to re-render
     };
 
-    if (scrollCount > 0 || storyTapTotal > 0) {
-      await _sleep(1500); // let Chrome settle after FRE / launch
+    // Wrap the scroll/tap block in its own try/catch so any mid-run exception
+    // (e.g. a swipe timeout, a bad XML dump) is caught here and logged, and the
+    // Chrome close step below always executes regardless.
+    try {
+      if (scrollCount > 0 || storyTapTotal > 0) {
+        await _sleep(1500); // let Chrome settle after FRE / launch
 
-      const feedXml = await _uiDump(adb, serial);
+        const feedXml = await _uiDump(adb, serial);
 
-      if (!feedXml.includes("feed_stream_recycler_view")) {
-        steps.push("Chrome feed: feed_stream_recycler_view not detected — skipping scroll/tap");
-      } else {
-        const { w: sw, h: sh } = _getScreenSize(feedXml);
-        const cx    = Math.round(sw / 2);
-        const fromY = Math.round(sh * 0.75);
-        const toY   = Math.round(sh * 0.25);
+        if (!feedXml.includes("feed_stream_recycler_view")) {
+          steps.push("Chrome feed: feed_stream_recycler_view not detected — skipping scroll/tap");
+        } else {
+          const { w: sw, h: sh } = _getScreenSize(feedXml);
+          const cx    = Math.round(sw / 2);
+          const fromY = Math.round(sh * 0.75);
+          const toY   = Math.round(sh * 0.25);
 
-        // Pick which scroll indices (0-based) trigger a story tap immediately after.
-        // Shuffle the index pool and pick the first storyTapTotal slots.
-        const tapAfterScroll = new Set<number>();
-        if (storyTapTotal > 0 && scrollCount > 0) {
-          const pool = Array.from({ length: scrollCount }, (_, i) => i);
-          for (let i = pool.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [pool[i], pool[j]] = [pool[j], pool[i]];
+          // Pick which scroll indices (0-based) trigger a story tap immediately after.
+          // Shuffle the index pool and pick the first storyTapTotal slots.
+          const tapAfterScroll = new Set<number>();
+          if (storyTapTotal > 0 && scrollCount > 0) {
+            const pool = Array.from({ length: scrollCount }, (_, i) => i);
+            for (let i = pool.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [pool[i], pool[j]] = [pool[j], pool[i]];
+            }
+            for (let i = 0; i < Math.min(storyTapTotal, scrollCount); i++) tapAfterScroll.add(pool[i]);
           }
-          for (let i = 0; i < Math.min(storyTapTotal, scrollCount); i++) tapAfterScroll.add(pool[i]);
-        }
 
-        steps.push(`Chrome feed: ${scrollCount} scroll(s), ${storyTapTotal} story tap(s)`);
+          steps.push(`Chrome feed: ${scrollCount} scroll(s), ${storyTapTotal} story tap(s)`);
 
-        let tapsLeft = storyTapTotal;
+          let tapsLeft = storyTapTotal;
 
-        // ── Main scroll loop ────────────────────────────────────────────────
-        for (let i = 0; i < scrollCount; i++) {
-          const dur = 350 + Math.floor(Math.random() * 300); // 350–650 ms
-          await swipe(serial, cx, fromY, cx, toY, dur);
-          await _sleep(700 + Math.floor(Math.random() * 800)); // 700–1500 ms pause
+          // ── Main scroll loop ──────────────────────────────────────────────
+          for (let i = 0; i < scrollCount; i++) {
+            const dur = 350 + Math.floor(Math.random() * 300); // 350–650 ms
+            await swipe(serial, cx, fromY, cx, toY, dur);
+            await _sleep(700 + Math.floor(Math.random() * 800)); // 700–1500 ms pause
 
-          if (tapAfterScroll.has(i) && tapsLeft > 0) {
+            if (tapAfterScroll.has(i) && tapsLeft > 0) {
+              const cardXml = await _uiDump(adb, serial);
+              const cards   = _findChromeFeedCards(cardXml, sw);
+              const tapNum  = storyTapTotal - tapsLeft + 1;
+              if (cards.length > 0) {
+                const card = cards[Math.floor(Math.random() * cards.length)];
+                _adbTap(adb, serial, card.x, card.y);
+                steps.push(`Chrome feed: story tap ${tapNum}/${storyTapTotal}`);
+                await readAndBack(tapNum);
+              } else {
+                steps.push(`Chrome feed: story tap ${tapNum}/${storyTapTotal} — no cards found`);
+              }
+              tapsLeft--;
+            }
+          }
+
+          // ── If storyTapTotal > scrollCount, fire remaining taps with a scroll between each ──
+          while (tapsLeft > 0) {
             const cardXml = await _uiDump(adb, serial);
             const cards   = _findChromeFeedCards(cardXml, sw);
             const tapNum  = storyTapTotal - tapsLeft + 1;
@@ -1117,30 +1161,17 @@ export async function runChromeApp(
               steps.push(`Chrome feed: story tap ${tapNum}/${storyTapTotal} — no cards found`);
             }
             tapsLeft--;
-          }
-        }
-
-        // ── If storyTapTotal > scrollCount, fire remaining taps with a scroll between each ──
-        while (tapsLeft > 0) {
-          const cardXml = await _uiDump(adb, serial);
-          const cards   = _findChromeFeedCards(cardXml, sw);
-          const tapNum  = storyTapTotal - tapsLeft + 1;
-          if (cards.length > 0) {
-            const card = cards[Math.floor(Math.random() * cards.length)];
-            _adbTap(adb, serial, card.x, card.y);
-            steps.push(`Chrome feed: story tap ${tapNum}/${storyTapTotal}`);
-            await readAndBack(tapNum);
-          } else {
-            steps.push(`Chrome feed: story tap ${tapNum}/${storyTapTotal} — no cards found`);
-          }
-          tapsLeft--;
-          if (tapsLeft > 0) {
-            // Scroll to surface a fresh card before the next tap
-            await swipe(serial, cx, fromY, cx, toY, 400 + Math.floor(Math.random() * 200));
-            await _sleep(700 + Math.floor(Math.random() * 600));
+            if (tapsLeft > 0) {
+              // Scroll to surface a fresh card before the next tap
+              await swipe(serial, cx, fromY, cx, toY, 400 + Math.floor(Math.random() * 200));
+              await _sleep(700 + Math.floor(Math.random() * 600));
+            }
           }
         }
       }
+    } catch (scrollErr: any) {
+      // Log the error but do NOT re-throw — the Chrome close step must always run.
+      steps.push(`Chrome: scroll/tap error — ${String(scrollErr?.message ?? scrollErr)}`);
     }
     // ─────────────────────────────────────────────────────────────────────────
 

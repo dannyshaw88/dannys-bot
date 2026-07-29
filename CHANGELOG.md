@@ -4,6 +4,28 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.267] — 2026-07-29
+
+### Fix — Chrome Phone Apps tool: cookie banner now exits article cleanly + Chrome always closes
+
+Two bugs in the `runChromeApp` flow have been fixed.
+
+**Bug 1 — Cookie banner with no recognisable accept button left Chrome stuck**
+
+When an article page served a cookie/consent banner (`_findCookieAcceptButton` detected banner keywords but could not locate a matching accept button), the old code simply continued — attempting to scroll and interact with a page that was entirely blocked by the banner overlay. All article scrolls fired blind against the banner, the actions were never completed, and Chrome was then left open because the outer `try/catch` caught a downstream exception and returned early before the close step.
+
+Fix: `readAndBack` now checks both conditions independently. If a banner is present but no accept button is found, it presses `KEYCODE_BACK` to exit the article cleanly, logs `cookie banner detected but no accept button found — pressed Back`, and returns early from `readAndBack` so the feed loop resumes normally without the banner blocking anything.
+
+**Bug 2 — An exception inside the scroll/tap block skipped Chrome close entirely**
+
+The scroll/tap block and the Chrome close step (open recents → swipe away) were both inside the same outer `try` block. If anything threw inside the scroll/tap block — a `swipe` timeout, a bad UI dump, a `readAndBack` error — the outer `catch` swallowed the exception and returned `{ ok: false }` immediately, leaving Chrome open in the foreground for the rest of the automation cycle.
+
+Fix: the entire scroll/tap block is now wrapped in its own inner `try/catch`. Any exception there is caught, logged as `Chrome: scroll/tap error — <message>`, and swallowed locally. The Chrome close step that follows is now unconditional — it always runs whether the scroll/tap block succeeded, partially succeeded, or threw entirely.
+
+**Combined effect:** regardless of what happens mid-run (banner, exception, bad UI state), Chrome is now always closed via the recents swipe before `runChromeApp` returns.
+
+---
+
 ## [1.2.266] — 2026-07-29
 
 ### Feature — Phone Apps tool now logs every step to the Action Log
