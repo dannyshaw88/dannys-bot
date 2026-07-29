@@ -4,6 +4,22 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.262] — 2026-07-29
+
+### Fix — Mobile Phone Apps: toggle-on now actually wakes and unlocks the device
+
+**Problem:** Toggling any Mobile Phone Apps slot on had no visible effect — the device screen stayed dark, nothing unlocked, no app opened. The scheduler was firing correctly and the activation roll was working, but the backend was calling `am start` on a locked, sleeping screen. Android silently accepts the `am start` command even when the keyguard is active, but the app never actually renders because the display is off and the lock screen is blocking the foreground. The result was that every Chrome and YouTube cycle appeared to run (the route returned `ok: true`) but nothing happened on the device.
+
+**Root cause:** The `runChromeApp` and `runYoutubeApp` functions in `androidManager.ts` jumped straight to `am start` without first waking the screen or dismissing the keyguard. The main automation cycle (Instagram) already does `wakeScreen` → `swipeUpFromBottom` before launching anything, but the Phone Apps runner was missing this entirely.
+
+**Fix:** Added `wakeScreen` (sends `KEYCODE_WAKEUP`) followed by `swipeUpFromBottom` (swipes up from the bottom edge to clear a swipe-to-unlock / no-PIN keyguard) at the top of the `POST /api/mobile/devices/:serial/run-phone-app` route handler, before any app-specific logic. Placing it in the shared route handler means all current apps (Chrome, YouTube) and any future ones (Google Play, Snapchat, WhatsApp) benefit automatically — nothing needs to be added to each individual app function.
+
+**Behaviour after fix:**
+- Toggle on → device screen lights up, keyguard dismisses, configured app opens and runs its full flow (scroll, optional tap, close via recents)
+- The activation-percentage roll still governs whether each individual app runs in a given cycle — only apps that roll above their configured % will activate
+
+---
+
 ## [1.2.261] — 2026-07-29
 
 ### Feature — YouTube: homepage scroll + video tap

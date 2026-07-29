@@ -11247,6 +11247,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           ? devicePrefsPA.dismissDirection
           : android.getModelDismissDirection(rawModelPA);
 
+      // Wake and unlock the screen before launching any app.
+      // Without this the device stays dark and am start is a no-op because
+      // the keyguard is in the way.
+      await android.wakeScreen(serial);
+      await android.swipeUpFromBottom(serial);
+
       let result: { ok: boolean; steps: string[]; error?: string };
 
       if (appId === "chrome") {
