@@ -236,6 +236,16 @@ function MobileSlotSessionToggle({ serial, slotIdx }: { serial: string; slotIdx:
         body: JSON.stringify({ enabled: val }),
       });
       queryClient.invalidateQueries({ queryKey: qKey });
+      // Signal the live MobilePage slot so its in-memory settings state and
+      // run-loop refs (manualToggleOnRef / explicitToggleOffRef) are updated
+      // immediately — identical to the user pressing the toggle on the Mobile
+      // page itself.  BroadcastChannel works across same-origin contexts
+      // (Electron's single-window SPA included).
+      try {
+        const bc = new BroadcastChannel("aura-slot-toggle");
+        bc.postMessage({ serial, slotIdx, enabled: val });
+        bc.close();
+      } catch { /* BroadcastChannel unavailable in very old environments */ }
     } catch {
       setOptimistic(null);
     }

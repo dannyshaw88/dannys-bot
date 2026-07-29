@@ -4,6 +4,26 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.251 — 2026-07-29
+
+### Fix — Statistics page: Session Tool toggle now actually starts/stops the automation cycle
+
+The Session Tool toggle shown against each account in the Statistics page tool-performance table was visually present and would persist the `enabled` state to the database, but the running automation loop on the Phone Farm page never reacted to it — so pressing it appeared to do nothing.
+
+**Root cause:** The Mobile page's automation loop reads from an in-memory `settings.enabled` state that is loaded once on device connect and never re-fetched from the server. The Statistics page toggle was only doing a database write (POST to `/api/mobile/devices/:serial/slots/:slotIdx/automation-settings`), so the running cycle's in-memory state was untouched and the loop kept running (or stayed stopped) regardless.
+
+**Fix — `BroadcastChannel` cross-page signal (`'aura-slot-toggle'`):**
+
+After a successful POST to the API the Statistics toggle now broadcasts a `{ serial, slotIdx, enabled }` message on a `BroadcastChannel` named `'aura-slot-toggle'`. The `useAutomationSettings` hook on the Phone Farm page subscribes to that channel on mount (keyed to the slot's own `serial` + `slotIdx`) and calls `setEnabledByUser(enabled)` when a matching message arrives.
+
+`setEnabledByUser` is the exact same function the main toggle on the Phone Farm page uses, so:
+- Turning **on** via Stats sets `manualToggleOnRef = true` → the run-loop fires the next cycle immediately, just as if you toggled it from the Phone Farm page
+- Turning **off** via Stats sets `explicitToggleOffRef = true` → the current cycle is aborted cleanly, just as if you toggled it off from the Phone Farm page
+
+`BroadcastChannel` is natively available in Chromium/Electron with no extra dependencies. The listener is cleaned up on unmount. Both `postMessage` and the subscription are wrapped in `try/catch` so they degrade silently in any environment where the API isn't available.
+
+---
+
 ## v1.2.250 — 2026-07-29
 
 ### Fix — Debug screenshots now capture phone mirror + Debugging Log side by side

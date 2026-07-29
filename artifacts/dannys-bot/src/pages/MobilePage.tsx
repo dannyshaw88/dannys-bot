@@ -3292,6 +3292,27 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     setSettings(s => ({ ...s, enabled }));
   }, [phone?.serial, slotIdx]);
 
+  // Listen for toggle signals broadcast by the Statistics page
+  // (MobileSlotSessionToggle).  When the user presses the toggle on the Stats
+  // page it persists the change to the DB via the API, then broadcasts here so
+  // the in-memory settings state AND the run-loop refs are updated exactly as if
+  // the user had pressed the toggle directly on this slot's panel.
+  useEffect(() => {
+    const serial = phone?.serial;
+    if (!serial) return;
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel("aura-slot-toggle");
+      bc.onmessage = (ev: MessageEvent) => {
+        const { serial: evSerial, slotIdx: evSlot, enabled } = ev.data ?? {};
+        if (evSerial === serial && evSlot === (slotIdx ?? 0)) {
+          setEnabledByUser(enabled);
+        }
+      };
+    } catch { /* BroadcastChannel unavailable */ }
+    return () => { try { bc?.close(); } catch {} };
+  }, [phone?.serial, slotIdx, setEnabledByUser]);
+
   useEffect(() => {
     // Re-fetch settings only when a genuinely new device connects (connectedKey
     // increments via the serial-watcher) or the user forces a refresh
