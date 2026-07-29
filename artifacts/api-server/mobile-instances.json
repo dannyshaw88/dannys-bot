@@ -41,6 +41,14 @@
           "emailAddress": "",
           "emailPassword": "",
           "phoneNumber": ""
+        },
+        {
+          "username": "",
+          "password": "",
+          "totpSecret": "",
+          "emailAddress": "",
+          "emailPassword": "",
+          "phoneNumber": ""
         }
       ]
     },

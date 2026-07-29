@@ -15,7 +15,6 @@ const isReplit = process.env.REPL_ID !== undefined;
 
 const replitPlugins = isReplit && process.env.NODE_ENV !== "production"
   ? await Promise.all([
-      import("@replit/vite-plugin-runtime-error-modal").then((m) => m.default()),
       import("@replit/vite-plugin-cartographer").then((m) =>
         m.cartographer({ root: path.resolve(import.meta.dirname, "..") })
       ),
