@@ -4,6 +4,50 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.252 — 2026-07-29
+
+### Fix — Collision Preventer: My Device scheduling now correctly uses CP interval instead of HST interval
+
+The Collision Preventer's rest interval (X–Y minutes between slots) was being ignored for the **My Device** tab in two specific situations. In both cases the HST "Run every" interval was used instead, so the device would restart cycles far too quickly — defeating the purpose of the CP rest window.
+
+**Bug 1 — Post-cycle scheduling race on first startup:**
+
+The post-cycle reschedule checks `collisionConfigRef.current` (a ref that mirrors the CP config from a 2-second API poll). On the very first cycle after the app loads, that ref can still hold its initial `{ enabled: false }` default if the API poll hasn't completed yet. This caused `useCP` to be `false` and the HST interval to win, even when CP was visibly enabled in the UI.
+
+*Fix:* `collisionPrevented` (the boolean returned by `requestSlot`) is now hoisted to outer scope so it's visible at post-cycle scheduling time. When `collisionPrevented === true`, CP was provably active when the slot was queued — so `useCP` is forced true regardless of whether the ref has been populated:
+
+```ts
+const useCP = (cp2?.enabled && cp2.restMinMin > 0) || collisionPrevented;
+```
+
+Because the cycle itself takes many seconds/minutes, the ref is always fully populated by the time post-cycle scheduling runs. This was only a risk for the very first reschedule.
+
+**Bug 2 — Initial startup scheduling ignores CP entirely:**
+
+When the automation effect mounts and the toggle is already on (app restart with toggle saved), the startup scheduling branch only read `settingsRef.current` (the HST interval). It never consulted `collisionConfigRef.current` at all — so even when CP was enabled with, say, a 5–10 minute rest window, the first cycle would fire after the HST "Run every" interval instead.
+
+*Fix:* The startup scheduling branch now mirrors the post-cycle logic exactly — reads `collisionConfigRef.current` and uses the CP `restMinMin`/`restMinMax` when CP is enabled. The server log also appends `[CP]` when the CP interval is applied, making it easy to confirm in the Debugging Log.
+
+---
+
+### Fix — Follow Users: last-resort result selection replaced coordinate tap with DPAD navigation
+
+When Instagram's accessibility tree does not expose search result nodes (confirmed behaviour on Xiaomi Redmi 12 5G — results render visually but never appear in the UIAutomator dump), the follow tool previously fell back to a hardcoded percentage-coordinate tap at `fbH × 0.27` (27% of screen height).
+
+**Why this was wrong:** The first search result row sits near the very top of the screen immediately below the search bar (~7% of screen height). On a 2460 px screen, 27% = 664 px — landing 7–8 rows down from the top, on a random user in the results list rather than the intended `@username`. This is why some follows succeeded (when the a11y tree DID expose nodes and the correct user was tapped via node) and others silently followed the wrong person or failed to navigate to any profile at all.
+
+**Fix — DPAD key navigation (no coordinates):**
+
+When all node-based approaches are exhausted, the code now uses Android's DPAD input system instead of a coordinate tap:
+
+1. `KEYCODE_DPAD_DOWN` (keycode 20) — moves Android's input focus from the search bar (where the keyboard is open) to the first focusable element below it. This operates at the OS input level, independent of what UIAutomator exposes in the accessibility tree.
+2. After a 350 ms settle, a fresh UI dump checks whether focus landed on a keyword/recent-search chip row (identified by `/row_search_keyword_title`, `/search_keyword_title`, `/row_search_recent_chip`, `/search_recent_chip` resource-ids). If a chip is detected, another `KEYCODE_DPAD_DOWN` steps past it onto the first real user profile row.
+3. `KEYCODE_ENTER` (keycode 66) — activates the currently-focused result row.
+
+Since the exact username was typed into the search bar, Instagram always ranks the matching account first — so DPAD_DOWN (past chip if any) + ENTER always activates the correct user regardless of screen size or phone model. No pixel coordinates involved.
+
+---
+
 ## v1.2.251 — 2026-07-29
 
 ### Fix — Statistics page: Session Tool toggle now actually starts/stops the automation cycle
