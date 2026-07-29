@@ -687,7 +687,7 @@ function _findChromeFeedCards(
 
 export async function runChromeApp(
   serial: string,
-  opts?: { scrollMin?: number; scrollMax?: number; storyTapMin?: number; storyTapMax?: number; tappedStoryScrollMin?: number; tappedStoryScrollMax?: number; internalLinkPctMin?: number; internalLinkPctMax?: number },
+  opts?: { scrollMin?: number; scrollMax?: number; storyTapMin?: number; storyTapMax?: number; tappedStoryScrollMin?: number; tappedStoryScrollMax?: number; internalLinkPctMin?: number; internalLinkPctMax?: number; dismissDirection?: "left" | "up" },
 ): Promise<{ ok: boolean; steps: string[]; error?: string }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
@@ -979,6 +979,83 @@ export async function runChromeApp(
       }
     }
     // ─────────────────────────────────────────────────────────────────────────
+
+    // ── Close Chrome via recents (open floaty windows + swipe gesture) ──────
+    // Always runs regardless of whether any scrolls/taps were configured.
+    const dismissDir = opts?.dismissDirection
+      ?? getModelDismissDirection(getDeviceModel(serial));
+    const { w: rw, h: rh } = getScreenSize(serial);
+    await openRecentApps(serial);
+    await _sleep(1200); // wait for OEM recents overlay to settle
+    const rcx = Math.round(rw / 2);
+    if (dismissDir === "up") {
+      await swipe(serial, rcx, Math.round(rh * 0.65), rcx, 0, 150);
+    } else {
+      await swipe(serial, rcx, Math.round(rh * 0.45), Math.round(rw * 0.05), Math.round(rh * 0.45), 400);
+    }
+    steps.push(`Chrome: opened recents + swiped away (${dismissDir})`);
+    await _sleep(800);
+    // ──────────────────────────────────────────────────────────────────────────
+
+    return { ok: true, steps };
+  } catch (e: any) {
+    return { ok: false, steps, error: String(e?.message ?? e) };
+  }
+}
+
+/**
+ * Opens the YouTube app on the device, dismisses the OS notification-
+ * permission dialog if it appears ("Allow YouTube to send you
+ * notifications?"), then returns.
+ *
+ * Detection uses the standard Android permission dialog resource-ids
+ * (permission_deny_button / permission_allow_button) rather than
+ * YouTube-package-prefixed ids because this dialog is rendered by the
+ * Android OS, not the app itself.
+ */
+export async function runYoutubeApp(
+  serial: string,
+): Promise<{ ok: boolean; steps: string[]; error?: string }> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const steps: string[] = [];
+  try {
+    // Launch YouTube main activity.
+    spawnSync(adb, ["-s", serial, "shell", "am", "start", "-n",
+      "com.google.android.youtube/com.google.android.youtube.HomeActivity",
+      "--activity-clear-top",
+    ], { encoding: "utf8", timeout: 10000 });
+    steps.push("YouTube launched");
+
+    // Allow time for the app (and any permission dialog) to render.
+    await _sleep(2500);
+
+    // Dump the UI tree and check for the notification-permission dialog.
+    const xml = await _uiDump(adb, serial);
+    const hasNotifDialog =
+      xml.includes("permission_deny_button") ||
+      xml.includes("Allow YouTube to send you notifications");
+
+    if (hasNotifDialog) {
+      steps.push("YouTube: notification permission dialog detected");
+      // The dialog is an Android OS sheet — id prefix is "android", not
+      // "com.google.android.youtube".  _findElem tries each label in order.
+      const denyPos = _findElem(xml,
+        "android:id/permission_deny_button",
+        "permission_deny_button",
+        "Don't allow",
+        "Don\u2019t allow", // typographic apostrophe variant
+      );
+      if (denyPos) {
+        _adbTap(adb, serial, denyPos.x, denyPos.y);
+        steps.push("YouTube: tapped Don't allow");
+        await _sleep(800);
+      } else {
+        steps.push("YouTube: deny button not found — skipping tap");
+      }
+    } else {
+      steps.push("YouTube: notification dialog not shown");
+    }
 
     return { ok: true, steps };
   } catch (e: any) {
