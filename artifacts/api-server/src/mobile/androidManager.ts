@@ -685,6 +685,68 @@ function _findChromeFeedCards(
   return results;
 }
 
+/**
+ * Universal cookie / consent banner accepter for Chrome article pages.
+ *
+ * Strategy:
+ *   1. Banner presence — check the XML for any cookie/consent/GDPR keyword.
+ *      We use case-insensitive substring checks so we don't rely on regex
+ *      backslash escaping (which the build tool can corrupt in template literals).
+ *   2. Accept button — try a priority-ordered list of common accept-button
+ *      labels via _findElem, which already handles case-insensitive matching
+ *      and both exact and partial text= / content-desc= attribute searches.
+ *
+ * Returns the tap coordinates if a banner was found and an accept button
+ * located, or null if the page has no consent banner or the button text
+ * wasn't recognised.
+ */
+function _findCookieAcceptButton(xml: string): { x: number; y: number } | null {
+  const low = xml.toLowerCase();
+  const hasBanner =
+    low.includes("cookie") ||
+    low.includes("consent") ||
+    low.includes("contentpass") ||
+    low.includes("personalised ads") ||
+    low.includes("personalized ads") ||
+    low.includes("gdpr") ||
+    low.includes("privacy policy") ||
+    low.includes("we and our") ||
+    low.includes("our partners");
+  if (!hasBanner) return null;
+
+  // Priority order: most-specific first so we always pick the affirmative
+  // "accept all" action rather than a weaker partial match.
+  return _findElem(xml,
+    "Accept All & Continue",
+    "Accept all & continue",
+    "Accept All and Continue",
+    "Accept All",
+    "Accept all",
+    "ACCEPT ALL",
+    "Accept all cookies",
+    "Accept Cookies",
+    "Accept cookies",
+    "Accept & Continue",
+    "Accept and Continue",
+    "Allow All",
+    "Allow all",
+    "Allow all cookies",
+    "Agree All",
+    "Agree all",
+    "I Agree",
+    "I agree",
+    "I Accept",
+    "I accept",
+    "Agree & Continue",
+    "Agree and Continue",
+    "Agree and continue",
+    "Agree",
+    "Accept",
+    "OK, got it",
+    "Ok, got it",
+  );
+}
+
 export async function runChromeApp(
   serial: string,
   opts?: { scrollMin?: number; scrollMax?: number; storyTapMin?: number; storyTapMax?: number; tappedStoryScrollMin?: number; tappedStoryScrollMax?: number; internalLinkPctMin?: number; internalLinkPctMax?: number; dismissDirection?: "left" | "up" },
@@ -923,6 +985,22 @@ export async function runChromeApp(
     // Called after every story-card tap regardless of which loop fires it.
     const readAndBack = async (tapNum: number) => {
       await _sleep(1800 + Math.floor(Math.random() * 1200)); // 1.8–3 s page load wait
+
+      // ── Universal cookie / consent banner dismissal ────────────────────────
+      // Some article pages show a cookie-consent overlay immediately on load.
+      // Detect it from the UI dump and tap the accept button before scrolling
+      // so subsequent taps land on real article content, not the banner.
+      {
+        const cookieXml = await _uiDump(adb, serial);
+        const acceptPos = _findCookieAcceptButton(cookieXml);
+        if (acceptPos) {
+          _adbTap(adb, serial, acceptPos.x, acceptPos.y);
+          steps.push(`Chrome story ${tapNum}: cookie/consent banner detected — tapped accept`);
+          await _sleep(900); // brief wait for banner to dismiss and page to settle
+        }
+      }
+      // ──────────────────────────────────────────────────────────────────────
+
       const articleScrolls = tappedStoryScrollMax > 0
         ? Math.round(tappedStoryScrollMin + Math.random() * Math.max(0, tappedStoryScrollMax - tappedStoryScrollMin))
         : 0;
