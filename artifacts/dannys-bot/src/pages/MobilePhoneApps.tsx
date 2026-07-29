@@ -210,14 +210,15 @@ interface AppSlotRowProps {
 function AppSlotRow({ icon, label, min, max, onMin, onMax, rowExtras, row2, row3 }: AppSlotRowProps) {
   return (
     <div className="bg-card border border-border rounded-xl p-4">
-      {/* Header: icon + app name */}
-      <div className="flex items-center gap-2 mb-3">
-        {icon}
-        <span className="text-sm font-semibold text-foreground">{label}</span>
-      </div>
+      {/* Single flex-wrap row: icon+name first, then all field groups flow inline */}
+      <div className="flex items-center gap-4 flex-wrap">
+        {/* Icon + label — anchors the left of the first visual row */}
+        <div className="flex items-center gap-2 min-w-[9rem]">
+          {icon}
+          <span className="text-sm font-semibold text-foreground">{label}</span>
+        </div>
 
-      {/* Row 1: Activation % + any extra field groups */}
-      <div className="flex items-end gap-4 flex-wrap">
+        {/* Activation % */}
         <div className="flex flex-col items-center gap-1">
           <span className="text-xs text-muted-foreground whitespace-nowrap">Activation %</span>
           <div className="flex items-center gap-1">
@@ -241,19 +242,12 @@ function AppSlotRow({ icon, label, min, max, onMin, onMax, rowExtras, row2, row3
             <span className="text-muted-foreground text-sm">%</span>
           </div>
         </div>
-        {rowExtras}
-      </div>
 
-      {row2 && (
-        <div className="flex items-end gap-4 flex-wrap mt-3">
-          {row2}
-        </div>
-      )}
-      {row3 && (
-        <div className="flex items-end gap-4 flex-wrap mt-3">
-          {row3}
-        </div>
-      )}
+        {/* All additional field groups flow in the same wrapping row */}
+        {rowExtras}
+        {row2}
+        {row3}
+      </div>
     </div>
   );
 }
