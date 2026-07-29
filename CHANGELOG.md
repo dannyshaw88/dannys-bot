@@ -4,6 +4,30 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.269] — 2026-07-29
+
+### Feature — YouTube: Watch Time, Click Shorts %, Shorts Scrolls, Shorts Watch Time
+
+Four new configurable fields added to the YouTube card in the Phone Apps tool.
+
+**Watch Time (sec)** — min/max seconds to spend watching a tapped video before pressing Back. Previously hardcoded at 1.5–3.5 s. Now user-configurable up to 600 s. Defaults to 3–8 s.
+
+**Click Shorts %** — min/max percentage chance (rolled after the video-tap section) to tap the Shorts button in the YouTube bottom navigation bar. When rolled:
+1. The feed is scrolled back UP the same number of times it was scrolled DOWN at the start, so the bottom nav bar becomes visible again (it hides when the feed is scrolled down).
+2. The Shorts button (`desc="Shorts"`, second icon in the bottom nav) is tapped.
+3. The first Short that loads is watched for a Shorts Watch Time draw.
+4. The feed is swiped up Shorts Scrolls times, spending a fresh Shorts Watch Time draw on each Short.
+
+**Shorts Scrolls** — min/max number of swipe-ups to perform inside the Shorts feed (each swipe advances to the next Short). Defaults to 0–0 (disabled).
+
+**Shorts Watch Time (sec)** — min/max seconds spent on each Short (including the first one that loads without a swipe). Defaults to 3–8 s.
+
+All four fields appear on the YouTube row in the Phone Apps panel. Watch Time is on the first row alongside Scrolls and Tap video %. Click Shorts %, Shorts Scrolls, and Shorts Watch Time appear on a second row below.
+
+YouTube is always closed via the floating-windows recents swipe after all actions complete, whether or not Shorts was entered.
+
+---
+
 ## [1.2.268] — 2026-07-29
 
 ### Fix — Chrome Phone Apps: each story tap now gets its own full feed cycle

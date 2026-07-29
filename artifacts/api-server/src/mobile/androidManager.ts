@@ -1278,6 +1278,14 @@ export async function runYoutubeApp(
   opts?: {
     scrollMin?: number; scrollMax?: number;
     clickPctMin?: number; clickPctMax?: number;
+    /** Seconds to spend watching a tapped video before pressing Back. */
+    watchTimeMin?: number; watchTimeMax?: number;
+    /** Chance (0–100%) to tap the Shorts tab after the video-tap section. */
+    clickShortsPctMin?: number; clickShortsPctMax?: number;
+    /** Number of swipe-ups to perform inside the Shorts feed. */
+    shortsScrollMin?: number; shortsScrollMax?: number;
+    /** Seconds to spend on each Short. */
+    shortsWatchTimeMin?: number; shortsWatchTimeMax?: number;
     dismissDirection?: "left" | "up";
   },
 ): Promise<{ ok: boolean; steps: string[]; error?: string }> {
@@ -1303,13 +1311,11 @@ export async function runYoutubeApp(
 
     if (hasNotifDialog) {
       steps.push("YouTube: notification permission dialog detected");
-      // The dialog is an Android OS sheet — id prefix is "android", not
-      // "com.google.android.youtube".  _findElem tries each label in order.
       const denyPos = _findElem(xml,
         "android:id/permission_deny_button",
         "permission_deny_button",
         "Don't allow",
-        "Don\u2019t allow", // typographic apostrophe variant
+        "Don\u2019t allow",
       );
       if (denyPos) {
         _adbTap(adb, serial, denyPos.x, denyPos.y);
@@ -1323,16 +1329,31 @@ export async function runYoutubeApp(
     }
 
     // ── Scroll and optional video tap ─────────────────────────────────────────
-    const scrollMin   = opts?.scrollMin   ?? 0;
-    const scrollMax   = opts?.scrollMax   ?? 0;
-    const clickPctMin = opts?.clickPctMin ?? 0;
-    const clickPctMax = opts?.clickPctMax ?? 0;
+    const scrollMin          = opts?.scrollMin          ?? 0;
+    const scrollMax          = opts?.scrollMax          ?? 0;
+    const clickPctMin        = opts?.clickPctMin        ?? 0;
+    const clickPctMax        = opts?.clickPctMax        ?? 0;
+    const watchTimeMin       = opts?.watchTimeMin       ?? 3;
+    const watchTimeMax       = opts?.watchTimeMax       ?? 8;
+    const clickShortsPctMin  = opts?.clickShortsPctMin  ?? 0;
+    const clickShortsPctMax  = opts?.clickShortsPctMax  ?? 0;
+    const shortsScrollMin    = opts?.shortsScrollMin    ?? 0;
+    const shortsScrollMax    = opts?.shortsScrollMax    ?? 0;
+    const shortsWatchTimeMin = opts?.shortsWatchTimeMin ?? 3;
+    const shortsWatchTimeMax = opts?.shortsWatchTimeMax ?? 8;
 
     const scrollCount = scrollMax > 0
       ? Math.round(scrollMin + Math.random() * Math.max(0, scrollMax - scrollMin))
       : 0;
 
-    if (scrollCount > 0 || clickPctMax > 0) {
+    // cx/fromY/toY are set once from the feed dump and reused throughout
+    // (upward scroll, Shorts navigation, etc.).
+    let cx    = 0;
+    let fromY = 0;
+    let toY   = 0;
+    let feedDetected = false;
+
+    if (scrollCount > 0 || clickPctMax > 0 || clickShortsPctMax > 0) {
       // Let the homepage settle after launch / dialog dismissal.
       await _sleep(1500);
 
@@ -1344,22 +1365,23 @@ export async function runYoutubeApp(
       if (!onHomepage) {
         steps.push("YouTube: homepage not detected — skipping scroll/tap");
       } else {
+        feedDetected = true;
         const { w: sw, h: sh } = _getScreenSize(feedXml);
-        const cx    = Math.round(sw / 2);
-        const fromY = Math.round(sh * 0.75);
-        const toY   = Math.round(sh * 0.25);
+        cx    = Math.round(sw / 2);
+        fromY = Math.round(sh * 0.75);
+        toY   = Math.round(sh * 0.25);
 
-        // ── Scroll loop ───────────────────────────────────────────────────────
+        // ── Scroll loop ─────────────────────────────────────────────────────
         if (scrollCount > 0) {
           steps.push(`YouTube: scrolling homepage ${scrollCount}x`);
           for (let i = 0; i < scrollCount; i++) {
-            const dur = 350 + Math.floor(Math.random() * 300); // 350–650 ms
+            const dur = 350 + Math.floor(Math.random() * 300);
             await swipe(serial, cx, fromY, cx, toY, dur);
-            await _sleep(700 + Math.floor(Math.random() * 800)); // 700–1500 ms pause
+            await _sleep(700 + Math.floor(Math.random() * 800));
           }
         }
 
-        // ── Optional video tap ────────────────────────────────────────────────
+        // ── Optional video tap ───────────────────────────────────────────────
         if (clickPctMax > 0) {
           const pct = clickPctMin + Math.random() * Math.max(0, clickPctMax - clickPctMin);
           if (Math.random() * 100 < pct) {
@@ -1370,7 +1392,6 @@ export async function runYoutubeApp(
               const card = cards[Math.floor(Math.random() * cards.length)];
               _adbTap(adb, serial, card.x, card.y);
               steps.push(`YouTube: tapped video card at (${card.x},${card.y})`);
-              // Wait for video player to open, then verify the tap landed.
               await _sleep(2500 + Math.floor(Math.random() * 1500));
               const afterXml = await _uiDump(adb, serial);
               const openedVideo =
@@ -1378,8 +1399,12 @@ export async function runYoutubeApp(
                 afterXml.includes("next_gen_watch_container_layout") ||
                 !afterXml.includes("browse_fragment_layout_coordinator_layout");
               if (openedVideo) {
-                // Brief watch time before pressing Back.
-                await _sleep(1500 + Math.floor(Math.random() * 2000));
+                // Configurable watch time before pressing Back.
+                const watchMs = Math.round(
+                  (watchTimeMin + Math.random() * Math.max(0, watchTimeMax - watchTimeMin)) * 1000,
+                );
+                steps.push(`YouTube: watching video for ~${Math.round(watchMs / 1000)}s`);
+                await _sleep(watchMs);
                 spawnSync(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"],
                   { encoding: "utf8", timeout: 5000 });
                 steps.push("YouTube: video confirmed opened — pressed Back");
@@ -1394,6 +1419,72 @@ export async function runYoutubeApp(
             steps.push("YouTube: click roll not fired");
           }
         }
+
+        // ── Optional Shorts tab ──────────────────────────────────────────────
+        // The Shorts button in the bottom nav bar is only reliably tappable
+        // from the top of the homepage (the bar hides when the user scrolls
+        // down).  After the video-tap section we are back in the feed but
+        // potentially scrolled down, so scroll back up the same number of
+        // times we scrolled down to restore the top-of-feed state.
+        if (clickShortsPctMax > 0 && feedDetected) {
+          const shortsPct = clickShortsPctMin + Math.random() * Math.max(0, clickShortsPctMax - clickShortsPctMin);
+          if (Math.random() * 100 < shortsPct) {
+            // Scroll UP to return to the top of the homepage feed.
+            if (scrollCount > 0) {
+              steps.push(`YouTube: Shorts roll fired — scrolling back to top (${scrollCount}x up)`);
+              for (let i = 0; i < scrollCount; i++) {
+                const dur = 350 + Math.floor(Math.random() * 300);
+                // Reverse swipe direction: toY→fromY scrolls the feed upward.
+                await swipe(serial, cx, toY, cx, fromY, dur);
+                await _sleep(500 + Math.floor(Math.random() * 500));
+              }
+            } else {
+              steps.push("YouTube: Shorts roll fired (no feed scrolls to undo)");
+            }
+
+            // Find and tap the Shorts nav button.
+            const navXml = await _uiDump(adb, serial);
+            const shortsBtn = _findElem(navXml, "Shorts");
+            if (shortsBtn) {
+              _adbTap(adb, serial, shortsBtn.x, shortsBtn.y);
+              steps.push("YouTube: tapped Shorts button");
+              await _sleep(2000); // wait for Shorts feed to load
+
+              const shortsTotal = shortsScrollMax > 0
+                ? Math.round(shortsScrollMin + Math.random() * Math.max(0, shortsScrollMax - shortsScrollMin))
+                : 0;
+
+              const { w: ssx, h: ssh } = getScreenSize(serial);
+              const scx    = Math.round(ssx / 2);
+              const sfromY = Math.round(ssh * 0.75);
+              const stoY   = Math.round(ssh * 0.25);
+
+              // Watch the first Short that loads.
+              const firstWatchMs = Math.round(
+                (shortsWatchTimeMin + Math.random() * Math.max(0, shortsWatchTimeMax - shortsWatchTimeMin)) * 1000,
+              );
+              steps.push(`YouTube Shorts: watching Short 1 for ~${Math.round(firstWatchMs / 1000)}s`);
+              await _sleep(firstWatchMs);
+
+              // Swipe up through additional Shorts.
+              for (let s = 0; s < shortsTotal; s++) {
+                // Swipe up = advance to the next Short.
+                await swipe(serial, scx, sfromY, scx, stoY, 300 + Math.floor(Math.random() * 200));
+                await _sleep(1000 + Math.floor(Math.random() * 500)); // wait for Short to load
+                const watchMs = Math.round(
+                  (shortsWatchTimeMin + Math.random() * Math.max(0, shortsWatchTimeMax - shortsWatchTimeMin)) * 1000,
+                );
+                steps.push(`YouTube Shorts: watching Short ${s + 2}/${shortsTotal + 1} for ~${Math.round(watchMs / 1000)}s`);
+                await _sleep(watchMs);
+              }
+            } else {
+              steps.push("YouTube: Shorts button not found in bottom nav — skipping");
+            }
+          } else {
+            steps.push("YouTube: Shorts roll not fired");
+          }
+        }
+        // ────────────────────────────────────────────────────────────────────
       }
     }
     // ─────────────────────────────────────────────────────────────────────────
@@ -1404,7 +1495,7 @@ export async function runYoutubeApp(
       ?? getModelDismissDirection(getDeviceModel(serial));
     const { w: rw, h: rh } = getScreenSize(serial);
     await openRecentApps(serial);
-    await _sleep(1200); // wait for OEM recents overlay to settle
+    await _sleep(1200);
     const rcx = Math.round(rw / 2);
     if (dismissDir === "up") {
       await swipe(serial, rcx, Math.round(rh * 0.65), rcx, 0, 150);

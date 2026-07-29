@@ -97,6 +97,18 @@ interface AppSlotSettings {
   /** Chance (0–100%) to tap a video item after scrolling — only used by YouTube. */
   clickPctMin?: number;
   clickPctMax?: number;
+  /** Seconds to spend watching a tapped video — only used by YouTube. */
+  watchTimeMin?: number;
+  watchTimeMax?: number;
+  /** Chance (0–100%) to tap the Shorts tab after the video section — only used by YouTube. */
+  clickShortsPctMin?: number;
+  clickShortsPctMax?: number;
+  /** Number of swipe-ups in the Shorts feed — only used by YouTube. */
+  shortsScrollMin?: number;
+  shortsScrollMax?: number;
+  /** Seconds to spend on each Short — only used by YouTube. */
+  shortsWatchTimeMin?: number;
+  shortsWatchTimeMax?: number;
 }
 
 interface PhoneAppsSettings {
@@ -117,7 +129,7 @@ const DEFAULT_SETTINGS: PhoneAppsSettings = {
   chrome:     { ...DEFAULT_APP_SLOT, scrollMin: 1, scrollMax: 5, storyTapMin: 0, storyTapMax: 0, tappedStoryScrollMin: 0, tappedStoryScrollMax: 0, internalLinkPctMin: 0, internalLinkPctMax: 0 },
   googlePlay: { ...DEFAULT_APP_SLOT },
   snapchat:   { ...DEFAULT_APP_SLOT },
-  youtube:    { ...DEFAULT_APP_SLOT, scrollMin: 1, scrollMax: 5, clickPctMin: 0, clickPctMax: 0 },
+  youtube:    { ...DEFAULT_APP_SLOT, scrollMin: 1, scrollMax: 5, clickPctMin: 0, clickPctMax: 0, watchTimeMin: 3, watchTimeMax: 8, clickShortsPctMin: 0, clickShortsPctMax: 0, shortsScrollMin: 0, shortsScrollMax: 0, shortsWatchTimeMin: 3, shortsWatchTimeMax: 8 },
   whatsapp:   { ...DEFAULT_APP_SLOT },
 };
 
@@ -321,7 +333,7 @@ export function MobilePhoneAppsPanel({
           chrome:      { activatePctMin: d.chrome?.activatePctMin ?? 0,      activatePctMax: d.chrome?.activatePctMax ?? 0,      scrollMin: d.chrome?.scrollMin ?? 1, scrollMax: d.chrome?.scrollMax ?? 5, storyTapMin: d.chrome?.storyTapMin ?? 0, storyTapMax: d.chrome?.storyTapMax ?? 0, tappedStoryScrollMin: d.chrome?.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: d.chrome?.tappedStoryScrollMax ?? 0, internalLinkPctMin: d.chrome?.internalLinkPctMin ?? 0, internalLinkPctMax: d.chrome?.internalLinkPctMax ?? 0 },
           googlePlay:  { activatePctMin: d.googlePlay?.activatePctMin ?? 0,  activatePctMax: d.googlePlay?.activatePctMax ?? 0 },
           snapchat:    { activatePctMin: d.snapchat?.activatePctMin ?? 0,     activatePctMax: d.snapchat?.activatePctMax ?? 0 },
-          youtube:     { activatePctMin: d.youtube?.activatePctMin ?? 0, activatePctMax: d.youtube?.activatePctMax ?? 0, scrollMin: d.youtube?.scrollMin ?? 1, scrollMax: d.youtube?.scrollMax ?? 5, clickPctMin: d.youtube?.clickPctMin ?? 0, clickPctMax: d.youtube?.clickPctMax ?? 0 },
+          youtube:     { activatePctMin: d.youtube?.activatePctMin ?? 0, activatePctMax: d.youtube?.activatePctMax ?? 0, scrollMin: d.youtube?.scrollMin ?? 1, scrollMax: d.youtube?.scrollMax ?? 5, clickPctMin: d.youtube?.clickPctMin ?? 0, clickPctMax: d.youtube?.clickPctMax ?? 0, watchTimeMin: d.youtube?.watchTimeMin ?? 3, watchTimeMax: d.youtube?.watchTimeMax ?? 8, clickShortsPctMin: d.youtube?.clickShortsPctMin ?? 0, clickShortsPctMax: d.youtube?.clickShortsPctMax ?? 0, shortsScrollMin: d.youtube?.shortsScrollMin ?? 0, shortsScrollMax: d.youtube?.shortsScrollMax ?? 0, shortsWatchTimeMin: d.youtube?.shortsWatchTimeMin ?? 3, shortsWatchTimeMax: d.youtube?.shortsWatchTimeMax ?? 8 },
           whatsapp:    { activatePctMin: d.whatsapp?.activatePctMin ?? 0,     activatePctMax: d.whatsapp?.activatePctMax ?? 0 },
         };
         setSettings(merged);
@@ -423,7 +435,7 @@ export function MobilePhoneAppsPanel({
       if (shouldActivate(s.chrome.activatePctMin,     s.chrome.activatePctMax))     await runApp("chrome", { scrollMin: s.chrome.scrollMin ?? 1, scrollMax: s.chrome.scrollMax ?? 5, storyTapMin: s.chrome.storyTapMin ?? 0, storyTapMax: s.chrome.storyTapMax ?? 0, tappedStoryScrollMin: s.chrome.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: s.chrome.tappedStoryScrollMax ?? 0, internalLinkPctMin: s.chrome.internalLinkPctMin ?? 0, internalLinkPctMax: s.chrome.internalLinkPctMax ?? 0 });
       if (shouldActivate(s.googlePlay.activatePctMin, s.googlePlay.activatePctMax)) await runApp("googlePlay");
       if (shouldActivate(s.snapchat.activatePctMin,   s.snapchat.activatePctMax))   await runApp("snapchat");
-      if (shouldActivate(s.youtube.activatePctMin,    s.youtube.activatePctMax))    await runApp("youtube", { scrollMin: s.youtube.scrollMin ?? 1, scrollMax: s.youtube.scrollMax ?? 5, clickPctMin: s.youtube.clickPctMin ?? 0, clickPctMax: s.youtube.clickPctMax ?? 0 });
+      if (shouldActivate(s.youtube.activatePctMin,    s.youtube.activatePctMax))    await runApp("youtube", { scrollMin: s.youtube.scrollMin ?? 1, scrollMax: s.youtube.scrollMax ?? 5, clickPctMin: s.youtube.clickPctMin ?? 0, clickPctMax: s.youtube.clickPctMax ?? 0, watchTimeMin: s.youtube.watchTimeMin ?? 3, watchTimeMax: s.youtube.watchTimeMax ?? 8, clickShortsPctMin: s.youtube.clickShortsPctMin ?? 0, clickShortsPctMax: s.youtube.clickShortsPctMax ?? 0, shortsScrollMin: s.youtube.shortsScrollMin ?? 0, shortsScrollMax: s.youtube.shortsScrollMax ?? 0, shortsWatchTimeMin: s.youtube.shortsWatchTimeMin ?? 3, shortsWatchTimeMax: s.youtube.shortsWatchTimeMax ?? 8 });
       if (shouldActivate(s.whatsapp.activatePctMin,   s.whatsapp.activatePctMax))   await runApp("whatsapp");
     }
     // ─────────────────────────────────────────────────────────────────────────
@@ -717,6 +729,99 @@ export function MobilePhoneAppsPanel({
                         onChange={e => patchApp("youtube", { clickPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
                       />
                       <span className="text-muted-foreground text-sm">%</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Watch Time</span>
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={600}
+                        className={PCT_INPUT}
+                        value={settings.youtube.watchTimeMin ?? 3}
+                        onChange={e => patchApp("youtube", { watchTimeMin: Math.min(600, Math.max(0, Number(e.target.value))) })}
+                      />
+                      <span className="text-muted-foreground text-sm">to</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={600}
+                        className={PCT_INPUT}
+                        value={settings.youtube.watchTimeMax ?? 8}
+                        onChange={e => patchApp("youtube", { watchTimeMax: Math.min(600, Math.max(0, Number(e.target.value))) })}
+                      />
+                      <span className="text-muted-foreground text-xs">sec</span>
+                    </div>
+                  </div>
+                </>}
+                row2={<>
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Click Shorts %</span>
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        className={PCT_INPUT}
+                        value={settings.youtube.clickShortsPctMin ?? 0}
+                        onChange={e => patchApp("youtube", { clickShortsPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                      />
+                      <span className="text-muted-foreground text-sm">to</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        className={PCT_INPUT}
+                        value={settings.youtube.clickShortsPctMax ?? 0}
+                        onChange={e => patchApp("youtube", { clickShortsPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                      />
+                      <span className="text-muted-foreground text-sm">%</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Shorts Scrolls</span>
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={50}
+                        className={PCT_INPUT}
+                        value={settings.youtube.shortsScrollMin ?? 0}
+                        onChange={e => patchApp("youtube", { shortsScrollMin: Math.min(50, Math.max(0, Number(e.target.value))) })}
+                      />
+                      <span className="text-muted-foreground text-sm">to</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={50}
+                        className={PCT_INPUT}
+                        value={settings.youtube.shortsScrollMax ?? 0}
+                        onChange={e => patchApp("youtube", { shortsScrollMax: Math.min(50, Math.max(0, Number(e.target.value))) })}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Shorts Watch Time</span>
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={600}
+                        className={PCT_INPUT}
+                        value={settings.youtube.shortsWatchTimeMin ?? 3}
+                        onChange={e => patchApp("youtube", { shortsWatchTimeMin: Math.min(600, Math.max(0, Number(e.target.value))) })}
+                      />
+                      <span className="text-muted-foreground text-sm">to</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={600}
+                        className={PCT_INPUT}
+                        value={settings.youtube.shortsWatchTimeMax ?? 8}
+                        onChange={e => patchApp("youtube", { shortsWatchTimeMax: Math.min(600, Math.max(0, Number(e.target.value))) })}
+                      />
+                      <span className="text-muted-foreground text-xs">sec</span>
                     </div>
                   </div>
                 </>}

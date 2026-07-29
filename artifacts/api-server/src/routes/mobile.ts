@@ -11221,19 +11221,31 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const { app: appId, scrollMin, scrollMax, storyTapMin, storyTapMax,
               tappedStoryScrollMin, tappedStoryScrollMax,
               internalLinkPctMin, internalLinkPctMax,
-              clickPctMin, clickPctMax } = z.object({
+              clickPctMin, clickPctMax,
+              watchTimeMin, watchTimeMax,
+              clickShortsPctMin, clickShortsPctMax,
+              shortsScrollMin, shortsScrollMax,
+              shortsWatchTimeMin, shortsWatchTimeMax } = z.object({
         app:                  z.enum(["chrome", "googlePlay", "snapchat", "youtube", "whatsapp"]),
-        scrollMin:            z.number().int().min(0).max(50).optional(),
-        scrollMax:            z.number().int().min(0).max(50).optional(),
+        scrollMin:            z.number().min(0).max(50).optional(),
+        scrollMax:            z.number().min(0).max(50).optional(),
         storyTapMin:          z.number().int().min(0).max(50).optional(),
         storyTapMax:          z.number().int().min(0).max(50).optional(),
         tappedStoryScrollMin: z.number().int().min(0).max(50).optional(),
         tappedStoryScrollMax: z.number().int().min(0).max(50).optional(),
         internalLinkPctMin:   z.number().int().min(0).max(100).optional(),
         internalLinkPctMax:   z.number().int().min(0).max(100).optional(),
-        // YouTube-specific: chance (0–100%) to tap a video item after scrolling.
+        // YouTube-specific
         clickPctMin:          z.number().int().min(0).max(100).optional(),
         clickPctMax:          z.number().int().min(0).max(100).optional(),
+        watchTimeMin:         z.number().min(0).max(600).optional(),
+        watchTimeMax:         z.number().min(0).max(600).optional(),
+        clickShortsPctMin:    z.number().int().min(0).max(100).optional(),
+        clickShortsPctMax:    z.number().int().min(0).max(100).optional(),
+        shortsScrollMin:      z.number().int().min(0).max(50).optional(),
+        shortsScrollMax:      z.number().int().min(0).max(50).optional(),
+        shortsWatchTimeMin:   z.number().min(0).max(600).optional(),
+        shortsWatchTimeMax:   z.number().min(0).max(600).optional(),
       }).parse(req.body);
 
       // Resolve dismiss direction (used by Chrome recents close).
@@ -11266,6 +11278,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         result = await android.runYoutubeApp(serial, {
           scrollMin, scrollMax,
           clickPctMin, clickPctMax,
+          watchTimeMin, watchTimeMax,
+          clickShortsPctMin, clickShortsPctMax,
+          shortsScrollMin, shortsScrollMax,
+          shortsWatchTimeMin, shortsWatchTimeMax,
           dismissDirection: dismissDir,
         });
       } else {
