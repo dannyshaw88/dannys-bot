@@ -601,6 +601,176 @@ export async function launchInstagram(serial: string): Promise<void> {
 }
 
 /**
+ * Open the Google Chrome app on the device and handle the Chrome first-run
+ * experience (FRE) if it appears.
+ *
+ * On first-ever launch Chrome shows a "Make Chrome your own" screen with a
+ * "Continue as [Name]" button (resource-id: signin_fre_continue_button).
+ * This function detects that screen via UIAutomator and taps the button
+ * automatically so the FRE never blocks subsequent automation.
+ */
+export async function runChromeApp(
+  serial: string,
+): Promise<{ ok: boolean; steps: string[]; error?: string }> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const steps: string[] = [];
+  try {
+    // Launch Chrome — standard main activity, clear any existing task stack.
+    spawnSync(adb, ["-s", serial, "shell", "am", "start", "-n",
+      "com.android.chrome/com.google.android.apps.chrome.Main",
+      "--activity-clear-top",
+    ], { encoding: "utf8", timeout: 10000 });
+    steps.push("Chrome launched");
+
+    // Allow time for the app to render its first frame.
+    await _sleep(2500);
+
+    // Dump the UI tree and look for the Chrome FRE screen.
+    const xml = await _uiDump(adb, serial);
+
+    // Detection: id="fre_pager" is the unique ViewPager container for the
+    // Chrome first-run experience.  id="signin_fre_continue_button" is the
+    // "Continue as [Name]" button.  Either is sufficient to confirm FRE.
+    const isFre =
+      xml.includes("fre_pager") ||
+      xml.includes("signin_fre_continue_button") ||
+      xml.includes("Make Chrome your own");
+
+    if (isFre) {
+      steps.push("Chrome FRE detected");
+
+      // 1. Try to tap the "Continue as [Name]" button by resource-id.
+      //    The full resource-id in raw UIAutomator XML is:
+      //    resource-id="com.android.chrome:id/signin_fre_continue_button"
+      let continuePos = _findElem(xml,
+        "com.android.chrome:id/signin_fre_continue_button",
+        "signin_fre_continue_button",
+      );
+
+      // 2. Fallback: scan for text="Continue as …" in case resource-id varies.
+      if (!continuePos) {
+        const m = xml.match(
+          /text="(Continue as [^"]+)"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/,
+        );
+        if (m) {
+          continuePos = {
+            x: Math.round((parseInt(m[2], 10) + parseInt(m[4], 10)) / 2),
+            y: Math.round((parseInt(m[3], 10) + parseInt(m[5], 10)) / 2),
+          };
+          steps.push(`Chrome FRE: found by text — "${m[1]}"`);
+        }
+      }
+
+      if (continuePos) {
+        _adbTap(adb, serial, continuePos.x, continuePos.y);
+        steps.push("Chrome FRE: tapped Continue");
+        await _sleep(1500);
+      } else {
+        steps.push("Chrome FRE: button not found — no tap");
+      }
+
+      // ── Page 2: "Save time, type less" (history sync offer) ──────────────
+      // After "Continue as [Name]" Chrome may immediately advance to a sync
+      // page.  Detection: id="history_sync_title" or text "Save time, type
+      // less".  Correct action: tap "No, thanks" (id="button_secondary").
+      const xml2 = await _uiDump(adb, serial);
+      const isHistorySync =
+        xml2.includes("history_sync_title") ||
+        xml2.includes("Save time, type less") ||
+        xml2.includes("button_secondary");
+      if (isHistorySync) {
+        steps.push("Chrome FRE page 2 detected (history sync)");
+        const noThanksPos = _findElem(xml2,
+          "com.android.chrome:id/button_secondary",
+          "button_secondary",
+          "No, thanks",
+          "No thanks",
+        );
+        if (noThanksPos) {
+          _adbTap(adb, serial, noThanksPos.x, noThanksPos.y);
+          steps.push("Chrome FRE page 2: tapped No, thanks");
+          await _sleep(1200);
+        } else {
+          steps.push("Chrome FRE page 2: No-thanks button not found — no tap");
+        }
+      }
+
+      // ── Page 3: "Turn on an ad privacy feature" (Privacy Sandbox EEA) ────
+      // Detection: id="privacy_sandbox_consent_eea_view" or title text.
+      // Correct action: tap "No, thanks" (id="no_button", left button).
+      const xml3 = await _uiDump(adb, serial);
+      const isPrivacySandbox =
+        xml3.includes("privacy_sandbox_consent_eea_view") ||
+        xml3.includes("Turn on an ad privacy feature") ||
+        xml3.includes("privacy_sandbox_dialog_scroll_view");
+      if (isPrivacySandbox) {
+        steps.push("Chrome FRE page 3 detected (Privacy Sandbox)");
+        const noPos = _findElem(xml3,
+          "com.android.chrome:id/no_button",
+          "no_button",
+          "No, thanks",
+          "No thanks",
+        );
+        if (noPos) {
+          _adbTap(adb, serial, noPos.x, noPos.y);
+          steps.push("Chrome FRE page 3: tapped No, thanks");
+          await _sleep(1200);
+        } else {
+          steps.push("Chrome FRE page 3: No-thanks button not found — no tap");
+        }
+      }
+
+      // ── Page 4: "Other ad privacy features now available" ─────────────────
+      // Detection: id="privacy_sandbox_m1_notice_eea_bullet_one" or title text.
+      // Correct action: tap the "More ↓" button (id="more_button", bottom-right)
+      // which scrolls/advances past this informational screen.
+      const xml4 = await _uiDump(adb, serial);
+      const isOtherAdPrivacy =
+        xml4.includes("privacy_sandbox_m1_notice_eea_bullet_one") ||
+        xml4.includes("Other ad privacy features now available");
+      if (isOtherAdPrivacy) {
+        steps.push("Chrome FRE page 4 detected (Other ad privacy)");
+        const morePos = _findElem(xml4,
+          "com.android.chrome:id/more_button",
+          "more_button",
+          "More",
+        );
+        if (morePos) {
+          _adbTap(adb, serial, morePos.x, morePos.y);
+          steps.push("Chrome FRE page 4: tapped More");
+          await _sleep(1200);
+
+          // After "More" the same screen scrolls to reveal "Got it" + "Settings"
+          // buttons (id="ack_button").  Tap "Got it" to finish this page.
+          const xml4b = await _uiDump(adb, serial);
+          const gotItPos = _findElem(xml4b,
+            "com.android.chrome:id/ack_button",
+            "ack_button",
+            "Got it",
+          );
+          if (gotItPos) {
+            _adbTap(adb, serial, gotItPos.x, gotItPos.y);
+            steps.push("Chrome FRE page 4b: tapped Got it");
+            await _sleep(1200);
+          } else {
+            steps.push("Chrome FRE page 4b: Got-it button not found — no tap");
+          }
+        } else {
+          steps.push("Chrome FRE page 4: More button not found — no tap");
+        }
+      }
+    } else {
+      steps.push("Chrome FRE: not shown");
+    }
+
+    return { ok: true, steps };
+  } catch (e: any) {
+    return { ok: false, steps, error: String(e?.message ?? e) };
+  }
+}
+
+/**
  * Instagram occasionally shows Meta's EU/UK "ads choice" consent screen on
  * launch ("Make a choice about your ads" → Get started → pick "Use for free
  * with ads" → Continue → Agree). It's a full-screen modal that blocks

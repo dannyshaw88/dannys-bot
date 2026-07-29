@@ -348,10 +348,36 @@ export function MobilePhoneAppsPanel({
       if (stopRef.current) { releaseSlot?.(PHONE_APPS_SLOT_IDX, true); runningRef.current = false; return; }
     }
 
-    // ── Execute app tools here (each runs based on its own activation % roll) ──
-    // Tools will be implemented here as they are built. The scheduling
-    // framework fires correctly — activation % fields are wired and saved.
-    // ──────────────────────────────────────────────────────────────────────────
+    // ── Execute app tools — each rolls its own activation % ──────────────────
+    if (serialRef.current) {
+      const s = settingsRef.current;
+      const serial = serialRef.current;
+
+      // Roll: pick a uniform random % in [min, max]; activate if that beats
+      // a second random draw.  Both must be > 0 to have any chance.
+      const shouldActivate = (min: number, max: number): boolean => {
+        if (min === 0 && max === 0) return false;
+        const pct = min + Math.random() * Math.max(0, max - min);
+        return Math.random() * 100 < pct;
+      };
+
+      const runApp = async (appId: string) => {
+        try {
+          await fetch(
+            `/api/mobile/devices/${encodeURIComponent(serial)}/run-phone-app`,
+            { method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ app: appId }) },
+          );
+        } catch { /* network error — ignore, don't crash the cycle */ }
+      };
+
+      if (shouldActivate(s.chrome.activatePctMin,     s.chrome.activatePctMax))     await runApp("chrome");
+      if (shouldActivate(s.googlePlay.activatePctMin, s.googlePlay.activatePctMax)) await runApp("googlePlay");
+      if (shouldActivate(s.snapchat.activatePctMin,   s.snapchat.activatePctMax))   await runApp("snapchat");
+      if (shouldActivate(s.youtube.activatePctMin,    s.youtube.activatePctMax))    await runApp("youtube");
+      if (shouldActivate(s.whatsapp.activatePctMin,   s.whatsapp.activatePctMax))   await runApp("whatsapp");
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     releaseSlot?.(PHONE_APPS_SLOT_IDX);
     runningRef.current = false;

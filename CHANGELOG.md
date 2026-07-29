@@ -4,6 +4,53 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.256] — 2026-07-29
+
+### New — Mobile Phone Apps: Google Chrome activation fully implemented
+
+When the Google Chrome app is rolled for activation in a phone-apps cycle, the automation now **opens Chrome on the real device** and handles every first-run-experience (FRE) screen that Chrome can show on first-ever launch — fully automatically, no manual interaction required.
+
+#### What runs
+
+**`runChromeApp(serial)`** — new export in `artifacts/api-server/src/mobile/androidManager.ts`:
+
+1. Launches Chrome via `am start -n com.android.chrome/com.google.android.apps.chrome.Main --activity-clear-top`
+2. Waits 2.5 s for the app to render its first frame
+3. Takes a UIAutomator accessibility dump and walks through up to five Chrome FRE screens in order:
+
+| Step | Screen | Detection signal | Action |
+|------|--------|-----------------|--------|
+| 1 | "Make Chrome your own" | `fre_pager` or `signin_fre_continue_button` | Tap **Continue as [Name]** — found first by resource-id, falls back to regex scan of `text="Continue as …"` so it works regardless of which Google account is signed in |
+| 2 | "Save time, type less" (history sync offer) | `history_sync_title` or `button_secondary` | Tap **No, thanks** |
+| 3 | "Turn on an ad privacy feature" (Privacy Sandbox EEA consent) | `privacy_sandbox_consent_eea_view` | Tap **No, thanks** (`no_button`) |
+| 4 | "Other ad privacy features now available" — scroll gate | `privacy_sandbox_m1_notice_eea_bullet_one` | Tap **More ↓** (`more_button`) to reveal final buttons |
+| 4b | Same screen after scroll | `ack_button` present | Tap **Got it** |
+
+Each step takes a fresh UIAutomator dump only when the previous step was triggered, so on a device where Chrome is already set up the function returns after a single dump with no taps.
+
+**`POST /api/mobile/devices/:serial/run-phone-app`** — new endpoint in `artifacts/api-server/src/routes/mobile.ts`:
+- Body: `{ app: "chrome" | "googlePlay" | "snapchat" | "youtube" | "whatsapp" }`
+- Calls `runChromeApp` for Chrome; returns `{ ok, steps }` (steps are the action log)
+- Other apps return a "not yet implemented" step — endpoints are registered and ready for future implementation
+
+#### Scheduler wired (frontend)
+
+`runCycle` in `artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx` now executes each app based on its activation % roll (previously the block was a placeholder comment):
+- For each app: picks a uniform random % in `[activatePctMin, activatePctMax]`; activates if that beats a second random draw — the same double-roll pattern used by the existing inject-browsing gate
+- Apps with both values set to 0 are unconditionally skipped
+- Each app call is `await`ed sequentially so they never race on the same device
+- Any network error in a single app call is silently swallowed so one app failure cannot crash the whole cycle or prevent the slot from being released
+
+### Fix — Phone Farm device detail: fingerprint buttons now vertically aligned
+
+All blue fingerprint (cyan) icon buttons in the device detail Accounts tab — **Mobile Phone Apps** row and every **Instagram Account Slot N** row — are now in the same horizontal column.
+
+Previously the title labels had no minimum width, so "Mobile Phone Apps" (shorter text) pushed its fingerprint button further left than "Instagram Account Slot 1" (longer text), breaking the column alignment. Fixed by adding `min-w-[200px] shrink-0` to both title `<p>` elements. The `shrink-0` also ensures the title never collapses when the right-side brand icons row grows, so the fingerprint button position is stable regardless of how many app icons are present.
+
+Files changed: `artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx`, `artifacts/dannys-bot/src/pages/MobilePage.tsx`
+
+---
+
 ## [1.2.255] — 2026-07-29
 
 ### Fixed

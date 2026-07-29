@@ -11202,6 +11202,29 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
+  // ── Run a single phone app (called by the frontend scheduler per-cycle) ────
+  // The frontend rolls the activation % and only calls this when activated.
+  // Returns { ok, steps } — steps are appended to the device debug log.
+  app.post("/api/mobile/devices/:serial/run-phone-app", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const { app: appId } = z.object({
+        app: z.enum(["chrome", "googlePlay", "snapchat", "youtube", "whatsapp"]),
+      }).parse(req.body);
+
+      let result: { ok: boolean; steps: string[]; error?: string };
+
+      if (appId === "chrome") {
+        result = await android.runChromeApp(serial);
+      } else {
+        // Remaining apps are placeholders — will be implemented individually.
+        result = { ok: true, steps: [`${appId}: not yet implemented`] };
+      }
+
+      res.json(result);
+    } catch (e: any) { res.status(400).json({ ok: false, error: e?.message }); }
+  });
+
   // ── Client-side dashboard event logger ────────────────────────────────────
   // Used by the Collision Preventer (and any future client-side events) to
   // create a session_action row without going through the full cycle endpoint.
