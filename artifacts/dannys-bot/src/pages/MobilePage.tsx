@@ -7245,6 +7245,10 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
     ? ([phone.manufacturer, phone.marketName || phone.model].filter(Boolean).join(" ") || phone.serial)
     : "";
 
+  // Google Play settings
+  const [gpEmail,      setGpEmail]      = React.useState("");
+  const [gpPassword,   setGpPassword]   = React.useState("");
+
   return (
     <div className="h-full flex flex-col">
       {/* Always-mounted slot Human Session Tool views — hidden when phone is
@@ -7651,10 +7655,6 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
       setDismissSaving(false);
     }
   };
-
-  // Google Play settings
-  const [gpEmail,      setGpEmail]      = React.useState("");
-  const [gpPassword,   setGpPassword]   = React.useState("");
 
   // Device spec
   interface SimInfo { slot: number; carrier: string | null; phoneNumber: string | null }
