@@ -4,6 +4,21 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.272] — 2026-07-29
+
+### Fix — YouTube Shorts: dismiss mini-player before tapping Shorts button
+
+After pressing Back on a YouTube video, the app sometimes leaves a mini-player docked at the bottom of the screen. This mini-player covers the Shorts nav icon, causing the Shorts button lookup to fail ("Shorts button not found in bottom nav — skipping"). The fix adds a dismiss step immediately after the scroll-back-to-top pass and before the Shorts button tap:
+
+1. A fresh UI dump is taken after all upward scrolls complete.
+2. The dump is searched for a node with `content-desc` matching `"Close"` that is located in the **bottom half** of the screen (y > 50 % of screen height). This is the X close button on YouTube's mini-player.
+3. If found it is tapped and the code waits ~900–1300 ms for the dismiss animation to complete.
+4. A second UI dump is then taken for the Shorts button lookup, which now finds the Shorts nav icon cleanly.
+
+If no mini-player is present the extra dump adds a few hundred milliseconds at most and the run continues normally.
+
+---
+
 ## [1.2.271] — 2026-07-29
 
 ### Feature — YouTube Shorts: Shorts Like % per Short

@@ -1445,6 +1445,21 @@ export async function runYoutubeApp(
               await _sleep(500 + Math.floor(Math.random() * 500));
             }
 
+            // ── Dismiss YouTube mini-player if present ──────────────────────
+            // After pressing Back from a video, YouTube sometimes keeps a
+            // mini-player pinned at the bottom of the screen.  Its X close
+            // button sits in the bottom-right corner and blocks the Shorts
+            // nav icon until dismissed.  Tap it if it is visible, then wait
+            // for the dismiss animation before looking for Shorts.
+            const preNavXml = await _uiDump(adb, serial);
+            const { h: ytScreenH } = getScreenSize(serial);
+            const miniCloseBtn = _findElem(preNavXml, "Close");
+            if (miniCloseBtn && miniCloseBtn.y > ytScreenH * 0.5) {
+              _adbTap(adb, serial, miniCloseBtn.x, miniCloseBtn.y);
+              steps.push("YouTube: dismissed mini-player (tapped X close button)");
+              await _sleep(900 + Math.floor(Math.random() * 400));
+            }
+
             // Find and tap the Shorts nav button.
             const navXml = await _uiDump(adb, serial);
             const shortsBtn = _findElem(navXml, "Shorts");
