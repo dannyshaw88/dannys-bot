@@ -4192,27 +4192,37 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     await sleepOrAbort(serial, 800);
 
-    // ── Profile-page recovery ──────────────────────────────────────────────
+    // ── Home-feed recovery ─────────────────────────────────────────────────
     // Even at x=97%, an advance tap can occasionally land on a mention/collab
     // sticker placed near the right edge, navigating to the story author's
     // profile page.  The ad-deviation block above only catches non-Instagram
     // apps; this block catches the intra-Instagram case where we're left on a
-    // profile page instead of the home feed.
+    // non-feed surface.
     //
     // Detection: findHomeTab looks for content-desc="Home" or the feed_tab
-    // resource-id in the accessibility tree.  On the home feed the Home tab is
-    // always present in the bottom nav.  On a profile page, inside the story
-    // viewer, or inside any other full-screen surface the home tab is absent —
-    // but we know we're not in the story viewer any more (the exit-swipe above
-    // just ran, or stillInStoryViewer() returned false before it).  So a null
-    // result here reliably means "we ended up somewhere other than the feed".
+    // resource-id in the accessibility tree.
     //
-    // Recovery: one pressBack is enough to return from a profile page to the
-    // feed.  A second Back would be needed only if we somehow navigated two
-    // levels deep, which this flow cannot do.
+    // Recovery: ALWAYS tap the Home tab when it is visible rather than just
+    // checking for its presence.  The Reels full-screen player still shows the
+    // bottom nav (Home tab visible), so the old null-only guard passed through
+    // it without navigating back to the feed.  Tapping Home is safe on the
+    // feed (stays/refreshes) AND correctly exits the Reels player back to the
+    // home feed.  When the Home tab is absent entirely (Chrome, deep link,
+    // etc.) fall back to pressing Back once.
+    //
+    // Root cause (observed Jul 2026): after all story slides ended naturally,
+    // Instagram auto-navigated to the Reels full-screen player.  findHomeTab
+    // returned non-null (bottom nav still visible in Reels), so the old
+    // null-only guard did nothing and the automation cycle continued inside
+    // the Reels player instead of the home feed.
     {
       const _stFeedTab = await android.findHomeTab(serial).catch(() => null);
-      if (!_stFeedTab) {
+      if (_stFeedTab) {
+        onLog?.("Story exit: tapping Home tab to return to home feed (guards against Reels/profile auto-navigation after story end)");
+        logger.info({ serial }, "[view-stories] tapping Home tab post-exit to ensure home feed");
+        await android.tap(serial, _stFeedTab.x, _stFeedTab.y);
+        await sleepOrAbort(serial, 700);
+      } else {
         onLog?.("Story exit: home-feed tab not found after story loop — pressing Back to recover from possible profile-page navigation");
         logger.info({ serial }, "[view-stories] home tab absent post-exit — pressing Back to recover");
         await android.pressBack(serial);

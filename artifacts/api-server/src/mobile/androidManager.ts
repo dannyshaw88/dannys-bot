@@ -4977,10 +4977,44 @@ export async function isInStoryViewerSlow(serial: string): Promise<boolean> {
   const xml = await _uiDump(adb, serial).catch(() => null);
   if (!xml) return true; // dump failed → assume still in viewer (safe default)
 
+  // ── 0. Standalone Reels player — NOT the story viewer ────────────────────
+  // The Reels player (opened by tapping a Reel in the feed or the Reels tab)
+  // uses the same reel_viewer_* resource IDs as the story viewer internally,
+  // so the positive-marker check below produces a false positive: when the
+  // story-bubble tap misses and opens a Reel instead, this function used to
+  // return true ("story viewer open"), causing the automation to run the
+  // whole story loop inside the Reels player.
+  //
+  // Distinguish the two screens:
+  //   Story viewer  — no Reels tab / clips-player IDs; no "Reels" header label
+  //   Reels player  — has clips_tab / reels_tab in the nav, or a "Reels"
+  //                   header/title node, or clips_viewer / reels_player IDs
+  //
+  // If ANY of these are present we are definitively NOT in the story viewer.
+  const REELS_PLAYER_MARKERS = [
+    ":id/clips_tab",
+    ":id/reels_tab",
+    ":id/tab_clips",
+    ":id/nav_clips",
+    ":id/clips_viewer",
+    ":id/reels_viewer",
+    ":id/reels_player",
+  ];
+  const hasReelsPlayerMarker = REELS_PLAYER_MARKERS.some(m => xml.includes(m));
+  // Also catch the "Reels" header title that appears in the top bar of the
+  // standalone Reels player (content-desc or text node).
+  const hasReelsHeader =
+    /content-desc="Reels"/.test(xml) ||
+    /text="Reels"/.test(xml);
+  if (hasReelsPlayerMarker || hasReelsHeader) return false;
+
   // ── 1. Positive story-viewer markers ─────────────────────────────────────
-  // Any of these resource-id substrings are only present when the story /
-  // reel viewer is on screen.  If found we can return immediately — no need
-  // to check for the home tab.
+  // Any of these resource-id substrings are only present when the story
+  // viewer is on screen.  If found we can return immediately — no need to
+  // check for the home tab.
+  // NOTE: "reel_viewer" is intentionally still here — the story viewer uses
+  // reel_viewer_* IDs too, and the Reels-player exclusion above already
+  // filters out the standalone Reels case before we reach this check.
   const STORY_MARKERS = [
     "toolbar_like_button",   // story like button (heart) in the action toolbar
     "reel_viewer",           // covers reel_viewer_root, reel_viewer_video_player,
