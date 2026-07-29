@@ -7082,16 +7082,6 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
     onAnyEnabledRef.current?.(anyEnabled);
   }, [slotAutomationStates]);
 
-  // Bubble Phone Apps running state up to MobilePage so it can activate the
-  // mirror. phoneAppsRunning is local state (set via MobilePhoneAppsPanel's
-  // onRunning prop) — without this effect MobilePage can't see it, causing
-  // a ReferenceError in the production build.
-  const onPhoneAppsRunningRef = useRef(onPhoneAppsRunning);
-  onPhoneAppsRunningRef.current = onPhoneAppsRunning;
-  useEffect(() => {
-    onPhoneAppsRunningRef.current?.(phoneAppsRunning);
-  }, [phoneAppsRunning]);
-
   // One ref per slot — each points to that slot's SlotHumanSessionView handle.
   // The mirror toggle calls slotHandleRefs.current[i]?.setEnabled(v) directly,
   // hitting exactly that slot's setEnabledByUser with no indirection.
@@ -7115,6 +7105,14 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   const [phoneAppsEnabled,   setPhoneAppsEnabled]   = useState(false);
   const [phoneAppsNextRunAt, setPhoneAppsNextRunAt] = useState<number | null>(null);
   const [phoneAppsRunning,   setPhoneAppsRunning]   = useState(false);
+  // Bubble Phone Apps running state up to MobilePage so it can activate the
+  // mirror. Must live AFTER the phoneAppsRunning declaration to avoid TDZ in
+  // the production/Electron minified build.
+  const onPhoneAppsRunningRef = useRef(onPhoneAppsRunning);
+  onPhoneAppsRunningRef.current = onPhoneAppsRunning;
+  useEffect(() => {
+    onPhoneAppsRunningRef.current?.(phoneAppsRunning);
+  }, [phoneAppsRunning]);
   useEffect(() => { onSlotChange?.(openSlotTool); }, [openSlotTool]);
   useImperativeHandle(ref, () => ({
     backToSlots: () => { setOpenSlotTool(null); setOpenPhoneAppsTool(false); },

@@ -4,6 +4,14 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.265] — 2026-07-29
+
+### Fix — Phone Farm device view crash ("Cannot access before initialization")
+
+Follow-up to v1.2.264. The `useEffect` that bubbles `phoneAppsRunning` up to `MobilePage` was placed above the `const [phoneAppsRunning, ...]` declaration inside `AccountSettingsPanel`. React evaluates the dependency array (`[phoneAppsRunning]`) immediately when the hook call is reached — before the `useState` declaration below it — triggering a temporal dead zone (TDZ) `ReferenceError` in the production/Electron minified build. Moved the effect and its ref to immediately after the `phoneAppsRunning` declaration so the variable is always initialized before the dependency array is evaluated.
+
+---
+
 ## [1.2.264] — 2026-07-29
 
 ### Fix — Phone Farm device view crash on startup ("phoneAppsRunning is not defined")
