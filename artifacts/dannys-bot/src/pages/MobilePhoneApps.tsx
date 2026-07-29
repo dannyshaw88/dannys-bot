@@ -164,19 +164,19 @@ export function MobilePhoneApps({
             {/* Switch toggle — reflects enabled state, saves immediately when clicked */}
             <div className="flex items-center gap-2 pl-2 border-l border-border">
               <Switch checked={enabled} onCheckedChange={onToggle} className="shrink-0" />
-              <span className={`text-[11px] font-semibold leading-tight whitespace-nowrap ${
-                enabled ? "text-green-600 dark:text-green-400" : "text-muted-foreground"
-              }`}>
-                {enabled ? "Active" : "Disabled"}
-              </span>
+              <div className="flex flex-col min-w-0">
+                <span className={`text-[11px] font-semibold leading-tight whitespace-nowrap ${
+                  enabled ? "text-green-600 dark:text-green-400" : "text-muted-foreground"
+                }`}>
+                  {enabled ? "Active" : "Disabled"}
+                </span>
+                {enabled && nextRunAt && (
+                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                    Next run at {new Date(nextRunAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} on {new Date(nextRunAt).toLocaleDateString([], { day: "2-digit", month: "2-digit", year: "numeric" })}
+                  </span>
+                )}
+              </div>
             </div>
-
-            {/* Next run */}
-            {enabled && nextRunAt && (
-              <span className="text-[11px] text-muted-foreground whitespace-nowrap pl-2">
-                Next run {new Date(nextRunAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-              </span>
-            )}
           </div>
 
           {/* Right: brand icons */}
@@ -275,12 +275,15 @@ export function MobilePhoneAppsPanel({
   const [saveError,   setSaveError]   = useState<string | null>(null);
 
   // Always-current refs for use inside scheduler closures.
-  const settingsRef   = useRef<PhoneAppsSettings>(settings);
-  const nextRunAtRef  = useRef<number | null>(null);
-  const timerRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const runningRef    = useRef(false);
-  const stopRef       = useRef(false);
-  const serialRef     = useRef(serial);
+  const settingsRef        = useRef<PhoneAppsSettings>(settings);
+  const nextRunAtRef       = useRef<number | null>(null);
+  const timerRef           = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const runningRef         = useRef(false);
+  const stopRef            = useRef(false);
+  const serialRef          = useRef(serial);
+  // Set to true when the user explicitly toggles the tool on — causes the
+  // scheduler to fire immediately (delay 0) rather than wait a random interval.
+  const manualToggleOnRef  = useRef(false);
 
   useEffect(() => { settingsRef.current = settings; }, [settings]);
   useEffect(() => { serialRef.current   = serial;   }, [serial]);
@@ -416,11 +419,20 @@ export function MobilePhoneAppsPanel({
     if (loading) return;
     if (settings.enabled) {
       stopRef.current = false;
-      const existing = nextRunAtRef.current;
-      if (existing && existing > Date.now()) {
-        scheduleNext(existing - Date.now());
+      // Manual toggle-on → fire immediately (user asked for it right now).
+      // Remount / app-restart with toggle already on → restore the remaining
+      // wait from the module-level mirror, or schedule a fresh random interval.
+      const wasManualToggleOn = manualToggleOnRef.current;
+      manualToggleOnRef.current = false;
+      if (wasManualToggleOn) {
+        scheduleNext(0);
       } else {
-        scheduleNext(randomInterval(settings.intervalMin, settings.intervalMax));
+        const existing = nextRunAtRef.current;
+        if (existing && existing > Date.now()) {
+          scheduleNext(existing - Date.now());
+        } else {
+          scheduleNext(randomInterval(settings.intervalMin, settings.intervalMax));
+        }
       }
     } else {
       stopRef.current = true;
@@ -455,6 +467,7 @@ export function MobilePhoneAppsPanel({
   };
 
   const handleEnabled = (v: boolean) => {
+    if (v) manualToggleOnRef.current = true;
     const next = patch({ enabled: v });
     onEnabled(next.enabled);
   };
@@ -486,11 +499,18 @@ export function MobilePhoneAppsPanel({
                   onCheckedChange={handleEnabled}
                   className="shrink-0"
                 />
-                <span className={`text-sm font-semibold whitespace-nowrap ${
-                  settings.enabled ? "text-green-600 dark:text-green-400" : "text-foreground"
-                }`}>
-                  {settings.enabled ? "Active" : "Disabled"}
-                </span>
+                <div className="flex flex-col min-w-0">
+                  <span className={`text-sm font-semibold whitespace-nowrap ${
+                    settings.enabled ? "text-green-600 dark:text-green-400" : "text-foreground"
+                  }`}>
+                    {settings.enabled ? "Active" : "Disabled"}
+                  </span>
+                  {settings.enabled && nextRunAt && (
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      Next run at {new Date(nextRunAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} on {new Date(nextRunAt).toLocaleDateString([], { day: "2-digit", month: "2-digit", year: "numeric" })}
+                    </span>
+                  )}
+                </div>
                 <div className="w-px self-stretch bg-border mx-1" />
                 <Label className="text-sm text-muted-foreground whitespace-nowrap">Run every</Label>
                 <Input
@@ -509,20 +529,6 @@ export function MobilePhoneAppsPanel({
                 <Label className="text-sm text-muted-foreground whitespace-nowrap">minutes</Label>
               </div>
             </div>
-
-            {/* Next run timestamp */}
-            {settings.enabled && nextRunAt && (
-              <p className="text-sm text-muted-foreground">
-                Next run at{" "}
-                <span className="font-semibold text-foreground">
-                  {new Date(nextRunAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                </span>
-                {" "}on{" "}
-                <span className="font-semibold text-foreground">
-                  {new Date(nextRunAt).toLocaleDateString([], { day: "2-digit", month: "2-digit", year: "numeric" })}
-                </span>
-              </p>
-            )}
 
             {/* ── (STEP 2) App tool slots ─────────────────────────────────── */}
             <div className="space-y-1.5">
