@@ -210,46 +210,47 @@ interface AppSlotRowProps {
 function AppSlotRow({ icon, label, min, max, onMin, onMax, rowExtras, row2, row3 }: AppSlotRowProps) {
   return (
     <div className="bg-card border border-border rounded-xl p-4">
-      <div className="flex items-center gap-3 flex-wrap">
-        {/* Icon + label */}
-        <div className="flex items-center gap-2 min-w-[10rem]">
-          {icon}
-          <span className="text-sm font-semibold text-foreground">{label}</span>
+      {/* Header: icon + app name */}
+      <div className="flex items-center gap-2 mb-3">
+        {icon}
+        <span className="text-sm font-semibold text-foreground">{label}</span>
+      </div>
+
+      {/* Row 1: Activation % + any extra field groups */}
+      <div className="flex items-end gap-4 flex-wrap">
+        <div className="flex flex-col items-center gap-1">
+          <span className="text-xs text-muted-foreground whitespace-nowrap">Activation %</span>
+          <div className="flex items-center gap-1">
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              className={PCT_INPUT}
+              value={min}
+              onChange={e => onMin(Math.min(100, Math.max(0, Number(e.target.value))))}
+            />
+            <span className="text-muted-foreground text-sm">to</span>
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              className={PCT_INPUT}
+              value={max}
+              onChange={e => onMax(Math.min(100, Math.max(0, Number(e.target.value))))}
+            />
+            <span className="text-muted-foreground text-sm">%</span>
+          </div>
         </div>
-
-        {/* Divider */}
-        <div className="w-px self-stretch bg-border mx-1" />
-
-        {/* Activation % */}
-        <Label className="text-sm text-muted-foreground whitespace-nowrap">Activation %</Label>
-        <Input
-          type="number"
-          min={0}
-          max={100}
-          className={PCT_INPUT}
-          value={min}
-          onChange={e => onMin(Math.min(100, Math.max(0, Number(e.target.value))))}
-        />
-        <span className="text-muted-foreground text-sm">to</span>
-        <Input
-          type="number"
-          min={0}
-          max={100}
-          className={PCT_INPUT}
-          value={max}
-          onChange={e => onMax(Math.min(100, Math.max(0, Number(e.target.value))))}
-        />
-        <span className="text-muted-foreground text-sm">%</span>
-
         {rowExtras}
       </div>
+
       {row2 && (
-        <div className="flex items-center gap-3 flex-wrap mt-3">
+        <div className="flex items-end gap-4 flex-wrap mt-3">
           {row2}
         </div>
       )}
       {row3 && (
-        <div className="flex items-center gap-3 flex-wrap mt-3">
+        <div className="flex items-end gap-4 flex-wrap mt-3">
           {row3}
         </div>
       )}
@@ -545,87 +546,101 @@ export function MobilePhoneAppsPanel({
                 max={settings.chrome.activatePctMax}
                 onMin={v => patchApp("chrome", { activatePctMin: v })}
                 onMax={v => patchApp("chrome", { activatePctMax: v })}
-                rowExtras={<>
-                  <div className="w-px self-stretch bg-border mx-1" />
-                  <Label className="text-sm text-muted-foreground whitespace-nowrap">Scrolls</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={50}
-                    className={PCT_INPUT}
-                    value={settings.chrome.scrollMin ?? 1}
-                    onChange={e => patchApp("chrome", { scrollMin: Math.min(50, Math.max(0, Number(e.target.value))) })}
-                  />
-                  <span className="text-muted-foreground text-sm">to</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={50}
-                    className={PCT_INPUT}
-                    value={settings.chrome.scrollMax ?? 5}
-                    onChange={e => patchApp("chrome", { scrollMax: Math.min(50, Math.max(0, Number(e.target.value))) })}
-                  />
-                </>}
+                rowExtras={
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Scrolls</span>
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={50}
+                        className={PCT_INPUT}
+                        value={settings.chrome.scrollMin ?? 1}
+                        onChange={e => patchApp("chrome", { scrollMin: Math.min(50, Math.max(0, Number(e.target.value))) })}
+                      />
+                      <span className="text-muted-foreground text-sm">to</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={50}
+                        className={PCT_INPUT}
+                        value={settings.chrome.scrollMax ?? 5}
+                        onChange={e => patchApp("chrome", { scrollMax: Math.min(50, Math.max(0, Number(e.target.value))) })}
+                      />
+                    </div>
+                  </div>
+                }
                 row2={<>
-                  <Label className="text-sm text-muted-foreground whitespace-nowrap">Story Taps</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={50}
-                    className={PCT_INPUT}
-                    value={settings.chrome.storyTapMin ?? 0}
-                    onChange={e => patchApp("chrome", { storyTapMin: Math.min(50, Math.max(0, Number(e.target.value))) })}
-                  />
-                  <span className="text-muted-foreground text-sm">to</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={50}
-                    className={PCT_INPUT}
-                    value={settings.chrome.storyTapMax ?? 0}
-                    onChange={e => patchApp("chrome", { storyTapMax: Math.min(50, Math.max(0, Number(e.target.value))) })}
-                  />
-                  <div className="w-px self-stretch bg-border mx-1" />
-                  <Label className="text-sm text-muted-foreground whitespace-nowrap">Tapped Story Scrolls</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={50}
-                    className={PCT_INPUT}
-                    value={settings.chrome.tappedStoryScrollMin ?? 0}
-                    onChange={e => patchApp("chrome", { tappedStoryScrollMin: Math.min(50, Math.max(0, Number(e.target.value))) })}
-                  />
-                  <span className="text-muted-foreground text-sm">to</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={50}
-                    className={PCT_INPUT}
-                    value={settings.chrome.tappedStoryScrollMax ?? 0}
-                    onChange={e => patchApp("chrome", { tappedStoryScrollMax: Math.min(50, Math.max(0, Number(e.target.value))) })}
-                  />
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Story Taps</span>
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={50}
+                        className={PCT_INPUT}
+                        value={settings.chrome.storyTapMin ?? 0}
+                        onChange={e => patchApp("chrome", { storyTapMin: Math.min(50, Math.max(0, Number(e.target.value))) })}
+                      />
+                      <span className="text-muted-foreground text-sm">to</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={50}
+                        className={PCT_INPUT}
+                        value={settings.chrome.storyTapMax ?? 0}
+                        onChange={e => patchApp("chrome", { storyTapMax: Math.min(50, Math.max(0, Number(e.target.value))) })}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Tapped Story Scrolls</span>
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={50}
+                        className={PCT_INPUT}
+                        value={settings.chrome.tappedStoryScrollMin ?? 0}
+                        onChange={e => patchApp("chrome", { tappedStoryScrollMin: Math.min(50, Math.max(0, Number(e.target.value))) })}
+                      />
+                      <span className="text-muted-foreground text-sm">to</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={50}
+                        className={PCT_INPUT}
+                        value={settings.chrome.tappedStoryScrollMax ?? 0}
+                        onChange={e => patchApp("chrome", { tappedStoryScrollMax: Math.min(50, Math.max(0, Number(e.target.value))) })}
+                      />
+                    </div>
+                  </div>
                 </>}
-                row3={<>
-                  <Label className="text-sm text-muted-foreground whitespace-nowrap">Internal Links Clicked</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    className={PCT_INPUT}
-                    value={settings.chrome.internalLinkPctMin ?? 0}
-                    onChange={e => patchApp("chrome", { internalLinkPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
-                  />
-                  <span className="text-muted-foreground text-sm">to</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    className={PCT_INPUT}
-                    value={settings.chrome.internalLinkPctMax ?? 0}
-                    onChange={e => patchApp("chrome", { internalLinkPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
-                  />
-                  <span className="text-muted-foreground text-sm">%</span>
-                </>}
+                row3={
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Internal Links Clicked</span>
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        className={PCT_INPUT}
+                        value={settings.chrome.internalLinkPctMin ?? 0}
+                        onChange={e => patchApp("chrome", { internalLinkPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                      />
+                      <span className="text-muted-foreground text-sm">to</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        className={PCT_INPUT}
+                        value={settings.chrome.internalLinkPctMax ?? 0}
+                        onChange={e => patchApp("chrome", { internalLinkPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                      />
+                      <span className="text-muted-foreground text-sm">%</span>
+                    </div>
+                  </div>
+                }
               />
               <AppSlotRow
                 icon={<GooglePlayIcon size={22} />}
