@@ -4,6 +4,18 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.273] — 2026-07-29
+
+### Feature — YouTube: skip skippable ads automatically
+
+During the video watch window the app now polls for YouTube's skip-ad button every ~5 seconds instead of sleeping for the full watch duration. When the button appears (`id="skip_ad_button"` / `desc="Skip ad"`) it is tapped immediately and the watch timer continues running so the session still looks natural. If no ad is playing the polls add minimal overhead (~200 ms per check). Defaults require no configuration change — the feature is always active whenever a video is watched.
+
+### UI — Phone Apps Step 2: grouped bordered block with dividers
+
+All five app cards (Google Chrome, YouTube, Snapchat, Google Play, WhatsApp) are now grouped inside a single `rounded-xl` bordered container. A thin `divide-y` line separates each card. Previously each card had its own individual border. The Step 2 subtitle label and description text have been removed.
+
+---
+
 ## [1.2.272] — 2026-07-29
 
 ### Fix — YouTube Shorts: dismiss mini-player before tapping Shorts button
