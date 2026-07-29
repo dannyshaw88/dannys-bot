@@ -35,7 +35,7 @@ function GooglePlayIcon() {
 function SnapchatIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <path d="M12 2C8.5 2 6 4.9 6 8.3v1.2c-.4.1-.9.1-1.3.3-.4.2-.6.5-.5.9.1.5.6.8 1.2.9-.1.3-.3.6-.6.8-.7.5-1.8.7-2.8.8-.1 0-.3.1-.3.3 0 .5 1.5 1.1 1.8 1.2.1.5.5 2.4 2.7 2.4.7 0 1.4-.1 2.1-.3.8.8 1.8 1.2 3.7 1.2s2.9-.4 3.7-1.2c.7.2 1.4.3 2.1.3 2.2 0 2.6-1.9 2.7-2.4.3-.1 1.8-.7 1.8-1.2 0-.2-.2-.3-.3-.3-1-.1-2.1-.3-2.8-.8-.3-.2-.5-.5-.6-.8.6-.1 1.1-.4 1.2-.9.1-.4-.1-.7-.5-.9-.4-.2-.9-.2-1.3-.3V8.3C18 4.9 15.5 2 12 2z" fill="#FFFC00" stroke="#000" strokeWidth="0.5"/>
+      <path d="M12 3c-2.35 0-4.35 1.9-4.35 4.6v.9l-.9.2c-.3.05-.5.3-.4.6.05.3.35.5.75.55-.05.2-.2.4-.4.5-.5.35-1.25.5-1.95.55 0 .35 1.05.75 1.25.8.05.35.35 1.65 1.85 1.65.5 0 1-.1 1.45-.2.55.55 1.25.85 2.7.85s2.15-.3 2.7-.85c.45.1.95.2 1.45.2 1.5 0 1.8-1.3 1.85-1.65.2-.05 1.25-.45 1.25-.8-.7-.05-1.45-.2-1.95-.55-.2-.1-.35-.3-.4-.5.4-.05.7-.25.75-.55.1-.3-.1-.55-.4-.6l-.9-.2v-.9C16.35 4.9 14.35 3 12 3z" fill="#FFFC00" stroke="#555" strokeWidth="0.6"/>
     </svg>
   );
 }
@@ -78,7 +78,7 @@ export function MobilePhoneApps({ serial: _serial, deviceName }: MobilePhoneApps
 
           {/* Left: title + fingerprint button + toggle */}
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider min-w-[13rem]">
               Mobile Phone Apps
             </p>
 
