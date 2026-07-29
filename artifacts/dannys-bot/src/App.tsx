@@ -3,6 +3,7 @@ import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-q
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { useState, useEffect, Component, type ReactNode, type ErrorInfo } from "react";
+import { startHstLoop, stopHstLoop } from "@/lib/hstRunner";
 
 import { Dashboard } from "@/pages/Dashboard";
 import { StatsPage } from "@/pages/StatsPage";
@@ -138,10 +139,32 @@ function BrowserLayer() {
   );
 }
 
+/** Always-mounted listener — receives Stats-page toggle broadcasts and starts/stops the HST loop. */
+function HstToggleListener() {
+  useEffect(() => {
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel("aura-slot-toggle");
+      bc.onmessage = (ev: MessageEvent) => {
+        const { serial, slotIdx, enabled } = ev.data ?? {};
+        if (typeof serial !== "string" || typeof slotIdx !== "number") return;
+        if (enabled) {
+          startHstLoop(serial, slotIdx);
+        } else {
+          stopHstLoop(serial, slotIdx);
+        }
+      };
+    } catch { /* BroadcastChannel unavailable (old browser / test env) */ }
+    return () => { try { bc?.close(); } catch {} };
+  }, []);
+  return null;
+}
+
 function AppInner() {
   useStatusEvents();
   return (
     <>
+      <HstToggleListener />
       <Router />
       <BrowserLayer />
     </>

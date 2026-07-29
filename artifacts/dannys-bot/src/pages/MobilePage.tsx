@@ -5,6 +5,8 @@
 import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, useMemo, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useSearch } from "wouter";
+import { _hstTimers, _hstStop, _hstNextRunAt } from "@/lib/hstRunner";
+import { BrowserPanel } from "@/components/BrowserPanel";
 import { Sidebar, FilledFarmIcon } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
 import { useDeviceLog } from "@/contexts/DeviceLogContext";
@@ -3185,16 +3187,8 @@ const clamp4 = (n: number) => Math.min(9999, Math.max(0, Math.trunc(Number.isFin
 //   oscillation. A `clearTimeout(timerRef.current)` in cleanup then kills the
 //   25-99 min wait every 3 seconds. Moving the timer here makes it completely
 //   invisible to React's lifecycle machinery.
-const _hstTimers = new Map<string, ReturnType<typeof setTimeout>>();
-// When the user explicitly turns the master toggle OFF, the key is added here.
-// runCycle checks this set before rescheduling so it exits cleanly even if
-// the abort/cleanup races with a timer that is already mid-fire.
-const _hstStop = new Set<string>();
-// Tracks the wall-clock time the next cycle is scheduled to fire, mirrored
-// from React state so it survives component unmount/remount (phone switches).
-// On remount the effect reads this to restore nextRunAt and recover remaining
-// delay instead of starting a fresh random timer.
-const _hstNextRunAt = new Map<string, number>();
+// _hstTimers, _hstStop, _hstNextRunAt are imported from hstRunner.ts above so
+// App.tsx's always-mounted HstToggleListener shares the same map instances.
 
 // Owns settings load/autosave and the continuous run-loop. Called once from
 // `MobilePage` (not from the tab-conditional panel) so switching away from
@@ -8693,15 +8687,30 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
 
 const TOTAL_SLOTS = 1;
 
-type MobileTab = "account" | "phonesettings" | "actionlog" | "metrics" | "log";
-const MOBILE_TABS: { id: MobileTab; label: string }[] = [
-  { id: "account",      label: "Accounts"       },
-  { id: "metrics",      label: "Metrics"        },
+type MobileTab = "account" | "browser" | "metrics" | "phonesettings" | "actionlog" | "log";
+// Left-side tabs shown in order before the spacer.
+const MOBILE_TABS_LEFT: { id: MobileTab; label: string }[] = [
+  { id: "account",      label: "Accounts"  },
+  { id: "browser",      label: "Browser"   },
+  { id: "metrics",      label: "Metrics"   },
   { id: "phonesettings",label: "My Device" },
-  { id: "actionlog",    label: "Action Log"     },
-  { id: "log",          label: "Debugging Log"  },
+];
+// Right-side tabs — pushed to the far right with ml-auto on the first one.
+const MOBILE_TABS_RIGHT: { id: MobileTab; label: string }[] = [
+  { id: "actionlog", label: "Action Log"    },
+  { id: "log",       label: "Debugging Log" },
 ];
 const LOG_MAX_LINES = 500;
+
+/** Deterministic numeric browser-profile ID from a device serial.
+ *  Kept in the 1,000,000–9,999,999 range to avoid collision with real DB profile IDs. */
+function serialToBrowserId(serial: string): number {
+  let h = 5381;
+  for (let i = 0; i < serial.length; i++) {
+    h = (((h << 5) + h) ^ serial.charCodeAt(i)) >>> 0;
+  }
+  return 1_000_000 + (h % 8_999_999);
+}
 
 // Regex for detecting bot automation taps in log lines.
 // Matches "tapping … at (X,Y)" / "tapped … (X,Y)" patterns emitted by the
@@ -9017,17 +9026,33 @@ export function MobilePage() {
             </div>
             <div className="w-1/2 h-full min-h-0 flex flex-col border-l border-border">
               <div className="shrink-0 flex items-center border-b border-border px-4">
-                {MOBILE_TABS.map(t => (
+                {MOBILE_TABS_LEFT.map(t => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveTab(t.id);
+                      if (t.id === "account") accountPanelRef.current?.backToSlots();
+                    }}
+                    className={`px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                      activeTab === t.id
+                        ? "border-primary text-foreground"
+                        : "border-transparent text-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+                <div className="flex-1" />
+                {MOBILE_TABS_RIGHT.map(t => (
                   <button
                     key={t.id}
                     type="button"
                     onClick={() => {
                       if (t.id === "log") {
-                        // Snapshot where the user is right now so ← can restore it.
                         setPrevLogLocation({ tab: activeTab, slotIdx: openAccountSlot });
                       }
                       setActiveTab(t.id);
-                      if (t.id === "account") accountPanelRef.current?.backToSlots();
                     }}
                     className={`px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
                       activeTab === t.id
@@ -9045,6 +9070,22 @@ export function MobilePage() {
                 <div className={activeTab === "account" ? "h-full" : "hidden"}>
                   <AccountSettingsPanel ref={accountPanelRef} phone={stickySlot0Ref.current} addLog={addLog} onSlotChange={setOpenAccountSlot} initialSlot={initialSlot} onAnyEnabled={setHstEnabled} onPhoneAppsRunning={setPhoneAppsRunning} />
                 </div>
+                {/* Browser tab — isolated ghost browser per device serial */}
+                {activeTab === "browser" && activeSerial ? (
+                  <div className="h-full w-full overflow-hidden">
+                    <BrowserPanel
+                      profileId={serialToBrowserId(activeSerial)}
+                      userAgent=""
+                      username={activeSerial}
+                      embedded
+                      forceStream
+                    />
+                  </div>
+                ) : activeTab === "browser" ? (
+                  <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
+                    No device connected
+                  </div>
+                ) : null}
                 {activeTab === "phonesettings" && (
                   <PhoneSettingsPanel serial={activeSerial} />
                 )}

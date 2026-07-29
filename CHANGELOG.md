@@ -4,6 +4,24 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.274] — 2026-07-29
+
+### Fix — Statistics page: Session Tool toggle now actually starts/stops automation
+
+The green toggle in the Session Tool column on the Automation Stats page was saving the on/off state to the database and broadcasting it correctly, but the signal fired into a void — the MobilePage component that listens for it is not mounted while you are on the Stats page (the router only keeps the active page in the tree). Toggling from Stats appeared to work (the switch moved) but no cycle ever ran.
+
+**Root cause:** the BroadcastChannel("aura-slot-toggle") listener lived only inside `useAutomationSettings` in MobilePage. Navigating to Stats unmounted MobilePage, so the broadcast had nobody to receive it.
+
+**Fix:** extracted the three shared timer maps (`_hstTimers`, `_hstStop`, `_hstNextRunAt`) into a new `src/lib/hstRunner.ts` module. That module also exports `startHstLoop(serial, slotIdx)` and `stopHstLoop(serial, slotIdx)` — lightweight background runners that fetch settings fresh from the API and fire automation cycles independently of MobilePage being rendered. A new `HstToggleListener` component (always mounted in `App.tsx`, outside the route tree) listens to the BroadcastChannel and calls these functions whenever any page's toggle fires. MobilePage imports the same map instances from hstRunner so both share state — if MobilePage subsequently mounts it detects the existing timer and takes over seamlessly without double-scheduling.
+
+### Feature — Device Browser tab (isolated ghost browser per device)
+
+Each device detail page now has a **Browser** tab placed between Accounts and Metrics. This is a fully isolated ghost browser (the same Puppeteer-backed panel used in the old engine) scoped to the specific USB device — each device's browser runs with its own Chrome user-data directory, so cookies, saved passwords, sessions, and cache never cross over between devices.
+
+The **Action Log** and **Debugging Log** tabs have been moved to the far right of the tab bar to keep them visually separated from the main workflow tabs.
+
+---
+
 ## [1.2.273] — 2026-07-29
 
 ### Feature — YouTube: skip skippable ads automatically
