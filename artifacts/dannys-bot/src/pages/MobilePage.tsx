@@ -7294,7 +7294,10 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
       <div className={phone && openSlotTool === null ? "h-full overflow-y-auto p-6 space-y-6" : "hidden"}>
 
         {/* ── Mobile Phone Apps ─────────────────────────────────────────── */}
-        <h2 className="text-lg font-bold text-foreground">Mobile Phone Apps</h2>
+        <div className="flex items-start justify-between gap-4">
+          <h2 className="text-lg font-bold text-foreground">Mobile Phone Apps</h2>
+          <span className="text-xs text-muted-foreground text-right shrink-0 pt-1">{deviceName}</span>
+        </div>
 
         {/* Google Play Account card (moved from My Device tab) */}
         <div className="bg-card border border-border rounded-xl p-5 space-y-4">
@@ -7322,10 +7325,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
         </div>
 
         {/* ── Instagram Accounts ────────────────────────────────────────── */}
-        <div className="flex items-start justify-between gap-4">
-          <h2 className="text-lg font-bold text-foreground">Instagram Accounts</h2>
-          <span className="text-xs text-muted-foreground text-right shrink-0 pt-1">{deviceName}</span>
-        </div>
+        <h2 className="text-lg font-bold text-foreground">Instagram Accounts</h2>
 
         <div className="space-y-4">
           {slots.map((slot, i) => (
