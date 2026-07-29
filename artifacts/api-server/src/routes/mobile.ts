@@ -11168,6 +11168,40 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
+  // ── Mobile Phone Apps scheduler settings ─────────────────────────────────
+  // Simple enabled + interval (min/max minutes) persisted per device serial.
+  // Stored inside mobile-instances.json under cfg[serial].phoneApps so it
+  // travels with the rest of the device config.
+
+  app.get("/api/mobile/devices/:serial/phone-apps-settings", (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const cfg    = loadInstanceConfigs();
+      const saved  = (cfg[serial] as any)?.phoneApps ?? null;
+      const defaults = { enabled: false, intervalMin: 25, intervalMax: 99 };
+      res.json({ ...defaults, ...saved });
+    } catch (e: any) { res.status(500).json({ error: e?.message }); }
+  });
+
+  app.post("/api/mobile/devices/:serial/phone-apps-settings", (req: Request, res: Response) => {
+    try {
+      const serial   = p(req, "serial");
+      const cfg      = loadInstanceConfigs();
+      const existing = (cfg[serial] as any)?.phoneApps ?? { enabled: false, intervalMin: 25, intervalMax: 99 };
+      // All fields optional — caller may send just { enabled } from the card-level
+      // toggle without needing to know the current interval values.
+      const input = z.object({
+        enabled:     z.boolean().optional(),
+        intervalMin: z.number().min(1).max(9999).optional(),
+        intervalMax: z.number().min(1).max(9999).optional(),
+      }).parse(req.body);
+      const merged = { ...existing, ...input };
+      (cfg[serial] as any) = { ...cfg[serial], phoneApps: merged };
+      saveInstanceConfigs(cfg);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
+
   // ── Client-side dashboard event logger ────────────────────────────────────
   // Used by the Collision Preventer (and any future client-side events) to
   // create a session_action row without going through the full cycle endpoint.

@@ -4,6 +4,49 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## v1.2.254 — 2026-07-29
+
+### Fix — Mobile Phone Apps fingerprint icon now vertically aligned with Instagram Account Slot fingerprint icons
+
+The blue fingerprint (cyan) button in the "MOBILE PHONE APPS" row was sitting slightly left of the fingerprint buttons in the Instagram Account Slot rows because the label text before it had a narrower `min-width`. Increased the label's `min-width` from `13rem` to `14rem` so all fingerprint buttons now sit in the same horizontal column across every row in the Accounts tab, matching the visual grid the rest of the UI uses.
+
+### Fix — Snapchat icon now fills the full row height
+
+The yellow Snapchat ghost icon in the Mobile Phone Apps brand icon row was visually squished — the SVG path only occupied roughly the top half of the 24×24 viewBox, making it noticeably shorter than the Google Play, YouTube, and WhatsApp icons beside it. Replaced the path with a proper full-ghost Snapchat SVG that fills the entire viewBox height so all five brand icons sit at the same visual size.
+
+### New — Chrome browser icon added to Mobile Phone Apps brand row
+
+A Google Chrome icon is now the first icon in the Mobile Phone Apps brand icon row. The full order is now: **Chrome → Google Play → Snapchat → YouTube → WhatsApp**. The icon uses Chrome's standard four-colour split-ring design.
+
+### Change — Mobile Phone Apps card: dot indicator replaced with live Switch toggle
+
+The small green/grey dot and "Active / Disabled" label on the Mobile Phone Apps card in the Accounts tab have been replaced with a proper `Switch` toggle component, identical in appearance to the toggles used on the Instagram Account Slot cards. Clicking the toggle from the card itself now immediately saves `{ enabled }` to the backend (`POST /api/mobile/devices/:serial/phone-apps-settings`) without requiring the fingerprint panel to be open. The card also displays the next scheduled run time (e.g. "Next run 14:32") when the tool is enabled.
+
+### Change — Mobile Phone Apps panel: Back button removed
+
+The "← Back" button that previously appeared in the top bar of the Mobile Phone Apps fingerprint panel has been removed. Closing the panel is handled by the parent navigation (same mechanism used everywhere else in the UI). The top bar is still present and shows the "MOBILE PHONE APPS" label.
+
+### Fix — Mobile Phone Apps panel: top bar height now matches Instagram slot panel
+
+After the Back button was removed, the grey top bar in the Mobile Phone Apps panel collapsed to a smaller height than the equivalent bar in an Instagram Account Slot panel, creating an inconsistency in the card-to-panel transition. Added `min-h-[48px]` to the bar's container so it matches the Instagram slot panel header height exactly.
+
+### New — Mobile Phone Apps scheduler wired to the backend and Collision Preventer
+
+The "Run every X to Y minutes" controls in the Mobile Phone Apps panel are now fully functional:
+
+**Backend — two new API endpoints:**
+- `GET /api/mobile/devices/:serial/phone-apps-settings` — returns `{ enabled, intervalMin, intervalMax }` for the device. Defaults to `enabled: false`, `intervalMin: 25`, `intervalMax: 99` on first use. Stored inside `mobile-instances.json` under `cfg[serial].phoneApps` alongside the rest of the device config.
+- `POST /api/mobile/devices/:serial/phone-apps-settings` — saves any combination of `enabled`, `intervalMin`, `intervalMax`. All fields are optional; the server merges the incoming payload on top of the existing saved values, so a card-level toggle (`{ enabled: true }`) never overwrites the user's saved interval settings.
+
+**Frontend — panel scheduler:**
+- On mount the panel fetches the current settings from the API and restores the in-progress countdown if a `nextRunAt` timestamp was already set (survived panel remount via a module-level `Map` keyed by device serial, the same pattern used by `useAutomationSettings` for Instagram slots).
+- When `enabled` is turned on, a countdown timer fires after a random delay in the `[intervalMin, intervalMax]` minute window. When the timer fires, the tool executes (no-op for now — tools will be added later), then immediately schedules the next run.
+- Participates in the **Collision Preventer** queue using slot index `99` (a reserved index outside the normal Instagram account slot range `0–N`). Before each execution the scheduler calls `requestSlot(99, nextRunAt)`, which blocks if another Instagram slot is currently running on the device. After execution it calls `releaseSlot(99)`, triggering the CP rest window before the next queued slot can run.
+- `enabled` and `nextRunAt` are reported back to the parent (`MobilePage`) via `onEnabled` / `onNextRunAt` callbacks so the card in the Accounts tab always reflects live state.
+- Settings are saved to the API with a 600 ms debounce on every change to `enabled`, `intervalMin`, or `intervalMax`.
+
+---
+
 ## v1.2.253 — 2026-07-29
 
 ### Fix — Crash on device click: "gpEmail is not defined"

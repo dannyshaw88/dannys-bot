@@ -7101,8 +7101,9 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   // initialSlot lets the Dashboard (or any deep-link) open a specific slot's
   // Human Session Tool directly on mount (e.g. ?slot=0 in the URL).
   const [openSlotTool,      setOpenSlotTool]      = useState<number | null>(initialSlot ?? null);
-  const [openPhoneAppsTool, setOpenPhoneAppsTool] = useState(false);
-  const [phoneAppsEnabled,  setPhoneAppsEnabled]  = useState(false);
+  const [openPhoneAppsTool,  setOpenPhoneAppsTool]  = useState(false);
+  const [phoneAppsEnabled,   setPhoneAppsEnabled]   = useState(false);
+  const [phoneAppsNextRunAt, setPhoneAppsNextRunAt] = useState<number | null>(null);
   useEffect(() => { onSlotChange?.(openSlotTool); }, [openSlotTool]);
   useImperativeHandle(ref, () => ({
     backToSlots: () => { setOpenSlotTool(null); setOpenPhoneAppsTool(false); },
@@ -7292,8 +7293,13 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
       {/* Mobile Phone Apps tool panel — shown when fingerprint is clicked */}
       <div className={phone && openPhoneAppsTool ? "h-full" : "hidden"}>
         <MobilePhoneAppsPanel
+          serial={phone?.serial}
           onBack={() => setOpenPhoneAppsTool(false)}
           onEnabled={setPhoneAppsEnabled}
+          onNextRunAt={setPhoneAppsNextRunAt}
+          requestSlot={requestSlot}
+          releaseSlot={releaseSlot}
+          cancelQueuedSlot={cancelQueuedSlot}
         />
       </div>
 
@@ -7305,7 +7311,18 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
           serial={phone?.serial}
           deviceName={deviceName}
           enabled={phoneAppsEnabled}
+          nextRunAt={phoneAppsNextRunAt}
           onOpenTool={() => setOpenPhoneAppsTool(true)}
+          onToggle={(v) => {
+            setPhoneAppsEnabled(v);
+            if (phone?.serial) {
+              fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/phone-apps-settings`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ enabled: v }),
+              }).catch(() => {});
+            }
+          }}
         />
 
         {/* ── Instagram Accounts ────────────────────────────────────────── */}
