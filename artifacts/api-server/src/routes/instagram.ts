@@ -4600,20 +4600,19 @@ export async function registerInstagramRoutes(
       const allSettings = await storage.getGlobalSettings().catch(() => ({} as Record<string, string>));
       const proxyRaw = allSettings[`device_browser_proxy_${profileId}`] ?? null;
       const proxyCfg = proxyRaw && proxyRaw !== "null" ? JSON.parse(proxyRaw) : null;
-      if (!proxyCfg) {
-        wss.handleUpgrade(request, socket, head, (ws) => {
-          ws.send(JSON.stringify({ type: "error", message: "No proxy configured — add a proxy in the Browser tab settings before connecting." }));
-          ws.close();
-        });
-        return;
-      }
-      const deviceProxy: ProxyConfig = {
+
+      // useLocalIp: browser launches with no proxy (uses the PC's own IP).
+      // null proxyCfg means unconfigured — also allow it through with no proxy
+      // so the browser works out of the box on first open.
+      const useLocalIp = !proxyCfg || proxyCfg.useLocalIp === true;
+      const deviceProxy: ProxyConfig | undefined = useLocalIp ? undefined : {
         host:     proxyCfg.host,
         port:     proxyCfg.port,
         type:     "http" as const,
         username: proxyCfg.username || undefined,
         password: proxyCfg.password || undefined,
       };
+
       wss.handleUpgrade(request, socket, head, async (ws) => {
         ws.on("close", () => { detachWS(profileId, ws); });
         try {

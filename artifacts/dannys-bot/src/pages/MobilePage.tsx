@@ -8648,14 +8648,9 @@ export function MobilePage() {
             Use CSS hiding instead so the hooks stay alive through any gap. */}
         <div className={showSplitView ? "flex-1 min-h-0 flex" : "hidden"}>
             <div ref={setPaneEl} className="w-1/2 h-full flex items-center justify-center p-4 min-h-0">
-              {/* PhoneSlot sizes its own shell exactly to the phone's real
-                  reported resolution using the measured pane size below —
-                  see PhoneSlot's "Exact shell sizing" block for why this
-                  can't be a CSS aspect-ratio on a wrapper div (that was the
-                  bug: it included the header/nav chrome in the ratio math,
-                  which shrank the resolved screen height and forced the
-                  canvas to pillarbox/letterbox — the "dead space" bug). */}
-              {slots.map((phone, i) => (
+              {/* Hidden on the Browser tab — panel keeps its width so the
+                  right-hand tab bar never shifts position. */}
+              {activeTab !== "browser" && slots.map((phone, i) => (
                 <PhoneSlot
                   key={i}
                   phone={phone}
