@@ -4,6 +4,64 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.289] — 2026-07-30
+
+### Feature — Local AI Image Generation (GPU-accelerated, no credits, no queue)
+
+Adds a fully self-contained AI image generation system that runs directly on the user's own GPU inside the Aura Farming desktop app. No external API, no credits, no internet queue — images generate locally in 4–60 seconds depending on model and hardware.
+
+#### How it works
+
+A Python FastAPI sidecar server (`artifacts/electron/sidecar/server.py`) is spawned by Electron as a background process on a free local port. It exposes a REST API (`/status`, `/load`, `/generate`, `/output/*`) that the Express API server proxies at `/api/image-gen/*`. The React frontend polls the status endpoint and adapts its UI to the current state.
+
+The Windows installer now bundles a ~30 MB Python 3.12 Embeddable distribution (`resources/python-embed/`). On first use the user clicks **Install AI Libraries** in the app — this runs `get-pip.py` then `pip install -r requirements.txt` which downloads torch + diffusers (~1.5–2.5 GB depending on CUDA version) onto their machine. Subsequent launches are instant.
+
+#### Supported models
+
+| Model | Steps | Download | Notes |
+|---|---|---|---|
+| FLUX.1-schnell | 4 | ~16 GB | Recommended — fastest, photorealistic quality, Apache-2.0 |
+| SDXL-Turbo | 1 | ~6.5 GB | Very fast, good quality |
+| Stable Diffusion XL | 30 | ~7 GB | Highest quality, slower |
+
+Models are cached in `%AppData%\Local\AuraFarming\image-gen-models\` and never re-downloaded. Generated images are saved to `%AppData%\Local\AuraFarming\image-gen-output\` and can be downloaded directly from the UI.
+
+#### UI — AI Images page (`/image-gen`)
+
+- **Status bar** — live pill showing: Not available / Not loaded / Loading model / Ready
+- **Model selector** — switch between FLUX.1-schnell, SDXL-Turbo, and SDXL
+- **Prompt editor** — free-text prompt with 4 built-in photorealistic presets
+- **Negative prompt** — optional, filtered out of guidance
+- **Resolution picker** — Square 1024×1024, Landscape 1344×768, Portrait 768×1344, Wide 1152×896, Tall 896×1152
+- **Advanced controls** — Steps, Guidance Scale, Seed (all optional; defaults come from the loaded model)
+- **Generate button** — disabled until a model is loaded and a prompt is entered; shows spinner during generation
+- **Output panel** — displays the generated image full-width; hover reveals seed, generation time, and a Save button
+- **Download** — saves the PNG to the user's Downloads folder or any chosen location
+- **Setup flow** — if torch is not yet installed, shows the **Install AI Libraries** button with a live terminal-style log of pip output streamed from Electron via IPC
+
+#### Graceful degradation
+
+In web/browser mode (no Electron desktop), the `/api/image-gen/status` endpoint returns `{ status: "unavailable" }` and the page displays a "Desktop App Required" notice. No errors, no crashes.
+
+#### Files added
+
+- `artifacts/electron/sidecar/server.py` — FastAPI image-gen server (models, generate, output endpoints)
+- `artifacts/electron/sidecar/requirements.txt` — Python deps: torch, diffusers, transformers, accelerate, fastapi, uvicorn, Pillow
+- `artifacts/api-server/src/routes/imageGen.ts` — Express proxy + structured unavailable response for web mode
+- `artifacts/dannys-bot/src/pages/ImageGenPage.tsx` — Full React UI with all states and controls
+
+#### Files changed
+
+- `artifacts/api-server/src/index.ts` — registers `registerImageGenRoutes` before the static file handler
+- `artifacts/dannys-bot/src/App.tsx` — adds `/image-gen` route + `ImageGenPage` import
+- `artifacts/dannys-bot/src/components/layout/Sidebar.tsx` — adds **AI IMAGES** nav item with custom photo-frame SVG icon; adds `FilledImageGenIcon` component
+- `artifacts/electron/src/main.ts` — adds `getPythonPath()`, `getImageGenScriptPath()`, `isTorchInstalled()`, `spawnImageGenServer()` helpers; extends `startServer()` to accept and pass `IMAGE_GEN_PORT`; finds a free port and spawns the Python sidecar after the Node server starts; kills the sidecar cleanly on quit; adds `image-gen-setup` IPC handler (runs pip bootstrap + install with streamed progress) and `image-gen-open-output-dir` IPC handler
+- `artifacts/electron/src/preload.ts` — exposes `setupImageGen`, `onImageGenSetupProgress`, `openImageGenOutputDir` to the renderer via `contextBridge`
+- `artifacts/electron/electron-builder.json` — adds `resources/python-embed → python-embed` extra resource so the embedded Python ships with the installer
+- `.github/workflows/build-windows-installer.yml` — adds **Set up Python embeddable runtime** step: downloads Python 3.12.9 embed (~30 MB), adds `get-pip.py`, copies `sidecar/server.py` and `sidecar/requirements.txt` into `resources/python-embed/` before the Electron build runs
+
+---
+
 ## [1.2.288] — 2026-07-30
 
 ### Fix — Collision Preventer now logs when Phone Apps is blocked by a running Instagram slot
