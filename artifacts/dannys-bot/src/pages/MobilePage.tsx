@@ -8358,6 +8358,15 @@ export function MobilePage() {
   }, [paneEl]);
   const [activeTab, setActiveTab] = useState<MobileTab>("account");
 
+  // Derived phone/slot data — declared here so activeSerial is in scope for
+  // all hooks below (useEffect dependency arrays are evaluated synchronously).
+  const allPhones = data?.phones ?? [];
+  const phones = targetSerial
+    ? allPhones.filter(p => p.serial === targetSerial)
+    : [...allPhones].sort((a, b) => a.serial.localeCompare(b.serial));
+  const slots: (UsbPhone | null)[] = Array.from({ length: TOTAL_SLOTS }, (_, i) => phones[i] ?? null);
+  const activeSerial = slots[0]?.serial ?? null;
+
   // ── Device Browser proxy config ───────────────────────────────────────────
   const [browserProxyHostPort, setBrowserProxyHostPort] = useState("");
   const [browserProxyUser,     setBrowserProxyUser]     = useState("");
@@ -8460,16 +8469,6 @@ export function MobilePage() {
     return () => clearInterval(id);
   }, [refresh]);
 
-  const allPhones = data?.phones ?? [];
-  // When a specific serial is requested (from Phone Farm grid), show only that phone.
-  // Sort by serial so USB enumeration reorders never change which phone lands
-  // at index 0 — a reorder would otherwise oscillate the phone prop seen by
-  // AccountSettingsPanel and trigger connectedKey increments / hydration restarts.
-  const phones = targetSerial
-    ? allPhones.filter(p => p.serial === targetSerial)
-    : [...allPhones].sort((a, b) => a.serial.localeCompare(b.serial));
-  const slots: (UsbPhone | null)[] = Array.from({ length: TOTAL_SLOTS }, (_, i) => phones[i] ?? null);
-  const activeSerial = slots[0]?.serial ?? null;
   // Points at whichever rendered PhoneSlot corresponds to activeSerial, so
   // the Log tab (a sibling, not a child, of the mirror) can pull the live
   // decoded video frame size for Check Screen Info.

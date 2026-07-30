@@ -4,6 +4,20 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.279] — 2026-07-30
+
+### Fix — Electron crash when clicking a device: "Cannot access 'le' before initialization" (real fix)
+
+**Root cause.** The TDZ crash persisted after v1.2.278 because the actual bug was unrelated to the `TrustScoreDetailPage → MobilePage` import. The real cause was inside `MobilePage.tsx` itself: `activeSerial` was declared as a `const` at line 8472, but used in three `useEffect` dependency arrays and function bodies starting at line 8368 — 104 lines before its declaration. TypeScript already flagged this as `TS2448: Block-scoped variable 'activeSerial' used before its declaration`.
+
+In development mode (Vite HMR) the bug was hidden because each module is wrapped in its own closure and evaluated lazily. In the Rollup production bundle all module-level code is concatenated into a single scope, so Rollup placed the minified `const le = ...` (= `activeSerial`) after the code that read it. The result was a JavaScript temporal dead zone `ReferenceError` thrown the moment React synchronously evaluated the `useEffect([activeSerial])` dependency array during the first render of `MobilePage` — which happens when you click any device.
+
+**The fix.** Moved `allPhones`, `phones`, `slots`, and `activeSerial` (four `const` declarations that derive from `data` and `targetSerial`) from their old position at line 8472 to immediately after `activeTab` at line 8359 — before the browser-proxy `useState` hooks and all the `useEffect` calls that depend on `activeSerial`. The declarations are unchanged; only their position in the function body moved. `data` and `targetSerial` are both declared earlier in the component, so no dependency is broken.
+
+**Verification.** `pnpm --filter @workspace/dannys-bot run build` completes cleanly with a new bundle hash, confirming the variable ordering in the production output changed.
+
+---
+
 ## [1.2.278] — 2026-07-30
 
 ### Fix — Electron startup crash: "Cannot access 'le' before initialization"
