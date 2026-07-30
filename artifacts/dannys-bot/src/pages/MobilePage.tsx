@@ -3006,7 +3006,16 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       bc.onmessage = (ev: MessageEvent) => {
         const { serial: evSerial, slotIdx: evSlot, enabled } = ev.data ?? {};
         if (evSerial === serial && evSlot === (slotIdx ?? 0)) {
-          setEnabledByUser(enabled);
+          // Guard: if the slot is already in the requested state, skip the
+          // call entirely.  Without this, a Stats-page broadcast of
+          // enabled:true to an already-enabled slot sets manualToggleOnRef
+          // without the run-loop effect firing (settings.enabled didn't
+          // change), leaving the flag permanently true and causing the next
+          // incidental effect re-run to call scheduleNext(0) — resetting the
+          // 25-99min timer to fire immediately.
+          if (enabled !== settingsRef.current.enabled) {
+            setEnabledByUser(enabled);
+          }
         }
       };
     } catch { /* BroadcastChannel unavailable */ }

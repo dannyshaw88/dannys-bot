@@ -60,8 +60,8 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
       `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings`,
     );
     const body = await r.json().catch(() => null);
-    if (!r.ok || !body?.settings) return; // can't run without settings
-    s = body.settings as Record<string, unknown>;
+    if (!r.ok || !body) return; // can't run without settings
+    s = body as Record<string, unknown>;
   } catch {
     return; // network error — don't reschedule from background, let MobilePage take over
   }

@@ -4,6 +4,30 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.283] — 2026-07-30
+
+### Fix — Human Session Tool: timers no longer reset constantly with no cycles firing
+
+Two bugs introduced by the Stats-page toggle feature caused the HST automation loop
+to appear to run but never actually fire a cycle:
+
+1. **Background loop (hstRunner.ts) silently exited every tick** — `runCycleBg`
+   fetched the slot's automation-settings but then checked `body.settings` (a nested
+   key that doesn't exist on the flat response object), so the settings were always
+   `undefined` and the function returned early without running a cycle or rescheduling.
+   Fixed to read the flat `body` object directly.
+
+2. **BroadcastChannel toggle set a sticky "fire immediately" flag** — when the Stats
+   page broadcast `enabled: true` to an already-enabled slot, `setEnabledByUser(true)`
+   set `manualToggleOnRef` even though `settings.enabled` hadn't changed, so the
+   run-loop effect never fired to consume and clear the flag. On the next incidental
+   effect re-run (e.g. a slot-refresh key bump) the stale flag caused `scheduleNext(0)`,
+   resetting the 25-99 min wait timer to fire immediately and repeating endlessly.
+   Fixed by skipping the `setEnabledByUser` call when the BC message's `enabled` value
+   already matches the slot's current state.
+
+---
+
 ## [1.2.282] — 2026-07-30
 
 ### Fix — View Reels: all actions now skipped when Instagram serves a sponsored/ad reel
