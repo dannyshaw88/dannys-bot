@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  ChevronLeft, ChevronRight, RefreshCw, Compass, Globe, Shield,
+  ChevronLeft, ChevronRight, RefreshCw, Home, Globe, Shield,
   Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Upload, Phone, Mail, KeyRound, Plus, ShieldAlert, Sparkles, Download,
 } from "lucide-react";
 import {
@@ -122,7 +122,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
   }, []);
 
   const [isLoading, setIsLoading] = useState(false);
-  const [addressBar, setAddressBar] = useState("https://www.instagram.com/");
+  const [addressBar, setAddressBar] = useState("https://www.google.com/");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [loginState, setLoginState] = useState<LoginState>("idle");
@@ -841,9 +841,9 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
           {isLoading && connected ? <Loader2 className="w-6 h-6 animate-spin text-primary" /> : <RefreshCw className="w-6 h-6" />}
         </Button>
         <Button variant="ghost" size="icon" className="h-12 w-12 shrink-0"
-          onClick={() => { setIsLoading(true); send({ type: "navigate", url: "https://www.instagram.com/" }); }}
-          disabled={!connected} title="Home (Instagram)">
-          <Compass className="w-6 h-6" />
+          onClick={() => { setIsLoading(true); send({ type: "navigate", url: "https://www.google.com/" }); }}
+          disabled={!connected} title="Home">
+          <Home className="w-6 h-6" />
         </Button>
 
         <form onSubmit={onAddressSubmit} className="flex-1 min-w-0">
@@ -902,14 +902,6 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
             <MonitorPlay className="w-3.5 h-3.5" /> Bring to Front
           </Button>
         )}
-        <div
-          title={openedAt ? `Browser open for ${elapsedLabel}` : "Browser not yet connected"}
-          className={`h-8 px-2.5 flex items-center rounded-md border text-xs font-mono font-semibold shrink-0 tabular-nums transition-colors ${
-            openedAt ? "border-border bg-muted text-foreground" : "border-transparent text-muted-foreground"
-          }`}
-        >
-          {openedAt ? elapsedLabel : "--:--"}
-        </div>
       </div>}
 
 

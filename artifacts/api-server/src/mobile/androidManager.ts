@@ -1740,6 +1740,28 @@ export async function dismissInstagramInterstitials(
     }
   }
 
+  // "Allow the use of cookies by Instagram?" full-screen consent dialog —
+  // appears on first launch (and occasionally mid-session) on fresh or
+  // factory-reset accounts. Unlike the generic dismiss labels below, the only
+  // valid action here is an affirmative tap on "Allow all cookies"; there is
+  // no "Not now" or "Skip" option, so the automation would be permanently
+  // stuck without this specific guard.
+  //
+  // Detection: the title text is unique enough to use directly; the button
+  // has content-desc="Allow all cookies" so _findElem matches it reliably.
+  if (
+    xml.includes("Allow the use of cookies by Instagram?") ||
+    xml.includes('text="Allow all cookies"') ||
+    xml.includes('content-desc="Allow all cookies"')
+  ) {
+    const allowPos = _findElem(xml, "Allow all cookies");
+    if (allowPos) {
+      _adbTap(adb, serial, allowPos.x, allowPos.y);
+      await _sleep(600);
+      return "Cookie consent — Allow all cookies";
+    }
+  }
+
   // Ordered by specificity — more specific labels first so we don't
   // accidentally tap a generic button on a legitimate screen.
   // NOTE: "Cancel" and "OK" are intentionally excluded from the generic list

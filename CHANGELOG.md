@@ -4,6 +4,78 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.281] — 2026-07-30
+
+### Fix — Instagram cookie consent dialog now auto-accepted
+
+When Instagram shows the **"Allow the use of cookies by Instagram?"** full-screen dialog — which appears on fresh or factory-reset accounts and occasionally mid-session — the automation would get permanently stuck because the dialog has no "Not now" or "Skip" button. The only valid action is tapping **"Allow all cookies"**, which is an affirmative button and was deliberately excluded from the generic soft-dismiss list.
+
+A dedicated guard has been added to `dismissInstagramInterstitials` (the function called throughout the automation cycle) that detects this dialog by its title text or button label and taps "Allow all cookies" immediately. The fix follows the same pattern as the existing "Interacting with content from Facebook" handler — a named specific guard rather than a generic tap.
+
+Detection conditions (any one is sufficient):
+- Page contains `Allow the use of cookies by Instagram?`
+- XML contains `text="Allow all cookies"`
+- XML contains `content-desc="Allow all cookies"`
+
+Because `dismissInstagramInterstitials` is called on every cycle phase (launch, feed, stories, reels, explore), the dialog is caught wherever it appears — not just on first launch.
+
+**Files changed:** `artifacts/api-server/src/mobile/androidManager.ts`
+
+---
+
+### Fix — Statistics page: Farm table sort column and direction now persist across navigation
+
+Clicking a column header in the Phone Farm statistics table (e.g. Cycles, Likes, Follows) to sort was not saving the direction when navigating away and returning. The column would re-sort correctly on the first click but reset to the default ("desc") on every page revisit.
+
+**Root cause:** The `cycleFarmSort` handler called `setFarmSortDir(d => d === "desc" ? "asc" : "desc")` — passing a *function updater* to `usePersistentSetting`'s setter. That setter only accepts a direct value, not a function. `JSON.stringify` of a function returns `undefined`, so `localStorage.setItem` stored the string `"undefined"`. On the next page load `JSON.parse("undefined")` threw, the catch block returned `null`, and the default `"desc"` was used instead of whatever the user had set.
+
+**Fix:** Changed the functional updater to a direct value using the current state: `setFarmSortDir(farmSortDir === "desc" ? "asc" : "desc")`.
+
+The sort column key (`farmSortKey`) was already saving correctly — only the direction toggle was affected.
+
+**Files changed:** `artifacts/dannys-bot/src/pages/StatsPage.tsx`
+
+---
+
+### Fix — Statistics page: Session column toggles now actually start/stop automation
+
+The **Session** toggle switches in the Phone Farm statistics table were saving the enabled state to the database and visually updating, but the automation cycle never started when the user was on the Statistics page. This made them appear non-functional.
+
+**Root cause:** The toggle relied solely on a `BroadcastChannel("aura-slot-toggle")` message to signal the Phone Farm page's run-loop. When the user is on the Statistics page (not the Phone Farm page), that component is unmounted and not listening — the broadcast message is lost and no cycle ever fires.
+
+**Fix:** When turning a toggle **ON**, the component now also posts directly to `POST /api/mobile/devices/:serial/automation-cycle` with the slot's full saved settings, in addition to the BroadcastChannel signal. This starts a cycle immediately regardless of whether the Phone Farm page is mounted.
+
+Key details:
+- The full automation settings object is already cached in the query — it is spread directly into the cycle request body, so all tool flags, percentages, and timing values are forwarded correctly.
+- `slotUsername` is now passed as a prop from the parent `PhoneFarmPhoneSection` (it was already available as `slot.username`) so the server can attribute the cycle to the correct account.
+- If the Phone Farm page IS mounted and also picks up the BroadcastChannel, it will attempt its own cycle request. The server's 409 "cycle already in progress" guard rejects the duplicate silently — whichever arrives second is ignored.
+- Turning **OFF** continues to work via BroadcastChannel (signals MobilePage's run-loop to stop rescheduling) plus the saved `enabled: false` in the DB (prevents restart after the current cycle finishes).
+
+**Files changed:** `artifacts/dannys-bot/src/pages/StatsPage.tsx`
+
+---
+
+### Polish — Device Browser tab: default homepage changed to Google, timer removed, home icon updated
+
+Three small quality-of-life improvements to the Browser tab in the Phone Farm device panel:
+
+#### Default URL → google.com
+The browser's address bar and the home button both previously defaulted to `https://www.instagram.com/`. They now default to `https://www.google.com/`. This is more useful for a general-purpose isolated browser session on a device.
+
+- `useState("https://www.google.com/")` — address bar initial value
+- Home button `onClick` navigates to `https://www.google.com/`
+- Address bar `placeholder` updated to match
+
+#### Timer display removed
+The top-right elapsed-time box (`00:10` / `--:--`) that showed how long the browser session had been open has been removed. It was taking up toolbar space without providing actionable information for the device browser use case.
+
+#### Home icon (was Compass)
+The home/navigation button previously used the `Compass` icon from lucide-react. It now uses the `Home` icon, which is the standard convention for a "go to homepage" button.
+
+**Files changed:** `artifacts/dannys-bot/src/components/BrowserPanel.tsx`
+
+---
+
 ## [1.2.280] — 2026-07-30
 
 ### Polish — Device Browser tab: layout stability, local-IP option, and toolbar cleanup

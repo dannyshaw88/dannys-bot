@@ -217,35 +217,73 @@ type MetricAccount = {
   slotIndex?: number;
 };
 
-function MobileSlotSessionToggle({ serial, slotIdx }: { serial: string; slotIdx: number }) {
+function MobileSlotSessionToggle({ serial, slotIdx, slotUsername }: { serial: string; slotIdx: number; slotUsername: string }) {
   const qKey = [`/api/mobile/devices/${serial}/slots/${slotIdx}/automation-settings`];
-  const { data: settings, isLoading } = useQuery<{ enabled: boolean }>({ queryKey: qKey });
+  // Fetch the full settings object (not just enabled) so we can pass it
+  // directly to the automation-cycle endpoint when turning on.
+  const { data: settings, isLoading } = useQuery<Record<string, any>>({ queryKey: qKey });
   const [optimistic, setOptimistic] = useState<boolean | null>(null);
 
   if (isLoading) return <span className="text-muted-foreground text-[10px]">…</span>;
   if (!settings) return <span className="text-muted-foreground text-[10px]">—</span>;
 
-  const checked = optimistic ?? settings.enabled;
+  const checked = optimistic ?? (settings.enabled as boolean);
 
   const toggle = async (val: boolean) => {
     setOptimistic(val);
     try {
+      // 1. Persist the new enabled state.
       await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: val }),
       });
       queryClient.invalidateQueries({ queryKey: qKey });
-      // Signal the live MobilePage slot so its in-memory settings state and
-      // run-loop refs (manualToggleOnRef / explicitToggleOffRef) are updated
-      // immediately — identical to the user pressing the toggle on the Mobile
-      // page itself.  BroadcastChannel works across same-origin contexts
-      // (Electron's single-window SPA included).
+
+      // 2. Signal MobilePage's run-loop if it is currently mounted (same-origin
+      //    BroadcastChannel).  When MobilePage IS mounted this is sufficient —
+      //    its run-loop sets manualToggleOnRef and fires the next cycle with no
+      //    extra delay, exactly like pressing the toggle on that page.
       try {
         const bc = new BroadcastChannel("aura-slot-toggle");
         bc.postMessage({ serial, slotIdx, enabled: val });
         bc.close();
       } catch { /* BroadcastChannel unavailable in very old environments */ }
+
+      // 3. When turning ON, also kick off an automation cycle directly.
+      //    This handles the common case where the user is on the Stats page
+      //    and MobilePage is NOT mounted — the BroadcastChannel message above
+      //    would be lost and no cycle would ever start.  We spread the full
+      //    cached settings object so the cycle runs with the slot's real
+      //    configuration.  If MobilePage also picks up the BroadcastChannel
+      //    and fires its own cycle request, the server's 409 "already in
+      //    progress" guard on the /automation-cycle endpoint prevents a
+      //    duplicate — whichever arrives second is safely ignored.
+      if (val) {
+        const s = settings;
+        const scrollMin = Math.max(1, Math.min(s.feedScrollMin ?? 5, s.feedScrollMax ?? 10));
+        const scrollMax = Math.max(s.feedScrollMin ?? 5, s.feedScrollMax ?? 10);
+        const count = Math.floor(Math.random() * (scrollMax - scrollMin + 1)) + scrollMin;
+        const cycleId = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+        // Fire-and-forget: 409 means a cycle is already running (e.g. MobilePage
+        // also triggered one via BroadcastChannel), which is fine.
+        fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            // Spread all settings so every tool flag/percentage is forwarded.
+            // The server's zod schema ignores unknown fields.
+            ...s,
+            // Computed / renamed fields that override the raw settings names:
+            cycleId,
+            slotIdx,
+            slotUsername,
+            count,
+            delayMinSec: s.actionDelayMin,
+            delayMaxSec: s.actionDelayMax,
+          }),
+        }).catch(() => {}); // 409 = another cycle already in progress, ignore
+      }
     } catch {
       setOptimistic(null);
     }
@@ -352,7 +390,7 @@ function PhoneFarmPhoneSection({
                 return (
                   <td key="session_tool" className="py-2.5 px-3 text-center">
                     <div className="flex items-center justify-center">
-                      <MobileSlotSessionToggle serial={phone.serial} slotIdx={slot.idx} />
+                      <MobileSlotSessionToggle serial={phone.serial} slotIdx={slot.idx} slotUsername={slot.username} />
                     </div>
                   </td>
                 );
@@ -1082,7 +1120,7 @@ function PhoneFarmTab() {
 
   const cycleFarmSort = (key: string) => {
     if (farmSortKey === key) {
-      setFarmSortDir(d => d === "desc" ? "asc" : "desc");
+      setFarmSortDir(farmSortDir === "desc" ? "asc" : "desc");
     } else {
       setFarmSortKey(key);
       setFarmSortDir("desc");
