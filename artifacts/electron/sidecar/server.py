@@ -6,6 +6,15 @@ the Express API server which proxies /api/image-gen/* → this server.
 """
 import os
 import sys
+
+# The Windows Python Embeddable distribution uses a python312._pth file that
+# overrides sys.path and ignores the PYTHONPATH environment variable entirely.
+# We manually inject the pip package directory (set by Electron via PYTHONPATH)
+# at the very top — before any third-party imports — so torch/diffusers resolve.
+_pip_dir = os.environ.get("PYTHONPATH", "")
+if _pip_dir and _pip_dir not in sys.path:
+    sys.path.insert(0, _pip_dir)
+
 import io
 import base64
 import time

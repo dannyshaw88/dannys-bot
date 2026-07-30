@@ -4,6 +4,38 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.293] — 2026-07-30
+
+### Fix — Sidecar crashes at startup with ImportError (torch/diffusers not found)
+
+#### Problem
+
+Even after pip installs successfully into `image-gen-pip\`, the Python sidecar would crash immediately on launch with an `ImportError` for `torch` or `diffusers`, because the embeddable Python's `python312._pth` file also ignores `PYTHONPATH` at runtime — not just during the setup step.
+
+#### Root cause
+
+The same embeddable Python `._pth` restriction that blocked `-m pip` in v1.2.292 also affects the spawned sidecar process. `PYTHONPATH` is set in the sidecar's environment by `spawnImageGenServer()`, but the embeddable Python's startup sequence reads `python312._pth` first, hard-overrides `sys.path` with only what's listed there, and never consults `PYTHONPATH`. By the time Python reaches `import torch`, `sys.path` contains only the standard library — `image-gen-pip\` is absent, so the import fails.
+
+#### Fix — `artifacts/electron/sidecar/server.py`
+
+Added a `sys.path` injection block at the very top of `server.py`, before any third-party imports:
+
+```python
+_pip_dir = os.environ.get("PYTHONPATH", "")
+if _pip_dir and _pip_dir not in sys.path:
+    sys.path.insert(0, _pip_dir)
+```
+
+Python's `._pth` controls what's on `sys.path` at startup, but cannot prevent code from modifying `sys.path` after startup. Inserting `pipDir` manually before `import torch` ensures the packages installed in AppData are found at runtime.
+
+`os` and `sys` are both part of Python's standard library and are always available in the embeddable distribution — no circular dependency.
+
+#### Files changed
+
+- `artifacts/electron/sidecar/server.py` — sys.path injection before third-party imports
+
+---
+
 ## [1.2.292] — 2026-07-30
 
 ### Fix — "No module named pip" during AI library install (embeddable Python sys.path)
