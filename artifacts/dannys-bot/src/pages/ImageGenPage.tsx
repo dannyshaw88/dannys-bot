@@ -68,26 +68,71 @@ const RESOLUTIONS = [
   { label: "896 × 1152 (Tall)", w: 896, h: 1152 },
 ];
 
+// ── Module-level state cache ───────────────────────────────────────────────────
+// Survives navigation (component unmount/remount) for the lifetime of the tab.
+// Not persisted to disk — cleared on full page refresh, which is intentional.
+interface PageCache {
+  prompt: string;
+  negPrompt: string;
+  model: string;
+  resolution: typeof RESOLUTIONS[number];
+  steps: number | "";
+  guidance: number | "";
+  seed: number | "";
+  initImage: string | null;
+  initImageName: string;
+  strength: number;
+  result: GenerateResult | null;
+}
+const _cache: PageCache = {
+  prompt: "",
+  negPrompt: "",
+  model: "flux-schnell",
+  resolution: RESOLUTIONS[0],
+  steps: "",
+  guidance: "",
+  seed: "",
+  initImage: null,
+  initImageName: "",
+  strength: 0.75,
+  result: null,
+};
+
 // ── Component ─────────────────────────────────────────────────────────────────
 export function ImageGenPage() {
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [statusErr, setStatusErr] = useState(false);
 
-  const [prompt, setPrompt] = useState("");
-  const [negPrompt, setNegPrompt] = useState("");
-  const [model, setModel] = useState("flux-schnell");
-  const [resolution, setResolution] = useState(RESOLUTIONS[0]);
-  const [steps, setSteps] = useState<number | "">("");
-  const [guidance, setGuidance] = useState<number | "">("");
-  const [seed, setSeed] = useState<number | "">("");
+  const [prompt, setPrompt] = useState(_cache.prompt);
+  const [negPrompt, setNegPrompt] = useState(_cache.negPrompt);
+  const [model, setModel] = useState(_cache.model);
+  const [resolution, setResolution] = useState(_cache.resolution);
+  const [steps, setSteps] = useState<number | "">(_cache.steps);
+  const [guidance, setGuidance] = useState<number | "">(_cache.guidance);
+  const [seed, setSeed] = useState<number | "">(_cache.seed);
 
-  const [initImage, setInitImage] = useState<string | null>(null);   // data URL
-  const [initImageName, setInitImageName] = useState("");
-  const [strength, setStrength] = useState(0.75);
+  const [initImage, setInitImage] = useState<string | null>(_cache.initImage);   // data URL
+  const [initImageName, setInitImageName] = useState(_cache.initImageName);
+  const [strength, setStrength] = useState(_cache.strength);
 
   const [generating, setGenerating] = useState(false);
   const [loadingModel, setLoadingModel] = useState(false);
-  const [result, setResult] = useState<GenerateResult | null>(null);
+  const [result, setResult] = useState<GenerateResult | null>(_cache.result);
+
+  // Sync all user-editable state back to the cache whenever anything changes
+  useEffect(() => {
+    _cache.prompt = prompt;
+    _cache.negPrompt = negPrompt;
+    _cache.model = model;
+    _cache.resolution = resolution;
+    _cache.steps = steps;
+    _cache.guidance = guidance;
+    _cache.seed = seed;
+    _cache.initImage = initImage;
+    _cache.initImageName = initImageName;
+    _cache.strength = strength;
+    _cache.result = result;
+  }, [prompt, negPrompt, model, resolution, steps, guidance, seed, initImage, initImageName, strength, result]);
   const [error, setError] = useState("");
 
   const [settingUp, setSettingUp] = useState(false);
