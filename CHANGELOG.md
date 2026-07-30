@@ -4,6 +4,30 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.278] — 2026-07-30
+
+### Fix — Electron startup crash: "Cannot access 'le' before initialization"
+
+**Root cause.** The Electron production bundle (built by Vite/Rollup) was crashing at startup with a JavaScript temporal dead zone (TDZ) `ReferenceError`. The minified variable `le` corresponds to one of the large module-level `const` declarations exported from `MobilePage.tsx`. Rollup's bundle evaluation order caused those constants to be accessed before their module-scope initialisation completed, because `TrustScoreDetailPage.tsx` imported them directly from the 9 000-line `MobilePage.tsx`. Every launch of the installed Windows app hit this crash on the React render cycle and displayed the "A component crashed on startup" error screen.
+
+**What was moved.** Five shared declarations were extracted from `MobilePage.tsx` into a new dedicated module `artifacts/dannys-bot/src/pages/mobileShared.ts`:
+
+- `UsbPhone` interface — USB device descriptor type used by the phone list and automation panel.
+- `AutomationSettingsData` interface — full 150-field settings shape for the mobile Human Session Tool.
+- `AUTOMATION_DEFAULTS` constant — default values object for every field in `AutomationSettingsData`.
+- `CopySubSetting` / `CopySection` types — shape for the Copy Settings dialog's section/sub-item tree.
+- `COPY_SECTIONS` constant — the full section-and-sub-item definition array used by both the Copy Settings dialog and the Trust Score copy dialog.
+- `ALL_SUB_KEYS` constant — flat array of every sub-setting key, derived from `COPY_SECTIONS`.
+
+**Import changes.**
+
+- `MobilePage.tsx` now imports all six from `./mobileShared` instead of defining them. The file is otherwise unchanged — `AutomationSettingsPanel` and all internal components remain in place.
+- `TrustScoreDetailPage.tsx` now imports the constants and types from `./mobileShared` and imports only `AutomationSettingsPanel` from `./MobilePage`. This breaks the problematic large-module import that caused the TDZ.
+
+**Result.** Vite production build completes without errors (`✓ 2832 modules transformed`). The Electron app no longer crashes on startup.
+
+---
+
 ## [1.2.277] — 2026-07-30
 
 ### Polish — Statistics page column headers

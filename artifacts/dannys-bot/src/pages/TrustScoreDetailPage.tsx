@@ -9,13 +9,13 @@ import {
 } from "@/components/ui/dialog";
 import {
   AUTOMATION_DEFAULTS,
-  AutomationSettingsPanel,
   COPY_SECTIONS,
   ALL_SUB_KEYS,
   type AutomationSettingsData,
   type UsbPhone,
   type CopySection,
-} from "@/pages/MobilePage";
+} from "@/pages/mobileShared";
+import { AutomationSettingsPanel } from "@/pages/MobilePage";
 
 // ── CopyTrustScoreDialog ──────────────────────────────────────────────────────
 // Exact same two-panel layout as the mobile slot CopySettingsDialog.
