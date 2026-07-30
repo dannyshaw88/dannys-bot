@@ -341,6 +341,7 @@ def generate(req: GenerateRequest):
                 StableDiffusion3Img2ImgPipeline,
                 AutoPipelineForImage2Image,
             )
+            import math
             _img2img_cls_map = {
                 "FluxPipeline":              FluxImg2ImgPipeline,
                 "StableDiffusionXLPipeline": StableDiffusionXLImg2ImgPipeline,
@@ -354,6 +355,14 @@ def generate(req: GenerateRequest):
                     status_code=400,
                     detail=f"Image-to-image is not supported for model '{req.model}'"
                 )
+
+            # Guard: floor(steps × strength) must be ≥ 1 or the pipeline gets
+            # 0 timesteps and raises "cannot reshape tensor of 0 elements".
+            # This bites SDXL-Turbo (default 1 step) whenever strength < 1.0.
+            min_steps_for_strength = math.ceil(1.0 / max(req.strength, 1e-6))
+            if steps < min_steps_for_strength:
+                steps = min_steps_for_strength
+                kwargs["num_inference_steps"] = steps
 
             img_bytes = base64.b64decode(req.init_image)
             init_img = PILImage.open(io.BytesIO(img_bytes)).convert("RGB")
