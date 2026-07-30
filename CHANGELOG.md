@@ -4,6 +4,38 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.296] — 2026-07-30
+
+### Fix — AI Images shows "Downloading…" and 0% progress bar on every restart even when the model is already installed
+
+#### Problem
+
+Every time the app was restarted and a model was loaded, the AI Images page showed:
+
+- Status message: `"Downloading Stable Diffusion XL (~7 GB — first run only)…"`
+- Progress bar: `0.00 / 7.0 GB — 0%`
+
+…even though the model weights were already fully downloaded and cached on disk from a previous session. The model loaded correctly in the end, but the misleading message and stuck-at-zero progress bar made it look like it was downloading 7 GB every single time.
+
+#### Root cause
+
+`_do_load()` always set the status message to the "Downloading…" string regardless of whether the files were already present in the HuggingFace blob cache. The download-progress function read the blob directory size, which either correctly read the full cached size (showing near-100%) or returned 0 if the directory path didn't match — either way the message was wrong.
+
+#### Fix — `artifacts/electron/sidecar/server.py`
+
+- Added `_model_is_cached(model_key)` helper that inspects the HuggingFace blob cache directory (`<MODELS_DIR>/models--<org>--<name>/blobs/`) and returns `True` if any file larger than 100 KB is already present — meaning real model weights are on disk.
+- Added `_loading_from_cache` global flag, set at the start of `_do_load()` based on the cache check, cleared on completion or error.
+- `_do_load()` now branches the status message before calling `from_pretrained()`:
+  - **Cached** → `"Loading {model} from cache…"`
+  - **Not cached** → `"Downloading {model} (~X GB — first run only)…"`
+- `/status` only returns `download_progress` when `_loading_from_cache` is `False`. For cache loads the field is `null`, which the frontend already handles by showing a clean indeterminate animation — no frontend change needed.
+
+#### Files changed
+
+- `artifacts/electron/sidecar/server.py` — `_model_is_cached()` helper, `_loading_from_cache` flag, conditional status message and progress suppression
+
+---
+
 ## [1.2.295] — 2026-07-30
 
 ### Feature — Image-to-image (img2img) on the AI Images page
