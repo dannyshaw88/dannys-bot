@@ -19,12 +19,18 @@ interface ModelInfo {
   default_guidance: number;
 }
 
+interface DownloadProgress {
+  downloaded_bytes: number;
+  total_bytes: number;
+}
+
 interface StatusResponse {
   status: "unavailable" | "idle" | "loading" | "ready" | "error";
   message: string;
   available?: boolean;
   loaded_model: string | null;
   available_models: Record<string, ModelInfo>;
+  download_progress?: DownloadProgress | null;
 }
 
 interface GenerateResult {
@@ -284,6 +290,7 @@ export function ImageGenPage() {
           {isLoading && (
             <InfoCard icon={<Loader2 className="w-5 h-5 animate-spin" style={{ color: BRAND }} />} title="Loading model…">
               <p className="text-sm text-muted-foreground">{status?.message}</p>
+              <DownloadProgressBar progress={status?.download_progress} />
               <p className="text-xs text-muted-foreground mt-1">
                 First load downloads the model weights. This can take several minutes on a fast connection.
               </p>
@@ -635,6 +642,42 @@ function SetupSection({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function DownloadProgressBar({ progress }: { progress?: DownloadProgress | null }) {
+  if (!progress || progress.total_bytes === 0) {
+    // Indeterminate — we know a download is happening but can't measure it yet
+    return (
+      <div className="mt-3 space-y-1.5">
+        <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+          <div
+            className="h-full rounded-full animate-pulse"
+            style={{ width: "100%", background: BRAND, opacity: 0.4 }}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">Preparing download…</p>
+      </div>
+    );
+  }
+
+  const pct = Math.min(100, Math.round((progress.downloaded_bytes / progress.total_bytes) * 100));
+  const dlGB = (progress.downloaded_bytes / 1_073_741_824).toFixed(2);
+  const totalGB = (progress.total_bytes / 1_073_741_824).toFixed(1);
+
+  return (
+    <div className="mt-3 space-y-1.5">
+      <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all duration-500"
+          style={{ width: `${pct}%`, background: BRAND }}
+        />
+      </div>
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>{dlGB} / {totalGB} GB</span>
+        <span>{pct}%</span>
+      </div>
     </div>
   );
 }

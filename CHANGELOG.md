@@ -4,6 +4,69 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.294] — 2026-07-30
+
+### Fix — `enable_sequential_cpu_offload` crash when `accelerate` library is not installed
+
+#### Problem
+
+When no CUDA GPU is present, the Python image-generation sidecar called `pipe.enable_sequential_cpu_offload()` to reduce VRAM usage. This method requires the `accelerate` library. If `accelerate` was not installed (or was installed in a different Python environment than the sidecar), the call raised:
+
+```
+`enable_sequential_cpu_offload` requires accelerator, but not found
+```
+
+The error surfaced as the status message on the AI Images page immediately after triggering a model load, leaving the page stuck in the "Not loaded" state with no way to proceed.
+
+#### Fix — `artifacts/electron/sidecar/server.py`
+
+Wrapped the `enable_sequential_cpu_offload()` call in a `try/except`. If it raises for any reason (missing `accelerate`, version mismatch, etc.) the sidecar falls back to a plain `pipe.to("cpu")`, which has no external dependencies and works on every machine:
+
+```python
+try:
+    pipe.enable_sequential_cpu_offload()
+except Exception:
+    pipe = pipe.to("cpu")
+```
+
+Generation still works correctly on CPU — it is just slower than with `accelerate`'s memory-efficient offloading.
+
+#### Files changed
+
+- `artifacts/electron/sidecar/server.py` — graceful fallback from `enable_sequential_cpu_offload` to `.to("cpu")`
+
+---
+
+### Feature — Download progress bar on the AI Images loading screen
+
+#### Problem
+
+When a model was loading for the first time (downloading 7–16 GB of weights from HuggingFace), the AI Images page showed only a static spinner and the text "Downloading … (~7 GB — first run only)…". There was no indication of how far along the download was — the user had no way to know if it was 5% done or 95% done.
+
+#### How it works
+
+The HuggingFace Hub cache layout is predictable: all downloaded blob files land in `<cache_dir>/models--<org>--<name>/blobs/`. The sidecar now reads that directory on every `/status` poll and sums the sizes of all files already written to disk, comparing against the known model size.
+
+**`artifacts/electron/sidecar/server.py`**
+
+- Added `_get_download_progress()` — scans the HuggingFace blob cache for the model currently being loaded and returns `{ downloaded_bytes, total_bytes }`.
+- Added `_loading_model_key` global — set when `_do_load()` starts, cleared when it finishes (success or error), so the progress function always knows which model's cache to check.
+- `/status` response now includes a `download_progress` field (populated only while `status == "loading"`).
+
+**`artifacts/dannys-bot/src/pages/ImageGenPage.tsx`**
+
+- Added `DownloadProgress` interface and `download_progress` field to `StatusResponse`.
+- Added `DownloadProgressBar` component: renders a filled cyan bar with "X.XX / Y.Y GB" and percentage text while bytes are accumulating, or a pulsing indeterminate bar while the cache directory is still being created (first few seconds before any blob file appears).
+- `DownloadProgressBar` is rendered inside the "Loading model…" info card, directly below the status message text.
+- The existing 3-second status poll drives all updates — no new polling or WebSocket needed.
+
+#### Files changed
+
+- `artifacts/electron/sidecar/server.py` — download progress tracking via blob cache scanning
+- `artifacts/dannys-bot/src/pages/ImageGenPage.tsx` — `DownloadProgressBar` component + type updates
+
+---
+
 ## [1.2.293] — 2026-07-30
 
 ### Fix — Sidecar crashes at startup with ImportError (torch/diffusers not found)

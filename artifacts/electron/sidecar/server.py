@@ -56,7 +56,42 @@ _pipeline = None
 _loaded_model: Optional[str] = None
 _status = "idle"        # idle | loading | ready | error
 _status_message = "Ready to load a model."
+_loading_model_key: Optional[str] = None   # model being downloaded right now
 _load_lock = threading.Lock()
+
+
+def _get_download_progress() -> Optional[dict]:
+    """
+    Estimate download progress by summing blob file sizes in the HuggingFace
+    cache directory.  Called only while _status == "loading".
+    Returns {"downloaded_bytes": int, "total_bytes": int} or None.
+    """
+    if _loading_model_key is None or _loading_model_key not in MODELS:
+        return None
+
+    info = MODELS[_loading_model_key]
+    total_bytes = int(info["size_gb"] * 1024 * 1024 * 1024)
+
+    # HuggingFace Hub stores blobs under:
+    #   <cache_dir>/models--<org>--<name>/blobs/
+    repo: str = info["repo"]
+    parts = repo.split("/", 1)
+    if len(parts) != 2:
+        return None
+    org, name = parts
+    blobs_dir = Path(MODELS_DIR) / f"models--{org}--{name}" / "blobs"
+
+    downloaded = 0
+    if blobs_dir.exists():
+        for f in blobs_dir.iterdir():
+            try:
+                downloaded += f.stat().st_size
+            except OSError:
+                pass
+
+    # Cap at total_bytes (size_gb is approximate)
+    downloaded = min(downloaded, total_bytes)
+    return {"downloaded_bytes": downloaded, "total_bytes": total_bytes}
 
 # ── Model registry ────────────────────────────────────────────────────────────
 MODELS = {
@@ -117,7 +152,7 @@ app.add_middleware(
 
 # ── Load pipeline (runs in a background thread) ───────────────────────────────
 def _do_load(model_key: str) -> None:
-    global _pipeline, _loaded_model, _status, _status_message
+    global _pipeline, _loaded_model, _status, _status_message, _loading_model_key
 
     if model_key not in MODELS:
         _status = "error"
@@ -125,6 +160,7 @@ def _do_load(model_key: str) -> None:
         return
 
     info = MODELS[model_key]
+    _loading_model_key = model_key
     _status = "loading"
     _status_message = f"Loading {info['label']}…"
     log.info(_status_message)
@@ -161,15 +197,22 @@ def _do_load(model_key: str) -> None:
         if device == "cuda":
             pipe = pipe.to(device)
         else:
-            pipe.enable_sequential_cpu_offload()
+            # enable_sequential_cpu_offload requires the `accelerate` library.
+            # Fall back to a plain .to("cpu") if it's not installed.
+            try:
+                pipe.enable_sequential_cpu_offload()
+            except Exception:
+                pipe = pipe.to("cpu")
 
         _pipeline = pipe
         _loaded_model = model_key
+        _loading_model_key = None
         _status = "ready"
         _status_message = f"Ready — {info['label']} on {device.upper()}"
         log.info(_status_message)
 
     except Exception as exc:
+        _loading_model_key = None
         _status = "error"
         _status_message = str(exc)
         log.error(f"Failed to load model: {exc}")
@@ -182,6 +225,7 @@ def get_status():
         "status": _status,
         "message": _status_message,
         "loaded_model": _loaded_model,
+        "download_progress": _get_download_progress() if _status == "loading" else None,
         "available_models": {
             k: {
                 "label": v["label"],
