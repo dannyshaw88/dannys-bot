@@ -6,60 +6,117 @@ All notable changes to Aura Farming are documented here.
 
 ## [1.2.285] — 2026-07-30
 
-### Fix — View Reels: "lastPollXml is not defined" crash ending every cycle
+### Fix — View Reels: "lastPollXml is not defined" ReferenceError crashed every cycle that ran Reels
 
-`lastPollXml` was declared inside a `{ }` block scoped to the
-`if (wantLike || wantShareFeed || wantSave || wantShareDm)` guard, but
-referenced outside that block by the ad-detection check at the bottom of
-each reel iteration. JavaScript raises a `ReferenceError` the moment any
-reel iteration reaches the ad check, crashing the entire automation cycle
-with "Cycle failed — lastPollXml is not defined".
+**Problem:** Every automation cycle that included View Reels crashed with
+"Cycle failed — lastPollXml is not defined" immediately after the mirror
+went off. The error appeared on the first reel that reached the ad-detection
+check, aborting the rest of the cycle (including any tools scheduled after Reels).
 
-Fixed by hoisting the declaration to the top of the reel iteration loop
-(before the `if` guard), so it is always in scope when the ad-detection
-check runs regardless of which actions were active.
+**Root cause:** The `lastPollXml` variable — which stores the last UIAutomator dump
+from the reel-player readiness poll — was declared with `let` inside a scoped `{ }`
+block that only runs when at least one action is wanted (`wantLike || wantShareFeed ||
+wantSave || wantShareDm`). The ad-detection check (`isReelAd = lastPollXml.includes(...)`)
+sits *outside* that scoped block, at the bottom of each reel iteration. JavaScript's
+block scoping means `lastPollXml` does not exist there — a `ReferenceError` fires the
+instant any reel reaches the ad check, killing the entire cycle.
+
+The failure was introduced alongside the ad-detection feature in v1.2.282: the variable
+was correctly used inside the poll block but its declaration was never hoisted to the
+outer scope where it is also needed.
+
+**Fix:** Moved `let lastPollXml = ""` to the top of the per-reel loop body, before the
+`if (wantLike || ...)` guard. The variable is now always in scope when the ad-detection
+check runs. When no actions were wanted (so the poll loop never ran), `lastPollXml`
+remains `""` and `isReelAd` is correctly false.
+
+**Files changed:** `artifacts/api-server/src/routes/mobile.ts`
 
 ---
 
 ## [1.2.284] — 2026-07-30
 
-### Fix — Cookie consent popup now detected and accepted when it appears after Instagram loads
+### Fix — Cookie consent popup now detected and dismissed mid-cycle when it appears after Instagram loads
 
-Instagram's "Allow the use of cookies by Instagram?" dialog appears AFTER Instagram
-finishes loading — after the launch-time popup scan has already run and declared "feed
-ready". The dialog covers the bottom nav bar, so the profile tab is invisible in the
-accessibility tree and account switching fails every cycle.
+**Problem:** Instagram's "Allow the use of cookies by Instagram?" full-screen dialog
+was visible on the device but the automation failed to detect it, logged
+"No launch popup — feed ready", and then immediately failed with
+"Profile tab not found after polling — cannot switch account", aborting
+all tools for that cycle. The cycle then airplane-mode recycled and the
+problem repeated every run.
 
-Fixed by adding a blocking-dialog check inside the profile-tab poll loop in
-`switchToInstagramAccount`. On each poll iteration where the profile tab isn't found,
-a fresh UIAutomator dump is taken and `dismissInstagramInterstitials` is run against it.
-If the cookie dialog (or any other interstitial) is present it is dismissed and the
-profile tab is retried immediately — no extra 1.5 s sleep — so the account switch
-proceeds without delay.
+**Root cause:** The cookie popup appears *after* Instagram finishes loading — it is
+rendered by the first-party webview once the app is fully initialised. The launch-time
+popup scan (run ~400 ms after the `am start` intent, before the UI is fully loaded)
+correctly dumps the UI and correctly finds no popup at that moment. By the time
+Instagram finishes loading and the dialog appears, the code has already declared
+"feed ready" and moved on to account switching. During the profile-tab poll,
+the cookie dialog covers the entire screen including the bottom navigation bar,
+so the accessibility tree never shows the Profile tab — all 5 × 1.5 s poll
+iterations fail and the switch is abandoned.
+
+The existing cookie-dialog handler in `dismissInstagramInterstitials` was correct
+and would have worked — it just was never called after the dialog appeared.
+
+**Fix:** Added a `dismissInstagramInterstitials` call inside the profile-tab poll loop
+in `switchToInstagramAccount` (`androidManager.ts`). On each iteration where the
+profile tab is not found in the accessibility tree, a fresh UIAutomator dump is taken
+and passed to the interstitials dismisser. If the cookie dialog (or any other blocking
+interstitial) is detected it is tapped away and the profile tab is immediately retried —
+without the normal 1.5 s sleep — so the account switch proceeds in the same poll cycle
+with no added delay. The fix covers the cookie dialog and any future interstitial that
+could appear after the launch scan.
+
+**Files changed:** `artifacts/api-server/src/mobile/androidManager.ts`
 
 ---
 
 ## [1.2.283] — 2026-07-30
 
-### Fix — Human Session Tool: timers no longer reset constantly with no cycles firing
+### Fix — Human Session Tool: slot timers reset endlessly and no automation cycles ever fired
 
-Two bugs introduced by the Stats-page toggle feature caused the HST automation loop
-to appear to run but never actually fire a cycle:
+**Problem:** Every slot enabled on the Mobile Human Session Tool showed the timer being
+set and immediately reset in a tight loop. No `POST /api/mobile/devices/.../automation-cycle`
+calls were ever made — the automation appeared to be running (timers counting down) but
+never actually executed any cycle. The issue persisted across app restarts and was
+reproducible on all slots.
 
-1. **Background loop (hstRunner.ts) silently exited every tick** — `runCycleBg`
-   fetched the slot's automation-settings but then checked `body.settings` (a nested
-   key that doesn't exist on the flat response object), so the settings were always
-   `undefined` and the function returned early without running a cycle or rescheduling.
-   Fixed to read the flat `body` object directly.
+**Root cause — two separate bugs, both introduced by the Statistics-page toggle feature:**
 
-2. **BroadcastChannel toggle set a sticky "fire immediately" flag** — when the Stats
-   page broadcast `enabled: true` to an already-enabled slot, `setEnabledByUser(true)`
-   set `manualToggleOnRef` even though `settings.enabled` hadn't changed, so the
-   run-loop effect never fired to consume and clear the flag. On the next incidental
-   effect re-run (e.g. a slot-refresh key bump) the stale flag caused `scheduleNext(0)`,
-   resetting the 25-99 min wait timer to fire immediately and repeating endlessly.
-   Fixed by skipping the `setEnabledByUser` call when the BC message's `enabled` value
-   already matches the slot's current state.
+1. **Background loop (`hstRunner.ts`) silently exited every tick without running a cycle.**
+   `runCycleBg` fetches the slot's current settings from the server before building the
+   `automation-cycle` POST body. It checked `body?.settings` to validate the response —
+   but the `/slots/:slotIdx/automation-settings` endpoint returns a flat object
+   (`{ enabled, feedEnabled, cycleIntervalMin, … }`), not a nested `{ settings: { … } }`
+   wrapper. So `body.settings` was always `undefined`, the guard failed, and the function
+   returned immediately without running a cycle or scheduling the next one. The background
+   loop effectively stopped after its very first tick, silently, every time.
+
+2. **Stats-page BroadcastChannel left `manualToggleOnRef` permanently `true`.**
+   When the Statistics page toggles a slot on, it saves `enabled: true` to the server
+   and then broadcasts over the `aura-slot-toggle` BroadcastChannel so MobilePage updates
+   its in-memory state. The BC listener called `setEnabledByUser(enabled)` unconditionally.
+   `setEnabledByUser` sets `manualToggleOnRef.current = true` (the "fire immediately"
+   flag). However, if the slot was *already* enabled, `settings.enabled` didn't change —
+   React's reconciler saw no state delta, so the run-loop effect never re-fired to consume
+   and clear the flag. The flag stayed `true` indefinitely. On the next incidental effect
+   re-run (triggered by anything — a slot-refresh key bump, a settings autosave, a
+   reconnect) the stale flag caused `scheduleNext(0)`, resetting the 25–99 min wait timer
+   to fire immediately. This in turn triggered another `setEnabledByUser` broadcast reaction,
+   creating an endless reset loop with no cycles ever completing.
+
+**Fixes:**
+- `hstRunner.ts`: Changed `if (!r.ok || !body?.settings)` → `if (!r.ok || !body)` and
+  `s = body.settings` → `s = body`. The background loop now correctly reads the flat
+  settings object and runs cycles on schedule.
+- `MobilePage.tsx`: The BroadcastChannel `onmessage` handler now guards with
+  `if (enabled !== settingsRef.current.enabled)` before calling `setEnabledByUser`.
+  When the Stats page broadcasts `enabled: true` to an already-enabled slot, the call
+  is skipped entirely — `manualToggleOnRef` is never set, the run-loop effect is not
+  disturbed, and the existing timer continues counting down undisturbed.
+
+**Files changed:** `artifacts/dannys-bot/src/lib/hstRunner.ts`,
+`artifacts/dannys-bot/src/pages/MobilePage.tsx`
 
 ---
 
