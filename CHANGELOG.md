@@ -4,6 +4,54 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.295] — 2026-07-30
+
+### Feature — Image-to-image (img2img) on the AI Images page
+
+#### What's new
+
+You can now upload a base image on the AI Images page and use the prompt to edit it, rather than generating from scratch. The result is a new image that stays true to the composition and structure of your original while applying whatever changes the prompt describes.
+
+#### How to use it
+
+1. On the AI Images page (with a model loaded), find the new **Input Image** section above the Prompt field.
+2. Drag-and-drop any PNG, JPEG, or WEBP onto the zone — or click it to browse.
+3. A thumbnail preview appears with a remove (×) button.
+4. Use the **Edit Strength** slider that appears below the thumbnail:
+   - **Low (10–30%)** — subtle change; the output closely resembles the original.
+   - **Mid (50–80%)** — balanced; clearly based on the original but meaningfully edited by the prompt.
+   - **High (90–100%)** — full redraw; the original is used loosely as a starting point.
+   - Default is **75%**.
+5. Write a prompt describing the desired result and click **Generate** as usual.
+
+#### How it works under the hood
+
+**`artifacts/electron/sidecar/server.py`**
+
+- Added `init_image: Optional[str]` (raw base64) and `strength: float = 0.75` to `GenerateRequest`.
+- When `init_image` is present, `generate()` creates an img2img pipeline variant from the already-loaded weights using diffusers' `from_pipe()`. This reuses the model that is already in memory — no re-download, no second full copy of the model on GPU/CPU.
+- The uploaded image is decoded from base64, converted to RGB, and resized to the requested output resolution via LANCZOS before being passed to the pipeline.
+- All three models are supported:
+  - FLUX.1-schnell → `FluxImg2ImgPipeline`
+  - SDXL-Turbo → `AutoPipelineForImage2Image`
+  - Stable Diffusion XL → `StableDiffusionXLImg2ImgPipeline`
+- The original text-to-image path is unchanged when no `init_image` is provided.
+- `HTTPException` re-raises are now explicit so FastAPI handles them correctly even when wrapped in the broad `except Exception` block.
+
+**`artifacts/dannys-bot/src/pages/ImageGenPage.tsx`**
+
+- Added `initImage` (data URL), `initImageName`, and `strength` state variables.
+- Added `ImageUploadZone` component: drag-and-drop zone with hover highlight; falls back to a hidden file input on click; shows a fixed-height thumbnail with overlay remove button and filename bar when an image is loaded.
+- Added **Edit Strength** range slider (0.10–1.00, step 0.05) that only renders when an image is loaded. Displays a live percentage and a human-readable label ("subtle change" / "balanced" / "full redraw").
+- `handleGenerate` strips the `data:image/...;base64,` prefix before including `init_image` in the request body; `strength` is sent alongside it.
+
+#### Files changed
+
+- `artifacts/electron/sidecar/server.py` — img2img pipeline via `from_pipe()`, request model update
+- `artifacts/dannys-bot/src/pages/ImageGenPage.tsx` — `ImageUploadZone` component, strength slider, state wiring
+
+---
+
 ## [1.2.294] — 2026-07-30
 
 ### Fix — `enable_sequential_cpu_offload` crash when `accelerate` library is not installed
