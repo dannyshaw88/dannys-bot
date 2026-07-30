@@ -4,6 +4,22 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.275] — 2026-07-30
+
+### Fix — Collision Preventer: "COLLISION PREVENTED" and "STARTED" no longer share the same timestamp
+
+The dashboard was showing both entries at identical timestamps, making it look like the preventer wasn't doing anything. Root cause: the "COLLISION PREVENTED" log event was fired **after** the 5–10 minute rest window had already expired and the slot was granted — right before STARTED — so both entries landed at the same moment.
+
+Fix: the log event now fires **at the instant the slot is pushed to the wait queue** (the moment the device is found busy), before any rest delay begins. The sequence on the dashboard is now correct:
+
+- **COLLISION PREVENTED** — logged immediately when the slot tries to run and the device is occupied
+- *(5–10 minute rest window passes)*
+- **STARTED** — logged when the rest period ends and the slot is granted its turn
+
+No settings changes required; the fix is automatic.
+
+---
+
 ## [1.2.274] — 2026-07-29
 
 ### Fix — Statistics page: Session Tool toggle now actually starts/stops automation

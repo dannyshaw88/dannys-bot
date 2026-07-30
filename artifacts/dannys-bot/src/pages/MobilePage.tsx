@@ -3583,16 +3583,22 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       let collisionPrevented = false;
       if (requestSlot && slotIdx !== undefined) {
         onLog?.(`[HST-DBG] ${_dbgTag} — awaiting collision-preventer slot…`);
-        collisionPrevented = await requestSlot(slotIdx, hstTurnAt);
+        // onQueued fires immediately when the device is busy so the dashboard
+        // "COLLISION PREVENTED" timestamp reflects the moment of the collision,
+        // not the moment the rest period ends and the slot finally gets its turn.
+        const onQueued = () => {
+          if (phoneRef.current?.serial && slotUsername) {
+            fetch(`/api/mobile/devices/${encodeURIComponent(phoneRef.current.serial)}/log-event`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ slotUsername, slotIdx, action: 'collision_prevented', detail: 'Collision Prevented' }),
+            }).catch(() => {});
+          }
+          onLog?.(`[HST-DBG] ${_dbgTag} — collision detected; queued, waiting for rest window`);
+        };
+        collisionPrevented = await requestSlot(slotIdx, hstTurnAt, onQueued);
         if (_hstStop.has(key)) {
           onLog?.(`[HST-DBG] ${_dbgTag} — stopped while waiting for collision-preventer; releasing slot`);
           releaseSlot?.(slotIdx, true); return;
-        }
-        if (collisionPrevented && phoneRef.current?.serial && slotUsername) {
-          fetch(`/api/mobile/devices/${encodeURIComponent(phoneRef.current.serial)}/log-event`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ slotUsername, slotIdx, action: 'collision_prevented', detail: 'Collision Prevented' }),
-          }).catch(() => {});
         }
         onLog?.(`[HST-DBG] ${_dbgTag} — slot acquired (collisionPrevented=${collisionPrevented})`);
       }
@@ -4054,7 +4060,10 @@ function useCollisionPreventer(serial: string | null) {
   }, []);
 
   // Returns true if the slot had to wait (collision was prevented), false if it ran immediately.
-  const requestSlot = useCallback((slotIdx: number, readyAt: number): Promise<boolean> => {
+  // onQueued fires immediately when the slot is pushed to the wait queue — before the rest
+  // period begins — so the dashboard timestamp reflects the moment of the collision, not when
+  // the slot eventually gets its turn.
+  const requestSlot = useCallback((slotIdx: number, readyAt: number, onQueued?: () => void): Promise<boolean> => {
     if (!configRef.current.enabled) return Promise.resolve(false);
     return new Promise<boolean>(resolve => {
       if (!busyRef.current) {
@@ -4065,6 +4074,10 @@ function useCollisionPreventer(serial: string | null) {
         // Preserve the original HST turn so an overdue slot keeps its place in
         // the priority queue while it waits for the configured collision rest.
         queueRef.current.push({ slotIdx, readyAt, resolve });
+        // Fire the callback NOW (at collision time) so the dashboard entry
+        // timestamp matches when the slot was actually blocked, not when it
+        // eventually gets its turn after the rest window.
+        onQueued?.();
       }
     });
   }, []);
