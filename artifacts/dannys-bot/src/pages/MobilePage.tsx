@@ -8656,8 +8656,10 @@ export function MobilePage() {
             automation run-loop timers on every 3-second USB poll flicker.
             Use CSS hiding instead so the hooks stay alive through any gap. */}
         <div className={showSplitView ? "flex-1 min-h-0 flex" : "hidden"}>
-            <div ref={setPaneEl} className={`${activeTab === "browser" ? "hidden" : "w-1/2 flex items-center justify-center p-4"} h-full min-h-0`}>
-              {slots.map((phone, i) => (
+            <div ref={setPaneEl} className="w-1/2 h-full flex items-center justify-center p-4 min-h-0">
+              {/* Hidden on the Browser tab — panel keeps its width so the
+                  right-hand tab bar never shifts position. */}
+              {activeTab !== "browser" && slots.map((phone, i) => (
                 <PhoneSlot
                   key={i}
                   phone={phone}
@@ -8682,7 +8684,7 @@ export function MobilePage() {
                 />
               ))}
             </div>
-            <div className={`${activeTab === "browser" ? "w-full" : "w-1/2 border-l"} border-border h-full min-h-0 flex flex-col`}>
+            <div className="w-1/2 border-l border-border h-full min-h-0 flex flex-col">
               <div className="shrink-0 flex items-center border-b border-border px-4">
                 {MOBILE_TABS_LEFT.map(t => (
                   <button
@@ -8729,8 +8731,11 @@ export function MobilePage() {
                   <AccountSettingsPanel ref={accountPanelRef} phone={stickySlot0Ref.current} addLog={addLog} onSlotChange={setOpenAccountSlot} initialSlot={initialSlot} onAnyEnabled={setHstEnabled} onPhoneAppsRunning={setPhoneAppsRunning} />
                 </div>
                 {/* Browser tab — isolated ghost browser per device serial */}
+                {/* Positioned absolutely so it spans the full split-view width
+                    (left: -100% reaches the left edge of the split container)
+                    while the tab bar above stays exactly where it is. */}
                 {activeTab === "browser" && (
-                  <div className="h-full w-full flex flex-col">
+                  <div className="absolute top-0 right-0 bottom-0 bg-background flex flex-col z-10" style={{ left: "-100%" }}>
                     {/* Proxy config bar */}
                     <div className="shrink-0 flex flex-wrap items-center gap-2 px-3 py-2 border-b border-border bg-muted/30">
                       <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Proxy</span>
