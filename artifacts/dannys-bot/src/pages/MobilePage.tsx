@@ -8656,10 +8656,8 @@ export function MobilePage() {
             automation run-loop timers on every 3-second USB poll flicker.
             Use CSS hiding instead so the hooks stay alive through any gap. */}
         <div className={showSplitView ? "flex-1 min-h-0 flex" : "hidden"}>
-            <div ref={setPaneEl} className="w-1/2 h-full flex items-center justify-center p-4 min-h-0">
-              {/* Hidden on the Browser tab — panel keeps its width so the
-                  right-hand tab bar never shifts position. */}
-              {activeTab !== "browser" && slots.map((phone, i) => (
+            <div ref={setPaneEl} className={`${activeTab === "browser" ? "hidden" : "w-1/2 flex items-center justify-center p-4"} h-full min-h-0`}>
+              {slots.map((phone, i) => (
                 <PhoneSlot
                   key={i}
                   phone={phone}
@@ -8684,7 +8682,7 @@ export function MobilePage() {
                 />
               ))}
             </div>
-            <div className="w-1/2 border-l border-border h-full min-h-0 flex flex-col">
+            <div className={`${activeTab === "browser" ? "w-full" : "w-1/2 border-l"} border-border h-full min-h-0 flex flex-col`}>
               <div className="shrink-0 flex items-center border-b border-border px-4">
                 {MOBILE_TABS_LEFT.map(t => (
                   <button
