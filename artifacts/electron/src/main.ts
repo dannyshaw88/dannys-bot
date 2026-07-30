@@ -1286,11 +1286,17 @@ async function createWindow() {
         });
       }
 
-      // Step 2: install AI libraries into the same writable pipDir
+      // Step 2: install AI libraries into the same writable pipDir.
+      // The embeddable Python's python312._pth file overrides sys.path and
+      // ignores PYTHONPATH, so `python -m pip` cannot find the pip we just
+      // installed in pipDir.  Run pip/__main__.py directly as a script instead
+      // — Python can always execute a file path regardless of sys.path.
+      const pipMain = path.join(pipDir, "pip", "__main__.py");
       sendProgress("Installing AI libraries (downloading ~2 GB for CUDA torch — please wait)…", false);
       await new Promise<void>((resolve, reject) => {
         const p = spawn(pythonExe, [
-          "-m", "pip", "install",
+          pipMain,
+          "install",
           "--target", pipDir,
           "-r", requirementsFile,
           "--extra-index-url", "https://download.pytorch.org/whl/cu121",

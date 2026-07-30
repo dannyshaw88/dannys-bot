@@ -4,6 +4,62 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.292] — 2026-07-30
+
+### Fix — "No module named pip" during AI library install (embeddable Python sys.path)
+
+#### Problem
+
+After v1.2.291 fixed the WinError 5 access-denied error, pip itself installed successfully into AppData, but Step 2 immediately failed with:
+
+```
+C:\Program Files\Aura Farming\resources\python-embed\python.exe: No module named pip
+× Setup failed: pip install failed (code 1)
+```
+
+#### Root cause
+
+The Windows Python Embeddable distribution ships with a `python312._pth` file that explicitly controls `sys.path`. This file **overrides** the normal Python path-building logic and **ignores the `PYTHONPATH` environment variable entirely**. Comments inside the file even note that `import site` is disabled by default.
+
+As a result, even though we set `PYTHONPATH=<pipDir>` in the process environment, the embeddable Python never added `pipDir` to `sys.path`. When Step 2 ran `python -m pip install …`, Python searched only the paths listed in `python312._pth` (the embed's standard library), found no `pip` package there, and exited with "No module named pip".
+
+This is a [known limitation](https://docs.python.org/3/using/windows.html#finding-modules) of the embeddable distribution that catches many developers — `PYTHONPATH` simply doesn't work with it.
+
+#### Fix — `artifacts/electron/src/main.ts`
+
+Instead of `python -m pip install` (which uses module search and is blocked by `._pth`), Step 2 now invokes `pip/__main__.py` **directly as a script file**:
+
+```
+python.exe  <pipDir>/pip/__main__.py  install  --target <pipDir>  -r requirements.txt  ...
+```
+
+Python can always execute a file path regardless of `sys.path` or `._pth` restrictions. `pip/__main__.py` is the same entry-point that `python -m pip` would have run — the behaviour is identical, but the lookup is bypassed.
+
+#### Complete working install sequence (v1.2.292)
+
+```
+Step 1:  python.exe  get-pip.py
+             --target <AppData>\image-gen-pip\
+             --no-warn-script-location
+         → installs pip 26.x into pipDir
+
+Step 2:  python.exe  <pipDir>/pip/__main__.py
+             install  --target <pipDir>
+             -r requirements.txt
+             --extra-index-url https://download.pytorch.org/whl/cu121
+             --no-warn-script-location
+         → downloads & installs torch + diffusers + friends (~2 GB)
+
+Step 3:  spawnImageGenServer() with PYTHONPATH=<pipDir>
+         → sidecar imports torch/diffusers from pipDir at runtime
+```
+
+#### Files changed
+
+- `artifacts/electron/src/main.ts` — Step 2 changed from `-m pip install` to `pipDir/pip/__main__.py install`
+
+---
+
 ## [1.2.291] — 2026-07-30
 
 ### Fix — AI Libraries install fails with "Access denied" (WinError 5)
