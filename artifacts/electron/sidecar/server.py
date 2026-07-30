@@ -57,7 +57,28 @@ _loaded_model: Optional[str] = None
 _status = "idle"        # idle | loading | ready | error
 _status_message = "Ready to load a model."
 _loading_model_key: Optional[str] = None   # model being downloaded right now
+_loading_from_cache: bool = False           # True when weights are already on disk
 _load_lock = threading.Lock()
+
+
+def _model_is_cached(model_key: str) -> bool:
+    """Return True if the model's blob files already exist in MODELS_DIR."""
+    if model_key not in MODELS:
+        return False
+    info = MODELS[model_key]
+    repo: str = info["repo"]
+    parts = repo.split("/", 1)
+    if len(parts) != 2:
+        return False
+    org, name = parts
+    blobs_dir = Path(MODELS_DIR) / f"models--{org}--{name}" / "blobs"
+    if not blobs_dir.exists():
+        return False
+    # At least one shard larger than 100 KB means real model weights are present
+    return any(
+        f.is_file() and f.stat().st_size > 100 * 1024
+        for f in blobs_dir.iterdir()
+    )
 
 
 def _get_download_progress() -> Optional[dict]:
@@ -154,7 +175,7 @@ app.add_middleware(
 
 # ── Load pipeline (runs in a background thread) ───────────────────────────────
 def _do_load(model_key: str) -> None:
-    global _pipeline, _loaded_model, _status, _status_message, _loading_model_key
+    global _pipeline, _loaded_model, _status, _status_message, _loading_model_key, _loading_from_cache
 
     if model_key not in MODELS:
         _status = "error"
@@ -164,7 +185,14 @@ def _do_load(model_key: str) -> None:
     info = MODELS[model_key]
     _loading_model_key = model_key
     _status = "loading"
-    _status_message = f"Loading {info['label']}…"
+
+    # Detect whether the weights are already cached so we can show the right message
+    cached = _model_is_cached(model_key)
+    _loading_from_cache = cached
+    if cached:
+        _status_message = f"Loading {info['label']} from cache…"
+    else:
+        _status_message = f"Downloading {info['label']} (~{info['size_gb']} GB — first run only)…"
     log.info(_status_message)
 
     try:
@@ -185,11 +213,6 @@ def _do_load(model_key: str) -> None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
         dtype = torch.bfloat16 if device == "cuda" else torch.float32
 
-        _status_message = (
-            f"Downloading {info['label']} (~{info['size_gb']} GB — first run only)…"
-        )
-        log.info(_status_message)
-
         pipe = PipelineCls.from_pretrained(
             info["repo"],
             torch_dtype=dtype,
@@ -209,12 +232,14 @@ def _do_load(model_key: str) -> None:
         _pipeline = pipe
         _loaded_model = model_key
         _loading_model_key = None
+        _loading_from_cache = False
         _status = "ready"
         _status_message = f"Ready — {info['label']} on {device.upper()}"
         log.info(_status_message)
 
     except Exception as exc:
         _loading_model_key = None
+        _loading_from_cache = False
         _status = "error"
         _status_message = str(exc)
         log.error(f"Failed to load model: {exc}")
@@ -227,7 +252,7 @@ def get_status():
         "status": _status,
         "message": _status_message,
         "loaded_model": _loaded_model,
-        "download_progress": _get_download_progress() if _status == "loading" else None,
+        "download_progress": _get_download_progress() if _status == "loading" and not _loading_from_cache else None,
         "available_models": {
             k: {
                 "label": v["label"],
