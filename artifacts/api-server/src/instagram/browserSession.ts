@@ -3195,6 +3195,12 @@ export async function getOrCreateSession(
   } else if (cookiesLoaded) {
     log(`[cookies:${profileId}] Cookies restored — will navigate to Instagram home on SSE attach`, "browser");
     session.pendingInitUrl = "https://www.instagram.com/";
+  } else if (profileId >= 1_000_000) {
+    // Device browser sessions (serialToBrowserId range: 1,000,000–9,999,999) are
+    // general-purpose browsers, not Instagram profile sessions. Start on a blank
+    // page so the user's homepage (e.g. google.com) can be used immediately
+    // instead of waiting ~25 s for the Instagram login page to load.
+    session.pendingInitUrl = "about:blank";
   } else {
     session.pendingInitUrl = "https://www.instagram.com/accounts/login/";
   }
@@ -3336,7 +3342,9 @@ export function attachWS(profileId: number, ws: WebSocket) {
           const recentLogin = session.lastLoginSuccessAt ? (Date.now() - session.lastLoginSuccessAt) < 90000 : false;
           const target = (hasCookies || recentLogin)
             ? "https://www.instagram.com/"
-            : "https://www.instagram.com/accounts/login/";
+            : profileId >= 1_000_000
+              ? "about:blank"
+              : "https://www.instagram.com/accounts/login/";
           session.navProtectedUntil = Date.now() + 15000;
           log(`[attachSSE:${profileId}] page is "${currentUrl}" (error/blank) — recovering → ${target}`, "browser");
           session.page.goto(target, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});

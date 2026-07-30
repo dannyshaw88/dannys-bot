@@ -4,6 +4,109 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.287] — 2026-07-30
+
+### Fix — Phone Farm device browser navigated to Instagram instead of the configured homepage
+
+**Problem:** Opening the Browser tab under Phone Farm → Device → Browser always loaded
+`https://www.instagram.com/accounts/login/` — even when the address bar showed a different
+homepage (e.g. `https://www.google.com/`). The page took roughly 25 seconds to load because
+Instagram's login page is heavyweight, and the loading overlay read "Loading Instagram, please
+wait" — even though the user had set Google as their homepage.
+
+**Root cause:** `getOrCreateSession` in `browserSession.ts` sets a `pendingInitUrl` that the
+WebSocket attach handler navigates to on first connect. When no Instagram session cookies exist
+for a profile (which is always the case for device browser sessions, whose IDs are in the
+1,000,000–9,999,999 range), `pendingInitUrl` was unconditionally set to
+`https://www.instagram.com/accounts/login/` — regardless of whether the profile was an
+Instagram account session or a general-purpose device browser. The reconnect-recovery path
+(inside `attachSSE`) had the same hardcoded fallback.
+
+**Fix:**
+- `browserSession.ts` — added `else if (profileId >= 1_000_000)` branch in `getOrCreateSession`
+  that sets `pendingInitUrl = "about:blank"` for device browser sessions instead of the
+  Instagram login URL.
+- Same guard added to the reconnect-recovery path: when a device browser session lands on an
+  error/blank page after a crash, it now recovers to `about:blank` instead of
+  `instagram.com/accounts/login/`.
+- `BrowserPanel.tsx` — loading overlay subtitle changed from **"Loading Instagram, please wait"**
+  to **"Starting browser, please wait"** so the text is accurate for non-Instagram browser
+  sessions.
+
+**Effect:** The device browser tab now opens immediately on a blank page. Navigating to Google
+(or any other homepage) is instant. Regular Instagram account EB sessions are completely
+unaffected — they still auto-navigate to the login page when no session cookies exist.
+
+**Files changed:**
+- `artifacts/api-server/src/instagram/browserSession.ts`
+- `artifacts/dannys-bot/src/components/BrowserPanel.tsx`
+
+---
+
+### Fix — Instagram "Allow all cookies" popup not being tapped by the Electron embedded browser
+
+**Problem:** When the Electron embedded browser (EB) opened an Instagram page, the
+"Allow all cookies" consent banner was consistently ignored — it remained on screen and
+blocked all subsequent automation (login auto-fill, session verification, etc.).
+
+**Root cause:** The `cdpClickCookieBanner` function in `ebManager.ts` loops up to 8 times
+looking for the cookie banner button and, on each pass, if the button is not found it
+immediately calls `break` — exiting the loop entirely. Instagram's cookie consent dialog is a
+React-controlled component that is mounted asynchronously. It typically appears **3–5 seconds
+after `did-finish-load`** fires. The first detection attempt runs at 2.5 s (the initial delay),
+finds nothing (banner not yet rendered), hits `break`, and exits. The banner then mounts a
+second or two later with nothing left to dismiss it.
+
+The root cause is this single line:
+
+```typescript
+if (!pos) break; // banner gone (or never appeared) — stop
+```
+
+This correctly exits when a banner that was previously found is now gone (successfully
+dismissed), but also prematurely exits when the banner simply hasn't appeared yet.
+
+**Fix:** Introduced a `_bannerSeenOnce` flag. The loop now:
+- `continue`s (keeps polling) when `!pos && !_bannerSeenOnce` — banner not yet visible, React
+  still mounting.
+- `break`s when `!pos && _bannerSeenOnce` — banner was found on a previous attempt and has
+  since disappeared, meaning the click succeeded.
+- Increased the maximum attempts from 8 to 12 (covering an 18-second window: 2.5 s initial +
+  11 × 1.5 s = 19 s total) to accommodate slow network/rendering conditions.
+
+The three-layer click strategy (CDP synthesizeTapGesture → dispatchMouseEvent → direct JS
+`btn.click()`) is unchanged.
+
+**Files changed:** `artifacts/electron/src/ebManager.ts`
+
+---
+
+### Fix — Reel automation wasted 12 seconds polling on every ad reel
+
+**Problem:** When the Reels automation cycle encountered a sponsored (ad) reel, the debug log
+showed a cascade of "Reel N/M: player not in tree yet [regular window — Instagram a11y tree
+visible but reel player not yet attached (still loading)] — retrying in 2s (poll X/6)"
+messages. The full 12-second poll budget was consumed on every ad reel before the code
+finally gave up and correctly skipped it.
+
+**Root cause:** The player-ready detection checks for a set of known accessibility tree nodes
+(`REEL_NODES`) that indicate a reel video is loaded: `content-desc="Like"`,
+`content-desc="Unlike"`, `reel_viewer`, `reels_feed_media_view`, `:id/outer_container`.
+Ad reels use a completely different view hierarchy — none of these nodes appear. The poll
+ran all 6 attempts × 2 seconds = **12 seconds**, logged "not in tree" every pass, then after
+exhausting the budget fell through to the ad-detection check (`text="Ad"` /
+`content-desc="Ad"`) which correctly identified it as an ad and skipped all actions. The
+12-second wait was entirely wasted.
+
+**Fix:** Added `text="Ad"`, `content-desc="Ad"`, `text="Sponsored"`, and
+`content-desc="Sponsored"` to `REEL_NODES`. The player-ready poll now exits on the **first
+dump** when it encounters an ad reel. The `isReelAd` guard that follows still fires and skips
+all actions — the only change is that the wasted 12-second wait is eliminated.
+
+**Files changed:** `artifacts/api-server/src/routes/mobile.ts`
+
+---
+
 ## [1.2.286] — 2026-07-30
 
 ### Fix — Device Browser tab showed "Starting browser… Loading Instagram, please wait" spinner forever

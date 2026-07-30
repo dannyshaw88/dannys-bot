@@ -4975,6 +4975,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             "reel_viewer",                  // reel_viewer_root, _video_player, _toolbar, …
             "reels_feed_media_view",        // Reels-tab feed root (some builds)
             ":id/outer_container",          // action-icon column container (no-cd builds)
+            // Ad reels use a completely different view hierarchy — no reel_viewer
+            // IDs and no Like/Unlike nodes — so the poll was burning its full 12 s
+            // on every ad. Including the ad markers here lets the poll exit on the
+            // first attempt. The isReelAd check below still fires and skips actions.
+            'text="Ad"',
+            'content-desc="Ad"',
+            'text="Sponsored"',
+            'content-desc="Sponsored"',
           ];
           const POLL_MS   = 2000;
           const MAX_POLLS = 6; // up to 12 s extra wait

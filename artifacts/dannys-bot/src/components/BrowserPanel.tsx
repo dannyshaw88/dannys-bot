@@ -1075,7 +1075,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 z-10">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
                 <p className="text-sm font-medium text-foreground">Starting browser…</p>
-                <p className="text-xs text-muted-foreground">Loading Instagram, please wait</p>
+                <p className="text-xs text-muted-foreground">Starting browser, please wait</p>
               </div>
             )}
 

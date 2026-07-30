@@ -3938,7 +3938,10 @@ export async function openEbWindow(opts: {
   })()`;
 
   // cdpClickCookieBanner: detects the banner and clicks via CDP.
-  // Called after every page load. Retries up to 8 times with 1.5 s gaps.
+  // Retries up to 12 times with 1.5 s gaps (≈18 s total window).
+  // Instagram's React cookie banner can take 3–5 s to mount after did-finish-load,
+  // so we must NOT exit on the first "no banner" result — we keep polling until we
+  // either find+dismiss it or exhaust all attempts without ever seeing it.
   let _cookieDismissRunning = false;
   const cdpClickCookieBanner = async () => {
     if (win.isDestroyed() || _cookieDismissRunning) return;
@@ -3947,7 +3950,8 @@ export async function openEbWindow(opts: {
       // Attach debugger if not already attached (idempotent)
       try { win.webContents.debugger.attach("1.3"); } catch {}
 
-      for (let attempt = 0; attempt < 8; attempt++) {
+      let _bannerSeenOnce = false; // true once we detect the banner at least once
+      for (let attempt = 0; attempt < 12; attempt++) {
         if (win.isDestroyed()) break;
         await new Promise(r => setTimeout(r, attempt === 0 ? 2500 : 1500));
         if (win.isDestroyed()) break;
@@ -3958,7 +3962,6 @@ export async function openEbWindow(opts: {
         // Log when the EB lands on the login page (usually means session died),
         // but do NOT break — the cookie consent banner appears on this page too
         // (on first visit or after cookie-jar reset) and must still be dismissed.
-        // If no banner is found the existing `if (!pos) break` below exits cleanly.
         if (/instagram\.com(?:\/[a-z]{2}(?:-[a-z]{2})?)?\/accounts\/login/i.test(_ccUrl)) {
           _ebLog(`CookieCheck#${attempt + 1} url="${_ccUrl.slice(0, 120)}" — on login page (session may be expired; checking for cookie banner before exiting)`);
           console.warn(`[eb-session-dead:${profileId}] @${username} CookieCheck detected login page at attempt ${attempt + 1} — session may be dead`);
@@ -3969,7 +3972,15 @@ export async function openEbWindow(opts: {
 
         _ebLog(`CookieCheck#${attempt + 1} url="${_ccUrl.slice(0, 80)}" detect=${pos ? `FOUND label="${pos.label}" at (${pos.x},${pos.y})` : "no-banner"}`);
 
-        if (!pos) break; // banner gone (or never appeared) — stop
+        if (!pos) {
+          // Banner was seen before and is now gone → successfully dismissed.
+          if (_bannerSeenOnce) break;
+          // Banner not yet visible — React may still be mounting (takes 3–5 s).
+          // Keep polling. Do NOT break here — that was the original bug that caused
+          // the banner to be missed when it rendered after the first 2.5 s check.
+          continue;
+        }
+        _bannerSeenOnce = true;
 
         // Use cdpTapGesture (synthesizeTapGesture) for mobile accounts — fires
         // touchstart→touchend→click with pointerType="touch", isTrusted=true.
