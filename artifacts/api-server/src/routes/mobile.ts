@@ -4972,8 +4972,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           const POLL_MS   = 2000;
           const MAX_POLLS = 6; // up to 12 s extra wait
           let reelReady = false;
+          let lastPollXml = "";
           for (let p = 0; p < MAX_POLLS && !reelReady; p++) {
             const pollXml = await android.dumpUi(serial).catch(() => "");
+            lastPollXml = pollXml;
             if (REEL_NODES.some(n => pollXml.includes(n))) {
               reelReady = true;
               if (p > 0) onLog?.(`Reel ${i + 1}/${totalReels}: player ready after ${p * POLL_MS / 1000}s extra wait`);
@@ -5007,6 +5009,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           }
           if (!reelReady) onLog?.(`Reel ${i + 1}/${totalReels}: player never appeared in tree — proceeding anyway`);
         }
+
+        // ── Ad detection — skip all actions for sponsored reels ──────────────
+        // Instagram labels sponsored reels with text="Ad" or content-desc="Ad"
+        // (sometimes "Sponsored"/"Advert"). Reuse the last dump from the
+        // player-ready poll above — no extra dump cost. Quoted attribute
+        // matching prevents false positives on "Add", "Adidas", etc.
+        const isReelAd =
+          lastPollXml.includes('text="Ad"')        || lastPollXml.includes('content-desc="Ad"') ||
+          lastPollXml.includes('text="Sponsored"') || lastPollXml.includes('content-desc="Sponsored"') ||
+          lastPollXml.includes('text="Advert"')    || lastPollXml.includes('content-desc="Advert"');
+        if (isReelAd) {
+          onLog?.(`Reel ${i + 1}/${totalReels}: ad post detected — skipping all actions`);
+        } else {
 
         onLog?.(`Reel ${i + 1}/${totalReels}: scanning right-side action column…`);
         const icons = await android.findReelActionIcons(serial, (msg) => onLog?.(`  ${msg}`)).catch(() => null);
@@ -5182,6 +5197,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             }
           }
         }
+        } // end !isReelAd
       }
 
       // ── Click Author — navigate to creator profile, scroll, then Back ──────

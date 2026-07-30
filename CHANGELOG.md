@@ -4,6 +4,33 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.282] — 2026-07-30
+
+### Fix — View Reels: all actions now skipped when Instagram serves a sponsored/ad reel
+
+**Problem:** When Instagram inserted a sponsored ad into the Reels feed, the automation could fire a like or share action on the ad. The screenshots showed the exact failure chain:
+
+1. The reel player initially loads with its normal interaction bar (Like/Comment/Share icons visible in the right-side column).
+2. Before the action fires, Instagram expands the ad to its full-screen sponsored view — the interaction bar disappears.
+3. The code still fired a double-tap like at the video coordinates, now landing on the expanded ad instead of the video. This either liking the ad post or, worse, navigating into the advertiser's landing page (as seen in screenshot 3 — a care-home website modal over the Reels feed).
+
+**Root cause:** The `wantClickAuthor` block already had an ad guard (it takes a fresh `dumpUi` and checks for `text="Ad"` / `content-desc="Ad"`). However, the `wantLike`, `wantShareFeed`, `wantSave`, and `wantShareDm` blocks had no such guard at all.
+
+**Fix:** The player-ready poll that runs before every action block already dumps the UI to wait for reel nodes. That last XML dump is now saved in `lastPollXml` (no extra dump call — zero performance cost). After the poll, an `isReelAd` flag is computed by checking for:
+- `text="Ad"` / `content-desc="Ad"`
+- `text="Sponsored"` / `content-desc="Sponsored"`
+- `text="Advert"` / `content-desc="Advert"`
+
+Quoted attribute matching is used throughout (`text="Ad"` not just `Ad`) to prevent false positives on words like "Add", "Adidas", "Address", etc.
+
+If `isReelAd` is true, a log line `"ad post detected — skipping all actions"` is emitted and the entire like/share/save/shareDm block is bypassed. The reel still counts toward `reelsViewed` and the swipe-to-next-reel fires normally — only the interaction actions are skipped.
+
+The existing `wantClickAuthor` ad guard (which already took its own dump) is unchanged.
+
+**Files changed:** `artifacts/api-server/src/routes/mobile.ts`
+
+---
+
 ## [1.2.281] — 2026-07-30
 
 ### Fix — Instagram cookie consent dialog now auto-accepted
