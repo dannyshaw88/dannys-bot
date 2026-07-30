@@ -85,17 +85,16 @@ function getImageGenOutputDir(): string {
   return path.join(getUserDataPath(), "image-gen-output");
 }
 
+// Writable directory where pip and all AI packages are installed.
+// Program Files is read-only after installation, so we target AppData instead.
+function getImageGenPipDir(): string {
+  return path.join(getUserDataPath(), "image-gen-pip");
+}
+
 function isTorchInstalled(): boolean {
-  const pythonExe = getPythonPath();
   if (app.isPackaged) {
-    // Embedded Python: check for torch in the embed's site-packages
-    const torchInit = path.join(
-      path.dirname(pythonExe),
-      "Lib",
-      "site-packages",
-      "torch",
-      "__init__.py",
-    );
+    // Packages are installed into the writable pipDir, not the embed's Lib/
+    const torchInit = path.join(getImageGenPipDir(), "torch", "__init__.py");
     return fs.existsSync(torchInit);
   }
   // Dev mode: assume not available to avoid noisy failures
@@ -123,6 +122,7 @@ function spawnImageGenServer(port: number): void {
   const pythonExe = getPythonPath();
   const modelsDir = getImageGenModelsDir();
   const outputDir = getImageGenOutputDir();
+  const pipDir    = getImageGenPipDir();
   try { fs.mkdirSync(modelsDir, { recursive: true }); } catch {}
   try { fs.mkdirSync(outputDir, { recursive: true }); } catch {}
 
@@ -132,6 +132,9 @@ function spawnImageGenServer(port: number): void {
     stdio: ["ignore", "pipe", "pipe"],
     env: {
       ...process.env,
+      // Packages are installed into pipDir (writable AppData), not the
+      // read-only Program Files embed — PYTHONPATH makes them importable.
+      PYTHONPATH: pipDir,
       IMAGE_GEN_PORT: String(port),
       IMAGE_GEN_MODELS_DIR: modelsDir,
       IMAGE_GEN_OUTPUT_DIR: outputDir,
@@ -1254,31 +1257,45 @@ async function createWindow() {
     const getPipScript = path.join(scriptDir, "get-pip.py");
     const requirementsFile = path.join(scriptDir, "requirements.txt");
 
+    // Packages must go into a user-writable location — Program Files is
+    // read-only after installation and causes WinError 5 (Access denied).
+    const pipDir = getImageGenPipDir();
+    try { fs.mkdirSync(pipDir, { recursive: true }); } catch {}
+
     imageGenSetupRunning = true;
     const sendProgress = (line: string, done: boolean) => {
       win?.webContents.send("image-gen-setup-progress", { line, done });
     };
 
+    // Env shared by both pip steps so python can find packages in pipDir
+    const pipEnv = { ...process.env, PYTHONPATH: pipDir };
+
     try {
-      // Step 1: bootstrap pip into the embeddable distribution
+      // Step 1: bootstrap pip into pipDir (writable AppData), not the embed dir
       if (fs.existsSync(getPipScript)) {
         sendProgress("Installing pip…", false);
         await new Promise<void>((resolve, reject) => {
-          const p = spawn(pythonExe, [getPipScript, "--no-warn-script-location"], { stdio: "pipe" });
+          const p = spawn(pythonExe, [
+            getPipScript,
+            "--target", pipDir,
+            "--no-warn-script-location",
+          ], { stdio: "pipe", env: pipEnv });
           p.stdout?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
           p.stderr?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
           p.on("exit", code => code === 0 ? resolve() : reject(new Error(`pip bootstrap failed (code ${code})`)));
         });
       }
 
-      // Step 2: install AI libraries (torch + diffusers + friends)
+      // Step 2: install AI libraries into the same writable pipDir
       sendProgress("Installing AI libraries (downloading ~2 GB for CUDA torch — please wait)…", false);
       await new Promise<void>((resolve, reject) => {
         const p = spawn(pythonExe, [
-          "-m", "pip", "install", "-r", requirementsFile,
+          "-m", "pip", "install",
+          "--target", pipDir,
+          "-r", requirementsFile,
           "--extra-index-url", "https://download.pytorch.org/whl/cu121",
           "--no-warn-script-location",
-        ], { stdio: "pipe" });
+        ], { stdio: "pipe", env: pipEnv });
         p.stdout?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
         p.stderr?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
         p.on("exit", code => code === 0 ? resolve() : reject(new Error(`pip install failed (code ${code})`)));

@@ -4,6 +4,74 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.291] — 2026-07-30
+
+### Fix — AI Libraries install fails with "Access denied" (WinError 5)
+
+#### Problem
+
+After the v1.2.290 fix made the **Install AI Libraries** button appear correctly, clicking it immediately failed with:
+
+```
+ERROR: Could not install packages due to an OSError: [WinError 5] Access is
+denied: 'C:\Program Files\Aura Farming\resources\python-embed\Lib'
+Consider using the `--user` option or check the permissions.
+× Setup failed: pip bootstrap failed (code 1)
+```
+
+Setup was impossible — no model could ever be loaded.
+
+#### Root cause
+
+`get-pip.py` (and the subsequent `pip install`) were running without a `--target` flag, so pip defaulted to writing into the Python embeddable distribution's own `Lib\` directory. On a typical Windows installation, `C:\Program Files\` is protected by UAC — regular user accounts cannot write there, and the app does not require administrator privileges, so every write attempt got WinError 5 (Access denied).
+
+The embeddable Python at `resources\python-embed\` is a read-only asset shipped inside the installer. It is intentionally never written to after installation.
+
+#### Fix — `artifacts/electron/src/main.ts`
+
+**New helper `getImageGenPipDir()`** returns a writable AppData location for all pip packages:
+
+```
+%AppData%\Local\AuraFarming\image-gen-pip\
+```
+
+This directory sits alongside `image-gen-models\` and `image-gen-output\` which already used AppData correctly.
+
+**`isTorchInstalled()`** now checks `image-gen-pip\torch\__init__.py` instead of the old (unreachable) `python-embed\Lib\site-packages\torch\__init__.py`.
+
+**`image-gen-setup` IPC handler** — both pip steps now target `pipDir`:
+
+```
+Step 1 (pip bootstrap):
+  python get-pip.py --target <pipDir> --no-warn-script-location
+
+Step 2 (AI libraries):
+  python -m pip install --target <pipDir> -r requirements.txt
+      --extra-index-url https://download.pytorch.org/whl/cu121
+      --no-warn-script-location
+```
+
+`PYTHONPATH=<pipDir>` is set for both steps so that Step 2's `python -m pip` can find the pip package that Step 1 just installed there.
+
+**`spawnImageGenServer()`** — `PYTHONPATH=<pipDir>` is now included in the sidecar's process environment so Python can find torch, diffusers, and all other packages at runtime.
+
+#### AppData layout after successful install
+
+```
+%AppData%\Local\AuraFarming\
+  image-gen-pip\        ← pip + torch + diffusers + all AI packages (~2 GB)
+  image-gen-models\     ← FLUX/SDXL model weights (~6–16 GB each, downloaded on first Load)
+  image-gen-output\     ← generated PNG images
+```
+
+Nothing is ever written to `C:\Program Files\` after installation.
+
+#### Files changed
+
+- `artifacts/electron/src/main.ts` — adds `getImageGenPipDir()`; fixes `isTorchInstalled()`, `spawnImageGenServer()`, and `image-gen-setup` handler
+
+---
+
 ## [1.2.290] — 2026-07-30
 
 ### Fix — AI Images page stuck on "Cannot reach the API server" (first launch)
