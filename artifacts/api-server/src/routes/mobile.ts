@@ -11178,6 +11178,52 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
+  // ── Device Browser proxy config ───────────────────────────────────────────
+  // The "Browser" tab on each device detail page uses a synthetic Puppeteer
+  // profileId derived from the device serial (same hash as the client's
+  // serialToBrowserId in MobilePage.tsx). Proxy credentials are stored here
+  // per device so the browser WebSocket handler in instagram.ts can pick them
+  // up without a real DB profile lookup.
+  function serialToBrowserProfileId(serial: string): number {
+    let h = 5381;
+    for (let i = 0; i < serial.length; i++) {
+      h = (((h << 5) + h) ^ serial.charCodeAt(i)) >>> 0;
+    }
+    return 1_000_000 + (h % 8_999_999);
+  }
+
+  app.get("/api/mobile/devices/:serial/browser-proxy", async (req: Request, res: Response) => {
+    try {
+      const serial    = p(req, "serial");
+      const profileId = serialToBrowserProfileId(serial);
+      const all       = await storage.getGlobalSettings();
+      const raw       = all[`device_browser_proxy_${profileId}`] ?? null;
+      const proxy     = raw && raw !== "null" ? JSON.parse(raw) : null;
+      res.json({ proxy });
+    } catch (e: any) { res.status(500).json({ error: e?.message }); }
+  });
+
+  app.post("/api/mobile/devices/:serial/browser-proxy", async (req: Request, res: Response) => {
+    try {
+      const serial    = p(req, "serial");
+      const profileId = serialToBrowserProfileId(serial);
+      // Accept { host, port, username, password } or null to clear.
+      const body = req.body;
+      if (body === null || body?.clear === true) {
+        await storage.setGlobalSetting(`device_browser_proxy_${profileId}`, "null");
+        return res.json({ ok: true });
+      }
+      const cfg = z.object({
+        host:     z.string().min(1),
+        port:     z.number().int().min(1).max(65535),
+        username: z.string().default(""),
+        password: z.string().default(""),
+      }).parse(body);
+      await storage.setGlobalSetting(`device_browser_proxy_${profileId}`, JSON.stringify(cfg));
+      res.json({ ok: true });
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
+
   // ── Mobile Phone Apps scheduler settings ─────────────────────────────────
   // Simple enabled + interval (min/max minutes) persisted per device serial.
   // Stored inside mobile-instances.json under cfg[serial].phoneApps so it

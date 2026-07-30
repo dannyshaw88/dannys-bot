@@ -4,6 +4,20 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.276] — 2026-07-30
+
+### Feature — Device Browser tab: full-screen, proxy config, per-device isolation
+
+**Full-screen browser.** When the Browser tab is active the phone mirror pane is hidden and the browser fills the entire right half of the screen (the same panel that carries all the other tabs). No wasted space.
+
+**Proxy assignment.** A compact bar at the top of the Browser tab lets you enter the proxy in `host:port` format plus a username and password. Click **Save** to persist it to the server — settings survive restarts. Each device stores its own independent proxy config (keyed by device serial), so two devices on different proxies never interfere.
+
+**Working browser connection.** The server-side WebSocket stream handler now handles device-browser profile IDs (≥ 1,000,000) separately from real account profiles: it reads the stored proxy config from the database, launches a Puppeteer/Chrome session with `--proxy-server` and HTTP authentication, and streams it to the client. If no proxy has been saved yet, the panel shows a clear error message asking you to configure one first.
+
+**Per-device isolation.** Chrome's user-data directory is keyed by the device's synthetic profile ID (derived from its serial), so cookies, saved passwords, autofill entries, and session data are completely separate for each physical device and are never shared between them.
+
+---
+
 ## [1.2.275] — 2026-07-30
 
 ### Fix — Collision Preventer: "COLLISION PREVENTED" and "STARTED" no longer share the same timestamp

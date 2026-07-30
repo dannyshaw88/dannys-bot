@@ -8778,6 +8778,57 @@ export function MobilePage() {
     return () => ro.disconnect();
   }, [paneEl]);
   const [activeTab, setActiveTab] = useState<MobileTab>("account");
+
+  // ── Device Browser proxy config ───────────────────────────────────────────
+  const [browserProxyHostPort, setBrowserProxyHostPort] = useState("");
+  const [browserProxyUser,     setBrowserProxyUser]     = useState("");
+  const [browserProxyPass,     setBrowserProxyPass]     = useState("");
+  const [browserProxySaving,   setBrowserProxySaving]   = useState(false);
+  const [browserProxyError,    setBrowserProxyError]    = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!activeSerial) return;
+    fetch(`/api/mobile/devices/${encodeURIComponent(activeSerial)}/browser-proxy`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.proxy) {
+          setBrowserProxyHostPort(`${d.proxy.host}:${d.proxy.port}`);
+          setBrowserProxyUser(d.proxy.username ?? "");
+          setBrowserProxyPass(d.proxy.password ?? "");
+        } else {
+          setBrowserProxyHostPort("");
+          setBrowserProxyUser("");
+          setBrowserProxyPass("");
+        }
+      })
+      .catch(() => {});
+  }, [activeSerial]);
+
+  const saveBrowserProxy = async () => {
+    if (!activeSerial) return;
+    setBrowserProxySaving(true);
+    setBrowserProxyError(null);
+    try {
+      const [host, portStr] = browserProxyHostPort.trim().split(":");
+      const port = parseInt(portStr ?? "", 10);
+      if (!host || !portStr || isNaN(port) || port < 1 || port > 65535) {
+        setBrowserProxyError("Enter proxy as host:port (e.g. 192.168.1.254:29842)");
+        return;
+      }
+      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(activeSerial)}/browser-proxy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ host, port, username: browserProxyUser, password: browserProxyPass }),
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok || !body?.ok) setBrowserProxyError(body?.error ?? "Save failed");
+    } catch (e: any) {
+      setBrowserProxyError(e?.message ?? "Network error");
+    } finally {
+      setBrowserProxySaving(false);
+    }
+  };
+
   // Remembers where the user was before opening the Debugging Log tab so the
   // ← back button can return them to the exact same location (tab + slot).
   const [prevLogLocation, setPrevLogLocation] = useState<{ tab: MobileTab; slotIdx: number | null } | null>(null);
@@ -9004,7 +9055,7 @@ export function MobilePage() {
             automation run-loop timers on every 3-second USB poll flicker.
             Use CSS hiding instead so the hooks stay alive through any gap. */}
         <div className={showSplitView ? "flex-1 min-h-0 flex" : "hidden"}>
-            <div ref={setPaneEl} className="w-1/2 h-full flex items-center justify-center p-4 min-h-0">
+            <div ref={setPaneEl} className={activeTab === "browser" ? "hidden" : "w-1/2 h-full flex items-center justify-center p-4 min-h-0"}>
               {/* PhoneSlot sizes its own shell exactly to the phone's real
                   reported resolution using the measured pane size below —
                   see PhoneSlot's "Exact shell sizing" block for why this
@@ -9037,7 +9088,7 @@ export function MobilePage() {
                 />
               ))}
             </div>
-            <div className="w-1/2 h-full min-h-0 flex flex-col border-l border-border">
+            <div className={`${activeTab === "browser" ? "w-full" : "w-1/2 border-l border-border"} h-full min-h-0 flex flex-col`}>
               <div className="shrink-0 flex items-center border-b border-border px-4">
                 {MOBILE_TABS_LEFT.map(t => (
                   <button
@@ -9084,21 +9135,62 @@ export function MobilePage() {
                   <AccountSettingsPanel ref={accountPanelRef} phone={stickySlot0Ref.current} addLog={addLog} onSlotChange={setOpenAccountSlot} initialSlot={initialSlot} onAnyEnabled={setHstEnabled} onPhoneAppsRunning={setPhoneAppsRunning} />
                 </div>
                 {/* Browser tab — isolated ghost browser per device serial */}
-                {activeTab === "browser" && activeSerial ? (
-                  <div className="h-full w-full overflow-hidden">
-                    <BrowserPanel
-                      profileId={serialToBrowserId(activeSerial)}
-                      userAgent=""
-                      username={activeSerial}
-                      embedded
-                      forceStream
-                    />
+                {activeTab === "browser" && (
+                  <div className="h-full w-full flex flex-col">
+                    {/* Proxy config bar */}
+                    <div className="shrink-0 flex flex-wrap items-center gap-2 px-3 py-2 border-b border-border bg-muted/30">
+                      <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Proxy</span>
+                      <input
+                        type="text"
+                        placeholder="host:port"
+                        value={browserProxyHostPort}
+                        onChange={e => setBrowserProxyHostPort(e.target.value)}
+                        className="h-7 rounded border border-border bg-background px-2 text-xs w-40 font-mono"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Username"
+                        value={browserProxyUser}
+                        onChange={e => setBrowserProxyUser(e.target.value)}
+                        className="h-7 rounded border border-border bg-background px-2 text-xs w-28"
+                      />
+                      <input
+                        type="password"
+                        placeholder="Password"
+                        value={browserProxyPass}
+                        onChange={e => setBrowserProxyPass(e.target.value)}
+                        className="h-7 rounded border border-border bg-background px-2 text-xs w-28"
+                      />
+                      <button
+                        type="button"
+                        disabled={browserProxySaving || !browserProxyHostPort.trim()}
+                        onClick={saveBrowserProxy}
+                        className="h-7 px-3 rounded text-xs font-medium bg-primary text-primary-foreground disabled:opacity-50"
+                      >
+                        {browserProxySaving ? "Saving…" : "Save"}
+                      </button>
+                      {browserProxyError && (
+                        <span className="text-xs text-destructive">{browserProxyError}</span>
+                      )}
+                    </div>
+                    {/* Browser panel — fills remaining height */}
+                    {activeSerial ? (
+                      <div className="flex-1 min-h-0 overflow-hidden">
+                        <BrowserPanel
+                          profileId={serialToBrowserId(activeSerial)}
+                          userAgent=""
+                          username={activeSerial}
+                          embedded
+                          forceStream
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
+                        No device connected
+                      </div>
+                    )}
                   </div>
-                ) : activeTab === "browser" ? (
-                  <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
-                    No device connected
-                  </div>
-                ) : null}
+                )}
                 {activeTab === "phonesettings" && (
                   <PhoneSettingsPanel serial={activeSerial} />
                 )}

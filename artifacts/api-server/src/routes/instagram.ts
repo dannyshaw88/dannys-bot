@@ -4592,6 +4592,48 @@ export async function registerInstagramRoutes(
     }
     const profileId = Number(match[1]);
 
+    // ── Device browser (profileId ≥ 1,000,000 = mobile device synthetic ID) ─
+    // These browsers are launched per-device from the "Browser" tab on the
+    // Phone Farm device detail page. They are NOT tied to a DB profile — proxy
+    // credentials are stored in global settings keyed by the synthetic profileId.
+    if (profileId >= 1_000_000) {
+      const allSettings = await storage.getGlobalSettings().catch(() => ({} as Record<string, string>));
+      const proxyRaw = allSettings[`device_browser_proxy_${profileId}`] ?? null;
+      const proxyCfg = proxyRaw && proxyRaw !== "null" ? JSON.parse(proxyRaw) : null;
+      if (!proxyCfg) {
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          ws.send(JSON.stringify({ type: "error", message: "No proxy configured — add a proxy in the Browser tab settings before connecting." }));
+          ws.close();
+        });
+        return;
+      }
+      const deviceProxy: ProxyConfig = {
+        host:     proxyCfg.host,
+        port:     proxyCfg.port,
+        type:     "http" as const,
+        username: proxyCfg.username || undefined,
+        password: proxyCfg.password || undefined,
+      };
+      wss.handleUpgrade(request, socket, head, async (ws) => {
+        ws.on("close", () => { detachWS(profileId, ws); });
+        try {
+          const ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+          ws.send(JSON.stringify({ type: "launching" }));
+          await getOrCreateSession(profileId, ua, deviceProxy, undefined);
+          if (hasActiveWS(profileId)) {
+            try { ws.send(JSON.stringify({ type: "already-connected" })); ws.close(); } catch {}
+            return;
+          }
+          attachWS(profileId, ws);
+        } catch (err: any) {
+          ws.send(JSON.stringify({ type: "error", message: err?.message || "Failed to start browser" }));
+          ws.close();
+        }
+      });
+      return;
+    }
+    // ── Standard profile-based browser ───────────────────────────────────────
+
     const profile = await storage.getProfile(profileId).catch(() => null);
     if (!profile) { socket.destroy(); return; }
 
