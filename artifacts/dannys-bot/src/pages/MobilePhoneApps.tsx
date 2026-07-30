@@ -279,7 +279,7 @@ interface MobilePhoneAppsPanelProps {
   onNextRunAt:       (ts: number | null) => void;
   onRunning?:        (running: boolean) => void;
   onLog?:            (msg: string) => void;
-  requestSlot?:      (idx: number, readyAt: number) => Promise<boolean>;
+  requestSlot?:      (idx: number, readyAt: number, onQueued?: () => void) => Promise<boolean>;
   releaseSlot?:      (idx: number, skipRest?: boolean) => void;
   cancelQueuedSlot?: (idx: number) => void;
 }
@@ -394,7 +394,9 @@ export function MobilePhoneAppsPanel({
 
     const hstTurnAt = nextRunAtRef.current ?? Date.now();
     if (requestSlot) {
-      await requestSlot(PHONE_APPS_SLOT_IDX, hstTurnAt);
+      await requestSlot(PHONE_APPS_SLOT_IDX, hstTurnAt, () => {
+        onLogRef.current?.("Phone Apps — collision detected; device busy, waiting for rest window");
+      });
       if (stopRef.current) { releaseSlot?.(PHONE_APPS_SLOT_IDX, true); runningRef.current = false; onRunningRef.current?.(false); return; }
     }
 

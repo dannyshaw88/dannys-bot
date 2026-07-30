@@ -4,6 +4,94 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.288] — 2026-07-30
+
+### Fix — Collision Preventer now logs when Phone Apps is blocked by a running Instagram slot
+
+**Problem:** When Mobile Phone Apps tried to run while a Human Session Tool slot was already
+active (or vice versa), the collision was silently swallowed with no log entry. The HST path
+logged "collision detected; queued" but Phone Apps had no equivalent — the user could not
+tell from the Action Log that Phone Apps had been delayed.
+
+**Root cause:** The `requestSlot` prop type on `MobilePhoneAppsPanel` was typed as
+`(idx, readyAt) => Promise<boolean>` — the optional third `onQueued` callback parameter was
+missing from the interface entirely, so there was no way to pass a log callback into the
+collision preventer path.
+
+**Fix:**
+- `MobilePhoneApps.tsx` — added the optional `onQueued?: () => void` third parameter to the
+  `requestSlot` prop type.
+- `MobilePhoneApps.tsx` — `runCycle` now passes an `onQueued` callback that writes
+  `"Phone Apps — collision detected; device busy, waiting for rest window"` to the Action Log
+  whenever Phone Apps is queued behind a running HST slot (matching the same visibility as
+  existing HST collision entries).
+
+**Collision coverage matrix (all three cases now correctly handled):**
+
+| Scenario | What happens |
+|---|---|
+| HST slot running → Phone Apps tries to fire | Phone Apps queues; Action Log shows collision |
+| Phone Apps running → HST slot tries to fire | HST slot queues; Action Log shows collision |
+| HST slot A running → HST slot B tries to fire | Slot B queues (existing behaviour) |
+
+**Files changed:**
+- `artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx`
+
+---
+
+### Fix — Removed unsolicited Debug ZIP button from Debugging Log
+
+**Problem:** A "Debug ZIP" button appeared in the Debugging Log toolbar that was never requested.
+It offered to download a ZIP of debug screenshots + server log, but the user did not ask for
+this feature.
+
+**Fix:** Removed the button, its `handleDownloadDebugZip` click handler, and the
+`downloadingZip` React state variable.
+
+**Files changed:**
+- `artifacts/dannys-bot/src/pages/MobilePage.tsx`
+
+---
+
+### Add — Browser tab debug strip + server-side logging for rendering failures
+
+**Problem:** When the Browser tab (Phone Farm → Device → Browser) fails to render any webpages,
+there is no visible feedback. Chrome may launch but frames never arrive — the panel sits on a
+blank white canvas after the 45-second overlay times out with no explanation of what went wrong.
+
+**What was added:**
+
+**Client-side debug strip** (visible below the toolbar whenever `forceStream` is active, i.e.
+the server-side Puppeteer browser path used by the device browser):
+
+- **`frames: N`** — shown in red if zero frames have been received from Chrome, green once
+  they start flowing. Immediately indicates whether Puppeteer's screencast pipeline is broken
+  or working.
+- **`ws: connected/error/idle`** — live WebSocket state colour-coded (green/red/amber).
+- **`err: …`** — any error message sent from the server (e.g. "Failed to start browser",
+  "no proxy assigned", Chrome crash details), shown in red.
+- Click the strip to expand it and see: connection mode, connect attempt count, last WS message
+  type received, stream URL, and whether the first-frame overlay has ever been cleared.
+
+The frame counter is throttled (updates every 30 frames) to avoid redundant React re-renders at
+60 fps.
+
+**Server-side logging** added to the device browser WS upgrade path in `instagram.ts`:
+- `[device-browser:ID] WS upgrade accepted — proxy: none / host:port`
+- `[device-browser:ID] Calling getOrCreateSession…`
+- `[device-browser:ID] getOrCreateSession returned OK` (or `Launch failed: <reason>`)
+- `[device-browser:ID] already-connected — rejecting duplicate WS`
+- `[device-browser:ID] Attaching WS to session`
+
+These log lines appear in the API server console output and allow diagnosing Chrome launch
+failures without needing to add breakpoints or dig through generic error messages.
+
+**Files changed:**
+- `artifacts/dannys-bot/src/components/BrowserPanel.tsx`
+- `artifacts/api-server/src/routes/instagram.ts`
+
+---
+
 ## [1.2.287] — 2026-07-30
 
 ### Fix — Phone Farm device browser navigated to Instagram instead of the configured homepage

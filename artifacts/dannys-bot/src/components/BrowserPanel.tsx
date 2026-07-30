@@ -148,6 +148,14 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
   const [aiResult, setAiResult] = useState<{ imageBase64: string; fileName: string; metadata: { make: string; model: string; shotAt: string; iso: number } } | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
 
+  // ── Debug strip state ─────────────────────────────────────────────────────
+  const [dbgFrameCount,  setDbgFrameCount]  = useState(0);
+  const [dbgWsError,     setDbgWsError]     = useState<string | null>(null);
+  const [dbgLastMsg,     setDbgLastMsg]     = useState<string | null>(null);
+  const [dbgConnects,    setDbgConnects]    = useState(0);
+  const [dbgExpanded,    setDbgExpanded]    = useState(false);
+  const dbgFrameCountRef = useRef(0);
+
   // F12 on the canvas toggles the log panel
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -311,6 +319,11 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
     setIsLoading(true);
     setWaitingFirstFrame(true);
     hasReceivedFirstFrameRef.current = false;
+    dbgFrameCountRef.current = 0;
+    setDbgFrameCount(0);
+    setDbgWsError(null);
+    setDbgLastMsg(null);
+    setDbgConnects(prev => prev + 1);
 
     // Safety net: if Chrome only ever sends blank frames (e.g. very slow proxy),
     // dismiss the overlay after 45 s so the user isn't stuck staring at the spinner.
@@ -343,6 +356,10 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
       // frames if they arrive faster than the display refreshes.
       if (evt.data instanceof Blob) {
         lastFrameTimeRef.current = Date.now();
+        // Increment frame counter — only trigger React re-render every 30 frames
+        // to avoid 80+ redundant state updates per second on the debug strip.
+        dbgFrameCountRef.current += 1;
+        if (dbgFrameCountRef.current % 30 === 1) setDbgFrameCount(dbgFrameCountRef.current);
         // Only flip state (→ React re-render) when actually transitioning out of frozen.
         if (isFrozenRef.current) { isFrozenRef.current = false; setIsFrozen(false); }
         // Any blob frame — even a blank/white checkpoint page — counts as first frame.
@@ -419,6 +436,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
             break;
           case "error":
             setErrorMsg(msg.message ?? "Unknown error");
+            setDbgWsError(msg.message ?? "Unknown error");
             setStatusSafe("error");
             setIsLoading(false);
             ws.close();
@@ -486,6 +504,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
             wsGenRef.current++;
             break;
         }
+        setDbgLastMsg(msg.type ?? "unknown");
         try { onMessage?.(msg); } catch {}
       } catch {}
     };
@@ -904,6 +923,37 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
         )}
       </div>}
 
+
+      {/* ── Debug strip (always visible when forceStream / device browser) ── */}
+      {forceStream && !IS_ELECTRON && (
+        <div
+          className="shrink-0 border-b border-border bg-slate-950 text-[10px] font-mono cursor-pointer select-none"
+          onClick={() => setDbgExpanded(prev => !prev)}
+        >
+          {/* Collapsed summary row */}
+          <div className="flex items-center gap-3 px-3 py-1 text-slate-400">
+            <span className={dbgFrameCountRef.current === 0 ? "text-red-400" : "text-green-400"}>
+              frames: {dbgFrameCount}
+            </span>
+            <span className={status === "connected" ? "text-green-400" : status === "error" ? "text-red-400" : "text-amber-400"}>
+              ws: {status}
+            </span>
+            {dbgWsError && <span className="text-red-300 truncate max-w-[240px]">err: {dbgWsError}</span>}
+            <span className="ml-auto text-slate-600">{dbgExpanded ? "▲" : "▼"} debug</span>
+          </div>
+          {/* Expanded detail */}
+          {dbgExpanded && (
+            <div className="px-3 pb-2 space-y-0.5 text-slate-400 border-t border-slate-800 pt-1">
+              <div>mode: forceStream (server-side Puppeteer)</div>
+              <div>connect attempts: {dbgConnects}</div>
+              <div>last msg type: {dbgLastMsg ?? "—"}</div>
+              <div>stream url: {streamUrl ?? `/api/browser/${profileId}/stream`}</div>
+              <div>first-frame overlay cleared: {!waitingFirstFrame ? "yes" : "no"}</div>
+              {dbgWsError && <div className="text-red-300 break-all">error: {dbgWsError}</div>}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Debug panel (F12) shows login log + browser console */}
       {showLog && (

@@ -4615,16 +4615,23 @@ export async function registerInstagramRoutes(
 
       wss.handleUpgrade(request, socket, head, async (ws) => {
         ws.on("close", () => { detachWS(profileId, ws); });
+        const proxyDesc = useLocalIp ? "none" : `${deviceProxy?.host ?? "?"}:${deviceProxy?.port ?? "?"}`;
+        console.log(`[device-browser:${profileId}] WS upgrade accepted — proxy: ${proxyDesc}`);
         try {
           const ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
           ws.send(JSON.stringify({ type: "launching" }));
+          console.log(`[device-browser:${profileId}] Calling getOrCreateSession…`);
           await getOrCreateSession(profileId, ua, deviceProxy, undefined);
+          console.log(`[device-browser:${profileId}] getOrCreateSession returned OK`);
           if (hasActiveWS(profileId)) {
+            console.log(`[device-browser:${profileId}] already-connected — rejecting duplicate WS`);
             try { ws.send(JSON.stringify({ type: "already-connected" })); ws.close(); } catch {}
             return;
           }
+          console.log(`[device-browser:${profileId}] Attaching WS to session`);
           attachWS(profileId, ws);
         } catch (err: any) {
+          console.log(`[device-browser:${profileId}] Launch failed: ${err?.message ?? "unknown"}`);
           ws.send(JSON.stringify({ type: "error", message: err?.message || "Failed to start browser" }));
           ws.close();
         }
