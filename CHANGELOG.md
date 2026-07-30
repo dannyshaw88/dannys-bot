@@ -4,6 +4,80 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.286] — 2026-07-30
+
+### Fix — Device Browser tab showed "Starting browser… Loading Instagram, please wait" spinner forever
+
+**Problem:** Opening the Browser tab on any Phone Farm device detail page produced an
+infinite "Starting browser… Loading Instagram, please wait" spinner. The browser never
+loaded and there was no error message — it just sat on the spinner indefinitely no matter
+how long you waited.
+
+**Root cause:** The Phone Farm device browser uses synthetic profile IDs (≥ 1,000,000)
+and the `forceStream` prop to request a Puppeteer-streamed Chrome session that sends live
+JPEG frames over WebSocket. The frontend's overlay clears only when it receives either a
+binary JPEG frame or a `screencast_started` JSON message.
+
+On the server side, four functions in `browserSession.ts` — `getOrCreateSession`,
+`attachWS`, `hasActiveWS`, and `detachWS` — all began with an `if (IS_ELECTRON_EB)`
+guard that immediately took the native Electron-window path for **every** profile ID,
+including these synthetic device-browser IDs. The native-window path sends a single
+`loginStatus` text message ("✓ Instagram browser is open as a native window.") and
+returns — it never calls `startScreencast`, never sends binary frames, and never emits
+`screencast_started`. The frontend received the `loginStatus` message (which only appears
+in the F12 debug log panel), never received any frames, and kept `waitingFirstFrame = true`
+indefinitely.
+
+**Fix:** Added `&& profileId < 1_000_000` to the `IS_ELECTRON_EB` guard in all four
+functions. Device-browser IDs now fall through to the Puppeteer path even when running
+inside Electron: Chrome launches, `startScreencast` fires, JPEG frames begin arriving,
+and the "Starting browser…" overlay clears on the first frame.
+
+**Files changed:** `artifacts/api-server/src/instagram/browserSession.ts`
+
+---
+
+### Improvement — Phone Farm Browser tab now fills the full width of the window
+
+**Problem:** The Browser tab content was constrained to the right half of the Phone Farm
+split-view layout (the same `w-1/2` panel as all other tabs). This gave the embedded
+browser only half the available horizontal space, making it hard to use for anything other
+than quick checks.
+
+**What changed:** When the Browser tab is active, the browser content panel now uses
+`position: absolute; left: -100%; right: 0` relative to the right panel's content area.
+Because the right panel is exactly `w-1/2` of the split container, `left: -100%` reaches
+the left edge of the split container exactly — giving the browser the full available width
+(minus the left nav sidebar). The tab bar row (Accounts / Browser / Metrics / My Device /
+Action Log / Debugging Log) stays in its original position; only the content below it
+expands. The left phone-mirror panel holds its `w-1/2` width so the tab bar never shifts
+horizontally when switching to or from the Browser tab.
+
+**Files changed:** `artifacts/dannys-bot/src/pages/MobilePage.tsx`
+
+---
+
+### Improvement — Phone Farm tab bar now shows an icon after each tab label
+
+**What changed:** Each tab in the Phone Farm device detail tab bar now displays a small
+Lucide icon (16×14 px, 70 % opacity) immediately after its text label:
+
+| Tab | Icon |
+|---|---|
+| Accounts | Users |
+| Browser | Globe |
+| Metrics | BarChart2 |
+| My Device | Smartphone |
+| Action Log | ClipboardList |
+| Debugging Log | Bug |
+
+The icons are purely decorative / navigational aids — they do not change any tab behaviour,
+layout, or spacing beyond a `gap-1.5` between the label and the icon inside each button.
+
+**Files changed:** `artifacts/dannys-bot/src/pages/MobilePage.tsx`
+
+---
+
 ## [1.2.285] — 2026-07-30
 
 ### Fix — View Reels: "lastPollXml is not defined" ReferenceError crashed every cycle that ran Reels
