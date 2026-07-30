@@ -4924,6 +4924,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const wantShareDm     = shareDmPercentMax > 0 && Math.random() * 100 < rollRange(shareDmPercentMin, shareDmPercentMax);
       const wantClickAuthor = clickAuthorPctMax > 0 && Math.random() * 100 < rollRange(clickAuthorPctMin, clickAuthorPctMax);
 
+      // Holds the last UIAutomator dump from the reel-player poll below.
+      // Declared here (outside the poll block) so the ad-detection check at
+      // the bottom of this reel iteration can reference it regardless of
+      // whether the poll block ran (i.e. even when wantLike/Share/Save are all
+      // false but wantClickAuthor or another action is active).
+      let lastPollXml = "";
+
       if (wantLike || wantShareFeed || wantSave || wantShareDm) {
         // ── View Reels: wait for reel player nodes to appear ────────────────
         // Problem: the reel viewer sometimes opens in a separate accessibility
@@ -4972,7 +4979,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           const POLL_MS   = 2000;
           const MAX_POLLS = 6; // up to 12 s extra wait
           let reelReady = false;
-          let lastPollXml = "";
           for (let p = 0; p < MAX_POLLS && !reelReady; p++) {
             const pollXml = await android.dumpUi(serial).catch(() => "");
             lastPollXml = pollXml;

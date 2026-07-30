@@ -4,6 +4,23 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.285] — 2026-07-30
+
+### Fix — View Reels: "lastPollXml is not defined" crash ending every cycle
+
+`lastPollXml` was declared inside a `{ }` block scoped to the
+`if (wantLike || wantShareFeed || wantSave || wantShareDm)` guard, but
+referenced outside that block by the ad-detection check at the bottom of
+each reel iteration. JavaScript raises a `ReferenceError` the moment any
+reel iteration reaches the ad check, crashing the entire automation cycle
+with "Cycle failed — lastPollXml is not defined".
+
+Fixed by hoisting the declaration to the top of the reel iteration loop
+(before the `if` guard), so it is always in scope when the ad-detection
+check runs regardless of which actions were active.
+
+---
+
 ## [1.2.284] — 2026-07-30
 
 ### Fix — Cookie consent popup now detected and accepted when it appears after Instagram loads
