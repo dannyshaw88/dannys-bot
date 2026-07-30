@@ -7,6 +7,7 @@ import { logger } from "./lib/logger";
 import { getLogUseLocalTime, setLogUseLocalTime } from "./lib/logSettings";
 import { registerInstagramRoutes } from "./routes/instagram";
 import { registerMobileRoutes } from "./routes/mobile";
+import { registerImageGenRoutes } from "./routes/imageGen";
 
 const port = Number(process.env["PORT"] ?? "3000");
 
@@ -86,6 +87,7 @@ console.log(`[server] Log file: ${SERVER_LOG_PATH}`);
 const httpServer = createServer(app);
 
 registerMobileRoutes(httpServer, app);
+registerImageGenRoutes(app);
 
 registerInstagramRoutes(httpServer, app).then(async () => {
   // Sync log timestamp mode with the persisted setting

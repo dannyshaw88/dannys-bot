@@ -78,6 +78,25 @@ jobs:
           echo "=== dannys-bot/dist ==="
           ls artifacts/dannys-bot/dist/
 
+      - name: Set up Python embeddable runtime
+        working-directory: artifacts/electron
+        shell: bash
+        run: |
+          mkdir -p resources/python-embed
+          # Download Windows embeddable Python 3.12
+          curl -fsSL "https://www.python.org/ftp/python/3.12.9/python-3.12.9-embed-amd64.zip" \
+            -o python-embed.zip
+          unzip -q python-embed.zip -d resources/python-embed/
+          rm python-embed.zip
+          # Bootstrap script so the app can install pip on first run
+          curl -fsSL "https://bootstrap.pypa.io/get-pip.py" \
+            -o resources/python-embed/get-pip.py
+          # Copy sidecar server files
+          cp sidecar/server.py resources/python-embed/server.py
+          cp sidecar/requirements.txt resources/python-embed/requirements.txt
+          echo "Python embed ready:"
+          ls resources/python-embed/ | head -20
+
       - name: Install Electron deps
         working-directory: artifacts/electron
         run: npm install --ignore-scripts

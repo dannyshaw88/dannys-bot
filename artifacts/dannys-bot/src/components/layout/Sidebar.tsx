@@ -80,6 +80,25 @@ function FilledShieldAlertIcon({ className, style }: { className?: string; style
 }
 
 
+function FilledImageGenIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+      {/* Rounded photo frame */}
+      <rect x="1" y="3" width="22" height="18" rx="3" fill="currentColor"/>
+      {/* Sky area (white) */}
+      <rect x="3" y="5" width="18" height="10" rx="1.5" fill="white"/>
+      {/* Ground strip */}
+      <rect x="3" y="15" width="18" height="4" rx="1" fill="white" opacity="0.4"/>
+      {/* Sun circle */}
+      <circle cx="8" cy="9" r="2" fill="currentColor"/>
+      {/* Mountain / landscape triangle */}
+      <polygon points="10,15 16,8 22,15" fill="currentColor" opacity="0.7"/>
+      {/* Sparkle top-right */}
+      <circle cx="19" cy="6" r="1" fill="currentColor"/>
+    </svg>
+  );
+}
+
 function FilledHammerIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
@@ -124,6 +143,7 @@ export function Sidebar() {
     { name: "Dashboard",       shortLabel: "DASHBOARD",      path: "/dashboard",    icon: FilledDashboardIcon   },
     { name: "Phone Farm",      shortLabel: "PHONE FARM",     path: "/mobile",       icon: FilledFarmIcon        },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon    },
+    { name: "AI Images",      shortLabel: "AI IMAGES",      path: "/image-gen",    icon: FilledImageGenIcon    },
     { name: "Settings",        shortLabel: "SETTINGS",       path: "/settings",     icon: FilledSettingsIcon    },
   ];
 

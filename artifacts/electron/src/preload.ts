@@ -36,4 +36,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
   settingsGetAll: () => ipcRenderer.invoke("settings-get-all"),
   openFolderDialog: (defaultPath?: string) => ipcRenderer.invoke("open-folder-dialog", defaultPath),
   countFolderFiles: (folderPath: string) => ipcRenderer.invoke("count-folder-files", folderPath),
+  setupImageGen: () => ipcRenderer.invoke("image-gen-setup"),
+  onImageGenSetupProgress: (cb: (line: string, done: boolean) => void) => {
+    ipcRenderer.on("image-gen-setup-progress", (_e, data: { line: string; done: boolean }) => {
+      cb(data.line, data.done);
+    });
+  },
+  openImageGenOutputDir: () => ipcRenderer.invoke("image-gen-open-output-dir"),
 });

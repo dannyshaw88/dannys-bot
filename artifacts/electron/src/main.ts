@@ -55,9 +55,96 @@ const execAsync = promisify(exec);
 
 let serverPort = 0;
 let serverProc: ChildProcess | null = null;
+let imageGenProc: ChildProcess | null = null;
+let imageGenPort = 0;
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
+
+// ── Image-gen sidecar helpers ─────────────────────────────────────────────────
+function getPythonPath(): string {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, "python-embed", "python.exe");
+  }
+  // Development: use system Python (not available on non-Windows dev machines)
+  return process.platform === "win32" ? "python" : "python3";
+}
+
+function getImageGenScriptPath(): string {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, "python-embed", "server.py");
+  }
+  return path.join(__dirname, "..", "sidecar", "server.py");
+}
+
+function getImageGenModelsDir(): string {
+  return path.join(getUserDataPath(), "image-gen-models");
+}
+
+function getImageGenOutputDir(): string {
+  return path.join(getUserDataPath(), "image-gen-output");
+}
+
+function isTorchInstalled(): boolean {
+  const pythonExe = getPythonPath();
+  if (app.isPackaged) {
+    // Embedded Python: check for torch in the embed's site-packages
+    const torchInit = path.join(
+      path.dirname(pythonExe),
+      "Lib",
+      "site-packages",
+      "torch",
+      "__init__.py",
+    );
+    return fs.existsSync(torchInit);
+  }
+  // Dev mode: assume not available to avoid noisy failures
+  return false;
+}
+
+function spawnImageGenServer(port: number): void {
+  if (process.platform !== "win32") {
+    // Image gen sidecar only supported on Windows (where the desktop app runs)
+    appendToMainLog("[image-gen] Non-Windows platform — skipping sidecar spawn");
+    return;
+  }
+
+  const scriptPath = getImageGenScriptPath();
+  if (!fs.existsSync(scriptPath)) {
+    appendToMainLog(`[image-gen] server.py not found at ${scriptPath} — skipping`);
+    return;
+  }
+
+  if (!isTorchInstalled()) {
+    appendToMainLog("[image-gen] torch not installed — skipping auto-spawn (user must run setup from the AI Images page)");
+    return;
+  }
+
+  const pythonExe = getPythonPath();
+  const modelsDir = getImageGenModelsDir();
+  const outputDir = getImageGenOutputDir();
+  try { fs.mkdirSync(modelsDir, { recursive: true }); } catch {}
+  try { fs.mkdirSync(outputDir, { recursive: true }); } catch {}
+
+  appendToMainLog(`[image-gen] Spawning server — port=${port} python=${pythonExe}`);
+
+  imageGenProc = spawn(pythonExe, [scriptPath], {
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      IMAGE_GEN_PORT: String(port),
+      IMAGE_GEN_MODELS_DIR: modelsDir,
+      IMAGE_GEN_OUTPUT_DIR: outputDir,
+    },
+  });
+
+  imageGenProc.stdout?.on("data", (d: Buffer) => appendToMainLog(`[image-gen] ${d.toString().trim()}`));
+  imageGenProc.stderr?.on("data", (d: Buffer) => appendToMainLog(`[image-gen] ${d.toString().trim()}`));
+  imageGenProc.on("exit", (code) => {
+    appendToMainLog(`[image-gen] Server exited with code ${code}`);
+    imageGenProc = null;
+  });
+}
 let splashWin: BrowserWindow | null = null;
 let splashIconDataUrl = "";
 
@@ -266,7 +353,7 @@ function rotateLogs(logPath: string): void {
   } catch {}
 }
 
-function startServer(port: number, logPath: string, ebIpcPort = 0): void {
+function startServer(port: number, logPath: string, ebIpcPort = 0, imgGenPort = 0): void {
   // Rotate previous log so it survives the next restart (logs → logs.1 → logs.2 → logs.3)
   rotateLogs(logPath);
 
@@ -305,6 +392,7 @@ function startServer(port: number, logPath: string, ebIpcPort = 0): void {
       ...(nodeModulesPath ? { NODE_PATH: nodeModulesPath } : {}),
       ...(chromiumPath ? { CHROMIUM_PATH: chromiumPath } : {}),
       ...(ebIpcPort   ? { EB_IPC_PORT: String(ebIpcPort) } : {}),
+      ...(imgGenPort  ? { IMAGE_GEN_PORT: String(imgGenPort) } : {}),
       IDEVICE_BIN_DIR: app.isPackaged
         ? path.join(process.resourcesPath, "bin", "win32")
         : path.join(__dirname, "..", "..", "resources", "bin", "win32"),
@@ -1091,7 +1179,16 @@ async function createWindow() {
     console.error("[EB] Failed to start IPC server:", err);
   }
 
-  startServer(serverPort, logPath, ebIpcPort);
+  // Find a free port for the image-gen sidecar (Windows desktop only)
+  if (process.platform === "win32") {
+    try { imageGenPort = await findFreePort(); } catch { imageGenPort = 17860; }
+  }
+
+  startServer(serverPort, logPath, ebIpcPort, imageGenPort);
+
+  // Spawn the Python image-gen sidecar after the Node server is launched
+  // (non-blocking — the UI handles "not yet ready" via the status endpoint)
+  if (imageGenPort) spawnImageGenServer(imageGenPort);
 
   try {
     await waitForServer(serverPort);
@@ -1143,6 +1240,72 @@ async function createWindow() {
       appendToMainLog(`[auto-updater] setup failed (non-fatal): ${(e as Error)?.message ?? String(e)}`);
     }
   }
+
+  // ── Image-gen IPC ─────────────────────────────────────────────────────────────
+  let imageGenSetupRunning = false;
+
+  ipcMain.handle("image-gen-setup", async () => {
+    if (imageGenSetupRunning) return { ok: false, message: "Setup already running" };
+    const pythonExe = getPythonPath();
+    if (!fs.existsSync(pythonExe)) {
+      return { ok: false, message: "Python executable not found — please reinstall the app." };
+    }
+    const scriptDir = path.dirname(getImageGenScriptPath());
+    const getPipScript = path.join(scriptDir, "get-pip.py");
+    const requirementsFile = path.join(scriptDir, "requirements.txt");
+
+    imageGenSetupRunning = true;
+    const sendProgress = (line: string, done: boolean) => {
+      win?.webContents.send("image-gen-setup-progress", { line, done });
+    };
+
+    try {
+      // Step 1: bootstrap pip into the embeddable distribution
+      if (fs.existsSync(getPipScript)) {
+        sendProgress("Installing pip…", false);
+        await new Promise<void>((resolve, reject) => {
+          const p = spawn(pythonExe, [getPipScript, "--no-warn-script-location"], { stdio: "pipe" });
+          p.stdout?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
+          p.stderr?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
+          p.on("exit", code => code === 0 ? resolve() : reject(new Error(`pip bootstrap failed (code ${code})`)));
+        });
+      }
+
+      // Step 2: install AI libraries (torch + diffusers + friends)
+      sendProgress("Installing AI libraries (downloading ~2 GB for CUDA torch — please wait)…", false);
+      await new Promise<void>((resolve, reject) => {
+        const p = spawn(pythonExe, [
+          "-m", "pip", "install", "-r", requirementsFile,
+          "--extra-index-url", "https://download.pytorch.org/whl/cu121",
+          "--no-warn-script-location",
+        ], { stdio: "pipe" });
+        p.stdout?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
+        p.stderr?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
+        p.on("exit", code => code === 0 ? resolve() : reject(new Error(`pip install failed (code ${code})`)));
+      });
+
+      sendProgress("✅ Setup complete! Starting image gen server…", false);
+
+      // Step 3: spawn the sidecar now that torch is available
+      if (imageGenPort) spawnImageGenServer(imageGenPort);
+
+      sendProgress("Done — you can now load a model from the AI Images page.", true);
+      return { ok: true };
+    } catch (err: any) {
+      const msg = err?.message ?? String(err);
+      sendProgress(`❌ Setup failed: ${msg}`, true);
+      return { ok: false, message: msg };
+    } finally {
+      imageGenSetupRunning = false;
+    }
+  });
+
+  ipcMain.handle("image-gen-open-output-dir", async () => {
+    const outputDir = getImageGenOutputDir();
+    try { fs.mkdirSync(outputDir, { recursive: true }); } catch {}
+    const err = await shell.openPath(outputDir);
+    return { ok: !err };
+  });
 
   ipcMain.handle("open-log", async () => {
     const { shell } = await import("electron");
@@ -1527,6 +1690,11 @@ app.on("before-quit", (event) => {
   trayPopup = null;
   tray?.destroy();
   tray = null;
+  // Kill the image-gen sidecar if it's running
+  if (imageGenProc) {
+    try { imageGenProc.kill("SIGTERM"); } catch {}
+    imageGenProc = null;
+  }
   if (!serverProc) return;
   // Give the server process a moment to flush and close the SQLite database
   // cleanly before Electron exits. better-sqlite3 is synchronous so the
