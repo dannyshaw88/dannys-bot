@@ -6,13 +6,71 @@ All notable changes to Aura Farming are documented here.
 
 ## [1.2.290] — 2026-07-30
 
-### Fix — AI Images page stuck on "Cannot reach the API server"
+### Fix — AI Images page stuck on "Cannot reach the API server" (first launch)
 
-The AI Images page was permanently showing the "Cannot reach the API server" error card instead of the "Install AI Libraries" setup button on first use.
+#### Problem
 
-**Root cause:** When torch/diffusers aren't installed yet the Python sidecar never starts, so the status proxy got ECONNREFUSED from the sidecar port and returned a 503 to the frontend. The frontend treats any non-2xx response the same as a total network failure — so the setup flow never appeared.
+On every first launch of the app (before torch/diffusers have been installed), the **AI Images** page displayed:
 
-**Fix:** The `/api/image-gen/status` endpoint now handles ECONNREFUSED/ETIMEDOUT by returning a 200 with `{ status: "idle" }` and a stub model list. The frontend then renders the setup section with the **Install AI Libraries** button as intended.
+> ⚠️ Cannot reach the API server  
+> The image generation status endpoint is not responding. Make sure the API server is running.
+
+The **Install AI Libraries** button never appeared. The error persisted indefinitely — refreshing or restarting the app made no difference.
+
+#### Root cause
+
+The bug was a status-code mismatch between the backend and frontend.
+
+When torch is not yet installed, Electron skips spawning the Python sidecar (by design — `isTorchInstalled()` returns false → `spawnImageGenServer()` returns early). Nothing is listening on `IMAGE_GEN_PORT`.
+
+The Express `/api/image-gen/status` route forwarded the request to the (absent) sidecar via `http.request`. That connection immediately got `ECONNREFUSED`. The shared `proxyToSidecar()` error handler caught it and responded with **HTTP 503**.
+
+The React frontend (`ImageGenPage.tsx`) checks `r.ok` on the fetch response. HTTP 503 is not `ok` → it set `statusErr = true` and left `status` as `null`. The derived variable `noSidecar = statusErr && !status` became `true`, which unconditionally rendered the "Cannot reach the API server" error card.
+
+The **Install AI Libraries** button is only rendered when `!isUnavailable && !noSidecar && needsLoad` — but `noSidecar` was permanently `true`, so the install flow was permanently blocked.
+
+The error message was also confusing: "API server" refers to the *local* Express server built into the app, not any external or third-party service. No external API is involved at any point.
+
+#### Fix — `artifacts/api-server/src/routes/imageGen.ts`
+
+The `/api/image-gen/status` route now has its own dedicated `http.request` implementation instead of delegating to `proxyToSidecar()`. The custom handler intercepts `ECONNREFUSED`, `ECONNRESET`, and `ETIMEDOUT` (all of which mean "sidecar not running yet") and responds with **HTTP 200**:
+
+```json
+{
+  "status": "idle",
+  "message": "AI libraries not installed. Click \"Install AI Libraries\" to set up.",
+  "available": true,
+  "loaded_model": null,
+  "available_models": {
+    "flux-schnell": { "name": "FLUX.1-schnell",         "default_steps": 4,  "default_guidance": 0   },
+    "sdxl-turbo":   { "name": "SDXL-Turbo",             "default_steps": 1,  "default_guidance": 0   },
+    "sdxl":         { "name": "Stable Diffusion XL",    "default_steps": 30, "default_guidance": 7.5 }
+  }
+}
+```
+
+The frontend reads `status === "idle"` → `needsLoad = true` → renders the `SetupSection` component with the **Install AI Libraries** button. The install flow works as designed from this point on.
+
+The 5-second timeout on the status probe (vs 300 s for generation) ensures the response is fast even if something is unexpectedly slow to reject the connection.
+
+All other routes (`/load`, `/generate`, `/output`) continue to go through `proxyToSidecar()` unchanged and return 503 on connection failure, which is correct — those operations genuinely cannot proceed without a running sidecar.
+
+#### Flow after this fix (first launch, torch not installed)
+
+1. App starts → Electron finds a free port, sets `IMAGE_GEN_PORT`, spawns Express.
+2. Express starts → `isTorchInstalled()` is false → Python sidecar is **not** spawned.
+3. User opens AI Images page → frontend polls `/api/image-gen/status` every 3 s.
+4. Express tries to connect to sidecar port → ECONNREFUSED → returns `{ status: "idle" }` with 200.
+5. Frontend: `r.ok = true`, `status.status = "idle"`, `noSidecar = false`, `needsLoad = true`.
+6. **"Install AI Libraries"** button renders correctly.
+7. User clicks it → Electron IPC `image-gen-setup` → runs `get-pip.py` then `pip install -r requirements.txt` → live log streams to terminal UI → ~1.5–2.5 GB download.
+8. On completion → `spawnImageGenServer()` is called → sidecar starts on `IMAGE_GEN_PORT`.
+9. Next status poll hits the real sidecar → returns `{ status: "idle" }` from Python → model selector appears.
+10. User picks a model → **Load Model** → `{ status: "loading" }` → `{ status: "ready" }` → Generate.
+
+#### Files changed
+
+- `artifacts/api-server/src/routes/imageGen.ts` — dedicated status handler with ECONNREFUSED→200 conversion
 
 ---
 
