@@ -2167,7 +2167,10 @@ export async function getOrCreateSession(
   userAgentApi?: string | null,
 ): Promise<Session> {
   // ── Electron native EB mode ────────────────────────────────────────────────
-  if (IS_ELECTRON_EB) {
+  // Device-browser IDs (≥ 1_000_000) are always Puppeteer-streamed even inside
+  // Electron — the Phone Farm "Browser" tab uses forceStream=true and expects a
+  // real Chrome session + screencast frames.  Skip the native EB path for them.
+  if (IS_ELECTRON_EB && profileId < 1_000_000) {
     const newProxyKey = proxy ? `${proxy.host}:${proxy.port}` : "direct";
     // Always update the map and always call /eb/open.
     // openEbWindow already handles "already open" by focusing the existing window,
@@ -3202,7 +3205,7 @@ export async function getOrCreateSession(
 
 /** True if the profile already has an open WS connection serving its EB session. */
 export function hasActiveWS(profileId: number): boolean {
-  if (IS_ELECTRON_EB) {
+  if (IS_ELECTRON_EB && profileId < 1_000_000) {
     const s = electronSessions.get(profileId);
     return !!(s?.ws && s.ws.readyState === WebSocket.OPEN);
   }
@@ -3211,7 +3214,7 @@ export function hasActiveWS(profileId: number): boolean {
 }
 
 export function detachWS(profileId: number, ws: WebSocket) {
-  if (IS_ELECTRON_EB) {
+  if (IS_ELECTRON_EB && profileId < 1_000_000) {
     const s = electronSessions.get(profileId);
     if (s && s.ws === ws) s.ws = null;
     return;
@@ -3237,7 +3240,9 @@ export function detachWS(profileId: number, ws: WebSocket) {
 }
 
 export function attachWS(profileId: number, ws: WebSocket) {
-  if (IS_ELECTRON_EB) {
+  // Device-browser IDs (≥ 1_000_000) always use the Puppeteer path — skip
+  // the Electron native-EB branch so startScreencast fires and frames arrive.
+  if (IS_ELECTRON_EB && profileId < 1_000_000) {
     let s = electronSessions.get(profileId);
     if (!s) {
       s = { ws: null, proxyKey: "direct" };
