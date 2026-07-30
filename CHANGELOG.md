@@ -4,6 +4,47 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.299] — 2026-07-30
+
+### Feature — IP-Adapter character lock on AI Images page
+
+#### What & Why
+
+The existing img2img (Input Image) feature redraws the uploaded photo from scratch, which destroys the character's face and identity whenever the prompt changes the scene or pose significantly. IP-Adapter solves this differently: instead of using the reference photo as a pixel canvas, it extracts the character's visual identity (face, skin tone, hair, body shape) and injects it as a steering signal into every generation step, while the text prompt fully controls the scene, background, clothing, and pose.
+
+**Result:** same character, completely different scenario — without the distortion from img2img at high strength.
+
+#### How it works
+
+**`artifacts/electron/sidecar/server.py`**
+
+- `ip_adapter_image: Optional[str]` and `ip_adapter_scale: float = 0.6` added to `GenerateRequest`.
+- `_ip_adapter_loaded: bool` global tracks whether IP-Adapter weights are currently mounted on the active pipeline. Resets to `False` whenever a new model is loaded in `_do_load()`.
+- IP-Adapter weights are lazy-loaded on the first generate request that includes a reference image. Weights are pulled from `h94/IP-Adapter` (`sdxl_models/ip-adapter_sdxl.bin`, ~300 MB) and cached in the existing models directory — one-time download.
+- When a request has no reference image but the adapter is already loaded, `set_ip_adapter_scale(0.0)` mutes it for that request without unloading.
+- `supports_ip_adapter: bool` field added to each model entry and exposed in the `/status` response. Currently enabled for: `sdxl`, `sdxl-turbo`, `realvisxl`, `dreamshaper-xl`. Disabled for FLUX and SD3 (no stable SDXL-compatible adapter exists for those).
+
+**`artifacts/dannys-bot/src/pages/ImageGenPage.tsx`**
+
+- `ModelInfo` TypeScript interface extended with `supports_ip_adapter?: boolean`.
+- `PageCache` and `_cache` extended with `charImage`, `charImageName`, `charScale` — all three survive navigation like the rest of the page state.
+- `charImage`, `charImageName`, `charScale` React state added, initialised from cache.
+- Cache sync `useEffect` updated to include the three new fields.
+- `handleGenerate` passes `ip_adapter_image` (raw base64) and `ip_adapter_scale` when a reference image is uploaded and the loaded model supports IP-Adapter.
+- **"Lock Character (optional)"** section added to the controls panel, above the Input Image section. Only rendered when the loaded model supports IP-Adapter. Contains:
+  - Explanatory one-liner so the user understands it's not the same as img2img.
+  - `ImageUploadZone` for the reference photo.
+  - "Character Influence" slider (10–100%, default 60%) with labels "loose likeness" → "strong lock".
+  - Note that first use triggers the ~300 MB IP-Adapter download.
+- `supportsIpAdapter` derived from `status.available_models[model].supports_ip_adapter`.
+
+#### Files changed
+
+- `artifacts/electron/sidecar/server.py` — `GenerateRequest`, `_ip_adapter_loaded` global, `_do_load()` reset, `/status` response, `generate()` IP-Adapter block
+- `artifacts/dannys-bot/src/pages/ImageGenPage.tsx` — `ModelInfo`, `PageCache`, `_cache`, state, cache sync, `handleGenerate`, Lock Character UI section
+
+---
+
 ## [1.2.298] — 2026-07-30
 
 ### AI Images — six improvements in one release

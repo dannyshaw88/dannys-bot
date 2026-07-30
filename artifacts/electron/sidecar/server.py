@@ -59,6 +59,7 @@ _status_message = "Ready to load a model."
 _loading_model_key: Optional[str] = None   # model being downloaded right now
 _loading_from_cache: bool = False           # True when weights are already on disk
 _load_lock = threading.Lock()
+_ip_adapter_loaded: bool = False            # True once IP-Adapter weights are loaded onto _pipeline
 
 
 def _model_is_cached(model_key: str) -> bool:
@@ -123,6 +124,7 @@ MODELS = {
         "default_steps": 4,
         "default_guidance": 0.0,
         "size_gb": 16,
+        "supports_ip_adapter": False,
     },
     "sdxl-turbo": {
         "label": "SDXL-Turbo (1-step, very fast, ~6.5 GB download)",
@@ -131,6 +133,7 @@ MODELS = {
         "default_steps": 1,
         "default_guidance": 0.0,
         "size_gb": 6.5,
+        "supports_ip_adapter": True,
     },
     "sdxl": {
         "label": "Stable Diffusion XL (30-step, best quality, ~7 GB download)",
@@ -139,6 +142,7 @@ MODELS = {
         "default_steps": 30,
         "default_guidance": 7.5,
         "size_gb": 7,
+        "supports_ip_adapter": True,
     },
     "flux-dev": {
         "label": "FLUX.1-dev (50-step, highest quality, ~24 GB download)",
@@ -147,6 +151,7 @@ MODELS = {
         "default_steps": 50,
         "default_guidance": 3.5,
         "size_gb": 24,
+        "supports_ip_adapter": False,
     },
     "sd3-medium": {
         "label": "Stable Diffusion 3 Medium (28-step, great quality, ~5 GB download)",
@@ -155,6 +160,7 @@ MODELS = {
         "default_steps": 28,
         "default_guidance": 7.0,
         "size_gb": 5,
+        "supports_ip_adapter": False,
     },
     "realvisxl": {
         "label": "RealVisXL v4 (30-step, photorealistic, unrestricted, ~7 GB download)",
@@ -163,6 +169,7 @@ MODELS = {
         "default_steps": 30,
         "default_guidance": 7.0,
         "size_gb": 7,
+        "supports_ip_adapter": True,
     },
     "dreamshaper-xl": {
         "label": "DreamShaper XL (8-step, fast + unrestricted, ~7 GB download)",
@@ -171,6 +178,7 @@ MODELS = {
         "default_steps": 8,
         "default_guidance": 2.0,
         "size_gb": 7,
+        "supports_ip_adapter": True,
     },
 }
 
@@ -184,8 +192,10 @@ class GenerateRequest(BaseModel):
     width: int = 1024
     height: int = 1024
     seed: Optional[int] = None
-    init_image: Optional[str] = None   # base64-encoded PNG/JPEG for img2img
-    strength: float = 0.75             # 0.0 = keep original, 1.0 = full generation
+    init_image: Optional[str] = None        # base64 PNG/JPEG for img2img
+    strength: float = 0.75                  # img2img: 0.0 = keep original, 1.0 = full redraw
+    ip_adapter_image: Optional[str] = None  # base64 reference photo for character lock
+    ip_adapter_scale: float = 0.6           # 0.0 = ignore reference, 1.0 = copy exactly
 
 class GenerateResponse(BaseModel):
     image_b64: str
@@ -207,7 +217,7 @@ app.add_middleware(
 
 # ── Load pipeline (runs in a background thread) ───────────────────────────────
 def _do_load(model_key: str) -> None:
-    global _pipeline, _loaded_model, _status, _status_message, _loading_model_key, _loading_from_cache
+    global _pipeline, _loaded_model, _status, _status_message, _loading_model_key, _loading_from_cache, _ip_adapter_loaded
 
     if model_key not in MODELS:
         _status = "error"
@@ -274,6 +284,7 @@ def _do_load(model_key: str) -> None:
         _loaded_model = model_key
         _loading_model_key = None
         _loading_from_cache = False
+        _ip_adapter_loaded = False   # new pipeline — IP-Adapter must be reloaded
         _status = "ready"
         _status_message = f"Ready — {info['label']} on {device.upper()}"
         log.info(_status_message)
@@ -300,6 +311,7 @@ def get_status():
                 "size_gb": v["size_gb"],
                 "default_steps": v["default_steps"],
                 "default_guidance": v["default_guidance"],
+                "supports_ip_adapter": v.get("supports_ip_adapter", False),
             }
             for k, v in MODELS.items()
         },
@@ -321,7 +333,7 @@ def load_model(req: LoadRequest):
 
 @app.post("/generate")
 def generate(req: GenerateRequest):
-    global _pipeline, _loaded_model, _status
+    global _pipeline, _loaded_model, _status, _ip_adapter_loaded
 
     # Auto-load synchronously if nothing is loaded yet
     if _pipeline is None or _loaded_model != req.model:
@@ -353,6 +365,30 @@ def generate(req: GenerateRequest):
             kwargs["guidance_scale"] = guidance
         if req.negative_prompt:
             kwargs["negative_prompt"] = req.negative_prompt
+
+        # ── IP-Adapter character lock ─────────────────────────────────────────
+        # Loads IP-Adapter weights lazily (first request that uses it; ~300 MB).
+        # set_ip_adapter_scale(0) disables it without unloading for requests
+        # that don't use it, so reload cost is only paid once per model session.
+        if req.ip_adapter_image and info.get("supports_ip_adapter"):
+            from PIL import Image as PILImage
+            if not _ip_adapter_loaded:
+                log.info("Loading IP-Adapter SDXL weights (~300 MB one-time download)…")
+                _pipeline.load_ip_adapter(
+                    "h94/IP-Adapter",
+                    subfolder="sdxl_models",
+                    weight_name="ip-adapter_sdxl.bin",
+                    cache_dir=MODELS_DIR,
+                )
+                _ip_adapter_loaded = True
+            _pipeline.set_ip_adapter_scale(req.ip_adapter_scale)
+            ref_bytes = base64.b64decode(req.ip_adapter_image)
+            ref_img = PILImage.open(io.BytesIO(ref_bytes)).convert("RGB")
+            kwargs["ip_adapter_image"] = ref_img
+            log.info(f"IP-Adapter enabled — scale {req.ip_adapter_scale}")
+        elif _ip_adapter_loaded:
+            # Reference image not provided this request — mute the adapter
+            _pipeline.set_ip_adapter_scale(0.0)
 
         if req.init_image:
             # ── Image-to-image ────────────────────────────────────────────────

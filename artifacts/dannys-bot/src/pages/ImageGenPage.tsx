@@ -17,6 +17,7 @@ interface ModelInfo {
   size_gb: number;
   default_steps: number;
   default_guidance: number;
+  supports_ip_adapter?: boolean;
 }
 
 interface DownloadProgress {
@@ -78,6 +79,9 @@ interface PageCache {
   initImage: string | null;
   initImageName: string;
   strength: number;
+  charImage: string | null;
+  charImageName: string;
+  charScale: number;
   result: GenerateResult | null;
 }
 const _cache: PageCache = {
@@ -91,6 +95,9 @@ const _cache: PageCache = {
   initImage: null,
   initImageName: "",
   strength: 0.75,
+  charImage: null,
+  charImageName: "",
+  charScale: 0.6,
   result: null,
 };
 
@@ -111,6 +118,10 @@ export function ImageGenPage() {
   const [initImageName, setInitImageName] = useState(_cache.initImageName);
   const [strength, setStrength] = useState(_cache.strength);
 
+  const [charImage, setCharImage] = useState<string | null>(_cache.charImage);   // IP-Adapter reference
+  const [charImageName, setCharImageName] = useState(_cache.charImageName);
+  const [charScale, setCharScale] = useState(_cache.charScale);
+
   const [generating, setGenerating] = useState(false);
   const [loadingModel, setLoadingModel] = useState(false);
   const [result, setResult] = useState<GenerateResult | null>(_cache.result);
@@ -127,8 +138,11 @@ export function ImageGenPage() {
     _cache.initImage = initImage;
     _cache.initImageName = initImageName;
     _cache.strength = strength;
+    _cache.charImage = charImage;
+    _cache.charImageName = charImageName;
+    _cache.charScale = charScale;
     _cache.result = result;
-  }, [prompt, negPrompt, model, resolution, steps, guidance, seed, initImage, initImageName, strength, result]);
+  }, [prompt, negPrompt, model, resolution, steps, guidance, seed, initImage, initImageName, strength, charImage, charImageName, charScale, result]);
   const [error, setError] = useState("");
 
   const [settingUp, setSettingUp] = useState(false);
@@ -223,6 +237,11 @@ export function ImageGenPage() {
         body.init_image = initImage.split(",")[1];
         body.strength = strength;
       }
+      const modelSupportsIpAdapter = status?.available_models?.[model]?.supports_ip_adapter;
+      if (charImage && modelSupportsIpAdapter) {
+        body.ip_adapter_image = charImage.split(",")[1];
+        body.ip_adapter_scale = charScale;
+      }
 
       const r = await fetch("/api/image-gen/generate", {
         method: "POST",
@@ -269,6 +288,7 @@ export function ImageGenPage() {
   const currentModelInfo = status?.available_models?.[model];
   const defaultSteps = currentModelInfo?.default_steps ?? 4;
   const defaultGuidance = currentModelInfo?.default_guidance ?? 0;
+  const supportsIpAdapter = Boolean(currentModelInfo?.supports_ip_adapter);
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
@@ -374,6 +394,49 @@ export function ImageGenPage() {
                     </button>
                   )}
                 </Section>
+
+                {/* Lock Character (IP-Adapter) */}
+                {supportsIpAdapter && (
+                  <Section label="Lock Character (optional)">
+                    <p className="text-[10px] text-muted-foreground mb-2 leading-relaxed">
+                      Upload your base character photo. The model will copy their face &amp; appearance into every new scene you prompt — without redrawing them pixel-by-pixel.
+                    </p>
+                    <ImageUploadZone
+                      image={charImage}
+                      imageName={charImageName}
+                      onImage={(dataUrl, name) => { setCharImage(dataUrl); setCharImageName(name); }}
+                      onClear={() => { setCharImage(null); setCharImageName(""); }}
+                    />
+                    {charImage && (
+                      <div className="mt-2 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                            Character Influence — {Math.round(charScale * 100)}%
+                          </label>
+                          <span className="text-[10px] text-muted-foreground">
+                            {charScale <= 0.4 ? "loose likeness" : charScale >= 0.8 ? "strong lock" : "balanced"}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={0.1}
+                          max={1.0}
+                          step={0.05}
+                          value={charScale}
+                          onChange={e => setCharScale(Number(e.target.value))}
+                          className="w-full accent-[#1AD2F2]"
+                        />
+                        <div className="flex justify-between text-[10px] text-muted-foreground">
+                          <span>loose likeness</span>
+                          <span>strong lock</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground pt-1">
+                          First use downloads IP-Adapter weights (~300 MB, one-time).
+                        </p>
+                      </div>
+                    )}
+                  </Section>
+                )}
 
                 {/* Input image (img2img) */}
                 <Section label="Input Image (optional)">
