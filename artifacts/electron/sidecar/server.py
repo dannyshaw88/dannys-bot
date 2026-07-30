@@ -156,6 +156,22 @@ MODELS = {
         "default_guidance": 7.0,
         "size_gb": 5,
     },
+    "realvisxl": {
+        "label": "RealVisXL v4 (30-step, photorealistic, unrestricted, ~7 GB download)",
+        "repo": "SG161222/RealVisXL_V4.0",
+        "pipeline_class": "StableDiffusionXLPipeline",
+        "default_steps": 30,
+        "default_guidance": 7.0,
+        "size_gb": 7,
+    },
+    "dreamshaper-xl": {
+        "label": "DreamShaper XL (8-step, fast + unrestricted, ~7 GB download)",
+        "repo": "Lykon/dreamshaper-xl-v2-turbo",
+        "pipeline_class": "StableDiffusionXLPipeline",
+        "default_steps": 8,
+        "default_guidance": 2.0,
+        "size_gb": 7,
+    },
 }
 
 # ── Request / response models ─────────────────────────────────────────────────
@@ -220,22 +236,29 @@ def _do_load(model_key: str) -> None:
             StableDiffusion3Pipeline,
         )
 
+        from diffusers import StableDiffusionPipeline
         _cls_map = {
             "FluxPipeline": FluxPipeline,
             "AutoPipelineForText2Image": AutoPipelineForText2Image,
             "StableDiffusionXLPipeline": StableDiffusionXLPipeline,
             "StableDiffusion3Pipeline": StableDiffusion3Pipeline,
+            "StableDiffusionPipeline": StableDiffusionPipeline,
         }
         PipelineCls = _cls_map[info["pipeline_class"]]
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         dtype = torch.bfloat16 if device == "cuda" else torch.float32
 
-        pipe = PipelineCls.from_pretrained(
-            info["repo"],
-            torch_dtype=dtype,
-            cache_dir=MODELS_DIR,
-        )
+        load_kwargs: dict = {"torch_dtype": dtype, "cache_dir": MODELS_DIR}
+
+        # SD 1.x pipelines ship with a safety checker that blacks out flagged
+        # outputs. Disable it so the model runs unrestricted on local hardware.
+        # SDXL, FLUX, and SD3 have no safety checker in diffusers — no-op there.
+        if info["pipeline_class"] == "StableDiffusionPipeline":
+            load_kwargs["safety_checker"] = None
+            load_kwargs["requires_safety_checker"] = False
+
+        pipe = PipelineCls.from_pretrained(info["repo"], **load_kwargs)
 
         if device == "cuda":
             pipe = pipe.to(device)
