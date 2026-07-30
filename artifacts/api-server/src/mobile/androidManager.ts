@@ -6290,6 +6290,19 @@ export async function switchToInstagramAccount(
     for (let pt = 0; pt < PROFILE_TAB_MAX_POLL; pt++) {
       profileTab = await findInstagramProfileTab(serial).catch(() => null);
       if (profileTab) break;
+      // The cookie-policy popup ("Allow the use of cookies by Instagram?") and
+      // other interstitials appear AFTER Instagram finishes loading — after the
+      // launch-time scan has already passed — and they cover the bottom nav bar,
+      // preventing the profile tab from appearing in the accessibility tree.
+      // On each failed poll, do a fresh dump and dismiss any blocking dialog
+      // before sleeping.  If something was dismissed, retry immediately without
+      // the 1500 ms wait so the switcher can proceed without extra delay.
+      const blockerLabel = await dismissInstagramInterstitials(serial).catch(() => null);
+      if (blockerLabel) {
+        onLog?.(`  ↳ Dismissed blocking dialog during profile-tab poll (${blockerLabel}) — retrying immediately`);
+        profileTab = await findInstagramProfileTab(serial).catch(() => null);
+        if (profileTab) break;
+      }
       if (pt < PROFILE_TAB_MAX_POLL - 1) {
         onLog?.(`  ↳ Profile tab not yet visible — waiting ${PROFILE_TAB_POLL_MS / 1000}s for nav bar to render (poll ${pt + 1}/${PROFILE_TAB_MAX_POLL})…`);
         await _sleep(PROFILE_TAB_POLL_MS);

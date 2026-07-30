@@ -4,6 +4,24 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.284] — 2026-07-30
+
+### Fix — Cookie consent popup now detected and accepted when it appears after Instagram loads
+
+Instagram's "Allow the use of cookies by Instagram?" dialog appears AFTER Instagram
+finishes loading — after the launch-time popup scan has already run and declared "feed
+ready". The dialog covers the bottom nav bar, so the profile tab is invisible in the
+accessibility tree and account switching fails every cycle.
+
+Fixed by adding a blocking-dialog check inside the profile-tab poll loop in
+`switchToInstagramAccount`. On each poll iteration where the profile tab isn't found,
+a fresh UIAutomator dump is taken and `dismissInstagramInterstitials` is run against it.
+If the cookie dialog (or any other interstitial) is present it is dismissed and the
+profile tab is retried immediately — no extra 1.5 s sleep — so the account switch
+proceeds without delay.
+
+---
+
 ## [1.2.283] — 2026-07-30
 
 ### Fix — Human Session Tool: timers no longer reset constantly with no cycles firing
