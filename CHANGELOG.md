@@ -4,6 +4,18 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.290] — 2026-07-30
+
+### Fix — AI Images page stuck on "Cannot reach the API server"
+
+The AI Images page was permanently showing the "Cannot reach the API server" error card instead of the "Install AI Libraries" setup button on first use.
+
+**Root cause:** When torch/diffusers aren't installed yet the Python sidecar never starts, so the status proxy got ECONNREFUSED from the sidecar port and returned a 503 to the frontend. The frontend treats any non-2xx response the same as a total network failure — so the setup flow never appeared.
+
+**Fix:** The `/api/image-gen/status` endpoint now handles ECONNREFUSED/ETIMEDOUT by returning a 200 with `{ status: "idle" }` and a stub model list. The frontend then renders the setup section with the **Install AI Libraries** button as intended.
+
+---
+
 ## [1.2.289] — 2026-07-30
 
 ### Feature — Local AI Image Generation (GPU-accelerated, no credits, no queue)

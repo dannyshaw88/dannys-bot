@@ -67,9 +67,12 @@ function proxyToSidecar(
 const router = Router();
 
 // ── Status ────────────────────────────────────────────────────────────────────
-router.get("/api/image-gen/status", (req, res) => {
+// The status endpoint gets special handling: ECONNREFUSED means the sidecar
+// isn't running yet (torch not installed) — return 200 "idle" so the UI can
+// show the "Install AI Libraries" button instead of the generic error card.
+router.get("/api/image-gen/status", (_req, res) => {
   if (!IMAGE_GEN_PORT) {
-    // Structured unavailable — UI reads this to show "desktop only" message
+    // Web mode — no sidecar possible
     res.json({
       status: "unavailable",
       message: "Image generation is only available in the Aura Farming desktop app.",
@@ -79,7 +82,53 @@ router.get("/api/image-gen/status", (req, res) => {
     });
     return;
   }
-  proxyToSidecar(req, res, "GET", "/status");
+
+  const proxyReq = http.request(
+    { hostname: "127.0.0.1", port: IMAGE_GEN_PORT, path: "/status", method: "GET",
+      headers: { "Content-Type": "application/json" }, timeout: 5_000 },
+    (proxyRes) => {
+      res.status(proxyRes.statusCode ?? 200);
+      const ct = proxyRes.headers["content-type"];
+      if (ct) res.setHeader("Content-Type", ct);
+      proxyRes.pipe(res);
+    },
+  );
+
+  proxyReq.on("error", (err: NodeJS.ErrnoException) => {
+    // Sidecar not running (torch not yet installed) — tell the UI to show setup
+    if (err.code === "ECONNREFUSED" || err.code === "ECONNRESET" || err.code === "ETIMEDOUT") {
+      res.json({
+        status: "idle",
+        message: "AI libraries not installed. Click \"Install AI Libraries\" to set up.",
+        available: true,
+        loaded_model: null,
+        available_models: {
+          "flux-schnell": { name: "FLUX.1-schnell", default_steps: 4, default_guidance: 0 },
+          "sdxl-turbo":   { name: "SDXL-Turbo",    default_steps: 1, default_guidance: 0 },
+          "sdxl":         { name: "Stable Diffusion XL", default_steps: 30, default_guidance: 7.5 },
+        },
+      });
+    } else {
+      res.status(503).json({ error: err.message, available: false });
+    }
+  });
+
+  proxyReq.on("timeout", () => {
+    proxyReq.destroy();
+    res.json({
+      status: "idle",
+      message: "AI libraries not installed. Click \"Install AI Libraries\" to set up.",
+      available: true,
+      loaded_model: null,
+      available_models: {
+        "flux-schnell": { name: "FLUX.1-schnell", default_steps: 4, default_guidance: 0 },
+        "sdxl-turbo":   { name: "SDXL-Turbo",    default_steps: 1, default_guidance: 0 },
+        "sdxl":         { name: "Stable Diffusion XL", default_steps: 30, default_guidance: 7.5 },
+      },
+    });
+  });
+
+  proxyReq.end();
 });
 
 // ── Load model ────────────────────────────────────────────────────────────────
