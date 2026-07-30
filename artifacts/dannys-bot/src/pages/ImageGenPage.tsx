@@ -53,15 +53,11 @@ declare global {
 
 const BRAND = "#1AD2F2";
 
-const PRESETS = [
-  "photorealistic portrait of a woman in streetwear, golden hour, Paris boulevard, shallow depth of field",
-  "cinematic close-up of a man in a tailored suit, city lights bokeh background, ultra-realistic",
-  "full body shot of a fitness model in athleisure, outdoor urban setting, natural lighting",
-  "editorial fashion photography, rooftop setting, sunset, high detail skin texture",
-];
-
 const RESOLUTIONS = [
   { label: "1024 × 1024 (Square)", w: 1024, h: 1024 },
+  { label: "1080 × 1080 (Instagram Square)", w: 1080, h: 1080 },
+  { label: "1080 × 1350 (Instagram Portrait 4:5)", w: 1080, h: 1350 },
+  { label: "1080 × 1920 (Instagram Story / Reel)", w: 1080, h: 1920 },
   { label: "1344 × 768 (Landscape)", w: 1344, h: 768 },
   { label: "768 × 1344 (Portrait)", w: 768, h: 1344 },
   { label: "1152 × 896 (Wide)", w: 1152, h: 896 },
@@ -421,31 +417,6 @@ export function ImageGenPage() {
                     onChange={e => setPrompt(e.target.value)}
                     placeholder="Describe the image you want to generate…"
                     rows={4}
-                    className="w-full bg-muted border border-border rounded-md px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary"
-                  />
-                  {/* Presets */}
-                  <div className="mt-2 space-y-1">
-                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Presets</p>
-                    {PRESETS.map((p, i) => (
-                      <button
-                        key={i}
-                        onClick={() => setPrompt(p)}
-                        className="w-full text-left text-xs text-muted-foreground hover:text-foreground hover:bg-accent rounded px-2 py-1 transition-colors truncate"
-                        title={p}
-                      >
-                        {p}
-                      </button>
-                    ))}
-                  </div>
-                </Section>
-
-                {/* Negative prompt */}
-                <Section label="Negative Prompt (optional)">
-                  <textarea
-                    value={negPrompt}
-                    onChange={e => setNegPrompt(e.target.value)}
-                    placeholder="blurry, low quality, watermark, text…"
-                    rows={2}
                     className="w-full bg-muted border border-border rounded-md px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary"
                   />
                 </Section>
