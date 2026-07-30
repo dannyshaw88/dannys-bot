@@ -4,6 +4,82 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.298] — 2026-07-30
+
+### AI Images — six improvements in one release
+
+---
+
+#### Fix — SDXL-Turbo img2img crash ("cannot reshape tensor of 0 elements")
+
+**Problem:** Using any model with img2img at a strength below 1.0 and a low step count (SDXL-Turbo defaults to 1 step) caused an immediate crash:
+```
+cannot reshape tensor of 0 elements into shape [0, -1, 1, 512]
+because the unspecified dimension size -1 can be any value and is ambiguous
+```
+The crash happened because `floor(steps × strength)` equalled zero — the pipeline received zero timesteps and failed inside PyTorch.
+
+**Fix:** Before handing off to the img2img pipeline, `server.py` now computes the minimum step count required for the given strength value (`ceil(1 / strength)`) and silently bumps `num_inference_steps` up to that minimum if the user's value is too low. At 75% strength the minimum is 2 steps; at 50% it is also 2; at 100% the existing value is unchanged. No visible quality difference.
+
+**File:** `artifacts/electron/sidecar/server.py` — guard added at the top of the `if req.init_image:` branch in `generate()`
+
+---
+
+#### Feature — AI Images page state survives navigation
+
+**Problem:** Navigating away from the AI Images tab and returning reset everything — prompt, model, resolution, steps, guidance, seed, input image, strength slider, and the last generated result.
+
+**Fix:** A module-level cache object (`_cache`) is declared at the top of `ImageGenPage.tsx`. Every `useState` initialiser now reads from `_cache` instead of a hardcoded default. A single `useEffect` writes all user-editable values back to `_cache` whenever any of them change. Because the cache lives at module scope (outside the React component), it survives component unmount/remount for the lifetime of the browser tab. State is intentionally reset on a full page refresh.
+
+**File:** `artifacts/dannys-bot/src/pages/ImageGenPage.tsx`
+
+---
+
+#### UI — Removed Presets and Negative Prompt sections
+
+The preset prompt buttons and the Negative Prompt textarea were removed from the AI Images controls panel. The prompt box now occupies the full space previously split between all three sections.
+
+**File:** `artifacts/dannys-bot/src/pages/ImageGenPage.tsx`
+
+---
+
+#### Feature — Instagram resolutions added to dropdown
+
+Three Instagram-native output sizes added to the Resolution dropdown, placed at the top of the list for quick access:
+
+| Label | Width × Height | Use case |
+|---|---|---|
+| Instagram Square | 1080 × 1080 | Feed post, square format |
+| Instagram Portrait 4:5 | 1080 × 1350 | Feed post, best reach format |
+| Instagram Story / Reel | 1080 × 1920 | Stories and Reels |
+
+**File:** `artifacts/dannys-bot/src/pages/ImageGenPage.tsx` — `RESOLUTIONS` array
+
+---
+
+#### Feature — Two new photorealistic models: RealVisXL v4 and DreamShaper XL
+
+Two unrestricted fine-tune models added to the model registry:
+
+| Key | Label | Steps | Guidance | Download |
+|---|---|---|---|---|
+| `realvisxl` | RealVisXL v4 | 30 | 7.0 | ~7 GB |
+| `dreamshaper-xl` | DreamShaper XL Turbo | 8 | 2.0 | ~7 GB |
+
+Both use `StableDiffusionXLPipeline` (already imported). Both support img2img via `StableDiffusionXLImg2ImgPipeline` (already in the img2img map). RealVisXL is the recommended model for photorealistic portrait generation. DreamShaper XL Turbo is the fast alternative (8 steps, similar speed to SDXL-Turbo but significantly better quality).
+
+**File:** `artifacts/electron/sidecar/server.py` — `MODELS` registry
+
+---
+
+#### Feature — Safety checker disabled for SD 1.x models + SD 1.5 pipeline class registered
+
+`StableDiffusionPipeline` (the SD 1.x loader) is now registered in both the text-to-image `_cls_map` and the img2img pipeline map. When loading any model whose `pipeline_class` is `StableDiffusionPipeline`, the loader now passes `safety_checker=None, requires_safety_checker=False` to `from_pretrained()`, disabling the post-generation NSFW filter that blacks out flagged outputs. SDXL, FLUX, and SD3 pipelines have no safety checker in modern diffusers — this change is a no-op for all currently listed models and activates automatically for any SD 1.5-style model added in future.
+
+**File:** `artifacts/electron/sidecar/server.py` — `_do_load()` function
+
+---
+
 ## [1.2.297] — 2026-07-30
 
 ### Feature — Two new AI image generation models: FLUX.1-dev and Stable Diffusion 3 Medium
