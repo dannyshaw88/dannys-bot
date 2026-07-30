@@ -22,6 +22,7 @@ import {
   ChevronLeft, Home, LayoutGrid, Power, Volume2, VolumeX, Trash2,
   FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim,
   Palette, Plus, X, RotateCcw, Sun, Keyboard,
+  Users, Globe, BarChart2, ClipboardList, Bug,
 } from "lucide-react";
 
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
@@ -8290,16 +8291,16 @@ const TOTAL_SLOTS = 1;
 
 type MobileTab = "account" | "browser" | "metrics" | "phonesettings" | "actionlog" | "log";
 // Left-side tabs shown in order before the spacer.
-const MOBILE_TABS_LEFT: { id: MobileTab; label: string }[] = [
-  { id: "account",      label: "Accounts"  },
-  { id: "browser",      label: "Browser"   },
-  { id: "metrics",      label: "Metrics"   },
-  { id: "phonesettings",label: "My Device" },
+const MOBILE_TABS_LEFT: { id: MobileTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: "account",      label: "Accounts",  icon: Users       },
+  { id: "browser",      label: "Browser",   icon: Globe       },
+  { id: "metrics",      label: "Metrics",   icon: BarChart2   },
+  { id: "phonesettings",label: "My Device", icon: Smartphone  },
 ];
 // Right-side tabs — pushed to the far right with ml-auto on the first one.
-const MOBILE_TABS_RIGHT: { id: MobileTab; label: string }[] = [
-  { id: "actionlog", label: "Action Log"    },
-  { id: "log",       label: "Debugging Log" },
+const MOBILE_TABS_RIGHT: { id: MobileTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: "actionlog", label: "Action Log",    icon: ClipboardList },
+  { id: "log",       label: "Debugging Log", icon: Bug           },
 ];
 const LOG_MAX_LINES = 500;
 
@@ -8694,13 +8695,13 @@ export function MobilePage() {
                       setActiveTab(t.id);
                       if (t.id === "account") accountPanelRef.current?.backToSlots();
                     }}
-                    className={`px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                    className={`px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-1.5 ${
                       activeTab === t.id
                         ? "border-primary text-foreground"
                         : "border-transparent text-foreground hover:text-foreground"
                     }`}
                   >
-                    {t.label}
+                    {t.label}<t.icon className="w-3.5 h-3.5 opacity-70" />
                   </button>
                 ))}
                 <div className="flex-1" />
@@ -8714,13 +8715,13 @@ export function MobilePage() {
                       }
                       setActiveTab(t.id);
                     }}
-                    className={`px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                    className={`px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-1.5 ${
                       activeTab === t.id
                         ? "border-primary text-foreground"
                         : "border-transparent text-foreground hover:text-foreground"
                     }`}
                   >
-                    {t.label}
+                    {t.label}<t.icon className="w-3.5 h-3.5 opacity-70" />
                   </button>
                 ))}
               </div>
