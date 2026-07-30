@@ -8373,17 +8373,25 @@ export function MobilePage() {
   const [browserProxyPass,     setBrowserProxyPass]     = useState("");
   const [browserProxySaving,   setBrowserProxySaving]   = useState(false);
   const [browserProxyError,    setBrowserProxyError]    = useState<string | null>(null);
+  const [browserUseLocalIp,    setBrowserUseLocalIp]    = useState(false);
 
   useEffect(() => {
     if (!activeSerial) return;
     fetch(`/api/mobile/devices/${encodeURIComponent(activeSerial)}/browser-proxy`)
       .then(r => r.json())
       .then(d => {
-        if (d.proxy) {
+        if (d.proxy?.useLocalIp) {
+          setBrowserUseLocalIp(true);
+          setBrowserProxyHostPort("");
+          setBrowserProxyUser("");
+          setBrowserProxyPass("");
+        } else if (d.proxy) {
+          setBrowserUseLocalIp(false);
           setBrowserProxyHostPort(`${d.proxy.host}:${d.proxy.port}`);
           setBrowserProxyUser(d.proxy.username ?? "");
           setBrowserProxyPass(d.proxy.password ?? "");
         } else {
+          setBrowserUseLocalIp(false);
           setBrowserProxyHostPort("");
           setBrowserProxyUser("");
           setBrowserProxyPass("");
@@ -8397,16 +8405,22 @@ export function MobilePage() {
     setBrowserProxySaving(true);
     setBrowserProxyError(null);
     try {
-      const [host, portStr] = browserProxyHostPort.trim().split(":");
-      const port = parseInt(portStr ?? "", 10);
-      if (!host || !portStr || isNaN(port) || port < 1 || port > 65535) {
-        setBrowserProxyError("Enter proxy as host:port (e.g. 192.168.1.254:29842)");
-        return;
+      let payload: object;
+      if (browserUseLocalIp) {
+        payload = { useLocalIp: true };
+      } else {
+        const [host, portStr] = browserProxyHostPort.trim().split(":");
+        const port = parseInt(portStr ?? "", 10);
+        if (!host || !portStr || isNaN(port) || port < 1 || port > 65535) {
+          setBrowserProxyError("Enter proxy as host:port (e.g. 192.168.1.254:29842)");
+          return;
+        }
+        payload = { host, port, username: browserProxyUser, password: browserProxyPass };
       }
       const r = await fetch(`/api/mobile/devices/${encodeURIComponent(activeSerial)}/browser-proxy`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ host, port, username: browserProxyUser, password: browserProxyPass }),
+        body: JSON.stringify(payload),
       });
       const body = await r.json().catch(() => null);
       if (!r.ok || !body?.ok) setBrowserProxyError(body?.error ?? "Save failed");
@@ -8633,7 +8647,7 @@ export function MobilePage() {
             automation run-loop timers on every 3-second USB poll flicker.
             Use CSS hiding instead so the hooks stay alive through any gap. */}
         <div className={showSplitView ? "flex-1 min-h-0 flex" : "hidden"}>
-            <div ref={setPaneEl} className={activeTab === "browser" ? "hidden" : "w-1/2 h-full flex items-center justify-center p-4 min-h-0"}>
+            <div ref={setPaneEl} className="w-1/2 h-full flex items-center justify-center p-4 min-h-0">
               {/* PhoneSlot sizes its own shell exactly to the phone's real
                   reported resolution using the measured pane size below —
                   see PhoneSlot's "Exact shell sizing" block for why this
@@ -8666,7 +8680,7 @@ export function MobilePage() {
                 />
               ))}
             </div>
-            <div className={`${activeTab === "browser" ? "w-full" : "w-1/2 border-l border-border"} h-full min-h-0 flex flex-col`}>
+            <div className="w-1/2 border-l border-border h-full min-h-0 flex flex-col">
               <div className="shrink-0 flex items-center border-b border-border px-4">
                 {MOBILE_TABS_LEFT.map(t => (
                   <button
@@ -8723,30 +8737,42 @@ export function MobilePage() {
                         placeholder="host:port"
                         value={browserProxyHostPort}
                         onChange={e => setBrowserProxyHostPort(e.target.value)}
-                        className="h-7 rounded border border-border bg-background px-2 text-xs w-40 font-mono"
+                        disabled={browserUseLocalIp}
+                        className="h-7 rounded border border-border bg-background px-2 text-xs w-40 font-mono disabled:opacity-40 disabled:cursor-not-allowed"
                       />
                       <input
                         type="text"
                         placeholder="Username"
                         value={browserProxyUser}
                         onChange={e => setBrowserProxyUser(e.target.value)}
-                        className="h-7 rounded border border-border bg-background px-2 text-xs w-28"
+                        disabled={browserUseLocalIp}
+                        className="h-7 rounded border border-border bg-background px-2 text-xs w-28 disabled:opacity-40 disabled:cursor-not-allowed"
                       />
                       <input
                         type="password"
                         placeholder="Password"
                         value={browserProxyPass}
                         onChange={e => setBrowserProxyPass(e.target.value)}
-                        className="h-7 rounded border border-border bg-background px-2 text-xs w-28"
+                        disabled={browserUseLocalIp}
+                        className="h-7 rounded border border-border bg-background px-2 text-xs w-28 disabled:opacity-40 disabled:cursor-not-allowed"
                       />
                       <button
                         type="button"
-                        disabled={browserProxySaving || !browserProxyHostPort.trim()}
+                        disabled={browserProxySaving || (!browserUseLocalIp && !browserProxyHostPort.trim())}
                         onClick={saveBrowserProxy}
                         className="h-7 px-3 rounded text-xs font-medium bg-primary text-primary-foreground disabled:opacity-50"
                       >
                         {browserProxySaving ? "Saving…" : "Save"}
                       </button>
+                      <label className="flex items-center gap-1.5 cursor-pointer select-none ml-1">
+                        <input
+                          type="checkbox"
+                          checked={browserUseLocalIp}
+                          onChange={e => setBrowserUseLocalIp(e.target.checked)}
+                          className="w-3.5 h-3.5 accent-primary"
+                        />
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">Use local PC's IP</span>
+                      </label>
                       {browserProxyError && (
                         <span className="text-xs text-destructive">{browserProxyError}</span>
                       )}

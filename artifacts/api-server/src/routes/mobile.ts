@@ -11213,6 +11213,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         await storage.setGlobalSetting(`device_browser_proxy_${profileId}`, "null");
         return res.json({ ok: true });
       }
+      // useLocalIp — no proxy, browser uses the PC's own IP address
+      if (body?.useLocalIp === true) {
+        await storage.setGlobalSetting(`device_browser_proxy_${profileId}`, JSON.stringify({ useLocalIp: true }));
+        return res.json({ ok: true });
+      }
       const cfg = z.object({
         host:     z.string().min(1),
         port:     z.number().int().min(1).max(65535),

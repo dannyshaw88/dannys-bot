@@ -813,11 +813,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
       {/* Isolation banner */}
       {!noToolbar && <div className="flex items-center gap-2 px-4 py-2 bg-background border-b border-border/60 text-xs shrink-0">
         <Shield className="w-3.5 h-3.5 text-primary shrink-0" />
-        <span className="text-muted-foreground truncate">
-          Isolated session · <span className="font-semibold text-foreground">@{username}</span>
-          {" · "}
-          <span className="font-mono text-[10px]">{(userAgent ?? "").slice(0, 60) || "No UA set"}</span>
-        </span>
+        <span className="text-muted-foreground truncate">Isolated session</span>
         <span className={`ml-auto flex items-center gap-1.5 font-medium shrink-0 ${statusColor}`}>
           <span className={`w-1.5 h-1.5 rounded-full ${statusDot}`} />
           {statusLabel}
@@ -890,144 +886,6 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
                                       "Login"}
         </Button>
 
-        {/* On the first (Instagram) tab show the usual tools.
-            On any additional tab show email provider quick-nav buttons instead. */}
-        {activeTab === 0 ? (
-          <>
-            <button
-              type="button"
-              onClick={() => generateTotp((code) => send({ type: "fill2fa", code }))}
-              disabled={!connected}
-              title="Generate a live 2FA code, paste it into the 2FA field on screen, and auto-click Continue"
-              className="h-8 px-3 rounded-md border border-border bg-muted text-xs font-semibold transition-colors shrink-0 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed hover:bg-accent text-foreground"
-            >
-              {totpCopied ? `✓ ${totpCode}` : totpNoKey ? "No 2FA key" : "2FA Code"}
-            </button>
-
-            <Button
-              variant="ghost" size="sm"
-              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1 shrink-0"
-              disabled={!connected}
-              title="Type the pre-filled phone number from Settings"
-              onClick={async () => {
-                try {
-                  const res = await fetch("/api/settings");
-                  const s = await res.json();
-                  const num = (s.preFilledPhoneNumber ?? "").trim();
-                  if (num) send({ type: "type", text: num });
-                } catch {}
-              }}
-            >
-              <Phone className="w-3.5 h-3.5" /> Phone Number
-            </Button>
-            <Button
-              variant="ghost" size="sm"
-              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1 shrink-0"
-              disabled={!connected}
-              title="Type the email validation username into the focused field"
-              onClick={async () => {
-                try {
-                  const res = await fetch(`/api/profiles/${profileId}`);
-                  const p = await res.json();
-                  const val = (p.emailValidationUsername ?? "").trim();
-                  if (val) send({ type: "type", text: val });
-                } catch {}
-              }}
-            >
-              <Mail className="w-3.5 h-3.5" /> Email Account
-            </Button>
-            <Button
-              variant="ghost" size="sm"
-              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1 shrink-0"
-              disabled={!connected}
-              title="Type the email validation password into the focused field"
-              onClick={async () => {
-                try {
-                  const res = await fetch(`/api/profiles/${profileId}`);
-                  const p = await res.json();
-                  const val = (p.emailValidationPassword ?? "").trim();
-                  if (val) send({ type: "type", text: val });
-                } catch {}
-              }}
-            >
-              <KeyRound className="w-3.5 h-3.5" /> Email Password
-            </Button>
-            <Button
-              variant="ghost" size="sm"
-              className="h-8 px-2 text-xs text-green-500 hover:text-green-400 hover:bg-green-500/10 gap-1 shrink-0 font-semibold"
-              disabled={!connected}
-              title="Run an in-app leak test — checks IP, WebRTC, WebDriver, Canvas, Audio, WebGL and more"
-              onClick={() => {
-                // Puppeteer's page.goto() needs an absolute URL — use the
-                // Replit proxy hostname with the API port injected at build time.
-                const { protocol, hostname } = window.location;
-                const apiOrigin = `${protocol}//${hostname}:${__API_PORT__}`;
-                const url = `${apiOrigin}/api/browser/leaks?profileId=${profileId}`;
-                send({ type: "navigate", url });
-              }}
-            >
-              <ShieldAlert className="w-3.5 h-3.5" /> Leak Check
-            </Button>
-            <Button
-              variant="ghost" size="sm"
-              className="h-8 px-2 text-xs text-purple-500 hover:text-purple-400 hover:bg-purple-500/10 gap-1 shrink-0 font-semibold"
-              title="Generate an AI selfie photo — realistic, no watermarks, with randomised camera EXIF metadata"
-              onClick={() => { setAiModalOpen(true); setAiResult(null); setAiError(null); }}
-            >
-              <Sparkles className="w-3.5 h-3.5" /> AI Image
-            </Button>
-            <label
-              className={`inline-flex items-center gap-1 h-8 px-2 text-xs rounded-md transition-colors shrink-0 ${connected ? "text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer" : "text-muted-foreground opacity-50 cursor-not-allowed pointer-events-none"}`}
-              title="Upload a file to the browser"
-            >
-              <Upload className="w-3.5 h-3.5" /> Upload
-              <input
-                type="file"
-                accept="image/*,video/*,*/*"
-                className="sr-only"
-                disabled={!connected}
-                onChange={async e => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  e.target.value = "";
-                  const reader = new FileReader();
-                  reader.onload = async ev => {
-                    const base64 = (ev.target?.result as string)?.split(",")[1];
-                    if (!base64) return;
-                    await fetch(`/api/browser/${profileId}/files`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ fileName: file.name, data: base64 }),
-                    }).catch(() => {});
-                  };
-                  reader.readAsDataURL(file);
-                }}
-              />
-            </label>
-          </>
-        ) : (
-          /* Extra-tab toolbar: email provider shortcuts */
-          <>
-            {[
-              { label: "Hotmail", url: "https://www.hotmail.com" },
-              { label: "OP.pl",   url: "https://www.op.pl"      },
-              { label: "GMX",     url: "https://www.gmx.com"    },
-            ].map(({ label, url }) => (
-              <Button
-                key={label}
-                variant="outline"
-                size="sm"
-                className="h-8 px-3 text-xs font-semibold shrink-0 gap-1"
-                disabled={!connected}
-                title={`Go to ${url}`}
-                onClick={() => { setAddressBar(url); setIsLoading(true); send({ type: "navigate", url }); }}
-              >
-                <Mail className="w-3.5 h-3.5" />
-                {label}
-              </Button>
-            ))}
-          </>
-        )}
         <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground hover:text-destructive gap-1 shrink-0"
           onClick={clearSession} title="Clear session">
           <Trash2 className="w-3.5 h-3.5" /> Clear
@@ -1054,35 +912,6 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
         </div>
       </div>}
 
-      {/* Tab strip — always visible once browser is running */}
-      {!noToolbar && (connected || tabs.length > 0) && (
-        <div className="flex items-center gap-0.5 px-2 pt-1 border-b border-border bg-muted/20 shrink-0 overflow-x-auto">
-          {tabs.map((tab, i) => (
-            <div
-              key={i}
-              className={`group flex items-center gap-1 px-2 py-1 rounded-t text-xs max-w-[160px] cursor-pointer select-none transition-colors ${
-                i === activeTab
-                  ? "bg-background border border-b-background border-border font-medium text-foreground"
-                  : "text-muted-foreground hover:bg-muted/60"
-              }`}
-              onClick={() => send({ type: "switchTab", index: i })}
-            >
-              <span className="truncate flex-1">
-                {tab.url ? (() => { try { return new URL(tab.url).hostname.replace("www.", "") || `Tab ${i + 1}`; } catch { return `Tab ${i + 1}`; } })() : `Tab ${i + 1}`}
-              </span>
-              {tabs.length > 1 && (
-                <button
-                  onClick={e => { e.stopPropagation(); send({ type: "closeTab", index: i }); }}
-                  className="opacity-0 group-hover:opacity-100 hover:text-destructive shrink-0 ml-0.5"
-                  title="Close tab"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* Debug panel (F12) shows login log + browser console */}
       {showLog && (

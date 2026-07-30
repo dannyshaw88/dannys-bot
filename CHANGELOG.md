@@ -4,6 +4,58 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.280] — 2026-07-30
+
+### Polish — Device Browser tab: layout stability, local-IP option, and toolbar cleanup
+
+#### Fix — Tab bar no longer shifts when switching to the Browser tab
+
+The right-hand panel was conditionally switching from `w-1/2` to `w-full` whenever the Browser tab was active, which caused the Accounts / Browser / Metrics / Phone Settings / Action Log / Log tab buttons to jump horizontally on every tab switch. The phone mirror panel was also hidden behind a conditional rather than staying mounted.
+
+Both panels are now fixed-width at all times (`w-1/2` each). The phone mirror stays visible on the left regardless of which tab is selected. No more layout shift when clicking Browser — the tab bar stays exactly where it is.
+
+**Files changed:** `artifacts/dannys-bot/src/pages/MobilePage.tsx`
+
+---
+
+#### Feature — "Use local PC's IP" checkbox in the Browser proxy bar
+
+A **Use local PC's IP** checkbox has been added immediately after the Save button in the Browser tab's proxy configuration bar.
+
+- When **ticked**: the three proxy input fields (host:port, username, password) are greyed out and disabled. Clicking Save persists `{ useLocalIp: true }` to the server — the browser opens with no proxy and uses the Windows machine's own IP address.
+- When **unticked**: normal proxy flow — fill in host:port and credentials, click Save.
+- The setting is **persisted per device** via the existing `/api/mobile/devices/:serial/browser-proxy` endpoint and survives app restarts. On page load the checkbox reflects the stored state.
+- The Save button is enabled whenever either the checkbox is ticked (no host:port required) or a valid host:port is entered.
+
+**Files changed:** `artifacts/dannys-bot/src/pages/MobilePage.tsx`, `artifacts/api-server/src/routes/mobile.ts`
+
+---
+
+#### Polish — Device Browser toolbar and banner stripped down for mobile-only workflow
+
+Since EB (Embedded Browser) automation is no longer used — all automation runs through the Android phone farm — the Browser panel's toolbar has been trimmed to the controls that are actually relevant for a device-linked isolated session:
+
+**Removed from toolbar:**
+- **2FA Code** button — auto-generated TOTP fill (EB-only feature)
+- **Phone Number** button — typed the pre-filled phone number from Settings into the focused field
+- **Email Account** button — typed the email validation username into the focused field
+- **Email Password** button — typed the email validation password into the focused field
+- **Leak Check** button — navigated to the in-app WebRTC/Canvas/IP leak test page
+- **AI Image** button — opened the AI selfie generation modal
+- **Upload** button/label — triggered a file chooser to upload a file into the browser
+
+**Removed:**
+- **Tab strip** — the row of open-tab chips that appeared below the toolbar once the browser was running. Multi-tab management is not needed for the device browser use case.
+
+**Simplified:**
+- **Isolation banner** — previously showed `Isolated session · @<serial> · <user-agent or "No UA set">`. Now shows only `Isolated session` plus the connection status dot. The serial number and UA string were noise for a device browser that has no configurable UA.
+
+What remains: navigation buttons (back, forward, reload, home), the address bar, the Login button, the Clear session button, Bring to Front (Electron only), and the session timer.
+
+**Files changed:** `artifacts/dannys-bot/src/components/BrowserPanel.tsx`
+
+---
+
 ## [1.2.279] — 2026-07-30
 
 ### Fix — Electron crash when clicking a device: "Cannot access 'le' before initialization" (real fix)
