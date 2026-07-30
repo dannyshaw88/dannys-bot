@@ -6,9 +6,9 @@
  * and the page shows a "desktop app only" notice.
  * In desktop mode the user can load a model and generate images locally on their GPU.
  */
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, DragEvent } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { Loader2, Sparkles, Download, RefreshCw, AlertTriangle, ChevronDown, X } from "lucide-react";
+import { Loader2, Sparkles, Download, RefreshCw, AlertTriangle, ChevronDown, X, Upload, ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -80,6 +80,10 @@ export function ImageGenPage() {
   const [steps, setSteps] = useState<number | "">("");
   const [guidance, setGuidance] = useState<number | "">("");
   const [seed, setSeed] = useState<number | "">("");
+
+  const [initImage, setInitImage] = useState<string | null>(null);   // data URL
+  const [initImageName, setInitImageName] = useState("");
+  const [strength, setStrength] = useState(0.75);
 
   const [generating, setGenerating] = useState(false);
   const [loadingModel, setLoadingModel] = useState(false);
@@ -173,6 +177,11 @@ export function ImageGenPage() {
       if (steps !== "") body.steps = Number(steps);
       if (guidance !== "") body.guidance_scale = Number(guidance);
       if (seed !== "") body.seed = Number(seed);
+      if (initImage) {
+        // Strip the "data:image/...;base64," prefix — sidecar expects raw base64
+        body.init_image = initImage.split(",")[1];
+        body.strength = strength;
+      }
 
       const r = await fetch("/api/image-gen/generate", {
         method: "POST",
@@ -322,6 +331,41 @@ export function ImageGenPage() {
                       {loadingModel ? <Loader2 className="w-3 h-3 animate-spin inline mr-1" /> : null}
                       Switch to {model}
                     </button>
+                  )}
+                </Section>
+
+                {/* Input image (img2img) */}
+                <Section label="Input Image (optional)">
+                  <ImageUploadZone
+                    image={initImage}
+                    imageName={initImageName}
+                    onImage={(dataUrl, name) => { setInitImage(dataUrl); setInitImageName(name); }}
+                    onClear={() => { setInitImage(null); setInitImageName(""); }}
+                  />
+                  {initImage && (
+                    <div className="mt-2 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                          Edit Strength — {Math.round(strength * 100)}%
+                        </label>
+                        <span className="text-[10px] text-muted-foreground">
+                          {strength <= 0.3 ? "subtle" : strength >= 0.8 ? "full redraw" : "balanced"}
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0.1}
+                        max={1.0}
+                        step={0.05}
+                        value={strength}
+                        onChange={e => setStrength(Number(e.target.value))}
+                        className="w-full accent-[#1AD2F2]"
+                      />
+                      <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span>subtle change</span>
+                        <span>full redraw</span>
+                      </div>
+                    </div>
                   )}
                 </Section>
 
@@ -643,6 +687,88 @@ function SetupSection({
         </div>
       )}
     </div>
+  );
+}
+
+function ImageUploadZone({
+  image, imageName, onImage, onClear,
+}: {
+  image: string | null;
+  imageName: string;
+  onImage: (dataUrl: string, name: string) => void;
+  onClear: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+
+  const readFile = (file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const result = e.target?.result;
+      if (typeof result === "string") onImage(result, file.name);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const onDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) readFile(file);
+  };
+
+  if (image) {
+    return (
+      <div className="relative rounded-md overflow-hidden border border-border bg-muted/30 group">
+        <img src={image} alt="Input" className="w-full h-36 object-cover block" />
+        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+          <button
+            onClick={onClear}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-black/60 hover:bg-black/80 rounded text-white text-xs font-medium"
+          >
+            <X className="w-3 h-3" /> Remove
+          </button>
+        </div>
+        <div className="px-2 py-1 bg-muted border-t border-border flex items-center gap-1.5">
+          <ImageIcon className="w-3 h-3 text-muted-foreground shrink-0" />
+          <span className="text-xs text-muted-foreground truncate">{imageName}</span>
+          <button onClick={onClear} className="ml-auto shrink-0 text-muted-foreground hover:text-foreground">
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="hidden"
+        onChange={e => { const f = e.target.files?.[0]; if (f) readFile(f); e.target.value = ""; }}
+      />
+      <div
+        onClick={() => inputRef.current?.click()}
+        onDragOver={e => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={onDrop}
+        className={cn(
+          "flex flex-col items-center justify-center gap-2 h-24 rounded-md border-2 border-dashed cursor-pointer transition-colors",
+          dragging
+            ? "border-[#1AD2F2] bg-[#1AD2F2]/5"
+            : "border-border hover:border-[#1AD2F2]/50 hover:bg-accent/50"
+        )}
+      >
+        <Upload className="w-5 h-5 text-muted-foreground" />
+        <span className="text-xs text-muted-foreground text-center">
+          Drop an image or <span className="text-foreground underline underline-offset-2">click to upload</span>
+        </span>
+        <span className="text-[10px] text-muted-foreground/60">PNG · JPEG · WEBP</span>
+      </div>
+    </>
   );
 }
 

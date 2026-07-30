@@ -131,6 +131,8 @@ class GenerateRequest(BaseModel):
     width: int = 1024
     height: int = 1024
     seed: Optional[int] = None
+    init_image: Optional[str] = None   # base64-encoded PNG/JPEG for img2img
+    strength: float = 0.75             # 0.0 = keep original, 1.0 = full generation
 
 class GenerateResponse(BaseModel):
     image_b64: str
@@ -278,8 +280,6 @@ def generate(req: GenerateRequest):
     try:
         kwargs: dict = {
             "prompt": req.prompt,
-            "width": req.width,
-            "height": req.height,
             "num_inference_steps": steps,
             "generator": generator,
         }
@@ -288,9 +288,48 @@ def generate(req: GenerateRequest):
         if req.negative_prompt:
             kwargs["negative_prompt"] = req.negative_prompt
 
-        result = _pipeline(**kwargs)
+        if req.init_image:
+            # ── Image-to-image ────────────────────────────────────────────────
+            # Reuse the loaded pipeline's weights via from_pipe() — no re-download.
+            from PIL import Image as PILImage
+            from diffusers import (
+                FluxImg2ImgPipeline,
+                StableDiffusionXLImg2ImgPipeline,
+                AutoPipelineForImage2Image,
+            )
+            _img2img_cls_map = {
+                "FluxPipeline":             FluxImg2ImgPipeline,
+                "StableDiffusionXLPipeline": StableDiffusionXLImg2ImgPipeline,
+                "AutoPipelineForText2Image": AutoPipelineForImage2Image,
+            }
+            pipeline_class = info.get("pipeline_class", "")
+            Img2ImgCls = _img2img_cls_map.get(pipeline_class)
+            if Img2ImgCls is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Image-to-image is not supported for model '{req.model}'"
+                )
+
+            img_bytes = base64.b64decode(req.init_image)
+            init_img = PILImage.open(io.BytesIO(img_bytes)).convert("RGB")
+            # Resize to requested output dimensions so the pipeline doesn't complain
+            init_img = init_img.resize((req.width, req.height), PILImage.LANCZOS)
+
+            img2img_pipe = Img2ImgCls.from_pipe(_pipeline)
+            kwargs["image"] = init_img
+            kwargs["strength"] = req.strength
+            # img2img pipelines derive output size from the input image — no width/height kwarg
+            result = img2img_pipe(**kwargs)
+        else:
+            # ── Text-to-image (original path) ─────────────────────────────────
+            kwargs["width"] = req.width
+            kwargs["height"] = req.height
+            result = _pipeline(**kwargs)
+
         image = result.images[0]
 
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
