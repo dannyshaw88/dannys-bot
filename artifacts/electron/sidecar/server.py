@@ -140,6 +140,22 @@ MODELS = {
         "default_guidance": 7.5,
         "size_gb": 7,
     },
+    "flux-dev": {
+        "label": "FLUX.1-dev (50-step, highest quality, ~24 GB download)",
+        "repo": "black-forest-labs/FLUX.1-dev",
+        "pipeline_class": "FluxPipeline",
+        "default_steps": 50,
+        "default_guidance": 3.5,
+        "size_gb": 24,
+    },
+    "sd3-medium": {
+        "label": "Stable Diffusion 3 Medium (28-step, great quality, ~5 GB download)",
+        "repo": "stabilityai/stable-diffusion-3-medium-diffusers",
+        "pipeline_class": "StableDiffusion3Pipeline",
+        "default_steps": 28,
+        "default_guidance": 7.0,
+        "size_gb": 5,
+    },
 }
 
 # ── Request / response models ─────────────────────────────────────────────────
@@ -201,12 +217,14 @@ def _do_load(model_key: str) -> None:
             FluxPipeline,
             AutoPipelineForText2Image,
             StableDiffusionXLPipeline,
+            StableDiffusion3Pipeline,
         )
 
         _cls_map = {
             "FluxPipeline": FluxPipeline,
             "AutoPipelineForText2Image": AutoPipelineForText2Image,
             "StableDiffusionXLPipeline": StableDiffusionXLPipeline,
+            "StableDiffusion3Pipeline": StableDiffusion3Pipeline,
         }
         PipelineCls = _cls_map[info["pipeline_class"]]
 
@@ -320,11 +338,13 @@ def generate(req: GenerateRequest):
             from diffusers import (
                 FluxImg2ImgPipeline,
                 StableDiffusionXLImg2ImgPipeline,
+                StableDiffusion3Img2ImgPipeline,
                 AutoPipelineForImage2Image,
             )
             _img2img_cls_map = {
-                "FluxPipeline":             FluxImg2ImgPipeline,
+                "FluxPipeline":              FluxImg2ImgPipeline,
                 "StableDiffusionXLPipeline": StableDiffusionXLImg2ImgPipeline,
+                "StableDiffusion3Pipeline":  StableDiffusion3Img2ImgPipeline,
                 "AutoPipelineForText2Image": AutoPipelineForImage2Image,
             }
             pipeline_class = info.get("pipeline_class", "")

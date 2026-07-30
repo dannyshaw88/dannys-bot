@@ -4,6 +4,39 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.297] — 2026-07-30
+
+### Feature — Two new AI image generation models: FLUX.1-dev and Stable Diffusion 3 Medium
+
+#### What's new
+
+Two additional models are now available in the AI Images model picker alongside the existing three:
+
+| Model | Steps | Quality | Download size |
+|---|---|---|---|
+| **FLUX.1-dev** | 50 | Highest quality open-weight model available — noticeably sharper and more detailed than FLUX.1-schnell | ~24 GB |
+| **Stable Diffusion 3 Medium** | 28 | Better composition and prompt adherence than SDXL at a smaller download size | ~5 GB |
+
+Both models are downloaded once on first load and cached locally — no internet or API key needed after that. Both also support image-to-image (upload a base image and edit it with a prompt).
+
+#### How it works
+
+**`artifacts/electron/sidecar/server.py`**
+
+- Added `flux-dev` and `sd3-medium` entries to the `MODELS` registry with their HuggingFace repo IDs, default steps, default guidance scales, and download sizes.
+- `flux-dev` uses the existing `FluxPipeline` class (same loader as FLUX.1-schnell, already imported).
+- `sd3-medium` uses `StableDiffusion3Pipeline`, added to the `_cls_map` in `_do_load()`.
+- Both models added to the img2img pipeline map in `generate()`:
+  - FLUX.1-dev → `FluxImg2ImgPipeline` (already imported)
+  - SD3 Medium → `StableDiffusion3Img2ImgPipeline` (newly imported)
+- No frontend changes needed — the AI Images page already reads the model list dynamically from `/status`.
+
+#### Files changed
+
+- `artifacts/electron/sidecar/server.py` — `flux-dev` and `sd3-medium` in MODELS registry, `StableDiffusion3Pipeline` and `StableDiffusion3Img2ImgPipeline` added to pipeline maps
+
+---
+
 ## [1.2.296] — 2026-07-30
 
 ### Fix — AI Images shows "Downloading…" and 0% progress bar on every restart even when the model is already installed
