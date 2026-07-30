@@ -4,6 +4,17 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.277] — 2026-07-30
+
+### Polish — Statistics page column headers
+
+- **Removed sort/rearrange icons** (⇅ / ▲ / ▼) from all column headers in the Farm table. Columns are still sortable by click; the indicators were just visual noise.
+- **Renamed columns**: Session Tool → Session · Feed Shares → Shares · Reel Scrolls → Reel · Feed Scrolls → Feed · Explore Scrolls → Explore.
+- **Eye icon** (👁) added after the three "view-count" columns (Reel, Feed, Explore) to reinforce what they measure at a glance.
+- Same label updates applied to the activity-metrics chart legend (Shares / Reel / Feed / Explore).
+
+---
+
 ## [1.2.276] — 2026-07-30
 
 ### Feature — Device Browser tab: full-screen, proxy config, per-device isolation

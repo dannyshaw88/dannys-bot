@@ -150,8 +150,8 @@ function ProfileStatsRow({
 
 // ─── Phone Farm tab ───────────────────────────────────────────────────────────
 
-const FARM_STAT_LABELS: { key: string; label: string; icon: React.ReactNode; color: string }[] = [
-  { key: "session_tool",    label: "Session Tool",   icon: <Fingerprint className="w-3 h-3" />, color: "text-cyan-500" },
+const FARM_STAT_LABELS: { key: string; label: string; icon: React.ReactNode; color: string; showEye?: boolean }[] = [
+  { key: "session_tool",    label: "Session",  icon: <Fingerprint className="w-3 h-3" />, color: "text-cyan-500" },
   { key: "trustscore",      label: "Trust Score",    icon: <Shield className="w-3 h-3" />,      color: "text-indigo-500" },
   { key: "cycles",          label: "Cycles",         icon: <Activity className="w-3 h-3" />,   color: "text-cyan-500" },
   { key: "likes",           label: "Likes",          icon: <Heart className="w-3 h-3" />,       color: "text-rose-500" },
@@ -159,10 +159,10 @@ const FARM_STAT_LABELS: { key: string; label: string; icon: React.ReactNode; col
   { key: "stories",         label: "Stories",        icon: <Eye className="w-3 h-3" />,         color: "text-emerald-500" },
   { key: "reels",           label: "Reels",          icon: <Repeat2 className="w-3 h-3" />,     color: "text-sky-500" },
   { key: "dms",             label: "DMs",            icon: <Mail className="w-3 h-3" />,        color: "text-violet-500" },
-  { key: "feed_shares",     label: "Feed Shares",    icon: <Zap className="w-3 h-3" />,         color: "text-amber-500" },
-  { key: "reel_scrolls",   label: "Reel Scrolls",   icon: <Repeat2 className="w-3 h-3" />,     color: "text-purple-500" },
-  { key: "feed_scrolls",   label: "Feed Scrolls",   icon: <BarChart2 className="w-3 h-3" />,   color: "text-teal-500" },
-  { key: "explore_scrolls", label: "Explore Scrolls", icon: <Activity className="w-3 h-3" />,  color: "text-orange-500" },
+  { key: "feed_shares",     label: "Shares",         icon: <Zap className="w-3 h-3" />,         color: "text-amber-500" },
+  { key: "reel_scrolls",   label: "Reel",           icon: <Repeat2 className="w-3 h-3" />,     color: "text-purple-500", showEye: true },
+  { key: "feed_scrolls",   label: "Feed",           icon: <BarChart2 className="w-3 h-3" />,   color: "text-teal-500",   showEye: true },
+  { key: "explore_scrolls", label: "Explore",        icon: <Activity className="w-3 h-3" />,    color: "text-orange-500", showEye: true },
 ];
 
 const FARM_DEFAULT_COL_WIDTHS: Record<string, number> = {
@@ -194,10 +194,10 @@ const MOBILE_METRIC_DEFS: {
   { key: "stories",         label: "Story Views",     icon: <Eye className="w-3.5 h-3.5" />,      color: "text-emerald-500", pieColor: "#10b981" },
   { key: "reels",            label: "Reels Viewed",    icon: <Repeat2 className="w-3.5 h-3.5" />,  color: "text-sky-500",    pieColor: "#0ea5e9" },
   { key: "dms",              label: "DMs Sent",        icon: <Mail className="w-3.5 h-3.5" />,     color: "text-violet-500", pieColor: "#8b5cf6" },
-  { key: "feed_shares",      label: "Feed Shares",     icon: <Zap className="w-3.5 h-3.5" />,      color: "text-amber-500",  pieColor: "#f59e0b" },
-  { key: "reel_scrolls",     label: "Reel Scrolls",    icon: <Repeat2 className="w-3.5 h-3.5" />,  color: "text-purple-500", pieColor: "#a855f7" },
-  { key: "feed_scrolls",     label: "Feed Scrolls",    icon: <BarChart2 className="w-3.5 h-3.5" />, color: "text-teal-500",  pieColor: "#14b8a6" },
-  { key: "explore_scrolls",  label: "Explore Scrolls", icon: <Activity className="w-3.5 h-3.5" />, color: "text-orange-500", pieColor: "#f97316" },
+  { key: "feed_shares",      label: "Shares",          icon: <Zap className="w-3.5 h-3.5" />,      color: "text-amber-500",  pieColor: "#f59e0b" },
+  { key: "reel_scrolls",     label: "Reel",            icon: <Repeat2 className="w-3.5 h-3.5" />,  color: "text-purple-500", pieColor: "#a855f7" },
+  { key: "feed_scrolls",     label: "Feed",            icon: <BarChart2 className="w-3.5 h-3.5" />, color: "text-teal-500",  pieColor: "#14b8a6" },
+  { key: "explore_scrolls",  label: "Explore",         icon: <Activity className="w-3.5 h-3.5" />, color: "text-orange-500", pieColor: "#f97316" },
 ];
 
 interface FarmPhone {
@@ -570,10 +570,6 @@ export function StatsPage() {
     }),
   ];
 
-  const sortIcon = (key: StatKey | "account") => {
-    if (sortKey !== key) return <span className="text-[9px] opacity-30 ml-0.5">⇅</span>;
-    return <span className="text-[9px] ml-0.5">{sortDir === "asc" ? "▲" : "▼"}</span>;
-  };
 
   const [flaggedIds] = useState<number[]>(() => {
     try { return JSON.parse(localStorage.getItem("equinox:flagged_profiles") ?? "[]") as number[]; } catch { return []; }
@@ -1296,10 +1292,7 @@ function PhoneFarmTab() {
                     >
                       <span className={`inline-flex items-center gap-1 ${s.color}`}>
                         {s.icon} {s.label}
-                        {s.key !== "trustscore" && s.key !== "session_tool" && (isSorted
-                          ? <span className="text-[9px]">{farmSortDir === "desc" ? "▼" : "▲"}</span>
-                          : <span className="text-[9px] opacity-30">⇅</span>
-                        )}
+                        {s.showEye && <Eye className="w-3 h-3 opacity-70" />}
                       </span>
                     </th>
                   );
