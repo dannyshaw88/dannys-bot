@@ -561,7 +561,7 @@ export function SettingsPage() {
                       saveToken(v);
                     }
                   }}
-                  className="font-mono text-sm"
+                  className="font-mono text-sm w-[50ch] max-w-full"
                 />
                 <Button
                   variant="outline"
@@ -596,7 +596,7 @@ export function SettingsPage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] items-center gap-3 md:gap-6">
             <p className="text-sm text-muted-foreground min-w-0">
-              Maximum number of HikerAPI scrape sessions the Follow Users tool is allowed to run per automation cycle, across all accounts. Set to 0 for unlimited.
+              Maximum number of HikerAPI scrape sessions the Follow Users tool is allowed to run per automation cycle, across all accounts.
             </p>
             <div className="flex items-center gap-3 shrink-0">
               <Label className="text-sm font-medium whitespace-nowrap">Abort after X scrapes</Label>
@@ -707,7 +707,7 @@ export function SettingsPage() {
                     mutation.mutate({ twoCaptchaApiKey: v });
                   }
                 }}
-                className="font-mono text-sm flex-1"
+                className="font-mono text-sm w-[50ch] max-w-full"
                 disabled={isLoading}
               />
               <Button
@@ -772,7 +772,7 @@ export function SettingsPage() {
                     mutation.mutate({ geminiApiKey: v } as any);
                   }
                 }}
-                className="font-mono text-sm flex-1"
+                className="font-mono text-sm w-[50ch] max-w-full"
                 disabled={isLoading}
               />
               <Button
@@ -837,7 +837,7 @@ export function SettingsPage() {
                   mutation.mutate({ openaiApiKey: v } as any);
                 }
               }}
-              className="font-mono text-sm"
+              className="font-mono text-sm w-[50ch] max-w-full"
               disabled={isLoading}
             />
           </div>

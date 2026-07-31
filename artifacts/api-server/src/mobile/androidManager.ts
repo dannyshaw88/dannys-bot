@@ -8301,24 +8301,79 @@ export async function findAndTapUserInSearch(
           await _sleep(800);
         }
       }
-      // All rows tried, none opened a profile — return true so caller can handle gracefully
-      return true;
+      // All rows tried, none opened a profile. Do not report a match here:
+      // the caller would otherwise continue into the profile/follow phase
+      // while still on the search results screen.
+      onLog?.(`Follow: no result row opened a confirmed profile for @${clean}`);
+      return false;
     }
   }
 
   // ── Last-resort fallback (Follow tool only) ─────────────────────────────
-  // Some devices/IG builds don't expose search result rows in the a11y tree
-  // (confirmed on Xiaomi Redmi 12 5G: keyboard and results both absent from
-  // UIAutomator dump even while visibly rendered). Since we typed the exact
-  // username, Instagram always ranks the matching account first.
+  // Some Instagram/device combinations don't expose search result rows in the
+  // accessibility tree even while they are visibly rendered. Since the exact
+  // username was entered, use only device-agnostic evidence from the current
+  // dump before falling back to generic directional navigation.
   //
   // Try one more node scan with generic row container resource-ids before
   // resorting to a coordinate tap — these ids appear on builds that do
   // expose containers but not individual avatar-ring or text nodes.
   {
-    const verifyXml = await _uiDump(adb, serial).catch(() => "");
+    let verifyXml = await _uiDump(adb, serial).catch(() => "");
     if (!verifyXml.includes("com.instagram.android")) {
       onLog?.(`Follow: fallback skipped — Instagram not in foreground`);
+      return false;
+    }
+
+    // Prefer an exact username node whenever the current accessibility dump
+    // exposes one. This keeps the fallback tied to the requested account
+    // rather than blindly selecting an unrelated visible row.
+    const cleanLcFallback = clean.toLowerCase();
+    const atCleanLcFallback = `@${cleanLcFallback}`;
+    const exactUserPositions: Array<{ x: number; y: number }> = [];
+    const exactUserSeen = new Set<string>();
+    for (const seg of verifyXml.split(/(?=<node )/)) {
+      if (!seg.startsWith("<node ")) continue;
+      if (/class="android\.widget\.EditText"/i.test(seg)) continue;
+      if (seg.includes("/row_search_keyword_title\"") ||
+          seg.includes("/search_keyword_title\"")) continue;
+      const segLc = seg.toLowerCase();
+      const exactMatch =
+        segLc.includes(`text="${cleanLcFallback}"`) ||
+        segLc.includes(`text="${atCleanLcFallback}"`) ||
+        segLc.includes(`content-desc="${cleanLcFallback}"`) ||
+        segLc.includes(`content-desc="${atCleanLcFallback}"`);
+      if (!exactMatch) continue;
+      const bb = seg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (!bb) continue;
+      const x = Math.round((parseInt(bb[1]) + parseInt(bb[3])) / 2);
+      const y = Math.round((parseInt(bb[2]) + parseInt(bb[4])) / 2);
+      const key = `${x},${y}`;
+      if (!exactUserSeen.has(key)) {
+        exactUserSeen.add(key);
+        exactUserPositions.push({ x, y });
+      }
+    }
+    exactUserPositions.sort((a, b) => a.y - b.y);
+    if (exactUserPositions.length > 0) {
+      const pos = exactUserPositions[0];
+      onLog?.(`Follow: @${clean} found in fallback tree at (${pos.x},${pos.y}) — tapping exact result`);
+      _adbTap(adb, serial, pos.x, pos.y);
+      await _sleep(1800);
+      const profileXml = await _uiDump(adb, serial).catch(() => "");
+      const stillOnSearchResults =
+        profileXml.includes("/row_search_avatar_in_ring\"") ||
+        profileXml.includes("/row_search_avatar_with_ring\"") ||
+        /class="android\.widget\.EditText"[^>]*resource-id="[^"]*search/i.test(profileXml);
+      const onProfile =
+        !stillOnSearchResults &&
+        (/(?:text|content-desc)="Follow(?:ing|ed)?"/.test(profileXml) ||
+          /(?:text|content-desc)="Requested"/.test(profileXml) ||
+          profileXml.includes(":id/follow_button") ||
+          profileXml.includes(":id/follow_btn") ||
+          profileXml.includes(":id/inline_follow_button"));
+      if (onProfile) return true;
+      onLog?.(`Follow: exact @${clean} result did not open a confirmed profile — skipping safely`);
       return false;
     }
 
@@ -8333,13 +8388,27 @@ export async function findAndTapUserInSearch(
     if (rowNode) {
       onLog?.(`Follow: @${clean} found via row-container id at (${rowNode.x},${rowNode.y}) — tapping`);
       _adbTap(adb, serial, rowNode.x, rowNode.y);
-      await _sleep(1500);
-      return true;
+      await _sleep(1800);
+      const profileXml = await _uiDump(adb, serial).catch(() => "");
+      const stillOnSearchResults =
+        profileXml.includes("/row_search_avatar_in_ring\"") ||
+        profileXml.includes("/row_search_avatar_with_ring\"") ||
+        /class="android\.widget\.EditText"[^>]*resource-id="[^"]*search/i.test(profileXml);
+      const onProfile =
+        !stillOnSearchResults &&
+        (/(?:text|content-desc)="Follow(?:ing|ed)?"/.test(profileXml) ||
+          /(?:text|content-desc)="Requested"/.test(profileXml) ||
+          profileXml.includes(":id/follow_button") ||
+          profileXml.includes(":id/follow_btn") ||
+          profileXml.includes(":id/inline_follow_button"));
+      if (onProfile) return true;
+      onLog?.(`Follow: row-container tap did not open a confirmed profile — skipping safely`);
+      return false;
     }
 
-    // DPAD fallback — only reached when UIAutomator exposes zero result nodes
-    // (confirmed Xiaomi Redmi 12 5G limitation: results render visually but
-    // never appear in the a11y tree).
+    // DPAD fallback — only reached when the current accessibility dump exposes
+    // no usable result nodes. This is generic Android directional navigation,
+    // not a device-specific coordinate or keyboard workaround.
     //
     // We typed the exact username so Instagram ranks the matching account first.
     // Rather than a fixed-percentage coordinate tap (which lands on a wrong row
@@ -8374,8 +8443,23 @@ export async function findAndTapUserInSearch(
     }
 
     runInputShell(serial, ["keyevent", "66"], "keyevent"); // KEYCODE_ENTER (66)
-    await _sleep(1500);
-    return true;
+    await _sleep(1800);
+    const profileXml = await _uiDump(adb, serial).catch(() => "");
+    const stillOnSearchResults =
+      profileXml.includes("/row_search_avatar_in_ring\"") ||
+      profileXml.includes("/row_search_avatar_with_ring\"") ||
+      /class="android\.widget\.EditText"[^>]*resource-id="[^"]*search/i.test(profileXml);
+    const onProfile =
+      !stillOnSearchResults &&
+      (/(?:text|content-desc)="Follow(?:ing|ed)?"/.test(profileXml) ||
+        /(?:text|content-desc)="Requested"/.test(profileXml) ||
+        profileXml.includes(":id/follow_button") ||
+        profileXml.includes(":id/follow_btn") ||
+        profileXml.includes(":id/inline_follow_button"));
+    if (!onProfile) {
+      onLog?.(`Follow: DPAD result did not open a confirmed profile — skipping safely`);
+    }
+    return onProfile;
   }
 }
 
