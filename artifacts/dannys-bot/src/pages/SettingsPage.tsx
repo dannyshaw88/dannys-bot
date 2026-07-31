@@ -143,16 +143,27 @@ function FakePhoneCard() {
 
   return (
     <div className="desktop-card p-5">
-      <div className="flex items-start gap-3 mb-4">
-        <div className="p-2 rounded-lg bg-primary/10 text-primary mt-0.5">
-          <Phone className="w-4 h-4" />
+      <div className="flex items-start justify-between gap-4 mb-4">
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="p-2 rounded-lg bg-primary/10 text-primary mt-0.5 shrink-0">
+            <Phone className="w-4 h-4" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">Inject Fake Phones</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Add simulated devices to the Phone Farm for UI testing without physical hardware.
+            </p>
+          </div>
         </div>
-        <div>
-          <p className="text-sm font-semibold text-foreground">Inject Fake Phones</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Add simulated devices to the Phone Farm for UI testing without physical hardware.
-          </p>
-        </div>
+        <Button
+          size="sm"
+          onClick={() => setShowPicker(v => !v)}
+          disabled={loading || saving || phones.length >= 10}
+          className="shrink-0"
+        >
+          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Plus className="w-3.5 h-3.5 mr-1" />}
+          Inject
+        </Button>
       </div>
 
       {/* Active injected devices */}
@@ -184,26 +195,16 @@ function FakePhoneCard() {
         </div>
       )}
 
-      {/* Action buttons */}
-      <div className="flex items-center gap-3">
-        <Button
-          size="sm"
-          onClick={() => setShowPicker(v => !v)}
-          disabled={loading || saving || phones.length >= 10}
-        >
-          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Plus className="w-3.5 h-3.5 mr-1" />}
-          Inject
-        </Button>
-        {phones.length > 0 && (
-          <>
-            <span className="text-xs text-muted-foreground">{phones.length} active</span>
-            <Button size="sm" variant="outline" onClick={handleRemoveAll} disabled={saving}>
-              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
-              Remove All
-            </Button>
-          </>
-        )}
-      </div>
+      {/* Active-device actions */}
+      {phones.length > 0 && (
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">{phones.length} active</span>
+          <Button size="sm" variant="outline" onClick={handleRemoveAll} disabled={saving}>
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+            Remove All
+          </Button>
+        </div>
+      )}
 
       {/* Device picker */}
       {showPicker && (
@@ -593,24 +594,26 @@ export function SettingsPage() {
             </div>
             <h3 className="text-base font-semibold">Scrape Limit</h3>
           </div>
-          <p className="text-sm text-muted-foreground mb-5">
-            Maximum number of HikerAPI scrape sessions the Follow Users tool is allowed to run per automation cycle, across all accounts. Set to 0 for unlimited.
-          </p>
-          <div className="flex items-center gap-3">
-            <Label className="text-sm font-medium w-44 shrink-0">Abort after X scrapes</Label>
-            <Input
-              type="number"
-              min={0}
-              max={999}
-              className="w-20 text-center"
-              value={settings?.followMaxScrapeSessions ?? 0}
-              onChange={e => {
-                const v = Math.max(0, Math.min(999, Math.trunc(Number(e.target.value) || 0)));
-                mutation.mutate({ followMaxScrapeSessions: v });
-              }}
-              disabled={isLoading || mutation.isPending}
-            />
-            <span className="text-xs text-muted-foreground">(0 = unlimited)</span>
+          <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] items-center gap-3 md:gap-6">
+            <p className="text-sm text-muted-foreground min-w-0">
+              Maximum number of HikerAPI scrape sessions the Follow Users tool is allowed to run per automation cycle, across all accounts. Set to 0 for unlimited.
+            </p>
+            <div className="flex items-center gap-3 shrink-0">
+              <Label className="text-sm font-medium whitespace-nowrap">Abort after X scrapes</Label>
+              <Input
+                type="number"
+                min={0}
+                max={999}
+                className="w-20 text-center"
+                value={settings?.followMaxScrapeSessions ?? 0}
+                onChange={e => {
+                  const v = Math.max(0, Math.min(999, Math.trunc(Number(e.target.value) || 0)));
+                  mutation.mutate({ followMaxScrapeSessions: v });
+                }}
+                disabled={isLoading || mutation.isPending}
+              />
+              <span className="text-xs text-muted-foreground whitespace-nowrap">(0 = unlimited)</span>
+            </div>
           </div>
         </div>
 
@@ -848,28 +851,30 @@ export function SettingsPage() {
             </div>
             <h3 className="text-base font-semibold">Dashboard Log Limit</h3>
           </div>
-          <p className="text-sm text-muted-foreground mb-5">
-            Maximum number of rows kept in memory for the Dashboard activity log. Older entries beyond this limit are dropped.
-            Larger limits preserve more history but use more memory.
-          </p>
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium">Max log rows</Label>
-            <select
-              className="flex h-9 w-48 items-center rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              value={settings?.logMaxRows ?? 100000}
-              disabled={isLoading}
-              onChange={(e) => {
-                const v = parseInt(e.target.value, 10);
-                if (!isNaN(v)) mutation.mutate({ logMaxRows: v });
-              }}
-            >
-              <option value={10000}>10,000</option>
-              <option value={50000}>50,000</option>
-              <option value={100000}>100,000</option>
-              <option value={250000}>250,000</option>
-              <option value={500000}>500,000</option>
-              <option value={1000000}>Unlimited (1M)</option>
-            </select>
+          <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] items-center gap-3 md:gap-6">
+            <p className="text-sm text-muted-foreground min-w-0">
+              Maximum number of rows kept in memory for the Dashboard activity log. Older entries beyond this limit are dropped.
+              Larger limits preserve more history but use more memory.
+            </p>
+            <div className="flex items-center gap-3 shrink-0">
+              <Label className="text-sm font-medium whitespace-nowrap">Max log rows</Label>
+              <select
+                className="flex h-9 w-48 items-center rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                value={settings?.logMaxRows ?? 100000}
+                disabled={isLoading}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10);
+                  if (!isNaN(v)) mutation.mutate({ logMaxRows: v });
+                }}
+              >
+                <option value={10000}>10,000</option>
+                <option value={50000}>50,000</option>
+                <option value={100000}>100,000</option>
+                <option value={250000}>250,000</option>
+                <option value={500000}>500,000</option>
+                <option value={1000000}>Unlimited (1M)</option>
+              </select>
+            </div>
           </div>
         </div>
 

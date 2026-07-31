@@ -416,15 +416,31 @@ export function BulkImportTabContent() {
     staleTime: 20_000,
   });
   const slotBySerial: Record<string, number> = Object.fromEntries(
-    (farmData?.devices ?? []).map(d => [d.serial, d.slotIndex])
+    (farmData?.devices ?? []).map(d => [d.serial, Number(d.slotIndex)])
   );
 
-  // Sort connected phones by Phone Farm slot; unregistered phones sort last.
-  const phones = [...(phonesData?.phones ?? [])].sort((a, b) => {
-    const sa = slotBySerial[a.serial] ?? Infinity;
-    const sb = slotBySerial[b.serial] ?? Infinity;
-    return sa - sb;
-  });
+  // Phone Farm layout order is physical slot order, not the USB enumeration
+  // order and not the device-name/alphabetical order:
+  //
+  //   row 1: Slot 1 | Slot 2 | Slot 3
+  //   row 2: Slot 4 | Slot 5 | Slot 6
+  //
+  // The registry's slotIndex is 1-based and already represents those cells,
+  // so ascending slotIndex is the canonical order for this selector too.
+  // Keep unregistered connected phones after the farm devices, preserving
+  // their USB response order rather than inventing a second ordering rule.
+  const phones = [...(phonesData?.phones ?? [])]
+    .map((phone, responseIndex) => ({ phone, responseIndex }))
+    .sort((a, b) => {
+      const slotA = Number.isFinite(slotBySerial[a.phone.serial])
+        ? slotBySerial[a.phone.serial]
+        : Number.POSITIVE_INFINITY;
+      const slotB = Number.isFinite(slotBySerial[b.phone.serial])
+        ? slotBySerial[b.phone.serial]
+        : Number.POSITIVE_INFINITY;
+      return slotA - slotB || a.responseIndex - b.responseIndex;
+    })
+    .map(({ phone }) => phone);
 
   // Slot counts per device — one query per connected phone, refreshed every 15 s.
   const slotCountResults = useQueries({
@@ -442,15 +458,6 @@ export function BulkImportTabContent() {
     })
   );
 
-  const handleParse = useCallback(() => {
-    if (!rawText.trim()) { toast({ title: "Nothing to parse", description: "Paste account data first.", variant: "destructive" }); return; }
-    const parsed = parseImportRaw(rawText);
-    if (parsed.length === 0) { toast({ title: "No accounts found", description: "Check format: username:password:2fasecret", variant: "destructive" }); return; }
-    setRows(parsed);
-    setSelectedIds(new Set(parsed.map(r => r.id)));
-    toast({ title: `Parsed ${parsed.length} account${parsed.length !== 1 ? "s" : ""}`, description: "Review and add to slots." });
-  }, [rawText, toast]);
-
   const pendingRows = rows.filter(r => r.status === "pending");
   const allPendingSelected = pendingRows.length > 0 && pendingRows.every(r => selectedIds.has(r.id));
   const toggleAll = () => {
@@ -459,7 +466,11 @@ export function BulkImportTabContent() {
   };
   const toggleRow = (id: string) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
-  const addRowsToDevice = useCallback(async (idsToAdd: string[], serial: string) => {
+  const addRowsToDevice = useCallback(async (
+    idsToAdd: string[],
+    serial: string,
+    sourceRows: ImportParsedRow[] = rows,
+  ) => {
     // Load current slots, merge new ones in (skip duplicates by username), save back
     let existingSlots: Array<{ username: string; password: string; totpSecret?: string; emailAddress?: string; emailPassword?: string; phoneNumber?: string }> = [];
     try {
@@ -471,7 +482,7 @@ export function BulkImportTabContent() {
     } catch { /* start fresh if fetch fails */ }
 
     const existingUsernames = new Set(existingSlots.map(s => s.username.toLowerCase()));
-    const toAdd = idsToAdd.map(id => rows.find(r => r.id === id)).filter(Boolean) as ImportParsedRow[];
+    const toAdd = idsToAdd.map(id => sourceRows.find(r => r.id === id)).filter(Boolean) as ImportParsedRow[];
 
     // Mark all as "adding" first
     setRows(prev => prev.map(r => idsToAdd.includes(r.id) && r.status === "pending" ? { ...r, status: "adding" } : r));
@@ -559,11 +570,32 @@ export function BulkImportTabContent() {
     else toast({ title: "All failed", description: "Check error rows for details.", variant: "destructive" });
   }, [rows, selectedSerial, addRowsToDevice, createProfileMutation, toast]);
 
-  const handleAddSelected = () => {
-    const pending = [...selectedIds].filter(id => rows.find(r => r.id === id)?.status === "pending");
-    if (pending.length === 0) { toast({ title: "Nothing to add", description: "Select at least one pending account.", variant: "destructive" }); return; }
-    addRows(pending);
-  };
+  const handleSortAndAdd = useCallback(async () => {
+    if (!rawText.trim()) {
+      toast({ title: "Nothing to sort", description: "Paste account data first.", variant: "destructive" });
+      return;
+    }
+    if (!selectedSerial) {
+      toast({ title: "Select a target device", description: "Choose a device before sorting accounts.", variant: "destructive" });
+      return;
+    }
+    const parsed = parseImportRaw(rawText);
+    if (parsed.length === 0) {
+      toast({ title: "No accounts found", description: "Check the pasted account data.", variant: "destructive" });
+      return;
+    }
+
+    const ids = parsed.map(row => row.id);
+    setRows(parsed);
+    setSelectedIds(new Set(ids));
+    setAdding(true);
+    try {
+      await addRowsToDevice(ids, selectedSerial, parsed);
+    } finally {
+      setAdding(false);
+    }
+  }, [rawText, selectedSerial, addRowsToDevice, toast]);
+
   const removeRow = (id: string) => { setRows(prev => prev.filter(r => r.id !== id)); setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n; }); };
   const handleClear = () => { setRawText(""); setRows([]); setSelectedIds(new Set()); };
   const selectedPendingCount = [...selectedIds].filter(id => rows.find(r => r.id === id)?.status === "pending").length;
@@ -617,16 +649,13 @@ export function BulkImportTabContent() {
         <div className="flex items-center justify-between mb-2">
           <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Raw Account Data</label>
           <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-            <span className="font-mono bg-muted px-1.5 py-0.5 rounded">user:pass:2fasecret</span>
-            <span>or</span>
-            <span className="font-mono bg-muted px-1.5 py-0.5 rounded">user:pass:2fasecret:email:emailpass</span>
           </div>
         </div>
         <textarea
           ref={textareaRef}
           value={rawText}
           onChange={e => setRawText(e.target.value)}
-          placeholder={"username:password:2FASecret\nusername2:password2:2FASecret2:email@example.com:emailpass"}
+          placeholder="Paste one account per line"
           rows={6}
           className="w-full font-mono text-xs bg-background border border-border rounded-md px-3 py-2 resize-y outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/40"
           spellCheck={false}
@@ -640,8 +669,9 @@ export function BulkImportTabContent() {
             }} className="h-8 text-xs gap-1.5">
               <ClipboardPaste className="w-3.5 h-3.5" /> Paste
             </Button>
-            <Button size="sm" onClick={handleParse} disabled={!rawText.trim()} className="h-8 text-xs gap-1.5">
-              <Upload className="w-3.5 h-3.5" /> Sort Accounts
+            <Button size="sm" onClick={handleSortAndAdd} disabled={!rawText.trim() || !selectedSerial || adding} className="h-8 text-xs gap-1.5">
+              {adding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+              Sort Accounts
             </Button>
           </div>
         </div>
@@ -657,10 +687,6 @@ export function BulkImportTabContent() {
                 {selectedPendingCount > 0 && ` · ${selectedPendingCount} selected`}
               </span>
             </div>
-            <Button size="sm" className="h-7 text-xs gap-1.5" disabled={selectedPendingCount === 0 || adding} onClick={handleAddSelected}>
-              {adding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-              Add {selectedPendingCount > 0 ? `${selectedPendingCount} ` : ""}{selectedSerial ? "to Device Slots" : "to Accounts"}
-            </Button>
           </div>
           <div className="grid grid-cols-[20px_180px_140px_180px_200px_130px_90px_60px] gap-x-3 px-4 py-2 border-b border-border bg-muted/20 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
             <div /><div>Username</div><div>Password</div><div>2FA Secret</div><div>Email</div><div>Email Pass</div><div>Status</div><div />
@@ -692,13 +718,6 @@ export function BulkImportTabContent() {
         </div>
       )}
 
-      {rows.length === 0 && (
-        <div className="rounded-lg border border-dashed border-border bg-card/50 flex flex-col items-center justify-center py-20 text-center">
-          <Instagram className="w-10 h-10 text-muted-foreground/30 mb-3" />
-          <p className="text-sm font-medium text-muted-foreground">No accounts sorted yet</p>
-          <p className="text-xs text-muted-foreground/60 mt-1">Paste credential lines above and click "Sort Accounts"</p>
-        </div>
-      )}
     </div>
   );
 }

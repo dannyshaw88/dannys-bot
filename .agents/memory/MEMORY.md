@@ -52,3 +52,4 @@
 - [Imported workspace verification](imported-workspace-verification.md) — use package-level build commands for this imported repo; root build/typecheck scripts include stale legacy paths and unrelated errors
 - [Image generation GPU detection](image-gen-gpu-detection.md) — separate Windows adapter/driver presence from PyTorch CUDA usability; unloading RAM is not deleting model files
 - [Image-generation model access](image-gen-model-access.md) — verify gating, account/license requirements, credits, and target-GPU fit before adding local model options
+- [View Feed ad-action safety](view-feed-ad-action-safety.md) — sponsored cards and unconfirmed media bounds must never receive guessed double-taps; use confirmed action nodes or skip

@@ -2403,9 +2403,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // alone via adb, so instead we verify we're still inside Instagram after
     // every gesture that could have hit a CTA, and recover with BACK if not.
     const INSTAGRAM_PKG = "com.instagram.android";
-    const verifyStillInInstagram = async (): Promise<void> => {
+    const verifyStillInInstagram = async (): Promise<boolean> => {
       const fg = await android.getForegroundPackage(serial).catch(() => null);
-      if (fg && fg !== INSTAGRAM_PKG) {
+      if (!fg || fg === INSTAGRAM_PKG) return true;
+      if (fg !== INSTAGRAM_PKG) {
         strayNavRecoveries++;
         logger.warn({ serial, fg }, "[check-feed] tap navigated away from Instagram (likely hit an ad's CTA) — recovering with BACK");
         onLog?.(`⚠ Tapped outside Instagram — foreground app is "${fg}" (likely hit an ad CTA). Pressing Back to recover…`);
@@ -2420,6 +2421,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           await sleepOrAbort(serial, 1500);
         }
       }
+      return false;
     };
     // Roll session scroll personality once — each run of the feed tool gets
     // its own mix so the distribution never converges to a fixed signature
@@ -2515,7 +2517,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // shares per post) is resolved fresh per post instead of assuming
           // a fixed layout. See findFeedActionIcons()'s doc comment.
           onLog?.(`View Feed ${i + 1}/${count}: scanning action bar…`);
-          const icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
+            // View Feed is intentionally strict and isolated from the other
+            // tools: sponsored cards are skipped, and a double-tap may only
+            // use a media rectangle confirmed by the live node tree.
+            const icons = await android.findFeedActionIcons(
+              serial,
+              onLog,
+              { strictViewFeed: true },
+            ).catch(() => null);
           if (!icons) {
             // No Like button found — this isn't a normal in-feed post right
             // now (Reel suggestion, ad, still animating in from the scroll,
@@ -2540,8 +2549,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 // icon so the mix of input methods looks organic to
                 // Instagram's telemetry.  Stories are excluded from this
                 // path (they use their own accessibility-tree like button).
-                const useDoubleTap = Math.random() < 0.93;
-                try {
+                // A double-tap is allowed only for a normal photo post whose
+                // media rectangle was confirmed by the live node tree. Video
+                // posts must use the Like node because a media double-tap
+                // opens the full-screen player.
+                const useDoubleTap = Math.random() < 0.93 &&
+                  !icons.isVideoPost &&
+                  !!icons.mediaBounds;
+                 let _likeActionSucceeded = false;
+                 try {
                   if (useDoubleTap) {
                     // Place the double-tap in the upper quarter of the post
                     // image to stay clear of sponsored-post CTA banners
@@ -2553,42 +2569,51 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     // dump, so no extra dump cost) and tap at a random point
                     // between 25 % and 45 % down from the top of the media.
                     //
-                    // Fallback (bounds not found): scale the upward offset
-                    // proportionally to likeBtn.y so it stays in the upper half
-                    // of the image across all screen sizes, rather than a flat
-                    // 300 px that can land near the bottom of shorter images.
-                    const { w: _fW } = getScreenSize(serial);
-                    const dtX = Math.round(_fW / 2) + Math.round((Math.random() - 0.5) * 20);
+                    // No proportional screen-coordinate fallback is allowed in
+                    // View Feed. When bounds are unavailable, the branch below
+                    // uses the confirmed Like node instead.
+                    const mb = icons.mediaBounds!;
+                    const mediaW = mb.x2 - mb.x1;
+                    const mediaH = mb.y2 - mb.y1;
+                    // Keep the gesture inside the node-confirmed media
+                    // rectangle. A small central band avoids captions/CTA
+                    // overlays while retaining natural variation.
+                    const xFraction = 0.40 + Math.random() * 0.20;
+                    const yFraction = 0.25 + Math.random() * 0.20;
+                    const dtX = Math.round(mb.x1 + mediaW * xFraction);
                     let dtY: number;
-                    if (icons.mediaBounds) {
-                      const mb = icons.mediaBounds;
-                      const mediaH = mb.y2 - mb.y1;
-                      const fraction = 0.25 + Math.random() * 0.20; // 25–45 % from top
-                      dtY = Math.round(mb.y1 + mediaH * fraction) + Math.round((Math.random() - 0.5) * 20);
-                      onLog?.(`View Feed ${i + 1}/${count}: double-tap using media bounds (${Math.round(fraction * 100)}% into media)`);
-                    } else {
-                      // Proportional fallback: ~35 % of likeBtn.y upward.
-                      dtY = likeBtn.y - Math.round(likeBtn.y * 0.35) + Math.round((Math.random() - 0.5) * 40);
-                    }
+                    dtY = Math.round(mb.y1 + mediaH * yFraction);
+                    onLog?.(`View Feed ${i + 1}/${count}: double-tap using media bounds (${Math.round(xFraction * 100)}% across, ${Math.round(yFraction * 100)}% down)`);
                     logger.info({ serial, target: "image-double-tap", x: dtX, y: dtY, mediaBoundsUsed: !!icons.mediaBounds }, "[check-feed] double-tap like");
                     onLog?.(`View Feed ${i + 1}/${count}: double-tapping image at (${dtX},${dtY})…`);
                     await android.doubleTap(serial, dtX, dtY);
                   } else {
-                    // Heart-icon tap — used ~7 % of the time for variety.
+                    // Safe node-targeted fallback when this is a video post,
+                    // the random double-tap roll misses, or the media border
+                    // is not exposed by this Instagram build.
+                    if (!icons.mediaBounds && !icons.isVideoPost) {
+                      onLog?.(`View Feed ${i + 1}/${count}: media border not confirmed — using Like node instead of guessing a double-tap`);
+                    }
                     const jx = likeBtn.x + Math.round((Math.random() - 0.5) * 6);
                     const jy = likeBtn.y + Math.round((Math.random() - 0.5) * 6);
                     logger.info({ serial, target: "like-button", x: jx, y: jy }, "[check-feed] heart-icon like");
                     onLog?.(`View Feed ${i + 1}/${count}: tapping heart icon at (${jx},${jy})…`);
                     await android.tap(serial, jx, jy);
-                  }
-                  likes++;
-                  onLog?.(`View Feed ${i + 1}/${count}: ✓ liked`);
+                   }
+                   _likeActionSucceeded = true;
                 } catch {
                   likeFailures++;
                   onLog?.(`View Feed ${i + 1}/${count}: ✗ like threw an error`);
                 }
                 await sleepOrAbort(serial, 300);
-                await verifyStillInInstagram();
+                const _likeStayedInInstagram = await verifyStillInInstagram();
+                 if (_likeActionSucceeded && _likeStayedInInstagram) {
+                  likes++;
+                  onLog?.(`View Feed ${i + 1}/${count}: ✓ liked`);
+                 } else if (_likeActionSucceeded) {
+                  likeFailures++;
+                  onLog?.(`View Feed ${i + 1}/${count}: like not counted — action left Instagram and was recovered`);
+                }
               }
             } else {
               onLog?.(`View Feed ${i + 1}/${count}: like roll missed (chance ${Math.round(likeChance * 100)}%) — scrolling without like`);
@@ -2844,10 +2869,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                       await sleepOrAbort(serial, 300);
                     }
                   }
-                  saves++;
-                  logger.info({ serial }, "[check-feed] saved post via ribbon icon");
-                  onLog?.(`View Feed ${i + 1}/${count}: ✓ post saved`);
-                  await verifyStillInInstagram();
+                  const _saveStayedInInstagram = await verifyStillInInstagram();
+                  if (_saveStayedInInstagram) {
+                    saves++;
+                    logger.info({ serial }, "[check-feed] saved post via ribbon icon");
+                    onLog?.(`View Feed ${i + 1}/${count}: ✓ post saved`);
+                  } else {
+                    onLog?.(`View Feed ${i + 1}/${count}: save not counted — action left Instagram and was recovered`);
+                  }
                 } catch (e: any) {
                   if (e?.message === "cycle-aborted") throw e;
                   onLog?.(`View Feed ${i + 1}/${count}: save error — ${e?.message}`);

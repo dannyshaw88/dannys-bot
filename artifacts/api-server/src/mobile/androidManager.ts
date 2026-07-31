@@ -2579,6 +2579,37 @@ export interface FeedActionIcons {
 }
 
 /**
+ * View Feed-only safety options. Other tools keep the historical behaviour
+ * unless they explicitly opt into this strict scan.
+ */
+export interface FeedActionScanOptions {
+  strictViewFeed?: boolean;
+}
+
+function _isSponsoredViewFeedXml(xml: string): boolean {
+  // Match exact accessibility values so normal words such as "Add" or
+  // "Adidas" do not get treated as ads.
+  const explicitAdMarker =
+    xml.includes('text="Ad"') || xml.includes('content-desc="Ad"') ||
+    xml.includes('text="Sponsored"') || xml.includes('content-desc="Sponsored"') ||
+    xml.includes('text="Advert"') || xml.includes('content-desc="Advert"');
+  if (explicitAdMarker) return true;
+
+  // Sponsored cards commonly expose a CTA Button even when the explicit
+  // "Sponsored" label is omitted from the accessibility dump. Parse each
+  // node segment so attribute ordering cannot make this check miss the CTA.
+  for (const segment of xml.split("<node ")) {
+    const className = (segment.match(/class="([^"]*)"/i) || [])[1] ?? "";
+    if (className !== "android.widget.Button") continue;
+    const text = (segment.match(/\b(?:text|content-desc)="([^"]*)"/i) || [])[1] ?? "";
+    if (/\b(?:shop|install|learn more|visit|sign up|get offer|contact us|download|book now|apply now|become a partner)\b/i.test(text)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Locates Instagram's feed post action-bar icons (Like, Comment, Repost,
  * Send) for whatever post is on screen right now, instead of assuming
  * they always sit at fixed screen-width percentages.
@@ -2616,11 +2647,19 @@ export interface FeedActionIcons {
  * Callers must treat a `null` field as "skip this action for this post",
  * never fall back to a fixed coordinate.
  */
-export async function findFeedActionIcons(serial: string, onLog?: (msg: string) => void): Promise<FeedActionIcons | null> {
+export async function findFeedActionIcons(
+  serial: string,
+  onLog?: (msg: string) => void,
+  options?: FeedActionScanOptions,
+): Promise<FeedActionIcons | null> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial);
   if (!xml) return null;
+  if (options?.strictViewFeed && _isSponsoredViewFeedXml(xml)) {
+    onLog?.("[feed-icons] View Feed sponsored/ad card detected — skipping all post actions");
+    return null;
+  }
 
   // Use the adb-queried screen dimensions, NOT _getScreenSize(xml). The XML-parsed
   // fallback returns w=1600 (landscape desktop) / h=900 when the root bounds attribute
@@ -3015,8 +3054,45 @@ export async function findFeedActionIcons(serial: string, onLog?: (msg: string) 
         break;
       }
     }
+    // Some Instagram builds strip both media_group resource IDs. In that
+    // case, recover the border from the live node tree itself: choose the
+    // largest ImageView/media-like rectangle above this post's action row.
+    // This is still node-derived targeting; no screen pixel or fixed
+    // coordinate is used.
     if (!mediaBounds) {
-      onLog?.("[feed-icons] media bounds not found — double-tap will use proportional fallback offset");
+      const { w, h: screenH } = getScreenSize(serial);
+      const candidates: Array<{ bounds: { x1: number; y1: number; x2: number; y2: number }; area: number }> = [];
+      for (const segment of xml.split("<node ")) {
+        const boundsMatch = segment.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+        if (!boundsMatch) continue;
+        const b = {
+          x1: Number(boundsMatch[1]), y1: Number(boundsMatch[2]),
+          x2: Number(boundsMatch[3]), y2: Number(boundsMatch[4]),
+        };
+        const width = b.x2 - b.x1;
+        const height = b.y2 - b.y1;
+        const rid = (segment.match(/resource-id="([^"]*)"/) || [])[1] ?? "";
+        const cls = (segment.match(/class="([^"]*)"/) || [])[1] ?? "";
+        const desc = (segment.match(/content-desc="([^"]*)"/) || [])[1] ?? "";
+        const text = (segment.match(/\btext="([^"]*)"/) || [])[1] ?? "";
+        const mediaLike = /media|photo|image|carousel|video/i.test(`${rid} ${cls} ${desc} ${text}`);
+        const imageClass = /ImageView|TextureView|SurfaceView|VideoView/i.test(cls);
+        if (!mediaLike && !imageClass) continue;
+        if (width < w * 0.60 || height < screenH * 0.18) continue;
+        if (b.y1 < screenH * 0.06 || b.y2 >= like.y) continue;
+        candidates.push({ bounds: b, area: width * height });
+      }
+      candidates.sort((a, b) => b.area - a.area);
+      if (candidates[0]) {
+        mediaBounds = candidates[0].bounds;
+        onLog?.(`[feed-icons] media bounds found from node tree: [${mediaBounds.x1},${mediaBounds.y1}][${mediaBounds.x2},${mediaBounds.y2}]`);
+      }
+    }
+    if (!mediaBounds) {
+      onLog?.("[feed-icons] media bounds not found — no node-confirmed double-tap target");
+      // Keep the action-bar result even when the media border is unavailable.
+      // View Feed can safely fall back to the node-confirmed Like heart, while
+      // Save/Share remain independently usable from their own nodes.
     }
   }
 
