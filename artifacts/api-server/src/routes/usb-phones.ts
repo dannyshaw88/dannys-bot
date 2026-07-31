@@ -276,8 +276,14 @@ function listUsbPhones(adbPath: string, diag?: { rawOutput: string }): UsbPhone[
         const ver = runAdb(adbPath, ["-s", serial, "shell", "getprop", "ro.build.version.release"]);
         if (ver) cached.androidVersion = ver;
 
-        // If model wasn't in the -l output, try getprop
-        if (!phone.model) {
+        // Keep the public model from `adb devices -l` in the cache too. The
+        // screenshot-folder resolver runs independently of this response and
+        // must not fall back to the serial just because the model came from
+        // `-l` instead of getprop.
+        if (phone.model) {
+          cached.model = phone.model;
+        } else {
+          // If model wasn't in the -l output, try getprop.
           const mdl = runAdb(adbPath, ["-s", serial, "shell", "getprop", "ro.product.model"]);
           if (mdl) cached.model = mdl;
         }

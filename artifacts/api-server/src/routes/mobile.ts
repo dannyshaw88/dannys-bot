@@ -388,9 +388,9 @@ const FOLDER_PATHS_DIR: string = process.env.EQUINOX_DATA_DIR
   : path.join(path.dirname(path.resolve(process.argv[1] ?? ".")), "..", "mobile-folder-paths");
 try { fs.mkdirSync(FOLDER_PATHS_DIR, { recursive: true }); } catch { /* already exists */ }
 
-// Debug screenshots — one folder per device serial, max 50 PNG files, cleared
-// when a new account's Human Session cycle starts.  Named by Unix timestamp so
-// they sort chronologically and can be played back like a movie.
+// Debug screenshots — one folder per public device model, max 50 PNG files,
+// cleared when a new account's Human Session cycle starts. Named by Unix
+// timestamp so they sort chronologically and can be played back like a movie.
 const SCREENSHOTS_DIR: string = process.env.EQUINOX_DATA_DIR
   ? path.join(process.env.EQUINOX_DATA_DIR, "debug-screenshots")
   : path.join(path.dirname(path.resolve(process.argv[1] ?? ".")), "..", "debug-screenshots");
@@ -437,6 +437,23 @@ async function captureDebugScreenshot(serial: string, label: string): Promise<vo
     const adb = android.detectToolset().adb.path;
     if (!adb) return;
     const dir = path.join(SCREENSHOTS_DIR, getDeviceLabel(serial));
+    const legacySerialDir = path.join(
+      SCREENSHOTS_DIR,
+      serial.replace(/[^a-zA-Z0-9_\-]/g, "_"),
+    );
+    // Older builds used the serial for this folder. Merge it into the public
+    // model folder once the device metadata is available so one phone cannot
+    // leave two separate screenshot histories behind.
+    if (legacySerialDir !== dir && fs.existsSync(legacySerialDir)) {
+      await fsPromises.mkdir(dir, { recursive: true });
+      for (const file of await fsPromises.readdir(legacySerialDir)) {
+        const from = path.join(legacySerialDir, file);
+        const to = path.join(dir, file);
+        if (!fs.existsSync(to)) await fsPromises.rename(from, to).catch(() => {});
+        else await fsPromises.unlink(from).catch(() => {});
+      }
+      await fsPromises.rm(legacySerialDir, { recursive: true, force: true }).catch(() => {});
+    }
     await fsPromises.mkdir(dir, { recursive: true });
     // Enforce 50-file cap: delete oldest before writing the new one.
     const existing = (await fsPromises.readdir(dir))
@@ -8606,9 +8623,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Push into the rolling buffer BEFORE capturing so the composite always
       // includes the current line in the log panel on the right.
       pushDebugLogLine(serial, fullLine);
-      // Fire-and-forget: screenshot after every log entry so the user can
-      // play back exactly what the phone was doing at each step.
-      captureDebugScreenshot(serial, msg).catch(() => {});
+      // Only action-stamp lines represent a real state-changing automation
+      // action. Status/detail lines can arrive several times per second and
+      // must update the log without creating another disk screenshot.
+      if (/^▶\s/.test(msg.trim())) {
+        captureDebugScreenshot(serial, msg).catch(() => {});
+      }
     };
     try {
       const {
