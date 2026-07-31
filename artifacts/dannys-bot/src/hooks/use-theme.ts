@@ -43,7 +43,7 @@ export function useTheme() {
     () => (localStorage.getItem("equinox-theme-color") as ThemeColor) ?? "blue"
   );
   const [themeMode, setThemeModeState] = useState<ThemeMode>(
-    () => (localStorage.getItem("equinox-theme-mode") as ThemeMode) ?? "dark"
+    () => (localStorage.getItem("equinox-theme-mode") as ThemeMode) ?? "light"
   );
 
   // On mount: fetch from backend it is the single source of truth because
@@ -55,7 +55,7 @@ export function useTheme() {
       .then((data) => {
         if (!data) return;
         const color = (data.themeColor as ThemeColor) ?? "blue";
-        const mode  = (data.themeMode  as ThemeMode)  ?? "dark";
+        const mode  = (data.themeMode  as ThemeMode)  ?? "light";
         // Always apply + sync don't skip even if localStorage looks the same.
         // The localStorage at a fresh port is empty, so defaults would mask
         // the real saved value.
@@ -71,7 +71,7 @@ export function useTheme() {
   const setThemeColor = useCallback((color: ThemeColor) => {
     localStorage.setItem("equinox-theme-color", color);
     setThemeColorState(color);
-    const mode = (localStorage.getItem("equinox-theme-mode") as ThemeMode) ?? "dark";
+    const mode = (localStorage.getItem("equinox-theme-mode") as ThemeMode) ?? "light";
     applyTheme(color, mode);
     saveToBackend(color, mode);
   }, []);

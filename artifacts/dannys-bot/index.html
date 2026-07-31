@@ -6,7 +6,7 @@
     <script>
       (function() {
         var c = localStorage.getItem("equinox-theme-color") || "blue";
-        var m = localStorage.getItem("equinox-theme-mode") || "dark";
+        var m = localStorage.getItem("equinox-theme-mode") || "light";
         var h = document.documentElement;
         if (m === "dark") h.classList.add("dark");
         if (c !== "blue") h.classList.add("theme-" + c);

@@ -1456,7 +1456,7 @@ export async function registerInstagramRoutes(
       backupEnabled: settings.backupEnabled === "true",
       backupIntervalDays: parseInt(settings.backupIntervalDays ?? "7", 10),
       themeColor: settings.themeColor ?? "blue",
-      themeMode: settings.themeMode ?? "dark",
+      themeMode: settings.themeMode ?? "light",
       preFilledPhoneNumber: settings.preFilledPhoneNumber ?? "",
     });
   });
@@ -1531,7 +1531,7 @@ export async function registerInstagramRoutes(
       backupEnabled: settings.backupEnabled === "true",
       backupIntervalDays: parseInt(settings.backupIntervalDays ?? "7", 10),
       themeColor: settings.themeColor ?? "blue",
-      themeMode: settings.themeMode ?? "dark",
+      themeMode: settings.themeMode ?? "light",
       preFilledPhoneNumber: settings.preFilledPhoneNumber ?? "",
     });
   });
