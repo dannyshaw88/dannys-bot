@@ -20,6 +20,8 @@ interface ModelInfo {
   default_guidance: number;
   supports_ip_adapter?: boolean;
   supports_reference_image?: boolean;
+  minimum_vram_gb?: number | null;
+  recommended_vram_gb?: number | null;
 }
 
 interface GpuInfo {
@@ -52,7 +54,8 @@ interface StatusResponse {
   loaded_model: string | null;
   available_models: Record<string, ModelInfo>;
   download_progress?: DownloadProgress | null;
-  loading_phase?: "checking_cache" | "downloading" | "loading_pipeline" | "moving_to_device" | "error" | "idle";
+  loading_phase?: "checking_cache" | "hardware_check" | "downloading" | "loading_pipeline" | "moving_to_device" | "error" | "idle";
+  loading_detail?: string;
   loading_elapsed_seconds?: number | null;
   cpu_threads?: number;
   cpu_count?: number;
@@ -384,6 +387,7 @@ export function ImageGenPage() {
     status?.loading_phase === "loading_pipeline" ||
     status?.loading_phase === "moving_to_device" ||
     Boolean(status?.download_progress?.download_complete);
+  const loadingHardware = status?.loading_phase === "hardware_check";
   const needsLoad = status?.status === "idle" || status?.status === "error";
   const noSidecar = statusErr && !status;
   const hasElectronSetup = Boolean(window.electronAPI?.setupImageGen);
@@ -479,16 +483,25 @@ export function ImageGenPage() {
           {isLoading && (
             <InfoCard
               icon={<Loader2 className="w-5 h-5 animate-spin" style={{ color: BRAND }} />}
-              title={loadingPipeline ? "Download complete — loading model into memory…" : "Loading model…"}
+              title={
+                loadingHardware
+                  ? "Checking hardware compatibility…"
+                  : loadingPipeline
+                    ? "Download complete — loading model into memory…"
+                    : "Loading model…"
+              }
             >
               <p className="text-sm text-muted-foreground">{status?.message}</p>
+              {status?.loading_detail && (
+                <p className="text-xs text-muted-foreground mt-1">{status.loading_detail}</p>
+              )}
               <DownloadProgressBar
                 progress={status?.download_progress}
                 loadingPipeline={loadingPipeline}
               />
               <p className="text-xs text-muted-foreground mt-1">
                 {loadingPipeline
-                  ? "The files are downloaded. The model is now being assembled and moved into memory; this can take several minutes on the first load."
+                  ? "The files are downloaded. The model is now being assembled and moved into memory; this can take several minutes on supported hardware."
                   : "First load downloads the model weights. This can take several minutes on a fast connection."}
               </p>
               {typeof status?.loading_elapsed_seconds === "number" && status.loading_elapsed_seconds >= 60 && (
@@ -913,6 +926,14 @@ function SetupSection({
                 <p className="text-xs text-muted-foreground">
                   Download size: ~{models[model].size_gb} GB (stored in your AppData folder)
                 </p>
+                {models[model].minimum_vram_gb && (
+                  <p className="text-xs text-muted-foreground">
+                    Full-GPU loading requires at least {models[model].minimum_vram_gb} GB VRAM
+                    {models[model].recommended_vram_gb
+                      ? ` · ${models[model].recommended_vram_gb} GB recommended`
+                      : ""}
+                  </p>
+                )}
                 {models[model].installed && (
                   <p className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
                     <CheckCircle2 className="w-3.5 h-3.5" /> Downloaded on this PC

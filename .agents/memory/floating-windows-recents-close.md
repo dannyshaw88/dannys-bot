@@ -27,6 +27,21 @@ left/right card-strip layout.
 must use a left-drag of the left-most visible card, not an upward swipe, and
 must repeat if the target app might not be the only (or left-most) card.
 
+## Follow search-tab diagnostic rule
+
+The UIAutomator root may omit its `bounds` attribute. The shared XML screen-size
+helper has a desktop-sized `1600×900` fallback for unrelated coordinate callers,
+but that fallback is not evidence of a phone floating window. Floating-window
+detection must only compare real root bounds; when root bounds are absent, use
+`adb shell wm size` for diagnostic cutoffs and do not relaunch Instagram.
+
+**Why:** Follow was incorrectly logging a floating-window warning on a normal
+Instagram screen, relaunching the app, then skipping the entire Follow step.
+
+**How to apply:** Keep “unknown root size” distinct from “confirmed resized
+window.” Preserve the fallback only for callers that explicitly need a usable
+coordinate space.
+
 ## Follow-up (11 Jul 2026): pidof checked too soon after a working swipe
 
 A correctly-aimed drag was dismissing the card (user-confirmed visually),

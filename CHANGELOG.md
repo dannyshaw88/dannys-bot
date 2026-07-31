@@ -4,6 +4,27 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.308] — 2026-07-31
+
+### Fixed — Follow Users floating-window false positive
+
+- Fixed Follow Users incorrectly treating a normal Instagram screen as a Xiaomi floating window when UIAutomator omitted the hierarchy root bounds.
+- Prevented the desktop-sized `1600×900` coordinate fallback from being interpreted as evidence that the phone was resized.
+- Search-tab diagnostics now use the real device dimensions from ADB when root bounds are unavailable.
+- Confirmed floating-window layouts still use the existing device-size comparison and recovery behavior.
+
+### Fixed — Qwen Image Edit hardware loading feedback
+
+- Added a VRAM preflight before Qwen Image Edit pipeline assembly so clearly undersized GPUs fail quickly instead of appearing stuck for minutes.
+- Added the Qwen minimum and recommended VRAM requirements to the AI Images model picker.
+- Added explicit loading details for hardware checks, pipeline assembly, and device-memory transfer.
+
+### Build and release
+
+- Bumped the application and Electron package version to `1.2.308` for the Windows installer and auto-updater.
+
+---
+
 ## [1.2.307] — 2026-07-31
 
 ### Fixed — Mobile Follow matching and safer device automation

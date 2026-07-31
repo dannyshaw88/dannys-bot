@@ -8,3 +8,9 @@ The local image-generation loader has separate phases: downloading, assembling t
 **Why:** The Qwen Image Edit download showed 100% for an extended period while the background pipeline load continued, making the desktop app appear frozen and leaving no way to distinguish downloading from model initialization.
 
 **How to apply:** Keep `status`, `loading_phase`, elapsed loading time, and download progress separate. Exclude Hugging Face `.incomplete` blobs from completed bytes, show an explicit post-download loading message, and only switch to the generation UI after the sidecar reports `ready`.
+
+The current full-GPU Qwen Image Edit loader also needs a hardware preflight. CUDA availability alone is not enough: a roughly 4 GB GTX 1050 Ti cannot hold this approximately 20 GB pipeline on the GPU. Reject clearly undersized GPUs before importing and materializing the pipeline, and expose the requirement beside the model picker.
+
+**Why:** Without the check, a supported CUDA runtime was mistaken for sufficient VRAM and the desktop app could appear to hang for minutes while attempting an allocation that could not succeed.
+
+**How to apply:** Preserve the existing loading phases, add a `hardware_check` phase and status detail, and fail with a clear recommendation to select a smaller model or use a GPU with substantially more VRAM. Do not claim that Qwen can use CPU/disk offload unless the loader is actually changed to implement it.

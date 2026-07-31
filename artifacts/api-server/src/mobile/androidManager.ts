@@ -6688,8 +6688,12 @@ function _findEditTextN(xml: string, index: number): { x: number; y: number } | 
 
 /** Get screen dimensions from the root hierarchy node bounds, e.g. "[0,0][1600,900]" → {w,h} */
 function _getScreenSize(xml: string): { w: number; h: number } {
+  return _getScreenSizeFromXml(xml) ?? { w: 1600, h: 900 };
+}
+
+function _getScreenSizeFromXml(xml: string): { w: number; h: number } | null {
   const m = xml.match(/bounds="\[0,0\]\[(\d+),(\d+)\]"/);
-  return m ? { w: +m[1], h: +m[2] } : { w: 1600, h: 900 };
+  return m ? { w: +m[1], h: +m[2] } : null;
 }
 
 function _adbTap(adb: string, serial: string, x: number, y: number): void {
@@ -7476,7 +7480,11 @@ export async function detectFloatingWindow(
   const { w: deviceW, h: deviceH } = getScreenSize(serial);
   const xml = await _uiDump(adb, serial).catch(() => null);
   if (!xml) return { floating: false, windowH: deviceH, deviceH, windowW: deviceW, deviceW };
-  const { w: windowW, h: windowH } = _getScreenSize(xml);
+  const xmlSize = _getScreenSizeFromXml(xml);
+  if (!xmlSize) {
+    return { floating: false, windowH: deviceH, deviceH, windowW: deviceW, deviceW };
+  }
+  const { w: windowW, h: windowH } = xmlSize;
   // Use 0.88 threshold — a floating window is typically 60–80 % of screen height;
   // 12 % headroom avoids false-positives from status-bar / notch differences.
   const floating = windowH < deviceH * 0.88 || windowW < deviceW * 0.88;
@@ -7502,8 +7510,9 @@ export async function findInstagramSearchTab(
   // smaller root-bounds height than the real device screen, shifting all
   // position-based detection thresholds and causing spurious misses.
   if (onLog) {
-    const { w: xmlW, h: xmlH } = _getScreenSize(xml);
     const { w: realW, h: realH } = getScreenSize(serial);
+    const xmlSize = _getScreenSizeFromXml(xml);
+    const { w: xmlW, h: xmlH } = xmlSize ?? { w: realW, h: realH };
     const botMin = Math.round(xmlH * 0.88);
     const rows: string[] = [];
     const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
@@ -7521,10 +7530,11 @@ export async function findInstagramSearchTab(
       const clickable = attrs.match(/clickable="([^"]*)"/)?.[1] ?? "";
       rows.push(`class=${cls} rid=${rid} cd="${cd}" text="${txt}" clickable=${clickable} bounds=${bm[0].slice(bm[0].indexOf('"') + 1, -1)}`);
     }
-    const floatingNote =
-      (xmlH < realH * 0.88 || xmlW < realW * 0.88)
+    const floatingNote = xmlSize
+      ? (xmlH < realH * 0.88 || xmlW < realW * 0.88)
         ? ` ⚠️ FLOATING WINDOW: ui-dump bounds ${xmlW}×${xmlH} vs real screen ${realW}×${realH} — Instagram is NOT fullscreen`
-        : ` (screen ${realW}×${realH}, dump root ${xmlW}×${xmlH})`;
+        : ` (screen ${realW}×${realH}, dump root ${xmlW}×${xmlH})`
+      : ` (screen ${realW}×${realH}, dump root bounds unavailable — using real screen dimensions)`;
     onLog(
       `Follow: search tab lookup missed — bottom-nav dump (${rows.length} node(s) below y=${botMin})` +
       floatingNote +

@@ -67,8 +67,9 @@ _status = "idle"        # idle | loading | ready | error
 _status_message = "Ready to load a model."
 _loading_model_key: Optional[str] = None   # model being downloaded right now
 _loading_from_cache: bool = False           # True when weights are already on disk
-_loading_phase: str = "idle"                # checking_cache | downloading | loading_pipeline | moving_to_device
+_loading_phase: str = "idle"                # checking_cache | hardware_check | downloading | loading_pipeline | moving_to_device
 _loading_started_at: Optional[float] = None
+_loading_detail: str = ""
 _load_lock = threading.Lock()
 _ip_adapter_loaded: bool = False            # True once IP-Adapter weights are loaded onto _pipeline
 _gpu_info_cache: Optional[dict] = None
@@ -351,6 +352,11 @@ MODELS = {
         "size_gb": 20,
         "supports_ip_adapter": False,
         "supports_reference_image": True,
+        # The current loader places the complete pipeline on CUDA; it does
+        # not use CPU/disk offload. Refuse clearly undersized GPUs before
+        # diffusers spends minutes materialising a pipeline that cannot fit.
+        "minimum_vram_gb": 16,
+        "recommended_vram_gb": 24,
     },
     "sd3-medium": {
         "label": "Stable Diffusion 3 Medium (28-step, great quality, ~5 GB download)",
@@ -420,7 +426,8 @@ app.add_middleware(
 # ── Load pipeline (runs in a background thread) ───────────────────────────────
 def _do_load(model_key: str) -> None:
     global _pipeline, _loaded_model, _status, _status_message, _loading_model_key
-    global _loading_from_cache, _loading_phase, _loading_started_at, _ip_adapter_loaded
+    global _loading_from_cache, _loading_phase, _loading_started_at, _loading_detail
+    global _ip_adapter_loaded
 
     if model_key not in MODELS:
         _status = "error"
@@ -432,6 +439,7 @@ def _do_load(model_key: str) -> None:
     _status = "loading"
     _loading_phase = "checking_cache"
     _loading_started_at = time.time()
+    _loading_detail = "Checking the local model cache…"
 
     # Detect whether the weights are already cached so we can show the right message
     cached = _model_is_cached(model_key)
@@ -439,13 +447,38 @@ def _do_load(model_key: str) -> None:
     if cached:
         _loading_phase = "loading_pipeline"
         _status_message = f"Loading {info['label']} from cache…"
+        _loading_detail = "Preparing the cached model pipeline…"
     else:
         _loading_phase = "downloading"
         _status_message = f"Downloading {info['label']} (~{info['size_gb']} GB — first run only)…"
+        _loading_detail = "Downloading model weights…"
     log.info(_status_message)
 
     try:
         import torch
+
+        # Check hardware before importing/assembling the large diffusers
+        # pipeline. CUDA availability only means that PyTorch can talk to the
+        # GPU; it does not mean this model can fit in that GPU's VRAM.
+        _loading_phase = "hardware_check"
+        _loading_detail = "Checking GPU memory and runtime compatibility…"
+        gpu_info = _get_gpu_info()
+        device = "cuda" if gpu_info["available"] else "cpu"
+        minimum_vram = info.get("minimum_vram_gb")
+        if device == "cuda" and minimum_vram and (
+            gpu_info.get("vram_gb") is not None
+            and gpu_info["vram_gb"] < minimum_vram
+        ):
+            actual_vram = gpu_info["vram_gb"]
+            raise RuntimeError(
+                f"{info['label']} needs at least {minimum_vram} GB of VRAM in the current full-GPU loader, "
+                f"but {gpu_info.get('name') or 'this GPU'} has {actual_vram} GB. "
+                "Choose SDXL-Turbo or another smaller model, or use a machine with more VRAM."
+            )
+
+        if device == "cpu" and info.get("minimum_vram_gb"):
+            _loading_detail = "No CUDA runtime detected; loading the large model into system RAM…"
+
         from diffusers import (
             FluxPipeline,
             AutoPipelineForText2Image,
@@ -472,8 +505,6 @@ def _do_load(model_key: str) -> None:
         torch.set_num_interop_threads(min(2, _cpu_threads))
         log.info(f"CPU threads: {_cpu_threads} / {_cpu_count} logical cores")
 
-        gpu_info = _get_gpu_info()
-        device = "cuda" if gpu_info["available"] else "cpu"
         dtype = (
             torch.float16
             if device == "cuda" and gpu_info.get("recommended_dtype") == "float16"
@@ -493,9 +524,13 @@ def _do_load(model_key: str) -> None:
             load_kwargs["safety_checker"] = None
             load_kwargs["requires_safety_checker"] = False
 
+        _loading_phase = "loading_pipeline"
+        _loading_detail = "Assembling model components; diffusers does not expose percentage progress here…"
+        log.info(f"Loading pipeline components for {model_key} (elapsed {time.time() - _loading_started_at:.0f}s)")
         pipe = PipelineCls.from_pretrained(info["repo"], **load_kwargs)
 
         _loading_phase = "moving_to_device"
+        _loading_detail = f"Moving the assembled pipeline to {device.upper()} memory…"
         if device == "cuda":
             torch.backends.cuda.matmul.allow_tf32 = True
             pipe = pipe.to(device)
@@ -511,6 +546,7 @@ def _do_load(model_key: str) -> None:
         _loading_from_cache = False
         _loading_phase = "idle"
         _loading_started_at = None
+        _loading_detail = ""
         _ip_adapter_loaded = False   # new pipeline — IP-Adapter must be reloaded
         _status = "ready"
         _status_message = f"Ready — {info['label']} on {device.upper()}"
@@ -521,6 +557,7 @@ def _do_load(model_key: str) -> None:
         _loading_from_cache = False
         _loading_phase = "error"
         _loading_started_at = None
+        _loading_detail = ""
         _status = "error"
         _status_message = str(exc)
         log.error(f"Failed to load model: {exc}")
@@ -534,6 +571,7 @@ def get_status():
     if _status == "loading" and progress and progress.get("download_complete"):
         phase = "loading_pipeline"
     message = _status_message
+    detail = _loading_detail
     if phase in {"loading_pipeline", "moving_to_device"} and _loading_model_key in MODELS:
         label = MODELS[_loading_model_key]["label"]
         message = (
@@ -546,6 +584,7 @@ def get_status():
         "message": message,
         "loaded_model": _loaded_model,
         "loading_phase": phase,
+        "loading_detail": detail,
         "loading_elapsed_seconds": (
             round(time.time() - _loading_started_at, 1)
             if _status == "loading" and _loading_started_at else None
@@ -560,6 +599,8 @@ def get_status():
                 "default_guidance": v["default_guidance"],
                 "supports_ip_adapter": v.get("supports_ip_adapter", False),
                 "supports_reference_image": v.get("supports_reference_image", False),
+                "minimum_vram_gb": v.get("minimum_vram_gb"),
+                "recommended_vram_gb": v.get("recommended_vram_gb"),
             }
             for k, v in MODELS.items()
         },
@@ -590,13 +631,15 @@ def set_cpu_threads(req: CpuThreadsRequest):
 @app.post("/unload")
 def unload_model():
     """Release the pipeline from memory so the rest of the app gets its RAM back."""
-    global _pipeline, _loaded_model, _status, _status_message, _loading_phase, _loading_started_at, _ip_adapter_loaded
+    global _pipeline, _loaded_model, _status, _status_message, _loading_phase
+    global _loading_started_at, _loading_detail, _ip_adapter_loaded
     import gc
     _pipeline = None
     _loaded_model = None
     _ip_adapter_loaded = False
     _loading_phase = "idle"
     _loading_started_at = None
+    _loading_detail = ""
     _status = "idle"
     _status_message = "Model unloaded — RAM freed."
     try:
