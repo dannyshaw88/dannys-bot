@@ -106,7 +106,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/">
-        <Redirect to="/dashboard" />
+        <Redirect to="/image-gen" />
       </Route>
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/profiles" component={ProfilesPage} />

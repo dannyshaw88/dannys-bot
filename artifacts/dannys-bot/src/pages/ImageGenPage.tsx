@@ -426,7 +426,7 @@ export function ImageGenPage() {
         </div>
 
         {/* ── Body ── */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center">
 
           {modelNotice && (
             <div className="max-w-xl mb-4 flex items-start gap-2 p-3 rounded-md bg-green-500/10 border border-green-500/20">
