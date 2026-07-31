@@ -41,6 +41,8 @@ interface GpuInfo {
 interface DownloadProgress {
   downloaded_bytes: number;
   total_bytes: number;
+  download_complete?: boolean;
+  incomplete_bytes?: number;
 }
 
 interface StatusResponse {
@@ -50,6 +52,8 @@ interface StatusResponse {
   loaded_model: string | null;
   available_models: Record<string, ModelInfo>;
   download_progress?: DownloadProgress | null;
+  loading_phase?: "checking_cache" | "downloading" | "loading_pipeline" | "moving_to_device" | "error" | "idle";
+  loading_elapsed_seconds?: number | null;
   cpu_threads?: number;
   cpu_count?: number;
   gpu?: GpuInfo;
@@ -376,6 +380,10 @@ export function ImageGenPage() {
   const isUnavailable = status?.status === "unavailable";
   const isReady = status?.status === "ready";
   const isLoading = status?.status === "loading";
+  const loadingPipeline =
+    status?.loading_phase === "loading_pipeline" ||
+    status?.loading_phase === "moving_to_device" ||
+    Boolean(status?.download_progress?.download_complete);
   const needsLoad = status?.status === "idle" || status?.status === "error";
   const noSidecar = statusErr && !status;
   const hasElectronSetup = Boolean(window.electronAPI?.setupImageGen);
@@ -469,12 +477,25 @@ export function ImageGenPage() {
 
           {/* Loading model */}
           {isLoading && (
-            <InfoCard icon={<Loader2 className="w-5 h-5 animate-spin" style={{ color: BRAND }} />} title="Loading model…">
+            <InfoCard
+              icon={<Loader2 className="w-5 h-5 animate-spin" style={{ color: BRAND }} />}
+              title={loadingPipeline ? "Download complete — loading model into memory…" : "Loading model…"}
+            >
               <p className="text-sm text-muted-foreground">{status?.message}</p>
-              <DownloadProgressBar progress={status?.download_progress} />
+              <DownloadProgressBar
+                progress={status?.download_progress}
+                loadingPipeline={loadingPipeline}
+              />
               <p className="text-xs text-muted-foreground mt-1">
-                First load downloads the model weights. This can take several minutes on a fast connection.
+                {loadingPipeline
+                  ? "The files are downloaded. The model is now being assembled and moved into memory; this can take several minutes on the first load."
+                  : "First load downloads the model weights. This can take several minutes on a fast connection."}
               </p>
+              {typeof status?.loading_elapsed_seconds === "number" && status.loading_elapsed_seconds >= 60 && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Loading time: {Math.floor(status.loading_elapsed_seconds / 60)}m {Math.floor(status.loading_elapsed_seconds % 60)}s
+                </p>
+              )}
             </InfoCard>
           )}
 
@@ -1083,9 +1104,16 @@ function ImageUploadZone({
   );
 }
 
-function DownloadProgressBar({ progress }: { progress?: DownloadProgress | null }) {
+function DownloadProgressBar({
+  progress,
+  loadingPipeline = false,
+}: {
+  progress?: DownloadProgress | null;
+  loadingPipeline?: boolean;
+}) {
   if (!progress || progress.total_bytes === 0) {
-    // Indeterminate — we know a download is happening but can't measure it yet
+    // Cached models skip byte-progress reporting while diffusers assembles the
+    // pipeline. Keep the indeterminate bar, but don't imply a new download.
     return (
       <div className="mt-3 space-y-1.5">
         <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
@@ -1094,7 +1122,9 @@ function DownloadProgressBar({ progress }: { progress?: DownloadProgress | null 
             style={{ width: "100%", background: BRAND, opacity: 0.4 }}
           />
         </div>
-        <p className="text-xs text-muted-foreground">Preparing download…</p>
+        <p className="text-xs text-muted-foreground">
+          {loadingPipeline ? "Loading model into memory…" : "Preparing download…"}
+        </p>
       </div>
     );
   }
@@ -1107,13 +1137,13 @@ function DownloadProgressBar({ progress }: { progress?: DownloadProgress | null 
     <div className="mt-3 space-y-1.5">
       <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
         <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${pct}%`, background: BRAND }}
+          className={cn("h-full rounded-full transition-all duration-500", loadingPipeline && "animate-pulse")}
+          style={{ width: `${pct}%`, background: BRAND, opacity: loadingPipeline ? 0.65 : 1 }}
         />
       </div>
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>{dlGB} / {totalGB} GB</span>
-        <span>{pct}%</span>
+        <span>{loadingPipeline ? "Loading…" : `${pct}%`}</span>
       </div>
     </div>
   );

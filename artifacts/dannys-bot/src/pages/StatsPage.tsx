@@ -154,7 +154,7 @@ const FARM_STAT_LABELS: { key: string; label: string; icon: React.ReactNode; col
   { key: "session_tool",    label: "Session",  icon: <Fingerprint className="w-3 h-3" />, color: "text-cyan-500" },
   { key: "trustscore",      label: "Trust Score",    icon: <Shield className="w-3 h-3" />,      color: "text-indigo-500" },
   { key: "cycles",          label: "Cycles",         icon: <Activity className="w-3 h-3" />,   color: "text-cyan-500" },
-  { key: "likes",           label: "Likes",          icon: <Heart className="w-3 h-3" />,       color: "text-rose-500" },
+  { key: "likes",           label: "Likes",          icon: <Heart className="w-3 h-3" fill="currentColor" />, color: "text-rose-500" },
   { key: "follows",         label: "Follows",        icon: <UserPlus className="w-3 h-3" />,    color: "text-blue-500" },
   { key: "stories",         label: "Stories",        icon: <Eye className="w-3 h-3" />,         color: "text-emerald-500" },
   { key: "reels",           label: "Reels",          icon: <Repeat2 className="w-3 h-3" />,     color: "text-sky-500" },

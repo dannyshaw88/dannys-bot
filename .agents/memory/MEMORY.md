@@ -54,3 +54,4 @@
 - [Image-generation model access](image-gen-model-access.md) — verify gating, account/license requirements, credits, and target-GPU fit before adding local model options
 - [View Feed ad-action safety](view-feed-ad-action-safety.md) — sponsored cards and unconfirmed media bounds must never receive guessed double-taps; use confirmed action nodes or skip
 - [Settings wide control rows](settings-wide-control-rows.md) — long explanatory settings text needs full-width, top-aligned control rows rather than a narrow centered layout
+- [Local image model loading phases](image-gen-download-completion.md) — Hugging Face cache size can reach 100% before diffusers finishes assembling and moving a model into memory

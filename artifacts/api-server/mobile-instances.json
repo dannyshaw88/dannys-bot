@@ -161,7 +161,7 @@
         "followFilterMinFollowers50": false,
         "followFilterVerifiedUsers": true,
         "followFilterMaxFollowers25k": false,
-        "randomJitterEnabled": true,
+        "randomJitterEnabled": false,
         "checkNotificationsPctMin": 0,
         "checkNotificationsPctMax": 0,
         "checkNotificationsScrollsMin": 2,

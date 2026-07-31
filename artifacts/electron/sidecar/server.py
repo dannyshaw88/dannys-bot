@@ -67,6 +67,8 @@ _status = "idle"        # idle | loading | ready | error
 _status_message = "Ready to load a model."
 _loading_model_key: Optional[str] = None   # model being downloaded right now
 _loading_from_cache: bool = False           # True when weights are already on disk
+_loading_phase: str = "idle"                # checking_cache | downloading | loading_pipeline | moving_to_device
+_loading_started_at: Optional[float] = None
 _load_lock = threading.Lock()
 _ip_adapter_loaded: bool = False            # True once IP-Adapter weights are loaded onto _pipeline
 _gpu_info_cache: Optional[dict] = None
@@ -275,16 +277,32 @@ def _get_download_progress() -> Optional[dict]:
     blobs_dir = Path(MODELS_DIR) / f"models--{org}--{name}" / "blobs"
 
     downloaded = 0
+    incomplete_bytes = 0
     if blobs_dir.exists():
         for f in blobs_dir.iterdir():
             try:
-                downloaded += f.stat().st_size
+                size = f.stat().st_size
+                # Hugging Face writes active transfers as *.incomplete. Those
+                # bytes are not usable model blobs and must not count toward
+                # the completed-download display.
+                if f.name.endswith(".incomplete"):
+                    incomplete_bytes += size
+                elif f.is_file():
+                    downloaded += size
             except OSError:
                 pass
 
-    # Cap at total_bytes (size_gb is approximate)
-    downloaded = min(downloaded, total_bytes)
-    return {"downloaded_bytes": downloaded, "total_bytes": total_bytes}
+    # size_gb is an intentionally approximate registry value. Never let the
+    # progress bar claim a completed download while an active .incomplete
+    # transfer still exists; the pipeline load phase will follow once the
+    # estimate is reached.
+    download_complete = downloaded >= total_bytes and incomplete_bytes == 0
+    return {
+        "downloaded_bytes": min(downloaded, total_bytes),
+        "total_bytes": total_bytes,
+        "download_complete": download_complete,
+        "incomplete_bytes": incomplete_bytes,
+    }
 
 # ── Model registry ────────────────────────────────────────────────────────────
 MODELS = {
@@ -401,7 +419,8 @@ app.add_middleware(
 
 # ── Load pipeline (runs in a background thread) ───────────────────────────────
 def _do_load(model_key: str) -> None:
-    global _pipeline, _loaded_model, _status, _status_message, _loading_model_key, _loading_from_cache, _ip_adapter_loaded
+    global _pipeline, _loaded_model, _status, _status_message, _loading_model_key
+    global _loading_from_cache, _loading_phase, _loading_started_at, _ip_adapter_loaded
 
     if model_key not in MODELS:
         _status = "error"
@@ -411,13 +430,17 @@ def _do_load(model_key: str) -> None:
     info = MODELS[model_key]
     _loading_model_key = model_key
     _status = "loading"
+    _loading_phase = "checking_cache"
+    _loading_started_at = time.time()
 
     # Detect whether the weights are already cached so we can show the right message
     cached = _model_is_cached(model_key)
     _loading_from_cache = cached
     if cached:
+        _loading_phase = "loading_pipeline"
         _status_message = f"Loading {info['label']} from cache…"
     else:
+        _loading_phase = "downloading"
         _status_message = f"Downloading {info['label']} (~{info['size_gb']} GB — first run only)…"
     log.info(_status_message)
 
@@ -472,6 +495,7 @@ def _do_load(model_key: str) -> None:
 
         pipe = PipelineCls.from_pretrained(info["repo"], **load_kwargs)
 
+        _loading_phase = "moving_to_device"
         if device == "cuda":
             torch.backends.cuda.matmul.allow_tf32 = True
             pipe = pipe.to(device)
@@ -485,6 +509,8 @@ def _do_load(model_key: str) -> None:
         _loaded_model = model_key
         _loading_model_key = None
         _loading_from_cache = False
+        _loading_phase = "idle"
+        _loading_started_at = None
         _ip_adapter_loaded = False   # new pipeline — IP-Adapter must be reloaded
         _status = "ready"
         _status_message = f"Ready — {info['label']} on {device.upper()}"
@@ -493,6 +519,8 @@ def _do_load(model_key: str) -> None:
     except Exception as exc:
         _loading_model_key = None
         _loading_from_cache = False
+        _loading_phase = "error"
+        _loading_started_at = None
         _status = "error"
         _status_message = str(exc)
         log.error(f"Failed to load model: {exc}")
@@ -501,11 +529,28 @@ def _do_load(model_key: str) -> None:
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.get("/status")
 def get_status():
+    progress = _get_download_progress() if _status == "loading" and not _loading_from_cache else None
+    phase = _loading_phase
+    if _status == "loading" and progress and progress.get("download_complete"):
+        phase = "loading_pipeline"
+    message = _status_message
+    if phase in {"loading_pipeline", "moving_to_device"} and _loading_model_key in MODELS:
+        label = MODELS[_loading_model_key]["label"]
+        message = (
+            f"Download complete. Moving {label} into memory…"
+            if phase == "moving_to_device"
+            else f"Download estimate reached. Loading {label} into memory…"
+        )
     return {
         "status": _status,
-        "message": _status_message,
+        "message": message,
         "loaded_model": _loaded_model,
-        "download_progress": _get_download_progress() if _status == "loading" and not _loading_from_cache else None,
+        "loading_phase": phase,
+        "loading_elapsed_seconds": (
+            round(time.time() - _loading_started_at, 1)
+            if _status == "loading" and _loading_started_at else None
+        ),
+        "download_progress": progress,
         "available_models": {
             k: {
                 "label": v["label"],
@@ -545,11 +590,13 @@ def set_cpu_threads(req: CpuThreadsRequest):
 @app.post("/unload")
 def unload_model():
     """Release the pipeline from memory so the rest of the app gets its RAM back."""
-    global _pipeline, _loaded_model, _status, _status_message, _ip_adapter_loaded
+    global _pipeline, _loaded_model, _status, _status_message, _loading_phase, _loading_started_at, _ip_adapter_loaded
     import gc
     _pipeline = None
     _loaded_model = None
     _ip_adapter_loaded = False
+    _loading_phase = "idle"
+    _loading_started_at = None
     _status = "idle"
     _status_message = "Model unloaded — RAM freed."
     try:
