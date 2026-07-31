@@ -7504,43 +7504,48 @@ export async function findInstagramSearchTab(
   const byLabel = _findElem(xml, "Search", "Explore");
   if (byLabel) return byLabel;
 
-  // Nothing matched — dump the bottom-nav row so the next failure carries
-  // real evidence instead of another guess.  Also check for floating-window
-  // mode (MIUI "floating windows" feature) which makes the ui-dump report a
-  // smaller root-bounds height than the real device screen, shifting all
-  // position-based detection thresholds and causing spurious misses.
-  if (onLog) {
-    const { w: realW, h: realH } = getScreenSize(serial);
-    const xmlSize = _getScreenSizeFromXml(xml);
-    const { w: xmlW, h: xmlH } = xmlSize ?? { w: realW, h: realH };
-    const botMin = Math.round(xmlH * 0.88);
-    const rows: string[] = [];
-    const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
-    let m: RegExpExecArray | null;
-    while ((m = nodeRe.exec(xml)) !== null) {
-      const attrs = m[1];
-      const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-      if (!bm) continue;
-      const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
-      if (cy < botMin) continue;
-      const cls = attrs.match(/class="([^"]*)"/)?.[1] ?? "";
-      const rid = attrs.match(/resource-id="([^"]*)"/)?.[1] ?? "";
-      const cd = attrs.match(/content-desc="([^"]*)"/)?.[1] ?? "";
-      const txt = attrs.match(/(?<!content-desc)(?<!content-des)text="([^"]*)"/)?.[1] ?? "";
-      const clickable = attrs.match(/clickable="([^"]*)"/)?.[1] ?? "";
-      rows.push(`class=${cls} rid=${rid} cd="${cd}" text="${txt}" clickable=${clickable} bounds=${bm[0].slice(bm[0].indexOf('"') + 1, -1)}`);
-    }
-    const floatingNote = xmlSize
-      ? (xmlH < realH * 0.88 || xmlW < realW * 0.88)
-        ? ` ⚠️ FLOATING WINDOW: ui-dump bounds ${xmlW}×${xmlH} vs real screen ${realW}×${realH} — Instagram is NOT fullscreen`
-        : ` (screen ${realW}×${realH}, dump root ${xmlW}×${xmlH})`
-      : ` (screen ${realW}×${realH}, dump root bounds unavailable — using real screen dimensions)`;
-    onLog(
-      `Follow: search tab lookup missed — bottom-nav dump (${rows.length} node(s) below y=${botMin})` +
-      floatingNote +
-      (rows.length ? `: ${rows.join(" | ")}` : ""),
-    );
+  // Some Instagram builds expose the bottom navigation only as unlabeled
+  // clickable nodes. Resolve Search from that live accessibility row:
+  // collapse parent/child duplicates, require a full-width row with at least
+  // four tabs, then select the second tab (Home, Search, ...). Never infer a
+  // point from screen dimensions.
+  // The XML root omits bounds on some MIUI builds. Use the device-reported
+  // size for thresholds in that case; the returned point still comes only
+  // from an accessibility node's own bounds.
+  const xmlSize = _getScreenSizeFromXml(xml) ?? getScreenSize(serial);
+  const { w: xmlW, h: xmlH } = xmlSize;
+  const botMin = Math.round(xmlH * 0.84);
+  const raw: { x: number; y: number }[] = [];
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+  let m: RegExpExecArray | null;
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    if (!attrs.includes('clickable="true"')) continue;
+    const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+    if (!bm) continue;
+    const cx = Math.round((Number(bm[1]) + Number(bm[3])) / 2);
+    const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
+    if (cy < botMin) continue;
+    raw.push({ x: cx, y: cy });
   }
+  const tabs = raw
+    .filter((node, index, all) =>
+      all.findIndex(other => Math.abs(other.x - node.x) < 40 && Math.abs(other.y - node.y) < 40) === index,
+    )
+    .sort((a, b) => a.x - b.x);
+  const spanW = tabs.length > 1 ? tabs[tabs.length - 1].x - tabs[0].x : 0;
+  if (tabs.length >= 4 && spanW >= xmlW * 0.55) {
+    const searchTab = tabs[1];
+    onLog?.(
+      `Follow: Search tab found from accessibility bottom-nav row at ` +
+      `(${searchTab.x}, ${searchTab.y}) — ${tabs.length} validated tab nodes`,
+    );
+    return searchTab;
+  }
+  onLog?.(
+    `Follow: Search tab node not found — refusing coordinate fallback ` +
+    `(bottom-nav candidates=${tabs.length}, span=${spanW}px, dump=${xmlW}×${xmlH})`,
+  );
   return null;
 }
 
@@ -7551,12 +7556,12 @@ export async function findInstagramSearchTab(
  * Fixed: the old 30%-height limit and the unconstrained `_findElem` fallback
  * could match elements deep in the Explore grid (causing a tap below the bar
  * that looked like a swipe/pull-to-refresh).  Now strictly constrained to the
- * top 15 % of the screen with retries so the Explore page has time to settle.
+ * top 30 % of the screen with retries so the Explore page has time to settle.
  */
 export async function findInstagramSearchBar(
   serial: string,
   onLog?: (msg: string) => void,
-): Promise<{ x: number; y: number }> {
+): Promise<{ x: number; y: number } | null> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
 
@@ -7568,7 +7573,7 @@ export async function findInstagramSearchBar(
   // ~180–260 px from the top, so 135 px rejected it every time → "search bar
   // not found". getScreenSize(serial) runs `adb shell wm size` and defaults to
   // 1080×2400 on error — both are correct for a portrait phone.
-  const { w: screenW, h: screenH } = getScreenSize(serial);
+  const { h: screenH } = getScreenSize(serial);
 
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) await _sleep(800);
@@ -7650,17 +7655,10 @@ export async function findInstagramSearchBar(
     }
   }
 
-  // Positional fallback — Instagram's Explore search bar does not appear in the
-  // UIAutomator accessibility tree on some device/app combinations (the Scan
-  // Screen Layout tool confirms 0 elements in the TOP zone even when the bar is
-  // visually present).  The bar is always at the very top of the Explore page,
-  // centred horizontally.  Calibrated from a real Redmi 12 5G dump: the search
-  // bar container sits at y=153 px on a 2226 px screen → 6.9 % of screen height.
-  // (Old value was 3.8 % / ~85 px which landed inside the status bar at 0–104 px.)
-  const fallbackY = Math.round(screenH * 0.069);
-  const fallbackX = Math.round(screenW / 2);
-  onLog?.(`Follow: search bar not in a11y tree — using positional fallback (${fallbackX}, ${fallbackY})`);
-  return { x: fallbackX, y: fallbackY };
+  // Do not guess from screen dimensions. If Instagram does not expose the
+  // search field as an accessibility node, the caller must skip this user.
+  onLog?.("Follow: search bar node not found — refusing coordinate fallback");
+  return null;
 }
 
 /**

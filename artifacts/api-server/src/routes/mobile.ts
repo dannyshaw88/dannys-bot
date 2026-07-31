@@ -8159,7 +8159,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // (causing a scroll/pull-to-refresh) or the keyboard didn't animate up
         // before typeViaOnscreenKeyboard started.
         const searchBar = await android.findInstagramSearchBar(serial, onLog).catch(() => null);
-        if (!searchBar) { onLog?.("Follow: search bar lookup threw — giving up"); break; }
+        if (!searchBar) { onLog?.("Follow: search bar accessibility node not found — stopping"); break; }
         await android.tap(serial, searchBar.x, searchBar.y);
         await sleepOrAbort(serial, 1000 + Math.floor(Math.random() * 4000));
 
@@ -9442,7 +9442,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // search tab at startup.  Tapping the search tab when it is already
             // active dismisses the search and leaves Instagram in a broken
             // explore-grid state where findInstagramSearchBar can't locate the
-            // bar, the positional fallback misfires, and no results ever appear.
+            // bar, and no results ever appear.
             // Navigating to home first gives every backup call the same clean
             // starting state as the very first spread slot.
             const _resetToHome = async () => {
