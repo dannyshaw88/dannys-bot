@@ -4,6 +4,17 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.306] — 2026-07-31
+
+### Changed — Replace gated image model
+
+- Removed FLUX.1 Kontext because it requires a Hugging Face account and license acceptance.
+- Replaced it with Qwen Image Edit 2511, a public Apache-2.0 local editing model.
+- Qwen uses the uploaded reference image directly and requires no paid API or credits.
+- Added a clear reference-image requirement before generation.
+
+---
+
 ## [1.2.305] — 2026-07-31
 
 ### Added — Qwen Image Edit local image editing
