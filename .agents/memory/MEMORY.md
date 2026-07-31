@@ -25,6 +25,7 @@
 - [Farm mirror-live cleanup](farm-mirror-live-cleanup.md) — clear the server thumbnail flag when the detail mirror unmounts, or Farm SVG stays black polling stale screencaps
 - [Automation-cycle real-phone lifecycle](automation-cycle-lifecycle.md) — master toggle runs power-on→open IG→run tools→close IG→airplane-mode recycle→lock each tick; use WAKEUP/SLEEP keycodes not toggle POWER, verify app close via pidof
 - [GitHub Actions Windows installer duplication](github-actions-windows-installer-duplication.md) — `build-windows-installer.yml` is the ONLY canonical workflow; never add another, deprecated stubs are inert on purpose
+- [Git remote history and runtime-state cleanup](git-remote-runtime-state.md) — preserve unrelated remote history with a merge; never force-push over it or reintroduce tracked cookies, databases, or device tooling
 - [Story share viewer-exit race](story-share-viewer-exit-race.md) — re-verify story viewer still open before EVERY tap (esp. DM-share); stories auto-advance mid multi-step sequence, blind taps then hit the home feed
 - [Floating-windows recents close gesture](floating-windows-recents-close.md) — this farm's app-switcher needs a LEFT-drag of the left-most card, not swipe-up; repeat per remaining app; poll pidof, don't check once too soon.
 - [Story action timing starvation](story-action-timing-starvation.md) — never insert a "watch first" delay before a scheduled like/share; fire immediately or the multi-step DM-share sequence runs out of the story's fixed timer.
