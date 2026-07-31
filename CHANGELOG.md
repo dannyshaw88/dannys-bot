@@ -4,6 +4,35 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.302] — 2026-07-31
+
+### Fix — HST timers not restarting after app reboot (tools dead for hours)
+
+#### Root cause
+
+The Human Session Tool scheduler is entirely driven by frontend `setTimeout` calls stored in a module-level `Map` in `hstRunner.ts`. These timers die the moment the Electron renderer process reloads (app restart, crash, or any page-level refresh). The only recovery path was a `BroadcastChannel("aura-slot-toggle")` message — which only fires when the user **manually toggles a slot off and on**. No user interaction = no timers = no tool runs, indefinitely.
+
+This is why 9 hours of silence was possible after the 09:34 restart: all timers were gone and nothing recreated them.
+
+#### Fix
+
+**`artifacts/api-server/src/routes/mobile.ts`**
+
+- New `GET /api/mobile/enabled-hst-slots` endpoint. Reads `loadInstanceConfigs()`, iterates every device's `slotAutomation` map, and returns `{ slots: [{ serial, slotIdx }] }` for every entry where `enabled: true`. Lightweight read-only call — no side effects.
+
+**`artifacts/dannys-bot/src/App.tsx`**
+
+- New `HstAutoRestart` component, always-mounted alongside `HstToggleListener` and `Router` inside `AppInner`.
+- On mount it calls `GET /api/mobile/enabled-hst-slots` once, then calls `startHstLoop(serial, slotIdx)` for each returned slot — staggered 5 seconds apart so they don't all fire simultaneously and flood the device.
+- `startHstLoop` is already idempotent: if a timer is already running for a key it returns immediately, so there is no double-scheduling risk if `MobilePage` also starts a timer for the same slot.
+- Cancellable on unmount (`cancelled` flag) to prevent state updates after teardown.
+
+#### Result
+
+Every slot that was enabled when the user last configured their farm restarts automatically on the next app boot — no manual toggling required.
+
+---
+
 ## [1.2.301] — 2026-07-31
 
 ### Fix — Generation timeout + RAM exhaustion causing Phone Farm devices to vanish

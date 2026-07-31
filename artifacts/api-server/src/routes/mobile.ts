@@ -1652,6 +1652,29 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to save automation settings" }); }
   });
 
+  // ── Startup auto-restart helper ──────────────────────────────────────────────
+  // Returns every {serial, slotIdx} pair that has enabled:true in the persisted
+  // config.  The frontend calls this once on mount and calls startHstLoop for
+  // each entry — recovering all HST timers after an app restart without
+  // requiring the user to manually toggle each slot off and on.
+  app.get("/api/mobile/enabled-hst-slots", (_req: Request, res: Response) => {
+    try {
+      const cfg = loadInstanceConfigs();
+      const slots: { serial: string; slotIdx: number }[] = [];
+      for (const [serial, deviceCfg] of Object.entries(cfg)) {
+        const slotAuto = (deviceCfg as InstanceConfig).slotAutomation ?? {};
+        for (const [idxStr, settings] of Object.entries(slotAuto)) {
+          if ((settings as AutomationSettings).enabled) {
+            slots.push({ serial, slotIdx: parseInt(idxStr, 10) });
+          }
+        }
+      }
+      res.json({ slots });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message ?? "Failed to load enabled slots" });
+    }
+  });
+
   // ── Per-slot Human Session Tool automation settings ─────────────────────────
   // Each Instagram account slot stores its own independent copy of all
   // automation settings. Settings are keyed by slot index in slotAutomation.

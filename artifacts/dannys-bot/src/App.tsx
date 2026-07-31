@@ -141,6 +141,34 @@ function BrowserLayer() {
   );
 }
 
+/**
+ * Fires once on app mount. Fetches every slot that was enabled when the app
+ * last ran and restarts their HST timers — recovering from the "timers are
+ * lost on app restart" problem without requiring the user to toggle anything.
+ *
+ * Slots are staggered 5 s apart so they don't all fire at the same second.
+ */
+function HstAutoRestart() {
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch("/api/mobile/enabled-hst-slots");
+        if (!r.ok || cancelled) return;
+        const { slots } = await r.json() as { slots: { serial: string; slotIdx: number }[] };
+        if (!Array.isArray(slots)) return;
+        slots.forEach(({ serial, slotIdx }, i) => {
+          setTimeout(() => {
+            if (!cancelled) startHstLoop(serial, slotIdx);
+          }, i * 5_000); // 5-second stagger — avoids burst of simultaneous cycles
+        });
+      } catch { /* non-critical — user can toggle manually if this fails */ }
+    })();
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
 /** Always-mounted listener — receives Stats-page toggle broadcasts and starts/stops the HST loop. */
 function HstToggleListener() {
   useEffect(() => {
@@ -166,6 +194,7 @@ function AppInner() {
   useStatusEvents();
   return (
     <>
+      <HstAutoRestart />
       <HstToggleListener />
       <Router />
       <BrowserLayer />
