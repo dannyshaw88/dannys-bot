@@ -12,6 +12,8 @@ jobs:
   build-web:
     name: Build Web Bundle
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -28,6 +30,13 @@ jobs:
         run: pnpm --filter @workspace/dannys-bot run build
         env:
           REPL_ID: ci
+      - name: Verify release version
+        shell: bash
+        run: |
+          root_version="$(node -p "require('./package.json').version")"
+          electron_version="$(node -p "require('./artifacts/electron/package.json').version")"
+          test "$root_version" = "$electron_version"
+          echo "Building Aura Farming version $root_version"
       # Upload each dist directory as its own artifact so download-artifact
       # can place files at the exact target path without any copy/rename step.
       - name: Upload API server dist
@@ -47,6 +56,8 @@ jobs:
     name: Build Windows Installer
     runs-on: windows-latest
     needs: build-web
+    permissions:
+      contents: write
     defaults:
       run:
         shell: bash
@@ -110,6 +121,15 @@ jobs:
         run: npx electron-builder --win --publish never
         env:
           DANNY_BOT_UPDATER_TOKEN: ${{ secrets.UPDATER_TOKEN }}
+
+      - name: Verify Windows installer
+        working-directory: artifacts/electron
+        shell: bash
+        run: |
+          installer_count="$(find release -maxdepth 1 -type f -iname '*.exe' | wc -l)"
+          test "$installer_count" -gt 0
+          echo "Windows installer artifacts:"
+          find release -maxdepth 1 -type f -iname '*.exe' -print
 
       - name: Upload installer
         uses: actions/upload-artifact@v4

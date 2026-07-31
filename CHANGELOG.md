@@ -4,6 +4,39 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.307] — 2026-07-31
+
+### Fixed — Mobile Follow matching and safer device automation
+
+- Follow Users now matches the exact requested username when Instagram exposes it through the accessibility tree.
+- Removed Follow-specific keyboard and IME assumptions because targets are pasted into the app and the flow does not use keyboard input.
+- Made the search-result fallback device-agnostic instead of depending on Xiaomi-specific behavior.
+- The flow confirms that a profile page actually opened before reporting success; an unresolved search result is skipped safely.
+- Added row-container and generic directional-navigation confirmation paths while preserving the rule that automation must not continue from the search screen.
+
+### Changed — Navigation and Statistics
+
+- Moved Settings out of the normal sidebar list and pinned it directly above the Operational status indicator.
+- The Statistics Phone Farm table now uses a filled red heart for the Likes column title.
+- Preserved the persisted Phone Farm ordering and the existing Settings full-width control-row layout.
+
+### Fixed — Local AI image loading status
+
+- Separated model loading into cache checking, downloading, pipeline assembly, and device-memory transfer phases.
+- The AI Images page now clearly says when the download estimate has reached 100% but Qwen is still being loaded into RAM or VRAM.
+- Added elapsed loading time for long model initialization so a slow first load is distinguishable from an unreported failure.
+- Hugging Face `.incomplete` blobs are excluded from completed-download progress, preventing an active transfer from being reported as finished.
+- Added backend status fields for loading phase and elapsed time while preserving the existing ready/error states.
+
+### Build and release
+
+- Kept `.github/workflows/build-windows-installer.yml` as the single canonical Windows installer workflow; deprecated duplicate workflow files remain inert.
+- Added CI checks that the root and Electron package versions match before building.
+- Added an explicit CI check that the Windows build produced at least one `.exe` before uploading `Aura-Farming-Windows-Installer`.
+- Bumped the application and Electron package version to `1.2.307` so the installer and auto-updater receive a new release version.
+
+---
+
 ## [1.2.306] — 2026-07-31
 
 ### Changed — Replace gated image model
