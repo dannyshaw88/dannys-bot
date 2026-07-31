@@ -94,6 +94,17 @@ declare global {
 }
 
 const BRAND = "#1AD2F2";
+const LICENSE_REQUIRED_MODEL_KEYS = new Set([
+  "flux-dev",
+  "flux2-dev",
+  "sd3-medium",
+  "sd35-large",
+  "sd35-large-turbo",
+]);
+
+function isSelectableModel(info: ModelInfo | undefined, key: string): boolean {
+  return Boolean(info) && !info?.disabled && !LICENSE_REQUIRED_MODEL_KEYS.has(key);
+}
 
 const RESOLUTIONS = [
   { label: "1024 × 1024 (Square)", w: 1024, h: 1024 },
@@ -206,9 +217,14 @@ export function ImageGenPage() {
         const data: StatusResponse = await r.json();
         setStatus(data);
         setStatusErr(false);
-        // Auto-select model from status
+        // Auto-select the loaded model, or recover from a removed/legacy model
+        // that may still be present in the module-level navigation cache.
         if (data.loaded_model && data.status === "ready") {
           setModel(data.loaded_model);
+        } else if (!isSelectableModel(data.available_models?.[model], model)) {
+          const firstSelectable = Object.entries(data.available_models ?? {})
+            .find(([key, info]) => isSelectableModel(info, key))?.[0];
+          if (firstSelectable) setModel(firstSelectable);
         }
       } else {
         setStatusErr(true);
@@ -409,7 +425,6 @@ export function ImageGenPage() {
   const requiresReferenceImage = Boolean(
     currentModelInfo?.requires_reference_image ?? currentModelInfo?.supports_reference_image,
   );
-  const hasGatedModels = Object.values(status?.available_models ?? {}).some(info => info.disabled);
   const gpu = status?.gpu;
   const generationProgress = status?.generation_progress;
   const pixelCount = resolution.w * resolution.h;
@@ -479,7 +494,10 @@ export function ImageGenPage() {
           {!isUnavailable && !noSidecar && needsLoad && !isLoading && (
             <SetupSection
               model={model}
-              models={status?.available_models ?? {}}
+               models={Object.fromEntries(
+                 Object.entries(status?.available_models ?? {})
+                   .filter(([key, info]) => isSelectableModel(info, key)),
+               )}
               onModelChange={setModel}
               onLoad={handleLoadModel}
               onDelete={handleDeleteModel}
@@ -540,15 +558,10 @@ export function ImageGenPage() {
                   <SelectField
                     value={model}
                     onChange={setModel}
-                    options={Object.entries(status?.available_models ?? {}).map(([k, v]) => ({
-                      value: k, label: v.label, disabled: v.disabled,
-                    }))}
+                     options={Object.entries(status?.available_models ?? {})
+                       .filter(([key, info]) => isSelectableModel(info, key))
+                       .map(([k, v]) => ({ value: k, label: v.label }))}
                   />
-                  {hasGatedModels && (
-                    <p className="mt-1 text-[10px] text-muted-foreground">
-                      License-gated models are shown for reference only and cannot be downloaded here.
-                    </p>
-                  )}
                    {currentModelInfo?.installed && (
                      <p className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
                        <HardDrive className="w-3 h-3" />
