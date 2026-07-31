@@ -4,6 +4,23 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.312] — 2026-07-31
+
+### Added — LongCat Image Edit
+
+- Added public, ungated `meituan-longcat/LongCat-Image-Edit` to the local AI Images model picker.
+- Wired the dedicated `LongCatImageEditPipeline` for reference-image editing.
+- The model requires an uploaded source/reference image and is labeled with its approximate 30 GB download and 18 GB minimum / 24 GB recommended VRAM requirements before loading.
+- Uses LongCat's documented CPU-offload path and avoids the generic Diffusers step callback that its pipeline does not support.
+- Bumped the root application and Electron package versions to `1.2.312`.
+
+### Verification
+
+- LongCat's official model card identifies the repository as Apache-2.0 and provides the `LongCatImageEditPipeline` API.
+- Frontend and API builds are required before release push.
+
+---
+
 ## [1.2.311] — 2026-07-31
 
 ### Fixed — Windows installer build reliability

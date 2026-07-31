@@ -358,6 +358,22 @@ MODELS = {
         "minimum_vram_gb": 16,
         "recommended_vram_gb": 24,
     },
+    "longcat-image-edit": {
+        "label": "LongCat Image Edit (reference-image editing, ~30 GB download)",
+        "repo": "meituan-longcat/LongCat-Image-Edit",
+        "pipeline_class": "LongCatImageEditPipeline",
+        "default_steps": 50,
+        "default_guidance": 4.5,
+        "size_gb": 30,
+        "supports_ip_adapter": False,
+        "supports_reference_image": True,
+        # LongCat's official model card documents CPU offload at roughly
+        # 18 GB VRAM. Use that documented offload path instead of requiring
+        # the entire pipeline to remain resident on the GPU.
+        "use_cpu_offload": True,
+        "minimum_vram_gb": 18,
+        "recommended_vram_gb": 24,
+    },
     "sd3-medium": {
         "label": "Stable Diffusion 3 Medium (28-step, great quality, ~5 GB download)",
         "repo": "stabilityai/stable-diffusion-3-medium-diffusers",
@@ -524,6 +540,9 @@ def _do_load(model_key: str) -> None:
         if info["pipeline_class"] == "QwenImageEditPlusPipeline":
             from diffusers import QwenImageEditPlusPipeline
             PipelineCls = QwenImageEditPlusPipeline
+        elif info["pipeline_class"] == "LongCatImageEditPipeline":
+            from diffusers import LongCatImageEditPipeline
+            PipelineCls = LongCatImageEditPipeline
         else:
             PipelineCls = _cls_map[info["pipeline_class"]]
 
@@ -560,7 +579,10 @@ def _do_load(model_key: str) -> None:
         _loading_detail = f"Moving the assembled pipeline to {device.upper()} memory…"
         if device == "cuda":
             torch.backends.cuda.matmul.allow_tf32 = True
-            pipe = pipe.to(device)
+            if info.get("use_cpu_offload"):
+                pipe.enable_model_cpu_offload()
+            else:
+                pipe = pipe.to(device)
         else:
             # CPU offload hooks are designed for a CUDA device with limited
             # VRAM. On a CPU-only machine they add transfer overhead to every
@@ -629,6 +651,7 @@ def get_status():
                 "default_guidance": v["default_guidance"],
                 "supports_ip_adapter": v.get("supports_ip_adapter", False),
                 "supports_reference_image": v.get("supports_reference_image", False),
+                "uses_cpu_offload": v.get("use_cpu_offload", False),
                 "minimum_vram_gb": v.get("minimum_vram_gb"),
                 "recommended_vram_gb": v.get("recommended_vram_gb"),
             }
@@ -860,6 +883,38 @@ def generate(req: GenerateRequest):
                 kwargs["guidance_scale"] = 1.0
                 kwargs["negative_prompt"] = req.negative_prompt or " "
                 kwargs["num_images_per_prompt"] = 1
+                with torch.inference_mode():
+                    result = _pipeline(**kwargs)
+                image = result.images[0]
+                elapsed_ms = int((time.time() - t0) * 1000)
+                with _generation_lock:
+                    _generation_progress = None
+                ts = int(time.time() * 1000)
+                filename = f"aura-img-{ts}-seed{seed}.png"
+                out_path = Path(OUTPUT_DIR) / filename
+                image.save(str(out_path))
+                buf = io.BytesIO()
+                image.save(buf, format="PNG")
+                b64 = base64.b64encode(buf.getvalue()).decode()
+                return GenerateResponse(
+                    image_b64=b64,
+                    seed=seed,
+                    elapsed_ms=elapsed_ms,
+                    filename=filename,
+                )
+            if pipeline_class == "LongCatImageEditPipeline":
+                img_bytes = base64.b64decode(req.init_image)
+                init_img = PILImage.open(io.BytesIO(img_bytes)).convert("RGB")
+                init_img = init_img.resize((req.width, req.height), PILImage.LANCZOS)
+                # LongCat Image Edit takes the source image directly and
+                # applies an instruction-guided edit; it has no img2img
+                # strength parameter in its official pipeline API.
+                kwargs["image"] = init_img
+                kwargs["guidance_scale"] = guidance
+                kwargs["num_images_per_prompt"] = 1
+                # LongCat's pipeline does not expose Diffusers' generic
+                # callback_on_step_end hook.
+                kwargs.pop("callback_on_step_end", None)
                 with torch.inference_mode():
                     result = _pipeline(**kwargs)
                 image = result.images[0]

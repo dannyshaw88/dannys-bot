@@ -107,6 +107,7 @@ router.get("/api/image-gen/status", (_req, res) => {
           "sdxl-turbo":    { label: "SDXL-Turbo",       name: "SDXL-Turbo",       size_gb: 6.5, default_steps: 1, default_guidance: 0 },
           "sdxl":          { label: "Stable Diffusion XL", name: "Stable Diffusion XL", size_gb: 7, default_steps: 30, default_guidance: 7.5 },
           "z-image-turbo": { label: "Z-Image-Turbo (8-step, photorealistic + strong text, ~24 GB download)", name: "Z-Image-Turbo", size_gb: 24, default_steps: 8, default_guidance: 0, minimum_vram_gb: 16, recommended_vram_gb: 24 },
+          "longcat-image-edit": { label: "LongCat Image Edit (reference-image editing, ~30 GB download)", name: "LongCat Image Edit", size_gb: 30, default_steps: 50, default_guidance: 4.5, supports_reference_image: true, uses_cpu_offload: true, minimum_vram_gb: 18, recommended_vram_gb: 24 },
         },
       });
     } else {
@@ -126,6 +127,7 @@ router.get("/api/image-gen/status", (_req, res) => {
         "sdxl-turbo":    { label: "SDXL-Turbo",       name: "SDXL-Turbo",       size_gb: 6.5, default_steps: 1, default_guidance: 0 },
         "sdxl":          { label: "Stable Diffusion XL", name: "Stable Diffusion XL", size_gb: 7, default_steps: 30, default_guidance: 7.5 },
         "z-image-turbo": { label: "Z-Image-Turbo (8-step, photorealistic + strong text, ~24 GB download)", name: "Z-Image-Turbo", size_gb: 24, default_steps: 8, default_guidance: 0, minimum_vram_gb: 16, recommended_vram_gb: 24 },
+          "longcat-image-edit": { label: "LongCat Image Edit (reference-image editing, ~30 GB download)", name: "LongCat Image Edit", size_gb: 30, default_steps: 50, default_guidance: 4.5, supports_reference_image: true, uses_cpu_offload: true, minimum_vram_gb: 18, recommended_vram_gb: 24 },
       },
     });
   });

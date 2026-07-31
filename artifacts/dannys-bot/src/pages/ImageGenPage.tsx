@@ -20,6 +20,7 @@ interface ModelInfo {
   default_guidance: number;
   supports_ip_adapter?: boolean;
   supports_reference_image?: boolean;
+  uses_cpu_offload?: boolean;
   minimum_vram_gb?: number | null;
   recommended_vram_gb?: number | null;
 }
@@ -275,7 +276,7 @@ export function ImageGenPage() {
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
     if (currentModelInfo?.supports_reference_image && !initImage && !charImage) {
-      setError("Qwen Image Edit requires a reference or input image.");
+      setError(`${currentModelInfo.label} requires a reference or input image.`);
       return;
     }
     setGenerating(true);
@@ -575,10 +576,10 @@ export function ImageGenPage() {
 
                 {/* Lock Character (IP-Adapter) */}
                  {(supportsIpAdapter || supportsReferenceImage) && (
-                   <Section label={supportsReferenceImage ? "Reference image (Qwen editing)" : "Lock Character (optional)"}>
+                   <Section label={supportsReferenceImage ? "Reference image (editing)" : "Lock Character (optional)"}>
                     <p className="text-[10px] text-muted-foreground mb-2 leading-relaxed">
                         {supportsReferenceImage
-                         ? "Upload the image to edit. Qwen Image Edit uses it directly as visual context and follows your prompt. This model requires a reference image."
+                         ? `Upload the image to edit. ${currentModelInfo?.label ?? "This model"} uses it directly as visual context and follows your prompt. This model requires a reference image.`
                          : "Upload your base character photo. The model will copy their face &amp; appearance into every new scene you prompt — without redrawing them pixel-by-pixel."}
                     </p>
                     <ImageUploadZone
@@ -930,9 +931,11 @@ function SetupSection({
                 <p className="text-xs text-muted-foreground">
                   Download size: ~{models[model].size_gb} GB (stored in your AppData folder)
                 </p>
-                {models[model].minimum_vram_gb && (
+                 {models[model].minimum_vram_gb && (
                   <p className="text-xs text-muted-foreground">
-                    Full-GPU loading requires at least {models[model].minimum_vram_gb} GB VRAM
+                     {models[model].uses_cpu_offload
+                       ? `Documented CPU-offload path uses about ${models[model].minimum_vram_gb} GB VRAM`
+                       : `Full-GPU loading requires at least ${models[model].minimum_vram_gb} GB VRAM`}
                     {models[model].recommended_vram_gb
                       ? ` · ${models[model].recommended_vram_gb} GB recommended`
                       : ""}
