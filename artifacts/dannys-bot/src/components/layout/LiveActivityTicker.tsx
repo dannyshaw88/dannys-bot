@@ -142,7 +142,7 @@ export function LiveActivityTicker() {
     <div className="border-b border-border/50 bg-muted/30 pl-6 pr-8 py-1.5 flex items-center justify-start gap-2 w-full overflow-hidden shrink-0">
       <Activity className={`w-3 h-3 shrink-0 ${isError ? "text-red-500" : "text-primary"}`} />
       <span className={`text-xs overflow-hidden min-w-0 truncate ${isError ? "text-red-500" : "text-muted-foreground"}`}>
-        {label ?? "Aura Farming booted up — no recent activity"}
+        {label ?? "Aura Farming booted up waiting for activity"}
       </span>
     </div>
   );
