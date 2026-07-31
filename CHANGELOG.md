@@ -4,6 +4,17 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.304] — 2026-07-31
+
+### Added — Live AI image generation progress
+
+- Replaced the vague “This may take 10–60 seconds” message with a live progress bar.
+- Shows the current diffusion step and total steps.
+- Shows percentage complete, elapsed time, and the current generation phase.
+- Progress resets cleanly when generation finishes or fails.
+
+---
+
 ## [1.2.303] — 2026-07-31
 
 ### Fixed — AI image generation speed and GPU handling
