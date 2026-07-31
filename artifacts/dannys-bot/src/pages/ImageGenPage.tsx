@@ -8,16 +8,33 @@
  */
 import { useState, useEffect, useRef, useCallback, DragEvent } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { Loader2, Sparkles, Download, RefreshCw, AlertTriangle, ChevronDown, X, Upload, ImageIcon } from "lucide-react";
+import { Loader2, Sparkles, Download, RefreshCw, AlertTriangle, ChevronDown, X, Upload, ImageIcon, Trash2, HardDrive, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ModelInfo {
   label: string;
   size_gb: number;
+  installed?: boolean;
   default_steps: number;
   default_guidance: number;
   supports_ip_adapter?: boolean;
+}
+
+interface GpuInfo {
+  available: boolean;
+  backend: string;
+  name?: string | null;
+  reason: string;
+  torch_version?: string | null;
+  torch_cuda_version?: string | null;
+  system_gpu_detected?: boolean;
+  system_gpu_name?: string | null;
+  driver_version?: string | null;
+  device_count?: number;
+  compute_capability?: string | null;
+  vram_gb?: number | null;
+  recommended_dtype?: string | null;
 }
 
 interface DownloadProgress {
@@ -34,6 +51,7 @@ interface StatusResponse {
   download_progress?: DownloadProgress | null;
   cpu_threads?: number;
   cpu_count?: number;
+  gpu?: GpuInfo;
 }
 
 interface GenerateResult {
@@ -129,6 +147,7 @@ export function ImageGenPage() {
 
   const [generating, setGenerating] = useState(false);
   const [loadingModel, setLoadingModel] = useState(false);
+  const [deletingModel, setDeletingModel] = useState<string | null>(null);
   const [result, setResult] = useState<GenerateResult | null>(_cache.result);
 
   // Sync all user-editable state back to the cache whenever anything changes
@@ -150,6 +169,7 @@ export function ImageGenPage() {
     _cache.result = result;
   }, [prompt, negPrompt, model, resolution, steps, guidance, seed, initImage, initImageName, strength, charImage, charImageName, charScale, cpuThreads, result]);
   const [error, setError] = useState("");
+  const [modelNotice, setModelNotice] = useState("");
 
   const [settingUp, setSettingUp] = useState(false);
   const [setupLog, setSetupLog] = useState<string[]>([]);
@@ -287,6 +307,39 @@ export function ImageGenPage() {
     } catch { /* non-critical */ }
   };
 
+  const handleDeleteModel = async (modelKey: string) => {
+    const info = status?.available_models?.[modelKey];
+    if (!info?.installed) return;
+    const confirmed = window.confirm(
+      `Delete the downloaded ${info.label} files from this PC? This will free approximately ${info.size_gb} GB of disk space. You can download the model again later.`,
+    );
+    if (!confirmed) return;
+
+    setDeletingModel(modelKey);
+    setError("");
+    setModelNotice("");
+    try {
+      const r = await fetch("/api/image-gen/delete-model", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: modelKey }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setError(data.detail ?? data.error ?? "Failed to delete the downloaded model");
+        return;
+      }
+      setResult(null);
+      const freed = typeof data.freed_bytes === "number" ? formatBytes(data.freed_bytes) : `about ${info.size_gb} GB`;
+      setModelNotice(`${info.label} removed from disk. ${freed} of disk space was reclaimed.`);
+      await fetchStatus();
+    } catch (e: any) {
+      setError(e.message ?? "Network error while deleting the model");
+    } finally {
+      setDeletingModel(null);
+    }
+  };
+
   const handleSetup = async () => {
     if (!window.electronAPI?.setupImageGen) return;
     setSettingUp(true);
@@ -314,6 +367,9 @@ export function ImageGenPage() {
   const defaultSteps = currentModelInfo?.default_steps ?? 4;
   const defaultGuidance = currentModelInfo?.default_guidance ?? 0;
   const supportsIpAdapter = Boolean(currentModelInfo?.supports_ip_adapter);
+  const gpu = status?.gpu;
+  const pixelCount = resolution.w * resolution.h;
+  const slowCpuJob = !gpu?.available && (pixelCount > 786432 || (steps !== "" && Number(steps) > 8));
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
@@ -339,6 +395,16 @@ export function ImageGenPage() {
 
         {/* ── Body ── */}
         <div className="flex-1 overflow-y-auto p-6">
+
+          {modelNotice && (
+            <div className="max-w-xl mb-4 flex items-start gap-2 p-3 rounded-md bg-green-500/10 border border-green-500/20">
+              <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
+              <p className="text-xs text-green-700 dark:text-green-300">{modelNotice}</p>
+              <button onClick={() => setModelNotice("")} className="ml-auto">
+                <X className="w-3.5 h-3.5 text-muted-foreground" />
+              </button>
+            </div>
+          )}
 
           {/* Unavailable (web mode) */}
           {isUnavailable && (
@@ -372,6 +438,8 @@ export function ImageGenPage() {
               models={status?.available_models ?? {}}
               onModelChange={setModel}
               onLoad={handleLoadModel}
+              onDelete={handleDeleteModel}
+              deletingModel={deletingModel}
               loadingModel={loadingModel}
               onSetup={hasElectronSetup ? handleSetup : undefined}
               settingUp={settingUp}
@@ -408,8 +476,14 @@ export function ImageGenPage() {
                       value: k, label: v.label,
                     }))}
                   />
+                   {currentModelInfo?.installed && (
+                     <p className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
+                       <HardDrive className="w-3 h-3" />
+                       Downloaded on this PC · approximately {currentModelInfo.size_gb} GB
+                     </p>
+                   )}
                   {model !== status?.loaded_model && (
-                    <button
+                   <button
                       onClick={handleLoadModel}
                       disabled={loadingModel}
                       className="mt-2 w-full py-1.5 text-xs font-semibold rounded border border-border hover:bg-accent text-foreground disabled:opacity-50"
@@ -426,12 +500,21 @@ export function ImageGenPage() {
                   >
                     Unload model &amp; free RAM
                   </button>
-                  {/* CPU-only warning */}
-                  {!status?.message?.includes("CUDA") && (
-                    <p className="mt-2 text-[10px] text-yellow-500/80 leading-relaxed">
-                      ⚠ No GPU detected — running on CPU. SDXL models take 15–40 min per image on CPU. FLUX Schnell is much faster (2–5 min). <strong>Click "Unload model" when done</strong> to free RAM for your phone farm.
-                    </p>
-                  )}
+                   <button
+                     onClick={() => handleDeleteModel(model)}
+                     disabled={!currentModelInfo?.installed || deletingModel === model}
+                     className="mt-2 w-full py-1.5 text-xs rounded border border-red-500/30 hover:bg-red-500/10 text-red-600 dark:text-red-400 disabled:opacity-40 disabled:hover:bg-transparent flex items-center justify-center gap-1.5"
+                     title="Deletes the downloaded model files from this PC. You can download the model again later."
+                   >
+                     {deletingModel === model ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                     Delete downloaded model files
+                   </button>
+                   <GpuStatusNote gpu={gpu} />
+                   {slowCpuJob && (
+                     <p className="mt-2 rounded-md border border-red-500/30 bg-red-500/5 p-2 text-[10px] text-red-700 dark:text-red-300 leading-relaxed">
+                       This CPU job is unusually heavy ({resolution.w}×{resolution.h}). For a faster test, use SDXL-Turbo at 512×512 or 768×768. A CPU laptop will not match Gemini’s cloud GPU speed.
+                     </p>
+                   )}
                 </Section>
 
                 {/* Lock Character (IP-Adapter) */}
@@ -546,6 +629,7 @@ export function ImageGenPage() {
                       type="number"
                       min={1}
                       max={150}
+                      help={`Recommended for this model: ${defaultSteps}. Steps are denoising passes — more can add detail but takes longer. Turbo models usually need 1–8; SDXL/RealVis about 30; FLUX dev about 50.`}
                     />
                     <LabelledInput
                       label="Guidance"
@@ -722,6 +806,7 @@ function InfoCard({
 
 function SetupSection({
   model, models, onModelChange, onLoad, loadingModel,
+  onDelete, deletingModel,
   onSetup, settingUp, setupLog, setupLogRef, statusMessage,
 }: {
   model: string;
@@ -729,10 +814,12 @@ function SetupSection({
   onModelChange: (m: string) => void;
   onLoad: () => void;
   loadingModel: boolean;
+  onDelete: (model: string) => void;
+  deletingModel: string | null;
   onSetup?: () => void;
   settingUp: boolean;
   setupLog: string[];
-  setupLogRef: React.RefObject<HTMLDivElement>;
+  setupLogRef: React.RefObject<HTMLDivElement | null>;
   statusMessage?: string;
 }) {
   return (
@@ -763,9 +850,16 @@ function SetupSection({
               options={Object.entries(models).map(([k, v]) => ({ value: k, label: v.label }))}
             />
             {models[model] && (
-              <p className="text-xs text-muted-foreground">
-                Download size: ~{models[model].size_gb} GB (one-time, stored in your AppData folder)
-              </p>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  Download size: ~{models[model].size_gb} GB (stored in your AppData folder)
+                </p>
+                {models[model].installed && (
+                  <p className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Downloaded on this PC
+                  </p>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -782,6 +876,16 @@ function SetupSection({
             : <><Sparkles className="w-4 h-4" /> Load Model &amp; Start Generating</>
           }
         </button>
+        {models[model]?.installed && (
+          <button
+            onClick={() => onDelete(model)}
+            disabled={deletingModel === model}
+            className="w-full py-2 rounded-md font-semibold text-sm border border-red-500/30 hover:bg-red-500/10 text-red-600 dark:text-red-400 flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {deletingModel === model ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+            Delete downloaded model files
+          </button>
+        )}
 
         {/* First-time setup (if torch not installed) */}
         {onSetup && (
@@ -816,6 +920,47 @@ function SetupSection({
       )}
     </div>
   );
+}
+
+function GpuStatusNote({ gpu }: { gpu?: GpuInfo }) {
+  if (!gpu) {
+    return (
+      <p className="mt-2 text-[10px] text-muted-foreground leading-relaxed">
+        GPU capability details are not available from this image-generation server yet.
+      </p>
+    );
+  }
+  if (gpu.available) {
+    return (
+      <p className="mt-2 flex items-start gap-1.5 text-[10px] text-green-600 dark:text-green-400 leading-relaxed">
+        <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0" />
+        <span>GPU acceleration active: {gpu.name ?? "NVIDIA CUDA"}{gpu.torch_cuda_version ? ` · CUDA ${gpu.torch_cuda_version}` : ""}.</span>
+      </p>
+    );
+  }
+
+  const systemName = gpu.system_gpu_name ?? gpu.name;
+  return (
+    <div className="mt-2 rounded-md border border-yellow-500/30 bg-yellow-500/5 p-2 text-[10px] text-yellow-700 dark:text-yellow-300 leading-relaxed">
+      <div className="font-semibold">
+        {systemName
+          ? `${systemName} is installed, but this Python environment is using the CPU.`
+          : "GPU acceleration is not available to this Python environment."}
+      </div>
+      <div className="mt-1">{gpu.reason}</div>
+      {gpu.driver_version && <div className="mt-1">Windows driver detected: {gpu.driver_version}.</div>}
+      <div className="mt-1">
+        Device Manager showing a current driver does not guarantee that PyTorch can use CUDA; the bundled Torch build and its CUDA runtime must also be compatible.
+      </div>
+    </div>
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "No additional disk space";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / 1024 ** index).toFixed(index >= 3 ? 2 : 0)} ${units[index]}`;
 }
 
 function ImageUploadZone({
@@ -969,7 +1114,7 @@ function SelectField({
 }
 
 function LabelledInput({
-  label, placeholder, value, onChange, type = "text", min, max, step,
+  label, placeholder, value, onChange, type = "text", min, max, step, title, help,
 }: {
   label: string;
   placeholder: string;
@@ -979,6 +1124,8 @@ function LabelledInput({
   min?: number;
   max?: number;
   step?: number;
+  title?: string;
+  help?: string;
 }) {
   return (
     <div className="space-y-1">
@@ -991,8 +1138,10 @@ function LabelledInput({
         min={min}
         max={max}
         step={step}
+        title={title}
         className="w-full bg-muted border border-border rounded px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
       />
+      {help && <p className="text-[9px] leading-tight text-muted-foreground">{help}</p>}
     </div>
   );
 }

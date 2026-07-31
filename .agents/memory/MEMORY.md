@@ -50,3 +50,4 @@
 - [Keyboard calibration layer navigation](keyboard-calibration-layer-navigation.md) — calibrated typing must switch through ABC, ?123, and extended symbols in order; emoji opener is terminal
 - [Keyboard calibration UX](keyboard-calibration-ux.md) — dialog has 3 modes (intro/wizard/editMap); caches warm on open; editMap saves immediately per-key so no data is lost; wizard merges into existing map
 - [Imported workspace verification](imported-workspace-verification.md) — use package-level build commands for this imported repo; root build/typecheck scripts include stale legacy paths and unrelated errors
+- [Image generation GPU detection](image-gen-gpu-detection.md) — separate Windows adapter/driver presence from PyTorch CUDA usability; unloading RAM is not deleting model files

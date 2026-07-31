@@ -1292,19 +1292,50 @@ async function createWindow() {
       // installed in pipDir.  Run pip/__main__.py directly as a script instead
       // — Python can always execute a file path regardless of sys.path.
       const pipMain = path.join(pipDir, "pip", "__main__.py");
-      sendProgress("Installing AI libraries (downloading ~2 GB for CUDA torch — please wait)…", false);
+      // Do not rely on --extra-index-url alone: pip may select a CPU Torch
+      // wheel from the primary index even when the CUDA index is present.
+      // Install Torch with the CUDA index as primary, then install the rest.
+      const cudaTorchRequirements = path.join(pipDir, "requirements-cuda-torch.txt");
+      const otherRequirements = path.join(pipDir, "requirements-image-gen.txt");
+      try {
+        const requirementsText = fs.readFileSync(requirementsFile, "utf8");
+        const otherText = requirementsText
+          .split(/\r?\n/)
+          .filter(line => !/^\s*torch(?:\s|[<=>!~]|$)/i.test(line))
+          .join("\n");
+        fs.writeFileSync(cudaTorchRequirements, "torch>=2.4.0\n", "utf8");
+        fs.writeFileSync(otherRequirements, otherText, "utf8");
+      } catch (err: any) {
+        throw new Error(`Could not prepare AI library requirements: ${err?.message ?? String(err)}`);
+      }
+
+      sendProgress("Installing CUDA-enabled Torch (downloading ~2 GB — please wait)…", false);
       await new Promise<void>((resolve, reject) => {
         const p = spawn(pythonExe, [
           pipMain,
           "install",
           "--target", pipDir,
-          "-r", requirementsFile,
-          "--extra-index-url", "https://download.pytorch.org/whl/cu121",
+          "-r", cudaTorchRequirements,
+          "--index-url", "https://download.pytorch.org/whl/cu121",
           "--no-warn-script-location",
         ], { stdio: "pipe", env: pipEnv });
         p.stdout?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
         p.stderr?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
-        p.on("exit", code => code === 0 ? resolve() : reject(new Error(`pip install failed (code ${code})`)));
+        p.on("exit", code => code === 0 ? resolve() : reject(new Error(`CUDA Torch install failed (code ${code})`)));
+      });
+
+      sendProgress("Installing remaining AI libraries…", false);
+      await new Promise<void>((resolve, reject) => {
+        const p = spawn(pythonExe, [
+          pipMain,
+          "install",
+          "--target", pipDir,
+          "-r", otherRequirements,
+          "--no-warn-script-location",
+        ], { stdio: "pipe", env: pipEnv });
+        p.stdout?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
+        p.stderr?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
+        p.on("exit", code => code === 0 ? resolve() : reject(new Error(`AI library install failed (code ${code})`)));
       });
 
       sendProgress("✅ Setup complete! Starting image gen server…", false);

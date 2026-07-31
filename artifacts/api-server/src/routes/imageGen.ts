@@ -153,6 +153,11 @@ router.post("/api/image-gen/unload", (req, res) => {
   proxyToSidecar(req, res, "POST", "/unload");
 });
 
+// ── Delete downloaded model files ─────────────────────────────────────────────
+router.post("/api/image-gen/delete-model", (req, res) => {
+  proxyToSidecar(req, res, "POST", "/delete-model", JSON.stringify(req.body));
+});
+
 // ── Output history ────────────────────────────────────────────────────────────
 router.get("/api/image-gen/output", (req, res) => {
   proxyToSidecar(req, res, "GET", "/output");

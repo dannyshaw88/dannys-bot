@@ -4,6 +4,50 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.303] — 2026-07-31
+
+### Fixed — AI image generation speed and GPU handling
+
+#### Why generation could take 17 minutes
+
+The image-generation sidecar could fall back to CPU when PyTorch could not initialize CUDA. On CPU, a 1024px SDXL/RealVis image at 30 steps is expected to take many minutes and cannot approach Gemini's cloud-GPU latency. The GTX 1050 Ti shown in Windows Device Manager confirms that the adapter and driver exist, but it does not prove that the bundled Python/Torch runtime is using CUDA.
+
+#### Changes
+
+- Added structured GPU diagnostics to the image-generation status response:
+  - PyTorch version and CUDA build.
+  - CUDA availability and initialization errors.
+  - NVIDIA adapter name and driver version when Windows exposes them.
+  - GPU compute capability, VRAM, device count, and recommended tensor dtype.
+- The AI Images page now distinguishes an installed NVIDIA adapter from a CUDA-capable PyTorch runtime instead of searching status-message text for the word `CUDA`.
+- NVIDIA Pascal-class GPUs such as the GTX 1050 Ti now use FP16 instead of bfloat16.
+- Enabled TF32 matmul where supported by CUDA.
+- Removed CPU sequential-offload hooks when no CUDA device is available. Those hooks are intended for moving layers between CPU and GPU and added substantial overhead on a CPU-only path.
+- Wrapped inference in `torch.inference_mode()` to avoid autograd overhead.
+- Added a warning when CPU generation uses a high resolution or more than eight steps.
+- Added concise in-product guidance for Steps:
+  - Turbo models: usually 1–8 steps.
+  - SDXL/RealVis: around 30 steps.
+  - FLUX dev: around 50 steps.
+  Steps are denoising passes; reducing them speeds generation, but the model family determines the useful range.
+
+### Feature — Manage downloaded image models
+
+- Added **Delete downloaded model files** to the AI Images page.
+- Deleting requires confirmation and removes only the selected model's Hugging Face cache directory.
+- A loaded model is released from memory before its files are deleted.
+- The UI reports the disk space reclaimed and refreshes the installed-model state.
+- The existing **Unload model & free RAM** action remains separate and only releases memory; it does not delete model files.
+
+### Build and release
+
+- The canonical `.github/workflows/build-windows-installer.yml` remains the only active Windows installer workflow.
+- Every push to `main` builds the web bundle, packages the Electron app on `windows-latest`, and uploads `Aura-Farming-Windows-Installer` as an Actions artifact.
+- The workflow was intentionally not duplicated; the older installer workflow files remain inert deprecated stubs to prevent competing installer builds.
+- API server, frontend, Electron bundle, and Python sidecar syntax checks passed locally.
+
+---
+
 ## [1.2.302] — 2026-07-31
 
 ### Fix — HST timers not restarting after app reboot (tools dead for hours)
