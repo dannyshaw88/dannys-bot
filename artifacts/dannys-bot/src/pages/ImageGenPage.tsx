@@ -46,6 +46,7 @@ interface GpuInfo {
 
 interface DownloadProgress {
   downloaded_bytes: number;
+  completed_bytes?: number;
   total_bytes: number;
   download_complete?: boolean;
   incomplete_bytes?: number;
@@ -532,10 +533,13 @@ export function ImageGenPage() {
               <DownloadProgressBar
                 progress={status?.download_progress}
                 loadingPipeline={loadingPipeline}
+                loadingPhase={status?.loading_phase}
               />
               <p className="text-xs text-muted-foreground mt-1">
                 {loadingPipeline
                   ? "The files are downloaded. The model is now being assembled and moved into memory; this can take several minutes on supported hardware."
+                  : loadingHardware
+                    ? "Preparing the hardware check before downloading starts…"
                   : "First load downloads the model weights. This can take several minutes on a fast connection."}
               </p>
               {typeof status?.loading_elapsed_seconds === "number" && status.loading_elapsed_seconds >= 60 && (
@@ -1166,13 +1170,17 @@ function ImageUploadZone({
 function DownloadProgressBar({
   progress,
   loadingPipeline = false,
+  loadingPhase,
 }: {
   progress?: DownloadProgress | null;
   loadingPipeline?: boolean;
+  loadingPhase?: StatusResponse["loading_phase"];
 }) {
-  if (!progress || progress.total_bytes === 0) {
-    // Cached models skip byte-progress reporting while diffusers assembles the
-    // pipeline. Keep the indeterminate bar, but don't imply a new download.
+  const isDownloading = loadingPhase === "downloading";
+  if (!isDownloading || !progress || progress.total_bytes === 0) {
+    // Hardware checks, cache checks, and pipeline assembly do not have a
+    // meaningful byte percentage. Keep the indicator moving without showing
+    // a misleading 0% download.
     return (
       <div className="mt-3 space-y-1.5">
         <div className="h-2 w-full rounded-full bg-muted overflow-hidden">

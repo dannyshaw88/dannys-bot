@@ -4,6 +4,17 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.314] — 2026-07-31
+
+### Fixed — AI model download progress
+
+- Kept model loading in the download phase until Hugging Face finishes the actual `from_pretrained()` download.
+- Included active download bytes in the visible progress calculation so large `.incomplete` model files no longer appear stuck at 0%.
+- Replaced the misleading 0% download display during hardware checks and model assembly with an indeterminate preparation indicator.
+- Bumped the root application and Electron package versions to `1.2.314` so the fix reaches the installed Windows app.
+
+---
+
 ## [1.2.313] — 2026-07-31
 
 ### Added — FLUX.2 [klein] 4B

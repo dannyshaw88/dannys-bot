@@ -293,13 +293,18 @@ def _get_download_progress() -> Optional[dict]:
             except OSError:
                 pass
 
-    # size_gb is an intentionally approximate registry value. Never let the
-    # progress bar claim a completed download while an active .incomplete
-    # transfer still exists; the pipeline load phase will follow once the
-    # estimate is reached.
+    # Include active .incomplete files in the visible byte count so the user
+    # can see Hugging Face transfers moving while a large shard is downloading.
+    # Completion still requires all active transfers to be renamed to complete
+    # blobs, because size_gb is only an intentionally approximate estimate.
+    transferred = downloaded + incomplete_bytes
+    # Keep the displayed percentage below 100 while an active transfer still
+    # exists, even when the registry's approximate size has been reached.
+    visible_total = max(0, total_bytes - 1) if incomplete_bytes else total_bytes
     download_complete = downloaded >= total_bytes and incomplete_bytes == 0
     return {
-        "downloaded_bytes": min(downloaded, total_bytes),
+        "downloaded_bytes": min(transferred, visible_total),
+        "completed_bytes": min(downloaded, total_bytes),
         "total_bytes": total_bytes,
         "download_complete": download_complete,
         "incomplete_bytes": incomplete_bytes,
@@ -575,11 +580,20 @@ def _do_load(model_key: str) -> None:
             load_kwargs["safety_checker"] = None
             load_kwargs["requires_safety_checker"] = False
 
-        _loading_phase = "loading_pipeline"
-        _loading_detail = "Assembling model components; diffusers does not expose percentage progress here…"
+        if _loading_from_cache:
+            _loading_phase = "loading_pipeline"
+            _loading_detail = "Assembling the cached model components…"
+        else:
+            # from_pretrained() performs the Hugging Face download itself.
+            # Keep this phase as "downloading" until it returns so the status
+            # endpoint can expose live .incomplete-file progress.
+            _loading_phase = "downloading"
+            _loading_detail = "Downloading model weights…"
         log.info(f"Loading pipeline components for {model_key} (elapsed {time.time() - _loading_started_at:.0f}s)")
         pipe = PipelineCls.from_pretrained(info["repo"], **load_kwargs)
 
+        _loading_phase = "loading_pipeline"
+        _loading_detail = "Assembling model components; diffusers does not expose percentage progress here…"
         _loading_phase = "moving_to_device"
         _loading_detail = f"Moving the assembled pipeline to {device.upper()} memory…"
         if device == "cuda":
