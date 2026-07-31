@@ -4,6 +4,27 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.313] — 2026-07-31
+
+### Added — FLUX.2 [klein] 4B
+
+- Added the public, ungated Apache-2.0 `black-forest-labs/FLUX.2-klein-4B` model to the local AI Images picker.
+- Wired its unified text-to-image and reference-image editing pipeline with the documented CPU-offload path.
+- Added the model's approximate 24 GB download size and 13 GB minimum / 16 GB recommended VRAM guidance.
+- Bumped the root application and Electron package versions to `1.2.313`.
+
+### Not added — gated model checkpoints
+
+- FLUX.2-dev and Stable Diffusion 3.5 Large / Large Turbo are shown as disabled reference-only options because they require Hugging Face license acceptance.
+- They cannot be downloaded or run until the desktop app has a secure Hugging Face authentication and license-acceptance flow; this avoids the same unusable experience as the gated Qwen option.
+
+### Verification
+
+- FLUX.2 [klein] 4B metadata is public, ungated, and Apache-2.0.
+- Frontend, API, and Python sidecar validation are required before pushing.
+
+---
+
 ## [1.2.312] — 2026-07-31
 
 ### Added — LongCat Image Edit

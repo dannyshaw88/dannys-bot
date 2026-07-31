@@ -20,7 +20,10 @@ interface ModelInfo {
   default_guidance: number;
   supports_ip_adapter?: boolean;
   supports_reference_image?: boolean;
+  requires_reference_image?: boolean;
   uses_cpu_offload?: boolean;
+  disabled?: boolean;
+  disabled_reason?: string;
   minimum_vram_gb?: number | null;
   recommended_vram_gb?: number | null;
 }
@@ -275,7 +278,11 @@ export function ImageGenPage() {
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
-    if (currentModelInfo?.supports_reference_image && !initImage && !charImage) {
+    if (
+      (currentModelInfo?.requires_reference_image ?? currentModelInfo?.supports_reference_image) &&
+      !initImage &&
+      !charImage
+    ) {
       setError(`${currentModelInfo.label} requires a reference or input image.`);
       return;
     }
@@ -399,6 +406,10 @@ export function ImageGenPage() {
   const defaultGuidance = currentModelInfo?.default_guidance ?? 0;
   const supportsIpAdapter = Boolean(currentModelInfo?.supports_ip_adapter);
   const supportsReferenceImage = Boolean(currentModelInfo?.supports_reference_image);
+  const requiresReferenceImage = Boolean(
+    currentModelInfo?.requires_reference_image ?? currentModelInfo?.supports_reference_image,
+  );
+  const hasGatedModels = Object.values(status?.available_models ?? {}).some(info => info.disabled);
   const gpu = status?.gpu;
   const generationProgress = status?.generation_progress;
   const pixelCount = resolution.w * resolution.h;
@@ -530,9 +541,14 @@ export function ImageGenPage() {
                     value={model}
                     onChange={setModel}
                     options={Object.entries(status?.available_models ?? {}).map(([k, v]) => ({
-                      value: k, label: v.label,
+                      value: k, label: v.label, disabled: v.disabled,
                     }))}
                   />
+                  {hasGatedModels && (
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      License-gated models are shown for reference only and cannot be downloaded here.
+                    </p>
+                  )}
                    {currentModelInfo?.installed && (
                      <p className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
                        <HardDrive className="w-3 h-3" />
@@ -578,8 +594,10 @@ export function ImageGenPage() {
                  {(supportsIpAdapter || supportsReferenceImage) && (
                    <Section label={supportsReferenceImage ? "Reference image (editing)" : "Lock Character (optional)"}>
                     <p className="text-[10px] text-muted-foreground mb-2 leading-relaxed">
-                        {supportsReferenceImage
-                         ? `Upload the image to edit. ${currentModelInfo?.label ?? "This model"} uses it directly as visual context and follows your prompt. This model requires a reference image.`
+                         {supportsReferenceImage
+                          ? requiresReferenceImage
+                            ? `Upload the image to edit. ${currentModelInfo?.label ?? "This model"} uses it directly as visual context and follows your prompt. This model requires a reference image.`
+                            : `Optional: upload an image for ${currentModelInfo?.label ?? "this model"} to use as visual context while editing. Leave it empty for text-to-image generation.`
                          : "Upload your base character photo. The model will copy their face &amp; appearance into every new scene you prompt — without redrawing them pixel-by-pixel."}
                     </p>
                     <ImageUploadZone
@@ -924,7 +942,7 @@ function SetupSection({
             <SelectField
               value={model}
               onChange={onModelChange}
-              options={Object.entries(models).map(([k, v]) => ({ value: k, label: v.label }))}
+               options={Object.entries(models).map(([k, v]) => ({ value: k, label: v.label, disabled: v.disabled }))}
             />
             {models[model] && (
               <div className="space-y-1">
@@ -1191,7 +1209,7 @@ function SelectField({
 }: {
   value: string;
   onChange: (v: string) => void;
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; disabled?: boolean }[];
 }) {
   return (
     <div className="relative">
@@ -1201,7 +1219,7 @@ function SelectField({
         className="w-full appearance-none bg-muted border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary pr-8"
       >
         {options.map(o => (
-          <option key={o.value} value={o.value}>{o.label}</option>
+          <option key={o.value} value={o.value} disabled={o.disabled}>{o.label}</option>
         ))}
       </select>
       <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />

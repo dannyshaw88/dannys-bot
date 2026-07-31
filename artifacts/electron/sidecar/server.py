@@ -343,6 +343,30 @@ MODELS = {
         "size_gb": 24,
         "supports_ip_adapter": False,
     },
+    "flux2-klein-4b": {
+        "label": "FLUX.2 [klein] 4B (4-step, generation + editing, ~24 GB download)",
+        "repo": "black-forest-labs/FLUX.2-klein-4B",
+        "pipeline_class": "Flux2KleinPipeline",
+        "default_steps": 4,
+        "default_guidance": 1.0,
+        "size_gb": 24,
+        "supports_ip_adapter": False,
+        "supports_reference_image": True,
+        "requires_reference_image": False,
+        "use_cpu_offload": True,
+        "minimum_vram_gb": 13,
+        "recommended_vram_gb": 16,
+    },
+    "flux2-dev": {
+        "label": "FLUX.2 [dev] — LICENSE REQUIRED (gated, ~178 GB download)",
+        "repo": "black-forest-labs/FLUX.2-dev",
+        "disabled": True,
+        "disabled_reason": "Hugging Face license acceptance is required before this model can be downloaded.",
+        "size_gb": 178,
+        "default_steps": 50,
+        "default_guidance": 4.0,
+        "supports_reference_image": True,
+    },
     "qwen-image-edit-2511": {
         "label": "Qwen Image Edit 2511 (best ungated local editing, ~20 GB download)",
         "repo": "Qwen/Qwen-Image-Edit-2511",
@@ -352,6 +376,7 @@ MODELS = {
         "size_gb": 20,
         "supports_ip_adapter": False,
         "supports_reference_image": True,
+        "requires_reference_image": True,
         # The current loader places the complete pipeline on CUDA; it does
         # not use CPU/disk offload. Refuse clearly undersized GPUs before
         # diffusers spends minutes materialising a pipeline that cannot fit.
@@ -367,6 +392,7 @@ MODELS = {
         "size_gb": 30,
         "supports_ip_adapter": False,
         "supports_reference_image": True,
+        "requires_reference_image": True,
         # LongCat's official model card documents CPU offload at roughly
         # 18 GB VRAM. Use that documented offload path instead of requiring
         # the entire pipeline to remain resident on the GPU.
@@ -382,6 +408,24 @@ MODELS = {
         "default_guidance": 7.0,
         "size_gb": 5,
         "supports_ip_adapter": False,
+    },
+    "sd35-large": {
+        "label": "Stable Diffusion 3.5 Large — LICENSE REQUIRED (~75 GB download)",
+        "repo": "stabilityai/stable-diffusion-3.5-large",
+        "disabled": True,
+        "disabled_reason": "Hugging Face license acceptance is required before this model can be downloaded.",
+        "size_gb": 75,
+        "default_steps": 28,
+        "default_guidance": 4.5,
+    },
+    "sd35-large-turbo": {
+        "label": "Stable Diffusion 3.5 Large Turbo — LICENSE REQUIRED (~59 GB download)",
+        "repo": "stabilityai/stable-diffusion-3.5-large-turbo",
+        "disabled": True,
+        "disabled_reason": "Hugging Face license acceptance is required before this model can be downloaded.",
+        "size_gb": 59,
+        "default_steps": 4,
+        "default_guidance": 0.0,
     },
     "realvisxl": {
         "label": "RealVisXL v4 (30-step, photorealistic, unrestricted, ~7 GB download)",
@@ -468,6 +512,10 @@ def _do_load(model_key: str) -> None:
         return
 
     info = MODELS[model_key]
+    if info.get("disabled"):
+        _status = "error"
+        _status_message = info.get("disabled_reason", "This model is not available.")
+        return
     _loading_model_key = model_key
     _status = "loading"
     _loading_phase = "checking_cache"
@@ -543,6 +591,9 @@ def _do_load(model_key: str) -> None:
         elif info["pipeline_class"] == "LongCatImageEditPipeline":
             from diffusers import LongCatImageEditPipeline
             PipelineCls = LongCatImageEditPipeline
+        elif info["pipeline_class"] == "Flux2KleinPipeline":
+            from diffusers import Flux2KleinPipeline
+            PipelineCls = Flux2KleinPipeline
         else:
             PipelineCls = _cls_map[info["pipeline_class"]]
 
@@ -651,7 +702,10 @@ def get_status():
                 "default_guidance": v["default_guidance"],
                 "supports_ip_adapter": v.get("supports_ip_adapter", False),
                 "supports_reference_image": v.get("supports_reference_image", False),
+                "requires_reference_image": v.get("requires_reference_image", False),
                 "uses_cpu_offload": v.get("use_cpu_offload", False),
+                "disabled": v.get("disabled", False),
+                "disabled_reason": v.get("disabled_reason"),
                 "minimum_vram_gb": v.get("minimum_vram_gb"),
                 "recommended_vram_gb": v.get("recommended_vram_gb"),
             }
@@ -762,6 +816,14 @@ def delete_model(req: DeleteModelRequest):
 @app.post("/load")
 def load_model(req: LoadRequest):
     global _status
+    info = MODELS.get(req.model)
+    if info is None:
+        raise HTTPException(status_code=400, detail="Unknown model")
+    if info.get("disabled"):
+        raise HTTPException(
+            status_code=403,
+            detail=info.get("disabled_reason", "This model is not available."),
+        )
     if _loaded_model == req.model and _status == "ready":
         return {"ok": True, "message": "Already loaded"}
     if _status == "loading":
@@ -776,6 +838,15 @@ def load_model(req: LoadRequest):
 def generate(req: GenerateRequest):
     global _pipeline, _loaded_model, _status, _ip_adapter_loaded, _generation_progress
 
+    requested_info = MODELS.get(req.model)
+    if requested_info is None:
+        raise HTTPException(status_code=400, detail=f"Unknown model '{req.model}'")
+    if requested_info.get("disabled"):
+        raise HTTPException(
+            status_code=403,
+            detail=requested_info.get("disabled_reason", "This model is not available."),
+        )
+
     # Auto-load synchronously if nothing is loaded yet
     if _pipeline is None or _loaded_model != req.model:
         if _status == "loading":
@@ -786,7 +857,7 @@ def generate(req: GenerateRequest):
             raise HTTPException(status_code=500, detail=_status_message)
 
     info = MODELS.get(req.model, MODELS["flux-schnell"])
-    if info.get("supports_reference_image") and not req.init_image:
+    if info.get("requires_reference_image") and not req.init_image:
         raise HTTPException(
             status_code=400,
             detail=f"{info['label']} requires an input or reference image.",
@@ -867,11 +938,26 @@ def generate(req: GenerateRequest):
 
         kwargs["callback_on_step_end"] = on_step_end
 
-        if req.init_image:
+        pipeline_class = info.get("pipeline_class", "")
+        if pipeline_class == "Flux2KleinPipeline":
+            # FLUX.2 Klein uses one unified pipeline for text-to-image and
+            # multi-reference image editing. It accepts image= directly,
+            # but does not accept the generic negative_prompt or callback
+            # shape used by the older pipelines in this server.
+            kwargs.pop("negative_prompt", None)
+            kwargs.pop("callback_on_step_end", None)
+            kwargs["width"] = req.width
+            kwargs["height"] = req.height
+            if req.init_image:
+                img_bytes = base64.b64decode(req.init_image)
+                init_img = PILImage.open(io.BytesIO(img_bytes)).convert("RGB")
+                kwargs["image"] = init_img.resize((req.width, req.height), PILImage.LANCZOS)
+            with torch.inference_mode():
+                result = _pipeline(**kwargs)
+        elif req.init_image:
             # ── Image-to-image ────────────────────────────────────────────────
             # Reuse the loaded pipeline's weights via from_pipe() — no re-download.
             from PIL import Image as PILImage
-            pipeline_class = info.get("pipeline_class", "")
             if pipeline_class == "QwenImageEditPlusPipeline":
                 img_bytes = base64.b64decode(req.init_image)
                 init_img = PILImage.open(io.BytesIO(img_bytes)).convert("RGB")
