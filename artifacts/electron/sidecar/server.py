@@ -324,6 +324,16 @@ MODELS = {
         "size_gb": 24,
         "supports_ip_adapter": False,
     },
+    "flux-kontext-dev": {
+        "label": "FLUX.1 Kontext [dev] (best local editing, non-commercial, ~24 GB download)",
+        "repo": "black-forest-labs/FLUX.1-Kontext-dev",
+        "pipeline_class": "FluxKontextPipeline",
+        "default_steps": 28,
+        "default_guidance": 2.5,
+        "size_gb": 24,
+        "supports_ip_adapter": False,
+        "supports_context_image": True,
+    },
     "sd3-medium": {
         "label": "Stable Diffusion 3 Medium (28-step, great quality, ~5 GB download)",
         "repo": "stabilityai/stable-diffusion-3-medium-diffusers",
@@ -415,6 +425,7 @@ def _do_load(model_key: str) -> None:
         import torch
         from diffusers import (
             FluxPipeline,
+            FluxKontextPipeline,
             AutoPipelineForText2Image,
             StableDiffusionXLPipeline,
             StableDiffusion3Pipeline,
@@ -423,6 +434,7 @@ def _do_load(model_key: str) -> None:
         from diffusers import StableDiffusionPipeline
         _cls_map = {
             "FluxPipeline": FluxPipeline,
+            "FluxKontextPipeline": FluxKontextPipeline,
             "AutoPipelineForText2Image": AutoPipelineForText2Image,
             "StableDiffusionXLPipeline": StableDiffusionXLPipeline,
             "StableDiffusion3Pipeline": StableDiffusion3Pipeline,
@@ -500,6 +512,7 @@ def get_status():
                 "default_steps": v["default_steps"],
                 "default_guidance": v["default_guidance"],
                 "supports_ip_adapter": v.get("supports_ip_adapter", False),
+                "supports_context_image": v.get("supports_context_image", False),
             }
             for k, v in MODELS.items()
         },
@@ -708,6 +721,34 @@ def generate(req: GenerateRequest):
             # ── Image-to-image ────────────────────────────────────────────────
             # Reuse the loaded pipeline's weights via from_pipe() — no re-download.
             from PIL import Image as PILImage
+            pipeline_class = info.get("pipeline_class", "")
+            if pipeline_class == "FluxKontextPipeline":
+                img_bytes = base64.b64decode(req.init_image)
+                init_img = PILImage.open(io.BytesIO(img_bytes)).convert("RGB")
+                init_img = init_img.resize((req.width, req.height), PILImage.LANCZOS)
+                kwargs["image"] = init_img
+                # Kontext is an instruction-based editor; it does not use the
+                # SDXL img2img strength or negative-prompt contract.
+                kwargs.pop("negative_prompt", None)
+                with torch.inference_mode():
+                    result = _pipeline(**kwargs)
+                image = result.images[0]
+                elapsed_ms = int((time.time() - t0) * 1000)
+                with _generation_lock:
+                    _generation_progress = None
+                ts = int(time.time() * 1000)
+                filename = f"aura-img-{ts}-seed{seed}.png"
+                out_path = Path(OUTPUT_DIR) / filename
+                image.save(str(out_path))
+                buf = io.BytesIO()
+                image.save(buf, format="PNG")
+                b64 = base64.b64encode(buf.getvalue()).decode()
+                return GenerateResponse(
+                    image_b64=b64,
+                    seed=seed,
+                    elapsed_ms=elapsed_ms,
+                    filename=filename,
+                )
             from diffusers import (
                 FluxImg2ImgPipeline,
                 StableDiffusionXLImg2ImgPipeline,
@@ -721,7 +762,6 @@ def generate(req: GenerateRequest):
                 "StableDiffusion3Pipeline":  StableDiffusion3Img2ImgPipeline,
                 "AutoPipelineForText2Image": AutoPipelineForImage2Image,
             }
-            pipeline_class = info.get("pipeline_class", "")
             Img2ImgCls = _img2img_cls_map.get(pipeline_class)
             if Img2ImgCls is None:
                 raise HTTPException(

@@ -19,6 +19,7 @@ interface ModelInfo {
   default_steps: number;
   default_guidance: number;
   supports_ip_adapter?: boolean;
+  supports_context_image?: boolean;
 }
 
 interface GpuInfo {
@@ -279,10 +280,12 @@ export function ImageGenPage() {
       if (steps !== "") body.steps = Number(steps);
       if (guidance !== "") body.guidance_scale = Number(guidance);
       if (seed !== "") body.seed = Number(seed);
-      if (initImage) {
+       if (initImage) {
         // Strip the "data:image/...;base64," prefix — sidecar expects raw base64
         body.init_image = initImage.split(",")[1];
         body.strength = strength;
+       } else if (currentModelInfo?.supports_context_image && charImage) {
+         body.init_image = charImage.split(",")[1];
       }
       const modelSupportsIpAdapter = status?.available_models?.[model]?.supports_ip_adapter;
       if (charImage && modelSupportsIpAdapter) {
@@ -376,6 +379,7 @@ export function ImageGenPage() {
   const defaultSteps = currentModelInfo?.default_steps ?? 4;
   const defaultGuidance = currentModelInfo?.default_guidance ?? 0;
   const supportsIpAdapter = Boolean(currentModelInfo?.supports_ip_adapter);
+  const supportsContextImage = Boolean(currentModelInfo?.supports_context_image);
   const gpu = status?.gpu;
   const generationProgress = status?.generation_progress;
   const pixelCount = resolution.w * resolution.h;
@@ -528,10 +532,12 @@ export function ImageGenPage() {
                 </Section>
 
                 {/* Lock Character (IP-Adapter) */}
-                {supportsIpAdapter && (
-                  <Section label="Lock Character (optional)">
+                 {(supportsIpAdapter || supportsContextImage) && (
+                   <Section label={supportsContextImage ? "Reference image (Kontext editing)" : "Lock Character (optional)"}>
                     <p className="text-[10px] text-muted-foreground mb-2 leading-relaxed">
-                      Upload your base character photo. The model will copy their face &amp; appearance into every new scene you prompt — without redrawing them pixel-by-pixel.
+                       {supportsContextImage
+                         ? "Upload the image to edit. FLUX.1 Kontext uses it directly as visual context, then follows your prompt."
+                         : "Upload your base character photo. The model will copy their face &amp; appearance into every new scene you prompt — without redrawing them pixel-by-pixel."}
                     </p>
                     <ImageUploadZone
                       image={charImage}
@@ -562,9 +568,11 @@ export function ImageGenPage() {
                           <span>loose likeness</span>
                           <span>strong lock</span>
                         </div>
-                        <p className="text-[10px] text-muted-foreground pt-1">
-                          First use downloads IP-Adapter weights (~300 MB, one-time).
-                        </p>
+                       {!supportsContextImage && (
+                         <p className="text-[10px] text-muted-foreground pt-1">
+                           First use downloads IP-Adapter weights (~300 MB, one-time).
+                         </p>
+                       )}
                       </div>
                     )}
                   </Section>
