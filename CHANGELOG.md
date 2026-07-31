@@ -6,12 +6,12 @@ All notable changes to Aura Farming are documented here.
 
 ## [1.2.305] — 2026-07-31
 
-### Added — FLUX.1 Kontext local image editing
+### Added — Qwen Image Edit local image editing
 
-- Added FLUX.1 Kontext [dev] as a free, local model option for stronger reference-image editing and character consistency.
-- Kontext uses the uploaded reference image directly instead of the older IP-Adapter path.
+- Added Qwen Image Edit 2511 as a public, local model option for stronger reference-image editing and character consistency.
+- Qwen uses the uploaded reference image directly instead of the older IP-Adapter path.
 - No paid API or generation credits are required.
-- The model requires a powerful GPU and is marked for non-commercial use under its model license.
+- The model is Apache-2.0 licensed but requires a powerful GPU; it will not run practically on a GTX 1050 Ti.
 
 ---
 

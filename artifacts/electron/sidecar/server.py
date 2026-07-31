@@ -324,15 +324,15 @@ MODELS = {
         "size_gb": 24,
         "supports_ip_adapter": False,
     },
-    "flux-kontext-dev": {
-        "label": "FLUX.1 Kontext [dev] (best local editing, non-commercial, ~24 GB download)",
-        "repo": "black-forest-labs/FLUX.1-Kontext-dev",
-        "pipeline_class": "FluxKontextPipeline",
-        "default_steps": 28,
-        "default_guidance": 2.5,
-        "size_gb": 24,
+    "qwen-image-edit-2511": {
+        "label": "Qwen Image Edit 2511 (best ungated local editing, ~20 GB download)",
+        "repo": "Qwen/Qwen-Image-Edit-2511",
+        "pipeline_class": "QwenImageEditPlusPipeline",
+        "default_steps": 40,
+        "default_guidance": 4.0,
+        "size_gb": 20,
         "supports_ip_adapter": False,
-        "supports_context_image": True,
+        "supports_reference_image": True,
     },
     "sd3-medium": {
         "label": "Stable Diffusion 3 Medium (28-step, great quality, ~5 GB download)",
@@ -425,7 +425,6 @@ def _do_load(model_key: str) -> None:
         import torch
         from diffusers import (
             FluxPipeline,
-            FluxKontextPipeline,
             AutoPipelineForText2Image,
             StableDiffusionXLPipeline,
             StableDiffusion3Pipeline,
@@ -434,13 +433,16 @@ def _do_load(model_key: str) -> None:
         from diffusers import StableDiffusionPipeline
         _cls_map = {
             "FluxPipeline": FluxPipeline,
-            "FluxKontextPipeline": FluxKontextPipeline,
             "AutoPipelineForText2Image": AutoPipelineForText2Image,
             "StableDiffusionXLPipeline": StableDiffusionXLPipeline,
             "StableDiffusion3Pipeline": StableDiffusion3Pipeline,
             "StableDiffusionPipeline": StableDiffusionPipeline,
         }
-        PipelineCls = _cls_map[info["pipeline_class"]]
+        if info["pipeline_class"] == "QwenImageEditPlusPipeline":
+            from diffusers import QwenImageEditPlusPipeline
+            PipelineCls = QwenImageEditPlusPipeline
+        else:
+            PipelineCls = _cls_map[info["pipeline_class"]]
 
         # Apply CPU thread cap before any computation
         torch.set_num_threads(_cpu_threads)
@@ -512,7 +514,7 @@ def get_status():
                 "default_steps": v["default_steps"],
                 "default_guidance": v["default_guidance"],
                 "supports_ip_adapter": v.get("supports_ip_adapter", False),
-                "supports_context_image": v.get("supports_context_image", False),
+                "supports_reference_image": v.get("supports_reference_image", False),
             }
             for k, v in MODELS.items()
         },
@@ -641,6 +643,11 @@ def generate(req: GenerateRequest):
             raise HTTPException(status_code=500, detail=_status_message)
 
     info = MODELS.get(req.model, MODELS["flux-schnell"])
+    if info.get("supports_reference_image") and not req.init_image:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{info['label']} requires an input or reference image.",
+        )
     steps = req.steps if req.steps is not None else info["default_steps"]
     guidance = req.guidance_scale if req.guidance_scale is not None else info["default_guidance"]
 
@@ -722,14 +729,17 @@ def generate(req: GenerateRequest):
             # Reuse the loaded pipeline's weights via from_pipe() — no re-download.
             from PIL import Image as PILImage
             pipeline_class = info.get("pipeline_class", "")
-            if pipeline_class == "FluxKontextPipeline":
+            if pipeline_class == "QwenImageEditPlusPipeline":
                 img_bytes = base64.b64decode(req.init_image)
                 init_img = PILImage.open(io.BytesIO(img_bytes)).convert("RGB")
                 init_img = init_img.resize((req.width, req.height), PILImage.LANCZOS)
-                kwargs["image"] = init_img
-                # Kontext is an instruction-based editor; it does not use the
-                # SDXL img2img strength or negative-prompt contract.
-                kwargs.pop("negative_prompt", None)
+                # Qwen Image Edit Plus takes one or more reference images as a
+                # list and uses true_cfg_scale for prompt adherence.
+                kwargs["image"] = [init_img]
+                kwargs["true_cfg_scale"] = guidance
+                kwargs["guidance_scale"] = 1.0
+                kwargs["negative_prompt"] = req.negative_prompt or " "
+                kwargs["num_images_per_prompt"] = 1
                 with torch.inference_mode():
                     result = _pipeline(**kwargs)
                 image = result.images[0]

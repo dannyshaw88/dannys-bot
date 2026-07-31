@@ -19,7 +19,7 @@ interface ModelInfo {
   default_steps: number;
   default_guidance: number;
   supports_ip_adapter?: boolean;
-  supports_context_image?: boolean;
+  supports_reference_image?: boolean;
 }
 
 interface GpuInfo {
@@ -267,6 +267,10 @@ export function ImageGenPage() {
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
+    if (currentModelInfo?.supports_reference_image && !initImage && !charImage) {
+      setError("Qwen Image Edit requires a reference or input image.");
+      return;
+    }
     setGenerating(true);
     setError("");
     try {
@@ -284,7 +288,7 @@ export function ImageGenPage() {
         // Strip the "data:image/...;base64," prefix — sidecar expects raw base64
         body.init_image = initImage.split(",")[1];
         body.strength = strength;
-       } else if (currentModelInfo?.supports_context_image && charImage) {
+       } else if (currentModelInfo?.supports_reference_image && charImage) {
          body.init_image = charImage.split(",")[1];
       }
       const modelSupportsIpAdapter = status?.available_models?.[model]?.supports_ip_adapter;
@@ -379,7 +383,7 @@ export function ImageGenPage() {
   const defaultSteps = currentModelInfo?.default_steps ?? 4;
   const defaultGuidance = currentModelInfo?.default_guidance ?? 0;
   const supportsIpAdapter = Boolean(currentModelInfo?.supports_ip_adapter);
-  const supportsContextImage = Boolean(currentModelInfo?.supports_context_image);
+  const supportsReferenceImage = Boolean(currentModelInfo?.supports_reference_image);
   const gpu = status?.gpu;
   const generationProgress = status?.generation_progress;
   const pixelCount = resolution.w * resolution.h;
@@ -532,11 +536,11 @@ export function ImageGenPage() {
                 </Section>
 
                 {/* Lock Character (IP-Adapter) */}
-                 {(supportsIpAdapter || supportsContextImage) && (
-                   <Section label={supportsContextImage ? "Reference image (Kontext editing)" : "Lock Character (optional)"}>
+                 {(supportsIpAdapter || supportsReferenceImage) && (
+                   <Section label={supportsReferenceImage ? "Reference image (Qwen editing)" : "Lock Character (optional)"}>
                     <p className="text-[10px] text-muted-foreground mb-2 leading-relaxed">
-                       {supportsContextImage
-                         ? "Upload the image to edit. FLUX.1 Kontext uses it directly as visual context, then follows your prompt."
+                        {supportsReferenceImage
+                         ? "Upload the image to edit. Qwen Image Edit uses it directly as visual context and follows your prompt. This model requires a reference image."
                          : "Upload your base character photo. The model will copy their face &amp; appearance into every new scene you prompt — without redrawing them pixel-by-pixel."}
                     </p>
                     <ImageUploadZone
@@ -568,7 +572,7 @@ export function ImageGenPage() {
                           <span>loose likeness</span>
                           <span>strong lock</span>
                         </div>
-                       {!supportsContextImage && (
+                       {!supportsReferenceImage && (
                          <p className="text-[10px] text-muted-foreground pt-1">
                            First use downloads IP-Adapter weights (~300 MB, one-time).
                          </p>
