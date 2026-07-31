@@ -60,3 +60,4 @@
 - [HST restart recovery](hst-restart-recovery.md) — startup recovery and manual toggle-on must use separate scheduling paths; preserve slot identity in background settings responses
 - [Mobile Search tab detector](mobile-search-tab-detector.md) — validate unlabeled bottom-nav nodes from the live accessibility row; never derive a tap coordinate from screen dimensions
 - [GitHub PAT push fallback](github-pat-push-fallback.md) — project GITHUB_TOKEN secrets work with GIT_ASKPASS HTTPS pushes, but not the gitPush source-control helper
+- [Large model CPU fallback](large-model-cpu-fallback.md) — models with full-pipeline VRAM requirements must fail before CPU float32 assembly when CUDA is unavailable

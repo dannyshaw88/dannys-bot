@@ -4,6 +4,16 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.317] — 2026-07-31
+
+### Fixed — Prevent Qwen and other large models from appearing frozen
+
+- Large models with documented VRAM requirements now fail immediately when CUDA is unavailable instead of falling through to an impractical CPU `float32` load.
+- Raised Qwen Image Edit 2511's full-pipeline requirement to 24 GB VRAM, matching the approximate memory needed by its 20B-parameter BF16 pipeline.
+- Added explicit sidecar logs after pipeline assembly and after the device transfer so long loads can be distinguished from a stalled or failed load.
+- Added a visible warning after five minutes of model assembly.
+- Bumped the root application and Electron package versions to `1.2.317`.
+
 ## [1.2.316] — 2026-07-31
 
 ### Fixed — Restore fast legacy Hugging Face model downloads

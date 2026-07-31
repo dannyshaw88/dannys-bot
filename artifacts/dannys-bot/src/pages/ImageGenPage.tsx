@@ -548,6 +548,11 @@ export function ImageGenPage() {
                   Loading time: {Math.floor(status.loading_elapsed_seconds / 60)}m {Math.floor(status.loading_elapsed_seconds % 60)}s
                 </p>
               )}
+              {typeof status?.loading_elapsed_seconds === "number" && status.loading_elapsed_seconds >= 300 && (
+                <p className="text-xs text-amber-700 dark:text-amber-300 mt-2">
+                  Model assembly is taking longer than 5 minutes. If this does not finish, the selected model likely exceeds the available GPU or system memory; refresh the app and choose a smaller model.
+                </p>
+              )}
             </InfoCard>
           )}
 

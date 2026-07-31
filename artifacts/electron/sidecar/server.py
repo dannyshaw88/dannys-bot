@@ -364,6 +364,7 @@ MODELS = {
         "use_cpu_offload": True,
         "minimum_vram_gb": 13,
         "recommended_vram_gb": 16,
+        "requires_cuda": True,
     },
     "qwen-image-edit-2511": {
         "label": "Qwen Image Edit 2511 (best ungated local editing, ~20 GB download)",
@@ -376,10 +377,12 @@ MODELS = {
         "supports_reference_image": True,
         "requires_reference_image": True,
         # The current loader places the complete pipeline on CUDA; it does
-        # not use CPU/disk offload. Refuse clearly undersized GPUs before
+        # not use CPU/disk offload. A 20B-parameter BF16 pipeline needs about
+        # 24 GB of VRAM. Refuse CPU-only and undersized machines before
         # diffusers spends minutes materialising a pipeline that cannot fit.
-        "minimum_vram_gb": 16,
+        "minimum_vram_gb": 24,
         "recommended_vram_gb": 24,
+        "requires_cuda": True,
     },
     "longcat-image-edit": {
         "label": "LongCat Image Edit (reference-image editing, ~30 GB download)",
@@ -397,6 +400,7 @@ MODELS = {
         "use_cpu_offload": True,
         "minimum_vram_gb": 18,
         "recommended_vram_gb": 24,
+        "requires_cuda": True,
     },
     "realvisxl": {
         "label": "RealVisXL v4 (30-step, photorealistic, unrestricted, ~7 GB download)",
@@ -430,6 +434,7 @@ MODELS = {
         # that cannot fit.
         "minimum_vram_gb": 16,
         "recommended_vram_gb": 24,
+        "requires_cuda": True,
         # Tongyi-MAI/Z-Image-Turbo is Apache-2.0 and ungated on Hugging Face;
         # weights are downloaded into the local cache and inference is local.
     },
@@ -520,6 +525,16 @@ def _do_load(model_key: str) -> None:
         gpu_info = _get_gpu_info()
         device = "cuda" if gpu_info["available"] else "cpu"
         minimum_vram = info.get("minimum_vram_gb")
+        if info.get("requires_cuda") and device != "cuda":
+            gpu_name = gpu_info.get("system_gpu_name") or gpu_info.get("name")
+            detected = f" ({gpu_name})" if gpu_name else ""
+            raise RuntimeError(
+                f"{info['label']} requires a CUDA-capable NVIDIA GPU{detected}; "
+                f"this installation cannot use CUDA ({gpu_info.get('reason', 'CUDA is unavailable')}). "
+                "The model was downloaded successfully, but it cannot be loaded into CPU memory. "
+                "Choose SDXL-Turbo or another CPU-compatible model, or install the CUDA-enabled "
+                "AI libraries and NVIDIA driver."
+            )
         if device == "cuda" and minimum_vram:
             actual_vram = gpu_info.get("vram_gb")
             if actual_vram is None:
@@ -617,6 +632,10 @@ def _do_load(model_key: str) -> None:
         )
         log.info(f"Loading pipeline components for {model_key} (elapsed {time.time() - _loading_started_at:.0f}s)")
         pipe = PipelineCls.from_pretrained(info["repo"], **load_kwargs)
+        log.info(
+            f"Pipeline components assembled for {model_key} "
+            f"(elapsed {time.time() - _loading_started_at:.0f}s); moving to {device.upper()}"
+        )
 
         _loading_phase = "loading_pipeline"
         _loading_detail = "Assembling model components; diffusers does not expose percentage progress here…"
@@ -633,6 +652,7 @@ def _do_load(model_key: str) -> None:
             # VRAM. On a CPU-only machine they add transfer overhead to every
             # layer and can turn a minutes-long generation into 15+ minutes.
             pipe = pipe.to("cpu")
+        log.info(f"Pipeline moved to {device.upper()} (elapsed {time.time() - _loading_started_at:.0f}s)")
 
         _pipeline = pipe
         _loaded_model = model_key
