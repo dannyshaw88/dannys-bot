@@ -1,0 +1,35 @@
+[
+  {
+    "name": "sessionid",
+    "value": "77828332637%3AdZgu8aCQZHnQUV%3A9%3AAYgQnQ0e3BdJMJ_E0lDcVS7B4OBrtsay7Q5zdtdEmg",
+    "domain": ".instagram.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "Lax",
+    "session": false
+  },
+  {
+    "name": "ds_user_id",
+    "value": "77828332637",
+    "domain": ".instagram.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "Lax",
+    "session": false
+  },
+  {
+    "name": "mid",
+    "value": "ae9AtgABAAF_lV0wAJMBFkEBE0SW",
+    "domain": ".instagram.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "Lax",
+    "session": false
+  }
+]
