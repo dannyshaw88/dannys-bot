@@ -1,0 +1,156 @@
+name: Build Windows Installer
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: windows-installer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-web:
+    name: Build Web Bundle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile --ignore-scripts
+      - name: Build API server
+        run: pnpm --filter @workspace/api-server run build
+      - name: Build frontend
+        run: pnpm --filter @workspace/dannys-bot run build
+        env:
+          REPL_ID: ci
+      - name: Verify release version
+        shell: bash
+        run: |
+          root_version="$(node -p "require('./package.json').version")"
+          electron_version="$(node -p "require('./artifacts/electron/package.json').version")"
+          test "$root_version" = "$electron_version"
+          test -f artifacts/electron/build.mjs
+          test -f artifacts/electron/electron-builder.json
+          test -f artifacts/electron/sidecar/server.py
+          echo "Building Aura Farming version $root_version"
+      # Upload each dist directory as its own artifact so download-artifact
+      # can place files at the exact target path without any copy/rename step.
+      - name: Upload API server dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-server-dist
+          path: artifacts/api-server/dist/
+          if-no-files-found: error
+      - name: Upload frontend dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: dannys-bot-dist
+          path: artifacts/dannys-bot/dist/
+          if-no-files-found: error
+
+  build-installer:
+    name: Build Windows Installer
+    runs-on: windows-latest
+    needs: build-web
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Download directly into the paths the Electron builder expects.
+      # No copy step needed — download-artifact places files at the given path.
+      - name: Download API server dist
+        uses: actions/download-artifact@v4
+        with:
+          name: api-server-dist
+          path: artifacts/api-server/dist
+
+      - name: Download frontend dist
+        uses: actions/download-artifact@v4
+        with:
+          name: dannys-bot-dist
+          path: artifacts/dannys-bot/dist
+
+      - name: Verify dist files
+        run: |
+          echo "=== api-server/dist ==="
+          ls artifacts/api-server/dist/
+          echo "=== dannys-bot/dist ==="
+          ls artifacts/dannys-bot/dist/
+
+      - name: Set up Python embeddable runtime
+        working-directory: artifacts/electron
+        shell: bash
+        run: |
+          mkdir -p resources/python-embed
+          # Download Windows embeddable Python 3.12
+          curl -fsSL "https://www.python.org/ftp/python/3.12.9/python-3.12.9-embed-amd64.zip" \
+            -o python-embed.zip
+          unzip -q python-embed.zip -d resources/python-embed/
+          rm python-embed.zip
+          # Bootstrap script so the app can install pip on first run
+          curl -fsSL "https://bootstrap.pypa.io/get-pip.py" \
+            -o resources/python-embed/get-pip.py
+          # Copy sidecar server files
+          cp sidecar/server.py resources/python-embed/server.py
+          cp sidecar/requirements.txt resources/python-embed/requirements.txt
+          echo "Python embed ready:"
+          ls resources/python-embed/ | head -20
+
+      - name: Install Electron deps
+        working-directory: artifacts/electron
+        run: npm install --ignore-scripts
+
+      - name: Build Electron bundle
+        working-directory: artifacts/electron
+        run: node build.mjs
+
+      - name: Build installer
+        working-directory: artifacts/electron
+        run: npx electron-builder --win --publish never
+        env:
+          DANNY_BOT_UPDATER_TOKEN: ${{ secrets.UPDATER_TOKEN }}
+
+      - name: Verify Windows installer
+        working-directory: artifacts/electron
+        shell: bash
+        run: |
+          installer_count="$(find release -maxdepth 1 -type f -iname '*.exe' | wc -l)"
+          test "$installer_count" -gt 0
+          installer_bytes="$(find release -maxdepth 1 -type f -iname '*.exe' -printf '%s\n' | awk '{ total += $1 } END { print total + 0 }')"
+          test "$installer_bytes" -gt 1000000
+          echo "Windows installer artifacts:"
+          find release -maxdepth 1 -type f -iname '*.exe' -print
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Aura-Farming-Windows-Installer
+          path: artifacts/electron/release/*.exe
+          if-no-files-found: error
+
+      - name: Publish to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/electron/release/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.UPDATER_TOKEN }}
