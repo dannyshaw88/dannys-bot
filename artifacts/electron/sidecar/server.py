@@ -70,6 +70,8 @@ _loading_from_cache: bool = False           # True when weights are already on d
 _load_lock = threading.Lock()
 _ip_adapter_loaded: bool = False            # True once IP-Adapter weights are loaded onto _pipeline
 _gpu_info_cache: Optional[dict] = None
+_generation_progress: Optional[dict] = None
+_generation_lock = threading.Lock()
 
 
 def _model_is_cached(model_key: str) -> bool:
@@ -504,6 +506,7 @@ def get_status():
         "cpu_threads": _cpu_threads,
         "cpu_count": _cpu_count,
         "gpu": _get_gpu_info(),
+        "generation_progress": _generation_progress,
     }
 
 
@@ -613,7 +616,7 @@ def load_model(req: LoadRequest):
 
 @app.post("/generate")
 def generate(req: GenerateRequest):
-    global _pipeline, _loaded_model, _status, _ip_adapter_loaded
+    global _pipeline, _loaded_model, _status, _ip_adapter_loaded, _generation_progress
 
     # Auto-load synchronously if nothing is loaded yet
     if _pipeline is None or _loaded_model != req.model:
@@ -633,6 +636,14 @@ def generate(req: GenerateRequest):
 
     seed = req.seed if req.seed is not None else random.randint(0, 2**32 - 1)
     generator = torch.Generator().manual_seed(seed)
+    with _generation_lock:
+        _generation_progress = {
+            "current_step": 0,
+            "total_steps": steps,
+            "percent": 0,
+            "elapsed_seconds": 0,
+            "phase": "Starting",
+        }
 
     t0 = time.time()
     try:
@@ -653,6 +664,14 @@ def generate(req: GenerateRequest):
         if req.ip_adapter_image and info.get("supports_ip_adapter"):
             from PIL import Image as PILImage
             if not _ip_adapter_loaded:
+                with _generation_lock:
+                    _generation_progress = {
+                        "current_step": 0,
+                        "total_steps": steps,
+                        "percent": 0,
+                        "elapsed_seconds": round(time.time() - t0, 1),
+                        "phase": "Loading character adapter",
+                    }
                 log.info("Loading IP-Adapter SDXL weights (~300 MB one-time download)…")
                 _pipeline.load_ip_adapter(
                     "h94/IP-Adapter",
@@ -669,6 +688,21 @@ def generate(req: GenerateRequest):
         elif _ip_adapter_loaded:
             # Reference image not provided this request — mute the adapter
             _pipeline.set_ip_adapter_scale(0.0)
+
+        def on_step_end(_pipe, step_index, _timestep, callback_kwargs):
+            global _generation_progress
+            current_step = min(step_index + 1, steps)
+            with _generation_lock:
+                _generation_progress = {
+                    "current_step": current_step,
+                    "total_steps": steps,
+                    "percent": round(current_step / max(steps, 1) * 100),
+                    "elapsed_seconds": round(time.time() - t0, 1),
+                    "phase": "Denoising",
+                }
+            return callback_kwargs
+
+        kwargs["callback_on_step_end"] = on_step_end
 
         if req.init_image:
             # ── Image-to-image ────────────────────────────────────────────────
@@ -724,11 +758,17 @@ def generate(req: GenerateRequest):
         image = result.images[0]
 
     except HTTPException:
+        with _generation_lock:
+            _generation_progress = None
         raise
     except Exception as exc:
+        with _generation_lock:
+            _generation_progress = None
         raise HTTPException(status_code=500, detail=str(exc))
 
     elapsed_ms = int((time.time() - t0) * 1000)
+    with _generation_lock:
+        _generation_progress = None
 
     # Save to output directory
     ts = int(time.time() * 1000)

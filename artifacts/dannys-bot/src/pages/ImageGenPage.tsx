@@ -52,6 +52,15 @@ interface StatusResponse {
   cpu_threads?: number;
   cpu_count?: number;
   gpu?: GpuInfo;
+  generation_progress?: GenerationProgress | null;
+}
+
+interface GenerationProgress {
+  current_step: number;
+  total_steps: number;
+  percent: number;
+  elapsed_seconds: number;
+  phase: string;
 }
 
 interface GenerateResult {
@@ -368,6 +377,7 @@ export function ImageGenPage() {
   const defaultGuidance = currentModelInfo?.default_guidance ?? 0;
   const supportsIpAdapter = Boolean(currentModelInfo?.supports_ip_adapter);
   const gpu = status?.gpu;
+  const generationProgress = status?.generation_progress;
   const pixelCount = resolution.w * resolution.h;
   const slowCpuJob = !gpu?.available && (pixelCount > 786432 || (steps !== "" && Number(steps) > 8));
 
@@ -733,11 +743,7 @@ export function ImageGenPage() {
                     style={{ minHeight: "400px" }}
                   >
                     {generating ? (
-                      <>
-                        <Loader2 className="w-10 h-10 animate-spin mb-3" style={{ color: BRAND }} />
-                        <p className="text-sm">Generating your image…</p>
-                        <p className="text-xs mt-1">This may take 10–60 seconds depending on your GPU</p>
-                      </>
+                      <GenerationProgressView progress={generationProgress} />
                     ) : (
                       <>
                         <Sparkles className="w-10 h-10 mb-3 opacity-20" />
@@ -752,6 +758,26 @@ export function ImageGenPage() {
           )}
 
         </div>
+      </div>
+    </div>
+  );
+}
+
+function GenerationProgressView({ progress }: { progress?: GenerationProgress | null }) {
+  const percent = progress?.percent ?? 0;
+  return (
+    <div className="w-full max-w-md px-8 text-center">
+      <Loader2 className="w-10 h-10 animate-spin mx-auto mb-3" style={{ color: BRAND }} />
+      <p className="text-sm">Generating your image…</p>
+      <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-muted">
+        <div
+          className="h-full rounded-full transition-all duration-500"
+          style={{ width: `${percent}%`, background: BRAND }}
+        />
+      </div>
+      <div className="mt-2 flex justify-between text-xs text-muted-foreground">
+        <span>{progress ? `${progress.phase} · step ${progress.current_step}/${progress.total_steps}` : "Preparing…"}</span>
+        <span>{progress ? `${progress.elapsed_seconds.toFixed(0)}s` : "Starting"}</span>
       </div>
     </div>
   );
