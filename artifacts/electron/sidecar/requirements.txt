@@ -7,3 +7,7 @@ accelerate>=0.33.0
 sentencepiece>=0.2.0
 pydantic>=2.0.0
 Pillow>=10.0.0
+# huggingface_hub >= 0.32 can use hf-xet when it is available. The Electron
+# setup attempts that accelerator separately so the regular HTTP downloader
+# remains available if the optional Windows wheel cannot be installed.
+huggingface_hub>=0.32.0

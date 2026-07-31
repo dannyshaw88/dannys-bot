@@ -46,6 +46,7 @@ interface GpuInfo {
 
 interface DownloadProgress {
   downloaded_bytes: number;
+  current_bytes?: number;
   completed_bytes?: number;
   total_bytes: number;
   download_complete?: boolean;

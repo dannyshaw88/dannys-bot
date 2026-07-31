@@ -70,6 +70,7 @@ _loading_from_cache: bool = False           # True when weights are already on d
 _loading_phase: str = "idle"                # checking_cache | hardware_check | downloading | loading_pipeline | moving_to_device
 _loading_started_at: Optional[float] = None
 _loading_detail: str = ""
+_download_progress_high_water: int = 0      # bytes observed during this load; never moves backwards
 _load_lock = threading.Lock()
 _ip_adapter_loaded: bool = False            # True once IP-Adapter weights are loaded onto _pipeline
 _gpu_info_cache: Optional[dict] = None
@@ -295,15 +296,19 @@ def _get_download_progress() -> Optional[dict]:
 
     # Include active .incomplete files in the visible byte count so the user
     # can see Hugging Face transfers moving while a large shard is downloading.
-    # Completion still requires all active transfers to be renamed to complete
-    # blobs, because size_gb is only an intentionally approximate estimate.
-    transferred = downloaded + incomplete_bytes
-    # Keep the displayed percentage below 100 while an active transfer still
-    # exists, even when the registry's approximate size has been reached.
-    visible_total = max(0, total_bytes - 1) if incomplete_bytes else total_bytes
+    # Hugging Face may replace an incomplete blob while resuming/retrying a
+    # transfer. That makes a raw directory sum go backwards even though the
+    # load is still progressing, so expose a per-load high-water mark to the UI.
+    global _download_progress_high_water
+    current_bytes = downloaded + incomplete_bytes
+    _download_progress_high_water = max(_download_progress_high_water, current_bytes)
+    # The registry size is an estimate. It is valid for the visible counter to
+    # reach that estimate while a final/retried file is still incomplete;
+    # download_complete remains false until every incomplete file is finalized.
     download_complete = downloaded >= total_bytes and incomplete_bytes == 0
     return {
-        "downloaded_bytes": min(transferred, visible_total),
+        "downloaded_bytes": min(_download_progress_high_water, total_bytes),
+        "current_bytes": min(current_bytes, total_bytes),
         "completed_bytes": min(downloaded, total_bytes),
         "total_bytes": total_bytes,
         "download_complete": download_complete,
@@ -463,6 +468,7 @@ app.add_middleware(
 def _do_load(model_key: str) -> None:
     global _pipeline, _loaded_model, _status, _status_message, _loading_model_key
     global _loading_from_cache, _loading_phase, _loading_started_at, _loading_detail
+    global _download_progress_high_water
     global _ip_adapter_loaded
 
     if model_key not in MODELS:
@@ -480,6 +486,7 @@ def _do_load(model_key: str) -> None:
     _loading_phase = "checking_cache"
     _loading_started_at = time.time()
     _loading_detail = "Checking the local model cache…"
+    _download_progress_high_water = 0
 
     # Detect whether the weights are already cached so we can show the right message
     cached = _model_is_cached(model_key)
@@ -612,6 +619,7 @@ def _do_load(model_key: str) -> None:
         _loaded_model = model_key
         _loading_model_key = None
         _loading_from_cache = False
+        _download_progress_high_water = 0
         _loading_phase = "idle"
         _loading_started_at = None
         _loading_detail = ""
@@ -623,6 +631,7 @@ def _do_load(model_key: str) -> None:
     except Exception as exc:
         _loading_model_key = None
         _loading_from_cache = False
+        _download_progress_high_water = 0
         _loading_phase = "error"
         _loading_started_at = None
         _loading_detail = ""

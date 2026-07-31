@@ -4,6 +4,15 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.315] — 2026-07-31
+
+### Fixed — AI model download speed and progress regressions
+
+- Made the displayed download counter monotonic for a single model load. Hugging Face can replace a partial `.incomplete` shard while resuming, which previously made the UI jump backwards.
+- Enabled Hugging Face Xet high-performance transfers in the Windows sidecar, with an environment override for slower disks.
+- Added the optional `hf-xet` downloader package to the desktop AI library setup, while retaining the regular Hub downloader as a fallback.
+- Bumped the root application and Electron package versions to `1.2.315`.
+
 ## [1.2.314] — 2026-07-31
 
 ### Fixed — AI model download progress

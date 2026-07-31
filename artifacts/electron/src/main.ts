@@ -138,6 +138,13 @@ function spawnImageGenServer(port: number): void {
       IMAGE_GEN_PORT: String(port),
       IMAGE_GEN_MODELS_DIR: modelsDir,
       IMAGE_GEN_OUTPUT_DIR: outputDir,
+      // Current huggingface_hub uses hf-xet for Hub-backed large-file
+      // downloads. High-performance mode enables concurrent range transfers
+      // instead of the slow, conservative default. Keep it overridable for
+      // machines where parallel writes hurt (for example, a spinning HDD).
+      HF_XET_HIGH_PERFORMANCE: process.env.HF_XET_HIGH_PERFORMANCE ?? "1",
+      HF_XET_RECONSTRUCT_WRITE_SEQUENTIALLY:
+        process.env.HF_XET_RECONSTRUCT_WRITE_SEQUENTIALLY ?? "0",
     },
   });
 
@@ -1336,6 +1343,32 @@ async function createWindow() {
         p.stdout?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
         p.stderr?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
         p.on("exit", code => code === 0 ? resolve() : reject(new Error(`AI library install failed (code ${code})`)));
+      });
+
+      // hf-xet is an optional accelerator for large Hugging Face downloads.
+      // Install it separately and continue if its platform wheel is not
+      // available; huggingface_hub's regular HTTP downloader remains usable.
+      sendProgress("Installing optional high-speed model downloader…", false);
+      await new Promise<void>((resolve) => {
+        const p = spawn(pythonExe, [
+          pipMain,
+          "install",
+          "--target", pipDir,
+          "hf-xet>=1.1.0",
+          "--no-warn-script-location",
+        ], { stdio: "pipe", env: pipEnv });
+        p.stdout?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
+        p.stderr?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
+        p.on("exit", code => {
+          if (code !== 0) {
+            sendProgress("Optional hf-xet install was unavailable; using the regular Hugging Face downloader.", false);
+          }
+          resolve();
+        });
+        p.on("error", () => {
+          sendProgress("Optional hf-xet install was unavailable; using the regular Hugging Face downloader.", false);
+          resolve();
+        });
       });
 
       sendProgress("✅ Setup complete! Starting image gen server…", false);
