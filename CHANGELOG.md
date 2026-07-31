@@ -4,6 +4,41 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.301] — 2026-07-31
+
+### Fix — Generation timeout + RAM exhaustion causing Phone Farm devices to vanish
+
+#### Root causes
+
+1. **Timeout** — The Express proxy to the sidecar had a 5-minute hard limit. SDXL models at 30 steps on CPU take 15–40 minutes. The request was killed at 5 min with "Generation timed out" every time.
+
+2. **RAM exhaustion** — A 7 GB model loaded on CPU stays in memory permanently. During generation it consumes all available RAM, starving the Express API server. When the user navigated to Phone Farm, the device-list API call returned an error (or timed out), so the UI showed an empty farm. Restarting the app cleared the model process, freeing RAM, so devices appeared again on first load.
+
+#### Fixes
+
+**`artifacts/api-server/src/routes/imageGen.ts`**
+
+- `proxyToSidecar` now accepts an optional `timeoutMs` parameter (default 300 000 ms / 5 min).
+- `POST /api/image-gen/generate` passes `2_700_000` (45 minutes) — more than enough headroom for the slowest CPU inference.
+- New `POST /api/image-gen/unload` proxy route.
+
+**`artifacts/electron/sidecar/server.py`**
+
+- `low_cpu_mem_usage=True` added to every `from_pretrained` call. This prevents diffusers from holding a full second copy of the weights during the load phase, cutting peak RAM use roughly in half (e.g. RealVisXL peak drops from ~14 GB to ~7 GB).
+- New `POST /unload` endpoint: sets `_pipeline = None`, calls `gc.collect()` and `torch.cuda.empty_cache()` (if CUDA), and resets status to `"idle"`. Immediately releases the model's RAM back to the OS.
+
+**`artifacts/dannys-bot/src/pages/ImageGenPage.tsx`**
+
+- `handleUnload()` fires `POST /api/image-gen/unload` (fire-and-forget; status poll picks up the idle state within 2 s).
+- **"Unload model & free RAM"** button added below the Switch/Load button in the Model section. Always visible when a model is loaded. Tooltip explains why: frees RAM so Phone Farm and the rest of the app stay responsive.
+- **CPU-only warning banner** shown when the loaded model is not on CUDA: explains that SDXL takes 15–40 min on CPU, suggests FLUX Schnell for speed, and reminds the user to unload when done.
+
+#### Usage
+
+Generate your images → click **"Unload model & free RAM"** → navigate to Phone Farm. Devices will be there.
+
+---
+
 ## [1.2.300] — 2026-07-31
 
 ### Feature — CPU thread limiter on AI Images page

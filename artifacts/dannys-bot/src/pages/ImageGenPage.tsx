@@ -280,6 +280,13 @@ export function ImageGenPage() {
     }
   };
 
+  const handleUnload = async () => {
+    try {
+      await fetch("/api/image-gen/unload", { method: "POST" });
+      // Status poll will pick up the idle state within 2 s
+    } catch { /* non-critical */ }
+  };
+
   const handleSetup = async () => {
     if (!window.electronAPI?.setupImageGen) return;
     setSettingUp(true);
@@ -410,6 +417,20 @@ export function ImageGenPage() {
                       {loadingModel ? <Loader2 className="w-3 h-3 animate-spin inline mr-1" /> : null}
                       Switch to {model}
                     </button>
+                  )}
+                  {/* Unload button — frees the model's RAM so Phone Farm / rest of app stays responsive */}
+                  <button
+                    onClick={handleUnload}
+                    className="mt-2 w-full py-1.5 text-xs rounded border border-border hover:bg-accent text-muted-foreground"
+                    title="Releases the model from memory. Phone Farm and other features will respond normally again. Reload the model when you want to generate again."
+                  >
+                    Unload model &amp; free RAM
+                  </button>
+                  {/* CPU-only warning */}
+                  {!status?.message?.includes("CUDA") && (
+                    <p className="mt-2 text-[10px] text-yellow-500/80 leading-relaxed">
+                      ⚠ No GPU detected — running on CPU. SDXL models take 15–40 min per image on CPU. FLUX Schnell is much faster (2–5 min). <strong>Click "Unload model" when done</strong> to free RAM for your phone farm.
+                    </p>
                   )}
                 </Section>
 

@@ -18,6 +18,7 @@ function proxyToSidecar(
   method: "GET" | "POST",
   sidePath: string,
   bodyStr?: string,
+  timeoutMs: number = 300_000,
 ): void {
   if (!IMAGE_GEN_PORT) {
     res
@@ -35,8 +36,7 @@ function proxyToSidecar(
       "Content-Type": "application/json",
       ...(bodyStr ? { "Content-Length": Buffer.byteLength(bodyStr) } : {}),
     },
-    // Long timeout for model loading / generation
-    timeout: 300_000,
+    timeout: timeoutMs,
   };
 
   const proxyReq = http.request(options, (proxyRes) => {
@@ -142,8 +142,15 @@ router.post("/api/image-gen/cpu-threads", (req, res) => {
 });
 
 // ── Generate image ────────────────────────────────────────────────────────────
+// CPU inference of large SDXL models can take 20–40 minutes — use a dedicated
+// 45-minute timeout so the proxy never cuts the request short.
 router.post("/api/image-gen/generate", (req, res) => {
-  proxyToSidecar(req, res, "POST", "/generate", JSON.stringify(req.body));
+  proxyToSidecar(req, res, "POST", "/generate", JSON.stringify(req.body), 2_700_000);
+});
+
+// ── Unload model ─────────────────────────────────────────────────────────────
+router.post("/api/image-gen/unload", (req, res) => {
+  proxyToSidecar(req, res, "POST", "/unload");
 });
 
 // ── Output history ────────────────────────────────────────────────────────────

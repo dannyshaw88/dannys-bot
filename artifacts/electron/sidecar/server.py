@@ -274,7 +274,9 @@ def _do_load(model_key: str) -> None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
         dtype = torch.bfloat16 if device == "cuda" else torch.float32
 
-        load_kwargs: dict = {"torch_dtype": dtype, "cache_dir": MODELS_DIR}
+        # low_cpu_mem_usage avoids materialising a full second copy of the
+        # weights during load, cutting peak RAM use roughly in half.
+        load_kwargs: dict = {"torch_dtype": dtype, "cache_dir": MODELS_DIR, "low_cpu_mem_usage": True}
 
         # SD 1.x pipelines ship with a safety checker that blacks out flagged
         # outputs. Disable it so the model runs unrestricted on local hardware.
@@ -350,6 +352,27 @@ def set_cpu_threads(req: CpuThreadsRequest):
         pass
     log.info(f"CPU threads updated → {n}")
     return {"ok": True, "cpu_threads": n}
+
+
+@app.post("/unload")
+def unload_model():
+    """Release the pipeline from memory so the rest of the app gets its RAM back."""
+    global _pipeline, _loaded_model, _status, _status_message, _ip_adapter_loaded
+    import gc
+    _pipeline = None
+    _loaded_model = None
+    _ip_adapter_loaded = False
+    _status = "idle"
+    _status_message = "Model unloaded — RAM freed."
+    try:
+        import torch
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        gc.collect()
+    log.info("Model unloaded, RAM freed")
+    return {"ok": True}
 
 
 @app.post("/load")
