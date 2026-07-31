@@ -474,7 +474,7 @@ export function SettingsPage() {
         </div>
       )}
 
-      <div className={`space-y-4 max-w-2xl ${["my account", "evasion stats", "trust scores", "import"].includes(settingsTab) ? "hidden" : ""}`}>
+      <div className={`space-y-4 w-full ${["my account", "evasion stats", "trust scores", "import"].includes(settingsTab) ? "hidden" : ""}`}>
 
         {/* Talk to Equinox Bot shortcut */}
         <button
