@@ -136,6 +136,11 @@ router.post("/api/image-gen/load", (req, res) => {
   proxyToSidecar(req, res, "POST", "/load", JSON.stringify(req.body));
 });
 
+// ── CPU thread cap ────────────────────────────────────────────────────────────
+router.post("/api/image-gen/cpu-threads", (req, res) => {
+  proxyToSidecar(req, res, "POST", "/cpu-threads", JSON.stringify(req.body));
+});
+
 // ── Generate image ────────────────────────────────────────────────────────────
 router.post("/api/image-gen/generate", (req, res) => {
   proxyToSidecar(req, res, "POST", "/generate", JSON.stringify(req.body));

@@ -32,6 +32,8 @@ interface StatusResponse {
   loaded_model: string | null;
   available_models: Record<string, ModelInfo>;
   download_progress?: DownloadProgress | null;
+  cpu_threads?: number;
+  cpu_count?: number;
 }
 
 interface GenerateResult {
@@ -82,6 +84,7 @@ interface PageCache {
   charImage: string | null;
   charImageName: string;
   charScale: number;
+  cpuThreads: number | "";
   result: GenerateResult | null;
 }
 const _cache: PageCache = {
@@ -98,6 +101,7 @@ const _cache: PageCache = {
   charImage: null,
   charImageName: "",
   charScale: 0.6,
+  cpuThreads: "",
   result: null,
 };
 
@@ -121,6 +125,7 @@ export function ImageGenPage() {
   const [charImage, setCharImage] = useState<string | null>(_cache.charImage);   // IP-Adapter reference
   const [charImageName, setCharImageName] = useState(_cache.charImageName);
   const [charScale, setCharScale] = useState(_cache.charScale);
+  const [cpuThreads, setCpuThreads] = useState<number | "">(_cache.cpuThreads);
 
   const [generating, setGenerating] = useState(false);
   const [loadingModel, setLoadingModel] = useState(false);
@@ -141,8 +146,9 @@ export function ImageGenPage() {
     _cache.charImage = charImage;
     _cache.charImageName = charImageName;
     _cache.charScale = charScale;
+    _cache.cpuThreads = cpuThreads;
     _cache.result = result;
-  }, [prompt, negPrompt, model, resolution, steps, guidance, seed, initImage, initImageName, strength, charImage, charImageName, charScale, result]);
+  }, [prompt, negPrompt, model, resolution, steps, guidance, seed, initImage, initImageName, strength, charImage, charImageName, charScale, cpuThreads, result]);
   const [error, setError] = useState("");
 
   const [settingUp, setSettingUp] = useState(false);
@@ -215,6 +221,18 @@ export function ImageGenPage() {
     } finally {
       setLoadingModel(false);
     }
+  };
+
+  const handleCpuThreads = async (val: number | "") => {
+    setCpuThreads(val);
+    if (val === "") return;
+    try {
+      await fetch("/api/image-gen/cpu-threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ threads: Number(val) }),
+      });
+    } catch { /* non-critical */ }
   };
 
   const handleGenerate = async () => {
@@ -498,7 +516,7 @@ export function ImageGenPage() {
 
                 {/* Advanced */}
                 <Section label="Advanced (optional)">
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     <LabelledInput
                       label="Steps"
                       placeholder={String(defaultSteps)}
@@ -525,6 +543,16 @@ export function ImageGenPage() {
                       onChange={v => setSeed(v === "" ? "" : Number(v))}
                       type="number"
                       min={0}
+                    />
+                    <LabelledInput
+                      label={`CPU Threads (of ${status?.cpu_count ?? "?"})`}
+                      placeholder={String(status?.cpu_threads ?? "auto")}
+                      value={String(cpuThreads)}
+                      onChange={v => handleCpuThreads(v === "" ? "" : Number(v))}
+                      type="number"
+                      min={1}
+                      max={status?.cpu_count ?? 64}
+                      title="Limit how many CPU cores PyTorch uses. Lower = cooler/quieter PC, slower generation. Default is half your cores."
                     />
                   </div>
                 </Section>

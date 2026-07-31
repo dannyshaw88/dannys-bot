@@ -51,6 +51,13 @@ OUTPUT_DIR = os.environ.get(
 Path(MODELS_DIR).mkdir(parents=True, exist_ok=True)
 Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 
+# ── CPU thread cap ────────────────────────────────────────────────────────────
+# PyTorch defaults to using every logical core, which causes fan spin even on
+# GPU machines (CPU pre/post-processing). Default: half the cores, min 2.
+_cpu_count: int = os.cpu_count() or 4
+_default_cpu_threads: int = max(2, _cpu_count // 2)
+_cpu_threads: int = int(os.environ.get("IMAGE_GEN_CPU_THREADS", str(_default_cpu_threads)))
+
 # ── Global state ──────────────────────────────────────────────────────────────
 _pipeline = None
 _loaded_model: Optional[str] = None
@@ -183,6 +190,9 @@ MODELS = {
 }
 
 # ── Request / response models ─────────────────────────────────────────────────
+class CpuThreadsRequest(BaseModel):
+    threads: int
+
 class GenerateRequest(BaseModel):
     prompt: str
     negative_prompt: str = ""
@@ -256,6 +266,11 @@ def _do_load(model_key: str) -> None:
         }
         PipelineCls = _cls_map[info["pipeline_class"]]
 
+        # Apply CPU thread cap before any computation
+        torch.set_num_threads(_cpu_threads)
+        torch.set_num_interop_threads(min(2, _cpu_threads))
+        log.info(f"CPU threads: {_cpu_threads} / {_cpu_count} logical cores")
+
         device = "cuda" if torch.cuda.is_available() else "cpu"
         dtype = torch.bfloat16 if device == "cuda" else torch.float32
 
@@ -315,7 +330,26 @@ def get_status():
             }
             for k, v in MODELS.items()
         },
+        "cpu_threads": _cpu_threads,
+        "cpu_count": _cpu_count,
     }
+
+
+@app.post("/cpu-threads")
+def set_cpu_threads(req: CpuThreadsRequest):
+    global _cpu_threads
+    n = max(1, min(req.threads, _cpu_count))
+    _cpu_threads = n
+    # Apply immediately — affects the next generate() call; torch is not
+    # imported at module level so guard the call.
+    try:
+        import torch
+        torch.set_num_threads(n)
+        torch.set_num_interop_threads(min(2, n))
+    except Exception:
+        pass
+    log.info(f"CPU threads updated → {n}")
+    return {"ok": True, "cpu_threads": n}
 
 
 @app.post("/load")

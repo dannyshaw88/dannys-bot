@@ -4,6 +4,47 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.300] — 2026-07-31
+
+### Feature — CPU thread limiter on AI Images page
+
+#### What & Why
+
+PyTorch defaults to using every logical CPU core it can find, even when a GPU handles the heavy work. Pre/post-processing (image encode/decode, scheduler math, IP-Adapter embedding) all runs on CPU, so the fan spins hard during every generation regardless of whether CUDA is active.
+
+The fix caps the thread count. Default is half your logical cores (minimum 2), which keeps generation times nearly identical while cutting CPU heat significantly. The cap can be adjusted live from the Advanced section — no restart needed.
+
+#### How it works
+
+**`artifacts/electron/sidecar/server.py`**
+
+- `_cpu_count` reads `os.cpu_count()` at startup.
+- `_cpu_threads` defaults to `max(2, cpu_count // 2)`; overridable via `IMAGE_GEN_CPU_THREADS` env var.
+- `torch.set_num_threads(_cpu_threads)` + `torch.set_num_interop_threads(min(2, n))` called inside `_do_load()` right after `import torch`, so it applies before the model is moved to device.
+- New `POST /cpu-threads` endpoint accepts `{ threads: number }`, clamps to `[1, cpu_count]`, calls `torch.set_num_threads` immediately (takes effect on the next generate call), and updates the global.
+- `/status` response now includes `cpu_threads` (current cap) and `cpu_count` (total logical cores).
+
+**`artifacts/api-server/src/routes/imageGen.ts`**
+
+- `POST /api/image-gen/cpu-threads` proxy route added.
+
+**`artifacts/dannys-bot/src/pages/ImageGenPage.tsx`**
+
+- `StatusResponse` extended with `cpu_threads?: number` and `cpu_count?: number`.
+- `PageCache` / `_cache` extended with `cpuThreads: number | ""` (survives navigation).
+- `cpuThreads` React state added, initialised from cache.
+- Cache sync `useEffect` updated to include `cpuThreads`.
+- `handleCpuThreads(val)` helper: updates state + fires `POST /api/image-gen/cpu-threads` immediately (fire-and-forget, non-critical).
+- **Advanced section** grid changed from 3-column to 2×2. Fourth input: **"CPU Threads (of N)"** — placeholder shows the server's current cap, tooltip explains the tradeoff, onChange calls `handleCpuThreads`.
+
+#### Usage
+
+Leave blank → server auto-picks half your cores.  
+Set to a lower number (e.g. 2) → quieter fan, ~10–20% slower generation.  
+Set to max (your full core count) → fastest generation, hottest fan.
+
+---
+
 ## [1.2.299] — 2026-07-30
 
 ### Feature — IP-Adapter character lock on AI Images page
