@@ -1800,7 +1800,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         dismissDirection: "auto" as const,
       };
       const saved = cfg[serial]?.slotAutomation?.[String(slotIdx)];
-      const merged = { ...defaults, ...saved };
+      const merged = {
+        ...defaults,
+        ...saved,
+        // The background HST runner is mounted outside MobilePage and cannot
+        // read the Account Settings panel's React state.  Include the
+        // persisted account identity in the per-slot response so a restart
+        // preserves both slotIdx and slotUsername in cycle/dashboard events.
+        slotUsername: cfg[serial]?.account?.slots?.[slotIdx]?.username ?? "",
+      };
       // The dedicated folder-path file is the authoritative source for
       // makePostLocalFolderPath.  It is written directly when the user assigns
       // a folder, so it survives Copy Settings, schema drift, and any autosave

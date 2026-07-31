@@ -11,21 +11,38 @@
 export const _hstTimers   = new Map<string, ReturnType<typeof setTimeout>>();
 export const _hstStop     = new Set<string>();
 export const _hstNextRunAt = new Map<string, number>();
+const _hstStarting = new Set<string>();
 
 // ── Background loop ───────────────────────────────────────────────────────────
 
 /**
- * Start the automation loop for a given serial+slot from outside MobilePage
- * (e.g. from App.tsx's HstToggleListener when the Stats-page toggle fires).
+ * Start the automation loop for a given serial+slot from outside MobilePage.
  *
  * If a timer is already running for this key (MobilePage started it), this is
  * a no-op — MobilePage owns it and we don't want to double-schedule.
+ *
+ * Manual toggle-on starts immediately.  Startup recovery must pass
+ * `{ immediate: false }`; timers do not survive a software restart, so it
+ * first reloads the persisted interval and schedules a normal first turn.
  */
-export function startHstLoop(serial: string, slotIdx: number): void {
+export function startHstLoop(
+  serial: string,
+  slotIdx: number,
+  options: { immediate?: boolean } = {},
+): void {
   const key = `${serial}:${slotIdx}`;
-  if (_hstTimers.has(key)) return; // already running — MobilePage owns it
+  if (_hstTimers.has(key) || _hstStarting.has(key)) return; // already owned/starting
   _hstStop.delete(key);
-  scheduleNextBg(serial, slotIdx, key, 0); // fire immediately (manual toggle-on)
+  if (options.immediate !== false) {
+    scheduleNextBg(serial, slotIdx, key, 0); // manual toggle-on
+    return;
+  }
+
+  // Never use a zero/one-second fallback for restart recovery.  If the
+  // settings request fails, retry after a safe minute instead of accidentally
+  // turning a software restart into an immediate automation burst.
+  _hstStarting.add(key);
+  void scheduleRestartRecovery(serial, slotIdx, key);
 }
 
 /**
@@ -36,6 +53,7 @@ export function stopHstLoop(serial: string, slotIdx: number): void {
   const key = `${serial}:${slotIdx}`;
   const t = _hstTimers.get(key);
   if (t !== undefined) { clearTimeout(t); _hstTimers.delete(key); }
+  _hstStarting.delete(key);
   _hstStop.add(key);
   _hstNextRunAt.delete(key);
 }
@@ -46,6 +64,38 @@ function scheduleNextBg(serial: string, slotIdx: number, key: string, delayMs: n
   const t = setTimeout(() => runCycleBg(serial, slotIdx, key), Math.round(delayMs));
   _hstTimers.set(key, t);
   _hstNextRunAt.set(key, Date.now() + Math.round(delayMs));
+}
+
+async function scheduleRestartRecovery(serial: string, slotIdx: number, key: string): Promise<void> {
+  let settings: Record<string, unknown> | null = null;
+  try {
+    const r = await fetch(
+      `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings`,
+    );
+    const body = await r.json().catch(() => null);
+    if (r.ok && body && typeof body === "object") settings = body as Record<string, unknown>;
+  } catch {
+    // Keep the recovery alive through a transient API startup/network failure.
+  }
+
+  _hstStarting.delete(key);
+  if (_hstTimers.has(key) || _hstStop.has(key)) return;
+  if (!settings) {
+    // Keep trying to hydrate the interval after an API startup race.  Do not
+    // call runCycleBg here: that path is allowed to return on a network error,
+    // while recovery must remain durable until settings are available.
+    scheduleNextBg(serial, slotIdx, key, 60_000);
+    return;
+  }
+  if (!settings.enabled) return;
+
+  const safeMin = Math.max(1, Math.min(
+    Number(settings.cycleIntervalMin ?? 20),
+    Number(settings.cycleIntervalMax ?? 30),
+  ));
+  const safeMax = Math.max(safeMin, Number(settings.cycleIntervalMax ?? 30));
+  const delayMs = (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
+  scheduleNextBg(serial, slotIdx, key, delayMs);
 }
 
 async function runCycleBg(serial: string, slotIdx: number, key: string): Promise<void> {
@@ -60,10 +110,19 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
       `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings`,
     );
     const body = await r.json().catch(() => null);
-    if (!r.ok || !body) return; // can't run without settings
+    if (!r.ok || !body) {
+      // The API may still be restarting. Keep recovery alive without ever
+      // converting an unavailable settings response into an immediate cycle.
+      scheduleNextBg(serial, slotIdx, key, 60_000);
+      return;
+    }
     s = body as Record<string, unknown>;
   } catch {
-    return; // network error — don't reschedule from background, let MobilePage take over
+    // Keep the background loop alive even when the API briefly restarts.  A
+    // retry is deliberately delayed so a network failure can never turn into
+    // an immediate cycle after software restart.
+    scheduleNextBg(serial, slotIdx, key, 60_000);
+    return;
   }
 
   if (!s.enabled) return; // toggle was turned off in the DB
@@ -255,7 +314,9 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
       }),
     });
   } catch {
-    // network error — don't reschedule; MobilePage will take over when mounted
+    // Keep the loop alive through a transient API/network failure. A delayed
+    // retry is safer than relying on MobilePage to be mounted.
+    scheduleNextBg(serial, slotIdx, key, 60_000);
     return;
   }
 

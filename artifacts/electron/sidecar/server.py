@@ -461,20 +461,28 @@ def _do_load(model_key: str) -> None:
         # pipeline. CUDA availability only means that PyTorch can talk to the
         # GPU; it does not mean this model can fit in that GPU's VRAM.
         _loading_phase = "hardware_check"
+        _status_message = "Checking whether this computer can load the selected model…"
         _loading_detail = "Checking GPU memory and runtime compatibility…"
         gpu_info = _get_gpu_info()
         device = "cuda" if gpu_info["available"] else "cpu"
         minimum_vram = info.get("minimum_vram_gb")
-        if device == "cuda" and minimum_vram and (
-            gpu_info.get("vram_gb") is not None
-            and gpu_info["vram_gb"] < minimum_vram
-        ):
-            actual_vram = gpu_info["vram_gb"]
-            raise RuntimeError(
-                f"{info['label']} needs at least {minimum_vram} GB of VRAM in the current full-GPU loader, "
-                f"but {gpu_info.get('name') or 'this GPU'} has {actual_vram} GB. "
-                "Choose SDXL-Turbo or another smaller model, or use a machine with more VRAM."
-            )
+        if device == "cuda" and minimum_vram:
+            actual_vram = gpu_info.get("vram_gb")
+            if actual_vram is None:
+                # Never attempt to assemble a very large full-GPU pipeline when
+                # the runtime cannot prove how much VRAM is available.
+                raise RuntimeError(
+                    f"Could not measure VRAM for {gpu_info.get('name') or 'the CUDA device'}. "
+                    f"{info['label']} requires at least {minimum_vram} GB of VRAM in the current "
+                    "full-GPU loader. Choose SDXL-Turbo or another smaller model, or use a machine "
+                    "with more VRAM."
+                )
+            if actual_vram < minimum_vram:
+                raise RuntimeError(
+                    f"{info['label']} needs at least {minimum_vram} GB of VRAM in the current full-GPU loader, "
+                    f"but {gpu_info.get('name') or 'this GPU'} has {actual_vram} GB. "
+                    "Choose SDXL-Turbo or another smaller model, or use a machine with more VRAM."
+                )
 
         if device == "cpu" and info.get("minimum_vram_gb"):
             _loading_detail = "No CUDA runtime detected; loading the large model into system RAM…"
@@ -568,7 +576,10 @@ def _do_load(model_key: str) -> None:
 def get_status():
     progress = _get_download_progress() if _status == "loading" and not _loading_from_cache else None
     phase = _loading_phase
-    if _status == "loading" and progress and progress.get("download_complete"):
+    # A cache estimate can reach 100% before the loader has finished its
+    # hardware check. Never let download progress hide that more meaningful
+    # phase in the UI.
+    if _status == "loading" and phase == "downloading" and progress and progress.get("download_complete"):
         phase = "loading_pipeline"
     message = _status_message
     detail = _loading_detail

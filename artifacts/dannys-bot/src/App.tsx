@@ -146,7 +146,9 @@ function BrowserLayer() {
  * last ran and restarts their HST timers — recovering from the "timers are
  * lost on app restart" problem without requiring the user to toggle anything.
  *
- * Slots are staggered 5 s apart so they don't all fire at the same second.
+ * Slots are staggered 5 s apart while their first run is scheduled inside
+ * each slot's configured Run-every interval.  The stagger only prevents
+ * identical scheduling timestamps; it must never replace the interval.
  */
 function HstAutoRestart() {
   useEffect(() => {
@@ -159,7 +161,7 @@ function HstAutoRestart() {
         if (!Array.isArray(slots)) return;
         slots.forEach(({ serial, slotIdx }, i) => {
           setTimeout(() => {
-            if (!cancelled) startHstLoop(serial, slotIdx);
+            if (!cancelled) startHstLoop(serial, slotIdx, { immediate: false });
           }, i * 5_000); // 5-second stagger — avoids burst of simultaneous cycles
         });
       } catch { /* non-critical — user can toggle manually if this fails */ }

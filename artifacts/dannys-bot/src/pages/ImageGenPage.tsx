@@ -385,9 +385,11 @@ export function ImageGenPage() {
   const isLoading = status?.status === "loading";
   const loadingPipeline =
     status?.loading_phase === "loading_pipeline" ||
-    status?.loading_phase === "moving_to_device" ||
-    Boolean(status?.download_progress?.download_complete);
+    status?.loading_phase === "moving_to_device";
   const loadingHardware = status?.loading_phase === "hardware_check";
+  const downloadEstimateComplete =
+    status?.loading_phase === "downloading" &&
+    Boolean(status?.download_progress?.download_complete);
   const needsLoad = status?.status === "idle" || status?.status === "error";
   const noSidecar = statusErr && !status;
   const hasElectronSetup = Boolean(window.electronAPI?.setupImageGen);
@@ -488,6 +490,8 @@ export function ImageGenPage() {
                   ? "Checking hardware compatibility…"
                   : loadingPipeline
                     ? "Download complete — loading model into memory…"
+                    : downloadEstimateComplete
+                      ? "Download estimate complete — preparing model…"
                     : "Loading model…"
               }
             >

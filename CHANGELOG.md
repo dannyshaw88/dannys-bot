@@ -4,6 +4,30 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.309] — 2026-07-31
+
+### Fixed — Human Session Tool restart scheduling and account attribution
+
+- Separated software-restart recovery from manual toggle-on behavior. Manual activation can still begin immediately, while slots that were already enabled when the app restarts now wait for a randomized delay inside their configured `Run every X–Y minutes` interval.
+- Prevented missing or temporarily unavailable settings responses from becoming an immediate automation cycle. Startup recovery and background execution now retry after a safe delay while the API is restarting or briefly unreachable.
+- Preserved independent recovery for every enabled `serial + slotIdx` pair on a device instead of collapsing multi-slot startup state.
+- Included the persisted Instagram username in per-slot automation settings so restart-triggered cycles retain `slotIdx`, `slotUsername`, `sourceType: "phone"`, and `serial:slot` activity metadata.
+- Dashboard activity for recovered phone cycles now has the same device and account-slot identity as manually started cycles instead of appearing as `System`.
+
+### Fixed — Qwen Image Edit loading status
+
+- Kept the hardware-check phase visible until the VRAM preflight completes instead of allowing download progress to mask it.
+- Added a distinct “download estimate complete” state while the pipeline is still assembling or transferring to device memory.
+- Failed safely when CUDA VRAM cannot be measured rather than implying that the model is ready or appearing permanently stuck.
+- Updated the local image-generation loading diagnostics and durable restart/recovery notes.
+
+### Build and release
+
+- Bumped the root application and Electron package versions to `1.2.309`.
+- Kept `.github/workflows/build-windows-installer.yml` as the single canonical Windows installer workflow.
+
+---
+
 ## [1.2.308] — 2026-07-31
 
 ### Fixed — Follow Users floating-window false positive

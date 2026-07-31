@@ -14,3 +14,9 @@ The current full-GPU Qwen Image Edit loader also needs a hardware preflight. CUD
 **Why:** Without the check, a supported CUDA runtime was mistaken for sufficient VRAM and the desktop app could appear to hang for minutes while attempting an allocation that could not succeed.
 
 **How to apply:** Preserve the existing loading phases, add a `hardware_check` phase and status detail, and fail with a clear recommendation to select a smaller model or use a GPU with substantially more VRAM. Do not claim that Qwen can use CPU/disk offload unless the loader is actually changed to implement it.
+
+The React preview and the installed Windows desktop app are separate artifacts. A sidecar/UI fix in the workspace does not change an already-installed version; the Electron bundle and Windows installer must be rebuilt and installed before users can see it.
+
+**Why:** The v1.2.308 screenshot still showed the old generic loading card even though the source had newer phase fields; the screenshot came from the previously packaged installer, not the current workspace build.
+
+**How to apply:** When validating an installer-only feature, identify the app version shown by the user and compare it with the packaged build version. Do not treat a successful Vite/API preview as proof that the installed Windows app contains the change.
