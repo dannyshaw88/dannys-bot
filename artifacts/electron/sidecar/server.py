@@ -22,6 +22,7 @@ import threading
 import logging
 import shutil
 import subprocess
+import importlib.util
 from pathlib import Path
 from typing import Optional
 
@@ -52,6 +53,12 @@ OUTPUT_DIR = os.environ.get(
 
 Path(MODELS_DIR).mkdir(parents=True, exist_ok=True)
 Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+
+# Diffusers 0.37+ pulls in a newer huggingface_hub where Xet is commonly used
+# for model downloads. Older Aura Farming releases used the legacy HTTP/LFS
+# path and downloaded these models faster on the target Windows desktop. Keep
+# the legacy path as the default; Electron also passes this explicitly.
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 
 # ── CPU thread cap ────────────────────────────────────────────────────────────
 # PyTorch defaults to using every logical core, which causes fan spin even on
@@ -596,6 +603,18 @@ def _do_load(model_key: str) -> None:
             # endpoint can expose live .incomplete-file progress.
             _loading_phase = "downloading"
             _loading_detail = "Downloading model weights…"
+        try:
+            import huggingface_hub
+            hub_version = getattr(huggingface_hub, "__version__", "unknown")
+        except Exception:
+            hub_version = "unavailable"
+        xet_installed = importlib.util.find_spec("hf_xet") is not None
+        log.info(
+            "Hugging Face download backend: "
+            f"huggingface_hub={hub_version}, "
+            f"HF_HUB_DISABLE_XET={os.environ.get('HF_HUB_DISABLE_XET', '')!r}, "
+            f"hf_xet_installed={xet_installed}"
+        )
         log.info(f"Loading pipeline components for {model_key} (elapsed {time.time() - _loading_started_at:.0f}s)")
         pipe = PipelineCls.from_pretrained(info["repo"], **load_kwargs)
 

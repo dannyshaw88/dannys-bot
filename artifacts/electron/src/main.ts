@@ -138,13 +138,12 @@ function spawnImageGenServer(port: number): void {
       IMAGE_GEN_PORT: String(port),
       IMAGE_GEN_MODELS_DIR: modelsDir,
       IMAGE_GEN_OUTPUT_DIR: outputDir,
-      // Current huggingface_hub uses hf-xet for Hub-backed large-file
-      // downloads. High-performance mode enables concurrent range transfers
-      // instead of the slow, conservative default. Keep it overridable for
-      // machines where parallel writes hurt (for example, a spinning HDD).
-      HF_XET_HIGH_PERFORMANCE: process.env.HF_XET_HIGH_PERFORMANCE ?? "1",
-      HF_XET_RECONSTRUCT_WRITE_SEQUENTIALLY:
-        process.env.HF_XET_RECONSTRUCT_WRITE_SEQUENTIALLY ?? "0",
+      // Diffusers 0.37+ requires a newer huggingface_hub where Xet became
+      // the normal backend for many model repositories. Older Aura Farming
+      // releases used the legacy HTTP/LFS downloader and were substantially
+      // faster on this desktop, so keep that backend as the safe default.
+      // It remains overridable for testing with HF_HUB_DISABLE_XET=0.
+      HF_HUB_DISABLE_XET: process.env.HF_HUB_DISABLE_XET ?? "1",
     },
   });
 
@@ -1304,6 +1303,7 @@ async function createWindow() {
       // Install Torch with the CUDA index as primary, then install the rest.
       const cudaTorchRequirements = path.join(pipDir, "requirements-cuda-torch.txt");
       const otherRequirements = path.join(pipDir, "requirements-image-gen.txt");
+      const hubRequirements = path.join(pipDir, "requirements-huggingface-hub.txt");
       try {
         const requirementsText = fs.readFileSync(requirementsFile, "utf8");
         const otherText = requirementsText
@@ -1312,6 +1312,7 @@ async function createWindow() {
           .join("\n");
         fs.writeFileSync(cudaTorchRequirements, "torch>=2.4.0\n", "utf8");
         fs.writeFileSync(otherRequirements, otherText, "utf8");
+        fs.writeFileSync(hubRequirements, "huggingface_hub>=0.34.0,<1.0\n", "utf8");
       } catch (err: any) {
         throw new Error(`Could not prepare AI library requirements: ${err?.message ?? String(err)}`);
       }
@@ -1345,30 +1346,23 @@ async function createWindow() {
         p.on("exit", code => code === 0 ? resolve() : reject(new Error(`AI library install failed (code ${code})`)));
       });
 
-      // hf-xet is an optional accelerator for large Hugging Face downloads.
-      // Install it separately and continue if its platform wheel is not
-      // available; huggingface_hub's regular HTTP downloader remains usable.
-      sendProgress("Installing optional high-speed model downloader…", false);
-      await new Promise<void>((resolve) => {
+      // v1.2.310 raised Diffusers and indirectly moved the Hub downloader
+      // onto newer Xet-oriented releases. Pin the Hub client below 1.0 and
+      // upgrade it in place so an existing installation is actually reverted
+      // to the legacy HTTP/LFS path used by the faster older releases.
+      sendProgress("Restoring the faster legacy Hugging Face downloader…", false);
+      await new Promise<void>((resolve, reject) => {
         const p = spawn(pythonExe, [
           pipMain,
           "install",
           "--target", pipDir,
-          "hf-xet>=1.1.0",
+          "--upgrade",
+          "-r", hubRequirements,
           "--no-warn-script-location",
         ], { stdio: "pipe", env: pipEnv });
         p.stdout?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
         p.stderr?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
-        p.on("exit", code => {
-          if (code !== 0) {
-            sendProgress("Optional hf-xet install was unavailable; using the regular Hugging Face downloader.", false);
-          }
-          resolve();
-        });
-        p.on("error", () => {
-          sendProgress("Optional hf-xet install was unavailable; using the regular Hugging Face downloader.", false);
-          resolve();
-        });
+        p.on("exit", code => code === 0 ? resolve() : reject(new Error(`Hugging Face downloader install failed (code ${code})`)));
       });
 
       sendProgress("✅ Setup complete! Starting image gen server…", false);

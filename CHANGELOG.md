@@ -4,6 +4,16 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.316] — 2026-07-31
+
+### Fixed — Restore fast legacy Hugging Face model downloads
+
+- Identified an undocumented v1.2.310 dependency change: `diffusers` moved from `>=0.30.0` to `>=0.37.1`, which raised the indirect `huggingface_hub` dependency and moved many repositories onto the Xet transfer backend.
+- Restored the older HTTP/LFS downloader by disabling Xet in the Windows sidecar and pinning `huggingface_hub` below 1.0.
+- The setup flow now upgrades an existing Hub installation in place, so users who already installed the slower dependency stack do not remain on it silently.
+- Added startup diagnostics logging the Hub version, Xet setting, and whether `hf_xet` is installed.
+- Bumped the root application and Electron package versions to `1.2.316`.
+
 ## [1.2.315] — 2026-07-31
 
 ### Fixed — AI model download speed and progress regressions
