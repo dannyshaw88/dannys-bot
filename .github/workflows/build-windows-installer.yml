@@ -119,14 +119,36 @@ jobs:
         working-directory: artifacts/electron
         run: npm install --ignore-scripts
 
+      - name: Restore electron-builder download cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\electron-builder-cache
+          key: electron-builder-${{ runner.os }}-${{ hashFiles('artifacts/electron/package.json', 'artifacts/electron/electron-builder.json') }}
+          restore-keys: |
+            electron-builder-${{ runner.os }}-
+
       - name: Build Electron bundle
         working-directory: artifacts/electron
         run: node build.mjs
 
       - name: Build installer
         working-directory: artifacts/electron
-        run: npx electron-builder --win --publish never
+        run: |
+          for attempt in 1 2 3; do
+            echo "Building Windows installer (attempt $attempt of 3)"
+            if npx electron-builder --win --publish never; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              delay=$((attempt * 20))
+              echo "electron-builder failed; retrying in ${delay}s"
+              sleep "$delay"
+            fi
+          done
+          echo "electron-builder failed after 3 attempts"
+          exit 1
         env:
+          ELECTRON_BUILDER_CACHE: ${{ runner.temp }}\electron-builder-cache
           DANNY_BOT_UPDATER_TOKEN: ${{ secrets.UPDATER_TOKEN }}
 
       - name: Verify Windows installer

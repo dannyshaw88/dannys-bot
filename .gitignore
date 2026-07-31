@@ -74,6 +74,7 @@ attached_assets/*.txt
 # emulator-specific configuration and is not part of the application source.
 artifacts/api-server/mobile-instances.json
 artifacts/api-server/fake-phone-count.json
+artifacts/api-server/fake-phone-list.json
 artifacts/api-server/platform-tools/
 
 # Generated mockup preview state

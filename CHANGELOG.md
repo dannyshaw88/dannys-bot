@@ -4,6 +4,23 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.311] — 2026-07-31
+
+### Fixed — Windows installer build reliability
+
+- Added an Actions cache for electron-builder’s downloaded Electron packaging assets.
+- Added three-attempt retry handling with backoff around the Windows installer build so transient GitHub release-asset connection resets do not fail the entire workflow.
+- Kept the canonical `.github/workflows/build-windows-installer.yml` workflow and its existing installer verification/upload steps unchanged.
+- Bumped the root application and Electron package versions to `1.2.311`.
+
+### Verification
+
+- Run 761 reached the Electron packaging step successfully before a transient connection reset interrupted the Electron runtime download.
+- The failure was not caused by the Node.js 20 deprecation warnings shown by GitHub Actions.
+- A fresh Windows-runner build is required to validate the cache and retry path.
+
+---
+
 ## [1.2.310] — 2026-07-31
 
 ### Added — Phone Farm app lifecycle steps
