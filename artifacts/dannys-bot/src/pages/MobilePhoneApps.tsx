@@ -770,45 +770,41 @@ export function MobilePhoneAppsPanel({
                       />
                     </div>
                   </div>
+                  <div className="flex shrink-0 flex-col items-start gap-1">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Manual Searches Activation %</span>
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        className={PCT_INPUT}
+                        value={settings.chrome.manualSearchPctMin ?? 0}
+                        onChange={e => patchApp("chrome", { manualSearchPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                      />
+                      <span className="text-muted-foreground text-sm">to</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        className={PCT_INPUT}
+                        value={settings.chrome.manualSearchPctMax ?? 0}
+                        onChange={e => patchApp("chrome", { manualSearchPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                      />
+                      <span className="text-muted-foreground text-sm">%</span>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-start gap-1">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Search Result Link %</span>
+                    <div className="flex items-center gap-1">
+                      <Input type="number" min={0} max={100} className={PCT_INPUT} value={settings.chrome.manualSearchLinkPctMin ?? 0} onChange={e => patchApp("chrome", { manualSearchLinkPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })} />
+                      <span className="text-muted-foreground text-sm">to</span>
+                      <Input type="number" min={0} max={100} className={PCT_INPUT} value={settings.chrome.manualSearchLinkPctMax ?? 0} onChange={e => patchApp("chrome", { manualSearchLinkPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })} />
+                      <span className="text-muted-foreground text-sm">%</span>
+                    </div>
+                  </div>
                 </>}
                  row3={
-                   <div className="basis-full w-full flex flex-nowrap items-start justify-start gap-x-8 pt-2">
-                     <div className="flex shrink-0 flex-col items-start gap-1">
-                       <span className="text-xs text-muted-foreground whitespace-nowrap">Manual Searches Activation %</span>
-                       <div className="flex items-center gap-1">
-                         <Input
-                           type="number"
-                           min={0}
-                           max={100}
-                           className={PCT_INPUT}
-                           value={settings.chrome.manualSearchPctMin ?? 0}
-                           onChange={e => patchApp("chrome", { manualSearchPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
-                         />
-                         <span className="text-muted-foreground text-sm">to</span>
-                         <Input
-                           type="number"
-                           min={0}
-                           max={100}
-                           className={PCT_INPUT}
-                           value={settings.chrome.manualSearchPctMax ?? 0}
-                           onChange={e => patchApp("chrome", { manualSearchPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
-                         />
-                         <span className="text-muted-foreground text-sm">%</span>
-                       </div>
-                     </div>
-                   </div>
-                 }
-                 row4={
                    <div className="basis-full w-full flex flex-wrap items-start justify-start gap-x-8 gap-y-3 pt-2">
-                     <div className="flex shrink-0 flex-col items-start gap-1">
-                       <span className="text-xs text-muted-foreground whitespace-nowrap">Search Result Link %</span>
-                       <div className="flex items-center gap-1">
-                         <Input type="number" min={0} max={100} className={PCT_INPUT} value={settings.chrome.manualSearchLinkPctMin ?? 0} onChange={e => patchApp("chrome", { manualSearchLinkPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })} />
-                         <span className="text-muted-foreground text-sm">to</span>
-                         <Input type="number" min={0} max={100} className={PCT_INPUT} value={settings.chrome.manualSearchLinkPctMax ?? 0} onChange={e => patchApp("chrome", { manualSearchLinkPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })} />
-                         <span className="text-muted-foreground text-sm">%</span>
-                       </div>
-                     </div>
                      <div className="flex shrink-0 flex-col items-start gap-1">
                        <span className="text-xs text-muted-foreground whitespace-nowrap">Result Dwell Seconds</span>
                        <div className="flex items-center gap-1">
