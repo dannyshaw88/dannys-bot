@@ -4,6 +4,14 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [Unreleased]
+
+### Fixed — Repair the local AI Python environment
+
+- Updated the Hugging Face Hub dependency to the version required by the Qwen and LongCat pipelines.
+- Changed the AI library setup to upgrade existing AppData packages instead of leaving incompatible old versions beside newer `diffusers` files.
+- The existing model downloads remain untouched; use **Install / Repair AI Libraries** once in the desktop app, then load either model again.
+
 ## [1.2.322] — 2026-08-01
 
 ### Fixed — Allow CPU fallback for local image generation

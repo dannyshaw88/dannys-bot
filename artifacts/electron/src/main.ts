@@ -1344,7 +1344,11 @@ async function createWindow() {
         });
       }
 
-      // Step 2: install AI libraries into the same writable pipDir.
+      // Step 2: install/repair AI libraries in the same writable pipDir.
+      // --target does not reliably replace packages already present in this
+      // directory unless --upgrade is supplied. Without it, an older
+      // huggingface_hub can remain beside a newer diffusers and make both
+      // supported pipelines fail during import.
       // Do not rely on --extra-index-url alone: pip may select a CPU Torch
       // wheel from the primary index even when the CUDA index is present.
       // Install Torch with the CUDA index as primary, then install the rest.
@@ -1366,6 +1370,8 @@ async function createWindow() {
       await runPip([
         "install",
         "--target", pipDir,
+        "--upgrade",
+        "--upgrade-strategy", "eager",
         "-r", cudaTorchRequirements,
         "--index-url", "https://download.pytorch.org/whl/cu121",
         ...pipNetworkArgs,
@@ -1375,6 +1381,8 @@ async function createWindow() {
       await runPip([
         "install",
         "--target", pipDir,
+        "--upgrade",
+        "--upgrade-strategy", "eager",
         "-r", otherRequirements,
         ...pipNetworkArgs,
       ], "AI library install failed");

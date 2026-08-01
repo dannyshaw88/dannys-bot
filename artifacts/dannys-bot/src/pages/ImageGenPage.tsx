@@ -990,7 +990,7 @@ function SetupSection({
         {onSetup && (
           <div className="border-t border-border pt-4 space-y-3">
             <p className="text-xs text-muted-foreground">
-              <strong className="text-foreground">First time?</strong> Install the AI libraries (torch + diffusers) onto your bundled Python environment. Downloads ~1.5–2.5 GB depending on your CUDA version.
+              <strong className="text-foreground">First time or repairing an error?</strong> Install or repair the AI libraries (torch + diffusers) in your bundled Python environment. Downloads ~1.5–2.5 GB depending on your CUDA version.
             </p>
             <button
               onClick={onSetup}
@@ -999,7 +999,7 @@ function SetupSection({
             >
               {settingUp
                 ? <><Loader2 className="w-4 h-4 animate-spin" /> Installing…</>
-                : setupLog.length > 0 ? "Retry / Resume AI Library Install" : "Install AI Libraries"
+                : setupLog.length > 0 ? "Retry / Resume AI Library Repair" : "Install / Repair AI Libraries"
               }
             </button>
           </div>
