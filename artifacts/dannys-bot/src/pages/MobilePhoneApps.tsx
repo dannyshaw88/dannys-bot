@@ -174,7 +174,7 @@ export function MobilePhoneApps({
     <>
       {/* Section heading */}
       <div className="flex items-start justify-between gap-4">
-        <h2 className="text-lg font-bold text-foreground">Mobile Phone Apps</h2>
+        <h2 className="text-lg font-bold text-black">Mobile Phone Apps</h2>
         <span className="text-xs text-muted-foreground text-right shrink-0 pt-1">{deviceName}</span>
       </div>
 
@@ -184,7 +184,7 @@ export function MobilePhoneApps({
 
           {/* Left: title + fingerprint button + toggle */}
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider min-w-[200px] shrink-0">
+            <p className="text-xs font-bold text-black uppercase tracking-wider min-w-[200px] shrink-0">
               Mobile Phone Apps
             </p>
 
@@ -706,21 +706,14 @@ function MobilePhoneAppsPanel({
               </div>
             </div>
 
-            {/* ── (STEP 2) App tool slots ─────────────────────────────────── */}
-            <div className="bg-card border border-border rounded-xl p-5">
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+            {/* ── STEP 2 app tool slots ───────────────────────────────────── */}
+            <div className="bg-card border border-border rounded-xl flex flex-col">
+              <div className="px-5 py-4">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                   (STEP 2)
                 </span>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">Choose phone apps to run</p>
-                  <p className="text-xs text-muted-foreground">
-                    All apps below are Step 2 and run one at a time after Step 1. Google Chrome is first.
-                  </p>
-                </div>
               </div>
-            </div>
-            <div className="bg-card border border-border rounded-xl divide-y divide-border flex flex-col">
+              <div className="divide-y divide-border">
               <AppSlotRow
                 icon={<ChromeIcon size={22} />}
                 label="Google Chrome"
@@ -1105,14 +1098,12 @@ function MobilePhoneAppsPanel({
                 onMin={v => patchApp("whatsapp", { activatePctMin: v })}
                 onMax={v => patchApp("whatsapp", { activatePctMax: v })}
               />
+              </div>
             </div>
 
             {/* ── (STEP 3) Close apps + lock phone ───────────────────────── */}
             <div className="bg-card border border-border rounded-xl p-5">
               <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">
-                  (STEP 3)
-                </span>
                 <LockKeyhole className="w-4 h-4 text-muted-foreground shrink-0" />
                 <div className="flex flex-col min-w-0">
                   <span className="text-sm font-semibold text-foreground">Close apps and lock phone</span>
@@ -1125,7 +1116,6 @@ function MobilePhoneAppsPanel({
                   {completionStatus === "locking" && <><Loader2 className="w-3.5 h-3.5 animate-spin text-amber-500" /><span className="text-amber-600 dark:text-amber-400">Locking…</span></>}
                   {completionStatus === "locked" && <><CheckCircle2 className="w-3.5 h-3.5 text-green-600 dark:text-green-400" /><span className="text-green-600 dark:text-green-400">Phone locked</span></>}
                   {completionStatus === "error" && <span className="text-red-500">Lock failed</span>}
-                  {completionStatus === "idle" && <span className="text-muted-foreground">Runs automatically</span>}
                 </div>
               </div>
             </div>

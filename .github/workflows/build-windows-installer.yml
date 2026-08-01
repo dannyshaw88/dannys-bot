@@ -140,9 +140,9 @@ jobs:
       - name: Verify mobile automation and account display fixes
         shell: bash
         run: |
-          grep -F "REELS-TO-VIEW-REELS" artifacts/api-server/src/routes/mobile.ts
-          grep -F "FEED-TO-VIEW-FEED" artifacts/api-server/src/routes/mobile.ts
-          grep -F "EXPLORE-TO-VIEW-EXPLORE" artifacts/api-server/src/routes/mobile.ts
+          grep -F 'reels: "VIEW REELS"' artifacts/api-server/src/routes/mobile.ts
+          grep -F 'feed: "VIEW FEED"' artifacts/api-server/src/routes/mobile.ts
+          grep -F 'explore: "VIEW EXPLORE"' artifacts/api-server/src/routes/mobile.ts
           grep -F "allowBack=*/i > 0" artifacts/api-server/src/routes/mobile.ts
           grep -F "scanViewFeedA11y" artifacts/api-server/src/routes/mobile.ts
           grep -F "remove from saved" artifacts/api-server/src/routes/mobile.ts
@@ -199,17 +199,31 @@ jobs:
         shell: bash
         run: |
           grep -F "naturalSentenceQueries" artifacts/api-server/src/mobile/androidManager.ts
-          grep -F "CHROME_ONE_WORD_SEARCH_QUERIES" artifacts/api-server/src/mobile/androidManager.ts
-          grep -F "CHROME_MULTI_WORD_SEARCH_QUERIES" artifacts/api-server/src/mobile/androidManager.ts
-          grep -F "Math.random() < 0.05" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "CHROME_SEARCH_QUERIES_BY_WORD_COUNT" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "CHROME_SEARCH_WORD_COUNTS" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "2 + Math.floor(Math.random() * 4)" artifacts/api-server/src/mobile/androidManager.ts
           grep -F "chooseChromeManualSearchQuery" artifacts/api-server/src/mobile/androidManager.ts
-          grep -F "multi-word/natural" artifacts/api-server/src/mobile/androidManager.ts
-          grep -F "occasional one-word" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F 'selected ${selected.wordCount}-word query' artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "exactly 2–5 words" artifacts/api-server/src/mobile/androidManager.ts
+          if grep -F "CHROME_ONE_WORD_SEARCH_QUERIES" artifacts/api-server/src/mobile/androidManager.ts; then
+            echo "One-word manual search pool must not be present"
+            exit 1
+          fi
           grep -F "Starting Phone Apps cycle" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
           grep -F "Cycle complete — Phone Apps" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
           grep -F "Cycle failed — Phone Apps" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
           grep -F "Cycle aborted — Phone Apps" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
           echo "Mobile Phone Apps search variety and debugging-log configuration verified"
+      - name: Verify per-device keyboard bind execution
+        shell: bash
+        run: |
+          grep -F "tapCalibratedKeyboardKey" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "const aliases = normalized === \"emoji\"" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "via bind '\${mapKey}'" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "android.tapCalibratedKeyboardKey" artifacts/api-server/src/routes/mobile.ts
+          grep -F "findKeyboardEmojiButton" artifacts/api-server/src/routes/mobile.ts
+          grep -F "Emoji bind and visual key detection unavailable" artifacts/api-server/src/routes/mobile.ts
+          echo "Per-device named keyboard bind execution verified"
 
       - name: Install Electron deps
         working-directory: artifacts/electron

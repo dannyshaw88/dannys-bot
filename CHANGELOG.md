@@ -4,6 +4,23 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.337] — 2026-08-01
+
+### Fixed — Make per-device Keyboard binds execute in automation
+
+- Fixed the disconnect where Keyboard calibration successfully saved each device’s key coordinates, but named keyboard actions did not use those saved binds.
+- Added a shared per-device named-key executor that resolves calibrated coordinates for controls that are not ordinary text characters.
+- Added Emoji/Emoticon/Smiley aliases so the same device-specific bind works regardless of which name a flow uses.
+- Updated the Mobile Human Session Tool’s story-reply flow to press the calibrated Emoji key before entering the selected emoji whenever that device has an Emoji bind.
+- Preserved the existing screenshot-based Emoji-key detector for devices that have not been calibrated, with direct text entry retained only as the final fallback.
+- Kept calibrated coordinates in the phone’s real screen space so they bypass mirror video scaling and are sent directly through ADB.
+- Enforced strict 2–5-word natural Google Manual Searches with duplicate avoidance and selected word-count logging.
+- Updated Mobile Phone Apps debug labels, Step 2/3 layout, account-slot label alignment, and section heading colors.
+- Added Windows-installer Actions validation for the named keyboard bind executor, Emoji aliases, calibrated story-reply path, strict search variety, and updated Mobile Phone Apps labels.
+- Bumped the root application and Electron package versions to `1.2.337`.
+
+---
+
 ## [1.2.336] — 2026-08-01
 
 ### Changed — Align Statistics with Phone Farm slots and action-only Cycles

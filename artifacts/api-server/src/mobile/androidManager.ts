@@ -993,32 +993,60 @@ const CHROME_MANUAL_SEARCH_QUERIES = (() => {
   return [...queries];
 })();
 
-// Google history should be overwhelmingly made up of a few words or natural
-// questions, not isolated keywords.  Keep the one-word list deliberately
-// small and select it with a 5% probability in chooseChromeManualSearchQuery.
-const CHROME_ONE_WORD_SEARCH_QUERIES = [
-  "weather", "recipes", "news", "flights", "football", "holidays",
-  "gardening", "podcasts", "headphones", "mattresses",
-];
-const CHROME_MULTI_WORD_SEARCH_QUERIES = CHROME_MANUAL_SEARCH_QUERIES.filter(
-  query => query.split(/\s+/).filter(Boolean).length >= 2,
+// Google history should be made up of short, natural-looking searches rather
+// than a stream of isolated keywords. Every selected query must contain
+// exactly 2–5 words; one-word searches are intentionally excluded.
+const CHROME_SEARCH_QUERIES_BY_WORD_COUNT: Record<number, string[]> = {
+  2: CHROME_MANUAL_SEARCH_QUERIES.filter(
+    query => query.split(/\s+/).filter(Boolean).length === 2,
+  ),
+  3: CHROME_MANUAL_SEARCH_QUERIES.filter(
+    query => query.split(/\s+/).filter(Boolean).length === 3,
+  ),
+  4: CHROME_MANUAL_SEARCH_QUERIES.filter(
+    query => query.split(/\s+/).filter(Boolean).length === 4,
+  ),
+  5: CHROME_MANUAL_SEARCH_QUERIES.filter(
+    query => query.split(/\s+/).filter(Boolean).length === 5,
+  ),
+};
+const CHROME_SEARCH_WORD_COUNTS = [2, 3, 4, 5];
+const CHROME_NON_EMPTY_SEARCH_WORD_COUNTS = CHROME_SEARCH_WORD_COUNTS.filter(
+  count => (CHROME_SEARCH_QUERIES_BY_WORD_COUNT[count] ?? []).length > 0,
 );
 
 function chooseChromeManualSearchQuery(usedQueries: Set<string>): {
   query: string;
-  oneWord: boolean;
+  wordCount: number;
 } {
-  const useOneWord = Math.random() < 0.05;
-  const preferred = useOneWord
-    ? CHROME_ONE_WORD_SEARCH_QUERIES
-    : CHROME_MULTI_WORD_SEARCH_QUERIES;
+  // Randomly vary every query between 2 and 5 words. This keeps searches
+  // natural-looking while ensuring the history never falls back to a single
+  // isolated keyword.
+  const wordCount = 2 + Math.floor(Math.random() * 4);
+  const preferred = CHROME_SEARCH_QUERIES_BY_WORD_COUNT[wordCount] ?? [];
   const available = preferred.filter(query => !usedQueries.has(query));
-  const fallback = CHROME_MULTI_WORD_SEARCH_QUERIES.filter(query => !usedQueries.has(query));
-  const pool = available.length > 0 ? available : fallback.length > 0 ? fallback : preferred;
+  const fallback = CHROME_SEARCH_WORD_COUNTS
+    .filter(count => count !== wordCount)
+    .flatMap(count => CHROME_SEARCH_QUERIES_BY_WORD_COUNT[count] ?? [])
+    .filter(query => !usedQueries.has(query));
+  const allAvailable = CHROME_NON_EMPTY_SEARCH_WORD_COUNTS
+    .flatMap(count => CHROME_SEARCH_QUERIES_BY_WORD_COUNT[count] ?? [])
+    .filter(query => !usedQueries.has(query));
+  const pool = available.length > 0
+    ? available
+    : fallback.length > 0
+      ? fallback
+      : allAvailable.length > 0
+        ? allAvailable
+        : preferred;
+  if (pool.length === 0) {
+    throw new Error("Chrome manual search query pool is empty");
+  }
   const query = pool[Math.floor(Math.random() * pool.length)];
+  const selectedWordCount = query.split(/\s+/).filter(Boolean).length;
   return {
     query,
-    oneWord: query.split(/\s+/).filter(Boolean).length === 1,
+    wordCount: selectedWordCount,
   };
 }
 
@@ -1474,9 +1502,7 @@ export async function runChromeApp(
         const query = selected.query;
         usedQueries.add(query);
         steps.push(
-          `Chrome manual search ${searchNumber}/${totalSearches}: selected ${
-            selected.oneWord ? "occasional one-word" : "multi-word/natural"
-          } query`,
+          `Chrome manual search ${searchNumber}/${totalSearches}: selected ${selected.wordCount}-word query`,
         );
         await runOneManualGoogleSearch(query, searchNumber, totalSearches);
       }
@@ -8597,6 +8623,45 @@ export function loadKeyCalibrationMap(serial: string): KeyCalibrationMap | null 
     const raw = fs.readFileSync(_calibrationPath(serial), "utf8");
     return JSON.parse(raw) as KeyCalibrationMap;
   } catch { return null; }
+}
+
+/**
+ * Press a named key from the per-device calibration map.
+ *
+ * Character typing already uses the calibration map, but named controls such
+ * as Emoji/Emoticon are not characters and therefore need an explicit action
+ * path. These coordinates are phone-screen coordinates captured by getevent,
+ * so they must be sent directly to adb — never through the mirror video's
+ * videoW/videoH rescaling path.
+ */
+export async function tapCalibratedKeyboardKey(
+  serial: string,
+  keyName: string,
+  onLog?: (msg: string) => void,
+): Promise<boolean> {
+  const map = loadKeyCalibrationMap(serial);
+  if (!map) {
+    onLog?.(`[cal-keyboard] '${keyName}' has no saved calibration map`);
+    return false;
+  }
+
+  const normalized = keyName.trim().toLowerCase();
+  const aliases = normalized === "emoji" || normalized === "emoticon" || normalized === "smiley"
+    ? ["emoji", "emoticon", "smiley"]
+    : [normalized, keyName];
+  const mapKey = aliases.find(alias => map[alias] != null);
+  const pos = mapKey ? map[mapKey] : undefined;
+  if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) {
+    onLog?.(`[cal-keyboard] '${keyName}' is not in calibration map`);
+    return false;
+  }
+
+  const x = Math.round(pos.x);
+  const y = Math.round(pos.y);
+  await tap(serial, x, y);
+  onLog?.(`[cal-keyboard] tapped ${keyName} via bind '${mapKey}' at (${x},${y})`);
+  await _sleep(180 + Math.round(Math.random() * 100));
+  return true;
 }
 
 /** Persist a calibration map for a device. */

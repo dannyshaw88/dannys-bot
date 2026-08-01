@@ -4247,6 +4247,37 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               "😘","🤙","💫","⚡","🌟","😆","🥳","👌","💥","🫠",
             ];
             const _chosenEmoji = _STORY_EMOJI_POOL[Math.floor(Math.random() * _STORY_EMOJI_POOL.length)];
+            let _emojiKeyPressed = false;
+            try {
+              _emojiKeyPressed = await android.tapCalibratedKeyboardKey(
+                serial,
+                "emoji",
+                msg => onLog?.(`View Stories ${s + 1}: ${msg}`),
+              );
+            } catch (e: any) {
+              onLog?.(`View Stories ${s + 1}: calibrated Emoji bind failed — ${e?.message}`);
+              logger.warn(
+                { serial, story: s + 1, err: e?.message },
+                "[view-stories] calibrated emoji bind failed",
+              );
+            }
+            if (!_emojiKeyPressed) {
+              const _visualEmoji = await android.findKeyboardEmojiButton(serial).catch(() => null);
+              if (_visualEmoji) {
+                await android.tap(serial, _visualEmoji.x, _visualEmoji.y);
+                _emojiKeyPressed = true;
+                onLog?.(
+                  `View Stories ${s + 1}: tapped visually detected Emoji key at ` +
+                  `(${_visualEmoji.x},${_visualEmoji.y})`,
+                );
+                await sleepOrAbort(serial, 300);
+              } else {
+                onLog?.(
+                  `View Stories ${s + 1}: Emoji bind and visual key detection unavailable — ` +
+                  `using direct text fallback`,
+                );
+              }
+            }
             onLog?.(`View Stories ${s + 1}: injecting emoji "${_chosenEmoji}" via input text…`);
             try {
               await android.inputText(serial, _chosenEmoji);
@@ -9333,9 +9364,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           [_toolSeq[_si], _toolSeq[_sj]] = [_toolSeq[_sj], _toolSeq[_si]];
         }
         const _debugToolOrderLabels: Record<string, string> = {
-          reels: "REELS-TO-VIEW-REELS",
-          feed: "FEED-TO-VIEW-FEED",
-          explore: "EXPLORE-TO-VIEW-EXPLORE",
+          reels: "VIEW REELS",
+          feed: "VIEW FEED",
+          explore: "VIEW EXPLORE",
         };
         const _debugToolOrder = _toolSeq.map(_name => _debugToolOrderLabels[_name] ?? _name);
         tLog(`▶ Tool order shuffled: ${_debugToolOrder.length > 0 ? _debugToolOrder.join(' → ') : '(no tools active this execution)'}`);
