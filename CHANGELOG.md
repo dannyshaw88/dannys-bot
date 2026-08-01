@@ -4,6 +4,19 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.326] — 2026-08-01
+
+### Changed — Finalize Chrome manual-search controls and Windows installer delivery
+
+- Removed the obsolete Google Chrome **Manual Searches** checkbox from the Mobile Phone Apps settings.
+- Manual Searches is now controlled directly by its min-to-max activation percentage range: a maximum value of `0%` disables the feature, while any value above `0%` enables randomized activation within the configured range.
+- Kept **Internal Links Clicked %** and **Manual Searches Activation %** on the same settings row, with both titles and their percentage fields aligned consistently.
+- Updated Chrome runtime activation so it follows the percentage range rather than a removed legacy boolean field, while preserving the existing accessibility-driven Google search flow and its placement after normal Chrome activity.
+- Extended the canonical `.github/workflows/build-windows-installer.yml` source validation to ensure the released UI contains both percentage fields and cannot accidentally reintroduce the checkbox.
+- Confirmed the workflow continues to build the web bundles, package the Windows Electron application, upload the `Aura-Farming-Windows-Installer` Actions artifact, and publish tagged releases.
+- Included the latest AI model-loading and Windows model-cache reference screenshots in the pushed project files.
+- Bumped the root application and Electron package versions to `1.2.326`.
+
 ## [1.2.325] — 2026-08-01
 
 ### Changed — Align Google Chrome manual-search controls
