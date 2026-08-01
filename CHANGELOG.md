@@ -4,6 +4,20 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.329] — 2026-08-01
+
+### Changed — Polish Mobile Phone Apps controls and installer validation
+
+- Updated the Google Chrome and YouTube percentage controls so their titles no longer include the `%` symbol. The symbol now appears after the maximum value in each min-to-max percentage range, using the consistent format `minimum to maximum %`.
+- Applied the same percentage presentation to Activation, Internal Links Clicked, Manual Searches Activation, Search Result Link, Tap video, Click Shorts, and Shorts Like.
+- Kept count, scroll, and time controls as non-percentage ranges. Result Dwell Seconds now uses the compact `s` unit label without changing its stored values or validation.
+- Preserved the Chrome manual-search settings and runtime flow: Searches Per Run, Search Result Scrolls, Internal Links Clicked, Manual Searches Activation, Search Result Link, and Result Dwell Seconds remain configurable and continue through the existing accessibility-safe Google flow.
+- Preserved the optional **Tap Trending Storys** setting and conservative runtime detector. It remains disabled by default and only taps a positively identified Google story/news candidate after scrolling.
+- Refined the Mobile Phone Apps layout with targeted row-level offsets for the requested Chrome and YouTube alignment. These are deliberately limited to the affected Row 2 and Row 3 controls rather than replacing the card layout with a broad shared grid.
+- Updated the canonical `.github/workflows/build-windows-installer.yml` source validation to match the current labels, verify the trending-story control, and reject percentage symbols in field titles.
+- Kept the canonical Windows installer workflow as the only active installer workflow. Deprecated duplicate workflow files remain inert to prevent competing Windows builds.
+- Bumped the root application and Electron package versions to `1.2.329`.
+
 ## [1.2.328] — 2026-08-01
 
 ### Added — Expand Chrome Manual Searches into configurable multi-query sessions

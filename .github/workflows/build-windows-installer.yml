@@ -146,18 +146,34 @@ jobs:
       - name: Verify Mobile Phone Apps manual-search UI
         shell: bash
         run: |
-          grep -F "Internal Links Clicked %" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
-          grep -F "Manual Searches Activation %" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          grep -F "Internal Links Clicked" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          grep -F "Manual Searches Activation" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
           grep -F "manualSearchPctMin" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
           grep -F "manualSearchPctMax" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
           grep -F "Searches Per Run" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
           grep -F "Search Result Scrolls" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
-          grep -F "Search Result Link %" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          grep -F "Search Result Link" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
           grep -F "Result Dwell Seconds" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
           grep -F "manualSearchCountMin" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
           grep -F "manualSearchScrollMin" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
           grep -F "manualSearchLinkPctMin" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
           grep -F "manualSearchDwellMin" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          grep -F "Tap Trending Storys" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          grep -F 'value={settings.chrome.internalLinkPctMax' artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          grep -F 'value={settings.chrome.manualSearchPctMax' artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          grep -F 'value={settings.chrome.manualSearchLinkPctMax' artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          if grep -F "Internal Links Clicked %" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx; then
+            echo "Percentage symbols must not appear in field titles"
+            exit 1
+          fi
+          if grep -F "Manual Searches Activation %" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx; then
+            echo "Percentage symbols must not appear in field titles"
+            exit 1
+          fi
+          if grep -F "Search Result Link %" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx; then
+            echo "Percentage symbols must not appear in field titles"
+            exit 1
+          fi
           if grep -F "Checkbox" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx; then
             echo "Manual Searches UI must not reintroduce a checkbox"
             exit 1
