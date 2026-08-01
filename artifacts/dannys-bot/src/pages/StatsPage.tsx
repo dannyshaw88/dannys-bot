@@ -157,7 +157,6 @@ const FARM_STAT_LABELS: { key: string; label: string; icon: React.ReactNode; col
   { key: "likes",           label: "Likes",          icon: <Heart className="w-3 h-3" fill="currentColor" />, color: "text-rose-500" },
   { key: "follows",         label: "Follows",        icon: <UserPlus className="w-3 h-3" />,    color: "text-blue-500" },
   { key: "stories",         label: "Stories",        icon: <Eye className="w-3 h-3" />,         color: "text-emerald-500" },
-  { key: "reels",           label: "Reels",          icon: <Repeat2 className="w-3 h-3" />,     color: "text-sky-500" },
   { key: "dms",             label: "DMs",            icon: <Mail className="w-3 h-3" />,        color: "text-violet-500" },
   { key: "posts",           label: "Posts",          icon: <ImagePlus className="w-3 h-3" />,  color: "text-fuchsia-500" },
   { key: "feed_shares",     label: "Shares",         icon: <Zap className="w-3 h-3" />,         color: "text-amber-500" },
@@ -174,7 +173,6 @@ const FARM_DEFAULT_COL_WIDTHS: Record<string, number> = {
   likes:             80,
   follows:           80,
   stories:           80,
-  reels:             80,
   dms:               80,
   posts:             80,
   feed_shares:      100,
@@ -201,6 +199,8 @@ const MOBILE_METRIC_DEFS: {
   { key: "feed_scrolls",     label: "Feed",            icon: <BarChart2 className="w-3.5 h-3.5" />, color: "text-teal-500",  pieColor: "#14b8a6" },
   { key: "explore_scrolls",  label: "Explore",         icon: <Activity className="w-3.5 h-3.5" />, color: "text-orange-500", pieColor: "#f97316" },
 ];
+
+const MOBILE_PIE_METRIC_DEFS = MOBILE_METRIC_DEFS.filter(metric => metric.key !== "cycles");
 
 interface FarmPhone {
   serial: string;
@@ -649,7 +649,20 @@ export function StatsPage() {
     refetchInterval: 30000,
     enabled: activeTab === "metrics",
   });
-  const metricsPhoneList = metricsPhones?.phones ?? [];
+  const { data: metricsFarmData } = useQuery<{ devices: { serial: string; slotIndex: number }[] }>({
+    queryKey: ["/api/mobile/farm-devices"],
+    refetchInterval: 30000,
+    enabled: activeTab === "metrics",
+  });
+  const metricsPhoneList = useMemo(() => {
+    const rawPhones = metricsPhones?.phones ?? [];
+    const slotMap = new Map((metricsFarmData?.devices ?? []).map(device => [device.serial, device.slotIndex]));
+    return [...rawPhones].sort((a, b) => {
+      const aSlot = slotMap.get(a.serial) ?? Infinity;
+      const bSlot = slotMap.get(b.serial) ?? Infinity;
+      return aSlot - bSlot;
+    });
+  }, [metricsPhones?.phones, metricsFarmData?.devices]);
 
   const deviceSlotResults = useQueries({
     queries: metricsPhoneList.map(phone => ({
@@ -758,7 +771,7 @@ export function StatsPage() {
     metricsStats.find((s: any) => s.toolType === type && s.date === date)?.count ?? 0;
 
   const mobilePieData = useMemo(() =>
-    MOBILE_METRIC_DEFS
+    MOBILE_PIE_METRIC_DEFS
       .map(metric => ({
         name: metric.label,
         value: mobileSlotStats?.daily?.[metric.key] ?? 0,
@@ -769,7 +782,7 @@ export function StatsPage() {
   [mobileSlotStats]);
 
   const mobileLifetimePieData = useMemo(() =>
-    MOBILE_METRIC_DEFS
+    MOBILE_PIE_METRIC_DEFS
       .map(metric => ({
         name: metric.label,
         value: mobileSlotStats?.lifetime?.[metric.key] ?? 0,

@@ -4,6 +4,19 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.336] — 2026-08-01
+
+### Changed — Align Statistics with Phone Farm slots and action-only Cycles
+
+- Fixed the Statistics Metrics account dropdown so device groups follow the saved Phone Farm slot positions instead of raw USB discovery order.
+- Kept account entries within each device aligned with their physical phone slot order, while placing devices without a saved farm slot after positioned devices.
+- Removed the duplicate farm Statistics **Reels** column that used the two-arrow icon; the eye-marked **Reel** scroll metric remains.
+- Removed **Cycles** from the daily and lifetime Metrics pie charts because it is an action-level counter, not an activity category for the pie breakdown.
+- Kept Cycles available in the action metric cards and included in the all-actions totals.
+- Bumped the root application and Electron package versions to `1.2.336`.
+
+---
+
 ## [1.2.335] — 2026-08-01
 
 ### Maintenance — Document account-scoped posted-media history
