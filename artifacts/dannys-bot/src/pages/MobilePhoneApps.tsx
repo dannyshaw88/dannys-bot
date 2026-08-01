@@ -246,7 +246,7 @@ interface AppSlotRowProps {
 function AppSlotRow({ icon, label, min, max, onMin, onMax, rowExtras, row2, row3, row4 }: AppSlotRowProps) {
   return (
     <div className="p-4">
-      {/* Single flex-wrap row: icon+name first, then all field groups flow inline */}
+      {/* First visual row: icon, activation, and the app's primary fields. */}
       <div className="flex items-center gap-4 flex-wrap">
         {/* Icon + label — anchors the left of the first visual row */}
         <div className="flex items-center gap-2 min-w-[9rem]">
@@ -279,11 +279,26 @@ function AppSlotRow({ icon, label, min, max, onMin, onMax, rowExtras, row2, row3
           </div>
         </div>
 
-        {/* All additional field groups flow in the same wrapping row */}
+        {/* Fields that belong to the first visual row. */}
         {rowExtras}
-        {row2}
-        {row3}
-        {row4}
+
+        {/* Explicit full-width rows. These must not depend on available width
+            or happenstance flex wrapping to appear as separate rows. */}
+        {row2 && (
+          <div className="basis-full w-full flex items-center gap-4 flex-wrap">
+            {row2}
+          </div>
+        )}
+        {row3 && (
+          <div className="basis-full w-full flex items-center gap-4 flex-wrap">
+            {row3}
+          </div>
+        )}
+        {row4 && (
+          <div className="basis-full w-full flex items-center gap-4 flex-wrap">
+            {row4}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -648,7 +663,7 @@ export function MobilePhoneAppsPanel({
                 max={settings.chrome.activatePctMax}
                 onMin={v => patchApp("chrome", { activatePctMin: v })}
                 onMax={v => patchApp("chrome", { activatePctMax: v })}
-                rowExtras={
+                rowExtras={<>
                   <div className="flex flex-col items-center gap-1">
                     <span className="text-xs text-muted-foreground whitespace-nowrap">Scrolls</span>
                     <div className="flex items-center gap-1">
@@ -671,8 +686,6 @@ export function MobilePhoneAppsPanel({
                       />
                     </div>
                   </div>
-                }
-                row2={<>
                   <div className="flex flex-col items-center gap-1">
                     <span className="text-xs text-muted-foreground whitespace-nowrap">Story Taps</span>
                     <div className="flex items-center gap-1">
@@ -717,22 +730,24 @@ export function MobilePhoneAppsPanel({
                       />
                     </div>
                   </div>
-                   <div className="flex flex-col items-center gap-1">
-                     <span className="text-xs text-muted-foreground whitespace-nowrap">Searches Per Run</span>
-                     <div className="flex items-center gap-1">
-                       <Input type="number" min={1} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchCountMin ?? 1} onChange={e => patchApp("chrome", { manualSearchCountMin: Math.min(50, Math.max(1, Number(e.target.value))) })} />
-                       <span className="text-muted-foreground text-sm">to</span>
-                       <Input type="number" min={1} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchCountMax ?? 1} onChange={e => patchApp("chrome", { manualSearchCountMax: Math.min(50, Math.max(1, Number(e.target.value))) })} />
-                     </div>
-                   </div>
-                   <div className="flex flex-col items-center gap-1">
-                     <span className="text-xs text-muted-foreground whitespace-nowrap">Search Result Scrolls</span>
-                     <div className="flex items-center gap-1">
-                       <Input type="number" min={0} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchScrollMin ?? 0} onChange={e => patchApp("chrome", { manualSearchScrollMin: Math.min(50, Math.max(0, Number(e.target.value))) })} />
-                       <span className="text-muted-foreground text-sm">to</span>
-                       <Input type="number" min={0} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchScrollMax ?? 0} onChange={e => patchApp("chrome", { manualSearchScrollMax: Math.min(50, Math.max(0, Number(e.target.value))) })} />
-                     </div>
-                   </div>
+                </>}
+                row2={<>
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Searches Per Run</span>
+                    <div className="flex items-center gap-1">
+                      <Input type="number" min={1} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchCountMin ?? 1} onChange={e => patchApp("chrome", { manualSearchCountMin: Math.min(50, Math.max(1, Number(e.target.value))) })} />
+                      <span className="text-muted-foreground text-sm">to</span>
+                      <Input type="number" min={1} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchCountMax ?? 1} onChange={e => patchApp("chrome", { manualSearchCountMax: Math.min(50, Math.max(1, Number(e.target.value))) })} />
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Search Result Scrolls</span>
+                    <div className="flex items-center gap-1">
+                      <Input type="number" min={0} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchScrollMin ?? 0} onChange={e => patchApp("chrome", { manualSearchScrollMin: Math.min(50, Math.max(0, Number(e.target.value))) })} />
+                      <span className="text-muted-foreground text-sm">to</span>
+                      <Input type="number" min={0} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchScrollMax ?? 0} onChange={e => patchApp("chrome", { manualSearchScrollMax: Math.min(50, Math.max(0, Number(e.target.value))) })} />
+                    </div>
+                  </div>
                 </>}
                  row3={
                    <div className="basis-full w-full flex flex-nowrap items-start justify-start gap-x-8 pt-2">

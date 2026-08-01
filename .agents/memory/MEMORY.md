@@ -66,3 +66,4 @@
 - [AI library installer network resilience](ai-library-installer-network.md) — multi-GB CUDA Torch setup needs a persistent pip cache, 10-minute timeout, and retries; default 15s read timeout repeatedly restarts downloads
 - [Actions source validation](actions-source-validation.md) — CI checks must inspect active assignments, not raw text, because comments documenting disabled settings can trigger false failures
 - [Chrome manual search sequencing](chrome-manual-search-sequencing.md) — run optional Google history searches after normal Chrome feed work and target live EditText nodes, not toolbar coordinates
+- [Mobile Phone Apps explicit rows](mobile-phone-apps-explicit-rows.md) — row props need full-width wrappers; flex wrapping alone makes Google Chrome fields land in width-dependent visual rows
