@@ -4,6 +4,21 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.338] — 2026-08-01
+
+### Fixed — Reliable Chrome searches and live-accessibility Emoji replies
+
+- Fixed Chrome Manual Searches so multi-word queries are entered with real spaces through the active Chrome search field instead of losing word boundaries during ADB input.
+- Restored screenshot-confirmed Trending Stories WebView detection so the Trending Stories action only proceeds when the expected live WebView is visibly present.
+- Kept Google Manual Searches natural and unique: the normal path uses realistic 2–5-word searches, while isolated one-word searches remain restricted to the occasional low-percentage path.
+- Replaced Story Emoji reply Unicode injection with live Android IME accessibility-node execution. The flow now finds the current Emoji keyboard control and then a current picker-cell node at runtime.
+- Removed the Story Emoji pixel/screenshot fallback, saved-coordinate execution, random Unicode pool, and `adb input text` injection. If the live IME nodes are unavailable, the reply is skipped safely rather than tapping or typing blindly.
+- Added Windows Actions source checks that fail the build if the Story Emoji route reintroduces pixel detection or direct Unicode injection, while continuing to validate the single canonical Windows installer workflow.
+- Updated the keyboard bind documentation to distinguish device-specific enablement from runtime node resolution.
+- Bumped the root application and Electron package versions to `1.2.338`.
+
+---
+
 ## [1.2.337] — 2026-08-01
 
 ### Fixed — Make per-device Keyboard binds execute in automation
