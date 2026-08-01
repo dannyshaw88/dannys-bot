@@ -22,7 +22,7 @@ import {
   ChevronLeft, Home, LayoutGrid, Power, Volume2, VolumeX, Trash2,
   FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim,
   Palette, Plus, X, RotateCcw, Sun, Keyboard,
-  Users, Globe, BarChart2, ClipboardList, Bug,
+  Users, Globe, BarChart2, ClipboardList, Bug, ImagePlus,
 } from "lucide-react";
 
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
@@ -4300,7 +4300,13 @@ export function AutomationSettingsPanel({
   // Make a Post UI local state
   const [makePostImageSettingsOpen, setMakePostImageSettingsOpen] = useState(false);
   const [showPostedMedia, setShowPostedMedia] = useState(false);
-  const [postedMediaFiles, setPostedMediaFiles] = useState<string[]>([]);
+  const [postedMediaEntries, setPostedMediaEntries] = useState<{
+    id: string;
+    filename: string;
+    username: string;
+    slotIdx: number;
+    postedAt: string;
+  }[]>([]);
   const [loadingPostedMedia, setLoadingPostedMedia] = useState(false);
 
   const loadFollowedUsers = React.useCallback(async () => {
@@ -4314,22 +4320,18 @@ export function AutomationSettingsPanel({
   }, [phone?.serial]);
 
   const loadPostedMedia = React.useCallback(async () => {
-    if (!phone?.serial) return;
+    if (!phone?.serial || !slotUsername) return;
     setLoadingPostedMedia(true);
     try {
-      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/posted-media`);
+      const params = new URLSearchParams({
+        username: slotUsername,
+        slotIdx: String(slotIdx ?? 0),
+      });
+      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/posted-profile-media?${params}`);
       const data = await r.json().catch(() => null);
-      if (data?.files) setPostedMediaFiles(data.files);
+      if (Array.isArray(data?.entries)) setPostedMediaEntries(data.entries);
     } catch {} finally { setLoadingPostedMedia(false); }
-  }, [phone?.serial]);
-
-  const deletePostedMediaEntry = async (filename: string) => {
-    if (!phone?.serial) return;
-    try {
-      await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/posted-media/${encodeURIComponent(filename)}`, { method: 'DELETE' });
-      setPostedMediaFiles(f => f.filter(x => x !== filename));
-    } catch {}
-  };
+  }, [phone?.serial, slotUsername, slotIdx]);
 
   const loadSurplus = React.useCallback(async () => {
     if (!slotUsername) return;
@@ -5987,10 +5989,10 @@ export function AutomationSettingsPanel({
             <label htmlFor={`make-a-post-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">Make a Post</label>
             <Button
               variant="outline" size="sm"
-              className="h-7 text-xs px-3 ml-auto"
+              className="h-7 text-xs px-3 ml-auto gap-1.5"
               onClick={() => { setShowPostedMedia(v => !v); if (!showPostedMedia) loadPostedMedia(); }}
               disabled={loading}
-            >{showPostedMedia ? 'Hide' : 'Posted Media'}</Button>
+            ><ImagePlus className="w-3.5 h-3.5" />{showPostedMedia ? 'Hide' : 'Posted Media'}</Button>
           </div>
 
           {settings.makePostEnabled && (
@@ -6161,45 +6163,30 @@ export function AutomationSettingsPanel({
                 <div className="border border-border rounded-lg p-3 space-y-2">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs text-muted-foreground flex-1">
-                      {postedMediaFiles.length} image{postedMediaFiles.length !== 1 ? 's' : ''} posted
+                      {postedMediaEntries.length} profile post{postedMediaEntries.length !== 1 ? 's' : ''} made from @{slotUsername}
                     </span>
                     <Button
                       variant="outline" size="sm" className="h-7 text-xs px-2.5 gap-1 shrink-0"
                       onClick={loadPostedMedia}
                       disabled={loadingPostedMedia}
                     >Refresh</Button>
-                    {postedMediaFiles.length > 0 && (
-                      <Button
-                        variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:text-destructive shrink-0"
-                        disabled={loadingPostedMedia}
-                        onClick={async () => {
-                          if (!phone?.serial) return;
-                          await Promise.all(postedMediaFiles.map(f =>
-                            fetch(`/api/mobile/devices/${encodeURIComponent(phone!.serial)}/posted-media/${encodeURIComponent(f)}`, { method: 'DELETE' })
-                          ));
-                          setPostedMediaFiles([]);
-                        }}
-                      >Clear all</Button>
-                    )}
                   </div>
-                  {postedMediaFiles.length > 0 ? (
+                  {postedMediaEntries.length > 0 ? (
                     <div className="space-y-1 max-h-[260px] overflow-y-auto pr-0.5">
-                      {postedMediaFiles.map((fname, i) => (
-                        <div key={i} className="flex items-center gap-2 text-xs">
-                          <span className="flex-1 text-foreground font-mono truncate">{fname}</span>
-                          <button
-                            onClick={() => deletePostedMediaEntry(fname)}
-                            disabled={loadingPostedMedia}
-                            title="Remove — allows this image to be reposted"
-                            className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
-                          >✕</button>
+                      {postedMediaEntries.map(entry => (
+                        <div key={entry.id} className="flex items-center gap-2 text-xs">
+                          <ImagePlus className="w-3.5 h-3.5 text-primary shrink-0" />
+                          <span className="flex-1 text-foreground font-mono truncate">{entry.filename}</span>
+                          <span className="text-muted-foreground shrink-0">
+                            {new Date(entry.postedAt).toLocaleString()}
+                          </span>
                         </div>
                       ))}
                     </div>
                   ) : loadingPostedMedia ? (
                     <p className="text-xs text-muted-foreground">Loading…</p>
                   ) : (
-                    <p className="text-xs text-muted-foreground">No images posted yet.</p>
+                    <p className="text-xs text-muted-foreground">No profile posts have been made from this account yet.</p>
                   )}
                 </div>
               )}

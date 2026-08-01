@@ -4,6 +4,24 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.334] — 2026-08-01
+
+### Added — Track account-specific posted media and show Posts in Statistics
+
+- Added an account-specific **Posted Media** tab to the Mobile Human Session Tool’s Make a Post section. It shows the profile-feed media successfully posted from the currently selected Instagram account and slot.
+- Added the posting-content icon to the Posted Media control and each recorded media entry so the feature is visually distinct from the existing local-folder controls.
+- Recorded each confirmed profile-feed post with its filename, Instagram username, slot number, and posting timestamp in persistent device data that survives API restarts.
+- Kept Instagram Stories out of the Posted Media history and Posts count. The new history is written only after the profile-feed Share confirmation succeeds.
+- Preserved the existing device-wide no-repeat image cache separately. Clearing or managing that cache remains independent from the account’s historical list of posts.
+- Added refreshable account filtering so changing the Human Session Tool slot shows only posts made from that specific account, not posts from another account sharing the phone.
+- Added a new **Posts** column to the Statistics phone-farm table with an image-posting icon. It reports today’s confirmed profile posts and the lifetime total in the same daily/lifetime format as the other farm metrics.
+- Added Posts-column sorting, width management, persistence, and automatic refresh through the existing Statistics table controls.
+- Added the account-scoped posted-media API endpoint used by both the Mobile Human Session Tool and Statistics, keeping the displayed history and count derived from one source of truth.
+- Updated the canonical Windows installer Actions workflow to validate the new account-scoped posted-media route, profile-post recording call, Mobile Posted Media UI, Posts Statistics column, and `1.2.334` version/changelog alignment before building `Aura-Farming-Windows-Installer`.
+- Bumped the root application and Electron package versions to `1.2.334`.
+
+---
+
 ## [1.2.333] — 2026-08-01
 
 ### Changed — Remove AI Images and make the Mobile Farm Browser fast and persistent

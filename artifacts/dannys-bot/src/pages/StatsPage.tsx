@@ -159,6 +159,7 @@ const FARM_STAT_LABELS: { key: string; label: string; icon: React.ReactNode; col
   { key: "stories",         label: "Stories",        icon: <Eye className="w-3 h-3" />,         color: "text-emerald-500" },
   { key: "reels",           label: "Reels",          icon: <Repeat2 className="w-3 h-3" />,     color: "text-sky-500" },
   { key: "dms",             label: "DMs",            icon: <Mail className="w-3 h-3" />,        color: "text-violet-500" },
+  { key: "posts",           label: "Posts",          icon: <ImagePlus className="w-3 h-3" />,  color: "text-fuchsia-500" },
   { key: "feed_shares",     label: "Shares",         icon: <Zap className="w-3 h-3" />,         color: "text-amber-500" },
   { key: "reel_scrolls",   label: "Reel",           icon: <Repeat2 className="w-3 h-3" />,     color: "text-purple-500", showEye: true },
   { key: "feed_scrolls",   label: "Feed",           icon: <BarChart2 className="w-3 h-3" />,   color: "text-teal-500",   showEye: true },
@@ -175,6 +176,7 @@ const FARM_DEFAULT_COL_WIDTHS: Record<string, number> = {
   stories:           80,
   reels:             80,
   dms:               80,
+  posts:             80,
   feed_shares:      100,
   reel_scrolls:      95,
   feed_scrolls:      95,
@@ -327,6 +329,13 @@ function PhoneFarmPhoneSection({
     })),
   });
 
+  const postedMediaResults = useQueries({
+    queries: slots.map(slot => ({
+      queryKey: [`/api/mobile/devices/${encodeURIComponent(phone.serial)}/posted-profile-media?username=${encodeURIComponent(slot.username)}&slotIdx=${slot.idx}`],
+      refetchInterval: 30000,
+    })),
+  });
+
   const orderedLabels = farmColOrder
     .map(k => FARM_STAT_LABELS.find(s => s.key === k))
     .filter(Boolean) as typeof FARM_STAT_LABELS;
@@ -334,18 +343,21 @@ function PhoneFarmPhoneSection({
 
   const slotsWithStats = slots.map((slot, i) => {
     const d = slotStatsResults[i]?.data as { daily: Record<string, number>; lifetime: Record<string, number> } | undefined;
+    const posts = postedMediaResults[i]?.data as { dailyCount?: number; count?: number } | undefined;
     return {
       ...slot,
-      isLoadingStats: slotStatsResults[i]?.isLoading ?? true,
+      isLoadingStats: (slotStatsResults[i]?.isLoading ?? true) || (postedMediaResults[i]?.isLoading ?? true),
       daily: d?.daily ?? {},
       lifetime: d?.lifetime ?? {},
+      postsDaily: posts?.dailyCount ?? 0,
+      postsLifetime: posts?.count ?? 0,
     };
   });
 
   const sortedSlots = farmSortKey
     ? [...slotsWithStats].sort((a, b) => {
-        const va = a.daily[farmSortKey] ?? 0;
-        const vb = b.daily[farmSortKey] ?? 0;
+        const va = farmSortKey === "posts" ? a.postsDaily : (a.daily[farmSortKey] ?? 0);
+        const vb = farmSortKey === "posts" ? b.postsDaily : (b.daily[farmSortKey] ?? 0);
         return farmSortDir === "desc" ? vb - va : va - vb;
       })
     : slotsWithStats;
@@ -404,14 +416,16 @@ function PhoneFarmPhoneSection({
               }
               const daily = slot.daily[s.key] ?? 0;
               const lifetime = slot.lifetime[s.key] ?? 0;
+              const displayedDaily = s.key === "posts" ? slot.postsDaily : daily;
+              const displayedLifetime = s.key === "posts" ? slot.postsLifetime : lifetime;
               return (
                 <td key={s.key} className="py-2.5 px-3 text-center tabular-nums">
                   {slot.isLoadingStats ? (
                     <span className="text-muted-foreground text-[11px]">…</span>
                   ) : (
                     <div className="flex items-center justify-center gap-0.5 text-[11px]">
-                      <span className="font-bold text-foreground">{daily.toLocaleString()}</span>
-                      <span className="text-muted-foreground">/{lifetime.toLocaleString()}</span>
+                      <span className="font-bold text-foreground">{displayedDaily.toLocaleString()}</span>
+                      <span className="text-muted-foreground">/{displayedLifetime.toLocaleString()}</span>
                     </div>
                   )}
                 </td>

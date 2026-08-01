@@ -5952,6 +5952,53 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try { fs.writeFileSync(_postedFilePath(serial), JSON.stringify(list.slice(0, 5000)), "utf8"); } catch { /* best effort */ }
   };
 
+  // Account-scoped history of confirmed profile-feed posts. This is separate
+  // from mobilePostedLocalFiles: that list is a device-wide no-repeat cache
+  // and also includes Stories, while this history is the source of truth for
+  // the Human Session Tool Posted Media tab and Statistics → Posts.
+  type PostedProfileMediaEntry = {
+    id: string;
+    filename: string;
+    username: string;
+    slotIdx: number;
+    postedAt: string;
+  };
+  const mobilePostedProfileMedia = new Map<string, PostedProfileMediaEntry[]>();
+  const POSTED_PROFILE_MEDIA_DIR = process.env.EQUINOX_DATA_DIR
+    ? path.join(process.env.EQUINOX_DATA_DIR, "mobile-posted-profile-media")
+    : path.join(path.dirname(path.resolve(process.argv[1] ?? ".")), "..", "mobile-posted-profile-media");
+  try { fs.mkdirSync(POSTED_PROFILE_MEDIA_DIR, { recursive: true }); } catch { /* already exists */ }
+  const _postedProfileMediaPath = (serial: string) =>
+    path.join(POSTED_PROFILE_MEDIA_DIR, `${serial.replace(/[^a-zA-Z0-9_\-]/g, "_")}.json`);
+  const getPostedProfileMedia = (serial: string): PostedProfileMediaEntry[] => {
+    if (!mobilePostedProfileMedia.has(serial)) {
+      try {
+        const raw = fs.readFileSync(_postedProfileMediaPath(serial), "utf8");
+        const parsed = JSON.parse(raw);
+        mobilePostedProfileMedia.set(serial, Array.isArray(parsed) ? parsed : []);
+      } catch {
+        mobilePostedProfileMedia.set(serial, []);
+      }
+    }
+    return mobilePostedProfileMedia.get(serial)!;
+  };
+  const recordPostedProfileMedia = (serial: string, slotIdx: number, username: string, filename: string) => {
+    const normalizedUsername = username.replace(/^@/, "").trim();
+    if (!normalizedUsername) return;
+    const entry: PostedProfileMediaEntry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+      filename,
+      username: normalizedUsername,
+      slotIdx,
+      postedAt: new Date().toISOString(),
+    };
+    const list = getPostedProfileMedia(serial);
+    list.unshift(entry);
+    try {
+      fs.writeFileSync(_postedProfileMediaPath(serial), JSON.stringify(list.slice(0, 5000)), "utf8");
+    } catch { /* best effort — posting has already succeeded */ }
+  };
+
   const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 
   type MakePostImageOptions = {
@@ -6106,6 +6153,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   async function runMakePostStep(serial: string, opts: {
     localFolderPath: string; localFolderRandom: boolean; localFolderNoRepeat: boolean;
     deleteAfterUpload: boolean; captionText: string;
+    accountUsername?: string; slotIdx?: number;
     doFixAiSlop?: boolean;
     alterationEnabled?: boolean;
     alterationLevel?: AlterationLevel;
@@ -6436,6 +6484,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
 
     recordPostedLocalFile(serial, fileName);
+    recordPostedProfileMedia(serial, opts.slotIdx ?? 0, opts.accountUsername ?? "", fileName);
     if (deleteAfterUpload) {
       try { await fsPromises.unlink(localFilePath); } catch { /* best effort */ }
     }
@@ -8903,6 +8952,29 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     res.json({ ok: true, removed: list.length - next.length });
   });
 
+  // Confirmed profile-feed posts for one account slot. This is intentionally
+  // separate from posted-media, which is the device-wide no-repeat cache and
+  // includes Story uploads.
+  app.get("/api/mobile/devices/:serial/posted-profile-media", (req: Request, res: Response) => {
+    const serial = req.params.serial as string;
+    const username = String(req.query.username ?? "").replace(/^@/, "").trim().toLowerCase();
+    const slotIdxRaw = Number(req.query.slotIdx);
+    const slotIdx = Number.isInteger(slotIdxRaw) && slotIdxRaw >= 0 ? slotIdxRaw : null;
+    if (!username) return res.status(400).json({ ok: false, error: "username required" });
+
+    const entries = getPostedProfileMedia(serial).filter(entry =>
+      entry.username.replace(/^@/, "").trim().toLowerCase() === username &&
+      (slotIdx === null || entry.slotIdx === slotIdx)
+    );
+    const today = new Date().toISOString().slice(0, 10);
+    res.json({
+      ok: true,
+      entries,
+      count: entries.length,
+      dailyCount: entries.filter(entry => entry.postedAt.slice(0, 10) === today).length,
+    });
+  });
+
   // Abort endpoint — called by the frontend when the master toggle is switched
   // off mid-cycle.  The frontend passes the same cycleId it used to start the
   // cycle so we can ignore stale abort POSTs that arrive after the next cycle
@@ -9943,6 +10015,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                       localFolderRandom: makePostLocalFolderRandom,
                       localFolderNoRepeat: makePostLocalFolderNoRepeat,
                       deleteAfterUpload: makePostLocalFolderDeleteAfterUpload,
+                      accountUsername: slotUsername,
+                      slotIdx,
                       alterationEnabled: makePostAlterationEnabled,
                       alterationLevel: makePostAlterationLevel,
                       imageSettingsEnabled: makePostImageSettingsEnabled,
