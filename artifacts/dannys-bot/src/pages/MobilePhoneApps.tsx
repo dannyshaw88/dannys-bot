@@ -717,6 +717,22 @@ export function MobilePhoneAppsPanel({
                       />
                     </div>
                   </div>
+                   <div className="flex flex-col items-center gap-1">
+                     <span className="text-xs text-muted-foreground whitespace-nowrap">Searches Per Run</span>
+                     <div className="flex items-center gap-1">
+                       <Input type="number" min={1} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchCountMin ?? 1} onChange={e => patchApp("chrome", { manualSearchCountMin: Math.min(50, Math.max(1, Number(e.target.value))) })} />
+                       <span className="text-muted-foreground text-sm">to</span>
+                       <Input type="number" min={1} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchCountMax ?? 1} onChange={e => patchApp("chrome", { manualSearchCountMax: Math.min(50, Math.max(1, Number(e.target.value))) })} />
+                     </div>
+                   </div>
+                   <div className="flex flex-col items-center gap-1">
+                     <span className="text-xs text-muted-foreground whitespace-nowrap">Search Result Scrolls</span>
+                     <div className="flex items-center gap-1">
+                       <Input type="number" min={0} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchScrollMin ?? 0} onChange={e => patchApp("chrome", { manualSearchScrollMin: Math.min(50, Math.max(0, Number(e.target.value))) })} />
+                       <span className="text-muted-foreground text-sm">to</span>
+                       <Input type="number" min={0} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchScrollMax ?? 0} onChange={e => patchApp("chrome", { manualSearchScrollMax: Math.min(50, Math.max(0, Number(e.target.value))) })} />
+                     </div>
+                   </div>
                 </>}
                  row3={
                    <div className="basis-full w-full flex flex-nowrap items-start justify-start gap-x-8 pt-2">
@@ -771,22 +787,6 @@ export function MobilePhoneAppsPanel({
                  }
                  row4={
                    <div className="basis-full w-full flex flex-wrap items-start justify-start gap-x-8 gap-y-3 pt-2">
-                     <div className="flex shrink-0 flex-col items-start gap-1">
-                       <span className="text-xs text-muted-foreground whitespace-nowrap">Searches Per Run</span>
-                       <div className="flex items-center gap-1">
-                         <Input type="number" min={1} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchCountMin ?? 1} onChange={e => patchApp("chrome", { manualSearchCountMin: Math.min(50, Math.max(1, Number(e.target.value))) })} />
-                         <span className="text-muted-foreground text-sm">to</span>
-                         <Input type="number" min={1} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchCountMax ?? 1} onChange={e => patchApp("chrome", { manualSearchCountMax: Math.min(50, Math.max(1, Number(e.target.value))) })} />
-                       </div>
-                     </div>
-                     <div className="flex shrink-0 flex-col items-start gap-1">
-                       <span className="text-xs text-muted-foreground whitespace-nowrap">Search Result Scrolls</span>
-                       <div className="flex items-center gap-1">
-                         <Input type="number" min={0} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchScrollMin ?? 0} onChange={e => patchApp("chrome", { manualSearchScrollMin: Math.min(50, Math.max(0, Number(e.target.value))) })} />
-                         <span className="text-muted-foreground text-sm">to</span>
-                         <Input type="number" min={0} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchScrollMax ?? 0} onChange={e => patchApp("chrome", { manualSearchScrollMax: Math.min(50, Math.max(0, Number(e.target.value))) })} />
-                       </div>
-                     </div>
                      <div className="flex shrink-0 flex-col items-start gap-1">
                        <span className="text-xs text-muted-foreground whitespace-nowrap">Search Result Link %</span>
                        <div className="flex items-center gap-1">
