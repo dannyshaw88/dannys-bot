@@ -4,13 +4,18 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
-## [Unreleased]
+## [1.2.323] — 2026-08-01
 
 ### Fixed — Repair the local AI Python environment
 
-- Updated the Hugging Face Hub dependency to the version required by the Qwen and LongCat pipelines.
-- Changed the AI library setup to upgrade existing AppData packages instead of leaving incompatible old versions beside newer `diffusers` files.
-- The existing model downloads remain untouched; use **Install / Repair AI Libraries** once in the desktop app, then load either model again.
+- Fixed the shared Qwen and LongCat model startup error caused by an incompatible Hugging Face package set.
+- Updated `huggingface_hub` from the old `<1.0` range to `>=1.5.0,<2.0`, matching the version required by the installed `diffusers` pipeline implementations.
+- Fixed the Windows setup process so it upgrades the existing AppData AI package directory with `--upgrade` and `--upgrade-strategy eager`. Previously, `pip --target` could leave `huggingface_hub==0.36.2` beside a newer `diffusers` installation.
+- Renamed the setup action to **Install / Repair AI Libraries** and added repair-specific wording so an existing installation can be fixed without deleting the downloaded model files.
+- Preserved the separate Qwen and LongCat model cache; repairing Python dependencies does not redownload the 20–30 GB model weights.
+- Added Windows installer CI checks for the corrected Hub requirement and package-repair flags.
+- Kept the existing conservative HTTP/LFS model downloader, CPU fallback, and two-model-only registry unchanged.
+- Bumped the root application and Electron package versions to `1.2.323`.
 
 ## [1.2.322] — 2026-08-01
 
