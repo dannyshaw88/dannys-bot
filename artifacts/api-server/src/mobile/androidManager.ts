@@ -994,14 +994,9 @@ const CHROME_MANUAL_SEARCH_QUERIES = (() => {
 })();
 
 // Google history should be made up of short, natural-looking searches rather
-// than a stream of isolated keywords. Keep one-word searches occasional, but
-// explicitly constrain every selected query to 1–5 words.
-const CHROME_ONE_WORD_SEARCH_QUERIES = [
-  "weather", "recipes", "news", "flights", "football", "holidays",
-  "gardening", "podcasts", "headphones", "mattresses",
-];
+// than a stream of isolated keywords. Every selected query must contain
+// exactly 2–5 words; one-word searches are intentionally excluded.
 const CHROME_SEARCH_QUERIES_BY_WORD_COUNT: Record<number, string[]> = {
-  1: CHROME_ONE_WORD_SEARCH_QUERIES,
   2: CHROME_MANUAL_SEARCH_QUERIES.filter(
     query => query.split(/\s+/).filter(Boolean).length === 2,
   ),
@@ -1015,7 +1010,7 @@ const CHROME_SEARCH_QUERIES_BY_WORD_COUNT: Record<number, string[]> = {
     query => query.split(/\s+/).filter(Boolean).length === 5,
   ),
 };
-const CHROME_SEARCH_WORD_COUNTS = [1, 2, 3, 4, 5];
+const CHROME_SEARCH_WORD_COUNTS = [2, 3, 4, 5];
 const CHROME_NON_EMPTY_SEARCH_WORD_COUNTS = CHROME_SEARCH_WORD_COUNTS.filter(
   count => (CHROME_SEARCH_QUERIES_BY_WORD_COUNT[count] ?? []).length > 0,
 );
@@ -1023,14 +1018,11 @@ const CHROME_NON_EMPTY_SEARCH_WORD_COUNTS = CHROME_SEARCH_WORD_COUNTS.filter(
 function chooseChromeManualSearchQuery(usedQueries: Set<string>): {
   query: string;
   wordCount: number;
-  oneWord: boolean;
 } {
-  // Keep one-word searches at roughly 5%, then distribute the rest across
-  // 2–5 words. This gives every search a visible length change without making
-  // the history look like a sequence of isolated keywords.
-  const wordCount = Math.random() < 0.05
-    ? 1
-    : 2 + Math.floor(Math.random() * 4);
+  // Randomly vary every query between 2 and 5 words. This keeps searches
+  // natural-looking while ensuring the history never falls back to a single
+  // isolated keyword.
+  const wordCount = 2 + Math.floor(Math.random() * 4);
   const preferred = CHROME_SEARCH_QUERIES_BY_WORD_COUNT[wordCount] ?? [];
   const available = preferred.filter(query => !usedQueries.has(query));
   const fallback = CHROME_SEARCH_WORD_COUNTS
@@ -1055,7 +1047,6 @@ function chooseChromeManualSearchQuery(usedQueries: Set<string>): {
   return {
     query,
     wordCount: selectedWordCount,
-    oneWord: selectedWordCount === 1,
   };
 }
 
@@ -1510,10 +1501,7 @@ export async function runChromeApp(
         const selected = chooseChromeManualSearchQuery(usedQueries);
         const query = selected.query;
         usedQueries.add(query);
-        steps.push(
-          `Chrome manual search ${searchNumber}/${totalSearches}: selected ${selected.wordCount}-word query` +
-          `${selected.oneWord ? " (occasional one-word)" : ""}`,
-        );
+        steps.push(`Chrome manual search ${searchNumber}/${totalSearches}: selected ${selected.wordCount}-word query`);
         await runOneManualGoogleSearch(query, searchNumber, totalSearches);
       }
     };
