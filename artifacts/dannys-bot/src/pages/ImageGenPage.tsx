@@ -89,7 +89,13 @@ declare global {
   interface Window {
     electronAPI?: {
       setupImageGen?: () => Promise<{ ok: boolean; message?: string }>;
-      onImageGenSetupProgress?: (cb: (line: string, done: boolean) => void) => void;
+      getImageGenSetupStatus?: () => Promise<{
+        running: boolean;
+        done: boolean;
+        ok: boolean;
+        lines: string[];
+      }>;
+      onImageGenSetupProgress?: (cb: (line: string, done: boolean) => void) => (() => void) | void;
       openImageGenOutputDir?: () => void;
     };
   }
@@ -119,9 +125,9 @@ const RESOLUTIONS = [
   { label: "896 × 1152 (Tall)", w: 896, h: 1152 },
 ];
 
-// ── Module-level state cache ───────────────────────────────────────────────────
-// Survives navigation (component unmount/remount) for the lifetime of the tab.
-// Not persisted to disk — cleared on full page refresh, which is intentional.
+// ── Persistent state cache ─────────────────────────────────────────────────────
+// Route changes unmount this page. Keep the editor state in localStorage so
+// navigation and normal renderer reloads do not erase a half-finished setup.
 interface PageCache {
   prompt: string;
   negPrompt: string;
@@ -139,7 +145,8 @@ interface PageCache {
   cpuThreads: number | "";
   result: GenerateResult | null;
 }
-const _cache: PageCache = {
+const PAGE_CACHE_KEY = "aura-farming-ai-image-page-v2";
+const defaultPageCache: PageCache = {
   prompt: "",
   negPrompt: "",
   model: "flux-schnell",
@@ -156,6 +163,34 @@ const _cache: PageCache = {
   cpuThreads: "",
   result: null,
 };
+function readPageCache(): PageCache {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PAGE_CACHE_KEY) ?? "null");
+    if (!saved || typeof saved !== "object") return { ...defaultPageCache };
+    const resolution = RESOLUTIONS.find(r => r.w === saved.resolution?.w && r.h === saved.resolution?.h)
+      ?? defaultPageCache.resolution;
+    return { ...defaultPageCache, ...saved, resolution };
+  } catch {
+    return { ...defaultPageCache };
+  }
+}
+function writePageCache(value: PageCache): void {
+  try {
+    localStorage.setItem(PAGE_CACHE_KEY, JSON.stringify(value));
+  } catch {
+    // Large base64 uploads/results can exceed browser storage quotas. Preserve
+    // all controls even if the optional image payload cannot be persisted.
+    try {
+      localStorage.setItem(PAGE_CACHE_KEY, JSON.stringify({
+        ...value,
+        initImage: null,
+        charImage: null,
+        result: null,
+      }));
+    } catch { /* storage is unavailable; in-memory state still works */ }
+  }
+}
+const _cache: PageCache = readPageCache();
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export function ImageGenPage() {
@@ -201,6 +236,7 @@ export function ImageGenPage() {
     _cache.charScale = charScale;
     _cache.cpuThreads = cpuThreads;
     _cache.result = result;
+    writePageCache(_cache);
   }, [prompt, negPrompt, model, resolution, steps, guidance, seed, initImage, initImageName, strength, charImage, charImageName, charScale, cpuThreads, result]);
   const [error, setError] = useState("");
   const [modelNotice, setModelNotice] = useState("");
@@ -252,14 +288,28 @@ export function ImageGenPage() {
   // Register Electron progress listener once
   useEffect(() => {
     if (!window.electronAPI?.onImageGenSetupProgress) return;
-    window.electronAPI.onImageGenSetupProgress((line, done) => {
+    let active = true;
+    const restoreSetup = async () => {
+      try {
+        const saved = await window.electronAPI?.getImageGenSetupStatus?.();
+        if (!active || !saved) return;
+        if (saved.lines.length > 0) setSetupLog(saved.lines);
+        setSettingUp(saved.running);
+      } catch { /* browser mode or older desktop build */ }
+    };
+    restoreSetup();
+    const unsubscribe = window.electronAPI.onImageGenSetupProgress((line, done) => {
       setSetupLog(prev => [...prev.slice(-200), line]);
       if (done) {
         setSettingUp(false);
         fetchStatus();
       }
     });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, [fetchStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Actions ─────────────────────────────────────────────────────────────────
   const handleLoadModel = async () => {
@@ -392,8 +442,12 @@ export function ImageGenPage() {
   const handleSetup = async () => {
     if (!window.electronAPI?.setupImageGen) return;
     setSettingUp(true);
-    setSetupLog(["Starting AI library installation…"]);
-    await window.electronAPI.setupImageGen();
+    setSetupLog(["Starting or resuming AI library installation…"]);
+    const response = await window.electronAPI.setupImageGen();
+    if (!response.ok) {
+      setSettingUp(false);
+      if (response.message) setSetupLog(prev => [...prev, `❌ ${response.message}`]);
+    }
     // Progress events continue via onImageGenSetupProgress
   };
 
@@ -1028,7 +1082,7 @@ function SetupSection({
             >
               {settingUp
                 ? <><Loader2 className="w-4 h-4 animate-spin" /> Installing…</>
-                : "Install AI Libraries"
+                : setupLog.length > 0 ? "Retry / Resume AI Library Install" : "Install AI Libraries"
               }
             </button>
           </div>

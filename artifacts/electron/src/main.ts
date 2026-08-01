@@ -1252,6 +1252,17 @@ async function createWindow() {
 
   // ── Image-gen IPC ─────────────────────────────────────────────────────────────
   let imageGenSetupRunning = false;
+  let imageGenSetupState: {
+    running: boolean;
+    done: boolean;
+    ok: boolean;
+    lines: string[];
+  } = {
+    running: false,
+    done: false,
+    ok: false,
+    lines: [],
+  };
 
   ipcMain.handle("image-gen-setup", async () => {
     if (imageGenSetupRunning) return { ok: false, message: "Setup already running" };
@@ -1269,12 +1280,53 @@ async function createWindow() {
     try { fs.mkdirSync(pipDir, { recursive: true }); } catch {}
 
     imageGenSetupRunning = true;
+    imageGenSetupState = {
+      running: true,
+      done: false,
+      ok: false,
+      lines: ["Starting AI library installation…"],
+    };
     const sendProgress = (line: string, done: boolean) => {
+      const normalized = line.trim();
+      if (normalized) {
+        imageGenSetupState.lines = [...imageGenSetupState.lines, normalized].slice(-300);
+      }
+      imageGenSetupState.running = !done;
+      imageGenSetupState.done = done;
+      imageGenSetupState.ok = done && !normalized.startsWith("❌");
       win?.webContents.send("image-gen-setup-progress", { line, done });
     };
 
     // Env shared by both pip steps so python can find packages in pipDir
-    const pipEnv = { ...process.env, PYTHONPATH: pipDir };
+    const pipCacheDir = path.join(pipDir, "pip-cache");
+    try { fs.mkdirSync(pipCacheDir, { recursive: true }); } catch {}
+    // The embeddable Python cannot resolve pip through `python -m pip`; invoke
+    // pip's script directly from the writable AppData installation.
+    const pipMain = path.join(pipDir, "pip", "__main__.py");
+    const pipEnv = {
+      ...process.env,
+      PYTHONPATH: pipDir,
+      // The default pip read timeout is 15 seconds. That is too aggressive
+      // for a multi-gigabyte CUDA wheel on a normal residential connection.
+      PIP_DEFAULT_TIMEOUT: "600",
+      PIP_RETRIES: "10",
+    };
+    const pipNetworkArgs = [
+      "--cache-dir", pipCacheDir,
+      "--timeout", "600",
+      "--retries", "10",
+      "--disable-pip-version-check",
+      "--no-warn-script-location",
+    ];
+    const runPip = (args: string[], failureLabel: string) => new Promise<void>((resolve, reject) => {
+      const p = spawn(pythonExe, [pipMain, ...args], { stdio: "pipe", env: pipEnv });
+      p.stdout?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
+      p.stderr?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
+      p.on("error", (err) => reject(new Error(`${failureLabel}: ${err.message}`)));
+      p.on("exit", code => code === 0
+        ? resolve()
+        : reject(new Error(`${failureLabel} (code ${code})`)));
+    });
 
     try {
       // Step 1: bootstrap pip into pipDir (writable AppData), not the embed dir
@@ -1288,16 +1340,12 @@ async function createWindow() {
           ], { stdio: "pipe", env: pipEnv });
           p.stdout?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
           p.stderr?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
+          p.on("error", (err) => reject(new Error(`pip bootstrap failed: ${err.message}`)));
           p.on("exit", code => code === 0 ? resolve() : reject(new Error(`pip bootstrap failed (code ${code})`)));
         });
       }
 
       // Step 2: install AI libraries into the same writable pipDir.
-      // The embeddable Python's python312._pth file overrides sys.path and
-      // ignores PYTHONPATH, so `python -m pip` cannot find the pip we just
-      // installed in pipDir.  Run pip/__main__.py directly as a script instead
-      // — Python can always execute a file path regardless of sys.path.
-      const pipMain = path.join(pipDir, "pip", "__main__.py");
       // Do not rely on --extra-index-url alone: pip may select a CPU Torch
       // wheel from the primary index even when the CUDA index is present.
       // Install Torch with the CUDA index as primary, then install the rest.
@@ -1318,52 +1366,34 @@ async function createWindow() {
       }
 
       sendProgress("Installing CUDA-enabled Torch (downloading ~2 GB — please wait)…", false);
-      await new Promise<void>((resolve, reject) => {
-        const p = spawn(pythonExe, [
-          pipMain,
-          "install",
-          "--target", pipDir,
-          "-r", cudaTorchRequirements,
-          "--index-url", "https://download.pytorch.org/whl/cu121",
-          "--no-warn-script-location",
-        ], { stdio: "pipe", env: pipEnv });
-        p.stdout?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
-        p.stderr?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
-        p.on("exit", code => code === 0 ? resolve() : reject(new Error(`CUDA Torch install failed (code ${code})`)));
-      });
+      await runPip([
+        "install",
+        "--target", pipDir,
+        "-r", cudaTorchRequirements,
+        "--index-url", "https://download.pytorch.org/whl/cu121",
+        ...pipNetworkArgs,
+      ], "CUDA Torch install failed");
 
       sendProgress("Installing remaining AI libraries…", false);
-      await new Promise<void>((resolve, reject) => {
-        const p = spawn(pythonExe, [
-          pipMain,
-          "install",
-          "--target", pipDir,
-          "-r", otherRequirements,
-          "--no-warn-script-location",
-        ], { stdio: "pipe", env: pipEnv });
-        p.stdout?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
-        p.stderr?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
-        p.on("exit", code => code === 0 ? resolve() : reject(new Error(`AI library install failed (code ${code})`)));
-      });
+      await runPip([
+        "install",
+        "--target", pipDir,
+        "-r", otherRequirements,
+        ...pipNetworkArgs,
+      ], "AI library install failed");
 
       // v1.2.310 raised Diffusers and indirectly moved the Hub downloader
       // onto newer Xet-oriented releases. Pin the Hub client below 1.0 and
       // upgrade it in place so an existing installation is actually reverted
       // to the legacy HTTP/LFS path used by the faster older releases.
       sendProgress("Restoring the faster legacy Hugging Face downloader…", false);
-      await new Promise<void>((resolve, reject) => {
-        const p = spawn(pythonExe, [
-          pipMain,
-          "install",
-          "--target", pipDir,
-          "--upgrade",
-          "-r", hubRequirements,
-          "--no-warn-script-location",
-        ], { stdio: "pipe", env: pipEnv });
-        p.stdout?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
-        p.stderr?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
-        p.on("exit", code => code === 0 ? resolve() : reject(new Error(`Hugging Face downloader install failed (code ${code})`)));
-      });
+      await runPip([
+        "install",
+        "--target", pipDir,
+        "--upgrade",
+        "-r", hubRequirements,
+        ...pipNetworkArgs,
+      ], "Hugging Face downloader install failed");
 
       sendProgress("✅ Setup complete! Starting image gen server…", false);
 
@@ -1380,6 +1410,8 @@ async function createWindow() {
       imageGenSetupRunning = false;
     }
   });
+
+  ipcMain.handle("image-gen-setup-status", () => imageGenSetupState);
 
   ipcMain.handle("image-gen-open-output-dir", async () => {
     const outputDir = getImageGenOutputDir();

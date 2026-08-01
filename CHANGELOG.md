@@ -4,6 +4,17 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.318] — 2026-08-01
+
+### Fixed — Make AI library setup resumable and navigation-safe
+
+- Increased pip's network read timeout from the default 15 seconds to 10 minutes and enabled 10 retries for multi-gigabyte CUDA Torch downloads.
+- Added a persistent pip wheel/cache directory under the user's AppData so interrupted setup attempts can reuse completed downloads.
+- Added setup process state in the Electron main process so progress and errors remain visible after navigating away from and back to AI Images.
+- Added cleanup for the setup progress listener to prevent duplicate log lines after repeated navigation.
+- Persisted AI Images controls, selected model, prompt, resolution, seed, and result state to local storage instead of keeping them only in a module-level cache.
+- Bumped the root application and Electron package versions to `1.2.318`.
+
 ## [1.2.317] — 2026-07-31
 
 ### Fixed — Prevent Qwen and other large models from appearing frozen
