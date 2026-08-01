@@ -4,6 +4,21 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.328] — 2026-08-01
+
+### Added — Expand Chrome Manual Searches into configurable multi-query sessions
+
+- Added a **Searches Per Run** min/max control to Mobile Phone Apps → Google Chrome. When Manual Searches activates, the runtime now chooses an inclusive random number of fresh Google queries from that range. For example, `1` to `10` can run any count from one through ten.
+- Added a **Search Result Scrolls** min/max control. Each Google results page can now receive its own randomly selected number of accessibility-safe vertical scrolls after the query is submitted.
+- Added a **Search Result Link %** min/max control. When the roll fires, Chrome chooses a confirmed clickable result node from the current live UI dump; it never taps a guessed coordinate or a toolbar/system control.
+- Added a **Result Dwell Seconds** min/max control. A visited result is held for a random duration in the configured range, then Chrome presses Back and returns to the Google homepage.
+- Each query explicitly opens `https://www.google.com` again before typing, so multi-query runs do not inherit a previous results page or stale search field.
+- Kept the existing 6,000+ local everyday-query library and activation percentage. The activation percentage still decides whether the search session starts; the new search-count range decides how many queries that session contains.
+- Kept result-link visits optional and failure-safe: if a live result link cannot be positively identified, the link tap is skipped and the run continues.
+- Forwarded all new settings through frontend persistence, the mobile API validation layer, the Chrome Android manager, and the automation action log.
+- Extended the canonical Windows installer Actions workflow source validation for every new Chrome Manual Searches control.
+- Bumped the root application and Electron package versions to `1.2.328`.
+
 ## [1.2.327] — 2026-08-01
 
 ### Added — Expand Chrome Manual Searches to thousands of everyday queries

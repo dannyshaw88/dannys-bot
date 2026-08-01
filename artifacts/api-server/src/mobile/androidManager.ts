@@ -917,7 +917,19 @@ const CHROME_MANUAL_SEARCH_QUERIES = (() => {
 
 export async function runChromeApp(
   serial: string,
-  opts?: { scrollMin?: number; scrollMax?: number; storyTapMin?: number; storyTapMax?: number; tappedStoryScrollMin?: number; tappedStoryScrollMax?: number; internalLinkPctMin?: number; internalLinkPctMax?: number; manualSearches?: boolean; manualSearchPctMin?: number; manualSearchPctMax?: number; dismissDirection?: "left" | "up" },
+  opts?: {
+    scrollMin?: number; scrollMax?: number;
+    storyTapMin?: number; storyTapMax?: number;
+    tappedStoryScrollMin?: number; tappedStoryScrollMax?: number;
+    internalLinkPctMin?: number; internalLinkPctMax?: number;
+    manualSearches?: boolean;
+    manualSearchPctMin?: number; manualSearchPctMax?: number;
+    manualSearchCountMin?: number; manualSearchCountMax?: number;
+    manualSearchScrollMin?: number; manualSearchScrollMax?: number;
+    manualSearchLinkPctMin?: number; manualSearchLinkPctMax?: number;
+    manualSearchDwellMin?: number; manualSearchDwellMax?: number;
+    dismissDirection?: "left" | "up";
+  },
 ): Promise<{ ok: boolean; steps: string[]; error?: string }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
@@ -1168,21 +1180,80 @@ export async function runChromeApp(
     const internalLinkPctMax    = opts?.internalLinkPctMax    ?? 0;
     const manualSearchPctMin    = opts?.manualSearchPctMin    ?? 0;
     const manualSearchPctMax    = opts?.manualSearchPctMax    ?? 0;
+    const manualSearchCountMin  = opts?.manualSearchCountMin  ?? 1;
+    const manualSearchCountMax  = opts?.manualSearchCountMax  ?? 1;
+    const manualSearchScrollMin = opts?.manualSearchScrollMin ?? 0;
+    const manualSearchScrollMax = opts?.manualSearchScrollMax ?? 0;
+    const manualSearchLinkPctMin = opts?.manualSearchLinkPctMin ?? 0;
+    const manualSearchLinkPctMax = opts?.manualSearchLinkPctMax ?? 0;
+    const manualSearchDwellMin  = opts?.manualSearchDwellMin  ?? 3;
+    const manualSearchDwellMax  = opts?.manualSearchDwellMax  ?? 8;
 
-    const runManualGoogleSearch = async (): Promise<void> => {
-      if (manualSearchPctMax <= 0) return;
-      const pct = manualSearchPctMin + Math.random() * Math.max(0, manualSearchPctMax - manualSearchPctMin);
-      if (Math.random() * 100 >= pct) {
-        steps.push("Chrome manual search: activation roll did not fire");
-        return;
+    const randomRange = (min: number, max: number, floor = false): number => {
+      const low = Math.min(min, max);
+      const high = Math.max(min, max);
+      const value = low + Math.random() * Math.max(0, high - low);
+      return floor ? Math.round(value) : value;
+    };
+
+    const findGoogleResultLink = (resultXml: string): { x: number; y: number } | null => {
+      const candidates: Array<{ x: number; y: number }> = [];
+      const nodeRe = /<node\s([^>]+?)\s*\/?>/gi;
+      let nodeMatch: RegExpExecArray | null;
+      while ((nodeMatch = nodeRe.exec(resultXml)) !== null) {
+        const attrs = nodeMatch[1];
+        if (!attrs.includes('clickable="true"')) continue;
+        if (/class="android\.widget\.EditText"/i.test(attrs)) continue;
+        if (/resource-id="[^"]*com\.android\.chrome/i.test(attrs)) continue;
+        const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+        if (!bounds) continue;
+        const x1 = Number(bounds[1]), y1 = Number(bounds[2]);
+        const x2 = Number(bounds[3]), y2 = Number(bounds[4]);
+        const width = x2 - x1;
+        const height = y2 - y1;
+        const cy = Math.round((y1 + y2) / 2);
+        if (width < 90 || height < 24 || cy < 90 || cy > 0.9 * _getScreenSize(resultXml).h) continue;
+        const label = [
+          attrs.match(/\btext="([^"]*)"/i)?.[1] ?? "",
+          attrs.match(/\bcontent-desc="([^"]*)"/i)?.[1] ?? "",
+          attrs.match(/\bhint="([^"]*)"/i)?.[1] ?? "",
+        ].join(" ").replace(/\s+/g, " ").trim();
+        if (label.length < 8) continue;
+        if (/^(images?|news|maps?|shopping|videos?|more|settings|tools|sign in|next|previous)$/i.test(label)) continue;
+        candidates.push({ x: Math.round((x1 + x2) / 2), y: cy });
       }
+      return candidates.length > 0
+        ? candidates[Math.floor(Math.random() * candidates.length)]
+        : null;
+    };
 
-      const query = CHROME_MANUAL_SEARCH_QUERIES[
-        Math.floor(Math.random() * CHROME_MANUAL_SEARCH_QUERIES.length)
-      ];
-      // Navigate with an explicit Chrome VIEW intent instead of guessing where
-      // the toolbar is after a feed scroll has collapsed it. This keeps the
-      // navigation coordinate-free while still creating a real Chrome visit.
+    const returnGoogleToHomepage = async (): Promise<void> => {
+      const pageXml = await _uiDump(adb, serial);
+      const homeButton = _findElem(
+        pageXml,
+        "com.google.android.apps.chrome:id/home_button",
+        "com.android.chrome:id/home_button",
+        ":id/home_button",
+        "home_button",
+        "Open the homepage",
+      );
+      if (homeButton) {
+        _adbTap(adb, serial, homeButton.x, homeButton.y);
+        await _sleep(1300);
+      } else {
+        await keyevent(serial, 4);
+        await _sleep(900);
+      }
+    };
+
+    const runOneManualGoogleSearch = async (
+      query: string,
+      searchNumber: number,
+      totalSearches: number,
+    ): Promise<void> => {
+      // Navigate to Google separately for every query so each search starts
+      // from a clean homepage rather than inheriting the previous results page.
+      if (manualSearchPctMax <= 0) return;
       const openGoogle = spawnSync(adb, [
         "-s", serial, "shell", "am", "start",
         "-n", "com.android.chrome/com.google.android.apps.chrome.Main",
@@ -1191,10 +1262,10 @@ export async function runChromeApp(
       ], { encoding: "utf8", timeout: 10000 });
       const openOutput = `${openGoogle.stdout ?? ""}${openGoogle.stderr ?? ""}`;
       if (openGoogle.status !== 0 || /error|does not exist/i.test(openOutput)) {
-        steps.push(`Chrome manual search: could not open google.com — ${openOutput.trim().slice(0, 120)}`);
+        steps.push(`Chrome manual search ${searchNumber}/${totalSearches}: could not open google.com — ${openOutput.trim().slice(0, 120)}`);
         return;
       }
-      steps.push("Chrome manual search: opened google.com");
+      steps.push(`Chrome manual search ${searchNumber}/${totalSearches}: opened google.com`);
       await _sleep(2200 + Math.floor(Math.random() * 900));
 
       const googleXml = await _uiDump(adb, serial);
@@ -1227,7 +1298,7 @@ export async function runChromeApp(
         if (bounds) searchField = _parseCenter(bounds[1]);
       }
       if (!searchField) {
-        steps.push(`Chrome manual search: Google search field not found for "${query}" — skipped safely`);
+        steps.push(`Chrome manual search ${searchNumber}/${totalSearches}: Google search field not found for "${query}" — skipped safely`);
         await keyevent(serial, 4); // KEYCODE_BACK
         await _sleep(900);
         return;
@@ -1237,28 +1308,69 @@ export async function runChromeApp(
       await _sleep(300);
       await typeViaOnscreenKeyboard(serial, query, msg => steps.push(`Chrome manual search: ${msg}`));
       await keyevent(serial, 66); // KEYCODE_ENTER
-      steps.push(`Chrome manual search: searched "${query}"`);
+      steps.push(`Chrome manual search ${searchNumber}/${totalSearches}: searched "${query}"`);
       await _sleep(2500 + Math.floor(Math.random() * 1500));
 
-      // Return to the Chrome homepage so the existing feed/story flow starts
-      // from its normal state. Prefer the live Home button; Back is the safe
-      // fallback when Chrome's toolbar is temporarily collapsed.
-      const resultXml = await _uiDump(adb, serial);
-      const homeButton = _findElem(
-        resultXml,
-        "com.android.chrome:id/home_button",
-        ":id/home_button",
-        "home_button",
-        "Open the homepage",
-      );
-      if (homeButton) {
-        _adbTap(adb, serial, homeButton.x, homeButton.y);
-        await _sleep(1300);
-      } else {
-        await keyevent(serial, 4); // KEYCODE_BACK
-        await _sleep(900);
+      let resultXml = await _uiDump(adb, serial);
+      const { w: resultWidth, h: resultHeight } = _getScreenSize(resultXml);
+      const resultScrolls = manualSearchScrollMax > 0
+        ? randomRange(manualSearchScrollMin, manualSearchScrollMax, true)
+        : 0;
+      if (resultScrolls > 0) {
+        steps.push(`Chrome manual search ${searchNumber}/${totalSearches}: scrolling results ${resultScrolls}x`);
+        const scrollX = Math.round(resultWidth / 2);
+        for (let scroll = 0; scroll < resultScrolls; scroll++) {
+          await swipe(serial, scrollX, Math.round(resultHeight * 0.78), scrollX, Math.round(resultHeight * 0.28), 350 + Math.floor(Math.random() * 250));
+          await _sleep(650 + Math.floor(Math.random() * 650));
+        }
+        resultXml = await _uiDump(adb, serial);
       }
-      steps.push("Chrome manual search: returned to homepage");
+
+      const linkPct = randomRange(manualSearchLinkPctMin, manualSearchLinkPctMax);
+      if (manualSearchLinkPctMax > 0 && Math.random() * 100 < linkPct) {
+        const resultLink = findGoogleResultLink(resultXml);
+        if (resultLink) {
+          _adbTap(adb, serial, resultLink.x, resultLink.y);
+          const dwellSeconds = randomRange(manualSearchDwellMin, manualSearchDwellMax);
+          steps.push(`Chrome manual search ${searchNumber}/${totalSearches}: opened a confirmed result link; dwelling ${dwellSeconds.toFixed(1)}s`);
+          await _sleep(Math.round(dwellSeconds * 1000));
+          await keyevent(serial, 4);
+          await _sleep(900);
+          steps.push(`Chrome manual search ${searchNumber}/${totalSearches}: returned from result link`);
+        } else {
+          steps.push(`Chrome manual search ${searchNumber}/${totalSearches}: link roll fired but no confirmed result link was found`);
+        }
+      } else if (manualSearchLinkPctMax > 0) {
+        steps.push(`Chrome manual search ${searchNumber}/${totalSearches}: result-link roll did not fire`);
+      }
+
+      await returnGoogleToHomepage();
+      steps.push(`Chrome manual search ${searchNumber}/${totalSearches}: returned to Google homepage`);
+    };
+
+    const runManualGoogleSearches = async (): Promise<void> => {
+      if (manualSearchPctMax <= 0) return;
+      const activationPct = randomRange(manualSearchPctMin, manualSearchPctMax);
+      if (Math.random() * 100 >= activationPct) {
+        steps.push("Chrome manual searches: activation roll did not fire");
+        return;
+      }
+
+      const totalSearches = Math.max(1, Math.min(50, randomRange(manualSearchCountMin, manualSearchCountMax, true)));
+      const usedQueries = new Set<string>();
+      steps.push(`Chrome manual searches: activated for ${totalSearches} fresh Google quer${totalSearches === 1 ? "y" : "ies"}`);
+      for (let searchNumber = 1; searchNumber <= totalSearches; searchNumber++) {
+        let query = "";
+        for (let attempt = 0; attempt < 10 && !query; attempt++) {
+          const candidate = CHROME_MANUAL_SEARCH_QUERIES[
+            Math.floor(Math.random() * CHROME_MANUAL_SEARCH_QUERIES.length)
+          ];
+          if (!usedQueries.has(candidate) || CHROME_MANUAL_SEARCH_QUERIES.length <= usedQueries.size) query = candidate;
+        }
+        if (!query) query = CHROME_MANUAL_SEARCH_QUERIES[0];
+        usedQueries.add(query);
+        await runOneManualGoogleSearch(query, searchNumber, totalSearches);
+      }
     };
 
     const storyTapTotal = storyTapMax > 0
@@ -1467,7 +1579,7 @@ export async function runChromeApp(
     // before the verified recents close, so Google history is written normally.
     if (manualSearchPctMax > 0) {
       try {
-        await runManualGoogleSearch();
+        await runManualGoogleSearches();
       } catch (searchErr: any) {
         // Manual search is optional. Never prevent the verified Chrome close
         // gesture if it fails on a particular device or Chrome build.

@@ -97,6 +97,18 @@ interface AppSlotSettings {
   /** Chance (0–100%) to perform an ordinary Google search after Chrome activity. */
   manualSearchPctMin?: number;
   manualSearchPctMax?: number;
+  /** Number of fresh Google queries to run when Manual Searches activates. */
+  manualSearchCountMin?: number;
+  manualSearchCountMax?: number;
+  /** Scrolls to perform on each Google results page. */
+  manualSearchScrollMin?: number;
+  manualSearchScrollMax?: number;
+  /** Chance (0–100%) to open one confirmed result on each results page. */
+  manualSearchLinkPctMin?: number;
+  manualSearchLinkPctMax?: number;
+  /** Seconds to dwell on a manually opened Google result. */
+  manualSearchDwellMin?: number;
+  manualSearchDwellMax?: number;
   /** Chance (0–100%) to tap a video item after scrolling — only used by YouTube. */
   clickPctMin?: number;
   clickPctMax?: number;
@@ -134,7 +146,7 @@ const DEFAULT_APP_SLOT: AppSlotSettings = { activatePctMin: 0, activatePctMax: 0
 
 const DEFAULT_SETTINGS: PhoneAppsSettings = {
   enabled: false, intervalMin: 25, intervalMax: 99,
-  chrome:     { ...DEFAULT_APP_SLOT, scrollMin: 1, scrollMax: 5, storyTapMin: 0, storyTapMax: 0, tappedStoryScrollMin: 0, tappedStoryScrollMax: 0, internalLinkPctMin: 0, internalLinkPctMax: 0, manualSearchPctMin: 0, manualSearchPctMax: 0 },
+  chrome:     { ...DEFAULT_APP_SLOT, scrollMin: 1, scrollMax: 5, storyTapMin: 0, storyTapMax: 0, tappedStoryScrollMin: 0, tappedStoryScrollMax: 0, internalLinkPctMin: 0, internalLinkPctMax: 0, manualSearchPctMin: 0, manualSearchPctMax: 0, manualSearchCountMin: 1, manualSearchCountMax: 1, manualSearchScrollMin: 0, manualSearchScrollMax: 0, manualSearchLinkPctMin: 0, manualSearchLinkPctMax: 0, manualSearchDwellMin: 3, manualSearchDwellMax: 8 },
   googlePlay: { ...DEFAULT_APP_SLOT },
   snapchat:   { ...DEFAULT_APP_SLOT },
   youtube:    { ...DEFAULT_APP_SLOT, scrollMin: 1, scrollMax: 5, clickPctMin: 0, clickPctMax: 0, watchTimeMin: 3, watchTimeMax: 8, clickShortsPctMin: 0, clickShortsPctMax: 0, shortsScrollMin: 0, shortsScrollMax: 0, shortsWatchTimeMin: 3, shortsWatchTimeMax: 8, shortsLikePctMin: 0, shortsLikePctMax: 0 },
@@ -228,9 +240,10 @@ interface AppSlotRowProps {
   rowExtras?: React.ReactNode; // optional inline fields rendered after the % label on row 1
   row2?:      React.ReactNode; // optional second row rendered below row 1, full width
   row3?:      React.ReactNode; // optional third row rendered below row 2, full width
+  row4?:      React.ReactNode; // optional fourth row rendered below row 3, full width
 }
 
-function AppSlotRow({ icon, label, min, max, onMin, onMax, rowExtras, row2, row3 }: AppSlotRowProps) {
+function AppSlotRow({ icon, label, min, max, onMin, onMax, rowExtras, row2, row3, row4 }: AppSlotRowProps) {
   return (
     <div className="p-4">
       {/* Single flex-wrap row: icon+name first, then all field groups flow inline */}
@@ -270,6 +283,7 @@ function AppSlotRow({ icon, label, min, max, onMin, onMax, rowExtras, row2, row3
         {rowExtras}
         {row2}
         {row3}
+        {row4}
       </div>
     </div>
   );
@@ -339,7 +353,7 @@ export function MobilePhoneAppsPanel({
           enabled:     Boolean(d.enabled ?? false),
           intervalMin: Number(d.intervalMin ?? 25),
           intervalMax: Number(d.intervalMax ?? 99),
-           chrome:      { activatePctMin: d.chrome?.activatePctMin ?? 0,      activatePctMax: d.chrome?.activatePctMax ?? 0,      scrollMin: d.chrome?.scrollMin ?? 1, scrollMax: d.chrome?.scrollMax ?? 5, storyTapMin: d.chrome?.storyTapMin ?? 0, storyTapMax: d.chrome?.storyTapMax ?? 0, tappedStoryScrollMin: d.chrome?.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: d.chrome?.tappedStoryScrollMax ?? 0, internalLinkPctMin: d.chrome?.internalLinkPctMin ?? 0, internalLinkPctMax: d.chrome?.internalLinkPctMax ?? 0, manualSearchPctMin: d.chrome?.manualSearchPctMin ?? 0, manualSearchPctMax: d.chrome?.manualSearchPctMax ?? 0 },
+           chrome:      { activatePctMin: d.chrome?.activatePctMin ?? 0,      activatePctMax: d.chrome?.activatePctMax ?? 0,      scrollMin: d.chrome?.scrollMin ?? 1, scrollMax: d.chrome?.scrollMax ?? 5, storyTapMin: d.chrome?.storyTapMin ?? 0, storyTapMax: d.chrome?.storyTapMax ?? 0, tappedStoryScrollMin: d.chrome?.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: d.chrome?.tappedStoryScrollMax ?? 0, internalLinkPctMin: d.chrome?.internalLinkPctMin ?? 0, internalLinkPctMax: d.chrome?.internalLinkPctMax ?? 0, manualSearchPctMin: d.chrome?.manualSearchPctMin ?? 0, manualSearchPctMax: d.chrome?.manualSearchPctMax ?? 0, manualSearchCountMin: d.chrome?.manualSearchCountMin ?? 1, manualSearchCountMax: d.chrome?.manualSearchCountMax ?? 1, manualSearchScrollMin: d.chrome?.manualSearchScrollMin ?? 0, manualSearchScrollMax: d.chrome?.manualSearchScrollMax ?? 0, manualSearchLinkPctMin: d.chrome?.manualSearchLinkPctMin ?? 0, manualSearchLinkPctMax: d.chrome?.manualSearchLinkPctMax ?? 0, manualSearchDwellMin: d.chrome?.manualSearchDwellMin ?? 3, manualSearchDwellMax: d.chrome?.manualSearchDwellMax ?? 8 },
           googlePlay:  { activatePctMin: d.googlePlay?.activatePctMin ?? 0,  activatePctMax: d.googlePlay?.activatePctMax ?? 0 },
           snapchat:    { activatePctMin: d.snapchat?.activatePctMin ?? 0,     activatePctMax: d.snapchat?.activatePctMax ?? 0 },
           youtube:     { activatePctMin: d.youtube?.activatePctMin ?? 0, activatePctMax: d.youtube?.activatePctMax ?? 0, scrollMin: d.youtube?.scrollMin ?? 1, scrollMax: d.youtube?.scrollMax ?? 5, clickPctMin: d.youtube?.clickPctMin ?? 0, clickPctMax: d.youtube?.clickPctMax ?? 0, watchTimeMin: d.youtube?.watchTimeMin ?? 3, watchTimeMax: d.youtube?.watchTimeMax ?? 8, clickShortsPctMin: d.youtube?.clickShortsPctMin ?? 0, clickShortsPctMax: d.youtube?.clickShortsPctMax ?? 0, shortsScrollMin: d.youtube?.shortsScrollMin ?? 0, shortsScrollMax: d.youtube?.shortsScrollMax ?? 0, shortsWatchTimeMin: d.youtube?.shortsWatchTimeMin ?? 3, shortsWatchTimeMax: d.youtube?.shortsWatchTimeMax ?? 8, shortsLikePctMin: d.youtube?.shortsLikePctMin ?? 0, shortsLikePctMax: d.youtube?.shortsLikePctMax ?? 0 },
@@ -452,7 +466,7 @@ export function MobilePhoneAppsPanel({
         // Keep the execution order aligned with the Step 2 UI. Chrome is
         // intentionally first so the first visible app is also the first run.
         if (shouldActivate(s.chrome.activatePctMin, s.chrome.activatePctMax)) {
-           await runApp("chrome", { scrollMin: s.chrome.scrollMin ?? 1, scrollMax: s.chrome.scrollMax ?? 5, storyTapMin: s.chrome.storyTapMin ?? 0, storyTapMax: s.chrome.storyTapMax ?? 0, tappedStoryScrollMin: s.chrome.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: s.chrome.tappedStoryScrollMax ?? 0, internalLinkPctMin: s.chrome.internalLinkPctMin ?? 0, internalLinkPctMax: s.chrome.internalLinkPctMax ?? 0, manualSearchPctMin: s.chrome.manualSearchPctMin ?? 0, manualSearchPctMax: s.chrome.manualSearchPctMax ?? 0 });
+           await runApp("chrome", { scrollMin: s.chrome.scrollMin ?? 1, scrollMax: s.chrome.scrollMax ?? 5, storyTapMin: s.chrome.storyTapMin ?? 0, storyTapMax: s.chrome.storyTapMax ?? 0, tappedStoryScrollMin: s.chrome.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: s.chrome.tappedStoryScrollMax ?? 0, internalLinkPctMin: s.chrome.internalLinkPctMin ?? 0, internalLinkPctMax: s.chrome.internalLinkPctMax ?? 0, manualSearchPctMin: s.chrome.manualSearchPctMin ?? 0, manualSearchPctMax: s.chrome.manualSearchPctMax ?? 0, manualSearchCountMin: s.chrome.manualSearchCountMin ?? 1, manualSearchCountMax: s.chrome.manualSearchCountMax ?? 1, manualSearchScrollMin: s.chrome.manualSearchScrollMin ?? 0, manualSearchScrollMax: s.chrome.manualSearchScrollMax ?? 0, manualSearchLinkPctMin: s.chrome.manualSearchLinkPctMin ?? 0, manualSearchLinkPctMax: s.chrome.manualSearchLinkPctMax ?? 0, manualSearchDwellMin: s.chrome.manualSearchDwellMin ?? 3, manualSearchDwellMax: s.chrome.manualSearchDwellMax ?? 8 });
         }
         if (shouldActivate(s.googlePlay.activatePctMin, s.googlePlay.activatePctMax)) await runApp("googlePlay");
         if (shouldActivate(s.snapchat.activatePctMin, s.snapchat.activatePctMax))   await runApp("snapchat");
@@ -751,6 +765,44 @@ export function MobilePhoneAppsPanel({
                            onChange={e => patchApp("chrome", { manualSearchPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
                          />
                          <span className="text-muted-foreground text-sm">%</span>
+                       </div>
+                     </div>
+                   </div>
+                 }
+                 row4={
+                   <div className="basis-full w-full flex flex-wrap items-start justify-start gap-x-8 gap-y-3 pt-2">
+                     <div className="flex shrink-0 flex-col items-start gap-1">
+                       <span className="text-xs text-muted-foreground whitespace-nowrap">Searches Per Run</span>
+                       <div className="flex items-center gap-1">
+                         <Input type="number" min={1} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchCountMin ?? 1} onChange={e => patchApp("chrome", { manualSearchCountMin: Math.min(50, Math.max(1, Number(e.target.value))) })} />
+                         <span className="text-muted-foreground text-sm">to</span>
+                         <Input type="number" min={1} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchCountMax ?? 1} onChange={e => patchApp("chrome", { manualSearchCountMax: Math.min(50, Math.max(1, Number(e.target.value))) })} />
+                       </div>
+                     </div>
+                     <div className="flex shrink-0 flex-col items-start gap-1">
+                       <span className="text-xs text-muted-foreground whitespace-nowrap">Search Result Scrolls</span>
+                       <div className="flex items-center gap-1">
+                         <Input type="number" min={0} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchScrollMin ?? 0} onChange={e => patchApp("chrome", { manualSearchScrollMin: Math.min(50, Math.max(0, Number(e.target.value))) })} />
+                         <span className="text-muted-foreground text-sm">to</span>
+                         <Input type="number" min={0} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchScrollMax ?? 0} onChange={e => patchApp("chrome", { manualSearchScrollMax: Math.min(50, Math.max(0, Number(e.target.value))) })} />
+                       </div>
+                     </div>
+                     <div className="flex shrink-0 flex-col items-start gap-1">
+                       <span className="text-xs text-muted-foreground whitespace-nowrap">Search Result Link %</span>
+                       <div className="flex items-center gap-1">
+                         <Input type="number" min={0} max={100} className={PCT_INPUT} value={settings.chrome.manualSearchLinkPctMin ?? 0} onChange={e => patchApp("chrome", { manualSearchLinkPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })} />
+                         <span className="text-muted-foreground text-sm">to</span>
+                         <Input type="number" min={0} max={100} className={PCT_INPUT} value={settings.chrome.manualSearchLinkPctMax ?? 0} onChange={e => patchApp("chrome", { manualSearchLinkPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })} />
+                         <span className="text-muted-foreground text-sm">%</span>
+                       </div>
+                     </div>
+                     <div className="flex shrink-0 flex-col items-start gap-1">
+                       <span className="text-xs text-muted-foreground whitespace-nowrap">Result Dwell Seconds</span>
+                       <div className="flex items-center gap-1">
+                          <Input type="number" min={1} max={10} className={PCT_INPUT} value={settings.chrome.manualSearchDwellMin ?? 3} onChange={e => patchApp("chrome", { manualSearchDwellMin: Math.min(10, Math.max(1, Number(e.target.value))) })} />
+                         <span className="text-muted-foreground text-sm">to</span>
+                          <Input type="number" min={1} max={10} className={PCT_INPUT} value={settings.chrome.manualSearchDwellMax ?? 8} onChange={e => patchApp("chrome", { manualSearchDwellMax: Math.min(10, Math.max(1, Number(e.target.value))) })} />
+                         <span className="text-muted-foreground text-sm">sec</span>
                        </div>
                      </div>
                    </div>
