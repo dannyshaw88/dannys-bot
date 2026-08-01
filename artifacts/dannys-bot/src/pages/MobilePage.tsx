@@ -6921,7 +6921,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
               {/* Slot header: title + Human Session Tool button + mirror toggle + Delete */}
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider min-w-[200px] shrink-0">Instagram Account Slot {i + 1}</p>
+                  <p className="text-xs font-bold text-black uppercase tracking-wider min-w-[200px] shrink-0">Instagram Account Slot {i + 1}</p>
                   <Button
                     type="button"
                     size="sm"
@@ -6981,7 +6981,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
               <div className="flex items-end gap-3 flex-wrap">
                 {/* Username */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground block text-center">Username</Label>
+                  <Label className="text-xs text-muted-foreground block text-left">Username</Label>
                   <Input
                     value={slot.username}
                     onChange={e => updateSlot(i, { username: e.target.value })}
@@ -6993,7 +6993,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
 
                 {/* Password */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground block text-center">Password</Label>
+                  <Label className="text-xs text-muted-foreground block text-left">Password</Label>
                   <div className="flex items-center gap-1.5">
                     <Input
                       type={showPassword[i] ? "text" : "password"}
@@ -7012,7 +7012,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
 
                 {/* 2FA OTP Secret */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground block text-center">2FA OTP Secret</Label>
+                  <Label className="text-xs text-muted-foreground block text-left">2FA OTP Secret</Label>
                   <div className="flex items-center gap-1.5">
                     <Input
                       value={slot.totpSecret}
@@ -7044,7 +7044,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
               <div className="flex items-end gap-3 flex-wrap">
                 {/* Email Address */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground block text-center">Email Address</Label>
+                  <Label className="text-xs text-muted-foreground block text-left">Email Address</Label>
                   <Input
                     value={slot.emailAddress}
                     onChange={e => updateSlot(i, { emailAddress: e.target.value })}
@@ -7056,7 +7056,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
 
                 {/* Email Password */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground block text-center">Email Password</Label>
+                  <Label className="text-xs text-muted-foreground block text-left">Email Password</Label>
                   <div className="flex items-center gap-1.5">
                     <Input
                       type={showEmailPassword[i] ? "text" : "password"}
@@ -7075,7 +7075,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
 
                 {/* Phone Number */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground block text-center">Phone Number</Label>
+                  <Label className="text-xs text-muted-foreground block text-left">Phone Number</Label>
                   <Input
                     value={slot.phoneNumber}
                     onChange={e => updateSlot(i, { phoneNumber: e.target.value })}

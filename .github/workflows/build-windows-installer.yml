@@ -199,11 +199,12 @@ jobs:
         shell: bash
         run: |
           grep -F "naturalSentenceQueries" artifacts/api-server/src/mobile/androidManager.ts
-          grep -F "CHROME_ONE_WORD_SEARCH_QUERIES" artifacts/api-server/src/mobile/androidManager.ts
-          grep -F "CHROME_MULTI_WORD_SEARCH_QUERIES" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "CHROME_SEARCH_QUERIES_BY_WORD_COUNT" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "CHROME_SEARCH_WORD_COUNTS" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "2 + Math.floor(Math.random() * 4)" artifacts/api-server/src/mobile/androidManager.ts
           grep -F "Math.random() < 0.05" artifacts/api-server/src/mobile/androidManager.ts
           grep -F "chooseChromeManualSearchQuery" artifacts/api-server/src/mobile/androidManager.ts
-          grep -F "multi-word/natural" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F 'selected ${selected.wordCount}-word query' artifacts/api-server/src/mobile/androidManager.ts
           grep -F "occasional one-word" artifacts/api-server/src/mobile/androidManager.ts
           grep -F "Starting Phone Apps cycle" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
           grep -F "Cycle complete — Phone Apps" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
