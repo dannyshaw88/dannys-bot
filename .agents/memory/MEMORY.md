@@ -62,3 +62,4 @@
 - [GitHub PAT push fallback](github-pat-push-fallback.md) — project GITHUB_TOKEN secrets work with GIT_ASKPASS HTTPS pushes, but not the gitPush source-control helper
 - [Large model CPU fallback](large-model-cpu-fallback.md) — models with full-pipeline VRAM requirements must fail before CPU float32 assembly when CUDA is unavailable
 - [AI library installer network resilience](ai-library-installer-network.md) — multi-GB CUDA Torch setup needs a persistent pip cache, 10-minute timeout, and retries; default 15s read timeout repeatedly restarts downloads
+- [Actions source validation](actions-source-validation.md) — CI checks must inspect active assignments, not raw text, because comments documenting disabled settings can trigger false failures
