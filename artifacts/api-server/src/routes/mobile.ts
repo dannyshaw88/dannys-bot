@@ -13,7 +13,12 @@ import * as android from "../mobile/androidManager";
 import * as proxyRelay from "../mobile/proxyRelay";
 import * as sessionRecorder from "../mobile/sessionRecorder";
 import { getDeviceLabel } from "./usb-phones";
-import { fixAiSlop, cleanupAiSlopTemp } from "../instagram/fixAiSlop";
+import { fixAiSlop } from "../instagram/fixAiSlop";
+import {
+  alterJpegBuffer,
+  type AlterationLevel,
+  type ImageFilterSettings,
+} from "../instagram/imageAlteration";
 // NOTE: src/mobile/scrcpyServer.ts implements a real scrcpy-server protocol
 // client that was meant to replace the screenrecord-based mirror below (to
 // fix screenrecord's MIUI keyguard-freeze issue), but it has never
@@ -312,9 +317,9 @@ type AutomationSettings = {
   randomJitterActivatePctMax?: number;
   // Make a Post — settings ported over from the old browser-automation
   // "Make a Post" tool (HumanSessionPanel's repost* fields) at the user's
-  // request (13 Jul 2026). Config/persistence only for now: there is no
-  // mobile automation-cycle logic yet that reads these to actually drive a
-  // gallery-picker → caption → share flow on the phone.
+  // request (13 Jul 2026). These fields are forwarded into the live mobile
+  // automation-cycle image-preparation path before the Android media-picker
+  // upload.
   makePostEnabled?: boolean;
   makePostActivatePctMin?: number;
   makePostActivatePctMax?: number;
@@ -1514,8 +1519,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     randomJitterActivatePctMin: z.number().min(0).max(100).default(100),
     randomJitterActivatePctMax: z.number().min(0).max(100).default(100),
     // ── Make a Post — ported from the old browser-automation tool's
-    // repost* settings (13 Jul 2026). Config/persistence only; no
-    // automation-cycle logic reads these yet.
+    // repost* settings. The automation cycle consumes the local-folder,
+    // alteration, and image-settings fields below.
     makePostEnabled: z.boolean().default(false),
     makePostActivatePctMin: z.number().min(0).max(100).default(100),
     makePostActivatePctMax: z.number().min(0).max(100).default(100),
@@ -5612,6 +5617,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostLocalFolderRandom: z.boolean().default(false),
     makePostLocalFolderDeleteAfterUpload: z.boolean().default(false),
     makePostCaptionText: z.string().default(""),
+    makePostAlterationEnabled: z.boolean().default(true),
+    makePostAlterationLevel: z.enum(["small", "medium", "high"]).default("small"),
+    makePostImageSettingsEnabled: z.boolean().default(true),
+    makePostImageSettings: z.object({
+      contrast: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
+      brightness: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
+      noise: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
+      sharpen: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
+      pixelate: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
+    }).default({
+      contrast: { enabled: true, min: 5, max: 250 },
+      brightness: { enabled: true, min: 5, max: 250 },
+      noise: { enabled: true, min: 5, max: 15 },
+      sharpen: { enabled: true, min: 1.0, max: 2.0 },
+      pixelate: { enabled: true, min: 0.9, max: 2.1 },
+    }),
     // Fix AI Slop — strip C2PA / EXIF / XMP / IPTC metadata and apply pixel
     // perturbation before pushing the image to the device.  MUST be in this
     // schema or Zod strips it from the request body and doFixAiSlop is always
@@ -5767,6 +5788,99 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 
+  type MakePostImageOptions = {
+    doFixAiSlop?: boolean;
+    alterationEnabled?: boolean;
+    alterationLevel?: AlterationLevel;
+    imageSettingsEnabled?: boolean;
+    imageSettings?: ImageFilterSettings;
+    onLog?: (msg: string) => void;
+  };
+
+  /**
+   * Prepares the copy that will be sent to the phone. The source image is
+   * never modified. Both Fix AI Slop and the image-alteration engine operate
+   * on temporary files, and cleanup removes every temporary stage after ADB
+   * push succeeds or fails.
+   */
+  async function prepareMakePostImage(
+    localFilePath: string,
+    fileName: string,
+    opts: MakePostImageOptions,
+  ): Promise<{
+    pushFilePath: string;
+    pushFileName: string;
+    cleanup: () => Promise<void>;
+  }> {
+    const { doFixAiSlop, alterationEnabled, alterationLevel, imageSettingsEnabled, imageSettings, onLog } = opts;
+    const tempFiles: string[] = [];
+    const tempDirs: string[] = [];
+    const prefix = fileName.includes("/") ? "Make a Post" : "Make a Post";
+
+    let pushFilePath = localFilePath;
+    if (doFixAiSlop) {
+      onLog?.(`${prefix}: Fix AI Slop — stripping metadata & AI fingerprints…`);
+      try {
+        pushFilePath = await fixAiSlop(localFilePath);
+        if (pushFilePath !== localFilePath) {
+          tempFiles.push(pushFilePath);
+          onLog?.(`${prefix}: Fix AI Slop ✓ — metadata stripped, DCT watermarks scrambled`);
+        } else {
+          onLog?.(`${prefix}: Fix AI Slop — sharp unavailable, skipped`);
+        }
+      } catch (e: any) {
+        onLog?.(`${prefix}: Fix AI Slop error — ${e?.message ?? "unknown error"}, continuing with original`);
+        pushFilePath = localFilePath;
+      }
+    }
+
+    let pushFileName = fileName;
+    if (alterationEnabled) {
+      const level = alterationLevel ?? "small";
+      onLog?.(`${prefix}: applying ${level} image alteration…`);
+      try {
+        const input = await fsPromises.readFile(pushFilePath);
+        const altered = await alterJpegBuffer(
+          input,
+          level,
+          imageSettingsEnabled ? imageSettings : undefined,
+        );
+        const tempDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "equinox-mobile-alter-"));
+        const sourceExt = path.extname(fileName).toLowerCase();
+        const isJpeg = altered.length >= 2 && altered[0] === 0xff && altered[1] === 0xd8;
+        const outputExt = isJpeg ? ".jpg" : (IMAGE_EXTS.has(sourceExt) ? sourceExt : ".jpg");
+        const alteredPath = path.join(tempDir, `altered${outputExt}`);
+        await fsPromises.writeFile(alteredPath, altered);
+        tempDirs.push(tempDir);
+        tempFiles.push(alteredPath);
+        pushFilePath = alteredPath;
+
+        // alterJpegBuffer emits JPEG when Sharp is available. Keep the
+        // extension aligned with the bytes so Android MediaStore/Instagram
+        // does not infer PNG/WebP from the original source name.
+        if (isJpeg && sourceExt !== ".jpg" && sourceExt !== ".jpeg") {
+          pushFileName = `${path.basename(fileName, path.extname(fileName))}.jpg`;
+        }
+        onLog?.(`${prefix}: ${level} image alteration ✓ — pushing processed copy`);
+      } catch (e: any) {
+        onLog?.(`${prefix}: image alteration error — ${e?.message ?? "unknown error"}, continuing with previous image`);
+      }
+    }
+
+    return {
+      pushFilePath,
+      pushFileName,
+      cleanup: async () => {
+        for (const tempFile of tempFiles) {
+          await fsPromises.unlink(tempFile).catch(() => {});
+        }
+        for (const tempDir of tempDirs) {
+          await fsPromises.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+        }
+      },
+    };
+  }
+
   /**
    * Picks the next image to post from `folderPath` per the user's Local
    * Folder settings (random vs. alphabetical order, no-repeat). Returns
@@ -5827,9 +5941,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     localFolderPath: string; localFolderRandom: boolean; localFolderNoRepeat: boolean;
     deleteAfterUpload: boolean; captionText: string;
     doFixAiSlop?: boolean;
+    alterationEnabled?: boolean;
+    alterationLevel?: AlterationLevel;
+    imageSettingsEnabled?: boolean;
+    imageSettings?: ImageFilterSettings;
     onLog?: (msg: string) => void;
   }): Promise<{ posted: boolean; fileName?: string }> {
-    const { localFolderPath, localFolderRandom, localFolderNoRepeat, deleteAfterUpload, captionText, doFixAiSlop, onLog } = opts;
+    const {
+      localFolderPath, localFolderRandom, localFolderNoRepeat, deleteAfterUpload,
+      captionText, doFixAiSlop, alterationEnabled, alterationLevel,
+      imageSettingsEnabled, imageSettings, onLog,
+    } = opts;
 
     const fileName = await pickLocalFolderImage(serial, {
       folderPath: localFolderPath, random: localFolderRandom, noRepeat: localFolderNoRepeat, onLog,
@@ -5837,35 +5959,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (!fileName) return { posted: false };
     const localFilePath = path.join(localFolderPath, fileName);
 
-    // Fix AI Slop — strip metadata, DCT watermarks and AI frequency fingerprints
-    // from the image before pushing it to the device. Produces a temp file that
-    // must be cleaned up after the push regardless of success or failure.
-    let pushFilePath = localFilePath;
-    if (doFixAiSlop) {
-      onLog?.("Make a Post: Fix AI Slop — stripping metadata & AI fingerprints…");
-      try {
-        pushFilePath = await fixAiSlop(localFilePath);
-        if (pushFilePath !== localFilePath) {
-          onLog?.("Make a Post: Fix AI Slop ✓ — metadata stripped, DCT watermarks scrambled");
-        } else {
-          onLog?.("Make a Post: Fix AI Slop — sharp unavailable, skipped");
-        }
-      } catch (e: any) {
-        onLog?.(`Make a Post: Fix AI Slop error — ${e?.message ?? "unknown"}, continuing with original`);
-        pushFilePath = localFilePath;
-      }
-    }
+    const prepared = await prepareMakePostImage(localFilePath, fileName, {
+      doFixAiSlop,
+      alterationEnabled,
+      alterationLevel,
+      imageSettingsEnabled,
+      imageSettings,
+      onLog,
+    });
 
     onLog?.(`Make a Post: pushing "${fileName}" to device…`);
     let devicePath: string;
     try {
-      devicePath = await android.pushFileToDevice(serial, pushFilePath, fileName);
+      devicePath = await android.pushFileToDevice(serial, prepared.pushFilePath, prepared.pushFileName);
     } catch (e: any) {
-      await cleanupAiSlopTemp(pushFilePath, localFilePath).catch(() => {});
+      await prepared.cleanup();
       onLog?.(`Make a Post: adb push failed — ${e?.message ?? "unknown error"}`);
       return { posted: false };
     }
-    await cleanupAiSlopTemp(pushFilePath, localFilePath).catch(() => {});
+    await prepared.cleanup();
     onLog?.(`Make a Post: ✓ pushed to ${devicePath}, media-scanner notified`);
     await sleepOrAbort(serial, 1200); // let the scanner index the file before we open the picker
 
@@ -6176,9 +6288,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     localFolderPath: string; localFolderRandom: boolean; localFolderNoRepeat: boolean;
     deleteAfterUpload: boolean;
     doFixAiSlop?: boolean;
+    alterationEnabled?: boolean;
+    alterationLevel?: AlterationLevel;
+    imageSettingsEnabled?: boolean;
+    imageSettings?: ImageFilterSettings;
     onLog?: (msg: string) => void;
   }): Promise<{ posted: boolean; fileName?: string }> {
-    const { localFolderPath, localFolderRandom, localFolderNoRepeat, deleteAfterUpload, doFixAiSlop, onLog } = opts;
+    const {
+      localFolderPath, localFolderRandom, localFolderNoRepeat, deleteAfterUpload,
+      doFixAiSlop, alterationEnabled, alterationLevel,
+      imageSettingsEnabled, imageSettings, onLog,
+    } = opts;
 
     const fileName = await pickLocalFolderImage(serial, {
       folderPath: localFolderPath, random: localFolderRandom, noRepeat: localFolderNoRepeat, onLog,
@@ -6186,33 +6306,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (!fileName) return { posted: false };
     const localFilePath = path.join(localFolderPath, fileName);
 
-    // Fix AI Slop — same pre-push step as the profile post flow
-    let pushFilePath = localFilePath;
-    if (doFixAiSlop) {
-      onLog?.("Make a Post (Story): Fix AI Slop — stripping metadata & AI fingerprints…");
-      try {
-        pushFilePath = await fixAiSlop(localFilePath);
-        if (pushFilePath !== localFilePath) {
-          onLog?.("Make a Post (Story): Fix AI Slop ✓ — metadata stripped, DCT watermarks scrambled");
-        } else {
-          onLog?.("Make a Post (Story): Fix AI Slop — sharp unavailable, skipped");
-        }
-      } catch (e: any) {
-        onLog?.(`Make a Post (Story): Fix AI Slop error — ${e?.message ?? "unknown"}, continuing with original`);
-        pushFilePath = localFilePath;
-      }
-    }
+    const prepared = await prepareMakePostImage(localFilePath, fileName, {
+      doFixAiSlop,
+      alterationEnabled,
+      alterationLevel,
+      imageSettingsEnabled,
+      imageSettings,
+      onLog: (msg) => onLog?.(msg.replace("Make a Post:", "Make a Post (Story):")),
+    });
 
     onLog?.(`Make a Post (Story): pushing "${fileName}" to device…`);
     let devicePath: string;
     try {
-      devicePath = await android.pushFileToDevice(serial, pushFilePath, fileName);
+      devicePath = await android.pushFileToDevice(serial, prepared.pushFilePath, prepared.pushFileName);
     } catch (e: any) {
-      await cleanupAiSlopTemp(pushFilePath, localFilePath).catch(() => {});
+      await prepared.cleanup();
       onLog?.(`Make a Post (Story): adb push failed — ${e?.message ?? "unknown error"}`);
       return { posted: false };
     }
-    await cleanupAiSlopTemp(pushFilePath, localFilePath).catch(() => {});
+    await prepared.cleanup();
     onLog?.(`Make a Post (Story): ✓ pushed to ${devicePath}`);
     await sleepOrAbort(serial, 1200);
 
@@ -8767,7 +8879,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostPerSessionMin, makePostPerSessionMax,
         makePostLocalFolderEnabled, makePostLocalFolderPath,
         makePostLocalFolderNoRepeat, makePostLocalFolderRandom, makePostLocalFolderDeleteAfterUpload,
-        makePostFixAiSlop, makePostCaptionText,
+        makePostAlterationEnabled, makePostAlterationLevel, makePostImageSettingsEnabled,
+        makePostImageSettings, makePostFixAiSlop, makePostCaptionText,
         makePostPostToProfilePctMin, makePostPostToProfilePctMax,
         makePostPostToStoryPctMin, makePostPostToStoryPctMax,
         slotUsername, slotIdx,
@@ -9642,6 +9755,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                       localFolderRandom: makePostLocalFolderRandom,
                       localFolderNoRepeat: makePostLocalFolderNoRepeat,
                       deleteAfterUpload: makePostLocalFolderDeleteAfterUpload,
+                      alterationEnabled: makePostAlterationEnabled,
+                      alterationLevel: makePostAlterationLevel,
+                      imageSettingsEnabled: makePostImageSettingsEnabled,
+                      imageSettings: makePostImageSettings,
                       doFixAiSlop: makePostFixAiSlop,
                       onLog: (msg) => tLog(`  ${msg}`),
                     });
@@ -9654,6 +9771,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                       localFolderRandom: makePostLocalFolderRandom,
                       localFolderNoRepeat: makePostLocalFolderNoRepeat,
                       deleteAfterUpload: makePostLocalFolderDeleteAfterUpload,
+                      alterationEnabled: makePostAlterationEnabled,
+                      alterationLevel: makePostAlterationLevel,
+                      imageSettingsEnabled: makePostImageSettingsEnabled,
+                      imageSettings: makePostImageSettings,
                       doFixAiSlop: makePostFixAiSlop,
                       captionText: makePostCaptionText,
                       onLog: (msg) => tLog(`  ${msg}`),

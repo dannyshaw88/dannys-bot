@@ -47,6 +47,12 @@ Additionally: the mobile API client session may be expired by the time the post 
 
 ## Chronological entries (newest first)
 
+### 2026-08-01 — Mobile Make a Post image alteration is now connected to the Android upload path
+- The Mobile Human Session Tool had saved `makePostAlterationEnabled`, the selected level, and custom image settings, but the live profile/Story upload branches only pushed the source image (and optionally Fix AI Slop).
+- The mobile cycle now prepares a temporary copy before ADB push: Fix AI Slop runs first when enabled, then the selected Small/Medium/High alteration and optional custom filter ranges run through the shared `alterJpegBuffer` engine. The source file is never modified.
+- Temporary processing files are cleaned after push success or failure. When processing produces JPEG bytes from a PNG/WebP source, the pushed filename is changed to `.jpg` so Android MediaStore sees the correct format.
+- Status: API production build passes. Physical-device confirmation is still required for the complete Instagram picker/post flow.
+
 ### 2026-07-27 — Story editor arrow lookup used the wrong generic node id
 - The mobile Story Make a Post flow stopped after selecting the image because `findStoryNextArrowButton` only searched for `igds_media_button`, which did not identify the blue chevron shown in the supplied editor screenshot.
 - The lookup now uses the live accessibility node attributes (`next_button`, `button_next`, `action_next`, `share_story_button`, or an exact Next/Continue label). A `share_story_button` match is marked as direct submission so the flow does not tap Share twice.
