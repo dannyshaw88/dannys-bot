@@ -130,6 +130,19 @@ jobs:
           grep -F "Install / Repair AI Libraries" ../dannys-bot/src/pages/ImageGenPage.tsx
           echo "AI dependency repair configuration verified"
 
+      - name: Verify Reel DM recipient safety sources
+        shell: bash
+        run: |
+          grep -F "strictContactParents: true" artifacts/api-server/src/routes/mobile.ts
+          grep -F "no validated Chat avatar nodes" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "recipient selection was not positively confirmed" artifacts/api-server/src/routes/mobile.ts
+          grep -F "shared post via DM — Send tapped" artifacts/api-server/src/routes/mobile.ts
+          if sed -n '5190,5320p' artifacts/api-server/src/routes/mobile.ts | grep -F "DM likely sent by recipient tap"; then
+            echo "Unsafe Reel dismissed-sheet success fallback is still present"
+            exit 1
+          fi
+          echo "Reel DM recipient safety configuration verified"
+
       - name: Install Electron deps
         working-directory: artifacts/electron
         run: npm install --ignore-scripts

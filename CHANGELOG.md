@@ -4,6 +4,21 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.324] — 2026-08-01
+
+### Fixed — Prevent Reel DM shares from selecting WhatsApp or other shortcuts
+
+- Fixed the Reel Viewer’s **Share via DM** automation incorrectly treating Instagram’s WhatsApp/Share shortcut as a DM recipient.
+- Instagram reuses `grid_view_pog_avatar_view` for both real Chat contacts and external-share destinations. The previous nearby-XML lookback could attach a real username to the wrong shortcut coordinate.
+- Reel recipient detection now reads the actual accessibility-tree ancestor and requires a positive `Chat` recipient marker before any coordinate tap is allowed.
+- Added strict exclusions for WhatsApp, Share, Copy link, Add to story, Notes, Close Friends, and other non-contact destinations.
+- Disabled the generic label-scan fallback for Reel DM recipients when no validated Chat avatar exists, preventing underlying feed/action-row nodes from being tapped as fake contacts.
+- Added pre-tap diagnostics for the candidate resource ID, class, bounds, text, content description, and parent description.
+- A recipient tap now counts only when Instagram confirms the selected contact remains in the share sheet and the dedicated DM Send control is found and tapped.
+- Removed the unsafe success condition that treated a dismissed share sheet as proof that a DM was sent. Ambiguous or dismissed sheets are now logged and skipped without incrementing the DM count.
+- Kept the change isolated to the Reel Viewer path; Feed, Stories, Explore, Inject Browsing, and the legacy browser/profile tools are unchanged.
+- Bumped the root application and Electron package versions to `1.2.324`.
+
 ## [1.2.323] — 2026-08-01
 
 ### Fixed — Repair the local AI Python environment

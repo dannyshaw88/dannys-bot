@@ -4546,13 +4546,45 @@ export async function findShareSheetRecipients(serial: string, onLog?: (line: st
  * docs for the filter rules. Split out so confirmAndScanShareSheet can reuse
  * a single dump for both the Send-button confirmation and the recipient
  * scan instead of paying for two separate ~9s uiautomator dumps. */
-function _extractShareSheetRecipients(xml: string, serial: string, onLog?: (line: string) => void): { x: number; y: number; name?: string }[] {
+function _extractShareSheetRecipients(
+  xml: string,
+  serial: string,
+  onLog?: (line: string) => void,
+  options?: { strictContactParents?: boolean },
+): { x: number; y: number; name?: string }[] {
   const { w, h } = getScreenSize(serial);
+  const strictContactParents = options?.strictContactParents === true;
   const minY = Math.round(h * 0.20);
   const maxY = Math.round(h * 0.95);
   const dump: string[] = [];
   const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
   let m: RegExpExecArray | null;
+
+  // In the Reel share sheet, Instagram reuses the contact-avatar resource-id
+  // for the WhatsApp/Share shortcut row. A character-count lookback can then
+  // borrow the previous contact's content-desc and label the shortcut as a
+  // real person. Build the actual nearest ancestor map for the strict Reel
+  // path instead of guessing from nearby XML text.
+  const ancestorDescByNodeIndex = new Map<number, string>();
+  if (strictContactParents) {
+    const tagRe = /<\/?node\b[^>]*>/g;
+    const ancestors: string[] = [];
+    let tag: RegExpExecArray | null;
+    while ((tag = tagRe.exec(xml)) !== null) {
+      const rawTag = tag[0];
+      if (rawTag.startsWith("</")) {
+        ancestors.pop();
+        continue;
+      }
+      const attrs = rawTag.slice(5, rawTag.endsWith("/>") ? -2 : -1);
+      const ancestorDesc = [...ancestors]
+        .reverse()
+        .map(attrsText => attrsText.match(/content-desc="([^"]*)"/)?.[1] ?? "")
+        .find(Boolean) ?? "";
+      ancestorDescByNodeIndex.set(tag.index, ancestorDesc);
+      if (!rawTag.endsWith("/>")) ancestors.push(attrs);
+    }
+  }
 
   // ── Strategy 1 (primary): resource-id lookup.
   //
@@ -4580,7 +4612,17 @@ function _extractShareSheetRecipients(xml: string, serial: string, onLog?: (line
   // for the last content-desc seen there; if it contains a story-destination
   // phrase it belongs to "Your Story" / "Close Friends" / etc., not a contact.
   const STORY_DEST_RE = /your story|close friends|add to story|add to your story/i;
-  const avatarResults: { x: number; y: number }[] = [];
+  const avatarResults: {
+    x: number;
+    y: number;
+    name?: string;
+    preSelected?: boolean;
+    resourceId?: string;
+    className?: string;
+    bounds?: string;
+    text?: string;
+    contentDesc?: string;
+  }[] = [];
 
   {
     const re2 = /<node\s([^>]+?)\s*\/?>/g;
@@ -4608,9 +4650,19 @@ function _extractShareSheetRecipients(xml: string, serial: string, onLog?: (line
       // content-desc attr in the lookback window, which is the closest parent.
       const lookback = xml.slice(Math.max(0, m2.index - 600), m2.index);
       const parentCdMatches = [...lookback.matchAll(/content-desc="([^"]*)"/g)];
-      const parentCd = parentCdMatches.length > 0 ? parentCdMatches[parentCdMatches.length - 1][1] : "";
-      if (STORY_DEST_RE.test(parentCd)) {
+      const parentCd = strictContactParents
+        ? ancestorDescByNodeIndex.get(m2.index) ?? ""
+        : parentCdMatches.length > 0 ? parentCdMatches[parentCdMatches.length - 1][1] : "";
+      const NON_CONTACT_DEST_RE = /your story|close friends|add to story|add to your story|whatsapp|copy link|(?:^|\b)share(?:\b|$)|notes/i;
+      if (STORY_DEST_RE.test(parentCd) || NON_CONTACT_DEST_RE.test(parentCd)) {
         onLog?.(`[share-sheet] Strategy 1: excluded avatar at (${cx},${cy}) — parent content-desc "${parentCd}" is a story destination, not a DM contact`);
+        continue;
+      }
+      // Real DM avatar parents on the Reel sheet expose a Chat marker, e.g.
+      // "athayogahtx Chat not selected". Requiring that positive marker keeps
+      // external-share shortcuts out even when their resource-id is identical.
+      if (strictContactParents && !/\bchat\b/i.test(parentCd)) {
+        onLog?.(`[share-sheet] Reel strict filter: excluded avatar at (${cx},${cy}) — parent content-desc "${parentCd}" is not a Chat recipient`);
         continue;
       }
       // Detect pre-selected state: Instagram marks already-selected recipients
@@ -4625,7 +4677,17 @@ function _extractShareSheetRecipients(xml: string, serial: string, onLog?: (line
       if (alreadySelected) {
         onLog?.(`[share-sheet] Strategy 1: pre-selected recipient at (${cx},${cy}) — "${parentCd}" — will deselect first`);
       }
-      avatarResults.push({ x: cx, y: cy, name: parentCd || undefined, preSelected: alreadySelected } as { x: number; y: number; name?: string; preSelected?: boolean });
+      avatarResults.push({
+        x: cx,
+        y: cy,
+        name: parentCd || undefined,
+        preSelected: alreadySelected,
+        resourceId: (a.match(/resource-id="([^"]*)"/) ?? [])[1] || undefined,
+        className: (a.match(/class="([^"]*)"/) ?? [])[1] || undefined,
+        bounds: bm[0],
+        text: (a.match(/\btext="([^"]*)"/) ?? [])[1] || undefined,
+        contentDesc: (a.match(/content-desc="([^"]*)"/) ?? [])[1] || undefined,
+      });
     }
   }
 
@@ -4633,6 +4695,14 @@ function _extractShareSheetRecipients(xml: string, serial: string, onLog?: (line
     const preSelCount = avatarResults.filter(r => (r as any).preSelected).length;
     onLog?.(`[share-sheet] Strategy 1 (resource-id): ${avatarResults.length} DM contact avatar(s) found (${preSelCount} pre-selected) — ${avatarResults.map(r => `(${r.x},${r.y})`).join(", ")}`);
     return avatarResults;
+  }
+  if (strictContactParents) {
+    // The generic label scan remains available to legacy callers, but it is
+    // unsafe for Reel Viewer: when the avatar nodes are absent, underlying
+    // feed/action-row labels can be mistaken for recipients. Return no
+    // candidates rather than guessing.
+    onLog?.("[share-sheet] Reel strict filter: no validated Chat avatar nodes — refusing generic label fallback");
+    return [];
   }
   onLog?.("[share-sheet] Strategy 1: no non-story grid_view_pog_avatar_view nodes found — falling back to label scan");
 
@@ -4723,6 +4793,7 @@ function _extractShareSheetRecipients(xml: string, serial: string, onLog?: (line
 export async function confirmAndScanShareSheet(
   serial: string,
   onLog?: (line: string) => void,
+  options?: { strictContactParents?: boolean },
 ): Promise<{ sheetOpen: boolean; sendBtn: { x: number; y: number } | null; recipients: { x: number; y: number; name?: string }[]; preSelectedRecipients: { x: number; y: number; name?: string }[] }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
@@ -4781,7 +4852,7 @@ export async function confirmAndScanShareSheet(
     return { sheetOpen: false, sendBtn: null, recipients: [], preSelectedRecipients: [] };
   }
   const sendBtn = _findElem(xml, "Send");
-  const allRecipients = _extractShareSheetRecipients(xml, serial, onLog);
+  const allRecipients = _extractShareSheetRecipients(xml, serial, onLog, options);
   // Split into already-selected (from a prior failed run) vs fresh candidates.
   // Pre-selected ones must be tapped to deselect before picking a new target,
   // otherwise Instagram accumulates multiple recipients and creates a group DM.

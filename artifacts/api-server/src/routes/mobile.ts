@@ -5202,11 +5202,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 await android.tap(serial, icons.shareDm.x, icons.shareDm.y);
                 await sleepOrAbort(serial, 1500);
                 onLog?.(`${_vrPfx}: confirming share sheet opened and picking DM recipient…`);
-                let _vrScan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
+                const _vrShareScanOptions = { strictContactParents: true };
+                let _vrScan = await android.confirmAndScanShareSheet(serial, onLog, _vrShareScanOptions).catch(() => null);
                 if (!_vrScan?.sheetOpen) {
                   onLog?.(`${_vrPfx}: share sheet not yet visible — waiting 1500ms and retrying…`);
                   await sleepOrAbort(serial, 1500);
-                  _vrScan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
+                  _vrScan = await android.confirmAndScanShareSheet(serial, onLog, _vrShareScanOptions).catch(() => null);
                 }
                 if (!_vrScan?.sheetOpen) {
                   logger.warn({ serial }, "[view-reels] share sheet not confirmed open after retry — closing and skipping DM");
@@ -5214,7 +5215,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   await android.pressBack(serial);
                   await sleepOrAbort(serial, 200);
                 } else {
-                  const _vrSendBtn0 = _vrScan.sendBtn ?? null;
+                  let _vrShareAborted = false;
                   if (_vrScan.preSelectedRecipients && _vrScan.preSelectedRecipients.length > 0) {
                     onLog?.(`${_vrPfx}: deselecting ${_vrScan.preSelectedRecipients.length} pre-selected recipient(s) from prior run…`);
                     for (const _r of _vrScan.preSelectedRecipients) {
@@ -5222,8 +5223,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                       await android.tap(serial, _r.x, _r.y);
                       await sleepOrAbort(serial, 400);
                     }
+                    // Deselecting a prior contact can reflow the grid. Never
+                    // reuse coordinates from the pre-deselection dump.
+                    const _vrRefresh = await android.confirmAndScanShareSheet(serial, onLog, _vrShareScanOptions).catch(() => null);
+                    if (!_vrRefresh?.sheetOpen) {
+                      await android.pressBack(serial);
+                      onLog?.(`${_vrPfx}: share skipped — sheet disappeared while clearing prior recipient`);
+                      _vrShareAborted = true;
+                    }
+                    if (_vrRefresh?.sheetOpen) _vrScan = _vrRefresh;
                   }
-                  const _vrRecipients = _vrScan.recipients ?? [];
+                  const _vrRecipients = _vrShareAborted ? [] : (_vrScan.recipients ?? []);
                   if (_vrRecipients.length === 0) {
                     await android.pressBack(serial);
                     logger.warn({ serial }, "[view-reels] no recipient found — closed share sheet without sending");
@@ -5234,49 +5244,65 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     const _vrCands = _vrPool.length > 0 ? _vrPool : _vrRecipients;
                     const _vrPick = _vrCands[Math.floor(Math.random() * _vrCands.length)];
                     _viewReelsLastDmRecipient.set(serial, { x: _vrPick.x, y: _vrPick.y });
+                    onLog?.(
+                      `${_vrPfx}: validated recipient candidate — ` +
+                      `bounds="${String((_vrPick as any).bounds ?? `[${_vrPick.x},${_vrPick.y}]`) }" ` +
+                      `rid="${String((_vrPick as any).resourceId ?? "")}" ` +
+                      `class="${String((_vrPick as any).className ?? "")}" ` +
+                      `text="${String((_vrPick as any).text ?? "")}" ` +
+                      `content-desc="${String((_vrPick as any).contentDesc ?? "")}" ` +
+                      `parent-desc="${String((_vrPick as any).name ?? "")}"`,
+                    );
                     onLog?.(`${_vrPfx}: tapping recipient at (${_vrPick.x},${_vrPick.y})${(_vrPick as any).name ? ` (${(_vrPick as any).name})` : ""}`);
                     await android.tap(serial, _vrPick.x, _vrPick.y);
                     await sleepOrAbort(serial, 800);
-                    const _vrIsOpen = async () => {
-                      const _x = await android.dumpUi(serial).catch(() => "");
-                      // "Add to story" removed — home-feed story tray has this label
-                      // and causes a false-positive after the sheet closes.
-                      return _x.includes("direct_private_share") || _x.includes("grid_view_pog_avatar_view") ||
-                             _x.includes("android.widget.EditText") || _x.includes("Copy link");
-                    };
-                    // Always do a fresh lookup after recipient tap — the Send button
-                    // (direct_send_button_multi_select) only appears once a recipient is
-                    // selected, so _vrSendBtn0 (from the pre-selection scan) is stale and
-                    // will have matched the wrong element (e.g. "Send message" text box).
-                    // findDmSendButton tries resource-ids first before the label fallback.
-                    const _vrSb = await android.findDmSendButton(serial).catch(() => null);
-                    if (_vrSb) {
-                      await android.tap(serial, _vrSb.x, _vrSb.y);
-                      await sleepOrAbort(serial, 1000);
-                      if (!(await _vrIsOpen())) {
-                        _vrDmSent = true;
-                        logger.info({ serial }, "[view-reels] shared post via DM — Send tapped");
-                        onLog?.(`${_vrPfx}: ✓ shared via DM — Send tapped`);
-                        await sleepOrAbort(serial, 300);
+                    // A disappeared sheet is NOT proof that a DM was sent:
+                    // tapping the reused avatar resource can launch WhatsApp
+                    // or another external shortcut. Confirm the selected
+                    // contact itself before looking for Send.
+                    const _vrPostTapScan = await android.confirmAndScanShareSheet(serial, onLog, _vrShareScanOptions).catch(() => null);
+                    const _vrPickName = String((_vrPick as any).name ?? "").replace(/\bnot selected\b|\bselected\b/gi, "").trim();
+                    const _vrSelected = _vrPostTapScan?.sheetOpen === true &&
+                      (_vrPostTapScan.preSelectedRecipients ?? []).some(r => {
+                        const samePoint = Math.abs(r.x - _vrPick.x) <= 35 && Math.abs(r.y - _vrPick.y) <= 35;
+                        const rName = String((r as any).name ?? "").replace(/\bnot selected\b|\bselected\b/gi, "").trim();
+                        return samePoint || Boolean(_vrPickName && rName && rName === _vrPickName);
+                      });
+                    if (!_vrSelected) {
+                      onLog?.(`${_vrPfx}: share skipped — recipient selection was not positively confirmed; refusing to treat a dismissed sheet as a sent DM`);
+                      await android.pressBack(serial).catch(() => {});
+                      await sleepOrAbort(serial, 200);
+                    } else {
+                      // Always do a fresh lookup after recipient tap — the Send
+                      // button only appears once a recipient is selected.
+                      // findDmSendButton tries resource-ids first before the
+                      // label fallback.
+                      const _vrSb = await android.findDmSendButton(serial).catch(() => null);
+                      if (_vrSb) {
+                        await android.tap(serial, _vrSb.x, _vrSb.y);
+                        await sleepOrAbort(serial, 1000);
+                        const _vrAfterSend = await android.confirmAndScanShareSheet(serial, onLog, _vrShareScanOptions).catch(() => null);
+                        if (!_vrAfterSend?.sheetOpen) {
+                          _vrDmSent = true;
+                          logger.info({ serial }, "[view-reels] shared post via DM — Send tapped");
+                          onLog?.(`${_vrPfx}: ✓ shared via DM — Send tapped`);
+                          await sleepOrAbort(serial, 300);
+                        } else {
+                          logger.info({ serial }, "[view-reels] Send tapped but sheet still open — pressing Back");
+                          onLog?.(`${_vrPfx}: Send tapped but sheet did not close — pressing Back`);
+                          await android.pressBack(serial);
+                          await sleepOrAbort(serial, 200);
+                        }
                       } else {
-                        logger.info({ serial }, "[view-reels] Send tapped but sheet still open — pressing Back");
-                        onLog?.(`${_vrPfx}: Send tapped but sheet did not close — pressing Back`);
+                        // Send button not found after a confirmed contact
+                        // selection — press Back and skip rather than guessing.
+                        // No coordinate fallback: tapping a blind Y-fraction risks hitting
+                        // the Android nav bar (Home button) and dismissing Instagram.
+                        logger.info({ serial }, "[view-reels] Send button not found — pressing Back and skipping DM share");
+                        onLog?.(`${_vrPfx}: Send button not found via a11y — pressing Back and skipping`);
                         await android.pressBack(serial);
                         await sleepOrAbort(serial, 200);
                       }
-                    } else if (!(await _vrIsOpen())) {
-                      _vrDmSent = true;
-                      logger.info({ serial }, "[view-reels] share sheet already closed — DM likely sent by recipient tap");
-                      onLog?.(`${_vrPfx}: ✓ shared via DM — sheet auto-dismissed (sent by recipient tap)`);
-                      await sleepOrAbort(serial, 200);
-                    } else {
-                      // Send button not found and sheet still open — press Back and skip.
-                      // No coordinate fallback: tapping a blind Y-fraction risks hitting
-                      // the Android nav bar (Home button) and dismissing Instagram.
-                      logger.info({ serial }, "[view-reels] Send button not found — pressing Back and skipping DM share");
-                      onLog?.(`${_vrPfx}: Send button not found via a11y — pressing Back and skipping`);
-                      await android.pressBack(serial);
-                      await sleepOrAbort(serial, 200);
                     }
                   }
                 }
