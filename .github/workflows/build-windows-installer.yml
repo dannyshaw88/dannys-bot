@@ -40,10 +40,26 @@ jobs:
           root_version="$(node -p "require('./package.json').version")"
           electron_version="$(node -p "require('./artifacts/electron/package.json').version")"
           test "$root_version" = "$electron_version"
+          grep -F "## [$root_version]" CHANGELOG.md
           test -f artifacts/electron/build.mjs
           test -f artifacts/electron/electron-builder.json
-          test -f artifacts/electron/sidecar/server.py
           echo "Building Aura Farming version $root_version"
+      - name: Verify Browser persistence and removed AI Images sources
+        shell: bash
+        run: |
+          grep -F "synthetic browser stream detached — keeping Chrome and active page alive" artifacts/api-server/src/instagram/browserSession.ts
+          grep -F "synthetic browser is at" artifacts/api-server/src/instagram/browserSession.ts
+          grep -F "preserving current page" artifacts/api-server/src/instagram/browserSession.ts
+          grep -F 'className={activeTab === "browser"' artifacts/dannys-bot/src/pages/MobilePage.tsx
+          test ! -e artifacts/dannys-bot/src/pages/ImageGenPage.tsx
+          test ! -e artifacts/api-server/src/routes/imageGen.ts
+          test ! -e artifacts/electron/sidecar/server.py
+          if grep -R -n -E "ImageGenPage|registerImageGenRoutes|image-generation|sd15-config" \
+            artifacts/dannys-bot/src artifacts/api-server/src artifacts/electron/src artifacts/electron/electron-builder.json; then
+            echo "Obsolete AI Images runtime or packaging wiring is still present"
+            exit 1
+          fi
+          echo "Browser persistence and AI Images removal verified"
       # Upload each dist directory as its own artifact so download-artifact
       # can place files at the exact target path without any copy/rename step.
       - name: Upload API server dist
@@ -95,44 +111,6 @@ jobs:
           ls artifacts/api-server/dist/
           echo "=== dannys-bot/dist ==="
           ls artifacts/dannys-bot/dist/
-
-      - name: Set up Python embeddable runtime
-        working-directory: artifacts/electron
-        shell: bash
-        run: |
-          mkdir -p resources/python-embed
-          # Download Windows embeddable Python 3.12
-          curl -fsSL "https://www.python.org/ftp/python/3.12.9/python-3.12.9-embed-amd64.zip" \
-            -o python-embed.zip
-          unzip -q python-embed.zip -d resources/python-embed/
-          rm python-embed.zip
-          # Bootstrap script so the app can install pip on first run
-          curl -fsSL "https://bootstrap.pypa.io/get-pip.py" \
-            -o resources/python-embed/get-pip.py
-          # Copy sidecar server files
-          cp sidecar/server.py resources/python-embed/server.py
-          cp sidecar/requirements.txt resources/python-embed/requirements.txt
-          cp -R sidecar/sd15-config resources/python-embed/sd15-config
-          echo "Python embed ready:"
-          ls resources/python-embed/ | head -20
-
-      - name: Verify AI dependency repair sources
-        working-directory: artifacts/electron
-        shell: bash
-        run: |
-          test ! -s resources/python-embed/requirements.txt || grep -F "diffusers>=" resources/python-embed/requirements.txt
-          test -f resources/python-embed/sd15-config/model_index.json
-          test -f resources/python-embed/sd15-config/tokenizer/vocab.json
-          test -f resources/python-embed/sd15-config/v1-inference.yaml
-          grep -F -- '"--upgrade"' src/main.ts
-          grep -F -- '"--upgrade-strategy", "eager"' src/main.ts
-          grep -F -- '"--ignore-installed"' src/main.ts
-          grep -F "getImageGenPackagesDir" src/main.ts
-          grep -F "fs.rmSync(packagesDir" src/main.ts
-          grep -F "AI package verification failed" src/main.ts
-          grep -F "stopImageGenServer" src/main.ts
-          grep -F "Install / Repair AI Libraries" ../dannys-bot/src/pages/ImageGenPage.tsx
-          echo "AI dependency repair configuration verified"
 
       - name: Verify Reel DM recipient safety sources
         shell: bash

@@ -130,7 +130,7 @@ Some device/IG builds strip both `content-desc` and `resource-id` from every act
 Every push to `main` triggers `.github/workflows/build-windows-installer.yml` (the ONLY canonical workflow — `build.yml`, `build-windows.yml`, `windows-installer.yml`, and `release.yml` are all deprecated inert stubs), which runs two jobs:
 
 1. **`build-web`** (ubuntu-latest) — installs workspace deps with `pnpm install --no-frozen-lockfile --ignore-scripts`, builds the API server and React frontend, uploads them as intermediate Actions artifacts called `api-server-dist` and `dannys-bot-dist`. These are NOT the installer.
-2. **`build-installer`** (windows-latest) — downloads the dist artifacts, installs Electron deps with `npm install --ignore-scripts`, runs `build.mjs` to bundle the app, then runs `electron-builder --win --publish never` to produce the Windows installer. Uploads the installer as an Actions artifact called `Aura-Farming-Windows-Installer` (~88MB). On tagged releases (`v*`) also publishes to GitHub Releases.
+2. **`build-installer`** (windows-latest) — downloads the dist artifacts, installs Electron deps with `npm install --ignore-scripts`, runs `build.mjs` to bundle the app, then runs `electron-builder --win --publish never` to produce the Windows installer. Uploads the installer as an Actions artifact called `Aura-Farming-Windows-Installer`. On tagged releases (`v*`) also publishes to GitHub Releases.
 
 ### How the user gets the installer
 

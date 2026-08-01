@@ -7383,28 +7383,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
-    version: "1.0.701",
-    date: "1 Jun 2026",
-    items: [
-      { category: "Fix", text: "AI Image generator switched to OpenAI's new gpt-image-1 model — the previous dall-e-3 model is no longer available on standard API keys." },
-    ],
-  },
-  {
-    version: "1.0.700",
-    date: "1 Jun 2026",
-    items: [
-      { category: "Fix", text: "AI Image generation no longer fails with an 'Unknown parameter' error — updated to work with the latest OpenAI API format." },
-    ],
-  },
-  {
-    version: "1.0.699",
-    date: "1 Jun 2026",
-    items: [
-      { category: "Change", text: "AI Image generator now uses OpenAI DALL-E 3 instead of Together AI — better quality selfies and no credits required beyond your own OpenAI key." },
-      { category: "New", text: "Settings → Security: new Test button next to the OpenAI API key field — click it to verify your key is valid before trying to generate an image." },
-    ],
-  },
-  {
     version: "1.0.698",
     date: "1 Jun 2026",
     items: [

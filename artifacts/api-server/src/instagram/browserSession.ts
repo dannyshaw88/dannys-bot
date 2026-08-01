@@ -2166,6 +2166,11 @@ export async function getOrCreateSession(
   proxy?: ProxyConfig,
   userAgentApi?: string | null,
 ): Promise<Session> {
+  const isDeviceBrowser = profileId >= 1_000_000;
+  const launchStartedAt = Date.now();
+  const logLaunchPhase = (phase: string) => {
+    log(`[launch-timing:${profileId}] ${phase} (+${Date.now() - launchStartedAt}ms)`, "browser");
+  };
   // ── Electron native EB mode ────────────────────────────────────────────────
   // Device-browser IDs (≥ 1_000_000) are always Puppeteer-streamed even inside
   // Electron — the Phone Farm "Browser" tab uses forceStream=true and expects a
@@ -2295,7 +2300,7 @@ export async function getOrCreateSession(
   // A dead proxy causes Chrome's renderer to hang completely — the page shows
   // chrome-error:// and even Puppeteer screenshots time out. Test reachability
   // before launching so we fail fast instead of spending 40 s in a crash loop.
-  if (proxy) {
+  if (proxy && !isDeviceBrowser) {
     const proxyCheck = await testProxyReachable(proxy.host, proxy.port, 6000);
     if (!proxyCheck.ok) {
       const errMsg = `Proxy ${proxy.host}:${proxy.port} is unreachable (${proxyCheck.errorCode ?? "unknown"}) — not launching Chrome to avoid renderer freeze. Will retry on next open.`;
@@ -2304,6 +2309,11 @@ export async function getOrCreateSession(
       throw new Error(errMsg);
     }
     log(`[proxy-check:${profileId}] Proxy ${proxy.host}:${proxy.port} reachable ✓`, "browser");
+  } else if (proxy && isDeviceBrowser) {
+    // The Mobile Browser tab must become interactive even when a proxy is slow
+    // or unavailable. Chrome will surface the proxy failure in the stream; do
+    // not block the WebSocket handshake on a second network probe.
+    log(`[proxy-check:${profileId}] skipped for synthetic device browser`, "browser");
   }
 
   let proxyArg: string[] = [];
@@ -2386,6 +2396,7 @@ export async function getOrCreateSession(
   console.log(`[EB-DEBUG][browserSession] launch args: ${fullArgs.join(" ")}`);
 
   let browser: Browser;
+  logLaunchPhase("before Chrome launch");
   try {
     browser = await puppeteerLib.launch({
       headless: true,
@@ -2401,6 +2412,7 @@ export async function getOrCreateSession(
     _launchingProfiles.delete(profileId);
     throw new Error(msg);
   }
+  logLaunchPhase("Chrome launched");
 
   const [page] = await browser.pages();
   const uaMeta = buildUAMetadata(userAgent);
@@ -2418,6 +2430,7 @@ export async function getOrCreateSession(
     await page.authenticate({ username: proxy.username, password: proxy.password ?? "" });
   }
   log(`Chrome launched for profile ${profileId}`, "browser");
+  logLaunchPhase("page configured");
 
   // Resolve proxy exit-IP timezone AND country before injecting stealth scripts.
   // This ensures the browser's Date API timezone matches the proxy's country
@@ -2426,7 +2439,7 @@ export async function getOrCreateSession(
   // a real device in that country would send.
   let resolvedTZ: readonly [string, number, number] | undefined;
   let resolvedAcceptLang = "en-US,en;q=0.9";
-  if (proxy?.host && proxy?.port) {
+  if (proxy?.host && proxy?.port && !isDeviceBrowser) {
     try {
       const geo = await resolveProxyGeo(proxy.host, proxy.port, proxy.username, proxy.password);
       if (geo.timezone) {
@@ -2449,6 +2462,8 @@ export async function getOrCreateSession(
         log(`Proxy locale for profile ${profileId}: ${geo.countryCode} → ${locale} (Accept-Language: ${resolvedAcceptLang})`, "browser");
       }
     } catch { /* non-fatal — fall back to defaults */ }
+  } else if (isDeviceBrowser) {
+    logLaunchPhase("skipped proxy geo for synthetic device browser");
   }
 
   // Stealth: spoof all common headless-Chrome fingerprints that Instagram checks
@@ -2456,6 +2471,7 @@ export async function getOrCreateSession(
   // Inject locale-matched Accept-Language — headless Chrome omits it by default
   // (a bot tell). Use the proxy's detected country for the correct regional value.
   await page.setExtraHTTPHeaders({ "Accept-Language": resolvedAcceptLang });
+  logLaunchPhase("stealth and headers ready");
 
   // ── Request filtering via CDP Fetch (replaces setRequestInterception) ─────────
   // page.setRequestInterception(true) pauses EVERY network request in Node.js and
@@ -2470,60 +2486,65 @@ export async function getOrCreateSession(
   // Stylesheet, …) flow directly through Chrome with no Node.js involvement at all.
   // URL-pattern blocks (analytics/tracking) are handled by Network.setBlockedURLs —
   // also zero overhead, handled natively inside Chrome.
-  const fetchCdp = await page.createCDPSession();
+  if (!isDeviceBrowser) {
+    const fetchCdp = await page.createCDPSession();
 
-  // Intercept the challenge redirect URL and the scraping_warning consent loop.
-  // No image/font/media blocking here — those restrictions caused pages to hang.
-  await fetchCdp.send("Fetch.enable", {
-    patterns: [
-      { urlPattern: "*update_risky_contactpoint*", requestStage: "Request" },
-      { urlPattern: "*accounts/scraping_warning/*", requestStage: "Request" },
-    ]
-  });
+    // Intercept the challenge redirect URL and the scraping_warning consent loop.
+    // No image/font/media blocking here — those restrictions caused pages to hang.
+    await fetchCdp.send("Fetch.enable", {
+      patterns: [
+        { urlPattern: "*update_risky_contactpoint*", requestStage: "Request" },
+        { urlPattern: "*accounts/scraping_warning/*", requestStage: "Request" },
+      ]
+    });
 
-  fetchCdp.on("Fetch.requestPaused", (p: any) => {
-    const { requestId, request, redirectedRequestId } = p;
+    fetchCdp.on("Fetch.requestPaused", (p: any) => {
+      const { requestId, request, redirectedRequestId } = p;
 
-    // Challenge redirect interceptor — abort REDIRECT hops (redirectedRequestId set)
-    // to prevent Chrome hitting ERR_TOO_MANY_REDIRECTS, and capture the freshest
-    // token URL so startApprovalPolling can re-navigate on each iteration.
-    if (redirectedRequestId) {
-      const sc = sessions.get(profileId);
-      if (sc && (sc as any)._challengeRedirectInterceptor) {
-        (sc as any)._challengeRedirectInterceptor(request.url);
-      }
-      fetchCdp.send("Fetch.failRequest", { requestId, errorReason: "Aborted" }).catch(() => {});
-      return;
-    }
-
-    // ── scraping_warning intercept ────────────────────────────────────────────
-    // Instagram's cookie-consent loop: scraping_warning → consent/?flow=... → loop.
-    // Only intercept when 'next' points to /consent/ (the loop case).
-    // For interactive challenges (e.g. "Automated behaviour detected") where next
-    // points to the home feed, let Chrome load the page so the user can dismiss it.
-    if (request.url.includes("accounts/scraping_warning")) {
-      try {
-        const u = new URL(request.url);
-        const nextRaw = u.searchParams.get("next") ?? "";
-        if (nextRaw.includes("/consent/")) {
-          log(`[scraping:${profileId}] scraping_warning (cookie-consent loop) — redirecting to consent: ${nextRaw.slice(0, 80)}`, "browser");
-          fetchCdp.send("Fetch.continueRequest", { requestId, url: nextRaw }).catch(() => {
-            fetchCdp.send("Fetch.continueRequest", { requestId }).catch(() => {});
-          });
-          return;
+      // Challenge redirect interceptor — abort REDIRECT hops (redirectedRequestId set)
+      // to prevent Chrome hitting ERR_TOO_MANY_REDIRECTS, and capture the freshest
+      // token URL so startApprovalPolling can re-navigate on each iteration.
+      if (redirectedRequestId) {
+        const sc = sessions.get(profileId);
+        if (sc && (sc as any)._challengeRedirectInterceptor) {
+          (sc as any)._challengeRedirectInterceptor(request.url);
         }
-        // Interactive challenge — let Chrome load the scraping_warning page normally.
-        log(`[scraping:${profileId}] scraping_warning (interactive challenge) — letting Chrome load it`, "browser");
-      } catch { /* fall through */ }
-    }
+        fetchCdp.send("Fetch.failRequest", { requestId, errorReason: "Aborted" }).catch(() => {});
+        return;
+      }
 
-    // All other intercepted requests — let Chrome follow normally.
-    fetchCdp.send("Fetch.continueRequest", { requestId }).catch(() => {});
-  });
+      // ── scraping_warning intercept ────────────────────────────────────────────
+      // Instagram's cookie-consent loop: scraping_warning → consent/?flow=... → loop.
+      // Only intercept when 'next' points to /consent/ (the loop case).
+      // For interactive challenges (e.g. "Automated behaviour detected") where next
+      // points to the home feed, let Chrome load the page so the user can dismiss it.
+      if (request.url.includes("accounts/scraping_warning")) {
+        try {
+          const u = new URL(request.url);
+          const nextRaw = u.searchParams.get("next") ?? "";
+          if (nextRaw.includes("/consent/")) {
+            log(`[scraping:${profileId}] scraping_warning (cookie-consent loop) — redirecting to consent: ${nextRaw.slice(0, 80)}`, "browser");
+            fetchCdp.send("Fetch.continueRequest", { requestId, url: nextRaw }).catch(() => {
+              fetchCdp.send("Fetch.continueRequest", { requestId }).catch(() => {});
+            });
+            return;
+          }
+          // Interactive challenge — let Chrome load the scraping_warning page normally.
+          log(`[scraping:${profileId}] scraping_warning (interactive challenge) — letting Chrome load it`, "browser");
+        } catch { /* fall through */ }
+      }
+
+      // All other intercepted requests — let Chrome follow normally.
+      fetchCdp.send("Fetch.continueRequest", { requestId }).catch(() => {});
+    });
+  } else {
+    logLaunchPhase("skipped Instagram request interception for synthetic device browser");
+  }
 
   // Auto-dismiss cookie banners + post-login popups + save cookies on every main-frame navigation
   page.on("framenavigated", async (frame) => {
     if (frame !== page.mainFrame()) return;
+    if (isDeviceBrowser) return;
     // Extend navProtectedUntil so the crash detector doesn't fire while Chrome is
     // mid-navigation — BUT skip this for chrome-error:// pages (ERR_TOO_MANY_REDIRECTS
     // etc.).  If we extend navProtectedUntil when an error page loads, the error-page
@@ -2981,6 +3002,13 @@ export async function getOrCreateSession(
     wsWrite(s.ws, { type: "consoleLog", level, text });
   });
 
+  if (isDeviceBrowser) {
+    // Synthetic device browsers are general-purpose Chrome instances, not
+    // Instagram profile sessions. Do not run the account-cookie migration,
+    // DB token assertions, or Instagram cookie pre-seeding on this path.
+    session.pendingInitUrl = "about:blank";
+    logLaunchPhase("skipped Instagram cookie/session bootstrap for synthetic device browser");
+  } else {
   // ── Purge stale Chrome-profile cookies BEFORE loading our saved state ────────
   // Chrome's userDataDir persists between launches. It carries instagram.com
   // cookies from the previous session (expired sessionid, challenge tokens, etc.)
@@ -3204,7 +3232,9 @@ export async function getOrCreateSession(
   } else {
     session.pendingInitUrl = "https://www.instagram.com/accounts/login/";
   }
+  }
 
+  logLaunchPhase("session ready");
   _launchingProfiles.delete(profileId);
   return session;
 }
@@ -3227,11 +3257,23 @@ export function detachWS(profileId: number, ws: WebSocket) {
   }
   const session = sessions.get(profileId);
   if (!session || session.ws !== ws) return;
+  const isDeviceBrowser = profileId >= 1_000_000;
   session.ws = null;
   if (session.frameLoop) { clearInterval(session.frameLoop); session.frameLoop = null; }
   if (session.housekeepLoop) { clearInterval(session.housekeepLoop); session.housekeepLoop = null; }
   if ((session as any)._challengeKeepalive) { clearInterval((session as any)._challengeKeepalive); (session as any)._challengeKeepalive = null; }
   stopScreencast(profileId).catch(() => {});
+  if (isDeviceBrowser) {
+    // The Phone Farm Browser owns a persistent Chrome page. Switching away
+    // from the Mobile Browser tab temporarily detaches only the stream; it
+    // must never close Chromium or reset the user's active page.
+    if ((session as any)._detachTimer) {
+      clearTimeout((session as any)._detachTimer);
+      (session as any)._detachTimer = null;
+    }
+    log(`[detachWS:${profileId}] synthetic browser stream detached — keeping Chrome and active page alive`, "browser");
+    return;
+  }
   // Grace period: give the client 10 s to reconnect before killing Chrome.
   // Normal drops (network blips, Replit proxy resets, HMR updates) reconnect
   // within 3 s and reuse the live Chrome session — no relaunch needed.
@@ -3246,6 +3288,7 @@ export function detachWS(profileId: number, ws: WebSocket) {
 }
 
 export function attachWS(profileId: number, ws: WebSocket) {
+  const isDeviceBrowser = profileId >= 1_000_000;
   // Device-browser IDs (≥ 1_000_000) always use the Puppeteer path — skip
   // the Electron native-EB branch so startScreencast fires and frames arrive.
   if (IS_ELECTRON_EB && profileId < 1_000_000) {
@@ -3315,10 +3358,21 @@ export function attachWS(profileId: number, ws: WebSocket) {
         // 15s is enough for Chrome to move past the initial about:blank into a real URL.
         const target = session.pendingInitUrl;
         session.pendingInitUrl = undefined;
-        session.navProtectedUntil = Date.now() + 15000;
-        log(`[attachSSE:${profileId}] initial navigation → ${target}`, "browser");
-        session.page.goto(target, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
-      } else if (isBlankOrError) {
+        const alreadyAtBlank =
+          isDeviceBrowser &&
+          (target === "about:blank" || target === "about:newtab") &&
+          (currentUrl === "about:blank" || currentUrl === "about:newtab");
+        if (alreadyAtBlank) {
+          // A fresh synthetic device browser already starts at about:blank.
+          // Repeating page.goto("about:blank") races Page.startScreencast and
+          // can delay the first frame by 20+ seconds on Chromium 138.
+          log(`[attachSSE:${profileId}] already at ${target} — skipping redundant initial navigation`, "browser");
+        } else {
+          session.navProtectedUntil = Date.now() + 15000;
+          log(`[attachSSE:${profileId}] initial navigation → ${target}`, "browser");
+          session.page.goto(target, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
+        }
+      } else if (isBlankOrError && !isDeviceBrowser) {
         // If this account has an active Instagram challenge, inject a visible info page
         // instead of leaving Chrome parked on chrome-error:// (which appears blank/white).
         // Navigating to instagram.com would re-trigger the redirect loop, so we go to
@@ -3349,6 +3403,11 @@ export function attachWS(profileId: number, ws: WebSocket) {
           log(`[attachSSE:${profileId}] page is "${currentUrl}" (error/blank) — recovering → ${target}`, "browser");
           session.page.goto(target, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
         }
+      } else if (isBlankOrError && isDeviceBrowser) {
+        // Synthetic device browsers preserve the user's current page. A
+        // reconnect must never turn a deliberately blank page (or a Chrome
+        // error page the user is inspecting) into a new navigation.
+        log(`[attachSSE:${profileId}] synthetic browser is at ${currentUrl} — preserving current page`, "browser");
       }
       // else: user is actively browsing — leave them alone
     } catch { /* page may be closing — ignore */ }
@@ -3976,10 +4035,11 @@ function startScreencast(profileId: number, _retry = 0): Promise<void> {
   // Chain onto the global queue so concurrent calls from multiple EBs opening at
   // the same time run ONE AT A TIME.  Without this, simultaneous createCDPSession()
   // calls from N EBs flood the Puppeteer WebSocket protocol queue and Chrome stalls.
-  _screencastStartQueue = _screencastStartQueue
+  const run = _screencastStartQueue
     .catch(() => {})                          // never let a prior failure block the queue
     .then(() => _doStartScreencast(profileId, _retry));
-  return _screencastStartQueue;
+  _screencastStartQueue = run.catch(() => {});
+  return run;
 }
 
 async function _doStartScreencast(profileId: number, _retry = 0): Promise<void> {
@@ -4140,57 +4200,35 @@ async function _doStartScreencast(profileId: number, _retry = 0): Promise<void> 
     });
   });
 
-  // Serialize the Page.startScreencast CDP call through a global queue.
-  // Without this, opening 5+ EBs simultaneously fires all startScreencast
-  // calls at once. Chrome's back-pressure ACK protocol means Node must process
-  // each ACK before Chrome sends the next frame — but if the event loop is
-  // saturated servicing 5 simultaneous startScreencast round-trips, ACKs are
-  // delayed, Chrome stalls on frame delivery, and the EB appears frozen.
-  // Processing one startScreencast at a time (each takes ~10–50 ms) keeps the
-  // event loop free between calls so ACKs are processed promptly.
+  // This function is already serialized by startScreencast(). Waiting on
+  // _screencastStartQueue here would include this invocation itself and
+  // deadlock until the queue timeout.
   let startOk = true;
-  const prevQueue = _screencastStartQueue;
-  _screencastStartQueue = (async () => {
-    // Wait for the previous queue entry but cap at 20 s.
-    // Without a timeout a single hung cdp.send() in a previous entry would
-    // permanently jam this promise chain, causing every subsequent EB to wait
-    // forever and appear stuck on "Loading…".
-    await Promise.race([prevQueue, new Promise(r => setTimeout(r, 20000))]);
-    // Brief pause between consecutive starts: gives the Node.js event loop a
-    // chance to drain any pending CDP callbacks (e.g. ACKs from a previously
-    // started screencast) before we issue the next Page.startScreencast.
-    // 150 ms is imperceptible to the user but enough for one full event-loop
-    // cycle plus the first frame ACK round-trip.
-    if (sessions.size > 1) await new Promise(r => setTimeout(r, 150));
-    // Re-check session is still alive after waiting in queue
-    const sNow = sessions.get(profileId);
-    if (!sNow?.ws || sNow.ws.readyState !== WebSocket.OPEN) return;
-    const t1 = Date.now();
-    try {
-      // 10 s timeout on Page.startScreencast: under heavy load Chrome can
-      // fail to ACK this command indefinitely, jamming the global queue and
-      // preventing all subsequent EBs from ever receiving frames.
-      await Promise.race([
-        cdp.send("Page.startScreencast", {
-          format: "jpeg",
-          quality,
-          maxWidth,
-          maxHeight,
-          everyNthFrame: nthFrame,
-        }),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Page.startScreencast timeout (10 s)")), 10000)
-        ),
-      ]);
-      log(`[screencast:${profileId}] Page.startScreencast ACKed in ${Date.now() - t1}ms (quality=${quality} nth=${nthFrame} sessions=${nSessions})`, "browser");
-    } catch (e: any) {
-      log(`[screencast:${profileId}] Page.startScreencast FAILED: ${e?.message}`, "browser");
-      try { await Promise.race([cdp.detach(), new Promise(r => setTimeout(r, 3000))]); } catch {}
-      sNow.screencastCdp = null;
-      startOk = false;
-    }
-  })();
-  await _screencastStartQueue;
+  const sNow = sessions.get(profileId);
+  if (!sNow?.ws || sNow.ws.readyState !== WebSocket.OPEN) return;
+  const t1 = Date.now();
+  try {
+    // Keep the explicit timeout so one unhealthy Chromium instance cannot
+    // block the shared queue indefinitely.
+    await Promise.race([
+      cdp.send("Page.startScreencast", {
+        format: "jpeg",
+        quality,
+        maxWidth,
+        maxHeight,
+        everyNthFrame: nthFrame,
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Page.startScreencast timeout (10 s)")), 10000)
+      ),
+    ]);
+    log(`[screencast:${profileId}] Page.startScreencast ACKed in ${Date.now() - t1}ms (quality=${quality} nth=${nthFrame} sessions=${nSessions})`, "browser");
+  } catch (e: any) {
+    log(`[screencast:${profileId}] Page.startScreencast FAILED: ${e?.message}`, "browser");
+    try { await Promise.race([cdp.detach(), new Promise(r => setTimeout(r, 3000))]); } catch {}
+    sNow.screencastCdp = null;
+    startOk = false;
+  }
   if (!startOk) return;
 
   // Record when this screencast started — the watchdog below uses this to detect
@@ -4231,9 +4269,8 @@ async function _doStartScreencast(profileId: number, _retry = 0): Promise<void> 
       const sShot = sessions.get(profileId);
       if (!sShot?.ws || sShot.ws.readyState !== WebSocket.OPEN) return;
       const pageUrl = (() => { try { return sShot.page.url(); } catch { return ""; } })();
-      if (!pageUrl || pageUrl === "about:blank" || pageUrl === "about:newtab") return;
       // Push current URL immediately so the address bar shows the real URL
-      if (pageUrl !== sShot.lastUrl) {
+      if (pageUrl && pageUrl !== "about:blank" && pageUrl !== "about:newtab" && pageUrl !== sShot.lastUrl) {
         sShot.lastUrl = pageUrl;
         wsWrite(sShot.ws, { type: "urlChange", url: pageUrl });
       }
@@ -4288,6 +4325,7 @@ async function stopScreencast(profileId: number): Promise<void> {
 function startHousekeepLoop(profileId: number): void {
   const session = sessions.get(profileId);
   if (!session) return;
+  const isDeviceBrowser = profileId >= 1_000_000;
 
   if (session.housekeepLoop) { clearInterval(session.housekeepLoop); session.housekeepLoop = null; }
 
@@ -4317,21 +4355,21 @@ function startHousekeepLoop(profileId: number): void {
     // appears. The real Puppeteer click inside dismissCookieBanner() is safe
     // to call even when no banner is visible (noop if nothing matches).
     bannerCheckTick++;
-    if (bannerCheckTick >= 2) {
+    if (!isDeviceBrowser && bannerCheckTick >= 2) {
       bannerCheckTick = 0;
       dismissCookieBanner(s.page).catch(() => {});
     }
 
     // ── Popup dismissal ────────────────────────────────────────────────────
     popupCheckTick++;
-    if (popupCheckTick >= 2) {
+    if (!isDeviceBrowser && popupCheckTick >= 2) {
       popupCheckTick = 0;
       dismissInstagramPopups(s.page).catch(() => {});
     }
 
     // ── Cookie save ────────────────────────────────────────────────────────
     cookieSaveTick++;
-    if (cookieSaveTick >= 12) {
+    if (!isDeviceBrowser && cookieSaveTick >= 12) {
       cookieSaveTick = 0;
       saveCookies(profileId, s.page).catch(() => {});
     }
@@ -4343,7 +4381,7 @@ function startHousekeepLoop(profileId: number): void {
     //    a 3xx redirect) — e.g. the user manually navigated to confirm_email —
     //    classify it and write the accountStatus to DB so the account card updates.
     errorRecoveryTick++;
-    if (errorRecoveryTick >= 2) {
+    if (!isDeviceBrowser && errorRecoveryTick >= 2) {
       errorRecoveryTick = 0;
       if (!s.autoLoginInProgress && Date.now() > (s.navProtectedUntil ?? 0)) {
         let url = "";
@@ -4406,7 +4444,7 @@ function startHousekeepLoop(profileId: number): void {
     // every 50 s so Chrome delivers a fresh frame.  This resets the client's
     // stale-frame timer (60 s threshold) before it can fire the "Browser appears
     // frozen" overlay — no navigation needed, WS stays stable.
-    if (s.challengeUrl && s.screencastCdp) {
+    if (!isDeviceBrowser && s.challengeUrl && s.screencastCdp) {
       const silentMsKeepalive = Date.now() - s.lastScreencastFrameAt;
       if (silentMsKeepalive > 50000) {
         log(`[housekeep:${profileId}] challenge keepalive — restarting screencast (silent ${Math.round(silentMsKeepalive / 1000)}s)`, "browser");

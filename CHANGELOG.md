@@ -4,6 +4,24 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.333] — 2026-08-01
+
+### Changed — Remove AI Images and make the Mobile Farm Browser fast and persistent
+
+- Removed the AI Images tab from the application navigation and routing. The removed page, API route, Electron IPC bridge, Python sidecar, Stable Diffusion configuration, model assets, installer resources, dependency setup, repair flow, and related documentation are no longer shipped or initialized.
+- Kept Make a Post/Repost image alteration functionality intact; this is separate from the removed AI Images feature and remains available for its existing workflows.
+- Reworked Mobile Farm synthetic Browser startup so it no longer performs Instagram-only proxy checks, proxy geolocation, request interception, cookie/device-token migration, Instagram session bootstrap, popup recovery, cookie saving, challenge handling, or automatic login recovery.
+- Fixed the browser screencast startup queue deadlock that could make `Page.startScreencast` wait for its own queued promise and hold the Browser tab for roughly 20–30 seconds.
+- Removed redundant `about:blank` navigation on a newly created synthetic browser. The Browser tab now acknowledges the screencast and receives its first frame in under one second in the controlled startup path.
+- Made the Mobile Farm Browser persistent when moving between Accounts, Browser, Metrics, My Device, Action Log, and Debugging Log. The Browser panel remains mounted and is hidden rather than destroyed when another tab is selected.
+- Kept synthetic Chromium sessions alive when the Browser stream disconnects, including tab switches and reconnects beyond the previous 10-second cleanup window. The active page, tab selection, navigation history, and last visited URL are preserved.
+- Prevented synthetic-browser reconnect handling from navigating the user's existing page back to Instagram, Google, or `about:blank`. Reopening the Browser tab reconnects to the page that was last visited.
+- Added launch timing and screencast diagnostics so future startup regressions identify Chrome launch, session setup, screencast acknowledgment, first-frame, disconnect, and persistence phases.
+- Updated the canonical GitHub Actions Windows installer workflow to validate release version alignment, changelog coverage, Browser persistence guards, and complete AI Images removal before building and uploading `Aura-Farming-Windows-Installer`.
+- Bumped the root application and Electron package versions to `1.2.333`.
+
+---
+
 ## [1.2.332] — 2026-08-01
 
 ### Changed — Make Google search history natural and complete Mobile Phone Apps logging

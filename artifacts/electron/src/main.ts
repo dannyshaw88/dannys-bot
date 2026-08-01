@@ -55,131 +55,10 @@ const execAsync = promisify(exec);
 
 let serverPort = 0;
 let serverProc: ChildProcess | null = null;
-let imageGenProc: ChildProcess | null = null;
-let imageGenPort = 0;
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
 
-// ── Image-gen sidecar helpers ─────────────────────────────────────────────────
-function getPythonPath(): string {
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, "python-embed", "python.exe");
-  }
-  // Development: use system Python (not available on non-Windows dev machines)
-  return process.platform === "win32" ? "python" : "python3";
-}
-
-function getImageGenScriptPath(): string {
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, "python-embed", "server.py");
-  }
-  return path.join(__dirname, "..", "sidecar", "server.py");
-}
-
-function getImageGenModelsDir(): string {
-  return path.join(getUserDataPath(), "image-gen-models");
-}
-
-function getImageGenOutputDir(): string {
-  return path.join(getUserDataPath(), "image-gen-output");
-}
-
-// Writable directory where pip and all AI packages are installed.
-// Program Files is read-only after installation, so we target AppData instead.
-function getImageGenPipDir(): string {
-  return path.join(getUserDataPath(), "image-gen-pip");
-}
-
-function getImageGenPackagesDir(): string {
-  // Keep the writable pip bootstrap files separate from the AI package layer.
-  // A clean package directory makes repairs deterministic even when an older
-  // --target installation left conflicting package copies in AppData.
-  return path.join(getImageGenPipDir(), "packages");
-}
-
-function isTorchInstalled(): boolean {
-  if (app.isPackaged) {
-    // AI packages are installed into the isolated writable package layer.
-    const torchInit = path.join(getImageGenPackagesDir(), "torch", "__init__.py");
-    return fs.existsSync(torchInit);
-  }
-  // Dev mode: assume not available to avoid noisy failures
-  return false;
-}
-
-function spawnImageGenServer(port: number): void {
-  if (process.platform !== "win32") {
-    // Image gen sidecar only supported on Windows (where the desktop app runs)
-    appendToMainLog("[image-gen] Non-Windows platform — skipping sidecar spawn");
-    return;
-  }
-
-  const scriptPath = getImageGenScriptPath();
-  if (!fs.existsSync(scriptPath)) {
-    appendToMainLog(`[image-gen] server.py not found at ${scriptPath} — skipping`);
-    return;
-  }
-
-  if (!isTorchInstalled()) {
-    appendToMainLog("[image-gen] torch not installed — skipping auto-spawn (user must run setup from the AI Images page)");
-    return;
-  }
-
-  const pythonExe = getPythonPath();
-  const modelsDir = getImageGenModelsDir();
-  const outputDir = getImageGenOutputDir();
-  const packagesDir = getImageGenPackagesDir();
-  try { fs.mkdirSync(modelsDir, { recursive: true }); } catch {}
-  try { fs.mkdirSync(outputDir, { recursive: true }); } catch {}
-
-  appendToMainLog(`[image-gen] Spawning server — port=${port} python=${pythonExe}`);
-
-  imageGenProc = spawn(pythonExe, [scriptPath], {
-    stdio: ["ignore", "pipe", "pipe"],
-    env: {
-      ...process.env,
-      // Packages are installed into the isolated writable package layer, not
-      // read-only Program Files embed — PYTHONPATH makes them importable.
-      PYTHONPATH: packagesDir,
-      IMAGE_GEN_PORT: String(port),
-      IMAGE_GEN_MODELS_DIR: modelsDir,
-      IMAGE_GEN_OUTPUT_DIR: outputDir,
-    },
-  });
-
-  imageGenProc.stdout?.on("data", (d: Buffer) => appendToMainLog(`[image-gen] ${d.toString().trim()}`));
-  imageGenProc.stderr?.on("data", (d: Buffer) => appendToMainLog(`[image-gen] ${d.toString().trim()}`));
-  const proc = imageGenProc;
-  proc.on("exit", (code) => {
-    appendToMainLog(`[image-gen] Server exited with code ${code}`);
-    if (imageGenProc === proc) imageGenProc = null;
-  });
-}
-
-function stopImageGenServer(): Promise<void> {
-  const proc = imageGenProc;
-  if (!proc) return Promise.resolve();
-
-  imageGenProc = null;
-  return new Promise((resolve) => {
-    let finished = false;
-    const finish = () => {
-      if (finished) return;
-      finished = true;
-      resolve();
-    };
-    proc.once("exit", finish);
-    try { proc.kill("SIGTERM"); } catch { finish(); return; }
-    // Windows may not deliver SIGTERM to a child promptly. Do not start a
-    // repair install while the old sidecar still has package files open.
-    setTimeout(() => {
-      if (finished) return;
-      try { proc.kill("SIGKILL"); } catch {}
-      finish();
-    }, 5000);
-  });
-}
 let splashWin: BrowserWindow | null = null;
 let splashIconDataUrl = "";
 
@@ -388,7 +267,7 @@ function rotateLogs(logPath: string): void {
   } catch {}
 }
 
-function startServer(port: number, logPath: string, ebIpcPort = 0, imgGenPort = 0): void {
+function startServer(port: number, logPath: string, ebIpcPort = 0): void {
   // Rotate previous log so it survives the next restart (logs → logs.1 → logs.2 → logs.3)
   rotateLogs(logPath);
 
@@ -427,7 +306,6 @@ function startServer(port: number, logPath: string, ebIpcPort = 0, imgGenPort = 
       ...(nodeModulesPath ? { NODE_PATH: nodeModulesPath } : {}),
       ...(chromiumPath ? { CHROMIUM_PATH: chromiumPath } : {}),
       ...(ebIpcPort   ? { EB_IPC_PORT: String(ebIpcPort) } : {}),
-      ...(imgGenPort  ? { IMAGE_GEN_PORT: String(imgGenPort) } : {}),
       IDEVICE_BIN_DIR: app.isPackaged
         ? path.join(process.resourcesPath, "bin", "win32")
         : path.join(__dirname, "..", "..", "resources", "bin", "win32"),
@@ -1214,16 +1092,7 @@ async function createWindow() {
     console.error("[EB] Failed to start IPC server:", err);
   }
 
-  // Find a free port for the image-gen sidecar (Windows desktop only)
-  if (process.platform === "win32") {
-    try { imageGenPort = await findFreePort(); } catch { imageGenPort = 17860; }
-  }
-
-  startServer(serverPort, logPath, ebIpcPort, imageGenPort);
-
-  // Spawn the Python image-gen sidecar after the Node server is launched
-  // (non-blocking — the UI handles "not yet ready" via the status endpoint)
-  if (imageGenPort) spawnImageGenServer(imageGenPort);
+  startServer(serverPort, logPath, ebIpcPort);
 
   try {
     await waitForServer(serverPort);
@@ -1275,203 +1144,6 @@ async function createWindow() {
       appendToMainLog(`[auto-updater] setup failed (non-fatal): ${(e as Error)?.message ?? String(e)}`);
     }
   }
-
-  // ── Image-gen IPC ─────────────────────────────────────────────────────────────
-  let imageGenSetupRunning = false;
-  let imageGenSetupState: {
-    running: boolean;
-    done: boolean;
-    ok: boolean;
-    lines: string[];
-  } = {
-    running: false,
-    done: false,
-    ok: false,
-    lines: [],
-  };
-
-  ipcMain.handle("image-gen-setup", async () => {
-    if (imageGenSetupRunning) return { ok: false, message: "Setup already running" };
-    const pythonExe = getPythonPath();
-    if (!fs.existsSync(pythonExe)) {
-      return { ok: false, message: "Python executable not found — please reinstall the app." };
-    }
-    const scriptDir = path.dirname(getImageGenScriptPath());
-    const getPipScript = path.join(scriptDir, "get-pip.py");
-    const requirementsFile = path.join(scriptDir, "requirements.txt");
-
-    // Packages must go into a user-writable location — Program Files is
-    // read-only after installation and causes WinError 5 (Access denied).
-    const pipDir = getImageGenPipDir();
-    const packagesDir = getImageGenPackagesDir();
-    try { fs.mkdirSync(pipDir, { recursive: true }); } catch {}
-    try { fs.mkdirSync(packagesDir, { recursive: true }); } catch {}
-
-    imageGenSetupRunning = true;
-    imageGenSetupState = {
-      running: true,
-      done: false,
-      ok: false,
-      lines: ["Starting AI library installation…"],
-    };
-    const sendProgress = (line: string, done: boolean) => {
-      const normalized = line.trim();
-      if (normalized) {
-        imageGenSetupState.lines = [...imageGenSetupState.lines, normalized].slice(-300);
-      }
-      imageGenSetupState.running = !done;
-      imageGenSetupState.done = done;
-      imageGenSetupState.ok = done && !normalized.startsWith("❌");
-      win?.webContents.send("image-gen-setup-progress", { line, done });
-    };
-
-    // Env shared by both pip steps so python can find packages in pipDir
-    const pipCacheDir = path.join(pipDir, "pip-cache");
-    try { fs.mkdirSync(pipCacheDir, { recursive: true }); } catch {}
-    // The embeddable Python cannot resolve pip through `python -m pip`; invoke
-    // pip's script directly from the writable AppData installation.
-    const pipMain = path.join(pipDir, "pip", "__main__.py");
-    const pipEnv = {
-      ...process.env,
-      PYTHONPATH: pipDir,
-      // The default pip read timeout is 15 seconds. That is too aggressive
-      // for a multi-gigabyte CUDA wheel on a normal residential connection.
-      PIP_DEFAULT_TIMEOUT: "600",
-      PIP_RETRIES: "10",
-    };
-    const pipNetworkArgs = [
-      "--cache-dir", pipCacheDir,
-      "--timeout", "600",
-      "--retries", "10",
-      "--disable-pip-version-check",
-      "--no-warn-script-location",
-    ];
-    const runPip = (args: string[], failureLabel: string) => new Promise<void>((resolve, reject) => {
-      const p = spawn(pythonExe, [pipMain, ...args], { stdio: "pipe", env: pipEnv });
-      p.stdout?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
-      p.stderr?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
-      p.on("error", (err) => reject(new Error(`${failureLabel}: ${err.message}`)));
-      p.on("exit", code => code === 0
-        ? resolve()
-        : reject(new Error(`${failureLabel} (code ${code})`)));
-    });
-
-    try {
-      // Step 1: bootstrap pip into pipDir (writable AppData), not the embed dir
-      if (imageGenProc) {
-        sendProgress("Stopping the image-generation server before repair…", false);
-        await stopImageGenServer();
-      }
-      if (fs.existsSync(getPipScript)) {
-        sendProgress("Installing pip…", false);
-        await new Promise<void>((resolve, reject) => {
-          const p = spawn(pythonExe, [
-            getPipScript,
-            "--target", pipDir,
-            "--no-warn-script-location",
-          ], { stdio: "pipe", env: pipEnv });
-          p.stdout?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
-          p.stderr?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
-          p.on("error", (err) => reject(new Error(`pip bootstrap failed: ${err.message}`)));
-          p.on("exit", code => code === 0 ? resolve() : reject(new Error(`pip bootstrap failed (code ${code})`)));
-        });
-      }
-
-      // Step 2: install/repair AI libraries into a clean package directory.
-      // --target can leave conflicting package copies behind in an existing
-      // directory, so repairs always start with a clean package layer.
-      // The model checkpoint cache is separate under image-gen-models and is
-      // intentionally preserved.
-      try {
-        fs.rmSync(packagesDir, { recursive: true, force: true });
-        fs.mkdirSync(packagesDir, { recursive: true });
-      } catch (err: any) {
-        throw new Error(`Could not reset the AI package directory: ${err?.message ?? String(err)}`);
-      }
-      // Do not rely on --extra-index-url alone: pip may select a CPU Torch
-      // wheel from the primary index even when the CUDA index is present.
-      // Install Torch with the CUDA index as primary, then install the rest.
-      const cudaTorchRequirements = path.join(pipDir, "requirements-cuda-torch.txt");
-      const otherRequirements = path.join(pipDir, "requirements-image-gen.txt");
-      try {
-        const requirementsText = fs.readFileSync(requirementsFile, "utf8");
-        const otherText = requirementsText
-          .split(/\r?\n/)
-          .filter(line => !/^\s*torch(?:\s|[<=>!~]|$)/i.test(line))
-          .join("\n");
-        fs.writeFileSync(cudaTorchRequirements, "torch>=2.4.0\n", "utf8");
-        fs.writeFileSync(otherRequirements, otherText, "utf8");
-      } catch (err: any) {
-        throw new Error(`Could not prepare AI library requirements: ${err?.message ?? String(err)}`);
-      }
-
-      sendProgress("Installing CUDA-enabled Torch (downloading ~2 GB — please wait)…", false);
-      await runPip([
-        "install",
-        "--target", packagesDir,
-        "--ignore-installed",
-        "--upgrade",
-        "--upgrade-strategy", "eager",
-        "-r", cudaTorchRequirements,
-        "--index-url", "https://download.pytorch.org/whl/cu121",
-        ...pipNetworkArgs,
-      ], "CUDA Torch install failed");
-
-      sendProgress("Installing remaining AI libraries…", false);
-      await runPip([
-        "install",
-        "--target", packagesDir,
-        "--ignore-installed",
-        "--upgrade",
-        "--upgrade-strategy", "eager",
-        "-r", otherRequirements,
-        ...pipNetworkArgs,
-      ], "AI library install failed");
-
-      sendProgress("Verifying the repaired AI package versions…", false);
-      await new Promise<void>((resolve, reject) => {
-        const verifyEnv = { ...pipEnv, PYTHONPATH: packagesDir };
-        const verifyCode = [
-          `import sys; sys.path.insert(0, ${JSON.stringify(packagesDir)})`,
-          "import diffusers",
-          "print(f'Verified diffusers={diffusers.__version__}')",
-        ].join("; ");
-        const p = spawn(pythonExe, [
-          "-c",
-          verifyCode,
-        ], { stdio: "pipe", env: verifyEnv });
-        p.stdout?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
-        p.stderr?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
-        p.on("error", (err) => reject(new Error(`AI package verification failed: ${err.message}`)));
-        p.on("exit", code => code === 0
-          ? resolve()
-          : reject(new Error(`AI package verification failed (code ${code})`)));
-      });
-
-      sendProgress("✅ Setup complete! Starting image gen server…", false);
-
-      // Step 3: spawn the sidecar now that torch is available
-      if (imageGenPort) spawnImageGenServer(imageGenPort);
-
-      sendProgress("Done — you can now load a model from the AI Images page.", true);
-      return { ok: true };
-    } catch (err: any) {
-      const msg = err?.message ?? String(err);
-      sendProgress(`❌ Setup failed: ${msg}`, true);
-      return { ok: false, message: msg };
-    } finally {
-      imageGenSetupRunning = false;
-    }
-  });
-
-  ipcMain.handle("image-gen-setup-status", () => imageGenSetupState);
-
-  ipcMain.handle("image-gen-open-output-dir", async () => {
-    const outputDir = getImageGenOutputDir();
-    try { fs.mkdirSync(outputDir, { recursive: true }); } catch {}
-    const err = await shell.openPath(outputDir);
-    return { ok: !err };
-  });
 
   ipcMain.handle("open-log", async () => {
     const { shell } = await import("electron");
@@ -1856,11 +1528,6 @@ app.on("before-quit", (event) => {
   trayPopup = null;
   tray?.destroy();
   tray = null;
-  // Kill the image-gen sidecar if it's running
-  if (imageGenProc) {
-    try { imageGenProc.kill("SIGTERM"); } catch {}
-    imageGenProc = null;
-  }
   if (!serverProc) return;
   // Give the server process a moment to flush and close the SQLite database
   // cleanly before Electron exits. better-sqlite3 is synchronous so the

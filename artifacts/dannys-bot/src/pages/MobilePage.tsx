@@ -8696,8 +8696,12 @@ export function MobilePage() {
                 {/* Positioned absolutely so it spans the full split-view width
                     (left: -100% reaches the left edge of the split container)
                     while the tab bar above stays exactly where it is. */}
-                {activeTab === "browser" && (
-                  <div className="absolute top-0 right-0 bottom-0 bg-background flex flex-col z-10" style={{ left: "-100%" }}>
+                <div
+                  className={activeTab === "browser"
+                    ? "absolute top-0 right-0 bottom-0 bg-background flex flex-col z-10"
+                    : "hidden"}
+                  style={{ left: "-100%" }}
+                >
                     {/* Proxy config bar */}
                     <div className="shrink-0 flex flex-wrap items-center gap-2 px-3 py-2 border-b border-border bg-muted/30">
                       <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Proxy</span>
@@ -8762,8 +8766,7 @@ export function MobilePage() {
                         No device connected
                       </div>
                     )}
-                  </div>
-                )}
+                </div>
                 {activeTab === "phonesettings" && (
                   <PhoneSettingsPanel serial={activeSerial} />
                 )}
