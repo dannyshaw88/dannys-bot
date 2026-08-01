@@ -138,11 +138,9 @@ function spawnImageGenServer(port: number): void {
       IMAGE_GEN_PORT: String(port),
       IMAGE_GEN_MODELS_DIR: modelsDir,
       IMAGE_GEN_OUTPUT_DIR: outputDir,
-      // Large model repositories are served from Hugging Face's Xet backend.
-      // Do not inherit the old HF_HUB_DISABLE_XET=1 setting: it forced every
-      // model through the single-stream HTTP/LFS path and capped throughput.
-      HF_XET_HIGH_PERFORMANCE: "1",
-      HF_XET_NUM_CONCURRENT_RANGE_GETS: "32",
+      // Use the conservative Hugging Face HTTP/LFS downloader. Xet can open
+      // many concurrent range requests and saturate the user's connection.
+      HF_HUB_DISABLE_XET: "1",
       HF_HUB_DOWNLOAD_TIMEOUT: "600",
       HF_HUB_ETAG_TIMEOUT: "60",
     },
@@ -1352,7 +1350,6 @@ async function createWindow() {
       // Install Torch with the CUDA index as primary, then install the rest.
       const cudaTorchRequirements = path.join(pipDir, "requirements-cuda-torch.txt");
       const otherRequirements = path.join(pipDir, "requirements-image-gen.txt");
-      const hubRequirements = path.join(pipDir, "requirements-huggingface-hub.txt");
       try {
         const requirementsText = fs.readFileSync(requirementsFile, "utf8");
         const otherText = requirementsText
@@ -1361,11 +1358,6 @@ async function createWindow() {
           .join("\n");
         fs.writeFileSync(cudaTorchRequirements, "torch>=2.4.0\n", "utf8");
         fs.writeFileSync(otherRequirements, otherText, "utf8");
-        fs.writeFileSync(
-          hubRequirements,
-          "huggingface_hub>=0.34.0,<1.0\nhf-xet>=1.1.0\n",
-          "utf8",
-        );
       } catch (err: any) {
         throw new Error(`Could not prepare AI library requirements: ${err?.message ?? String(err)}`);
       }
@@ -1386,18 +1378,6 @@ async function createWindow() {
         "-r", otherRequirements,
         ...pipNetworkArgs,
       ], "AI library install failed");
-
-      // Existing installations may have been created before hf_xet was
-      // installed. Upgrade the Hub client and explicitly install the Xet
-      // transport so model downloads do not silently fall back to HTTP/LFS.
-      sendProgress("Enabling high-speed Hugging Face model downloads…", false);
-      await runPip([
-        "install",
-        "--target", pipDir,
-        "--upgrade",
-        "-r", hubRequirements,
-        ...pipNetworkArgs,
-      ], "Hugging Face downloader install failed");
 
       sendProgress("✅ Setup complete! Starting image gen server…", false);
 

@@ -1,10 +1,10 @@
 ---
-name: Local model download progress
-description: Durable rules for speed and progress reporting during local Hugging Face model downloads
+name: Local image model downloader
+description: Download transport and scope rules for the desktop local image-generation sidecar
 ---
 
-The Hugging Face cache directory is not a monotonic transfer counter. Resumed or retried `.incomplete` files can be replaced while `from_pretrained()` is running, making a live sum of blob sizes move backwards. Track a per-load high-water mark for the user-facing counter, while keeping completion tied to finalized blobs and the loader's actual return. For large repositories, keep `hf_xet` installed and enable high-performance range downloads; disabling Xet forces a slow single-stream fallback.
+Model downloads must use Hugging Face's conservative regular HTTP/LFS transport. Keep the image-generation registry limited to the two supported reference-image editors: Qwen Image Edit 2511 and LongCat Image Edit.
 
-**Why:** A 30 GB model's visible progress dropped several gigabytes during a real download because the observer counted a changing cache layout as if it were a stable transfer stream. A later desktop build also forced `HF_HUB_DISABLE_XET=1`, reducing model throughput to roughly 1 MB/s.
+**Why:** The accelerated Xet/range-request path saturated the user's entire connection and made the modem unusable. Custom cache-byte progress and speed reporting added complexity without fixing the underlying transfer behavior.
 
-**How to apply:** Pin/upgrade the Hub client and install `hf-xet` during desktop setup, set `HF_XET_HIGH_PERFORMANCE=1` and a bounded concurrency value before importing Diffusers, log the active backend, and never let a filesystem snapshot overwrite a higher progress value from the same load.
+**How to apply:** Do not install or enable `hf-xet`, `HF_XET_HIGH_PERFORMANCE`, or concurrent range settings. Do not reintroduce a filesystem-scanning download monitor; show an indeterminate loading state while `from_pretrained()` performs the download. Keep setup installation separate from model downloading.

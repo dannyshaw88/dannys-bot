@@ -22,7 +22,6 @@ import threading
 import logging
 import shutil
 import subprocess
-import importlib.util
 from pathlib import Path
 from typing import Optional
 
@@ -54,13 +53,10 @@ OUTPUT_DIR = os.environ.get(
 Path(MODELS_DIR).mkdir(parents=True, exist_ok=True)
 Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 
-# Large model repositories are served from Hugging Face's Xet backend. Older
-# builds forced the legacy HTTP/LFS path, which reduced model throughput to
-# roughly 1 MB/s on some Windows installations. Remove that stale override and
-# let hf_xet use concurrent range downloads.
-os.environ.pop("HF_HUB_DISABLE_XET", None)
-os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
-os.environ.setdefault("HF_XET_NUM_CONCURRENT_RANGE_GETS", "32")
+# Keep model downloads on the regular Hugging Face HTTP/LFS path. The optional
+# Xet transport can open many concurrent range requests and overwhelm a user's
+# connection, so this intentionally uses the conservative downloader.
+os.environ["HF_HUB_DISABLE_XET"] = "1"
 os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "600")
 os.environ.setdefault("HF_HUB_ETAG_TIMEOUT", "60")
 
@@ -81,12 +77,7 @@ _loading_from_cache: bool = False           # True when weights are already on d
 _loading_phase: str = "idle"                # checking_cache | hardware_check | downloading | loading_pipeline | moving_to_device
 _loading_started_at: Optional[float] = None
 _loading_detail: str = ""
-_download_progress_high_water: int = 0      # bytes observed during this load; never moves backwards
-_download_rate_bps: float = 0.0
-_download_rate_sample_at: Optional[float] = None
-_download_rate_sample_bytes: int = 0
 _load_lock = threading.Lock()
-_ip_adapter_loaded: bool = False            # True once IP-Adapter weights are loaded onto _pipeline
 _gpu_info_cache: Optional[dict] = None
 _generation_progress: Optional[dict] = None
 _generation_lock = threading.Lock()
@@ -271,127 +262,8 @@ def _get_gpu_info() -> dict:
     return _gpu_info_cache
 
 
-def _get_download_progress() -> Optional[dict]:
-    """
-    Estimate download progress by summing blob file sizes in the HuggingFace
-    cache directory.  Called only while _status == "loading".
-    Returns {"downloaded_bytes": int, "total_bytes": int} or None.
-    """
-    if _loading_model_key is None or _loading_model_key not in MODELS:
-        return None
-
-    info = MODELS[_loading_model_key]
-    total_bytes = int(info["size_gb"] * 1024 * 1024 * 1024)
-
-    # HuggingFace Hub stores blobs under:
-    #   <cache_dir>/models--<org>--<name>/blobs/
-    repo: str = info["repo"]
-    parts = repo.split("/", 1)
-    if len(parts) != 2:
-        return None
-    org, name = parts
-    blobs_dir = Path(MODELS_DIR) / f"models--{org}--{name}" / "blobs"
-
-    downloaded = 0
-    incomplete_bytes = 0
-    if blobs_dir.exists():
-        for f in blobs_dir.iterdir():
-            try:
-                size = f.stat().st_size
-                # Hugging Face writes active transfers as *.incomplete. Those
-                # bytes are not usable model blobs and must not count toward
-                # the completed-download display.
-                if f.name.endswith(".incomplete"):
-                    incomplete_bytes += size
-                elif f.is_file():
-                    downloaded += size
-            except OSError:
-                pass
-
-    # Include active .incomplete files in the visible byte count so the user
-    # can see Hugging Face transfers moving while a large shard is downloading.
-    # Hugging Face may replace an incomplete blob while resuming/retrying a
-    # transfer. That makes a raw directory sum go backwards even though the
-    # load is still progressing, so expose a per-load high-water mark to the UI.
-    global _download_progress_high_water
-    global _download_rate_bps, _download_rate_sample_at, _download_rate_sample_bytes
-    current_bytes = downloaded + incomplete_bytes
-    _download_progress_high_water = max(_download_progress_high_water, current_bytes)
-    now = time.time()
-    if _download_rate_sample_at is not None:
-        elapsed = now - _download_rate_sample_at
-        delta = current_bytes - _download_rate_sample_bytes
-        if elapsed >= 0.5 and delta >= 0:
-            # Smooth the UI value while ignoring filesystem regressions caused
-            # by Hugging Face replacing a retried .incomplete shard.
-            instant_bps = delta / elapsed
-            _download_rate_bps = (
-                instant_bps if _download_rate_bps <= 0
-                else (_download_rate_bps * 0.65) + (instant_bps * 0.35)
-            )
-            _download_rate_sample_at = now
-            _download_rate_sample_bytes = current_bytes
-    else:
-        _download_rate_sample_at = now
-        _download_rate_sample_bytes = current_bytes
-    # The registry size is an estimate. It is valid for the visible counter to
-    # reach that estimate while a final/retried file is still incomplete;
-    # download_complete remains false until every incomplete file is finalized.
-    download_complete = downloaded >= total_bytes and incomplete_bytes == 0
-    return {
-        "downloaded_bytes": min(_download_progress_high_water, total_bytes),
-        "current_bytes": min(current_bytes, total_bytes),
-        "completed_bytes": min(downloaded, total_bytes),
-        "total_bytes": total_bytes,
-        "download_complete": download_complete,
-        "incomplete_bytes": incomplete_bytes,
-        "speed_bps": round(_download_rate_bps),
-    }
-
 # ── Model registry ────────────────────────────────────────────────────────────
 MODELS = {
-    "flux-schnell": {
-        "label": "FLUX.1-schnell (Recommended — 4-step, fast, ~16 GB download)",
-        "repo": "black-forest-labs/FLUX.1-schnell",
-        "pipeline_class": "FluxPipeline",
-        "default_steps": 4,
-        "default_guidance": 0.0,
-        "size_gb": 16,
-        "supports_ip_adapter": False,
-    },
-    "sdxl-turbo": {
-        "label": "SDXL-Turbo (1-step, very fast, ~6.5 GB download)",
-        "repo": "stabilityai/sdxl-turbo",
-        "pipeline_class": "AutoPipelineForText2Image",
-        "default_steps": 1,
-        "default_guidance": 0.0,
-        "size_gb": 6.5,
-        "supports_ip_adapter": True,
-    },
-    "sdxl": {
-        "label": "Stable Diffusion XL (30-step, best quality, ~7 GB download)",
-        "repo": "stabilityai/stable-diffusion-xl-base-1.0",
-        "pipeline_class": "StableDiffusionXLPipeline",
-        "default_steps": 30,
-        "default_guidance": 7.5,
-        "size_gb": 7,
-        "supports_ip_adapter": True,
-    },
-    "flux2-klein-4b": {
-        "label": "FLUX.2 [klein] 4B (4-step, generation + editing, ~24 GB download)",
-        "repo": "black-forest-labs/FLUX.2-klein-4B",
-        "pipeline_class": "Flux2KleinPipeline",
-        "default_steps": 4,
-        "default_guidance": 1.0,
-        "size_gb": 24,
-        "supports_ip_adapter": False,
-        "supports_reference_image": True,
-        "requires_reference_image": False,
-        "use_cpu_offload": True,
-        "minimum_vram_gb": 13,
-        "recommended_vram_gb": 16,
-        "requires_cuda": True,
-    },
     "qwen-image-edit-2511": {
         "label": "Qwen Image Edit 2511 (best ungated local editing, ~20 GB download)",
         "repo": "Qwen/Qwen-Image-Edit-2511",
@@ -399,7 +271,6 @@ MODELS = {
         "default_steps": 40,
         "default_guidance": 4.0,
         "size_gb": 20,
-        "supports_ip_adapter": False,
         "supports_reference_image": True,
         "requires_reference_image": True,
         # The current loader places the complete pipeline on CUDA; it does
@@ -417,7 +288,6 @@ MODELS = {
         "default_steps": 50,
         "default_guidance": 4.5,
         "size_gb": 30,
-        "supports_ip_adapter": False,
         "supports_reference_image": True,
         "requires_reference_image": True,
         # LongCat's official model card documents CPU offload at roughly
@@ -428,42 +298,6 @@ MODELS = {
         "recommended_vram_gb": 24,
         "requires_cuda": True,
     },
-    "realvisxl": {
-        "label": "RealVisXL v4 (30-step, photorealistic, unrestricted, ~7 GB download)",
-        "repo": "SG161222/RealVisXL_V4.0",
-        "pipeline_class": "StableDiffusionXLPipeline",
-        "default_steps": 30,
-        "default_guidance": 7.0,
-        "size_gb": 7,
-        "supports_ip_adapter": True,
-    },
-    "dreamshaper-xl": {
-        "label": "DreamShaper XL (8-step, fast + unrestricted, ~7 GB download)",
-        "repo": "Lykon/dreamshaper-xl-v2-turbo",
-        "pipeline_class": "StableDiffusionXLPipeline",
-        "default_steps": 8,
-        "default_guidance": 2.0,
-        "size_gb": 7,
-        "supports_ip_adapter": True,
-    },
-    "z-image-turbo": {
-        "label": "Z-Image-Turbo (8-step, photorealistic + strong text, ~24 GB download)",
-        "repo": "Tongyi-MAI/Z-Image-Turbo",
-        "pipeline_class": "ZImagePipeline",
-        "default_steps": 8,
-        "default_guidance": 0.0,
-        "size_gb": 24,
-        "supports_ip_adapter": False,
-        # The official model card targets 16 GB consumer GPUs. The current
-        # loader keeps the complete pipeline on one device, so fail clearly
-        # below that threshold instead of spending time assembling a pipeline
-        # that cannot fit.
-        "minimum_vram_gb": 16,
-        "recommended_vram_gb": 24,
-        "requires_cuda": True,
-        # Tongyi-MAI/Z-Image-Turbo is Apache-2.0 and ungated on Hugging Face;
-        # weights are downloaded into the local cache and inference is local.
-    },
 }
 
 # ── Request / response models ─────────────────────────────────────────────────
@@ -473,7 +307,7 @@ class CpuThreadsRequest(BaseModel):
 class GenerateRequest(BaseModel):
     prompt: str
     negative_prompt: str = ""
-    model: str = "flux-schnell"
+    model: str = "qwen-image-edit-2511"
     steps: Optional[int] = None
     guidance_scale: Optional[float] = None
     width: int = 1024
@@ -481,8 +315,6 @@ class GenerateRequest(BaseModel):
     seed: Optional[int] = None
     init_image: Optional[str] = None        # base64 PNG/JPEG for img2img
     strength: float = 0.75                  # img2img: 0.0 = keep original, 1.0 = full redraw
-    ip_adapter_image: Optional[str] = None  # base64 reference photo for character lock
-    ip_adapter_scale: float = 0.6           # 0.0 = ignore reference, 1.0 = copy exactly
 
 class GenerateResponse(BaseModel):
     image_b64: str
@@ -491,7 +323,7 @@ class GenerateResponse(BaseModel):
     filename: str
 
 class LoadRequest(BaseModel):
-    model: str = "flux-schnell"
+    model: str = "qwen-image-edit-2511"
 
 # ── FastAPI app ───────────────────────────────────────────────────────────────
 app = FastAPI(title="Aura Farming Image Gen")
@@ -506,8 +338,6 @@ app.add_middleware(
 def _do_load(model_key: str) -> None:
     global _pipeline, _loaded_model, _status, _status_message, _loading_model_key
     global _loading_from_cache, _loading_phase, _loading_started_at, _loading_detail
-    global _download_progress_high_water
-    global _ip_adapter_loaded
 
     if model_key not in MODELS:
         _status = "error"
@@ -524,10 +354,6 @@ def _do_load(model_key: str) -> None:
     _loading_phase = "checking_cache"
     _loading_started_at = time.time()
     _loading_detail = "Checking the local model cache…"
-    _download_progress_high_water = 0
-    _download_rate_bps = 0.0
-    _download_rate_sample_at = None
-    _download_rate_sample_bytes = 0
 
     # Detect whether the weights are already cached so we can show the right message
     cached = _model_is_cached(model_key)
@@ -561,8 +387,7 @@ def _do_load(model_key: str) -> None:
                 f"{info['label']} requires a CUDA-capable NVIDIA GPU{detected}; "
                 f"this installation cannot use CUDA ({gpu_info.get('reason', 'CUDA is unavailable')}). "
                 "The model was downloaded successfully, but it cannot be loaded into CPU memory. "
-                "Choose SDXL-Turbo or another CPU-compatible model, or install the CUDA-enabled "
-                "AI libraries and NVIDIA driver."
+                "Install the CUDA-enabled AI libraries and NVIDIA driver."
             )
         if device == "cuda" and minimum_vram:
             actual_vram = gpu_info.get("vram_gb")
@@ -572,47 +397,26 @@ def _do_load(model_key: str) -> None:
                 raise RuntimeError(
                     f"Could not measure VRAM for {gpu_info.get('name') or 'the CUDA device'}. "
                     f"{info['label']} requires at least {minimum_vram} GB of VRAM in the current "
-                    "full-GPU loader. Choose SDXL-Turbo or another smaller model, or use a machine "
-                    "with more VRAM."
+                    "full-GPU loader; use a machine with more VRAM."
                 )
             if actual_vram < minimum_vram:
                 raise RuntimeError(
                     f"{info['label']} needs at least {minimum_vram} GB of VRAM in the current full-GPU loader, "
                     f"but {gpu_info.get('name') or 'this GPU'} has {actual_vram} GB. "
-                    "Choose SDXL-Turbo or another smaller model, or use a machine with more VRAM."
+                    "Use a machine with more VRAM."
                 )
 
         if device == "cpu" and info.get("minimum_vram_gb"):
             _loading_detail = "No CUDA runtime detected; loading the large model into system RAM…"
 
-        from diffusers import (
-            FluxPipeline,
-            AutoPipelineForText2Image,
-            StableDiffusionXLPipeline,
-            StableDiffusion3Pipeline,
-            ZImagePipeline,
-        )
-
-        from diffusers import StableDiffusionPipeline
-        _cls_map = {
-            "FluxPipeline": FluxPipeline,
-            "AutoPipelineForText2Image": AutoPipelineForText2Image,
-            "StableDiffusionXLPipeline": StableDiffusionXLPipeline,
-            "StableDiffusion3Pipeline": StableDiffusion3Pipeline,
-            "StableDiffusionPipeline": StableDiffusionPipeline,
-            "ZImagePipeline": ZImagePipeline,
-        }
         if info["pipeline_class"] == "QwenImageEditPlusPipeline":
             from diffusers import QwenImageEditPlusPipeline
             PipelineCls = QwenImageEditPlusPipeline
         elif info["pipeline_class"] == "LongCatImageEditPipeline":
             from diffusers import LongCatImageEditPipeline
             PipelineCls = LongCatImageEditPipeline
-        elif info["pipeline_class"] == "Flux2KleinPipeline":
-            from diffusers import Flux2KleinPipeline
-            PipelineCls = Flux2KleinPipeline
         else:
-            PipelineCls = _cls_map[info["pipeline_class"]]
+            raise RuntimeError(f"Unsupported image model pipeline: {info['pipeline_class']}")
 
         # Apply CPU thread cap before any computation
         torch.set_num_threads(_cpu_threads)
@@ -631,13 +435,6 @@ def _do_load(model_key: str) -> None:
         # weights during load, cutting peak RAM use roughly in half.
         load_kwargs: dict = {"torch_dtype": dtype, "cache_dir": MODELS_DIR, "low_cpu_mem_usage": True}
 
-        # SD 1.x pipelines ship with a safety checker that blacks out flagged
-        # outputs. Disable it so the model runs unrestricted on local hardware.
-        # SDXL, FLUX, and SD3 have no safety checker in diffusers — no-op there.
-        if info["pipeline_class"] == "StableDiffusionPipeline":
-            load_kwargs["safety_checker"] = None
-            load_kwargs["requires_safety_checker"] = False
-
         if _loading_from_cache:
             _loading_phase = "loading_pipeline"
             _loading_detail = "Assembling the cached model components…"
@@ -652,17 +449,11 @@ def _do_load(model_key: str) -> None:
             hub_version = getattr(huggingface_hub, "__version__", "unknown")
         except Exception:
             hub_version = "unavailable"
-        xet_installed = importlib.util.find_spec("hf_xet") is not None
-        xet_enabled = xet_installed and os.environ.get("HF_HUB_DISABLE_XET", "").lower() not in {
-            "1", "true", "yes", "on",
-        }
         log.info(
             "Hugging Face download backend: "
             f"huggingface_hub={hub_version}, "
-            f"hf_xet_installed={xet_installed}, "
-            f"xet_enabled={xet_enabled}, "
-            f"HF_XET_HIGH_PERFORMANCE={os.environ.get('HF_XET_HIGH_PERFORMANCE', '')!r}, "
-            f"HF_XET_NUM_CONCURRENT_RANGE_GETS={os.environ.get('HF_XET_NUM_CONCURRENT_RANGE_GETS', '')!r}"
+            "transport=regular HTTP/LFS, "
+            f"HF_HUB_DISABLE_XET={os.environ.get('HF_HUB_DISABLE_XET', '')!r}"
         )
         log.info(f"Loading pipeline components for {model_key} (elapsed {time.time() - _loading_started_at:.0f}s)")
         pipe = PipelineCls.from_pretrained(info["repo"], **load_kwargs)
@@ -692,14 +483,9 @@ def _do_load(model_key: str) -> None:
         _loaded_model = model_key
         _loading_model_key = None
         _loading_from_cache = False
-        _download_progress_high_water = 0
-        _download_rate_bps = 0.0
-        _download_rate_sample_at = None
-        _download_rate_sample_bytes = 0
         _loading_phase = "idle"
         _loading_started_at = None
         _loading_detail = ""
-        _ip_adapter_loaded = False   # new pipeline — IP-Adapter must be reloaded
         _status = "ready"
         _status_message = f"Ready — {info['label']} on {device.upper()}"
         log.info(_status_message)
@@ -707,7 +493,6 @@ def _do_load(model_key: str) -> None:
     except Exception as exc:
         _loading_model_key = None
         _loading_from_cache = False
-        _download_progress_high_water = 0
         _loading_phase = "error"
         _loading_started_at = None
         _loading_detail = ""
@@ -719,21 +504,15 @@ def _do_load(model_key: str) -> None:
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.get("/status")
 def get_status():
-    progress = _get_download_progress() if _status == "loading" and not _loading_from_cache else None
     phase = _loading_phase
-    # A cache estimate can reach 100% before the loader has finished its
-    # hardware check. Never let download progress hide that more meaningful
-    # phase in the UI.
-    if _status == "loading" and phase == "downloading" and progress and progress.get("download_complete"):
-        phase = "loading_pipeline"
     message = _status_message
     detail = _loading_detail
     if phase in {"loading_pipeline", "moving_to_device"} and _loading_model_key in MODELS:
         label = MODELS[_loading_model_key]["label"]
         message = (
-            f"Download complete. Moving {label} into memory…"
+            f"Preparing {label} in memory…"
             if phase == "moving_to_device"
-            else f"Download estimate reached. Loading {label} into memory…"
+            else f"Loading {label} into memory…"
         )
     return {
         "status": _status,
@@ -745,7 +524,6 @@ def get_status():
             round(time.time() - _loading_started_at, 1)
             if _status == "loading" and _loading_started_at else None
         ),
-        "download_progress": progress,
         "available_models": {
             k: {
                 "label": v["label"],
@@ -753,7 +531,6 @@ def get_status():
                 "installed": _model_is_cached(k),
                 "default_steps": v["default_steps"],
                 "default_guidance": v["default_guidance"],
-                "supports_ip_adapter": v.get("supports_ip_adapter", False),
                 "supports_reference_image": v.get("supports_reference_image", False),
                 "requires_reference_image": v.get("requires_reference_image", False),
                 "uses_cpu_offload": v.get("use_cpu_offload", False),
@@ -792,11 +569,10 @@ def set_cpu_threads(req: CpuThreadsRequest):
 def unload_model():
     """Release the pipeline from memory so the rest of the app gets its RAM back."""
     global _pipeline, _loaded_model, _status, _status_message, _loading_phase
-    global _loading_started_at, _loading_detail, _ip_adapter_loaded
+    global _loading_started_at, _loading_detail
     import gc
     _pipeline = None
     _loaded_model = None
-    _ip_adapter_loaded = False
     _loading_phase = "idle"
     _loading_started_at = None
     _loading_detail = ""
@@ -820,7 +596,7 @@ class DeleteModelRequest(BaseModel):
 @app.post("/delete-model")
 def delete_model(req: DeleteModelRequest):
     """Delete one registered model's downloaded Hugging Face cache from disk."""
-    global _pipeline, _loaded_model, _status, _status_message, _ip_adapter_loaded
+    global _pipeline, _loaded_model, _status, _status_message
 
     if req.model not in MODELS:
         raise HTTPException(status_code=400, detail="Unknown model")
@@ -832,7 +608,6 @@ def delete_model(req: DeleteModelRequest):
     if _loaded_model == req.model:
         _pipeline = None
         _loaded_model = None
-        _ip_adapter_loaded = False
         _status = "idle"
         try:
             import gc
@@ -889,7 +664,7 @@ def load_model(req: LoadRequest):
 
 @app.post("/generate")
 def generate(req: GenerateRequest):
-    global _pipeline, _loaded_model, _status, _ip_adapter_loaded, _generation_progress
+    global _pipeline, _loaded_model, _status, _generation_progress
 
     requested_info = MODELS.get(req.model)
     if requested_info is None:
@@ -909,7 +684,7 @@ def generate(req: GenerateRequest):
         if _pipeline is None:
             raise HTTPException(status_code=500, detail=_status_message)
 
-    info = MODELS.get(req.model, MODELS["flux-schnell"])
+    info = MODELS[req.model]
     if info.get("requires_reference_image") and not req.init_image:
         raise HTTPException(
             status_code=400,
@@ -944,38 +719,6 @@ def generate(req: GenerateRequest):
         if req.negative_prompt:
             kwargs["negative_prompt"] = req.negative_prompt
 
-        # ── IP-Adapter character lock ─────────────────────────────────────────
-        # Loads IP-Adapter weights lazily (first request that uses it; ~300 MB).
-        # set_ip_adapter_scale(0) disables it without unloading for requests
-        # that don't use it, so reload cost is only paid once per model session.
-        if req.ip_adapter_image and info.get("supports_ip_adapter"):
-            from PIL import Image as PILImage
-            if not _ip_adapter_loaded:
-                with _generation_lock:
-                    _generation_progress = {
-                        "current_step": 0,
-                        "total_steps": steps,
-                        "percent": 0,
-                        "elapsed_seconds": round(time.time() - t0, 1),
-                        "phase": "Loading character adapter",
-                    }
-                log.info("Loading IP-Adapter SDXL weights (~300 MB one-time download)…")
-                _pipeline.load_ip_adapter(
-                    "h94/IP-Adapter",
-                    subfolder="sdxl_models",
-                    weight_name="ip-adapter_sdxl.bin",
-                    cache_dir=MODELS_DIR,
-                )
-                _ip_adapter_loaded = True
-            _pipeline.set_ip_adapter_scale(req.ip_adapter_scale)
-            ref_bytes = base64.b64decode(req.ip_adapter_image)
-            ref_img = PILImage.open(io.BytesIO(ref_bytes)).convert("RGB")
-            kwargs["ip_adapter_image"] = ref_img
-            log.info(f"IP-Adapter enabled — scale {req.ip_adapter_scale}")
-        elif _ip_adapter_loaded:
-            # Reference image not provided this request — mute the adapter
-            _pipeline.set_ip_adapter_scale(0.0)
-
         def on_step_end(_pipe, step_index, _timestep, callback_kwargs):
             global _generation_progress
             current_step = min(step_index + 1, steps)
@@ -991,135 +734,24 @@ def generate(req: GenerateRequest):
 
         kwargs["callback_on_step_end"] = on_step_end
 
-        pipeline_class = info.get("pipeline_class", "")
-        if pipeline_class == "Flux2KleinPipeline":
-            # FLUX.2 Klein uses one unified pipeline for text-to-image and
-            # multi-reference image editing. It accepts image= directly,
-            # but does not accept the generic negative_prompt or callback
-            # shape used by the older pipelines in this server.
-            kwargs.pop("negative_prompt", None)
-            kwargs.pop("callback_on_step_end", None)
-            kwargs["width"] = req.width
-            kwargs["height"] = req.height
-            if req.init_image:
-                img_bytes = base64.b64decode(req.init_image)
-                init_img = PILImage.open(io.BytesIO(img_bytes)).convert("RGB")
-                kwargs["image"] = init_img.resize((req.width, req.height), PILImage.LANCZOS)
-            with torch.inference_mode():
-                result = _pipeline(**kwargs)
-        elif req.init_image:
-            # ── Image-to-image ────────────────────────────────────────────────
-            # Reuse the loaded pipeline's weights via from_pipe() — no re-download.
-            from PIL import Image as PILImage
-            if pipeline_class == "QwenImageEditPlusPipeline":
-                img_bytes = base64.b64decode(req.init_image)
-                init_img = PILImage.open(io.BytesIO(img_bytes)).convert("RGB")
-                init_img = init_img.resize((req.width, req.height), PILImage.LANCZOS)
-                # Qwen Image Edit Plus takes one or more reference images as a
-                # list and uses true_cfg_scale for prompt adherence.
-                kwargs["image"] = [init_img]
-                kwargs["true_cfg_scale"] = guidance
-                kwargs["guidance_scale"] = 1.0
-                kwargs["negative_prompt"] = req.negative_prompt or " "
-                kwargs["num_images_per_prompt"] = 1
-                with torch.inference_mode():
-                    result = _pipeline(**kwargs)
-                image = result.images[0]
-                elapsed_ms = int((time.time() - t0) * 1000)
-                with _generation_lock:
-                    _generation_progress = None
-                ts = int(time.time() * 1000)
-                filename = f"aura-img-{ts}-seed{seed}.png"
-                out_path = Path(OUTPUT_DIR) / filename
-                image.save(str(out_path))
-                buf = io.BytesIO()
-                image.save(buf, format="PNG")
-                b64 = base64.b64encode(buf.getvalue()).decode()
-                return GenerateResponse(
-                    image_b64=b64,
-                    seed=seed,
-                    elapsed_ms=elapsed_ms,
-                    filename=filename,
-                )
-            if pipeline_class == "LongCatImageEditPipeline":
-                img_bytes = base64.b64decode(req.init_image)
-                init_img = PILImage.open(io.BytesIO(img_bytes)).convert("RGB")
-                init_img = init_img.resize((req.width, req.height), PILImage.LANCZOS)
-                # LongCat Image Edit takes the source image directly and
-                # applies an instruction-guided edit; it has no img2img
-                # strength parameter in its official pipeline API.
-                kwargs["image"] = init_img
-                kwargs["guidance_scale"] = guidance
-                kwargs["num_images_per_prompt"] = 1
-                # LongCat's pipeline does not expose Diffusers' generic
-                # callback_on_step_end hook.
-                kwargs.pop("callback_on_step_end", None)
-                with torch.inference_mode():
-                    result = _pipeline(**kwargs)
-                image = result.images[0]
-                elapsed_ms = int((time.time() - t0) * 1000)
-                with _generation_lock:
-                    _generation_progress = None
-                ts = int(time.time() * 1000)
-                filename = f"aura-img-{ts}-seed{seed}.png"
-                out_path = Path(OUTPUT_DIR) / filename
-                image.save(str(out_path))
-                buf = io.BytesIO()
-                image.save(buf, format="PNG")
-                b64 = base64.b64encode(buf.getvalue()).decode()
-                return GenerateResponse(
-                    image_b64=b64,
-                    seed=seed,
-                    elapsed_ms=elapsed_ms,
-                    filename=filename,
-                )
-            from diffusers import (
-                FluxImg2ImgPipeline,
-                StableDiffusionXLImg2ImgPipeline,
-                StableDiffusion3Img2ImgPipeline,
-                AutoPipelineForImage2Image,
-                ZImageImg2ImgPipeline,
-            )
-            import math
-            _img2img_cls_map = {
-                "FluxPipeline":              FluxImg2ImgPipeline,
-                "StableDiffusionXLPipeline": StableDiffusionXLImg2ImgPipeline,
-                "StableDiffusion3Pipeline":  StableDiffusion3Img2ImgPipeline,
-                "AutoPipelineForText2Image": AutoPipelineForImage2Image,
-                "ZImagePipeline":            ZImageImg2ImgPipeline,
-            }
-            Img2ImgCls = _img2img_cls_map.get(pipeline_class)
-            if Img2ImgCls is None:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Image-to-image is not supported for model '{req.model}'"
-                )
-
-            # Guard: floor(steps × strength) must be ≥ 1 or the pipeline gets
-            # 0 timesteps and raises "cannot reshape tensor of 0 elements".
-            # This bites SDXL-Turbo (default 1 step) whenever strength < 1.0.
-            min_steps_for_strength = math.ceil(1.0 / max(req.strength, 1e-6))
-            if steps < min_steps_for_strength:
-                steps = min_steps_for_strength
-                kwargs["num_inference_steps"] = steps
-
-            img_bytes = base64.b64decode(req.init_image)
-            init_img = PILImage.open(io.BytesIO(img_bytes)).convert("RGB")
-            # Resize to requested output dimensions so the pipeline doesn't complain
-            init_img = init_img.resize((req.width, req.height), PILImage.LANCZOS)
-
-            img2img_pipe = Img2ImgCls.from_pipe(_pipeline)
-            kwargs["image"] = init_img
-            kwargs["strength"] = req.strength
-            # img2img pipelines derive output size from the input image — no width/height kwarg
-            with torch.inference_mode():
-                result = img2img_pipe(**kwargs)
+        # Both supported models are reference-image editors. Keep this path
+        # deliberately small: one image input, one pipeline call, no legacy
+        # text-to-image or adapter downloads.
+        from PIL import Image as PILImage
+        img_bytes = base64.b64decode(req.init_image)
+        init_img = PILImage.open(io.BytesIO(img_bytes)).convert("RGB")
+        init_img = init_img.resize((req.width, req.height), PILImage.LANCZOS)
+        kwargs["image"] = [init_img] if req.model == "qwen-image-edit-2511" else init_img
+        kwargs["num_images_per_prompt"] = 1
+        kwargs.pop("callback_on_step_end", None)
+        if req.model == "qwen-image-edit-2511":
+            kwargs["true_cfg_scale"] = guidance
+            kwargs["guidance_scale"] = 1.0
+            kwargs["negative_prompt"] = req.negative_prompt or " "
         else:
-            # ── Text-to-image (original path) ─────────────────────────────────
-            kwargs["width"] = req.width
-            kwargs["height"] = req.height
-            with torch.inference_mode():
-                result = _pipeline(**kwargs)
+            kwargs["guidance_scale"] = guidance
+        with torch.inference_mode():
+            result = _pipeline(**kwargs)
 
         image = result.images[0]
 

@@ -56,7 +56,7 @@
 - [View Feed ad-action safety](view-feed-ad-action-safety.md) — sponsored cards and unconfirmed media bounds must never receive guessed double-taps; use confirmed action nodes or skip
 - [Settings wide control rows](settings-wide-control-rows.md) — long explanatory settings text needs full-width, top-aligned control rows rather than a narrow centered layout
 - [Local image model loading phases](image-gen-download-completion.md) — Hugging Face cache size can reach 100% before diffusers finishes assembling and moving a model into memory
-- [Local model download progress](image-gen-download-speed.md) — raw Hugging Face cache sums can regress during partial-file retries; use a per-load high-water mark and enable hf-xet performance mode
+- [Local image model downloader](image-gen-download-speed.md) — keep model downloads on conservative HTTP/LFS transport; do not reintroduce Xet concurrency or custom byte-rate monitoring
 - [HST restart recovery](hst-restart-recovery.md) — startup recovery and manual toggle-on must use separate scheduling paths; preserve slot identity in background settings responses
 - [Mobile Search tab detector](mobile-search-tab-detector.md) — validate unlabeled bottom-nav nodes from the live accessibility row; never derive a tap coordinate from screen dimensions
 - [GitHub PAT push fallback](github-pat-push-fallback.md) — project GITHUB_TOKEN secrets work with GIT_ASKPASS HTTPS pushes, but not the gitPush source-control helper

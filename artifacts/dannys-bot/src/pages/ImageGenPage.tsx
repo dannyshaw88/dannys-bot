@@ -18,7 +18,6 @@ interface ModelInfo {
   installed?: boolean;
   default_steps: number;
   default_guidance: number;
-  supports_ip_adapter?: boolean;
   supports_reference_image?: boolean;
   requires_reference_image?: boolean;
   uses_cpu_offload?: boolean;
@@ -44,23 +43,12 @@ interface GpuInfo {
   recommended_dtype?: string | null;
 }
 
-interface DownloadProgress {
-  downloaded_bytes: number;
-  current_bytes?: number;
-  completed_bytes?: number;
-  total_bytes: number;
-  download_complete?: boolean;
-  incomplete_bytes?: number;
-  speed_bps?: number;
-}
-
 interface StatusResponse {
   status: "unavailable" | "idle" | "loading" | "ready" | "error";
   message: string;
   available?: boolean;
   loaded_model: string | null;
   available_models: Record<string, ModelInfo>;
-  download_progress?: DownloadProgress | null;
   loading_phase?: "checking_cache" | "hardware_check" | "downloading" | "loading_pipeline" | "moving_to_device" | "error" | "idle";
   loading_detail?: string;
   loading_elapsed_seconds?: number | null;
@@ -103,18 +91,6 @@ declare global {
 }
 
 const BRAND = "#1AD2F2";
-const LICENSE_REQUIRED_MODEL_KEYS = new Set([
-  "flux-dev",
-  "flux2-dev",
-  "sd3-medium",
-  "sd35-large",
-  "sd35-large-turbo",
-]);
-
-function isSelectableModel(info: ModelInfo | undefined, key: string): boolean {
-  return Boolean(info) && !info?.disabled && !LICENSE_REQUIRED_MODEL_KEYS.has(key);
-}
-
 const RESOLUTIONS = [
   { label: "1024 × 1024 (Square)", w: 1024, h: 1024 },
   { label: "1080 × 1080 (Instagram Square)", w: 1080, h: 1080 },
@@ -142,7 +118,6 @@ interface PageCache {
   strength: number;
   charImage: string | null;
   charImageName: string;
-  charScale: number;
   cpuThreads: number | "";
   result: GenerateResult | null;
 }
@@ -150,7 +125,7 @@ const PAGE_CACHE_KEY = "aura-farming-ai-image-page-v2";
 const defaultPageCache: PageCache = {
   prompt: "",
   negPrompt: "",
-  model: "flux-schnell",
+  model: "qwen-image-edit-2511",
   resolution: RESOLUTIONS[0],
   steps: "",
   guidance: "",
@@ -160,7 +135,6 @@ const defaultPageCache: PageCache = {
   strength: 0.75,
   charImage: null,
   charImageName: "",
-  charScale: 0.6,
   cpuThreads: "",
   result: null,
 };
@@ -210,9 +184,8 @@ export function ImageGenPage() {
   const [initImageName, setInitImageName] = useState(_cache.initImageName);
   const [strength, setStrength] = useState(_cache.strength);
 
-  const [charImage, setCharImage] = useState<string | null>(_cache.charImage);   // IP-Adapter reference
+  const [charImage, setCharImage] = useState<string | null>(_cache.charImage);
   const [charImageName, setCharImageName] = useState(_cache.charImageName);
-  const [charScale, setCharScale] = useState(_cache.charScale);
   const [cpuThreads, setCpuThreads] = useState<number | "">(_cache.cpuThreads);
 
   const [generating, setGenerating] = useState(false);
@@ -234,11 +207,10 @@ export function ImageGenPage() {
     _cache.strength = strength;
     _cache.charImage = charImage;
     _cache.charImageName = charImageName;
-    _cache.charScale = charScale;
     _cache.cpuThreads = cpuThreads;
     _cache.result = result;
     writePageCache(_cache);
-  }, [prompt, negPrompt, model, resolution, steps, guidance, seed, initImage, initImageName, strength, charImage, charImageName, charScale, cpuThreads, result]);
+  }, [prompt, negPrompt, model, resolution, steps, guidance, seed, initImage, initImageName, strength, charImage, charImageName, cpuThreads, result]);
   const [error, setError] = useState("");
   const [modelNotice, setModelNotice] = useState("");
 
@@ -256,13 +228,12 @@ export function ImageGenPage() {
         const data: StatusResponse = await r.json();
         setStatus(data);
         setStatusErr(false);
-        // Auto-select the loaded model, or recover from a removed/legacy model
-        // that may still be present in the module-level navigation cache.
+        // Auto-select the loaded model, or recover from an old saved selection.
         if (data.loaded_model && data.status === "ready") {
           setModel(data.loaded_model);
-        } else if (!isSelectableModel(data.available_models?.[model], model)) {
+        } else if (!data.available_models?.[model]) {
           const firstSelectable = Object.entries(data.available_models ?? {})
-            .find(([key, info]) => isSelectableModel(info, key))?.[0];
+            .find(([, info]) => !info.disabled)?.[0];
           if (firstSelectable) setModel(firstSelectable);
         }
       } else {
@@ -375,11 +346,6 @@ export function ImageGenPage() {
        } else if (currentModelInfo?.supports_reference_image && charImage) {
          body.init_image = charImage.split(",")[1];
       }
-      const modelSupportsIpAdapter = status?.available_models?.[model]?.supports_ip_adapter;
-      if (charImage && modelSupportsIpAdapter) {
-        body.ip_adapter_image = charImage.split(",")[1];
-        body.ip_adapter_scale = charScale;
-      }
 
       const r = await fetch("/api/image-gen/generate", {
         method: "POST",
@@ -468,16 +434,12 @@ export function ImageGenPage() {
     status?.loading_phase === "loading_pipeline" ||
     status?.loading_phase === "moving_to_device";
   const loadingHardware = status?.loading_phase === "hardware_check";
-  const downloadEstimateComplete =
-    status?.loading_phase === "downloading" &&
-    Boolean(status?.download_progress?.download_complete);
   const needsLoad = status?.status === "idle" || status?.status === "error";
   const noSidecar = statusErr && !status;
   const hasElectronSetup = Boolean(window.electronAPI?.setupImageGen);
   const currentModelInfo = status?.available_models?.[model];
   const defaultSteps = currentModelInfo?.default_steps ?? 4;
   const defaultGuidance = currentModelInfo?.default_guidance ?? 0;
-  const supportsIpAdapter = Boolean(currentModelInfo?.supports_ip_adapter);
   const supportsReferenceImage = Boolean(currentModelInfo?.supports_reference_image);
   const requiresReferenceImage = Boolean(
     currentModelInfo?.requires_reference_image ?? currentModelInfo?.supports_reference_image,
@@ -551,10 +513,7 @@ export function ImageGenPage() {
           {!isUnavailable && !noSidecar && needsLoad && !isLoading && (
             <SetupSection
               model={model}
-               models={Object.fromEntries(
-                 Object.entries(status?.available_models ?? {})
-                   .filter(([key, info]) => isSelectableModel(info, key)),
-               )}
+              models={status?.available_models ?? {}}
               onModelChange={setModel}
               onLoad={handleLoadModel}
               onDelete={handleDeleteModel}
@@ -577,8 +536,6 @@ export function ImageGenPage() {
                   ? "Checking hardware compatibility…"
                   : loadingPipeline
                     ? "Download complete — loading model into memory…"
-                    : downloadEstimateComplete
-                      ? "Download estimate complete — preparing model…"
                     : "Loading model…"
               }
             >
@@ -586,11 +543,12 @@ export function ImageGenPage() {
               {status?.loading_detail && (
                 <p className="text-xs text-muted-foreground mt-1">{status.loading_detail}</p>
               )}
-              <DownloadProgressBar
-                progress={status?.download_progress}
-                loadingPipeline={loadingPipeline}
-                loadingPhase={status?.loading_phase}
-              />
+              <div className="mt-3 h-2 w-full rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full w-full rounded-full animate-pulse"
+                  style={{ background: BRAND, opacity: 0.4 }}
+                />
+              </div>
               <p className="text-xs text-muted-foreground mt-1">
                 {loadingPipeline
                   ? "The files are downloaded. The model is now being assembled and moved into memory; this can take several minutes on supported hardware."
@@ -624,7 +582,7 @@ export function ImageGenPage() {
                     value={model}
                     onChange={setModel}
                      options={Object.entries(status?.available_models ?? {})
-                       .filter(([key, info]) => isSelectableModel(info, key))
+                       .filter(([, info]) => !info.disabled)
                        .map(([k, v]) => ({ value: k, label: v.label }))}
                   />
                    {currentModelInfo?.installed && (
@@ -663,20 +621,20 @@ export function ImageGenPage() {
                    <GpuStatusNote gpu={gpu} />
                    {slowCpuJob && (
                      <p className="mt-2 rounded-md border border-red-500/30 bg-red-500/5 p-2 text-[10px] text-red-700 dark:text-red-300 leading-relaxed">
-                       This CPU job is unusually heavy ({resolution.w}×{resolution.h}). For a faster test, use SDXL-Turbo at 512×512 or 768×768. A CPU laptop will not match Gemini’s cloud GPU speed.
+                      This CPU job is unusually heavy ({resolution.w}×{resolution.h}). A CPU laptop may take a long time to process large edits.
                      </p>
                    )}
                 </Section>
 
-                {/* Lock Character (IP-Adapter) */}
-                 {(supportsIpAdapter || supportsReferenceImage) && (
-                   <Section label={supportsReferenceImage ? "Reference image (editing)" : "Lock Character (optional)"}>
+                {/* Reference image */}
+                 {supportsReferenceImage && (
+                   <Section label="Reference image (editing)">
                     <p className="text-[10px] text-muted-foreground mb-2 leading-relaxed">
                          {supportsReferenceImage
                           ? requiresReferenceImage
                             ? `Upload the image to edit. ${currentModelInfo?.label ?? "This model"} uses it directly as visual context and follows your prompt. This model requires a reference image.`
                             : `Optional: upload an image for ${currentModelInfo?.label ?? "this model"} to use as visual context while editing. Leave it empty for text-to-image generation.`
-                         : "Upload your base character photo. The model will copy their face &amp; appearance into every new scene you prompt — without redrawing them pixel-by-pixel."}
+                         : "Upload an image for the selected model to use as visual context while editing."}
                     </p>
                     <ImageUploadZone
                       image={charImage}
@@ -684,36 +642,6 @@ export function ImageGenPage() {
                       onImage={(dataUrl, name) => { setCharImage(dataUrl); setCharImageName(name); }}
                       onClear={() => { setCharImage(null); setCharImageName(""); }}
                     />
-                    {charImage && (
-                      <div className="mt-2 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <label className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                            Character Influence — {Math.round(charScale * 100)}%
-                          </label>
-                          <span className="text-[10px] text-muted-foreground">
-                            {charScale <= 0.4 ? "loose likeness" : charScale >= 0.8 ? "strong lock" : "balanced"}
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min={0.1}
-                          max={1.0}
-                          step={0.05}
-                          value={charScale}
-                          onChange={e => setCharScale(Number(e.target.value))}
-                          className="w-full accent-[#1AD2F2]"
-                        />
-                        <div className="flex justify-between text-[10px] text-muted-foreground">
-                          <span>loose likeness</span>
-                          <span>strong lock</span>
-                        </div>
-                       {!supportsReferenceImage && (
-                         <p className="text-[10px] text-muted-foreground pt-1">
-                           First use downloads IP-Adapter weights (~300 MB, one-time).
-                         </p>
-                       )}
-                      </div>
-                    )}
                   </Section>
                 )}
 
@@ -1225,59 +1153,6 @@ function ImageUploadZone({
         <span className="text-[10px] text-muted-foreground/60">PNG · JPEG · WEBP</span>
       </div>
     </>
-  );
-}
-
-function DownloadProgressBar({
-  progress,
-  loadingPipeline = false,
-  loadingPhase,
-}: {
-  progress?: DownloadProgress | null;
-  loadingPipeline?: boolean;
-  loadingPhase?: StatusResponse["loading_phase"];
-}) {
-  const isDownloading = loadingPhase === "downloading";
-  if (!isDownloading || !progress || progress.total_bytes === 0) {
-    // Hardware checks, cache checks, and pipeline assembly do not have a
-    // meaningful byte percentage. Keep the indicator moving without showing
-    // a misleading 0% download.
-    return (
-      <div className="mt-3 space-y-1.5">
-        <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-          <div
-            className="h-full rounded-full animate-pulse"
-            style={{ width: "100%", background: BRAND, opacity: 0.4 }}
-          />
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {loadingPipeline ? "Loading model into memory…" : "Preparing download…"}
-        </p>
-      </div>
-    );
-  }
-
-  const pct = Math.min(100, Math.round((progress.downloaded_bytes / progress.total_bytes) * 100));
-  const dlGB = (progress.downloaded_bytes / 1_073_741_824).toFixed(2);
-  const totalGB = (progress.total_bytes / 1_073_741_824).toFixed(1);
-  const speedMbps = (progress.speed_bps ?? 0) / 1_000_000;
-  const speedLabel = speedMbps >= 1
-    ? `${speedMbps.toFixed(1)} MB/s`
-    : `${((progress.speed_bps ?? 0) / 1_000).toFixed(0)} KB/s`;
-
-  return (
-    <div className="mt-3 space-y-1.5">
-      <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-        <div
-          className={cn("h-full rounded-full transition-all duration-500", loadingPipeline && "animate-pulse")}
-          style={{ width: `${pct}%`, background: BRAND, opacity: loadingPipeline ? 0.65 : 1 }}
-        />
-      </div>
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>{dlGB} / {totalGB} GB</span>
-        <span>{loadingPipeline ? "Loading…" : `${pct}% · ${speedLabel}`}</span>
-      </div>
-    </div>
   );
 }
 

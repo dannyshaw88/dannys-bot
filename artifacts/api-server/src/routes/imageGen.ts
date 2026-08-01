@@ -103,12 +103,8 @@ router.get("/api/image-gen/status", (_req, res) => {
         available: true,
         loaded_model: null,
         available_models: {
-          "flux-schnell":  { label: "FLUX.1-schnell",  name: "FLUX.1-schnell",  size_gb: 16, default_steps: 4, default_guidance: 0 },
-          "sdxl-turbo":    { label: "SDXL-Turbo",       name: "SDXL-Turbo",       size_gb: 6.5, default_steps: 1, default_guidance: 0 },
-          "sdxl":          { label: "Stable Diffusion XL", name: "Stable Diffusion XL", size_gb: 7, default_steps: 30, default_guidance: 7.5 },
-          "z-image-turbo": { label: "Z-Image-Turbo (8-step, photorealistic + strong text, ~24 GB download)", name: "Z-Image-Turbo", size_gb: 24, default_steps: 8, default_guidance: 0, minimum_vram_gb: 16, recommended_vram_gb: 24 },
-          "flux2-klein-4b": { label: "FLUX.2 [klein] 4B (4-step, generation + editing, ~24 GB download)", name: "FLUX.2 [klein] 4B", size_gb: 24, default_steps: 4, default_guidance: 1, supports_reference_image: true, requires_reference_image: false, uses_cpu_offload: true, minimum_vram_gb: 13, recommended_vram_gb: 16 },
-          "longcat-image-edit": { label: "LongCat Image Edit (reference-image editing, ~30 GB download)", name: "LongCat Image Edit", size_gb: 30, default_steps: 50, default_guidance: 4.5, supports_reference_image: true, requires_reference_image: true, uses_cpu_offload: true, minimum_vram_gb: 18, recommended_vram_gb: 24 },
+          "qwen-image-edit-2511": { label: "Qwen Image Edit 2511", name: "Qwen Image Edit 2511", size_gb: 20, default_steps: 40, default_guidance: 4, supports_reference_image: true, requires_reference_image: true, minimum_vram_gb: 24, recommended_vram_gb: 24 },
+          "longcat-image-edit": { label: "LongCat Image Edit", name: "LongCat Image Edit", size_gb: 30, default_steps: 50, default_guidance: 4.5, supports_reference_image: true, requires_reference_image: true, uses_cpu_offload: true, minimum_vram_gb: 18, recommended_vram_gb: 24 },
         },
       });
     } else {
@@ -124,12 +120,8 @@ router.get("/api/image-gen/status", (_req, res) => {
       available: true,
       loaded_model: null,
       available_models: {
-        "flux-schnell":  { label: "FLUX.1-schnell",  name: "FLUX.1-schnell",  size_gb: 16, default_steps: 4, default_guidance: 0 },
-        "sdxl-turbo":    { label: "SDXL-Turbo",       name: "SDXL-Turbo",       size_gb: 6.5, default_steps: 1, default_guidance: 0 },
-        "sdxl":          { label: "Stable Diffusion XL", name: "Stable Diffusion XL", size_gb: 7, default_steps: 30, default_guidance: 7.5 },
-        "z-image-turbo": { label: "Z-Image-Turbo (8-step, photorealistic + strong text, ~24 GB download)", name: "Z-Image-Turbo", size_gb: 24, default_steps: 8, default_guidance: 0, minimum_vram_gb: 16, recommended_vram_gb: 24 },
-          "flux2-klein-4b": { label: "FLUX.2 [klein] 4B (4-step, generation + editing, ~24 GB download)", name: "FLUX.2 [klein] 4B", size_gb: 24, default_steps: 4, default_guidance: 1, supports_reference_image: true, requires_reference_image: false, uses_cpu_offload: true, minimum_vram_gb: 13, recommended_vram_gb: 16 },
-          "longcat-image-edit": { label: "LongCat Image Edit (reference-image editing, ~30 GB download)", name: "LongCat Image Edit", size_gb: 30, default_steps: 50, default_guidance: 4.5, supports_reference_image: true, requires_reference_image: true, uses_cpu_offload: true, minimum_vram_gb: 18, recommended_vram_gb: 24 },
+        "qwen-image-edit-2511": { label: "Qwen Image Edit 2511", name: "Qwen Image Edit 2511", size_gb: 20, default_steps: 40, default_guidance: 4, supports_reference_image: true, requires_reference_image: true, minimum_vram_gb: 24, recommended_vram_gb: 24 },
+        "longcat-image-edit": { label: "LongCat Image Edit", name: "LongCat Image Edit", size_gb: 30, default_steps: 50, default_guidance: 4.5, supports_reference_image: true, requires_reference_image: true, uses_cpu_offload: true, minimum_vram_gb: 18, recommended_vram_gb: 24 },
       },
     });
   });
