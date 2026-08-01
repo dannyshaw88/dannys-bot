@@ -66,3 +66,4 @@
 - [Mobile Phone Apps debugging log parity](mobile-phone-apps-debug-log-parity.md) — emit lifecycle, app decisions, results, lock, and cycle markers through the device log callback
 - [Google manual search variety](google-manual-search-variety.md) — manual Chrome searches should be mostly natural multi-word queries, with isolated one-word terms limited to an occasional 5% path
 - [Synthetic browser startup path](synthetic-browser-startup.md) — device Browser sessions must bypass Instagram bootstrap, blank-page recovery, and self-waiting screencast queues
+- [Mobile account posted-media history](mobile-posted-media-history.md) — keep confirmed profile posts per account/slot separate from the device-wide no-repeat cache

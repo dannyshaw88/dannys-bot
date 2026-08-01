@@ -4,6 +4,15 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.335] — 2026-08-01
+
+### Maintenance — Document account-scoped posted-media history
+
+- Documented the rule that confirmed profile-feed post history must remain separate from the device-wide no-repeat image cache.
+- Bumped the root application and Electron package versions to `1.2.335` so the memory/documentation update follows the repository’s release versioning policy.
+
+---
+
 ## [1.2.334] — 2026-08-01
 
 ### Added — Track account-specific posted media and show Posts in Statistics
