@@ -145,11 +145,6 @@ function spawnImageGenServer(port: number): void {
       IMAGE_GEN_PORT: String(port),
       IMAGE_GEN_MODELS_DIR: modelsDir,
       IMAGE_GEN_OUTPUT_DIR: outputDir,
-      // Use the conservative Hugging Face HTTP/LFS downloader. Xet can open
-      // many concurrent range requests and saturate the user's connection.
-      HF_HUB_DISABLE_XET: "1",
-      HF_HUB_DOWNLOAD_TIMEOUT: "600",
-      HF_HUB_ETAG_TIMEOUT: "60",
     },
   });
 
@@ -1384,10 +1379,9 @@ async function createWindow() {
 
       // Step 2: install/repair AI libraries into a clean package directory.
       // --target can leave conflicting package copies behind in an existing
-      // directory, even with --upgrade. That was the cause of the installed
-      // app continuing to import huggingface_hub==0.36.2 beside new diffusers.
-      // Only this package directory is replaced; the model cache is separate
-      // under image-gen-models and is intentionally preserved.
+      // directory, so repairs always start with a clean package layer.
+      // The model checkpoint cache is separate under image-gen-models and is
+      // intentionally preserved.
       try {
         fs.rmSync(packagesDir, { recursive: true, force: true });
         fs.mkdirSync(packagesDir, { recursive: true });
@@ -1439,8 +1433,8 @@ async function createWindow() {
         const verifyEnv = { ...pipEnv, PYTHONPATH: packagesDir };
         const verifyCode = [
           `import sys; sys.path.insert(0, ${JSON.stringify(packagesDir)})`,
-          "import diffusers, huggingface_hub",
-          "print(f'Verified diffusers={diffusers.__version__}, huggingface_hub={huggingface_hub.__version__}')",
+          "import diffusers",
+          "print(f'Verified diffusers={diffusers.__version__}')",
         ].join("; ");
         const p = spawn(pythonExe, [
           "-c",

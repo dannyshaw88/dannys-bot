@@ -380,9 +380,9 @@ function PhoneFarmPhoneSection({
               <Link
                 href={`/mobile/farm/${encodeURIComponent(phone.serial)}?slot=${slot.idx}`}
                 className="font-medium text-foreground hover:text-primary hover:underline transition-colors"
-                title={`Open Human Session Tool for @${slot.username}`}
+                title={`Open Human Session Tool for ${slot.username}`}
               >
-                @{slot.username}
+                {slot.username}
               </Link>
             </td>
             {orderedLabels.map(s => {

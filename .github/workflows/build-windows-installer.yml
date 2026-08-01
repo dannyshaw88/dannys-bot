@@ -112,6 +112,7 @@ jobs:
           # Copy sidecar server files
           cp sidecar/server.py resources/python-embed/server.py
           cp sidecar/requirements.txt resources/python-embed/requirements.txt
+          cp -R sidecar/sd15-config resources/python-embed/sd15-config
           echo "Python embed ready:"
           ls resources/python-embed/ | head -20
 
@@ -119,7 +120,10 @@ jobs:
         working-directory: artifacts/electron
         shell: bash
         run: |
-          grep -F "huggingface_hub>=1.5.0,<2.0" resources/python-embed/requirements.txt
+          test ! -s resources/python-embed/requirements.txt || grep -F "diffusers>=" resources/python-embed/requirements.txt
+          test -f resources/python-embed/sd15-config/model_index.json
+          test -f resources/python-embed/sd15-config/tokenizer/vocab.json
+          test -f resources/python-embed/sd15-config/v1-inference.yaml
           grep -F -- '"--upgrade"' src/main.ts
           grep -F -- '"--upgrade-strategy", "eager"' src/main.ts
           grep -F -- '"--ignore-installed"' src/main.ts
@@ -142,6 +146,27 @@ jobs:
             exit 1
           fi
           echo "Reel DM recipient safety configuration verified"
+
+      - name: Verify mobile automation and account display fixes
+        shell: bash
+        run: |
+          grep -F "REELS-TO-VIEW-REELS" artifacts/api-server/src/routes/mobile.ts
+          grep -F "FEED-TO-VIEW-FEED" artifacts/api-server/src/routes/mobile.ts
+          grep -F "EXPLORE-TO-VIEW-EXPLORE" artifacts/api-server/src/routes/mobile.ts
+          grep -F "allowBack=*/i > 0" artifacts/api-server/src/routes/mobile.ts
+          grep -F "scanViewFeedA11y" artifacts/api-server/src/routes/mobile.ts
+          grep -F "remove from saved" artifacts/api-server/src/routes/mobile.ts
+          grep -F 'title={`Open Human Session Tool for ${slot.username}`}' artifacts/dannys-bot/src/pages/StatsPage.tsx
+          if grep -F "@{slot.username}" artifacts/dannys-bot/src/pages/StatsPage.tsx; then
+            echo "Statistics Device / Account column still has an @ prefix"
+            exit 1
+          fi
+          grep -F "item.targetUsername ? item.targetUsername : label" artifacts/dannys-bot/src/pages/Dashboard.tsx
+          if grep -F '`@${item.targetUsername}`' artifacts/dannys-bot/src/pages/Dashboard.tsx; then
+            echo "Dashboard Account column still formats phone accounts with @"
+            exit 1
+          fi
+          echo "Mobile automation and account display fixes verified"
 
       - name: Verify Mobile Phone Apps manual-search UI
         shell: bash

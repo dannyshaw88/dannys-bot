@@ -2436,6 +2436,204 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
       return false;
     };
+
+    // View Feed owns this scan deliberately.  Do not replace it with the
+    // shared feed-icon helper: that helper is also used by other tools and its
+    // row selection is allowed to use assumptions that are unsafe here.
+    //
+    // Every coordinate returned by this function is the centre of the exact
+    // accessibility node that supplied it.  The current post is selected by
+    // one coherent action-row identity (Like + any same-row controls), never
+    // by screen percentages or by "first node in the dump".
+    type ViewFeedA11yNode = {
+      x: number; y: number; x1: number; y1: number; x2: number; y2: number;
+      rid: string; desc: string; text: string; cls: string; clickable: boolean;
+    };
+    type ViewFeedScan = {
+      like: { x: number; y: number };
+      alreadyLiked: boolean;
+      comment: { x: number; y: number } | null;
+      shareFeed: { x: number; y: number } | null;
+      shareDm: { x: number; y: number } | null;
+      save: { x: number; y: number } | null;
+      saveLabel: string;
+      author: { x: number; y: number; name: string } | null;
+      audio: { x: number; y: number } | null;
+      mediaBounds?: { x1: number; y1: number; x2: number; y2: number };
+      isVideoPost: boolean;
+      xml: string;
+    };
+    const scanViewFeedA11y = async (): Promise<ViewFeedScan | null> => {
+      const xml = await android.dumpUi(serial).catch(() => "");
+      if (!xml) return null;
+      if (
+        xml.includes('text="Ad"') || xml.includes('content-desc="Ad"') ||
+        xml.includes('text="Sponsored"') || xml.includes('content-desc="Sponsored"') ||
+        xml.includes('text="Advert"') || xml.includes('content-desc="Advert"')
+      ) {
+        onLog?.("View Feed a11y scan: sponsored post marker found — skipping post actions");
+        return null;
+      }
+      const nodes: ViewFeedA11yNode[] = [];
+      for (const segment of xml.split("<node ")) {
+        const bounds = segment.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+        if (!bounds) continue;
+        const x1 = Number(bounds[1]), y1 = Number(bounds[2]);
+        const x2 = Number(bounds[3]), y2 = Number(bounds[4]);
+        const attr = (name: string) => (segment.match(new RegExp(`${name}="([^"]*)"`)) ?? [])[1] ?? "";
+        const rid = attr("resource-id");
+        const desc = attr("content-desc");
+        const text = attr("text");
+        const cls = attr("class");
+        nodes.push({
+          x: Math.floor((x1 + x2) / 2), y: Math.floor((y1 + y2) / 2),
+          x1, y1, x2, y2, rid, desc, text, cls,
+          clickable: segment.includes('clickable="true"'),
+        });
+      }
+
+      const isLike = (n: ViewFeedA11yNode) =>
+        n.rid.includes("row_feed_button_like") || /^(?:un)?like$/i.test(n.desc);
+      const likeByCoord = new Map<string, ViewFeedA11yNode>();
+      for (const node of nodes) {
+        if (!node.clickable || !isLike(node)) continue;
+        const key = `${node.x},${node.y}`;
+        const previous = likeByCoord.get(key);
+        // Prefer the concrete resource-id node over a same-centre wrapper.
+        if (!previous || (node.rid.includes("row_feed_button_like") && !previous.rid.includes("row_feed_button_like"))) {
+          likeByCoord.set(key, node);
+        }
+      }
+      const likes = [...likeByCoord.values()];
+      if (likes.length === 0) {
+        onLog?.("View Feed a11y scan: no clickable Like/Unlike node");
+        return null;
+      }
+
+      const sameRow = (a: ViewFeedA11yNode, b: ViewFeedA11yNode, tolerance = 36) =>
+        Math.abs(a.y - b.y) <= tolerance;
+      const isSave = (n: ViewFeedA11yNode) =>
+        n.rid.includes("row_feed_button_save") ||
+        /^(?:add to saved|remove from saved)$/i.test(n.desc);
+      const isComment = (n: ViewFeedA11yNode) =>
+        /^comment$/i.test(n.desc) && !/commentary|comments/i.test(n.text);
+      const isRepost = (n: ViewFeedA11yNode) =>
+        /^(?:repost|repost to your story|share to feed)$/i.test(n.desc);
+      const isDm = (n: ViewFeedA11yNode) =>
+        /^(?:send|direct|message|share via dm)$/i.test(n.desc);
+
+      // Pick the row with the strongest complete identity.  A recycled
+      // off-screen post may expose another Like node, but it will not have the
+      // same row's save/role controls.  Ties are ambiguous and fail closed.
+      const rowChoices = likes.map(like => {
+        const row = nodes.filter(n => sameRow(n, like));
+        const controls = row.filter(n => n.clickable);
+        const mediaAbove = nodes
+          .filter(n => /(?:carousel_)?media_group/.test(n.rid) && n.y2 < like.y)
+          .sort((a, b) => (like.y - a.y2) - (like.y - b.y2))[0];
+        const mediaGap = mediaAbove ? like.y - mediaAbove.y2 : Number.POSITIVE_INFINITY;
+        const score =
+          100 +
+          (row.some(isSave) ? 40 : 0) +
+          (row.some(isComment) ? 20 : 0) +
+          (row.some(isRepost) ? 20 : 0) +
+          (row.some(isDm) ? 20 : 0) +
+          Math.min(controls.length, 8) +
+          (mediaAbove ? 60 : 0);
+        return { like, row, score, mediaGap };
+      });
+      rowChoices.sort((a, b) => b.score - a.score || a.mediaGap - b.mediaGap);
+      if (
+        rowChoices.length > 1 &&
+        rowChoices[0].score === rowChoices[1].score &&
+        rowChoices[0].mediaGap === rowChoices[1].mediaGap
+      ) {
+        onLog?.("View Feed a11y scan: multiple equally-identified action rows — skipping");
+        return null;
+      }
+      const chosen = rowChoices[0];
+      const row = chosen.row;
+      const like = chosen.like;
+      const pos = (n: ViewFeedA11yNode) => ({ x: n.x, y: n.y });
+      const clickableRow = row.filter(n => n.clickable);
+      const saveNode = clickableRow.find(isSave) ?? null;
+      const commentNode = clickableRow.find(isComment) ?? null;
+      const repostNode = clickableRow.find(isRepost) ?? null;
+      const dmNode = clickableRow.find(isDm) ?? null;
+
+      let comment = commentNode ? pos(commentNode) : null;
+      let shareFeed = repostNode ? pos(repostNode) : null;
+      let shareDm = dmNode ? pos(dmNode) : null;
+
+      // Some IG builds remove all labels, but expose exactly three clickable
+      // icon nodes as empty ViewGroups or Buttons.  This is structural
+      // elimination, not a coordinate guess.  Any other cardinality is
+      // ambiguous (disabled icon, count wrapper, or unrelated control).
+      if (!comment && !shareFeed && !shareDm) {
+        const unlabeledIcons = clickableRow.filter(n =>
+          !n.rid && !n.desc && !n.text &&
+          (n.cls === "android.view.ViewGroup" || n.cls === "android.widget.Button"),
+        );
+        if (unlabeledIcons.length === 3) {
+          unlabeledIcons.sort((a, b) => a.x - b.x);
+          comment = pos(unlabeledIcons[0]);
+          shareFeed = pos(unlabeledIcons[1]);
+          shareDm = pos(unlabeledIcons[2]);
+        }
+      }
+
+      const mediaCandidates = nodes.filter(n =>
+        /(?:carousel_)?media_group/.test(n.rid) &&
+        n.y2 < like.y &&
+        n.x2 > n.x1 && n.y2 > n.y1,
+      );
+      mediaCandidates.sort((a, b) =>
+        (b.x2 - b.x1) * (b.y2 - b.y1) - (a.x2 - a.x1) * (a.y2 - a.y1),
+      );
+      const media = mediaCandidates[0];
+
+      const authorCandidates = nodes.filter(n =>
+        n.clickable && n.rid.includes("row_feed_photo_profile_name") && n.y < like.y,
+      );
+      // The current post's header is the author node immediately before the
+      // current post media.  If media is unavailable, the nearest preceding
+      // author node is still safer than the first/topmost recycled row.
+      authorCandidates.sort((a, b) => {
+        if (media) {
+          const aGap = media.y1 - a.y;
+          const bGap = media.y1 - b.y;
+          return Math.abs(aGap) - Math.abs(bGap);
+        }
+        return b.y - a.y;
+      });
+      const authorNode = authorCandidates[0] ?? null;
+
+      const audioCandidates = nodes.filter(n => {
+        if (!n.clickable || n.y >= like.y - 20) return false;
+        if (/action_bar|like_button|comment_|share_|send_|save_/i.test(n.rid)) return false;
+        return /audio|music|sound|song/i.test(n.rid) ||
+          /\b(?:audio|music|song|original)\b/i.test(`${n.desc} ${n.text}`);
+      });
+      audioCandidates.sort((a, b) => {
+        const aStrong = /audio|music|sound|song/i.test(a.rid) ? 1 : 0;
+        const bStrong = /audio|music|sound|song/i.test(b.rid) ? 1 : 0;
+        return bStrong - aStrong || b.y - a.y;
+      });
+      const audioNode = audioCandidates[0] ?? null;
+
+      return {
+        like: pos(like),
+        alreadyLiked: /^unlike$/i.test(like.desc),
+        comment, shareFeed, shareDm,
+        save: saveNode ? pos(saveNode) : null,
+        saveLabel: saveNode?.desc || saveNode?.text || "",
+        author: authorNode ? { ...pos(authorNode), name: authorNode.desc || authorNode.text || "unknown" } : null,
+        audio: audioNode ? pos(audioNode) : null,
+        mediaBounds: media ? { x1: media.x1, y1: media.y1, x2: media.x2, y2: media.y2 } : undefined,
+        isVideoPost: /SurfaceView|TextureView|VideoView|video_player|row_feed_video/.test(xml),
+        xml,
+      };
+    };
     // Roll session scroll personality once — each run of the feed tool gets
     // its own mix so the distribution never converges to a fixed signature
     // over many sessions. Weights are relative (don't need to sum to 100).
@@ -2449,7 +2647,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     for (let i = 0; i < count; i++) {
       if (isCycleAborted(serial)) throw new Error("cycle-aborted");
-      const sv = rollScrollVelocity(h, feedScrollWeights, /*allowBack=*/true, /*safeStartFrac=*/0.88);
+      // There is no previous content on the first scroll, so a backward
+      // personality would have nothing meaningful to revisit. Keep the
+      // session personality distribution for later scrolls.
+      const sv = rollScrollVelocity(h, feedScrollWeights, /*allowBack=*/i > 0, /*safeStartFrac=*/0.88);
       onLog?.(`View Feed ${i + 1}/${count} [${sv.mode}]`);
       logger.info({ serial, target: "feed-scroll", mode: sv.mode, from: [x, sv.fromY], to: [x, sv.toY], durationMs: sv.duration }, "[check-feed] swipe");
       await android.swipe(serial, x, sv.fromY, x, sv.toY, sv.duration);
@@ -2533,11 +2734,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // View Feed is intentionally strict and isolated from the other
             // tools: sponsored cards are skipped, and a double-tap may only
             // use a media rectangle confirmed by the live node tree.
-            const icons = await android.findFeedActionIcons(
-              serial,
-              onLog,
-              { strictViewFeed: true },
-            ).catch(() => null);
+            const icons = await scanViewFeedA11y().catch(() => null);
           if (!icons) {
             // No Like button found — this isn't a normal in-feed post right
             // now (Reel suggestion, ad, still animating in from the scroll,
@@ -2554,7 +2751,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             onLog?.(`View Feed ${i + 1}/${count}: action bar found — ${iconSummary}`);
 
             if (wantLike) {
-              if (icons.alreadyLiked) {
+              // Re-scan immediately before this action.  The post can finish
+              // settling after the initial row check, and no action may use a
+              // coordinate from an older dump.
+              const likeScan = await scanViewFeedA11y().catch(() => null);
+              if (!likeScan) {
+                likeFailures++;
+                onLog?.(`View Feed ${i + 1}/${count}: like skipped — current Like node was not confirmed`);
+              } else if (likeScan.alreadyLiked) {
                 onLog?.(`View Feed ${i + 1}/${count}: already liked — skipping like`);
               } else {
                 // ~93 % of likes use a double-tap on the post image — the
@@ -2566,9 +2770,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 // media rectangle was confirmed by the live node tree. Video
                 // posts must use the Like node because a media double-tap
                 // opens the full-screen player.
-                const useDoubleTap = Math.random() < 0.93 &&
-                  !icons.isVideoPost &&
-                  !!icons.mediaBounds;
+                 const useDoubleTap = Math.random() < 0.93 &&
+                   !likeScan.isVideoPost &&
+                   !!likeScan.mediaBounds;
                  let _likeActionSucceeded = false;
                  try {
                   if (useDoubleTap) {
@@ -2585,7 +2789,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     // No proportional screen-coordinate fallback is allowed in
                     // View Feed. When bounds are unavailable, the branch below
                     // uses the confirmed Like node instead.
-                    const mb = icons.mediaBounds!;
+                     const mb = likeScan.mediaBounds!;
                     const mediaW = mb.x2 - mb.x1;
                     const mediaH = mb.y2 - mb.y1;
                     // Keep the gesture inside the node-confirmed media
@@ -2597,18 +2801,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     let dtY: number;
                     dtY = Math.round(mb.y1 + mediaH * yFraction);
                     onLog?.(`View Feed ${i + 1}/${count}: double-tap using media bounds (${Math.round(xFraction * 100)}% across, ${Math.round(yFraction * 100)}% down)`);
-                    logger.info({ serial, target: "image-double-tap", x: dtX, y: dtY, mediaBoundsUsed: !!icons.mediaBounds }, "[check-feed] double-tap like");
+                     logger.info({ serial, target: "image-double-tap", x: dtX, y: dtY, mediaBoundsUsed: !!likeScan.mediaBounds }, "[check-feed] double-tap like");
                     onLog?.(`View Feed ${i + 1}/${count}: double-tapping image at (${dtX},${dtY})…`);
                     await android.doubleTap(serial, dtX, dtY);
                   } else {
                     // Safe node-targeted fallback when this is a video post,
                     // the random double-tap roll misses, or the media border
                     // is not exposed by this Instagram build.
-                    if (!icons.mediaBounds && !icons.isVideoPost) {
+                     if (!likeScan.mediaBounds && !likeScan.isVideoPost) {
                       onLog?.(`View Feed ${i + 1}/${count}: media border not confirmed — using Like node instead of guessing a double-tap`);
                     }
-                    const jx = likeBtn.x + Math.round((Math.random() - 0.5) * 6);
-                    const jy = likeBtn.y + Math.round((Math.random() - 0.5) * 6);
+                     const jx = likeScan.like.x;
+                     const jy = likeScan.like.y;
                     logger.info({ serial, target: "like-button", x: jx, y: jy }, "[check-feed] heart-icon like");
                     onLog?.(`View Feed ${i + 1}/${count}: tapping heart icon at (${jx},${jy})…`);
                     await android.tap(serial, jx, jy);
@@ -2642,15 +2846,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // icon layout couldn't be told apart with confidence (see
             // findFeedActionIcons), so the action is skipped rather than
             // risking a tap on the wrong control (e.g. Comment).
-            if (wantShareFeed && !icons.shareFeed) {
-              logger.info({ serial }, "[check-feed] skipped share-to-feed — icon not identifiable on this post (disabled or ambiguous layout)");
-              onLog?.(`View Feed ${i + 1}/${count}: skipped repost — share-to-feed icon not found on this post`);
-            }
-            if (wantShareFeed && icons.shareFeed) {
-              const shareFeedIconX = icons.shareFeed.x, rowY = icons.shareFeed.y;
+            if (wantShareFeed) {
+              if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+              await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
+              const shareFeedScan = await scanViewFeedA11y().catch(() => null);
+              const shareFeedNode = shareFeedScan?.shareFeed ?? null;
+              if (!shareFeedNode) {
+                logger.info({ serial }, "[check-feed] skipped share-to-feed — current repost node not confirmed");
+                onLog?.(`View Feed ${i + 1}/${count}: skipped repost — current share-to-feed node not confirmed`);
+              } else {
+              const shareFeedIconX = shareFeedNode.x, rowY = shareFeedNode.y;
               if (isCycleAborted(serial)) throw new Error("cycle-aborted");
               try {
-                await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
                 // Capture the icon's own label before tapping — see the
                 // same-name guard in runProfileBrowsingSequence for why:
                 // some accounts' Instagram build reposts instantly on a
@@ -2715,6 +2922,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 }
                 await verifyStillInInstagram();
               } catch (e: any) { if (e?.message === "cycle-aborted") throw e; /* else non-fatal */ }
+              }
             }
 
             // Share via DM: tap the paper-plane icon to open the DM picker,
@@ -2726,30 +2934,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // position — null means it couldn't be identified with
             // confidence (disabled by the poster, or ambiguous layout — see
             // findFeedActionIcons), so the action is skipped.
-            if (wantShareDm && !icons.shareDm) {
-              logger.info({ serial }, "[check-feed] skipped share-via-DM — icon not identifiable on this post (disabled or ambiguous layout)");
-              onLog?.(`View Feed ${i + 1}/${count}: skipped share-via-DM — paper-plane icon not found on this post`);
-            }
-            // Guard: if icon detection resolved shareDm to the same screen
-            // position as shareFeed (ambiguous layout on this post/build),
-            // tapping it would double-tap the repost icon. Skip DM entirely
-            // and log so the icon-detection logic can be diagnosed.
-            const _cfDmOverlap = !!icons.shareDm && !!icons.shareFeed &&
-              Math.abs(icons.shareDm.x - icons.shareFeed.x) < 15 &&
-              Math.abs(icons.shareDm.y - icons.shareFeed.y) < 15;
-            if (wantShareDm && icons.shareDm && _cfDmOverlap) {
-              logger.warn({ serial, shareDm: icons.shareDm, shareFeed: icons.shareFeed }, "[check-feed] shareDm coord overlaps shareFeed — skipping DM to prevent double-tap of repost icon");
-              onLog?.(`View Feed ${i + 1}/${count}: share-to-DM skipped — icon at (${icons.shareDm.x},${icons.shareDm.y}) overlaps share-to-feed icon — detection ambiguous, preventing double-tap`);
-            }
-            if (wantShareDm && icons.shareDm && !_cfDmOverlap) {
+            if (wantShareDm) {
               // ── View Feed — Share via DM (isolated; not shared with any other tool) ──
               const _cfPfx = `View Feed ${i + 1}/${count}`;
               let _cfDmSent = false;
               try {
                 if (isCycleAborted(serial)) throw new Error("cycle-aborted");
                 await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
-                onLog?.(`${_cfPfx}: tapping share-via-DM icon at (${icons.shareDm.x},${icons.shareDm.y})…`);
-                await android.tap(serial, icons.shareDm.x, icons.shareDm.y);
+                const dmScan = await scanViewFeedA11y().catch(() => null);
+                const dmNode = dmScan?.shareDm ?? null;
+                if (!dmNode) {
+                  onLog?.(`${_cfPfx}: share aborted — current paper-plane node not confirmed`);
+                  await verifyStillInInstagram();
+                } else {
+                onLog?.(`${_cfPfx}: tapping share-via-DM icon at (${dmNode.x},${dmNode.y})…`);
+                await android.tap(serial, dmNode.x, dmNode.y);
                 await sleepOrAbort(serial, 1500);
                 onLog?.(`${_cfPfx}: confirming share sheet opened and picking DM recipient…`);
                 let _cfScan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
@@ -2823,27 +3022,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                       onLog?.(`${_cfPfx}: ✓ shared via DM — sheet auto-dismissed (sent by recipient tap)`);
                       await sleepOrAbort(serial, 200);
                     } else {
-                      const _cfFbX = Math.round(w * 0.50), _cfFbY = Math.round(h * 0.982);
-                      onLog?.(`${_cfPfx}: Send button not found via a11y — tapping coordinate fallback (${_cfFbX},${_cfFbY})`);
-                      await android.tap(serial, _cfFbX, _cfFbY);
-                      // Same 1500ms for the coordinate fallback path.
-                      await sleepOrAbort(serial, 1500);
-                      if (!(await _cfIsOpen())) {
-                        _cfDmSent = true;
-                        onLog?.(`${_cfPfx}: ✓ shared via DM — sent via coordinate fallback`);
-                        await sleepOrAbort(serial, 300);
-                      } else {
-                        await android.pressBack(serial);
-                        await sleepOrAbort(serial, 200);
-                      }
+                      // Never guess the Send position in View Feed.  The
+                      // sheet is still open, so close it and fail closed.
+                      onLog?.(`${_cfPfx}: Send node not found via accessibility — closing without sending`);
+                      await android.pressBack(serial);
+                      await sleepOrAbort(serial, 200);
                     }
                   }
+                }
                 }
               } catch (e: any) {
                 if (e?.message === "cycle-aborted") throw e;
                 onLog?.(`${_cfPfx}: share-via-DM error — ${e?.message}`);
               }
-              if (_cfDmSent) sharesDm++;
+                if (_cfDmSent) sharesDm++;
               await verifyStillInInstagram();
             }
 
@@ -2856,14 +3048,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // Instagram never puts any interactive control in that region
             // while the sheet is open.
             if (wantSave) {
-              const _saveBtn = icons.save;
-              if (!_saveBtn) {
+              if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+              await sleepOrAbort(serial, 200 + Math.round(Math.random() * 200));
+              const saveScan = await scanViewFeedA11y().catch(() => null);
+              const _saveBtn = saveScan?.save ?? null;
+              if (!saveScan || !_saveBtn) {
                 logger.info({ serial }, "[check-feed] save button not found on this post — skipping save");
                 onLog?.(`View Feed ${i + 1}/${count}: save skipped — ribbon icon not found on this post`);
+              } else if (/remove from saved/i.test(saveScan.saveLabel)) {
+                onLog?.(`View Feed ${i + 1}/${count}: already saved — skipping save`);
               } else {
                 try {
                   if (isCycleAborted(serial)) throw new Error("cycle-aborted");
-                  await sleepOrAbort(serial, 200 + Math.round(Math.random() * 200));
                   onLog?.(`View Feed ${i + 1}/${count}: tapping save (ribbon) icon at (${_saveBtn.x},${_saveBtn.y})…`);
                   await android.tap(serial, _saveBtn.x, _saveBtn.y);
                   await sleepOrAbort(serial, 600);
@@ -2873,20 +3069,45 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   // background_dimmer above the sheet (top 12% of screen).
                   // The dump is skipped when the sheet isn't present — the
                   // timeout is rare and acceptable on the save path.
-                  {
-                    const _fsSaveXml = await android.dumpUi(serial).catch(() => "");
-                    if (_fsSaveXml.includes('pinned_save_row') || _fsSaveXml.includes('Collect the posts you love')) {
-                      const { w: _fsW, h: _fsH } = getScreenSize(serial);
-                      await android.tap(serial, Math.round(_fsW * 0.50), Math.round(_fsH * 0.12));
-                      onLog?.(`View Feed ${i + 1}/${count}: dismissed "Save to collection?" popup`);
+                  let _fsSaveXml = await android.dumpUi(serial).catch(() => "");
+                  if (_fsSaveXml.includes('pinned_save_row') || _fsSaveXml.includes('Collect the posts you love')) {
+                    // The sheet must be dismissed through its own live
+                    // accessibility node.  Never tap a screen-relative
+                    // "safe" coordinate in View Feed.
+                    let _fsDismissed = false;
+                    for (const _fsSeg of _fsSaveXml.split("<node ")) {
+                      const _fsRid = (_fsSeg.match(/resource-id="([^"]*)"/) ?? [])[1] ?? "";
+                      const _fsDesc = (_fsSeg.match(/content-desc="([^"]*)"/) ?? [])[1] ?? "";
+                      if (
+                        !_fsSeg.includes('clickable="true"') ||
+                        !/background_dimmer|scrim|dismiss/i.test(`${_fsRid} ${_fsDesc}`)
+                      ) continue;
+                      const _fsBb = _fsSeg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+                      if (!_fsBb) continue;
+                      const _fsX = Math.floor((Number(_fsBb[1]) + Number(_fsBb[3])) / 2);
+                      const _fsY = Math.floor((Number(_fsBb[2]) + Number(_fsBb[4])) / 2);
+                      await android.tap(serial, _fsX, _fsY);
+                      _fsDismissed = true;
+                      onLog?.(`View Feed ${i + 1}/${count}: dismissed "Save to collection?" via accessibility dimmer node`);
+                      await sleepOrAbort(serial, 300);
+                      break;
+                    }
+                    if (!_fsDismissed) {
+                      onLog?.(`View Feed ${i + 1}/${count}: save sheet detected but no dismiss node was confirmed — leaving it closed with Back`);
+                      await android.pressBack(serial);
                       await sleepOrAbort(serial, 300);
                     }
+                    _fsSaveXml = await android.dumpUi(serial).catch(() => "");
                   }
                   const _saveStayedInInstagram = await verifyStillInInstagram();
-                  if (_saveStayedInInstagram) {
+                  const _saveAfter = await scanViewFeedA11y().catch(() => null);
+                  const _saveConfirmed = /remove from saved/i.test(_saveAfter?.saveLabel ?? "");
+                  if (_saveStayedInInstagram && _saveConfirmed) {
                     saves++;
                     logger.info({ serial }, "[check-feed] saved post via ribbon icon");
                     onLog?.(`View Feed ${i + 1}/${count}: ✓ post saved`);
+                  } else if (_saveStayedInInstagram) {
+                    onLog?.(`View Feed ${i + 1}/${count}: save tap completed but saved state was not confirmed — not counted`);
                   } else {
                     onLog?.(`View Feed ${i + 1}/${count}: save not counted — action left Instagram and was recovered`);
                   }
@@ -2980,55 +3201,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         try {
           if (isCycleAborted(serial)) throw new Error("cycle-aborted");
           await sleepOrAbort(serial, 300);
-          const _atXml = await android.dumpUi(serial).catch(() => "");
-          // Detect an audio affordance by scanning the a11y tree for any node
-          // whose resource-id or content-desc signals music/audio.
-          // We exclude action-bar verbs (Like, Comment, Share, Save) so the
-          // action-bar icons never count as an audio affordance.
-          let _atNode: { x: number; y: number } | null = null;
-          // Collect candidate nodes from the lower half of the screen for
-          // diagnostic logging when nothing matches.
-          const _atCandidates: string[] = [];
-          for (const _atSeg of _atXml.split("<node ")) {
-            const _rid  = (_atSeg.match(/resource-id="([^"]*)"/) ?? [])[1] ?? "";
-            const _desc = (_atSeg.match(/content-desc="([^"]*)"/) ?? [])[1] ?? "";
-            const _txt  = (_atSeg.match(/\btext="([^"]*)"/) ?? [])[1] ?? "";
-            const _atBb = _atSeg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-            if (!_atBb) continue;
-            const _atX = Math.round((parseInt(_atBb[1]) + parseInt(_atBb[3])) / 2);
-            const _atY = Math.round((parseInt(_atBb[2]) + parseInt(_atBb[4])) / 2);
-            // Must be in the lower portion of the screen — the audio marquee
-            // sits below the post media and above the action bar.
-            // Nodes near the very top (status bar / header) are never audio.
-            if (_atY < h * 0.40) continue;
-            // Resource-id match — Instagram uses "audio", "music", or "sound"
-            // in resource IDs for the audio affordance (e.g. clips_music_icon,
-            // row_feed_audio_icon, music_attribution_container).  Action-bar
-            // verbs (Like, Comment, Share, Save) are always excluded.
-            const _isAudioRid = /audio|music|sound|song/i.test(_rid) &&
-              !/action_bar|like_button|comment_|share_|send_|save_/.test(_rid);
-            // Content-desc / text fallback — matches "Original audio",
-            // "Music by …", "Song by …", artist-tagged audio labels, etc.
-            const _isAudioDesc =
-              /\b(audio|music|song|original)\b/i.test(_desc) ||
-              /\b(audio|music|song|original)\b/i.test(_txt);
-            if (_atNode === null && (_isAudioRid || _isAudioDesc)) {
-              _atNode = { x: _atX, y: _atY };
-              // Don't break — keep collecting candidates for diagnostics.
-            }
-            // Record lower-screen nodes for diagnostics (up to 12).
-            if (_atCandidates.length < 12 && (_rid || _desc || _txt)) {
-              _atCandidates.push(`rid=${_rid || "(none)"} desc=${_desc || "(none)"} txt=${_txt || "(none)"} y=${_atY}`);
-            }
-          }
+          const _atScan = await scanViewFeedA11y().catch(() => null);
+          const _atNode = _atScan?.audio ?? null;
 
           if (!_atNode) {
             onLog?.(`View Feed ${i + 1}/${count}: tap-audio rolled but no audio affordance on this post — skipping`);
-            if (_atCandidates.length > 0) {
-              onLog?.(`View Feed ${i + 1}/${count}: lower-screen nodes (diagnostic): ${_atCandidates.join(" | ")}`);
-            } else {
-              onLog?.(`View Feed ${i + 1}/${count}: lower-screen nodes (diagnostic): (none found)`);
-            }
           } else {
             onLog?.(`View Feed ${i + 1}/${count}: tapping audio affordance at (${_atNode.x},${_atNode.y})…`);
             await android.tap(serial, _atNode.x, _atNode.y);
@@ -3082,7 +3259,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               }
             } else {
               // Navigated directly to the song/audio page.
-              _atOnSongPage = true;
+              _atOnSongPage =
+                _atXml2.includes("audio_page") ||
+                _atXml2.includes("music_page") ||
+                _atXml2.includes("clips_audio") ||
+                _atXml2.includes("audio_browser") ||
+                /song|original audio|music/i.test(_atXml2);
+              if (!_atOnSongPage) {
+                onLog?.(`View Feed ${i + 1}/${count}: audio tap did not open a confirmed song page — pressing Back`);
+                await android.pressBack(serial);
+                await sleepOrAbort(serial, 400);
+              }
             }
 
             if (_atOnSongPage) {
@@ -3266,30 +3453,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         try {
           if (isCycleAborted(serial)) throw new Error("cycle-aborted");
           await sleepOrAbort(serial, 300);
-          const _caXml = await android.dumpUi(serial).catch(() => "");
-          // Skip author click if Instagram labels this as a sponsored post.
-          // Quoted attribute matching prevents false positives on words like
-          // "Add", "Adidas", etc. whose text values differ from the bare "Ad".
-          const _caIsAd =
-            _caXml.includes('text="Ad"')         || _caXml.includes('content-desc="Ad"') ||
-            _caXml.includes('text="Sponsored"')  || _caXml.includes('content-desc="Sponsored"') ||
-            _caXml.includes('text="Advert"')     || _caXml.includes('content-desc="Advert"');
-          if (_caIsAd) {
-            onLog?.(`View Feed ${i + 1}/${count}: ad post detected — skipping click author`);
-          } else {
-          // Find row_feed_photo_profile_name in the a11y tree.
-          let _caNode: { x: number; y: number; name: string } | null = null;
-          for (const _caSeg of _caXml.split("<node ")) {
-            const _caRid = (_caSeg.match(/resource-id="([^"]*)"/) ?? [])[1] ?? "";
-            if (!_caRid.includes("row_feed_photo_profile_name")) continue;
-            const _caDesc = (_caSeg.match(/content-desc="([^"]*)"/) ?? [])[1] ?? "";
-            const _caBb = _caSeg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-            if (!_caBb) continue;
-            const _caX = Math.round((parseInt(_caBb[1]) + parseInt(_caBb[3])) / 2);
-            const _caY = Math.round((parseInt(_caBb[2]) + parseInt(_caBb[4])) / 2);
-            _caNode = { x: _caX, y: _caY, name: _caDesc || "unknown" };
-            break; // only need the first (topmost) visible post header
-          }
+          const _caScan = await scanViewFeedA11y().catch(() => null);
+          const _caNode = _caScan?.author ?? null;
           if (!_caNode) {
             onLog?.(`View Feed ${i + 1}/${count}: click-author rolled but no profile name button visible — skipping`);
           } else {
@@ -3339,7 +3504,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               onLog?.(`View Feed ${i + 1}/${count}: ✓ author profile visited (${_caNode.name})`);
             }
           }
-          } // end ad-skip else
         } catch (e: any) {
           if (e?.message === "cycle-aborted") throw e;
           onLog?.(`View Feed ${i + 1}/${count}: click-author error — ${e?.message}`);
@@ -4893,7 +5057,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const delaySec = delayLoSec + Math.random() * (delayHiSec - delayLoSec);
         if (delaySec > 0) await sleepOrAbort(serial, Math.round(delaySec * 1000));
         // Swipe up to reveal more Explore posts.
-        const esv = rollScrollVelocity(h, exploreScrollWeights, /*allowBack=*/true, /*safeStartFrac=*/0.80);
+        // The first Explore advance is the first opportunity to reveal more
+        // content; there is no prior grid position to revisit yet.
+        const esv = rollScrollVelocity(h, exploreScrollWeights, /*allowBack=*/i > 0, /*safeStartFrac=*/0.80);
         onLog?.(`View Explore ${i + 1}/${scrollCount}: next swipe [${esv.mode}]`);
         logger.info({ serial, source: "explore-scroll", mode: esv.mode, from: [x, esv.fromY], to: [x, esv.toY], durationMs: esv.duration }, "[mobile-input] swipe");
         await android.swipe(serial, x, esv.fromY, x, esv.toY, esv.duration);
@@ -9094,7 +9260,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           const _sj = Math.floor(Math.random() * (_si + 1));
           [_toolSeq[_si], _toolSeq[_sj]] = [_toolSeq[_sj], _toolSeq[_si]];
         }
-        tLog(`▶ Tool order shuffled: ${_toolSeq.length > 0 ? _toolSeq.join(' → ') : '(no tools active this execution)'}`);
+        const _debugToolOrderLabels: Record<string, string> = {
+          reels: "REELS-TO-VIEW-REELS",
+          feed: "FEED-TO-VIEW-FEED",
+          explore: "EXPLORE-TO-VIEW-EXPLORE",
+        };
+        const _debugToolOrder = _toolSeq.map(_name => _debugToolOrderLabels[_name] ?? _name);
+        tLog(`▶ Tool order shuffled: ${_debugToolOrder.length > 0 ? _debugToolOrder.join(' → ') : '(no tools active this execution)'}`);
       }
 
       // ── Spread Follows mode ───────────────────────────────────────────────

@@ -4,6 +4,38 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.331] — 2026-08-01
+
+### Changed — Ship local image generation and mobile automation fixes
+
+- Replaced the previous large Hugging Face image-editing model choices with two smaller, free local Stable Diffusion checkpoints downloaded directly from Civitai: **Realistic Vision V6** and **epiCRealism Natural Sin**.
+- Added resumable `.part` downloads with byte progress, transfer speed, and ETA reporting, and bundled the SD 1.5 configuration and tokenizer assets required for offline pipeline assembly.
+- Removed the obsolete Hugging Face Hub runtime configuration and dependency verification from the Electron image-generation sidecar while preserving reference-image editing, local model management, CPU fallback, and CUDA acceleration when available.
+- Hardened **View Feed** action targeting with a local accessibility-tree scanner that associates Like, Repost, DM, Save, Audio, and Author nodes with the current post instead of using the shared feed helper or first-match nodes.
+- View Feed now rescans immediately before actions, uses the selected accessibility node’s own bounds, skips sponsored cards, fails closed on ambiguous rows, and requires meaningful post-action confirmation before counting Save, Audio, or Author success.
+- Updated shuffled automation-order messages for Reels, Feed, and Explore to show the explicit transition labels `REELS-TO-VIEW-REELS`, `FEED-TO-VIEW-FEED`, and `EXPLORE-TO-VIEW-EXPLORE`.
+- Prevented the randomized backward-scroll personality from being selected on the first Feed scroll or first Explore advance, while preserving backward scrolling for later iterations.
+- Removed the `@` prefix from account names in the Statistics Device / Account column and the Dashboard Account column without changing stored usernames or other account displays.
+- Kept the Windows installer pipeline consolidated in the single active `build-windows-installer.yml` GitHub Actions workflow, including validation and packaging of the offline SD configuration bundle.
+- Bumped the root application and Electron package versions to `1.2.331`.
+
+---
+
+## [1.2.330] — 2026-08-01
+
+### Changed — Replace throttled Hugging Face model downloads
+
+- Removed **Qwen Image Edit 2511** and **LongCat Image Edit** from the AI Images model registry. Both were multi-tens-of-gigabytes Hugging Face model downloads and were unsuitable for the available connection and hardware.
+- Added two smaller, free-to-run local photorealistic Stable Diffusion checkpoints downloaded directly from Civitai: **Realistic Vision V6** and **epiCRealism Natural Sin**, each approximately 2 GB.
+- Added resumable direct-download support with live byte progress, speed, ETA, and `.part` files so an interrupted Civitai transfer can continue instead of restarting.
+- Replaced the Hugging Face cache/manifest progress path with local checkpoint files and removed the Hugging Face Hub dependency from the image-generation requirements and Electron runtime environment.
+- Bundled the small SD 1.5 pipeline configuration and tokenizer assets required for offline checkpoint loading. Model weights are not fetched from Hugging Face.
+- Preserved local reference-image editing, CPU fallback, CUDA acceleration when available, model deletion, generation history, and the existing no-paid-credits workflow.
+- Updated API fallback metadata, saved UI defaults, installer packaging, and installer validation for the two new model identifiers.
+- Bumped the root application and Electron package versions to `1.2.330`.
+
+---
+
 ## [1.2.329] — 2026-08-01
 
 ### Changed — Polish Mobile Phone Apps controls and installer validation

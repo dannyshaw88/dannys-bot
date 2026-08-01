@@ -1,8 +1,8 @@
 """
 Aura Farming — Local Image Generation Sidecar
-FastAPI server that wraps HuggingFace diffusers for GPU-accelerated image generation.
-Spawned by Electron as a background process; the React frontend talks to it via
-the Express API server which proxies /api/image-gen/* → this server.
+FastAPI server that wraps local Stable Diffusion checkpoints for GPU-accelerated
+image generation. Model weights are downloaded directly from Civitai without
+Hugging Face model repositories or paid API credits.
 """
 import os
 import sys
@@ -20,8 +20,9 @@ import base64
 import time
 import threading
 import logging
-import shutil
 import subprocess
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Optional
 
@@ -53,13 +54,6 @@ OUTPUT_DIR = os.environ.get(
 Path(MODELS_DIR).mkdir(parents=True, exist_ok=True)
 Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 
-# Keep model downloads on the regular Hugging Face HTTP/LFS path. The optional
-# Xet transport can open many concurrent range requests and overwhelm a user's
-# connection, so this intentionally uses the conservative downloader.
-os.environ["HF_HUB_DISABLE_XET"] = "1"
-os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "600")
-os.environ.setdefault("HF_HUB_ETAG_TIMEOUT", "60")
-
 # ── CPU thread cap ────────────────────────────────────────────────────────────
 # PyTorch defaults to using every logical core, which causes fan spin even on
 # GPU machines (CPU pre/post-processing). Default: half the cores, min 2.
@@ -85,68 +79,47 @@ _generation_progress: Optional[dict] = None
 _generation_lock = threading.Lock()
 
 
-def _model_is_cached(model_key: str) -> bool:
-    """Return True if the model's blob files already exist in MODELS_DIR."""
-    if model_key not in MODELS:
-        return False
-    info = MODELS[model_key]
-    repo: str = info["repo"]
-    parts = repo.split("/", 1)
-    if len(parts) != 2:
-        return False
-    org, name = parts
-    blobs_dir = Path(MODELS_DIR) / f"models--{org}--{name}" / "blobs"
-    if not blobs_dir.exists():
-        return False
-    # At least one shard larger than 100 KB means real model weights are present
-    return any(
-        f.is_file() and f.stat().st_size > 100 * 1024
-        for f in blobs_dir.iterdir()
-    )
-
-
-def _model_cache_dir(model_key: str) -> Optional[Path]:
-    """Return the exact Hugging Face cache directory for a registered model."""
+def _model_path(model_key: str) -> Optional[Path]:
     info = MODELS.get(model_key)
     if not info:
         return None
-    parts = str(info["repo"]).split("/", 1)
-    if len(parts) != 2:
-        return None
-    org, name = parts
-    return Path(MODELS_DIR) / f"models--{org}--{name}"
+    return Path(MODELS_DIR) / str(info["filename"])
+
+
+def _model_is_cached(model_key: str) -> bool:
+    """Return True when a complete direct-download checkpoint is on disk."""
+    if model_key not in MODELS:
+        return False
+    model_path = _model_path(model_key)
+    if not model_path or not model_path.exists():
+        return False
+    expected = int(MODELS[model_key]["size_bytes"])
+    return model_path.stat().st_size >= int(expected * 0.99)
 
 
 def _scan_model_cache_progress(model_key: str) -> tuple[int, int, int]:
-    """Return (bytes on disk, completed blobs, in-progress files) for one model."""
-    cache_dir = _model_cache_dir(model_key)
-    blobs_dir = cache_dir / "blobs" if cache_dir else None
-    if not blobs_dir or not blobs_dir.exists():
+    """Return (bytes on disk, completed files, active files) for one checkpoint."""
+    model_path = _model_path(model_key)
+    if not model_path:
         return 0, 0, 0
-
+    partial_path = model_path.with_suffix(model_path.suffix + ".part")
     downloaded_bytes = 0
     completed_files = 0
     active_files = 0
     try:
-        for file_path in blobs_dir.iterdir():
-            if not file_path.is_file():
-                continue
-            try:
-                size = file_path.stat().st_size
-            except OSError:
-                continue
-            downloaded_bytes += size
-            if file_path.name.endswith(".incomplete"):
-                active_files += 1
-            else:
-                completed_files += 1
+        if model_path.exists() and model_path.is_file():
+            downloaded_bytes += model_path.stat().st_size
+            completed_files = 1
+        if partial_path.exists() and partial_path.is_file():
+            downloaded_bytes += partial_path.stat().st_size
+            active_files = 1
     except OSError:
         pass
     return downloaded_bytes, completed_files, active_files
 
 
 def _set_loading_progress(model_key: str, *, phase: Optional[str] = None) -> None:
-    """Refresh download progress from the live Hugging Face cache directory."""
+    """Refresh download progress from the local Civitai checkpoint files."""
     global _loading_progress
     downloaded_bytes, completed_files, active_files = _scan_model_cache_progress(model_key)
     now = time.monotonic()
@@ -174,63 +147,92 @@ def _set_loading_progress(model_key: str, *, phase: Optional[str] = None) -> Non
             "completed_files": completed_files,
             "active_files": active_files,
             "total_files": int(current.get("total_files", 0)),
-            "total_source": current.get("total_source", "model-size estimate"),
+            "total_source": current.get("total_source", "Civitai direct download"),
             "total_is_estimate": bool(current.get("total_is_estimate", True)),
             # Internal sampling timestamp; removed before returning status.
             "_sampled_at": now,
         }
 
 
-def _fetch_model_manifest_size(model_key: str) -> None:
-    """Fetch the repository manifest so progress uses the real byte total."""
-    global _loading_progress
-    try:
-        from huggingface_hub import HfApi
-
-        repo_id = MODELS[model_key]["repo"]
-        model_info = HfApi().model_info(repo_id, files_metadata=True)
-        siblings = getattr(model_info, "siblings", []) or []
-        sizes = [int(getattr(file_info, "size", 0) or 0) for file_info in siblings]
-        total_bytes = sum(size for size in sizes if size > 0)
-        if total_bytes <= 0:
-            raise RuntimeError("The model manifest did not include file sizes")
-        with _loading_progress_lock:
-            if _loading_model_key != model_key:
-                return
-            current = _loading_progress or {}
-            _loading_progress = {
-                **current,
-                "total_bytes": total_bytes,
-                "total_files": len(siblings),
-                "total_source": "Hugging Face model manifest",
-                "total_is_estimate": False,
-            }
-        log.info(f"Model manifest size for {model_key}: {total_bytes} bytes across {len(siblings)} files")
-    except Exception as exc:
-        log.warning(f"Could not fetch model manifest sizes for {model_key}; using the model-size estimate: {exc}")
-
-
 def _start_loading_progress(model_key: str, cached: bool) -> None:
-    """Initialize progress immediately, then replace the estimate with manifest data."""
+    """Initialize progress using the known size of the direct checkpoint file."""
     global _loading_progress
-    fallback_total = int(float(MODELS[model_key]["size_gb"]) * 1024 ** 3)
+    total_bytes = int(MODELS[model_key]["size_bytes"])
     with _loading_progress_lock:
         _loading_progress = {
             "phase": "loading_pipeline" if cached else "downloading",
             "downloaded_bytes": 0,
-            "total_bytes": fallback_total,
+            "total_bytes": total_bytes,
             "percent": 0,
             "speed_bytes_per_second": 0,
             "eta_seconds": None,
             "completed_files": 0,
             "active_files": 0,
-            "total_files": 0,
-            "total_source": "model-size estimate",
-            "total_is_estimate": True,
+            "total_files": 1,
+            "total_source": "Civitai direct download",
+            "total_is_estimate": False,
             "_sampled_at": time.monotonic(),
         }
     _set_loading_progress(model_key, phase="loading_pipeline" if cached else "downloading")
-    threading.Thread(target=_fetch_model_manifest_size, args=(model_key,), daemon=True).start()
+
+
+def _download_model_file(model_key: str) -> Path:
+    """Resume a public Civitai checkpoint download without using the Hub."""
+    info = MODELS[model_key]
+    model_path = _model_path(model_key)
+    if model_path is None:
+        raise RuntimeError(f"No local path configured for {model_key}")
+    if _model_is_cached(model_key):
+        return model_path
+
+    partial_path = model_path.with_suffix(model_path.suffix + ".part")
+    expected_bytes = int(info["size_bytes"])
+    existing_bytes = partial_path.stat().st_size if partial_path.exists() else 0
+    headers = {
+        "User-Agent": "AuraFarming/1.2 local image model downloader",
+        "Accept": "application/octet-stream",
+    }
+    if existing_bytes > 0:
+        headers["Range"] = f"bytes={existing_bytes}-"
+
+    request = urllib.request.Request(str(info["download_url"]), headers=headers)
+    try:
+        response = urllib.request.urlopen(request, timeout=90)
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"Civitai download could not start ({exc.code}): {exc.reason}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"Civitai download could not start: {exc}") from exc
+
+    response_status = getattr(response, "status", 200)
+    if existing_bytes > 0 and response_status != 206:
+        # The CDN declined resume. Restart the partial file rather than
+        # appending a second copy of the checkpoint.
+        existing_bytes = 0
+    mode = "ab" if existing_bytes > 0 else "wb"
+    downloaded_bytes = existing_bytes
+    try:
+        with response, partial_path.open(mode) as output:
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                output.write(chunk)
+                downloaded_bytes += len(chunk)
+                _set_loading_progress(model_key, phase="downloading")
+    except Exception as exc:
+        raise RuntimeError(
+            f"Civitai download interrupted after {downloaded_bytes / (1024 ** 3):.2f} GB. "
+            "Press Load Model again to resume."
+        ) from exc
+
+    if downloaded_bytes < int(expected_bytes * 0.99):
+        raise RuntimeError(
+            f"Civitai returned an incomplete checkpoint ({downloaded_bytes} of {expected_bytes} bytes). "
+            "Press Load Model again to resume."
+        )
+    partial_path.replace(model_path)
+    _set_loading_progress(model_key, phase="loading_pipeline")
+    return model_path
 
 
 def _public_loading_progress() -> Optional[dict]:
@@ -389,32 +391,30 @@ def _get_gpu_info() -> dict:
 
 # ── Model registry ────────────────────────────────────────────────────────────
 MODELS = {
-    "qwen-image-edit-2511": {
-        "label": "Qwen Image Edit 2511 (best ungated local editing, ~20 GB download)",
-        "repo": "Qwen/Qwen-Image-Edit-2511",
-        "pipeline_class": "QwenImageEditPlusPipeline",
-        "default_steps": 40,
-        "default_guidance": 4.0,
-        "size_gb": 20,
+    "realistic-vision-v6": {
+        "label": "Realistic Vision V6 (free local, ~2 GB)",
+        "filename": "realisticVisionV60B1_v60B1VAE.safetensors",
+        "download_url": "https://civitai.com/api/download/models/245598",
+        "size_bytes": 2132625894,
+        "size_gb": 2,
+        "config_dir": "sd15-config",
+        "default_steps": 30,
+        "default_guidance": 7.0,
         "supports_reference_image": True,
         "requires_reference_image": True,
-        # Keep this permissive: CUDA is faster when available, but CPU loading
-        # is still a valid fallback for machines without a usable Torch CUDA
-        # runtime. It may take a long time and use substantial system RAM.
         "use_cpu_offload": True,
     },
-    "longcat-image-edit": {
-        "label": "LongCat Image Edit (reference-image editing, ~30 GB download)",
-        "repo": "meituan-longcat/LongCat-Image-Edit",
-        "pipeline_class": "LongCatImageEditPipeline",
-        "default_steps": 50,
-        "default_guidance": 4.5,
-        "size_gb": 30,
+    "epicrealism-natural-sin": {
+        "label": "epiCRealism Natural Sin (free local, ~2 GB)",
+        "filename": "epicrealism_naturalSinRC1VAE.safetensors",
+        "download_url": "https://civitai.com/api/download/models/143906",
+        "size_bytes": 2132625612,
+        "size_gb": 2,
+        "config_dir": "sd15-config",
+        "default_steps": 30,
+        "default_guidance": 7.0,
         "supports_reference_image": True,
         "requires_reference_image": True,
-        # LongCat's official model card documents CPU offload at roughly
-        # 18 GB VRAM. Use that path when CUDA is available, while still
-        # allowing a CPU-only fallback.
         "use_cpu_offload": True,
     },
 }
@@ -426,7 +426,7 @@ class CpuThreadsRequest(BaseModel):
 class GenerateRequest(BaseModel):
     prompt: str
     negative_prompt: str = ""
-    model: str = "qwen-image-edit-2511"
+    model: str = "realistic-vision-v6"
     steps: Optional[int] = None
     guidance_scale: Optional[float] = None
     width: int = 1024
@@ -442,7 +442,7 @@ class GenerateResponse(BaseModel):
     filename: str
 
 class LoadRequest(BaseModel):
-    model: str = "qwen-image-edit-2511"
+    model: str = "realistic-vision-v6"
 
 # ── FastAPI app ───────────────────────────────────────────────────────────────
 app = FastAPI(title="Aura Farming Image Gen")
@@ -489,6 +489,9 @@ def _do_load(model_key: str) -> None:
     log.info(_status_message)
 
     try:
+        model_path = _download_model_file(model_key)
+        log.info(f"Local Civitai checkpoint ready: {model_path}")
+
         import torch
 
         # Detect the best available device, but do not reject the model here.
@@ -506,14 +509,9 @@ def _do_load(model_key: str) -> None:
                 "This can be slow and use substantial system RAM."
             )
 
-        if info["pipeline_class"] == "QwenImageEditPlusPipeline":
-            from diffusers import QwenImageEditPlusPipeline
-            PipelineCls = QwenImageEditPlusPipeline
-        elif info["pipeline_class"] == "LongCatImageEditPipeline":
-            from diffusers import LongCatImageEditPipeline
-            PipelineCls = LongCatImageEditPipeline
-        else:
-            raise RuntimeError(f"Unsupported image model pipeline: {info['pipeline_class']}")
+        from diffusers import StableDiffusionImg2ImgPipeline
+        from transformers import CLIPTokenizer
+        PipelineCls = StableDiffusionImg2ImgPipeline
 
         # Apply CPU thread cap before any computation
         torch.set_num_threads(_cpu_threads)
@@ -530,34 +528,36 @@ def _do_load(model_key: str) -> None:
 
         # low_cpu_mem_usage avoids materialising a full second copy of the
         # weights during load, cutting peak RAM use roughly in half.
-        load_kwargs: dict = {"torch_dtype": dtype, "cache_dir": MODELS_DIR, "low_cpu_mem_usage": True}
+        config_dir = Path(__file__).resolve().parent / str(info["config_dir"])
+        tokenizer = CLIPTokenizer.from_pretrained(
+            str(config_dir / "tokenizer"),
+            local_files_only=True,
+        )
 
         if _loading_from_cache:
             _loading_phase = "loading_pipeline"
             _loading_detail = "Assembling the cached model components…"
             _set_loading_progress(model_key, phase="loading_pipeline")
         else:
-            # from_pretrained() performs the Hugging Face download itself.
-            # Keep this phase as "downloading" until it returns so the status
-            # endpoint can expose live .incomplete-file progress.
-            _loading_phase = "downloading"
-            _loading_detail = "Downloading model weights…"
-            _set_loading_progress(model_key, phase="downloading")
-        try:
-            import huggingface_hub
-            hub_version = getattr(huggingface_hub, "__version__", "unknown")
-        except Exception:
-            hub_version = "unavailable"
-        log.info(
-            "Hugging Face download backend: "
-            f"huggingface_hub={hub_version}, "
-            "transport=regular HTTP/LFS, "
-            f"HF_HUB_DISABLE_XET={os.environ.get('HF_HUB_DISABLE_XET', '')!r}"
+            # The direct Civitai download has already completed above. Keep
+            # this phase separate so the UI never confuses model assembly with
+            # network transfer.
+            _loading_phase = "loading_pipeline"
+            _loading_detail = "Preparing the local checkpoint…"
+            _set_loading_progress(model_key, phase="loading_pipeline")
+        log.info(f"Loading local checkpoint for {model_key} (elapsed {time.time() - _loading_started_at:.0f}s)")
+        pipe = PipelineCls.from_single_file(
+            str(model_path),
+            config=str(config_dir),
+            tokenizer=tokenizer,
+            safety_checker=None,
+            feature_extractor=None,
+            torch_dtype=dtype,
+            local_files_only=True,
+            low_cpu_mem_usage=True,
         )
-        log.info(f"Loading pipeline components for {model_key} (elapsed {time.time() - _loading_started_at:.0f}s)")
-        pipe = PipelineCls.from_pretrained(info["repo"], **load_kwargs)
         log.info(
-            f"Pipeline components assembled for {model_key} "
+            f"Local pipeline assembled for {model_key} "
             f"(elapsed {time.time() - _loading_started_at:.0f}s); moving to {device.upper()}"
         )
 
@@ -703,7 +703,7 @@ class DeleteModelRequest(BaseModel):
 
 @app.post("/delete-model")
 def delete_model(req: DeleteModelRequest):
-    """Delete one registered model's downloaded Hugging Face cache from disk."""
+    """Delete one registered model's local Civitai checkpoint from disk."""
     global _pipeline, _loaded_model, _status, _status_message
 
     if req.model not in MODELS:
@@ -726,16 +726,16 @@ def delete_model(req: DeleteModelRequest):
         except Exception:
             pass
 
-    cache_dir = _model_cache_dir(req.model)
     freed_bytes = 0
-    if cache_dir and cache_dir.exists():
-        for file_path in cache_dir.rglob("*"):
+    for model_path in filter(None, (_model_path(req.model),)):
+        partial_path = model_path.with_suffix(model_path.suffix + ".part")
+        for file_path in (model_path, partial_path):
             try:
-                if file_path.is_file():
+                if file_path.exists():
                     freed_bytes += file_path.stat().st_size
+                    file_path.unlink()
             except OSError:
                 pass
-        shutil.rmtree(cache_dir)
 
     info = MODELS[req.model]
     _status = "idle"
@@ -842,22 +842,17 @@ def generate(req: GenerateRequest):
 
         kwargs["callback_on_step_end"] = on_step_end
 
-        # Both supported models are reference-image editors. Keep this path
-        # deliberately small: one image input, one pipeline call, no legacy
-        # text-to-image or adapter downloads.
+        # Both supported models are local Stable Diffusion reference-image
+        # editors. Keep this path deliberately small: one image input and one
+        # pipeline call, with no remote model or adapter downloads.
         from PIL import Image as PILImage
         img_bytes = base64.b64decode(req.init_image)
         init_img = PILImage.open(io.BytesIO(img_bytes)).convert("RGB")
         init_img = init_img.resize((req.width, req.height), PILImage.LANCZOS)
-        kwargs["image"] = [init_img] if req.model == "qwen-image-edit-2511" else init_img
+        kwargs["image"] = init_img
+        kwargs["strength"] = max(0.0, min(req.strength, 1.0))
         kwargs["num_images_per_prompt"] = 1
-        kwargs.pop("callback_on_step_end", None)
-        if req.model == "qwen-image-edit-2511":
-            kwargs["true_cfg_scale"] = guidance
-            kwargs["guidance_scale"] = 1.0
-            kwargs["negative_prompt"] = req.negative_prompt or " "
-        else:
-            kwargs["guidance_scale"] = guidance
+        kwargs["guidance_scale"] = guidance
         with torch.inference_mode():
             result = _pipeline(**kwargs)
 

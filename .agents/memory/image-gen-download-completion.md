@@ -3,17 +3,17 @@ name: Local image model loading phases
 description: Progress reporting rule for the Electron local image-generation sidecar
 ---
 
-The local image-generation loader has separate phases: downloading, assembling the diffusers pipeline, and moving it into CPU/GPU memory. A cache-size estimate can reach 100% before the model is usable, so the UI must not equate 100% with ready.
+The local image-generation loader has separate phases: downloading a direct checkpoint, assembling the Diffusers pipeline, and moving it into CPU/GPU memory. A completed transfer can reach 100% before the model is usable, so the UI must not equate 100% with ready.
 
-**Why:** The Qwen Image Edit download showed 100% for an extended period while the background pipeline load continued, making the desktop app appear frozen and leaving no way to distinguish downloading from model initialization.
+**Why:** The previous large editor download showed 100% for an extended period while the background pipeline load continued, making the desktop app appear frozen and leaving no way to distinguish downloading from model initialization.
 
-**How to apply:** Keep `status`, `loading_phase`, elapsed loading time, and download progress separate. Exclude Hugging Face `.incomplete` blobs from completed bytes, show an explicit post-download loading message, and only switch to the generation UI after the sidecar reports `ready`.
+**How to apply:** Keep `status`, `loading_phase`, elapsed loading time, and download progress separate. Count only the direct checkpoint and its `.part` file, show an explicit post-download loading message, and only switch to the generation UI after the sidecar reports `ready`.
 
-During `from_pretrained()`, Hugging Face downloads into `.incomplete` blobs before returning the assembled pipeline. Count those active bytes for visible progress, but keep completion false until the files are finalized; leave the phase as `downloading` until `from_pretrained()` returns.
+During the direct Civitai download, bytes are written to a `.part` file before an atomic rename to the completed checkpoint. Count those active bytes for visible progress, but keep the model unavailable until the file is finalized and the local pipeline load returns.
 
-**Why:** Switching to `loading_pipeline` before `from_pretrained()` made the desktop UI show a static 0% bar while the actual multi-gigabyte download was still underway.
+**Why:** Switching to pipeline assembly before the direct checkpoint transfer completed would make the desktop UI show a static loading state while the network transfer was still underway.
 
-**How to apply:** Set the phase to `downloading` immediately before `from_pretrained()` for uncached models, then switch to `loading_pipeline` only after that call returns.
+**How to apply:** Set the phase to `downloading` while the Civitai request is active, then switch to `loading_pipeline` only after the checkpoint has been finalized and loading begins.
 
 The current full-GPU Qwen Image Edit loader also needs a hardware preflight. CUDA availability alone is not enough: a roughly 4 GB GTX 1050 Ti cannot hold this approximately 20 GB pipeline on the GPU. Reject clearly undersized GPUs before importing and materializing the pipeline, and expose the requirement beside the model picker.
 

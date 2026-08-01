@@ -138,7 +138,7 @@ const PAGE_CACHE_KEY = "aura-farming-ai-image-page-v2";
 const defaultPageCache: PageCache = {
   prompt: "",
   negPrompt: "",
-  model: "qwen-image-edit-2511",
+  model: "realistic-vision-v6",
   resolution: RESOLUTIONS[0],
   steps: "",
   guidance: "",
@@ -157,7 +157,13 @@ function readPageCache(): PageCache {
     if (!saved || typeof saved !== "object") return { ...defaultPageCache };
     const resolution = RESOLUTIONS.find(r => r.w === saved.resolution?.w && r.h === saved.resolution?.h)
       ?? defaultPageCache.resolution;
-    return { ...defaultPageCache, ...saved, resolution };
+    const savedModel = typeof saved.model === "string" ? saved.model : "";
+    // Migrate cached page state instead of sending an obsolete model
+    // identifier to the sidecar.
+    const model = savedModel === "realistic-vision-v6" || savedModel === "epicrealism-natural-sin"
+      ? savedModel
+      : defaultPageCache.model;
+    return { ...defaultPageCache, ...saved, model, resolution };
   } catch {
     return { ...defaultPageCache };
   }
@@ -883,7 +889,7 @@ function ModelDownloadProgress({ progress }: { progress: LoadingProgress }) {
   const percent = hasTotal && progress.percent !== null ? Math.max(0, Math.min(100, progress.percent)) : 0;
   const speed = progress.speed_bytes_per_second;
   const eta = progress.eta_seconds;
-  const totalLabel = progress.total_is_estimate ? "estimated total" : "Hugging Face manifest total";
+  const totalLabel = progress.total_is_estimate ? "estimated total" : "Civitai direct-download total";
 
   return (
     <div className="mt-3 space-y-1.5">
