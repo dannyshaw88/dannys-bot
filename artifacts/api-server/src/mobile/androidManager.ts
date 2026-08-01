@@ -8658,13 +8658,12 @@ export function loadKeyCalibrationMap(serial: string): KeyCalibrationMap | null 
 }
 
 /**
- * Press a named key from the per-device calibration map.
+ * Resolve a named keyboard control from the per-device calibration map and the
+ * live IME accessibility tree.
  *
- * Character typing already uses the calibration map, but named controls such
- * as Emoji/Emoticon are not characters and therefore need an explicit action
- * path. These coordinates are phone-screen coordinates captured by getevent,
- * so they must be sent directly to adb — never through the mirror video's
- * videoW/videoH rescaling path.
+ * The calibration entry enables the named action, but its saved coordinates
+ * are intentionally never used here. Keyboard layouts differ between devices,
+ * so the current IME node bounds are the only execution target.
  */
 export async function tapCalibratedKeyboardKey(
   serial: string,
@@ -8682,17 +8681,148 @@ export async function tapCalibratedKeyboardKey(
     ? ["emoji", "emoticon", "smiley"]
     : [normalized, keyName];
   const mapKey = aliases.find(alias => map[alias] != null);
-  const pos = mapKey ? map[mapKey] : undefined;
-  if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) {
+  if (!mapKey) {
     onLog?.(`[cal-keyboard] '${keyName}' is not in calibration map`);
     return false;
   }
 
-  const x = Math.round(pos.x);
-  const y = Math.round(pos.y);
-  await tap(serial, x, y);
-  onLog?.(`[cal-keyboard] tapped ${keyName} via bind '${mapKey}' at (${x},${y})`);
+  // The calibration entry is deliberately used only as an enablement/bind
+  // check. Its saved coordinates are device-specific and MUST NOT be used to
+  // execute this named action. Resolve the current IME node on every run.
+  const { xml, imeIncluded } = await dumpUiWithIme(serial);
+  const { h: screenH } = getScreenSize(serial);
+  const candidates: Array<{ x: number; y: number; score: number; label: string }> = [];
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = nodeRe.exec(xml)) !== null) {
+    const attrs = match[1];
+    const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+    if (!bounds) continue;
+    const x1 = Number(bounds[1]), y1 = Number(bounds[2]);
+    const x2 = Number(bounds[3]), y2 = Number(bounds[4]);
+    const cy = Math.round((y1 + y2) / 2);
+    if (cy < Math.round(screenH * 0.45)) continue;
+    if (!attrs.includes('clickable="true"') && !attrs.includes('focusable="true"')) continue;
+
+    const label = [
+      attrs.match(/\btext="([^"]*)"/i)?.[1] ?? "",
+      attrs.match(/\bcontent-desc="([^"]*)"/i)?.[1] ?? "",
+      attrs.match(/\bhint="([^"]*)"/i)?.[1] ?? "",
+    ].join(" ").replace(/\s+/g, " ").trim();
+    const resourceId = attrs.match(/\bresource-id="([^"]*)"/i)?.[1] ?? "";
+    const packageName = attrs.match(/\bpackage="([^"]*)"/i)?.[1] ?? "";
+    const imeNode =
+      /(?:inputmethod|keyboard|ime)/i.test(resourceId) ||
+      /(?:inputmethod|keyboard|ime|gboard|swiftkey|latin)/i.test(packageName);
+    if (!imeNode) continue;
+
+    const labelMatch = aliases.some(alias =>
+      label.toLowerCase().includes(alias.toLowerCase()) ||
+      resourceId.toLowerCase().includes(alias.toLowerCase()),
+    );
+    if (!labelMatch) continue;
+
+    const exactLabel = aliases.some(alias => label.toLowerCase() === alias.toLowerCase());
+    const score =
+      (exactLabel ? 8 : 0) +
+      (resourceId.toLowerCase().includes("emoji") ? 4 : 0) +
+      (resourceId.toLowerCase().includes("key") ? 1 : 0);
+    candidates.push({
+      x: Math.round((x1 + x2) / 2),
+      y: cy,
+      score,
+      label: label || resourceId,
+    });
+  }
+
+  candidates.sort((a, b) => b.score - a.score || a.y - b.y);
+  const node = candidates[0];
+  if (!node) {
+    onLog?.(
+      `[cal-keyboard] bind '${mapKey}' is present, but live IME node '${keyName}' was not found ` +
+      `(ime=${imeIncluded ? "yes" : "no"})`,
+    );
+    return false;
+  }
+
+  await tap(serial, node.x, node.y);
+  onLog?.(
+    `[cal-keyboard] tapped live IME node '${keyName}' via bind '${mapKey}' ` +
+    `(label="${node.label}", ime=${imeIncluded ? "yes" : "no"})`,
+  );
   await _sleep(180 + Math.round(Math.random() * 100));
+  return true;
+}
+
+/**
+ * Select one emoji from the live IME accessibility tree after its Emoji
+ * control has opened the picker. This intentionally does not use the saved
+ * calibration map, screenshot pixels, or guessed coordinates. The picker
+ * cell's current accessibility bounds are the only tap target.
+ */
+export async function tapKeyboardEmojiNode(
+  serial: string,
+  onLog?: (msg: string) => void,
+): Promise<boolean> {
+  const { xml, imeIncluded } = await dumpUiWithIme(serial);
+  const { h: screenH } = getScreenSize(serial);
+  const candidates: Array<{ x: number; y: number; label: string }> = [];
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = nodeRe.exec(xml)) !== null) {
+    const attrs = match[1];
+    const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+    if (!bounds) continue;
+    const x1 = Number(bounds[1]), y1 = Number(bounds[2]);
+    const x2 = Number(bounds[3]), y2 = Number(bounds[4]);
+    const cy = Math.round((y1 + y2) / 2);
+    if (cy < Math.round(screenH * 0.42)) continue;
+    if (!attrs.includes('clickable="true"') && !attrs.includes('focusable="true"')) continue;
+
+    const label = [
+      attrs.match(/\btext="([^"]*)"/i)?.[1] ?? "",
+      attrs.match(/\bcontent-desc="([^"]*)"/i)?.[1] ?? "",
+    ].join(" ").replace(/\s+/g, " ").trim();
+    const resourceId = attrs.match(/\bresource-id="([^"]*)"/i)?.[1] ?? "";
+    const packageName = attrs.match(/\bpackage="([^"]*)"/i)?.[1] ?? "";
+    const imeNode =
+      /(?:inputmethod|keyboard|ime)/i.test(resourceId) ||
+      /(?:inputmethod|keyboard|ime|gboard|swiftkey|latin)/i.test(packageName);
+    if (!imeNode || !label) continue;
+
+    // Gboard exposes picker cells as descriptive labels such as "grinning
+    // face" or as the emoji glyph itself. Exclude navigation/category and
+    // keyboard controls so only an actual picker cell can be selected.
+    if (/(?:emoji|emoticon|smiley|backspace|delete|enter|return|space|shift|settings|search|category|sticker|gif|clipboard)/i.test(label)) {
+      continue;
+    }
+    const hasEmojiGlyph = /\p{Extended_Pictographic}/u.test(label);
+    const namedEmoji = /(?:face|heart|hand|thumb|fire|sparkles|laugh|cry|kiss|wink|grin|smile|folded hands|party|eyes|love|angry|sad|joy)/i.test(label);
+    if (!hasEmojiGlyph && !namedEmoji) continue;
+    candidates.push({
+      x: Math.round((x1 + x2) / 2),
+      y: cy,
+      label,
+    });
+  }
+
+  if (candidates.length === 0) {
+    onLog?.(
+      `[cal-keyboard] live Emoji picker node not found — skipping reply ` +
+      `(ime=${imeIncluded ? "yes" : "no"})`,
+    );
+    return false;
+  }
+
+  // Keep selection deterministic and node-based. The picker itself provides
+  // the ordering; no screen coordinate or pixel heuristic is involved.
+  const node = candidates[0];
+  await tap(serial, node.x, node.y);
+  onLog?.(
+    `[cal-keyboard] tapped live Emoji picker node (label="${node.label}", ` +
+    `candidates=${candidates.length}, ime=${imeIncluded ? "yes" : "no"})`,
+  );
+  await _sleep(220 + Math.round(Math.random() * 120));
   return true;
 }
 

@@ -4162,16 +4162,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
 
       // ── View Stories — Emoji comment reply ─────────────────────────────
-      // Sends a random emoji as a text reply to the current story slide.
+      // Selects an emoji through the live keyboard accessibility tree as a
+      // reply to the current story slide.
       // Only fires when the author allows message replies — confirmed by
       // the presence of id="message_composer_container" with
       // desc="Send Message or Reaction" in the accessibility tree.
       //
       // Flow:
       //   SEND-MESSAGE-BAR  → message_composer_container present → tap to open keyboard
-      //   ENTER-MESSAGE     → keyboard open; inject emoji via `adb shell input text`
-      //                       (no picker needed — InputManager.injectString() writes
-      //                       directly into the focused EditText on Android 8+)
+      //   ENTER-MESSAGE     → keyboard open; resolve the Emoji control and picker
+      //                       cell from the live IME accessibility tree
       //   TAP-SEND-PAPER-AIRPLANE → emoji in field, send button visible:
       //                       id="row_thread_composer_send_button_background" desc="Send"
       if (willComment && (await stillInStoryViewer(/* fastOnly= */ true))) {
@@ -4228,25 +4228,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             await android.tap(serial, _composerX, _composerY);
             await sleepOrAbort(serial, 800); // keyboard animates up
 
-            // ── Inject emoji directly into the focused composer ──────────────
+            // ── Open the Emoji picker through live IME accessibility nodes ──
             //
-            // The emoji picker lives inside the keyboard's IME window — a
-            // separate Android process that UIAutomator cannot dump.  Every
-            // attempt to open the picker and then find cells via the
-            // accessibility tree has failed on MIUI for this reason.
-            //
-            // The correct approach (and what the original design always
-            // intended) is to bypass the keyboard entirely: once the
-            // message composer is focused and the keyboard is up,
-            // `adb shell input text` calls InputManager.injectString()
-            // which writes directly into the focused EditText on Android 8+.
-            // No key press, no picker, no window-dump — just text in the field.
-            const _STORY_EMOJI_POOL = [
-              "🔥","❤️","😍","👏","💯","😂","🙏","✨","🤣","💪",
-              "😊","🥰","😎","👍","💕","🎉","😁","🤩","💖","🫶",
-              "😘","🤙","💫","⚡","🌟","😆","🥳","👌","💥","🫠",
-            ];
-            const _chosenEmoji = _STORY_EMOJI_POOL[Math.floor(Math.random() * _STORY_EMOJI_POOL.length)];
+            // The calibration entry confirms that this named action is enabled
+            // for the device, but its saved coordinates are never used. The
+            // current keyboard layout is resolved from the live IME dump.
             let _emojiKeyPressed = false;
             try {
               _emojiKeyPressed = await android.tapCalibratedKeyboardKey(
@@ -4262,32 +4248,31 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               );
             }
             if (!_emojiKeyPressed) {
-              const _visualEmoji = await android.findKeyboardEmojiButton(serial).catch(() => null);
-              if (_visualEmoji) {
-                await android.tap(serial, _visualEmoji.x, _visualEmoji.y);
-                _emojiKeyPressed = true;
-                onLog?.(
-                  `View Stories ${s + 1}: tapped visually detected Emoji key at ` +
-                  `(${_visualEmoji.x},${_visualEmoji.y})`,
-                );
-                await sleepOrAbort(serial, 300);
-              } else {
-                onLog?.(
-                  `View Stories ${s + 1}: Emoji bind and visual key detection unavailable — ` +
-                  `using direct text fallback`,
-                );
-              }
-            }
-            onLog?.(`View Stories ${s + 1}: injecting emoji "${_chosenEmoji}" via input text…`);
-            try {
-              await android.inputText(serial, _chosenEmoji);
-            } catch (e: any) {
-              onLog?.(`View Stories ${s + 1}: emoji input failed — ${e?.message}`);
-              logger.warn({ serial, story: s + 1, err: e?.message }, "[view-stories] emoji inputText failed");
+              onLog?.(
+                `View Stories ${s + 1}: Emoji bind exists but live keyboard node was not found — ` +
+                `skipping without coordinate/pixel fallback`,
+              );
               await android.pressBack(serial).catch(() => {});
               continue;
             }
-            await sleepOrAbort(serial, 400); // text settles; send button appears
+
+            await sleepOrAbort(serial, 350);
+            try {
+              const _emojiSelected = await android.tapKeyboardEmojiNode(
+                serial,
+                msg => onLog?.(`View Stories ${s + 1}: ${msg}`),
+              );
+              if (!_emojiSelected) {
+                await android.pressBack(serial).catch(() => {});
+                continue;
+              }
+            } catch (e: any) {
+              onLog?.(`View Stories ${s + 1}: live Emoji picker node lookup failed — ${e?.message}`);
+              logger.warn({ serial, story: s + 1, err: e?.message }, "[view-stories] live emoji node lookup failed");
+              await android.pressBack(serial).catch(() => {});
+              continue;
+            }
+            await sleepOrAbort(serial, 400); // selected emoji settles; send button appears
 
             // Find the send button that appears after the emoji is entered.
             // From TAP-SEND-PAPER-AIRPLANE dump:
