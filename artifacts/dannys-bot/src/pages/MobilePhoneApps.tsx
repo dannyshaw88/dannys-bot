@@ -735,7 +735,9 @@ export function MobilePhoneAppsPanel({
                      <div className={settings.chrome.manualSearches
                        ? "flex flex-col items-center gap-1"
                        : "flex flex-col items-center justify-center gap-1 w-[180px] min-h-[34px]"}>
-                       <label className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap cursor-pointer">
+                       <label className={settings.chrome.manualSearches
+                         ? "flex items-center justify-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap cursor-pointer"
+                         : "flex items-center justify-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap cursor-pointer translate-y-1"}>
                          <Checkbox
                            checked={settings.chrome.manualSearches ?? false}
                            onCheckedChange={checked => patchApp("chrome", { manualSearches: checked === true })}
