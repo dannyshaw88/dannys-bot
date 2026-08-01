@@ -1,0 +1,227 @@
+name: Build Windows Installer
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: windows-installer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-web:
+    name: Build Web Bundle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile --ignore-scripts
+      - name: Build API server
+        run: pnpm --filter @workspace/api-server run build
+      - name: Build frontend
+        run: pnpm --filter @workspace/dannys-bot run build
+        env:
+          REPL_ID: ci
+      - name: Verify release version
+        shell: bash
+        run: |
+          root_version="$(node -p "require('./package.json').version")"
+          electron_version="$(node -p "require('./artifacts/electron/package.json').version")"
+          test "$root_version" = "$electron_version"
+          test -f artifacts/electron/build.mjs
+          test -f artifacts/electron/electron-builder.json
+          test -f artifacts/electron/sidecar/server.py
+          echo "Building Aura Farming version $root_version"
+      # Upload each dist directory as its own artifact so download-artifact
+      # can place files at the exact target path without any copy/rename step.
+      - name: Upload API server dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-server-dist
+          path: artifacts/api-server/dist/
+          if-no-files-found: error
+      - name: Upload frontend dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: dannys-bot-dist
+          path: artifacts/dannys-bot/dist/
+          if-no-files-found: error
+
+  build-installer:
+    name: Build Windows Installer
+    runs-on: windows-latest
+    needs: build-web
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Download directly into the paths the Electron builder expects.
+      # No copy step needed — download-artifact places files at the given path.
+      - name: Download API server dist
+        uses: actions/download-artifact@v4
+        with:
+          name: api-server-dist
+          path: artifacts/api-server/dist
+
+      - name: Download frontend dist
+        uses: actions/download-artifact@v4
+        with:
+          name: dannys-bot-dist
+          path: artifacts/dannys-bot/dist
+
+      - name: Verify dist files
+        run: |
+          echo "=== api-server/dist ==="
+          ls artifacts/api-server/dist/
+          echo "=== dannys-bot/dist ==="
+          ls artifacts/dannys-bot/dist/
+
+      - name: Set up Python embeddable runtime
+        working-directory: artifacts/electron
+        shell: bash
+        run: |
+          mkdir -p resources/python-embed
+          # Download Windows embeddable Python 3.12
+          curl -fsSL "https://www.python.org/ftp/python/3.12.9/python-3.12.9-embed-amd64.zip" \
+            -o python-embed.zip
+          unzip -q python-embed.zip -d resources/python-embed/
+          rm python-embed.zip
+          # Bootstrap script so the app can install pip on first run
+          curl -fsSL "https://bootstrap.pypa.io/get-pip.py" \
+            -o resources/python-embed/get-pip.py
+          # Copy sidecar server files
+          cp sidecar/server.py resources/python-embed/server.py
+          cp sidecar/requirements.txt resources/python-embed/requirements.txt
+          echo "Python embed ready:"
+          ls resources/python-embed/ | head -20
+
+      - name: Verify AI dependency repair sources
+        working-directory: artifacts/electron
+        shell: bash
+        run: |
+          grep -F "huggingface_hub>=1.5.0,<2.0" resources/python-embed/requirements.txt
+          grep -F -- '"--upgrade"' src/main.ts
+          grep -F -- '"--upgrade-strategy", "eager"' src/main.ts
+          grep -F -- '"--ignore-installed"' src/main.ts
+          grep -F "getImageGenPackagesDir" src/main.ts
+          grep -F "fs.rmSync(packagesDir" src/main.ts
+          grep -F "AI package verification failed" src/main.ts
+          grep -F "stopImageGenServer" src/main.ts
+          grep -F "Install / Repair AI Libraries" ../dannys-bot/src/pages/ImageGenPage.tsx
+          echo "AI dependency repair configuration verified"
+
+      - name: Verify Reel DM recipient safety sources
+        shell: bash
+        run: |
+          grep -F "strictContactParents: true" artifacts/api-server/src/routes/mobile.ts
+          grep -F "no validated Chat avatar nodes" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "recipient selection was not positively confirmed" artifacts/api-server/src/routes/mobile.ts
+          grep -F "shared post via DM — Send tapped" artifacts/api-server/src/routes/mobile.ts
+          if sed -n '5190,5320p' artifacts/api-server/src/routes/mobile.ts | grep -F "DM likely sent by recipient tap"; then
+            echo "Unsafe Reel dismissed-sheet success fallback is still present"
+            exit 1
+          fi
+          echo "Reel DM recipient safety configuration verified"
+
+      - name: Verify Mobile Phone Apps manual-search UI
+        shell: bash
+        run: |
+          grep -F "Internal Links Clicked %" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          grep -F "Manual Searches Activation %" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          grep -F "manualSearchPctMin" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          grep -F "manualSearchPctMax" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          grep -F "Searches Per Run" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          grep -F "Search Result Scrolls" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          grep -F "Search Result Link %" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          grep -F "Result Dwell Seconds" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          grep -F "manualSearchCountMin" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          grep -F "manualSearchScrollMin" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          grep -F "manualSearchLinkPctMin" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          grep -F "manualSearchDwellMin" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          if grep -F "Checkbox" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx; then
+            echo "Manual Searches UI must not reintroduce a checkbox"
+            exit 1
+          fi
+          echo "Mobile Phone Apps manual-search UI configuration verified"
+
+      - name: Install Electron deps
+        working-directory: artifacts/electron
+        run: npm install --ignore-scripts
+
+      - name: Restore electron-builder download cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\electron-builder-cache
+          key: electron-builder-${{ runner.os }}-${{ hashFiles('artifacts/electron/package.json', 'artifacts/electron/electron-builder.json') }}
+          restore-keys: |
+            electron-builder-${{ runner.os }}-
+
+      - name: Build Electron bundle
+        working-directory: artifacts/electron
+        run: node build.mjs
+
+      - name: Build installer
+        working-directory: artifacts/electron
+        run: |
+          for attempt in 1 2 3; do
+            echo "Building Windows installer (attempt $attempt of 3)"
+            if npx electron-builder --win --publish never; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              delay=$((attempt * 20))
+              echo "electron-builder failed; retrying in ${delay}s"
+              sleep "$delay"
+            fi
+          done
+          echo "electron-builder failed after 3 attempts"
+          exit 1
+        env:
+          ELECTRON_BUILDER_CACHE: ${{ runner.temp }}\electron-builder-cache
+          DANNY_BOT_UPDATER_TOKEN: ${{ secrets.UPDATER_TOKEN }}
+
+      - name: Verify Windows installer
+        working-directory: artifacts/electron
+        shell: bash
+        run: |
+          installer_count="$(find release -maxdepth 1 -type f -iname '*.exe' | wc -l)"
+          test "$installer_count" -gt 0
+          installer_bytes="$(find release -maxdepth 1 -type f -iname '*.exe' -printf '%s\n' | awk '{ total += $1 } END { print total + 0 }')"
+          test "$installer_bytes" -gt 1000000
+          echo "Windows installer artifacts:"
+          find release -maxdepth 1 -type f -iname '*.exe' -print
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Aura-Farming-Windows-Installer
+          path: artifacts/electron/release/*.exe
+          if-no-files-found: error
+
+      - name: Publish to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/electron/release/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.UPDATER_TOKEN }}
