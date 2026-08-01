@@ -4,6 +4,19 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.327] — 2026-08-01
+
+### Added — Expand Chrome Manual Searches to thousands of everyday queries
+
+- Replaced the previous 18-item Google search list with a local generated library of more than 6,000 unique, ordinary search queries.
+- Added broad everyday topics covering food, travel, weather, sport, entertainment, shopping, home care, pets, money, work, study, technology, transport, health, hobbies, and local activities.
+- Added natural search variations such as “best”, “easy”, “near me”, “today”, “this weekend”, “for beginners”, “on a budget”, “how to”, “tips for”, and “simple steps to”.
+- Kept the original example searches in the pool while adding thousands of additional combinations.
+- Preserved the existing percentage activation behavior: a maximum of `0%` disables Manual Searches, and an activated run performs one randomly selected Google search.
+- Preserved the real-device accessibility flow: Chrome opens Google, the current Android `EditText` search node is detected from the live UI dump, the query is typed through the existing keyboard helper, and Chrome returns through the existing close sequence.
+- Kept the query generation fully local and free, with no paid keyword API, external service, or network dependency.
+- Bumped the root application and Electron package versions to `1.2.327`.
+
 ## [1.2.326] — 2026-08-01
 
 ### Changed — Finalize Chrome manual-search controls and Windows installer delivery
