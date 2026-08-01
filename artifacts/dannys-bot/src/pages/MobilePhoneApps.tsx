@@ -289,7 +289,7 @@ function AppSlotRow({ icon, label, className, min, max, onMin, onMax, rowExtras,
         {/* Explicit full-width rows. These must not depend on available width
             or happenstance flex wrapping to appear as separate rows. */}
         {row2 && (
-          <div className="basis-full w-full grid grid-cols-5 items-center gap-4 [&>*:not(:first-child)]:-translate-x-[5px]">
+          <div className="basis-full w-full grid grid-cols-5 items-center gap-4 [&>*:not(:first-child)]:-translate-x-[6px]">
             {row2}
           </div>
         )}
