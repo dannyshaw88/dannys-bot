@@ -54,11 +54,15 @@ OUTPUT_DIR = os.environ.get(
 Path(MODELS_DIR).mkdir(parents=True, exist_ok=True)
 Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 
-# Diffusers 0.37+ pulls in a newer huggingface_hub where Xet is commonly used
-# for model downloads. Older Aura Farming releases used the legacy HTTP/LFS
-# path and downloaded these models faster on the target Windows desktop. Keep
-# the legacy path as the default; Electron also passes this explicitly.
-os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+# Large model repositories are served from Hugging Face's Xet backend. Older
+# builds forced the legacy HTTP/LFS path, which reduced model throughput to
+# roughly 1 MB/s on some Windows installations. Remove that stale override and
+# let hf_xet use concurrent range downloads.
+os.environ.pop("HF_HUB_DISABLE_XET", None)
+os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
+os.environ.setdefault("HF_XET_NUM_CONCURRENT_RANGE_GETS", "32")
+os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "600")
+os.environ.setdefault("HF_HUB_ETAG_TIMEOUT", "60")
 
 # ── CPU thread cap ────────────────────────────────────────────────────────────
 # PyTorch defaults to using every logical core, which causes fan spin even on
@@ -78,6 +82,9 @@ _loading_phase: str = "idle"                # checking_cache | hardware_check | 
 _loading_started_at: Optional[float] = None
 _loading_detail: str = ""
 _download_progress_high_water: int = 0      # bytes observed during this load; never moves backwards
+_download_rate_bps: float = 0.0
+_download_rate_sample_at: Optional[float] = None
+_download_rate_sample_bytes: int = 0
 _load_lock = threading.Lock()
 _ip_adapter_loaded: bool = False            # True once IP-Adapter weights are loaded onto _pipeline
 _gpu_info_cache: Optional[dict] = None
@@ -307,8 +314,26 @@ def _get_download_progress() -> Optional[dict]:
     # transfer. That makes a raw directory sum go backwards even though the
     # load is still progressing, so expose a per-load high-water mark to the UI.
     global _download_progress_high_water
+    global _download_rate_bps, _download_rate_sample_at, _download_rate_sample_bytes
     current_bytes = downloaded + incomplete_bytes
     _download_progress_high_water = max(_download_progress_high_water, current_bytes)
+    now = time.time()
+    if _download_rate_sample_at is not None:
+        elapsed = now - _download_rate_sample_at
+        delta = current_bytes - _download_rate_sample_bytes
+        if elapsed >= 0.5 and delta >= 0:
+            # Smooth the UI value while ignoring filesystem regressions caused
+            # by Hugging Face replacing a retried .incomplete shard.
+            instant_bps = delta / elapsed
+            _download_rate_bps = (
+                instant_bps if _download_rate_bps <= 0
+                else (_download_rate_bps * 0.65) + (instant_bps * 0.35)
+            )
+            _download_rate_sample_at = now
+            _download_rate_sample_bytes = current_bytes
+    else:
+        _download_rate_sample_at = now
+        _download_rate_sample_bytes = current_bytes
     # The registry size is an estimate. It is valid for the visible counter to
     # reach that estimate while a final/retried file is still incomplete;
     # download_complete remains false until every incomplete file is finalized.
@@ -320,6 +345,7 @@ def _get_download_progress() -> Optional[dict]:
         "total_bytes": total_bytes,
         "download_complete": download_complete,
         "incomplete_bytes": incomplete_bytes,
+        "speed_bps": round(_download_rate_bps),
     }
 
 # ── Model registry ────────────────────────────────────────────────────────────
@@ -499,6 +525,9 @@ def _do_load(model_key: str) -> None:
     _loading_started_at = time.time()
     _loading_detail = "Checking the local model cache…"
     _download_progress_high_water = 0
+    _download_rate_bps = 0.0
+    _download_rate_sample_at = None
+    _download_rate_sample_bytes = 0
 
     # Detect whether the weights are already cached so we can show the right message
     cached = _model_is_cached(model_key)
@@ -624,11 +653,16 @@ def _do_load(model_key: str) -> None:
         except Exception:
             hub_version = "unavailable"
         xet_installed = importlib.util.find_spec("hf_xet") is not None
+        xet_enabled = xet_installed and os.environ.get("HF_HUB_DISABLE_XET", "").lower() not in {
+            "1", "true", "yes", "on",
+        }
         log.info(
             "Hugging Face download backend: "
             f"huggingface_hub={hub_version}, "
-            f"HF_HUB_DISABLE_XET={os.environ.get('HF_HUB_DISABLE_XET', '')!r}, "
-            f"hf_xet_installed={xet_installed}"
+            f"hf_xet_installed={xet_installed}, "
+            f"xet_enabled={xet_enabled}, "
+            f"HF_XET_HIGH_PERFORMANCE={os.environ.get('HF_XET_HIGH_PERFORMANCE', '')!r}, "
+            f"HF_XET_NUM_CONCURRENT_RANGE_GETS={os.environ.get('HF_XET_NUM_CONCURRENT_RANGE_GETS', '')!r}"
         )
         log.info(f"Loading pipeline components for {model_key} (elapsed {time.time() - _loading_started_at:.0f}s)")
         pipe = PipelineCls.from_pretrained(info["repo"], **load_kwargs)
@@ -659,6 +693,9 @@ def _do_load(model_key: str) -> None:
         _loading_model_key = None
         _loading_from_cache = False
         _download_progress_high_water = 0
+        _download_rate_bps = 0.0
+        _download_rate_sample_at = None
+        _download_rate_sample_bytes = 0
         _loading_phase = "idle"
         _loading_started_at = None
         _loading_detail = ""

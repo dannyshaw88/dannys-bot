@@ -96,6 +96,16 @@ jobs:
           echo "=== dannys-bot/dist ==="
           ls artifacts/dannys-bot/dist/
 
+      - name: Verify accelerated AI model download configuration
+        run: |
+          grep -q "HF_XET_HIGH_PERFORMANCE" src/main.ts 2>/dev/null || grep -q "HF_XET_HIGH_PERFORMANCE" artifacts/electron/src/main.ts
+          grep -q "hf-xet" artifacts/electron/sidecar/requirements.txt
+          if grep -q "HF_HUB_DISABLE_XET.*1" artifacts/electron/src/main.ts artifacts/electron/sidecar/server.py; then
+            echo "The installer must not ship with Xet disabled"
+            exit 1
+          fi
+          echo "Accelerated Hugging Face Xet configuration verified"
+
       - name: Set up Python embeddable runtime
         working-directory: artifacts/electron
         shell: bash

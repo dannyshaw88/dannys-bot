@@ -4,6 +4,23 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.319] — 2026-08-01
+
+### Fixed — Remove the AI model download throttle
+
+- Found that the Windows desktop app was explicitly setting `HF_HUB_DISABLE_XET=1`, forcing every Hugging Face model through the slower single-stream HTTP/LFS downloader.
+- Removed that override from both the Electron process and Python sidecar. Existing user-level copies of the old setting are now ignored when the sidecar starts.
+- Added an explicit `hf-xet` dependency so existing installations cannot silently fall back to the slow backend because the accelerated transport is missing.
+- Enabled Hugging Face Xet high-performance range downloads with 32 concurrent range requests, a 10-minute model-download timeout, and a 60-second metadata timeout.
+- Added live transfer-rate reporting to AI Images, showing the current MB/s or KB/s beside the model progress percentage.
+- Added backend diagnostics to the desktop log, including the Hub version, whether `hf_xet` is installed, whether Xet is enabled, and the active concurrency settings.
+- Updated the canonical `build-windows-installer.yml` Actions workflow to fail the installer build if the accelerated downloader configuration is missing or Xet is disabled.
+- Bumped the root application and Electron package versions to `1.2.319`.
+
+### Upgrade note
+
+Install the new `Aura-Farming-Windows-Installer` artifact from the latest successful run under GitHub Actions. The existing installed app cannot gain the new downloader settings until the v1.2.319 installer is installed. The model cache in AppData is preserved, so an interrupted download can resume.
+
 ## [1.2.318] — 2026-08-01
 
 ### Fixed — Make AI library setup resumable and navigation-safe

@@ -51,6 +51,7 @@ interface DownloadProgress {
   total_bytes: number;
   download_complete?: boolean;
   incomplete_bytes?: number;
+  speed_bps?: number;
 }
 
 interface StatusResponse {
@@ -1259,6 +1260,10 @@ function DownloadProgressBar({
   const pct = Math.min(100, Math.round((progress.downloaded_bytes / progress.total_bytes) * 100));
   const dlGB = (progress.downloaded_bytes / 1_073_741_824).toFixed(2);
   const totalGB = (progress.total_bytes / 1_073_741_824).toFixed(1);
+  const speedMbps = (progress.speed_bps ?? 0) / 1_000_000;
+  const speedLabel = speedMbps >= 1
+    ? `${speedMbps.toFixed(1)} MB/s`
+    : `${((progress.speed_bps ?? 0) / 1_000).toFixed(0)} KB/s`;
 
   return (
     <div className="mt-3 space-y-1.5">
@@ -1270,7 +1275,7 @@ function DownloadProgressBar({
       </div>
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>{dlGB} / {totalGB} GB</span>
-        <span>{loadingPipeline ? "Loading…" : `${pct}%`}</span>
+        <span>{loadingPipeline ? "Loading…" : `${pct}% · ${speedLabel}`}</span>
       </div>
     </div>
   );
