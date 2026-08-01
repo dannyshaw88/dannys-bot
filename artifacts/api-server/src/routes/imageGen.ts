@@ -103,8 +103,8 @@ router.get("/api/image-gen/status", (_req, res) => {
         available: true,
         loaded_model: null,
         available_models: {
-          "qwen-image-edit-2511": { label: "Qwen Image Edit 2511", name: "Qwen Image Edit 2511", size_gb: 20, default_steps: 40, default_guidance: 4, supports_reference_image: true, requires_reference_image: true, minimum_vram_gb: 24, recommended_vram_gb: 24 },
-          "longcat-image-edit": { label: "LongCat Image Edit", name: "LongCat Image Edit", size_gb: 30, default_steps: 50, default_guidance: 4.5, supports_reference_image: true, requires_reference_image: true, uses_cpu_offload: true, minimum_vram_gb: 18, recommended_vram_gb: 24 },
+          "qwen-image-edit-2511": { label: "Qwen Image Edit 2511", name: "Qwen Image Edit 2511", size_gb: 20, default_steps: 40, default_guidance: 4, supports_reference_image: true, requires_reference_image: true, uses_cpu_offload: true },
+          "longcat-image-edit": { label: "LongCat Image Edit", name: "LongCat Image Edit", size_gb: 30, default_steps: 50, default_guidance: 4.5, supports_reference_image: true, requires_reference_image: true, uses_cpu_offload: true },
         },
       });
     } else {
@@ -120,8 +120,8 @@ router.get("/api/image-gen/status", (_req, res) => {
       available: true,
       loaded_model: null,
       available_models: {
-        "qwen-image-edit-2511": { label: "Qwen Image Edit 2511", name: "Qwen Image Edit 2511", size_gb: 20, default_steps: 40, default_guidance: 4, supports_reference_image: true, requires_reference_image: true, minimum_vram_gb: 24, recommended_vram_gb: 24 },
-        "longcat-image-edit": { label: "LongCat Image Edit", name: "LongCat Image Edit", size_gb: 30, default_steps: 50, default_guidance: 4.5, supports_reference_image: true, requires_reference_image: true, uses_cpu_offload: true, minimum_vram_gb: 18, recommended_vram_gb: 24 },
+        "qwen-image-edit-2511": { label: "Qwen Image Edit 2511", name: "Qwen Image Edit 2511", size_gb: 20, default_steps: 40, default_guidance: 4, supports_reference_image: true, requires_reference_image: true, uses_cpu_offload: true },
+        "longcat-image-edit": { label: "LongCat Image Edit", name: "LongCat Image Edit", size_gb: 30, default_steps: 50, default_guidance: 4.5, supports_reference_image: true, requires_reference_image: true, uses_cpu_offload: true },
       },
     });
   });

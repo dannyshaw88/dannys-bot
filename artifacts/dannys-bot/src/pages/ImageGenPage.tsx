@@ -23,8 +23,6 @@ interface ModelInfo {
   uses_cpu_offload?: boolean;
   disabled?: boolean;
   disabled_reason?: string;
-  minimum_vram_gb?: number | null;
-  recommended_vram_gb?: number | null;
 }
 
 interface GpuInfo {
@@ -936,7 +934,7 @@ function SetupSection({
         )}
 
         <p className="text-sm text-muted-foreground">
-          Images are generated on <strong className="text-foreground">your own GPU</strong> — no credits, no queue, no internet needed after the model downloads.
+          Images are generated on <strong className="text-foreground">your own computer</strong> — GPU acceleration is used when available, with CPU fallback for slower generation.
         </p>
 
         {/* Model picker */}
@@ -955,16 +953,6 @@ function SetupSection({
                 <p className="text-xs text-muted-foreground">
                   Download size: ~{models[model].size_gb} GB (stored in your AppData folder)
                 </p>
-                 {models[model].minimum_vram_gb && (
-                  <p className="text-xs text-muted-foreground">
-                     {models[model].uses_cpu_offload
-                       ? `Documented CPU-offload path uses about ${models[model].minimum_vram_gb} GB VRAM`
-                       : `Full-GPU loading requires at least ${models[model].minimum_vram_gb} GB VRAM`}
-                    {models[model].recommended_vram_gb
-                      ? ` · ${models[model].recommended_vram_gb} GB recommended`
-                      : ""}
-                  </p>
-                )}
                 {models[model].installed && (
                   <p className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
                     <CheckCircle2 className="w-3.5 h-3.5" /> Downloaded on this PC

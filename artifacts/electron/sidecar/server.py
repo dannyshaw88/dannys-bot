@@ -273,13 +273,10 @@ MODELS = {
         "size_gb": 20,
         "supports_reference_image": True,
         "requires_reference_image": True,
-        # The current loader places the complete pipeline on CUDA; it does
-        # not use CPU/disk offload. A 20B-parameter BF16 pipeline needs about
-        # 24 GB of VRAM. Refuse CPU-only and undersized machines before
-        # diffusers spends minutes materialising a pipeline that cannot fit.
-        "minimum_vram_gb": 24,
-        "recommended_vram_gb": 24,
-        "requires_cuda": True,
+        # Keep this permissive: CUDA is faster when available, but CPU loading
+        # is still a valid fallback for machines without a usable Torch CUDA
+        # runtime. It may take a long time and use substantial system RAM.
+        "use_cpu_offload": True,
     },
     "longcat-image-edit": {
         "label": "LongCat Image Edit (reference-image editing, ~30 GB download)",
@@ -291,12 +288,9 @@ MODELS = {
         "supports_reference_image": True,
         "requires_reference_image": True,
         # LongCat's official model card documents CPU offload at roughly
-        # 18 GB VRAM. Use that documented offload path instead of requiring
-        # the entire pipeline to remain resident on the GPU.
+        # 18 GB VRAM. Use that path when CUDA is available, while still
+        # allowing a CPU-only fallback.
         "use_cpu_offload": True,
-        "minimum_vram_gb": 18,
-        "recommended_vram_gb": 24,
-        "requires_cuda": True,
     },
 }
 
@@ -371,43 +365,19 @@ def _do_load(model_key: str) -> None:
     try:
         import torch
 
-        # Check hardware before importing/assembling the large diffusers
-        # pipeline. CUDA availability only means that PyTorch can talk to the
-        # GPU; it does not mean this model can fit in that GPU's VRAM.
+        # Detect the best available device, but do not reject the model here.
+        # The previous version turned this into a hard CUDA/VRAM gate, which
+        # prevented machines from attempting the slower CPU fallback.
         _loading_phase = "hardware_check"
-        _status_message = "Checking whether this computer can load the selected model…"
-        _loading_detail = "Checking GPU memory and runtime compatibility…"
+        _status_message = "Selecting the best available processing device…"
+        _loading_detail = "CUDA will be used when available; otherwise loading on the CPU…"
         gpu_info = _get_gpu_info()
         device = "cuda" if gpu_info["available"] else "cpu"
-        minimum_vram = info.get("minimum_vram_gb")
-        if info.get("requires_cuda") and device != "cuda":
-            gpu_name = gpu_info.get("system_gpu_name") or gpu_info.get("name")
-            detected = f" ({gpu_name})" if gpu_name else ""
-            raise RuntimeError(
-                f"{info['label']} requires a CUDA-capable NVIDIA GPU{detected}; "
-                f"this installation cannot use CUDA ({gpu_info.get('reason', 'CUDA is unavailable')}). "
-                "The model was downloaded successfully, but it cannot be loaded into CPU memory. "
-                "Install the CUDA-enabled AI libraries and NVIDIA driver."
+        if device == "cpu":
+            _loading_detail = (
+                "No usable Torch CUDA runtime detected; loading on the CPU. "
+                "This can be slow and use substantial system RAM."
             )
-        if device == "cuda" and minimum_vram:
-            actual_vram = gpu_info.get("vram_gb")
-            if actual_vram is None:
-                # Never attempt to assemble a very large full-GPU pipeline when
-                # the runtime cannot prove how much VRAM is available.
-                raise RuntimeError(
-                    f"Could not measure VRAM for {gpu_info.get('name') or 'the CUDA device'}. "
-                    f"{info['label']} requires at least {minimum_vram} GB of VRAM in the current "
-                    "full-GPU loader; use a machine with more VRAM."
-                )
-            if actual_vram < minimum_vram:
-                raise RuntimeError(
-                    f"{info['label']} needs at least {minimum_vram} GB of VRAM in the current full-GPU loader, "
-                    f"but {gpu_info.get('name') or 'this GPU'} has {actual_vram} GB. "
-                    "Use a machine with more VRAM."
-                )
-
-        if device == "cpu" and info.get("minimum_vram_gb"):
-            _loading_detail = "No CUDA runtime detected; loading the large model into system RAM…"
 
         if info["pipeline_class"] == "QwenImageEditPlusPipeline":
             from diffusers import QwenImageEditPlusPipeline
@@ -536,8 +506,6 @@ def get_status():
                 "uses_cpu_offload": v.get("use_cpu_offload", False),
                 "disabled": v.get("disabled", False),
                 "disabled_reason": v.get("disabled_reason"),
-                "minimum_vram_gb": v.get("minimum_vram_gb"),
-                "recommended_vram_gb": v.get("recommended_vram_gb"),
             }
             for k, v in MODELS.items()
         },

@@ -4,6 +4,15 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.322] — 2026-08-01
+
+### Fixed — Allow CPU fallback for local image generation
+
+- Removed the hard CUDA and VRAM rejection that stopped downloaded models from loading on laptops with smaller GPUs or CPU-only Torch runtimes.
+- Qwen and LongCat now use CUDA when available and otherwise attempt CPU loading, with the expected slower-generation warning.
+- Removed the misleading “required VRAM” display from the AI Images page.
+- Bumped the root application and Electron package versions to `1.2.322`.
+
 ## [1.2.321] — 2026-08-01
 
 ### Fixed — Simplify local AI model downloads
