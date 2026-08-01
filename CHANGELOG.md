@@ -4,6 +4,16 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.321] — 2026-08-01
+
+### Fixed — Simplify local AI model downloads
+
+- Replaced the bandwidth-heavy accelerated downloader with Hugging Face's conservative regular HTTP/LFS transport.
+- Removed custom download-speed tracking and legacy model-loading branches that were not needed for the supported workflow.
+- Kept the initial AI package setup and limited the selectable local models to Qwen Image Edit 2511 and LongCat Image Edit.
+- Updated the Windows installer validation to match the simplified downloader.
+- Bumped the root application and Electron package versions to `1.2.321`.
+
 ## [1.2.320] — 2026-08-01
 
 ### Fixed — Windows installer workflow false failure
