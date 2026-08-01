@@ -3,7 +3,7 @@ name: Mobile Phone Apps explicit rows
 description: The Phone Farm Google Chrome settings layout must use explicit full-width row wrappers
 ---
 
-The `AppSlotRow` row props must render as explicit full-width flex rows; putting groups in one wrapping flex container only creates accidental visual lines that change with panel width. For the Google Chrome card, the first row contains activation/scroll/story controls and the second row contains, in order: Searches Per Run, Search Result Scrolls, Internal Links Clicked %, Manual Searches Activation %, and Search Result Link %. Result Dwell Seconds remains below.
+The `AppSlotRow` must use one shared six-column template for the first row and every following row: app label, activation, then five field columns. Secondary rows need a leading spacer for the label column so controls line up exactly with Row 1; never use an independent equal-width grid or flex wrap.
 
 **Why:** A screenshot-based UI request exposed that natural flex wrapping can make a field appear on the right line at one width while still belonging to the wrong structural row.
 

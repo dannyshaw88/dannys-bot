@@ -76,6 +76,7 @@ function WhatsAppIcon({ size = 20 }: { size?: number }) {
 // ── Shared style helpers ───────────────────────────────────────────────────────
 
 const PCT_INPUT = "w-14 text-center h-7 text-sm px-1";
+const APP_SLOT_GRID = "grid grid-cols-[minmax(9rem,auto)_repeat(5,minmax(0,1fr))] gap-4 items-start";
 
 // ── App tool slot config type ─────────────────────────────────────────────────
 
@@ -109,6 +110,9 @@ interface AppSlotSettings {
   /** Seconds to dwell on a manually opened Google result. */
   manualSearchDwellMin?: number;
   manualSearchDwellMax?: number;
+  /** Number of trending stories to tap on the Google homepage. */
+  tapTrendingStoryMin?: number;
+  tapTrendingStoryMax?: number;
   /** Chance (0–100%) to tap a video item after scrolling — only used by YouTube. */
   clickPctMin?: number;
   clickPctMax?: number;
@@ -146,7 +150,7 @@ const DEFAULT_APP_SLOT: AppSlotSettings = { activatePctMin: 0, activatePctMax: 0
 
 const DEFAULT_SETTINGS: PhoneAppsSettings = {
   enabled: false, intervalMin: 25, intervalMax: 99,
-  chrome:     { ...DEFAULT_APP_SLOT, scrollMin: 1, scrollMax: 5, storyTapMin: 0, storyTapMax: 0, tappedStoryScrollMin: 0, tappedStoryScrollMax: 0, internalLinkPctMin: 0, internalLinkPctMax: 0, manualSearchPctMin: 0, manualSearchPctMax: 0, manualSearchCountMin: 1, manualSearchCountMax: 1, manualSearchScrollMin: 0, manualSearchScrollMax: 0, manualSearchLinkPctMin: 0, manualSearchLinkPctMax: 0, manualSearchDwellMin: 3, manualSearchDwellMax: 8 },
+  chrome:     { ...DEFAULT_APP_SLOT, scrollMin: 1, scrollMax: 5, storyTapMin: 0, storyTapMax: 0, tappedStoryScrollMin: 0, tappedStoryScrollMax: 0, internalLinkPctMin: 0, internalLinkPctMax: 0, manualSearchPctMin: 0, manualSearchPctMax: 0, manualSearchCountMin: 1, manualSearchCountMax: 1, manualSearchScrollMin: 0, manualSearchScrollMax: 0, manualSearchLinkPctMin: 0, manualSearchLinkPctMax: 0, manualSearchDwellMin: 3, manualSearchDwellMax: 8, tapTrendingStoryMin: 0, tapTrendingStoryMax: 0 },
   googlePlay: { ...DEFAULT_APP_SLOT },
   snapchat:   { ...DEFAULT_APP_SLOT },
   youtube:    { ...DEFAULT_APP_SLOT, scrollMin: 1, scrollMax: 5, clickPctMin: 0, clickPctMax: 0, watchTimeMin: 3, watchTimeMax: 8, clickShortsPctMin: 0, clickShortsPctMax: 0, shortsScrollMin: 0, shortsScrollMax: 0, shortsWatchTimeMin: 3, shortsWatchTimeMax: 8, shortsLikePctMin: 0, shortsLikePctMax: 0 },
@@ -233,6 +237,7 @@ export function MobilePhoneApps({
 interface AppSlotRowProps {
   icon:       React.ReactNode;
   label:      string;
+  className?: string;
   min:        number;
   max:        number;
   onMin:      (v: number) => void;
@@ -243,11 +248,11 @@ interface AppSlotRowProps {
   row4?:      React.ReactNode; // optional fourth row rendered below row 3, full width
 }
 
-function AppSlotRow({ icon, label, min, max, onMin, onMax, rowExtras, row2, row3, row4 }: AppSlotRowProps) {
+function AppSlotRow({ icon, label, className, min, max, onMin, onMax, rowExtras, row2, row3, row4 }: AppSlotRowProps) {
   return (
-    <div className="p-4">
+    <div className={`p-4 ${className ?? ""}`}>
       {/* First visual row: icon, activation, and the app's primary fields. */}
-      <div className="flex items-center gap-4 flex-wrap">
+      <div className={APP_SLOT_GRID}>
         {/* Icon + label — anchors the left of the first visual row */}
         <div className="flex items-center gap-2 min-w-[9rem]">
           {icon}
@@ -285,17 +290,17 @@ function AppSlotRow({ icon, label, min, max, onMin, onMax, rowExtras, row2, row3
         {/* Explicit full-width rows. These must not depend on available width
             or happenstance flex wrapping to appear as separate rows. */}
         {row2 && (
-          <div className="basis-full w-full flex items-center gap-4 flex-wrap">
+          <div className={`col-span-6 w-full ${APP_SLOT_GRID}`}>
             {row2}
           </div>
         )}
         {row3 && (
-          <div className="basis-full w-full flex items-center gap-4 flex-wrap">
+          <div className={`col-span-6 w-full ${APP_SLOT_GRID}`}>
             {row3}
           </div>
         )}
         {row4 && (
-          <div className="basis-full w-full flex items-center gap-4 flex-wrap">
+          <div className={`col-span-6 w-full ${APP_SLOT_GRID}`}>
             {row4}
           </div>
         )}
@@ -368,7 +373,7 @@ export function MobilePhoneAppsPanel({
           enabled:     Boolean(d.enabled ?? false),
           intervalMin: Number(d.intervalMin ?? 25),
           intervalMax: Number(d.intervalMax ?? 99),
-           chrome:      { activatePctMin: d.chrome?.activatePctMin ?? 0,      activatePctMax: d.chrome?.activatePctMax ?? 0,      scrollMin: d.chrome?.scrollMin ?? 1, scrollMax: d.chrome?.scrollMax ?? 5, storyTapMin: d.chrome?.storyTapMin ?? 0, storyTapMax: d.chrome?.storyTapMax ?? 0, tappedStoryScrollMin: d.chrome?.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: d.chrome?.tappedStoryScrollMax ?? 0, internalLinkPctMin: d.chrome?.internalLinkPctMin ?? 0, internalLinkPctMax: d.chrome?.internalLinkPctMax ?? 0, manualSearchPctMin: d.chrome?.manualSearchPctMin ?? 0, manualSearchPctMax: d.chrome?.manualSearchPctMax ?? 0, manualSearchCountMin: d.chrome?.manualSearchCountMin ?? 1, manualSearchCountMax: d.chrome?.manualSearchCountMax ?? 1, manualSearchScrollMin: d.chrome?.manualSearchScrollMin ?? 0, manualSearchScrollMax: d.chrome?.manualSearchScrollMax ?? 0, manualSearchLinkPctMin: d.chrome?.manualSearchLinkPctMin ?? 0, manualSearchLinkPctMax: d.chrome?.manualSearchLinkPctMax ?? 0, manualSearchDwellMin: d.chrome?.manualSearchDwellMin ?? 3, manualSearchDwellMax: d.chrome?.manualSearchDwellMax ?? 8 },
+           chrome:      { activatePctMin: d.chrome?.activatePctMin ?? 0,      activatePctMax: d.chrome?.activatePctMax ?? 0,      scrollMin: d.chrome?.scrollMin ?? 1, scrollMax: d.chrome?.scrollMax ?? 5, storyTapMin: d.chrome?.storyTapMin ?? 0, storyTapMax: d.chrome?.storyTapMax ?? 0, tappedStoryScrollMin: d.chrome?.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: d.chrome?.tappedStoryScrollMax ?? 0, internalLinkPctMin: d.chrome?.internalLinkPctMin ?? 0, internalLinkPctMax: d.chrome?.internalLinkPctMax ?? 0, manualSearchPctMin: d.chrome?.manualSearchPctMin ?? 0, manualSearchPctMax: d.chrome?.manualSearchPctMax ?? 0, manualSearchCountMin: d.chrome?.manualSearchCountMin ?? 1, manualSearchCountMax: d.chrome?.manualSearchCountMax ?? 1, manualSearchScrollMin: d.chrome?.manualSearchScrollMin ?? 0, manualSearchScrollMax: d.chrome?.manualSearchScrollMax ?? 0, manualSearchLinkPctMin: d.chrome?.manualSearchLinkPctMin ?? 0, manualSearchLinkPctMax: d.chrome?.manualSearchLinkPctMax ?? 0, manualSearchDwellMin: d.chrome?.manualSearchDwellMin ?? 3, manualSearchDwellMax: d.chrome?.manualSearchDwellMax ?? 8, tapTrendingStoryMin: d.chrome?.tapTrendingStoryMin ?? 0, tapTrendingStoryMax: d.chrome?.tapTrendingStoryMax ?? 0 },
           googlePlay:  { activatePctMin: d.googlePlay?.activatePctMin ?? 0,  activatePctMax: d.googlePlay?.activatePctMax ?? 0 },
           snapchat:    { activatePctMin: d.snapchat?.activatePctMin ?? 0,     activatePctMax: d.snapchat?.activatePctMax ?? 0 },
           youtube:     { activatePctMin: d.youtube?.activatePctMin ?? 0, activatePctMax: d.youtube?.activatePctMax ?? 0, scrollMin: d.youtube?.scrollMin ?? 1, scrollMax: d.youtube?.scrollMax ?? 5, clickPctMin: d.youtube?.clickPctMin ?? 0, clickPctMax: d.youtube?.clickPctMax ?? 0, watchTimeMin: d.youtube?.watchTimeMin ?? 3, watchTimeMax: d.youtube?.watchTimeMax ?? 8, clickShortsPctMin: d.youtube?.clickShortsPctMin ?? 0, clickShortsPctMax: d.youtube?.clickShortsPctMax ?? 0, shortsScrollMin: d.youtube?.shortsScrollMin ?? 0, shortsScrollMax: d.youtube?.shortsScrollMax ?? 0, shortsWatchTimeMin: d.youtube?.shortsWatchTimeMin ?? 3, shortsWatchTimeMax: d.youtube?.shortsWatchTimeMax ?? 8, shortsLikePctMin: d.youtube?.shortsLikePctMin ?? 0, shortsLikePctMax: d.youtube?.shortsLikePctMax ?? 0 },
@@ -481,7 +486,7 @@ export function MobilePhoneAppsPanel({
         // Keep the execution order aligned with the Step 2 UI. Chrome is
         // intentionally first so the first visible app is also the first run.
         if (shouldActivate(s.chrome.activatePctMin, s.chrome.activatePctMax)) {
-           await runApp("chrome", { scrollMin: s.chrome.scrollMin ?? 1, scrollMax: s.chrome.scrollMax ?? 5, storyTapMin: s.chrome.storyTapMin ?? 0, storyTapMax: s.chrome.storyTapMax ?? 0, tappedStoryScrollMin: s.chrome.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: s.chrome.tappedStoryScrollMax ?? 0, internalLinkPctMin: s.chrome.internalLinkPctMin ?? 0, internalLinkPctMax: s.chrome.internalLinkPctMax ?? 0, manualSearchPctMin: s.chrome.manualSearchPctMin ?? 0, manualSearchPctMax: s.chrome.manualSearchPctMax ?? 0, manualSearchCountMin: s.chrome.manualSearchCountMin ?? 1, manualSearchCountMax: s.chrome.manualSearchCountMax ?? 1, manualSearchScrollMin: s.chrome.manualSearchScrollMin ?? 0, manualSearchScrollMax: s.chrome.manualSearchScrollMax ?? 0, manualSearchLinkPctMin: s.chrome.manualSearchLinkPctMin ?? 0, manualSearchLinkPctMax: s.chrome.manualSearchLinkPctMax ?? 0, manualSearchDwellMin: s.chrome.manualSearchDwellMin ?? 3, manualSearchDwellMax: s.chrome.manualSearchDwellMax ?? 8 });
+           await runApp("chrome", { scrollMin: s.chrome.scrollMin ?? 1, scrollMax: s.chrome.scrollMax ?? 5, storyTapMin: s.chrome.storyTapMin ?? 0, storyTapMax: s.chrome.storyTapMax ?? 0, tappedStoryScrollMin: s.chrome.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: s.chrome.tappedStoryScrollMax ?? 0, internalLinkPctMin: s.chrome.internalLinkPctMin ?? 0, internalLinkPctMax: s.chrome.internalLinkPctMax ?? 0, manualSearchPctMin: s.chrome.manualSearchPctMin ?? 0, manualSearchPctMax: s.chrome.manualSearchPctMax ?? 0, manualSearchCountMin: s.chrome.manualSearchCountMin ?? 1, manualSearchCountMax: s.chrome.manualSearchCountMax ?? 1, manualSearchScrollMin: s.chrome.manualSearchScrollMin ?? 0, manualSearchScrollMax: s.chrome.manualSearchScrollMax ?? 0, manualSearchLinkPctMin: s.chrome.manualSearchLinkPctMin ?? 0, manualSearchLinkPctMax: s.chrome.manualSearchLinkPctMax ?? 0, manualSearchDwellMin: s.chrome.manualSearchDwellMin ?? 3, manualSearchDwellMax: s.chrome.manualSearchDwellMax ?? 8, tapTrendingStoryMin: s.chrome.tapTrendingStoryMin ?? 0, tapTrendingStoryMax: s.chrome.tapTrendingStoryMax ?? 0 });
         }
         if (shouldActivate(s.googlePlay.activatePctMin, s.googlePlay.activatePctMax)) await runApp("googlePlay");
         if (shouldActivate(s.snapchat.activatePctMin, s.snapchat.activatePctMax))   await runApp("snapchat");
@@ -655,10 +660,11 @@ export function MobilePhoneAppsPanel({
                 </div>
               </div>
             </div>
-            <div className="bg-card border border-border rounded-xl divide-y divide-border">
+            <div className="bg-card border border-border rounded-xl divide-y divide-border flex flex-col">
               <AppSlotRow
                 icon={<ChromeIcon size={22} />}
                 label="Google Chrome"
+                className="order-1"
                 min={settings.chrome.activatePctMin}
                 max={settings.chrome.activatePctMax}
                 onMin={v => patchApp("chrome", { activatePctMin: v })}
@@ -732,6 +738,7 @@ export function MobilePhoneAppsPanel({
                   </div>
                 </>}
                 row2={<>
+                  <div aria-hidden="true" />
                   <div className="flex flex-col items-center gap-1">
                     <span className="text-xs text-muted-foreground whitespace-nowrap">Searches Per Run</span>
                     <div className="flex items-center gap-1">
@@ -748,7 +755,7 @@ export function MobilePhoneAppsPanel({
                       <Input type="number" min={0} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchScrollMax ?? 0} onChange={e => patchApp("chrome", { manualSearchScrollMax: Math.min(50, Math.max(0, Number(e.target.value))) })} />
                     </div>
                   </div>
-                  <div className="flex shrink-0 flex-col items-start gap-1">
+                  <div className="flex flex-col items-center gap-1">
                     <span className="text-xs text-muted-foreground whitespace-nowrap">Internal Links Clicked %</span>
                     <div className="flex items-center gap-1">
                       <Input
@@ -770,7 +777,7 @@ export function MobilePhoneAppsPanel({
                       />
                     </div>
                   </div>
-                  <div className="flex shrink-0 flex-col items-start gap-1">
+                  <div className="flex flex-col items-center gap-1">
                     <span className="text-xs text-muted-foreground whitespace-nowrap">Manual Searches Activation %</span>
                     <div className="flex items-center gap-1">
                       <Input
@@ -793,7 +800,7 @@ export function MobilePhoneAppsPanel({
                       <span className="text-muted-foreground text-sm">%</span>
                     </div>
                   </div>
-                  <div className="flex shrink-0 flex-col items-start gap-1">
+                  <div className="flex flex-col items-center gap-1">
                     <span className="text-xs text-muted-foreground whitespace-nowrap">Search Result Link %</span>
                     <div className="flex items-center gap-1">
                       <Input type="number" min={0} max={100} className={PCT_INPUT} value={settings.chrome.manualSearchLinkPctMin ?? 0} onChange={e => patchApp("chrome", { manualSearchLinkPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })} />
@@ -804,7 +811,8 @@ export function MobilePhoneAppsPanel({
                   </div>
                 </>}
                  row3={
-                   <div className="basis-full w-full flex flex-wrap items-start justify-start gap-x-8 gap-y-3 pt-2">
+                   <>
+                     <div aria-hidden="true" />
                      <div className="flex shrink-0 flex-col items-start gap-1">
                        <span className="text-xs text-muted-foreground whitespace-nowrap">Result Dwell Seconds</span>
                        <div className="flex items-center gap-1">
@@ -814,12 +822,35 @@ export function MobilePhoneAppsPanel({
                          <span className="text-muted-foreground text-sm">sec</span>
                        </div>
                      </div>
-                   </div>
+                      <div className="flex shrink-0 flex-col items-start gap-1">
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">Tap Trending Storys</span>
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number"
+                            min={0}
+                            max={50}
+                            className={PCT_INPUT}
+                            value={settings.chrome.tapTrendingStoryMin ?? 0}
+                            onChange={e => patchApp("chrome", { tapTrendingStoryMin: Math.min(50, Math.max(0, Math.round(Number(e.target.value)))) })}
+                          />
+                          <span className="text-muted-foreground text-sm">to</span>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={50}
+                            className={PCT_INPUT}
+                            value={settings.chrome.tapTrendingStoryMax ?? 0}
+                            onChange={e => patchApp("chrome", { tapTrendingStoryMax: Math.min(50, Math.max(0, Math.round(Number(e.target.value)))) })}
+                          />
+                        </div>
+                      </div>
+                   </>
                  }
               />
               <AppSlotRow
                 icon={<GooglePlayIcon size={22} />}
                 label="Google Play"
+                className="order-3"
                 min={settings.googlePlay.activatePctMin}
                 max={settings.googlePlay.activatePctMax}
                 onMin={v => patchApp("googlePlay", { activatePctMin: v })}
@@ -828,6 +859,7 @@ export function MobilePhoneAppsPanel({
               <AppSlotRow
                 icon={<SnapchatIcon size={22} />}
                 label="Snapchat"
+                className="order-4"
                 min={settings.snapchat.activatePctMin}
                 max={settings.snapchat.activatePctMax}
                 onMin={v => patchApp("snapchat", { activatePctMin: v })}
@@ -836,6 +868,7 @@ export function MobilePhoneAppsPanel({
               <AppSlotRow
                 icon={<YouTubeIcon size={22} />}
                 label="YouTube"
+                className="order-2"
                 min={settings.youtube.activatePctMin}
                 max={settings.youtube.activatePctMax}
                 onMin={v => patchApp("youtube", { activatePctMin: v })}
@@ -911,6 +944,7 @@ export function MobilePhoneAppsPanel({
                   </div>
                 </>}
                 row2={<>
+                  <div aria-hidden="true" />
                   <div className="flex flex-col items-center gap-1">
                     <span className="text-xs text-muted-foreground whitespace-nowrap">Click Shorts %</span>
                     <div className="flex items-center gap-1">
@@ -1007,6 +1041,7 @@ export function MobilePhoneAppsPanel({
               <AppSlotRow
                 icon={<WhatsAppIcon size={22} />}
                 label="WhatsApp"
+                className="order-5"
                 min={settings.whatsapp.activatePctMin}
                 max={settings.whatsapp.activatePctMax}
                 onMin={v => patchApp("whatsapp", { activatePctMin: v })}

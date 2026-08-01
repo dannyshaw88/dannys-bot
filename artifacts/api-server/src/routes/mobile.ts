@@ -11522,6 +11522,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           manualSearchLinkPctMax: 0,
           manualSearchDwellMin: 3,
           manualSearchDwellMax: 8,
+           tapTrendingStoryMin: 0,
+           tapTrendingStoryMax: 0,
         },
       };
       res.json({
@@ -11552,6 +11554,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           manualSearchLinkPctMax: 0,
           manualSearchDwellMin: 3,
           manualSearchDwellMax: 8,
+           tapTrendingStoryMin: 0,
+           tapTrendingStoryMax: 0,
         },
       };
       // All fields optional — caller may send just { enabled } from the card-level
@@ -11582,6 +11586,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           manualSearchLinkPctMax: z.number().int().min(0).max(100).optional(),
           manualSearchDwellMin: z.number().min(1).max(10).optional(),
           manualSearchDwellMax: z.number().min(1).max(10).optional(),
+           tapTrendingStoryMin: z.number().int().min(0).max(50).optional(),
+           tapTrendingStoryMax: z.number().int().min(0).max(50).optional(),
         }).passthrough().optional(),
       }).passthrough().parse(req.body);
       const merged = {
@@ -11609,6 +11615,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               manualSearchScrollMin, manualSearchScrollMax,
               manualSearchLinkPctMin, manualSearchLinkPctMax,
               manualSearchDwellMin, manualSearchDwellMax,
+               tapTrendingStoryMin, tapTrendingStoryMax,
               clickPctMin, clickPctMax,
               watchTimeMin, watchTimeMax,
               clickShortsPctMin, clickShortsPctMax,
@@ -11635,6 +11642,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         manualSearchLinkPctMax: z.number().int().min(0).max(100).optional(),
         manualSearchDwellMin: z.number().min(1).max(10).optional(),
         manualSearchDwellMax: z.number().min(1).max(10).optional(),
+         tapTrendingStoryMin: z.number().int().min(0).max(50).optional(),
+         tapTrendingStoryMax: z.number().int().min(0).max(50).optional(),
         // YouTube-specific
         clickPctMin:          z.number().int().min(0).max(100).optional(),
         clickPctMax:          z.number().int().min(0).max(100).optional(),
@@ -11679,6 +11688,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           manualSearchScrollMin, manualSearchScrollMax,
           manualSearchLinkPctMin, manualSearchLinkPctMax,
           manualSearchDwellMin, manualSearchDwellMax,
+           tapTrendingStoryMin, tapTrendingStoryMax,
           dismissDirection: dismissDir,
         });
       } else if (appId === "youtube") {
