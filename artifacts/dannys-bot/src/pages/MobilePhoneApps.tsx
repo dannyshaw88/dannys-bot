@@ -707,9 +707,9 @@ export function MobilePhoneAppsPanel({
                   </div>
                 </>}
                  row3={
-                   <div className="basis-full w-full flex flex-wrap items-start justify-center gap-x-8 gap-y-2 pt-2">
+                   <div className="basis-full w-full flex flex-wrap items-start justify-start gap-x-8 gap-y-2 pt-2">
                      <div className="flex flex-col items-center gap-1">
-                       <div className="flex items-center gap-1.5">
+                       <div className="flex items-center gap-1.5 self-start">
                          <span className="text-xs text-muted-foreground whitespace-nowrap">Internal Links Clicked %</span>
                        </div>
                        <div className="flex items-center gap-1">
@@ -732,18 +732,19 @@ export function MobilePhoneAppsPanel({
                          />
                        </div>
                      </div>
-                     <div className="flex flex-col items-center gap-1">
-                       <label className="flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap cursor-pointer">
+                     <div className={settings.chrome.manualSearches
+                       ? "flex flex-col items-center gap-1"
+                       : "flex flex-col items-center justify-center gap-1 w-[180px] min-h-[34px]"}>
+                       <label className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap cursor-pointer">
                          <Checkbox
                            checked={settings.chrome.manualSearches ?? false}
                            onCheckedChange={checked => patchApp("chrome", { manualSearches: checked === true })}
                            className="h-3.5 w-3.5"
                          />
-                         Manual Searches
+                         Manual Searches Activation %
                        </label>
                        {settings.chrome.manualSearches && (
                          <div className="flex flex-col items-center gap-1">
-                           <span className="text-xs text-muted-foreground whitespace-nowrap">Activation %</span>
                            <div className="flex items-center gap-1">
                              <Input
                                type="number"
