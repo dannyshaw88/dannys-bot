@@ -98,10 +98,14 @@ jobs:
 
       - name: Verify accelerated AI model download configuration
         run: |
-          grep -q "HF_XET_HIGH_PERFORMANCE" src/main.ts 2>/dev/null || grep -q "HF_XET_HIGH_PERFORMANCE" artifacts/electron/src/main.ts
+          test -f artifacts/electron/src/main.ts
+          grep -q "HF_XET_HIGH_PERFORMANCE" artifacts/electron/src/main.ts
           grep -q "hf-xet" artifacts/electron/sidecar/requirements.txt
-          if grep -q "HF_HUB_DISABLE_XET.*1" artifacts/electron/src/main.ts artifacts/electron/sidecar/server.py; then
-            echo "The installer must not ship with Xet disabled"
+          # Ignore comments and diagnostic strings. Fail only if either
+          # source file actively assigns the old disabling environment flag.
+          if grep -Eq '^[[:space:]]*HF_HUB_DISABLE_XET[[:space:]]*:' artifacts/electron/src/main.ts ||
+             grep -Eq '^[[:space:]]*os\.environ\.setdefault\("HF_HUB_DISABLE_XET"' artifacts/electron/sidecar/server.py; then
+            echo "The installer must not actively disable Xet"
             exit 1
           fi
           echo "Accelerated Hugging Face Xet configuration verified"

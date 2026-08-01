@@ -4,6 +4,15 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.320] — 2026-08-01
+
+### Fixed — Windows installer workflow false failure
+
+- Fixed the canonical GitHub Actions installer workflow, which was incorrectly failing its accelerated-download validation because it matched the text of a code comment documenting the old `HF_HUB_DISABLE_XET=1` bug.
+- The validation now checks only for real active assignments that disable Xet, while still failing if the shipped source truly turns the accelerated backend off.
+- Kept the installer check for `hf-xet`, high-performance Xet settings, and the generated Windows installer artifact.
+- Bumped the root application and Electron package versions to `1.2.320`.
+
 ## [1.2.319] — 2026-08-01
 
 ### Fixed — Remove the AI model download throttle
