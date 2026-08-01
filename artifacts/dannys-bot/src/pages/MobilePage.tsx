@@ -28,7 +28,7 @@ import {
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
 import { ImageSettingsDialog, type ImageFilterSettings } from "@/components/tools/ImageSettingsDialog";
 import { getTrustLevels, type TrustLevelEntry } from "@/components/TrustScoreBadge";
-import { MobilePhoneApps, MobilePhoneAppsPanel } from "@/pages/MobilePhoneApps";
+import { MobilePhoneApps, MobilePhoneAppsPanel, type MobilePhoneAppsPanelHandle } from "@/pages/MobilePhoneApps";
 import {
   loadSlotTrustScore,
   readLocalSlotTrustScore,
@@ -6650,6 +6650,7 @@ type AccountSettingsPanelProps  = { phone: UsbPhone | null; addLog: (msg: string
 const AccountSettingsPanel = React.forwardRef<AccountSettingsPanelHandle, AccountSettingsPanelProps>(
 function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyEnabled, onPhoneAppsRunning }, ref) {
   const [slotRefreshKeys, setSlotRefreshKeys] = useState<Record<number, number>>({});
+  const phoneAppsPanelRef = useRef<MobilePhoneAppsPanelHandle>(null);
   const handleCopied = useCallback((targetSlotIdxs: number[]) => {
     setSlotRefreshKeys(prev => {
       const next = { ...prev };
@@ -6898,6 +6899,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
       {/* Mobile Phone Apps tool panel — shown when fingerprint is clicked */}
       <div className={phone && openPhoneAppsTool ? "h-full" : "hidden"}>
         <MobilePhoneAppsPanel
+          ref={phoneAppsPanelRef}
           serial={phone?.serial}
           onBack={() => setOpenPhoneAppsTool(false)}
           onEnabled={setPhoneAppsEnabled}
@@ -6920,16 +6922,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
           enabled={phoneAppsEnabled}
           nextRunAt={phoneAppsNextRunAt}
           onOpenTool={() => setOpenPhoneAppsTool(true)}
-          onToggle={(v) => {
-            setPhoneAppsEnabled(v);
-            if (phone?.serial) {
-              fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/phone-apps-settings`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ enabled: v }),
-              }).catch(() => {});
-            }
-          }}
+          onToggle={(v) => phoneAppsPanelRef.current?.setEnabled(v)}
         />
 
         {/* ── Instagram Accounts ────────────────────────────────────────── */}

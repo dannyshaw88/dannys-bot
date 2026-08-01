@@ -4,6 +4,24 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.332] — 2026-08-01
+
+### Changed — Make Google search history natural and complete Mobile Phone Apps logging
+
+- Reworked the built-in Google Chrome Manual Searches library so searches are no longer dominated by isolated one-word terms.
+- Added a larger set of natural, conversational searches phrased as realistic questions and sentences, including everyday topics such as meals, travel, household tasks, shopping, work, hobbies, technology, pets, and local activities.
+- Separated the occasional one-word search terms into their own small pool and limited their selection to an approximately **5% probability**. The normal path now selects from multi-word phrases and natural questions.
+- Preserved the existing local-only query generation, unique-query handling within each run, activation percentage, search-count range, accessibility-based search-field detection, result scrolling, confirmed result-link handling, and result dwell behavior.
+- Added query-style entries to the Mobile Phone Apps activity log so each search is identified as `multi-word/natural` or `occasional one-word`.
+- Made Mobile Phone Apps activity behave like a regular automation tool in the Debugging Log. The log now records enable/disable state, scheduling, cycle start, collision waits, per-app activation decisions, app starts and results, phone-lock status, missing-device failures, completion, failure, and cancellation.
+- Reused the existing `Cycle complete`, `Cycle failed`, and `Cycle aborted` markers so Mobile Phone Apps cycle outcomes are also classified by the regular Action Log.
+- Kept the Accounts-page Mobile Phone Apps switch synchronized with the mounted Step 1 tool handler, including pending state while settings load, persistence, scheduler start/stop, immediate execution, and queued-work cancellation.
+- Clarified the Mobile Phone Apps panel so every listed app is explicitly identified as part of Step 2.
+- Extended the canonical `.github/workflows/build-windows-installer.yml` source validation to verify the search-distribution rules and Mobile Phone Apps logging markers. The workflow remains the only active Windows installer workflow and continues to support both pushes to `main` and manual Actions runs.
+- Bumped the root application and Electron package versions to `1.2.332`.
+
+---
+
 ## [1.2.331] — 2026-08-01
 
 ### Changed — Ship local image generation and mobile automation fixes

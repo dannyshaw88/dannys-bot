@@ -9,7 +9,7 @@
  * never touched by changes to the surrounding Accounts / Settings UI.
  */
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useImperativeHandle } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -310,6 +310,10 @@ function AppSlotRow({ icon, label, className, min, max, onMin, onMax, rowExtras,
 
 // ── Panel component ────────────────────────────────────────────────────────────
 
+export interface MobilePhoneAppsPanelHandle {
+  setEnabled: (enabled: boolean) => void;
+}
+
 interface MobilePhoneAppsPanelProps {
   serial:            string | null | undefined;
   onBack:            () => void;  // no visible button; parent uses this to close
@@ -324,9 +328,10 @@ interface MobilePhoneAppsPanelProps {
 
 const NUM_INPUT_CLASS = "w-16 text-center";
 
-export function MobilePhoneAppsPanel({
+export const MobilePhoneAppsPanel = React.forwardRef<MobilePhoneAppsPanelHandle, MobilePhoneAppsPanelProps>(
+function MobilePhoneAppsPanel({
   serial, onEnabled, onNextRunAt, onRunning, onLog, requestSlot, releaseSlot, cancelQueuedSlot,
-}: MobilePhoneAppsPanelProps) {
+}, ref) {
   const [settings,    setSettings]    = useState<PhoneAppsSettings>(DEFAULT_SETTINGS);
   const [nextRunAt,   setNextRunAt]   = useState<number | null>(null);
   const [loading,     setLoading]     = useState(true);
@@ -342,6 +347,7 @@ export function MobilePhoneAppsPanel({
   const serialRef          = useRef(serial);
   const onRunningRef       = useRef(onRunning);
   const onLogRef           = useRef(onLog);
+  const pendingEnabledRef  = useRef<boolean | null>(null);
   // Set to true when the user explicitly toggles the tool on — causes the
   // scheduler to fire immediately (delay 0) rather than wait a random interval.
   const manualToggleOnRef  = useRef(false);
@@ -368,8 +374,9 @@ export function MobilePhoneAppsPanel({
       .then(r => r.json())
       .then((d: any) => {
         if (!active) return;
+        const pendingEnabled = pendingEnabledRef.current;
         const merged: PhoneAppsSettings = {
-          enabled:     Boolean(d.enabled ?? false),
+          enabled:     pendingEnabled ?? Boolean(d.enabled ?? false),
           intervalMin: Number(d.intervalMin ?? 25),
           intervalMax: Number(d.intervalMax ?? 99),
            chrome:      { activatePctMin: d.chrome?.activatePctMin ?? 0,      activatePctMax: d.chrome?.activatePctMax ?? 0,      scrollMin: d.chrome?.scrollMin ?? 1, scrollMax: d.chrome?.scrollMax ?? 5, storyTapMin: d.chrome?.storyTapMin ?? 0, storyTapMax: d.chrome?.storyTapMax ?? 0, tappedStoryScrollMin: d.chrome?.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: d.chrome?.tappedStoryScrollMax ?? 0, internalLinkPctMin: d.chrome?.internalLinkPctMin ?? 0, internalLinkPctMax: d.chrome?.internalLinkPctMax ?? 0, manualSearchPctMin: d.chrome?.manualSearchPctMin ?? 0, manualSearchPctMax: d.chrome?.manualSearchPctMax ?? 0, manualSearchCountMin: d.chrome?.manualSearchCountMin ?? 1, manualSearchCountMax: d.chrome?.manualSearchCountMax ?? 1, manualSearchScrollMin: d.chrome?.manualSearchScrollMin ?? 0, manualSearchScrollMax: d.chrome?.manualSearchScrollMax ?? 0, manualSearchLinkPctMin: d.chrome?.manualSearchLinkPctMin ?? 0, manualSearchLinkPctMax: d.chrome?.manualSearchLinkPctMax ?? 0, manualSearchDwellMin: d.chrome?.manualSearchDwellMin ?? 3, manualSearchDwellMax: d.chrome?.manualSearchDwellMax ?? 8, tapTrendingStoryMin: d.chrome?.tapTrendingStoryMin ?? 0, tapTrendingStoryMax: d.chrome?.tapTrendingStoryMax ?? 0 },
@@ -381,6 +388,10 @@ export function MobilePhoneAppsPanel({
         setSettings(merged);
         settingsRef.current = merged;
         onEnabled(merged.enabled);
+        if (pendingEnabled !== null) {
+          pendingEnabledRef.current = null;
+          saveSettings(merged);
+        }
 
         // Restore nextRunAt from module mirror (survives remount).
         const savedTs = serial ? _nextRunAtBySerial.get(serial) : undefined;
@@ -422,6 +433,9 @@ export function MobilePhoneAppsPanel({
     if (timerRef.current) clearTimeout(timerRef.current);
     updateNextRunAt(Date.now() + delayMs);
     timerRef.current = setTimeout(runCycle, delayMs);
+    onLogRef.current?.(
+      `Phone Apps — next cycle scheduled in ${Math.max(0, Math.round(delayMs / 1000))}s`,
+    );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [updateNextRunAt]);
 
@@ -431,16 +445,22 @@ export function MobilePhoneAppsPanel({
     onRunningRef.current?.(true);
     setCompletionStatus("running");
     updateNextRunAt(null);
+    onLogRef.current?.("▶ Starting Phone Apps cycle");
 
     const hstTurnAt = nextRunAtRef.current ?? Date.now();
     let slotAcquired = false;
+    let cycleOutcomeLogged = false;
     try {
       if (requestSlot) {
         await requestSlot(PHONE_APPS_SLOT_IDX, hstTurnAt, () => {
           onLogRef.current?.("Phone Apps — collision detected; device busy, waiting for rest window");
         });
         slotAcquired = true;
-        if (stopRef.current) return;
+        if (stopRef.current) {
+          cycleOutcomeLogged = true;
+          onLogRef.current?.("Cycle aborted — Phone Apps disabled while waiting for the device");
+          return;
+        }
       }
 
       // ── Execute app tools — each rolls its own activation % ────────────────
@@ -458,6 +478,7 @@ export function MobilePhoneAppsPanel({
 
         const runApp = async (appId: string, extra?: Record<string, unknown>) => {
           try {
+            onLogRef.current?.(`Phone Apps [${appId}]: starting`);
             const res = await fetch(
               `/api/mobile/devices/${encodeURIComponent(serial)}/run-phone-app`,
               { method: "POST", headers: { "Content-Type": "application/json" },
@@ -474,6 +495,8 @@ export function MobilePhoneAppsPanel({
                 }
                 if (!data.ok) {
                   log(`Phone Apps [${appId}]: ⚠ ${data.error ?? "unknown error"}`);
+                } else {
+                  log(`Phone Apps [${appId}]: complete`);
                 }
               }
             } catch { /* JSON parse error — response body unreadable, ignore */ }
@@ -484,13 +507,23 @@ export function MobilePhoneAppsPanel({
 
         // Keep the execution order aligned with the Step 2 UI. Chrome is
         // intentionally first so the first visible app is also the first run.
-        if (shouldActivate(s.chrome.activatePctMin, s.chrome.activatePctMax)) {
+        const chromeActivated = shouldActivate(s.chrome.activatePctMin, s.chrome.activatePctMax);
+        onLogRef.current?.(`Phone Apps [chrome]: ${chromeActivated ? "activation roll passed" : "activation roll skipped"}`);
+        if (chromeActivated) {
            await runApp("chrome", { scrollMin: s.chrome.scrollMin ?? 1, scrollMax: s.chrome.scrollMax ?? 5, storyTapMin: s.chrome.storyTapMin ?? 0, storyTapMax: s.chrome.storyTapMax ?? 0, tappedStoryScrollMin: s.chrome.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: s.chrome.tappedStoryScrollMax ?? 0, internalLinkPctMin: s.chrome.internalLinkPctMin ?? 0, internalLinkPctMax: s.chrome.internalLinkPctMax ?? 0, manualSearchPctMin: s.chrome.manualSearchPctMin ?? 0, manualSearchPctMax: s.chrome.manualSearchPctMax ?? 0, manualSearchCountMin: s.chrome.manualSearchCountMin ?? 1, manualSearchCountMax: s.chrome.manualSearchCountMax ?? 1, manualSearchScrollMin: s.chrome.manualSearchScrollMin ?? 0, manualSearchScrollMax: s.chrome.manualSearchScrollMax ?? 0, manualSearchLinkPctMin: s.chrome.manualSearchLinkPctMin ?? 0, manualSearchLinkPctMax: s.chrome.manualSearchLinkPctMax ?? 0, manualSearchDwellMin: s.chrome.manualSearchDwellMin ?? 3, manualSearchDwellMax: s.chrome.manualSearchDwellMax ?? 8, tapTrendingStoryMin: s.chrome.tapTrendingStoryMin ?? 0, tapTrendingStoryMax: s.chrome.tapTrendingStoryMax ?? 0 });
         }
-        if (shouldActivate(s.googlePlay.activatePctMin, s.googlePlay.activatePctMax)) await runApp("googlePlay");
-        if (shouldActivate(s.snapchat.activatePctMin, s.snapchat.activatePctMax))   await runApp("snapchat");
-        if (shouldActivate(s.youtube.activatePctMin, s.youtube.activatePctMax))    await runApp("youtube", { scrollMin: s.youtube.scrollMin ?? 1, scrollMax: s.youtube.scrollMax ?? 5, clickPctMin: s.youtube.clickPctMin ?? 0, clickPctMax: s.youtube.clickPctMax ?? 0, watchTimeMin: s.youtube.watchTimeMin ?? 3, watchTimeMax: s.youtube.watchTimeMax ?? 8, clickShortsPctMin: s.youtube.clickShortsPctMin ?? 0, clickShortsPctMax: s.youtube.clickShortsPctMax ?? 0, shortsScrollMin: s.youtube.shortsScrollMin ?? 0, shortsScrollMax: s.youtube.shortsScrollMax ?? 0, shortsWatchTimeMin: s.youtube.shortsWatchTimeMin ?? 3, shortsWatchTimeMax: s.youtube.shortsWatchTimeMax ?? 8, shortsLikePctMin: s.youtube.shortsLikePctMin ?? 0, shortsLikePctMax: s.youtube.shortsLikePctMax ?? 0 });
-        if (shouldActivate(s.whatsapp.activatePctMin, s.whatsapp.activatePctMax))   await runApp("whatsapp");
+        const googlePlayActivated = shouldActivate(s.googlePlay.activatePctMin, s.googlePlay.activatePctMax);
+        onLogRef.current?.(`Phone Apps [googlePlay]: ${googlePlayActivated ? "activation roll passed" : "activation roll skipped"}`);
+        if (googlePlayActivated) await runApp("googlePlay");
+        const snapchatActivated = shouldActivate(s.snapchat.activatePctMin, s.snapchat.activatePctMax);
+        onLogRef.current?.(`Phone Apps [snapchat]: ${snapchatActivated ? "activation roll passed" : "activation roll skipped"}`);
+        if (snapchatActivated) await runApp("snapchat");
+        const youtubeActivated = shouldActivate(s.youtube.activatePctMin, s.youtube.activatePctMax);
+        onLogRef.current?.(`Phone Apps [youtube]: ${youtubeActivated ? "activation roll passed" : "activation roll skipped"}`);
+        if (youtubeActivated) await runApp("youtube", { scrollMin: s.youtube.scrollMin ?? 1, scrollMax: s.youtube.scrollMax ?? 5, clickPctMin: s.youtube.clickPctMin ?? 0, clickPctMax: s.youtube.clickPctMax ?? 0, watchTimeMin: s.youtube.watchTimeMin ?? 3, watchTimeMax: s.youtube.watchTimeMax ?? 8, clickShortsPctMin: s.youtube.clickShortsPctMin ?? 0, clickShortsPctMax: s.youtube.clickShortsPctMax ?? 0, shortsScrollMin: s.youtube.shortsScrollMin ?? 0, shortsScrollMax: s.youtube.shortsScrollMax ?? 0, shortsWatchTimeMin: s.youtube.shortsWatchTimeMin ?? 3, shortsWatchTimeMax: s.youtube.shortsWatchTimeMax ?? 8, shortsLikePctMin: s.youtube.shortsLikePctMin ?? 0, shortsLikePctMax: s.youtube.shortsLikePctMax ?? 0 });
+        const whatsappActivated = shouldActivate(s.whatsapp.activatePctMin, s.whatsapp.activatePctMax);
+        onLogRef.current?.(`Phone Apps [whatsapp]: ${whatsappActivated ? "activation roll passed" : "activation roll skipped"}`);
+        if (whatsappActivated) await runApp("whatsapp");
 
         // This is deliberately outside the activation branches: a completed
         // cycle must lock even when every app roll misses.
@@ -507,18 +540,33 @@ export function MobilePhoneAppsPanel({
           }
           setCompletionStatus("locked");
           onLogRef.current?.("Phone Apps — phone locked ✓");
+          cycleOutcomeLogged = true;
+          onLogRef.current?.("Cycle complete — Phone Apps");
         } catch (e: any) {
           setCompletionStatus("error");
           onLogRef.current?.(`Phone Apps — ⚠ phone lock failed: ${e?.message ?? "unknown error"}`);
+          cycleOutcomeLogged = true;
+          onLogRef.current?.(`Cycle failed — Phone Apps: ${e?.message ?? "phone lock failed"}`);
         }
+      } else {
+        const message = "Phone Apps cycle could not start — no device connected";
+        setCompletionStatus("error");
+        onLogRef.current?.(`Phone Apps — ⚠ ${message}`);
+        cycleOutcomeLogged = true;
+        onLogRef.current?.(`Cycle failed — Phone Apps: ${message}`);
       }
     } catch (e: any) {
       setCompletionStatus("error");
       onLogRef.current?.(`Phone Apps — cycle failed: ${e?.message ?? "unknown error"}`);
+      cycleOutcomeLogged = true;
+      onLogRef.current?.(`Cycle failed — Phone Apps: ${e?.message ?? "unknown error"}`);
     } finally {
       if (slotAcquired) releaseSlot?.(PHONE_APPS_SLOT_IDX);
       runningRef.current = false;
       onRunningRef.current?.(false);
+      if (!cycleOutcomeLogged && stopRef.current) {
+        onLogRef.current?.("Cycle aborted — Phone Apps");
+      }
     }
 
     if (!stopRef.current && settingsRef.current.enabled) {
@@ -581,11 +629,24 @@ export function MobilePhoneAppsPanel({
   };
 
   const handleEnabled = (v: boolean) => {
+    if (loading) {
+      if (v) manualToggleOnRef.current = true;
+      pendingEnabledRef.current = v;
+      setSettings(current => ({ ...current, enabled: v }));
+      settingsRef.current = { ...settingsRef.current, enabled: v };
+      if (!v) setCompletionStatus("idle");
+      onLogRef.current?.(`Phone Apps — ${v ? "enabled" : "disabled"}`);
+      onEnabled(v);
+      return;
+    }
     if (v) manualToggleOnRef.current = true;
     const next = patch({ enabled: v });
     if (!v) setCompletionStatus("idle");
+    onLogRef.current?.(`Phone Apps — ${v ? "enabled" : "disabled"}`);
     onEnabled(next.enabled);
   };
+
+  useImperativeHandle(ref, () => ({ setEnabled: handleEnabled }), [loading]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -654,7 +715,7 @@ export function MobilePhoneAppsPanel({
                 <div>
                   <p className="text-sm font-semibold text-foreground">Choose phone apps to run</p>
                   <p className="text-xs text-muted-foreground">
-                    Apps run one at a time after Step 1. Google Chrome is first.
+                    All apps below are Step 2 and run one at a time after Step 1. Google Chrome is first.
                   </p>
                 </div>
               </div>
@@ -1077,4 +1138,4 @@ export function MobilePhoneAppsPanel({
       </div>
     </div>
   );
-}
+});

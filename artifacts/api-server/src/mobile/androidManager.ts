@@ -899,6 +899,83 @@ const CHROME_MANUAL_SEARCH_QUERIES = (() => {
     "how to grow tomatoes", "what time does the sun set", "how to save money",
     "healthy lunch ideas",
   ];
+  // Keep a visible share of searches conversational and sentence-like.  The
+  // generated topic queries above are useful for variety, but these are closer
+  // to how people actually phrase occasional Google searches in their history.
+  const naturalSentenceQueries = [
+    "what can I make for dinner with the ingredients I have",
+    "what should I pack for a weekend trip",
+    "how can I make my bedroom feel more spacious",
+    "which exercises are easiest to do at home",
+    "what is the best way to clean a fabric sofa",
+    "how long should I bake homemade bread",
+    "where can I find a quiet coffee shop nearby",
+    "what are some easy meals for a busy week",
+    "how do I keep my phone battery healthy",
+    "which plants are good for a sunny windowsill",
+    "what should I look for when buying a used car",
+    "how can I save money on my monthly bills",
+    "what are the best day trips from London",
+    "how do I prepare for my first job interview",
+    "what should I take on a long flight",
+    "how can I improve the signal on my home wifi",
+    "which books are good for learning a new language",
+    "what is a simple way to organize family photos",
+    "how do I remove a coffee stain from a white shirt",
+    "where are the best walking routes near me",
+    "what can I do with leftover vegetables",
+    "how often should I water a houseplant",
+    "what are some good films to watch tonight",
+    "how do I choose the right running shoes",
+    "which museums are open this weekend",
+    "what is the easiest way to plan a weekly budget",
+    "how can I make better photos with my phone",
+    "what should I know before adopting a dog",
+    "how do I make a quick healthy breakfast",
+    "where can I find affordable furniture nearby",
+    "what are some fun things to do on a rainy day",
+    "how can I make my home office more comfortable",
+    "which foods are good for a packed lunch",
+    "what is the best way to remove limescale",
+    "how do I compare travel insurance policies",
+    "what should I plant in my garden this month",
+    "how can I sleep better when traveling",
+    "where can I find local events this evening",
+    "what are some beginner friendly yoga exercises",
+    "how do I back up photos from my phone",
+    "which headphones are good for commuting",
+    "what is a good present for a friend's birthday",
+    "how can I make a small kitchen more practical",
+    "what should I do if my car will not start",
+    "where can I find the best train ticket prices",
+    "how do I write a simple cover letter",
+    "what are some easy recipes for a slow cooker",
+    "which apps can help me learn Spanish",
+    "how can I reduce the amount of plastic I use",
+    "what should I see on a first visit to Edinburgh",
+    "how do I clean a laptop screen safely",
+    "what are some ways to make a morning routine",
+    "where can I find a good place for Sunday lunch",
+    "how can I make my internet connection more reliable",
+    "what should I check before booking a holiday apartment",
+    "which snacks are easy to take on a walk",
+    "how do I get candle wax out of fabric",
+    "what are some interesting podcasts for a long drive",
+    "how can I keep my garden birds coming back",
+    "what is the best way to learn basic photography",
+    "where can I find swimming pools with public sessions",
+    "how do I make a spreadsheet for household expenses",
+    "what should I wear to a casual summer wedding",
+    "which cities are good for a short break by train",
+    "how can I use less electricity at home",
+    "what are some simple activities for a family weekend",
+    "how do I choose a mattress that will last",
+    "where can I find beginner guitar lessons nearby",
+    "what should I do with old electronics before recycling them",
+    "how can I make homemade pizza without a pizza oven",
+    "which weather app gives the most useful forecast",
+    "what are the best ways to stay organized at work",
+  ];
 
   const queries = new Set<string>();
   const add = (query: string) => {
@@ -906,6 +983,7 @@ const CHROME_MANUAL_SEARCH_QUERIES = (() => {
     if (normalized) queries.add(normalized);
   };
   for (const query of directQueries) add(query);
+  for (const query of naturalSentenceQueries) add(query);
   for (const topic of nounTopics) {
     for (const pattern of nounPatterns) add(pattern.replace("{topic}", topic));
   }
@@ -914,6 +992,35 @@ const CHROME_MANUAL_SEARCH_QUERIES = (() => {
   }
   return [...queries];
 })();
+
+// Google history should be overwhelmingly made up of a few words or natural
+// questions, not isolated keywords.  Keep the one-word list deliberately
+// small and select it with a 5% probability in chooseChromeManualSearchQuery.
+const CHROME_ONE_WORD_SEARCH_QUERIES = [
+  "weather", "recipes", "news", "flights", "football", "holidays",
+  "gardening", "podcasts", "headphones", "mattresses",
+];
+const CHROME_MULTI_WORD_SEARCH_QUERIES = CHROME_MANUAL_SEARCH_QUERIES.filter(
+  query => query.split(/\s+/).filter(Boolean).length >= 2,
+);
+
+function chooseChromeManualSearchQuery(usedQueries: Set<string>): {
+  query: string;
+  oneWord: boolean;
+} {
+  const useOneWord = Math.random() < 0.05;
+  const preferred = useOneWord
+    ? CHROME_ONE_WORD_SEARCH_QUERIES
+    : CHROME_MULTI_WORD_SEARCH_QUERIES;
+  const available = preferred.filter(query => !usedQueries.has(query));
+  const fallback = CHROME_MULTI_WORD_SEARCH_QUERIES.filter(query => !usedQueries.has(query));
+  const pool = available.length > 0 ? available : fallback.length > 0 ? fallback : preferred;
+  const query = pool[Math.floor(Math.random() * pool.length)];
+  return {
+    query,
+    oneWord: query.split(/\s+/).filter(Boolean).length === 1,
+  };
+}
 
 export async function runChromeApp(
   serial: string,
@@ -1363,15 +1470,14 @@ export async function runChromeApp(
       const usedQueries = new Set<string>();
       steps.push(`Chrome manual searches: activated for ${totalSearches} fresh Google quer${totalSearches === 1 ? "y" : "ies"}`);
       for (let searchNumber = 1; searchNumber <= totalSearches; searchNumber++) {
-        let query = "";
-        for (let attempt = 0; attempt < 10 && !query; attempt++) {
-          const candidate = CHROME_MANUAL_SEARCH_QUERIES[
-            Math.floor(Math.random() * CHROME_MANUAL_SEARCH_QUERIES.length)
-          ];
-          if (!usedQueries.has(candidate) || CHROME_MANUAL_SEARCH_QUERIES.length <= usedQueries.size) query = candidate;
-        }
-        if (!query) query = CHROME_MANUAL_SEARCH_QUERIES[0];
+        const selected = chooseChromeManualSearchQuery(usedQueries);
+        const query = selected.query;
         usedQueries.add(query);
+        steps.push(
+          `Chrome manual search ${searchNumber}/${totalSearches}: selected ${
+            selected.oneWord ? "occasional one-word" : "multi-word/natural"
+          } query`,
+        );
         await runOneManualGoogleSearch(query, searchNumber, totalSearches);
       }
     };

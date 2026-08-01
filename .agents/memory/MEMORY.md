@@ -69,3 +69,6 @@
 - [Actions source validation](actions-source-validation.md) — CI checks must inspect active assignments, not raw text, because comments documenting disabled settings can trigger false failures
 - [Chrome manual search sequencing](chrome-manual-search-sequencing.md) — run optional Google history searches after normal Chrome feed work and target live EditText nodes, not toolbar coordinates
 - [Mobile Phone Apps explicit rows](mobile-phone-apps-explicit-rows.md) — row props need full-width wrappers; flex wrapping alone makes Google Chrome fields land in width-dependent visual rows
+- [Mobile Phone Apps toggle parity](mobile-phone-apps-toggle-parity.md) — main-page toggle must call the mounted Step 1 panel handler so scheduler state and persisted settings stay in sync
+- [Mobile Phone Apps debugging log parity](mobile-phone-apps-debug-log-parity.md) — emit lifecycle, app decisions, results, lock, and cycle markers through the device log callback
+- [Google manual search variety](google-manual-search-variety.md) — manual Chrome searches should be mostly natural multi-word queries, with isolated one-word terms limited to an occasional 5% path
