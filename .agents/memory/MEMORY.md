@@ -50,7 +50,6 @@
 - [Account switcher render settling](account-switcher-render-settle.md) — profile-tab accessibility can precede visible Instagram navigation; wait briefly before the long-press
 - [Electron debug log fresh session](electron-debug-log-fresh-session.md) — truncate the Windows server debug log at process startup, then append normally within that session
 - [Keyboard calibration layer navigation](keyboard-calibration-layer-navigation.md) — calibrated typing must switch through ABC, ?123, and extended symbols in order; emoji opener is terminal
-- [Keyboard named-key bind execution](keyboard-named-key-bind-execution.md) — named controls need an explicit per-device calibration lookup; character typing alone does not press Emoji/Emoticon binds
 - [Keyboard calibration UX](keyboard-calibration-ux.md) — dialog has 3 modes (intro/wizard/editMap); caches warm on open; editMap saves immediately per-key so no data is lost; wizard merges into existing map
 - [Imported workspace verification](imported-workspace-verification.md) — use package-level build commands for this imported repo; root build/typecheck scripts include stale legacy paths and unrelated errors
 - [View Feed ad-action safety](view-feed-ad-action-safety.md) — sponsored cards and unconfirmed media bounds must never receive guessed double-taps; use confirmed action nodes or skip
