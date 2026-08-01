@@ -76,7 +76,6 @@ function WhatsAppIcon({ size = 20 }: { size?: number }) {
 // ── Shared style helpers ───────────────────────────────────────────────────────
 
 const PCT_INPUT = "w-14 text-center h-7 text-sm px-1";
-const APP_SLOT_GRID = "grid grid-cols-[minmax(9rem,auto)_repeat(5,minmax(0,1fr))] gap-4 items-start";
 
 // ── App tool slot config type ─────────────────────────────────────────────────
 
@@ -252,7 +251,7 @@ function AppSlotRow({ icon, label, className, min, max, onMin, onMax, rowExtras,
   return (
     <div className={`p-4 ${className ?? ""}`}>
       {/* First visual row: icon, activation, and the app's primary fields. */}
-      <div className={APP_SLOT_GRID}>
+      <div className="flex items-center gap-4 flex-wrap">
         {/* Icon + label — anchors the left of the first visual row */}
         <div className="flex items-center gap-2 min-w-[9rem]">
           {icon}
@@ -290,17 +289,17 @@ function AppSlotRow({ icon, label, className, min, max, onMin, onMax, rowExtras,
         {/* Explicit full-width rows. These must not depend on available width
             or happenstance flex wrapping to appear as separate rows. */}
         {row2 && (
-          <div className={`col-span-6 w-full ${APP_SLOT_GRID}`}>
+          <div className="basis-full w-full grid grid-cols-5 items-center gap-4">
             {row2}
           </div>
         )}
         {row3 && (
-          <div className={`col-span-6 w-full ${APP_SLOT_GRID}`}>
+          <div className="basis-full w-full flex items-center gap-4 flex-wrap">
             {row3}
           </div>
         )}
         {row4 && (
-          <div className={`col-span-6 w-full ${APP_SLOT_GRID}`}>
+          <div className="basis-full w-full flex items-center gap-4 flex-wrap">
             {row4}
           </div>
         )}
@@ -738,7 +737,6 @@ export function MobilePhoneAppsPanel({
                   </div>
                 </>}
                 row2={<>
-                  <div aria-hidden="true" />
                   <div className="flex flex-col items-center gap-1">
                     <span className="text-xs text-muted-foreground whitespace-nowrap">Searches Per Run</span>
                     <div className="flex items-center gap-1">
@@ -811,8 +809,7 @@ export function MobilePhoneAppsPanel({
                   </div>
                 </>}
                  row3={
-                   <>
-                     <div aria-hidden="true" />
+                   <div className="basis-full w-full flex flex-wrap items-start justify-start gap-x-8 gap-y-3 pt-2">
                      <div className="flex shrink-0 flex-col items-start gap-1">
                        <span className="text-xs text-muted-foreground whitespace-nowrap">Result Dwell Seconds</span>
                        <div className="flex items-center gap-1">
@@ -844,7 +841,7 @@ export function MobilePhoneAppsPanel({
                           />
                         </div>
                       </div>
-                   </>
+                   </div>
                  }
               />
               <AppSlotRow
@@ -944,7 +941,6 @@ export function MobilePhoneAppsPanel({
                   </div>
                 </>}
                 row2={<>
-                  <div aria-hidden="true" />
                   <div className="flex flex-col items-center gap-1">
                     <span className="text-xs text-muted-foreground whitespace-nowrap">Click Shorts %</span>
                     <div className="flex items-center gap-1">
