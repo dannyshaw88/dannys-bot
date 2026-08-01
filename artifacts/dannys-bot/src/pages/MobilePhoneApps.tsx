@@ -810,7 +810,7 @@ export function MobilePhoneAppsPanel({
                   </div>
                 </>}
                  row3={
-                   <div className="basis-full w-full flex flex-wrap items-start justify-start gap-x-8 gap-y-3 pt-2 [&>*:first-child]:translate-x-[7px] [&>*:nth-child(2)]:-translate-x-[16px]">
+                   <div className="basis-full w-full flex flex-wrap items-start justify-start gap-x-8 gap-y-3 pt-2 [&>*:first-child]:translate-x-[7px] [&>*:nth-child(2)]:-translate-x-[12px]">
                      <div className="flex shrink-0 flex-col items-start gap-1">
                        <span className="text-xs text-muted-foreground whitespace-nowrap">Result Dwell Seconds</span>
                        <div className="flex items-center gap-1">
