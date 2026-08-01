@@ -148,8 +148,12 @@ jobs:
         run: |
           grep -F "Internal Links Clicked %" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
           grep -F "Manual Searches Activation %" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
-          grep -F "settings.chrome.manualSearches" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
           grep -F "manualSearchPctMin" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          grep -F "manualSearchPctMax" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          if grep -F "Checkbox" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx; then
+            echo "Manual Searches UI must not reintroduce a checkbox"
+            exit 1
+          fi
           echo "Mobile Phone Apps manual-search UI configuration verified"
 
       - name: Install Electron deps

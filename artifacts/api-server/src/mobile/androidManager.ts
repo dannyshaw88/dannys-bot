@@ -998,7 +998,6 @@ export async function runChromeApp(
     const tappedStoryScrollMax  = opts?.tappedStoryScrollMax  ?? 0;
     const internalLinkPctMin    = opts?.internalLinkPctMin    ?? 0;
     const internalLinkPctMax    = opts?.internalLinkPctMax    ?? 0;
-    const manualSearches        = opts?.manualSearches        ?? false;
     const manualSearchPctMin    = opts?.manualSearchPctMin    ?? 0;
     const manualSearchPctMax    = opts?.manualSearchPctMax    ?? 0;
 
@@ -1027,7 +1026,7 @@ export async function runChromeApp(
     ];
 
     const runManualGoogleSearch = async (): Promise<void> => {
-      if (!manualSearches || manualSearchPctMax <= 0) return;
+      if (manualSearchPctMax <= 0) return;
       const pct = manualSearchPctMin + Math.random() * Math.max(0, manualSearchPctMax - manualSearchPctMin);
       if (Math.random() * 100 >= pct) {
         steps.push("Chrome manual search: activation roll did not fire");
@@ -1320,7 +1319,7 @@ export async function runChromeApp(
     // Run the optional search after the normal Chrome activity so it cannot
     // change the page state used by the existing feed/story flow. It remains
     // before the verified recents close, so Google history is written normally.
-    if (manualSearches) {
+    if (manualSearchPctMax > 0) {
       try {
         await runManualGoogleSearch();
       } catch (searchErr: any) {
