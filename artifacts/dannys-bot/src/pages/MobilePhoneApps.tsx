@@ -707,10 +707,33 @@ export function MobilePhoneAppsPanel({
                   </div>
                 </>}
                  row3={
-                   <div className="flex flex-col items-center gap-1">
-                     <div className="flex items-center gap-1.5">
-                       <span className="text-xs text-muted-foreground whitespace-nowrap">Internal Links Clicked %</span>
-                       <label className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap cursor-pointer">
+                   <div className="basis-full w-full flex flex-wrap items-start justify-center gap-x-8 gap-y-2 pt-2">
+                     <div className="flex flex-col items-center gap-1">
+                       <div className="flex items-center gap-1.5">
+                         <span className="text-xs text-muted-foreground whitespace-nowrap">Internal Links Clicked %</span>
+                       </div>
+                       <div className="flex items-center gap-1">
+                         <Input
+                           type="number"
+                           min={0}
+                           max={100}
+                           className={PCT_INPUT}
+                           value={settings.chrome.internalLinkPctMin ?? 0}
+                           onChange={e => patchApp("chrome", { internalLinkPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                         />
+                         <span className="text-muted-foreground text-sm">to</span>
+                         <Input
+                           type="number"
+                           min={0}
+                           max={100}
+                           className={PCT_INPUT}
+                           value={settings.chrome.internalLinkPctMax ?? 0}
+                           onChange={e => patchApp("chrome", { internalLinkPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                         />
+                       </div>
+                     </div>
+                     <div className="flex flex-col items-center gap-1">
+                       <label className="flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap cursor-pointer">
                          <Checkbox
                            checked={settings.chrome.manualSearches ?? false}
                            onCheckedChange={checked => patchApp("chrome", { manualSearches: checked === true })}
@@ -718,53 +741,34 @@ export function MobilePhoneAppsPanel({
                          />
                          Manual Searches
                        </label>
-                     </div>
-                    <div className="flex items-center gap-1">
-                      <Input
-                        type="number"
-                        min={0}
-                        max={100}
-                        className={PCT_INPUT}
-                        value={settings.chrome.internalLinkPctMin ?? 0}
-                        onChange={e => patchApp("chrome", { internalLinkPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
-                      />
-                      <span className="text-muted-foreground text-sm">to</span>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={100}
-                        className={PCT_INPUT}
-                        value={settings.chrome.internalLinkPctMax ?? 0}
-                        onChange={e => patchApp("chrome", { internalLinkPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
-                      />
-                    </div>
-                     {settings.chrome.manualSearches && (
-                       <div className="flex flex-col items-center gap-1 mt-1">
-                         <span className="text-xs text-muted-foreground whitespace-nowrap">Manual Search Activation %</span>
-                         <div className="flex items-center gap-1">
-                           <Input
-                             type="number"
-                             min={0}
-                             max={100}
-                             className={PCT_INPUT}
-                             value={settings.chrome.manualSearchPctMin ?? 0}
-                             onChange={e => patchApp("chrome", { manualSearchPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
-                           />
-                           <span className="text-muted-foreground text-sm">to</span>
-                           <Input
-                             type="number"
-                             min={0}
-                             max={100}
-                             className={PCT_INPUT}
-                             value={settings.chrome.manualSearchPctMax ?? 0}
-                             onChange={e => patchApp("chrome", { manualSearchPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
-                           />
-                           <span className="text-muted-foreground text-sm">%</span>
+                       {settings.chrome.manualSearches && (
+                         <div className="flex flex-col items-center gap-1">
+                           <span className="text-xs text-muted-foreground whitespace-nowrap">Activation %</span>
+                           <div className="flex items-center gap-1">
+                             <Input
+                               type="number"
+                               min={0}
+                               max={100}
+                               className={PCT_INPUT}
+                               value={settings.chrome.manualSearchPctMin ?? 0}
+                               onChange={e => patchApp("chrome", { manualSearchPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                             />
+                             <span className="text-muted-foreground text-sm">to</span>
+                             <Input
+                               type="number"
+                               min={0}
+                               max={100}
+                               className={PCT_INPUT}
+                               value={settings.chrome.manualSearchPctMax ?? 0}
+                               onChange={e => patchApp("chrome", { manualSearchPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                             />
+                             <span className="text-muted-foreground text-sm">%</span>
+                           </div>
                          </div>
-                       </div>
-                     )}
-                  </div>
-                }
+                       )}
+                     </div>
+                   </div>
+                 }
               />
               <AppSlotRow
                 icon={<GooglePlayIcon size={22} />}
