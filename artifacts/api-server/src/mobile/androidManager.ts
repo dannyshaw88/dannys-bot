@@ -747,6 +747,174 @@ function _findCookieAcceptButton(xml: string): { x: number; y: number } | null {
   );
 }
 
+/**
+ * Build a broad, local-only pool of ordinary Google searches for Chrome
+ * history activity.  The combinations are intentionally generated from
+ * human-readable topic phrases rather than being a tiny fixed list or an
+ * external/paid keyword service.  This gives repeated device runs thousands
+ * of plausible variations while keeping every query safe to type and easy to
+ * audit in source.
+ */
+const CHROME_MANUAL_SEARCH_QUERIES = (() => {
+  const nounTopics = [
+    "fish recipes", "easy dinner recipes", "healthy lunch ideas", "budget meal ideas",
+    "meal prep recipes", "vegetarian dinner ideas", "slow cooker recipes", "air fryer recipes",
+    "baking recipes for beginners", "homemade pizza recipes", "coffee shops near me",
+    "dog friendly parks", "best dog food", "cat care tips", "local hiking trails",
+    "weekend trips", "beach holidays", "city breaks", "family activities",
+    "free things to do", "museums near me", "budget hotels", "cheap flights",
+    "train travel tips", "packing lists", "weather this weekend", "local news today",
+    "football fixtures", "man united football fixtures", "movie reviews",
+    "films to watch", "TV series recommendations", "live music near me",
+    "concert tickets", "book recommendations", "podcasts to listen to",
+    "birthday gift ideas", "gifts for parents", "summer outfits", "running shoes",
+    "winter coats", "home office ideas", "small bedroom ideas", "living room decor",
+    "garden ideas", "house plants", "how to grow tomatoes", "DIY storage ideas",
+    "paint colors for a kitchen", "kitchen organization", "bathroom cleaning tips",
+    "stain removal tips", "cleaning white shoes", "laundry tips", "ways to save money",
+    "monthly budget ideas", "grocery deals", "energy saving tips", "mortgage rates",
+    "bank holiday dates", "public holidays", "tax deadlines", "job interview tips",
+    "CV examples", "remote jobs", "part time jobs", "online courses",
+    "learn Spanish", "learn guitar", "photography tips", "phone camera tips",
+    "laptop comparisons", "wireless headphones", "best phone apps",
+    "wifi troubleshooting", "printer troubleshooting", "sleep tips",
+    "healthy breakfast ideas", "exercise at home", "walking routes",
+    "skincare routine", "haircuts for men", "dentist near me", "NHS dentist",
+    "allergy symptoms", "first aid basics", "recipe conversions", "time zones",
+    "sunrise time", "sunset time", "plant care", "DIY home repairs",
+    "car maintenance", "MOT checklist", "petrol prices", "parking near me",
+    "public transport times", "local events", "things to do this weekend",
+    "best restaurants near me", "takeaway recommendations", "vegetable garden ideas",
+    "storage solutions for small homes", "cheap furniture", "second hand furniture",
+    "best mattress", "sofa reviews", "kitchen appliances", "coffee machine reviews",
+    "best water bottle", "backpack recommendations", "school holiday dates",
+    "calendar dates", "public swimming pools", "cinema times", "theatre shows",
+    "football results", "tennis results", "golf news", "weather forecast",
+    "rain radar", "sunny holiday destinations", "best places to visit",
+    "family holiday ideas", "day trips from London", "places to visit in England",
+    "museum opening times", "library opening times", "local markets",
+    "farmers markets near me", "photography locations", "sunset viewpoints",
+    "best board games", "party games", "puzzle books", "craft ideas",
+    "knitting patterns", "drawing tutorials", "home workout videos",
+    "yoga for beginners", "running plan for beginners", "healthy snack ideas",
+    "protein breakfast ideas", "vegetarian meal prep", "food storage tips",
+    "how to tell if food is off", "best dog breeds", "dog walking tips",
+    "puppy training advice", "cat toys", "pet insurance", "bird identification",
+    "local wildlife", "garden birds", "house cleaning schedule", "decluttering tips",
+    "wardrobe organization", "bathroom storage", "recycle old electronics",
+    "electricity prices", "mobile phone deals", "SIM only deals", "broadband deals",
+    "best bank accounts", "credit score tips", "money saving challenges",
+    "student discounts", "cheap days out", "free parking", "bus timetable",
+    "train ticket prices", "airport parking", "travel insurance", "passport renewal",
+    "visa requirements", "language translation", "currency exchange rates",
+    "how to use Google Maps", "map directions", "nearby petrol stations",
+    "car insurance quotes", "used car reviews", "bike routes", "cycling gear",
+    "walking boots", "rain jackets", "gift ideas for a friend", "Christmas gift ideas",
+    "wedding guest outfits", "party food ideas", "birthday cake ideas",
+    "date night ideas", "family recipes", "quick recipes", "one pot meals",
+    "slow cooker dinner", "pasta recipes", "chicken recipes", "vegetable recipes",
+    "dessert recipes", "smoothie recipes", "bread recipes", "pancake recipes",
+    "how to make coffee", "best tea brands", "restaurant reviews", "pubs near me",
+    "breakfast places near me", "lunch places near me", "local takeaway menus",
+    "new movie releases", "best comedy films", "documentaries to watch",
+    "music festivals", "radio stations", "new book releases", "audiobook recommendations",
+    "historical podcasts", "science podcasts", "news podcasts", "weather apps",
+    "calendar apps", "note taking apps", "photo editing apps", "budgeting apps",
+    "language learning apps", "best browser extensions", "phone battery tips",
+    "how to free phone storage", "laptop buying guide", "tablet reviews",
+    "smartwatch reviews", "bluetooth speaker reviews", "home printer reviews",
+    "camera accessories", "USB cable types", "how to back up photos",
+    "online safety tips", "password manager reviews", "learn coding online",
+    "spreadsheet tutorials", "presentation ideas", "public speaking tips",
+    "work from home ideas", "career change advice", "apprenticeship vacancies",
+    "local job vacancies", "cover letter examples", "interview questions",
+    "professional development courses", "study tips", "revision timetable",
+    "school project ideas", "science experiments at home", "maths help",
+    "history facts", "space news", "animal facts", "why is the sky blue",
+    "how plants grow", "interesting facts", "word definitions", "grammar checker",
+  ];
+
+  const actionTopics = [
+    "cook fish", "cook rice", "boil eggs", "clean white shoes", "remove red wine stains",
+    "grow tomatoes", "sleep better", "save money", "plan a holiday", "pack a suitcase",
+    "train a puppy", "teach a dog recall", "make coffee", "bake bread", "fix a dripping tap",
+    "unblock a sink", "change a light bulb", "paint a room", "organize a wardrobe",
+    "declutter a house", "wash a duvet", "remove limescale", "check tyre pressure",
+    "jump start a car", "change engine oil", "prepare for a job interview", "write a CV",
+    "learn Spanish", "learn guitar", "take better photos", "edit phone photos",
+    "improve WiFi", "back up a phone", "transfer photos", "choose running shoes",
+    "start running", "stretch hamstrings", "build a morning routine", "meditate",
+    "reduce screen time", "choose a mattress", "sleep on a flight", "care for houseplants",
+    "repot a plant", "identify birds", "make a packed lunch", "meal prep chicken",
+    "freeze leftovers", "make pancakes", "cook pasta", "make a curry", "choose a dog breed",
+    "introduce cats", "keep food fresh", "tell if food is off", "find a lost phone",
+    "remove an app", "clear browser history", "use Google Maps", "read a train timetable",
+    "convert currency", "calculate percentages", "make a spreadsheet", "learn coding",
+    "start a side hustle", "apply for jobs", "prepare a presentation", "improve public speaking",
+    "plan a birthday", "choose a gift", "make a budget", "reduce household bills",
+    "compare energy tariffs", "book cheap flights", "find a hotel", "plan a day trip",
+    "make a shopping list", "organize digital photos", "clean a phone screen",
+    "remove sticker residue", "wash a car", "check a car battery", "prepare for an MOT",
+    "find cheap petrol", "plan a walking route", "choose walking boots", "make a smoothie",
+    "pack a healthy lunch", "cook vegetables", "make homemade pizza", "store fresh herbs",
+    "choose a coffee machine", "clean a washing machine", "remove mould safely",
+    "organize a small bedroom", "make a home office", "hang a picture", "fill a wall hole",
+    "fix a loose door handle", "change a shower head", "clean a microwave",
+    "clean an oven", "remove pet hair", "keep a house cool", "save electricity",
+    "check a weather forecast", "find local events", "buy train tickets", "renew a passport",
+    "compare travel insurance", "learn a new language", "study more effectively",
+    "make flashcards", "choose a laptop", "connect wireless headphones", "fix a printer",
+    "improve phone battery life", "free up storage space", "set up a new phone",
+    "protect an online account", "spot a scam message", "use a password manager",
+    "make a photo collage", "edit a video", "start a podcast", "find a new book",
+    "choose a film to watch", "find live music", "make a birthday cake",
+    "host a dinner party", "plan a date night", "choose a board game",
+    "start a vegetable garden", "attract birds to a garden", "look after a cat",
+    "keep a dog entertained", "choose pet insurance", "make a home workout",
+    "begin yoga", "improve flexibility", "build muscle at home", "eat more vegetables",
+    "prepare a healthy breakfast", "plan weekly meals", "drink more water",
+    "create a sleep routine", "deal with jet lag", "stay calm before an interview",
+  ];
+
+  const nounPatterns = [
+    "best {topic}", "easy {topic}", "cheap {topic}", "latest {topic}",
+    "{topic} near me", "{topic} today", "{topic} this weekend",
+    "reviews for {topic}", "ideas for {topic}", "tips for {topic}",
+    "a guide to {topic}", "where to find {topic}", "what to know about {topic}",
+    "top rated {topic}", "{topic} for beginners", "{topic} on a budget",
+  ];
+  const actionPatterns = [
+    "how to {topic}", "best way to {topic}", "easy way to {topic}",
+    "tips for {topic}", "what do I need to {topic}", "how long does it take to {topic}",
+    "can I {topic}", "common mistakes when you {topic}",
+    "a beginner guide to {topic}", "what is the easiest way to {topic}",
+    "should I {topic}", "when is the best time to {topic}",
+    "simple steps to {topic}", "things to know before you {topic}",
+  ];
+  const directQueries = [
+    "how to cook fish", "is my food off", "man united football fixtures", "weather today",
+    "what dog is the best breed", "am I happy", "easy dinner ideas", "how to sleep better",
+    "best places to visit", "why is the sky blue", "how long to boil eggs",
+    "local news today", "how to clean white shoes", "best movies to watch",
+    "how to grow tomatoes", "what time does the sun set", "how to save money",
+    "healthy lunch ideas",
+  ];
+
+  const queries = new Set<string>();
+  const add = (query: string) => {
+    const normalized = query.replace(/\s+/g, " ").trim();
+    if (normalized) queries.add(normalized);
+  };
+  for (const query of directQueries) add(query);
+  for (const topic of nounTopics) {
+    for (const pattern of nounPatterns) add(pattern.replace("{topic}", topic));
+  }
+  for (const topic of actionTopics) {
+    for (const pattern of actionPatterns) add(pattern.replace("{topic}", topic));
+  }
+  return [...queries];
+})();
+
 export async function runChromeApp(
   serial: string,
   opts?: { scrollMin?: number; scrollMax?: number; storyTapMin?: number; storyTapMax?: number; tappedStoryScrollMin?: number; tappedStoryScrollMax?: number; internalLinkPctMin?: number; internalLinkPctMax?: number; manualSearches?: boolean; manualSearchPctMin?: number; manualSearchPctMax?: number; dismissDirection?: "left" | "up" },
@@ -1001,30 +1169,6 @@ export async function runChromeApp(
     const manualSearchPctMin    = opts?.manualSearchPctMin    ?? 0;
     const manualSearchPctMax    = opts?.manualSearchPctMax    ?? 0;
 
-    // Keep the query pool deliberately ordinary and varied. A single query is
-    // selected per Chrome run, so repeated runs build a small, human-looking
-    // search history rather than replaying one fixed phrase.
-    const manualSearchQueries = [
-      "how to cook fish",
-      "is my food off",
-      "man united football fixtures",
-      "weather today",
-      "what dog is the best breed",
-      "am i happy",
-      "easy dinner ideas",
-      "how to sleep better",
-      "best places to visit",
-      "why is the sky blue",
-      "how long to boil eggs",
-      "local news today",
-      "how to clean white shoes",
-      "best movies to watch",
-      "how to grow tomatoes",
-      "what time does the sun set",
-      "how to save money",
-      "healthy lunch ideas",
-    ];
-
     const runManualGoogleSearch = async (): Promise<void> => {
       if (manualSearchPctMax <= 0) return;
       const pct = manualSearchPctMin + Math.random() * Math.max(0, manualSearchPctMax - manualSearchPctMin);
@@ -1033,7 +1177,9 @@ export async function runChromeApp(
         return;
       }
 
-      const query = manualSearchQueries[Math.floor(Math.random() * manualSearchQueries.length)];
+      const query = CHROME_MANUAL_SEARCH_QUERIES[
+        Math.floor(Math.random() * CHROME_MANUAL_SEARCH_QUERIES.length)
+      ];
       // Navigate with an explicit Chrome VIEW intent instead of guessing where
       // the toolbar is after a feed scroll has collapsed it. This keeps the
       // navigation coordinate-free while still creating a real Chrome visit.
