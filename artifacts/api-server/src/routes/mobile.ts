@@ -4169,7 +4169,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       //
       // Flow:
       //   SEND-MESSAGE-BAR  → message_composer_container present → tap to open keyboard
-      //   ENTER-MESSAGE     → keyboard open; inject emoji via `adb shell input text`
+      //   ENTER-MESSAGE     → keyboard open; press the calibrated Emoji key
+      //                       when available, then inject the chosen emoji
       //                       (no picker needed — InputManager.injectString() writes
       //                       directly into the focused EditText on Android 8+)
       //   TAP-SEND-PAPER-AIRPLANE → emoji in field, send button visible:
@@ -4247,6 +4248,37 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               "😘","🤙","💫","⚡","🌟","😆","🥳","👌","💥","🫠",
             ];
             const _chosenEmoji = _STORY_EMOJI_POOL[Math.floor(Math.random() * _STORY_EMOJI_POOL.length)];
+            let _emojiKeyPressed = false;
+            try {
+              _emojiKeyPressed = await android.tapCalibratedKeyboardKey(
+                serial,
+                "emoji",
+                msg => onLog?.(`View Stories ${s + 1}: ${msg}`),
+              );
+            } catch (e: any) {
+              onLog?.(`View Stories ${s + 1}: calibrated Emoji bind failed — ${e?.message}`);
+              logger.warn(
+                { serial, story: s + 1, err: e?.message },
+                "[view-stories] calibrated emoji bind failed",
+              );
+            }
+            if (!_emojiKeyPressed) {
+              const _visualEmoji = await android.findKeyboardEmojiButton(serial).catch(() => null);
+              if (_visualEmoji) {
+                await android.tap(serial, _visualEmoji.x, _visualEmoji.y);
+                _emojiKeyPressed = true;
+                onLog?.(
+                  `View Stories ${s + 1}: tapped visually detected Emoji key at ` +
+                  `(${_visualEmoji.x},${_visualEmoji.y})`,
+                );
+                await sleepOrAbort(serial, 300);
+              } else {
+                onLog?.(
+                  `View Stories ${s + 1}: Emoji bind and visual key detection unavailable — ` +
+                  `using direct text fallback`,
+                );
+              }
+            }
             onLog?.(`View Stories ${s + 1}: injecting emoji "${_chosenEmoji}" via input text…`);
             try {
               await android.inputText(serial, _chosenEmoji);

@@ -8666,6 +8666,45 @@ export function loadKeyCalibrationMap(serial: string): KeyCalibrationMap | null 
   } catch { return null; }
 }
 
+/**
+ * Press a named key from the per-device calibration map.
+ *
+ * Character typing already uses the calibration map, but named controls such
+ * as Emoji/Emoticon are not characters and therefore need an explicit action
+ * path. These coordinates are phone-screen coordinates captured by getevent,
+ * so they must be sent directly to adb — never through the mirror video's
+ * videoW/videoH rescaling path.
+ */
+export async function tapCalibratedKeyboardKey(
+  serial: string,
+  keyName: string,
+  onLog?: (msg: string) => void,
+): Promise<boolean> {
+  const map = loadKeyCalibrationMap(serial);
+  if (!map) {
+    onLog?.(`[cal-keyboard] '${keyName}' has no saved calibration map`);
+    return false;
+  }
+
+  const normalized = keyName.trim().toLowerCase();
+  const aliases = normalized === "emoji" || normalized === "emoticon" || normalized === "smiley"
+    ? ["emoji", "emoticon", "smiley"]
+    : [normalized, keyName];
+  const mapKey = aliases.find(alias => map[alias] != null);
+  const pos = mapKey ? map[mapKey] : undefined;
+  if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) {
+    onLog?.(`[cal-keyboard] '${keyName}' is not in calibration map`);
+    return false;
+  }
+
+  const x = Math.round(pos.x);
+  const y = Math.round(pos.y);
+  await tap(serial, x, y);
+  onLog?.(`[cal-keyboard] tapped ${keyName} via bind '${mapKey}' at (${x},${y})`);
+  await _sleep(180 + Math.round(Math.random() * 100));
+  return true;
+}
+
 /** Persist a calibration map for a device. */
 export function saveKeyCalibrationMap(serial: string, map: KeyCalibrationMap): void {
   fs.writeFileSync(_calibrationPath(serial), JSON.stringify(map, null, 2), "utf8");
