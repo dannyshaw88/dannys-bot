@@ -50,10 +50,25 @@ interface StatusResponse {
   loading_phase?: "checking_cache" | "hardware_check" | "downloading" | "loading_pipeline" | "moving_to_device" | "error" | "idle";
   loading_detail?: string;
   loading_elapsed_seconds?: number | null;
+  loading_progress?: LoadingProgress | null;
   cpu_threads?: number;
   cpu_count?: number;
   gpu?: GpuInfo;
   generation_progress?: GenerationProgress | null;
+}
+
+interface LoadingProgress {
+  phase: "hardware_check" | "downloading" | "loading_pipeline" | "moving_to_device";
+  downloaded_bytes: number;
+  total_bytes: number;
+  percent: number | null;
+  speed_bytes_per_second: number;
+  eta_seconds: number | null;
+  completed_files: number;
+  active_files: number;
+  total_files: number;
+  total_source: string;
+  total_is_estimate: boolean;
 }
 
 interface GenerationProgress {
@@ -444,6 +459,7 @@ export function ImageGenPage() {
   );
   const gpu = status?.gpu;
   const generationProgress = status?.generation_progress;
+  const loadingProgress = status?.loading_progress;
   const pixelCount = resolution.w * resolution.h;
   const slowCpuJob = !gpu?.available && (pixelCount > 786432 || (steps !== "" && Number(steps) > 8));
 
@@ -541,19 +557,25 @@ export function ImageGenPage() {
               {status?.loading_detail && (
                 <p className="text-xs text-muted-foreground mt-1">{status.loading_detail}</p>
               )}
-              <div className="mt-3 h-2 w-full rounded-full bg-muted overflow-hidden">
-                <div
-                  className="h-full w-full rounded-full animate-pulse"
-                  style={{ background: BRAND, opacity: 0.4 }}
-                />
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {loadingPipeline
-                  ? "The files are downloaded. The model is now being assembled and moved into memory; this can take several minutes on supported hardware."
-                  : loadingHardware
-                    ? "Preparing the hardware check before downloading starts…"
-                  : "First load downloads the model weights. This can take several minutes on a fast connection."}
-              </p>
+              {loadingProgress && !loadingPipeline && !loadingHardware ? (
+                <ModelDownloadProgress progress={loadingProgress} />
+              ) : (
+                <>
+                  <div className="mt-3 h-2 w-full rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full w-1/3 rounded-full animate-pulse"
+                      style={{ background: BRAND, opacity: 0.5 }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {loadingPipeline
+                      ? "The files are downloaded. The model is now being assembled and moved into memory; this can take several minutes on supported hardware."
+                      : loadingHardware
+                        ? "Preparing the hardware check before downloading starts…"
+                        : "First load downloads the model weights. This can take several minutes on a fast connection."}
+                  </p>
+                </>
+              )}
               {typeof status?.loading_elapsed_seconds === "number" && status.loading_elapsed_seconds >= 60 && (
                 <p className="text-xs text-muted-foreground mt-2">
                   Loading time: {Math.floor(status.loading_elapsed_seconds / 60)}m {Math.floor(status.loading_elapsed_seconds % 60)}s
@@ -856,6 +878,45 @@ function GenerationProgressView({ progress }: { progress?: GenerationProgress | 
   );
 }
 
+function ModelDownloadProgress({ progress }: { progress: LoadingProgress }) {
+  const hasTotal = progress.total_bytes > 0;
+  const percent = hasTotal && progress.percent !== null ? Math.max(0, Math.min(100, progress.percent)) : 0;
+  const speed = progress.speed_bytes_per_second;
+  const eta = progress.eta_seconds;
+  const totalLabel = progress.total_is_estimate ? "estimated total" : "Hugging Face manifest total";
+
+  return (
+    <div className="mt-3 space-y-1.5">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span className="font-medium text-foreground">
+          {hasTotal && progress.percent !== null ? `${percent.toFixed(1)}% downloaded` : "Measuring download…"}
+        </span>
+        <span>{formatTransferBytes(progress.downloaded_bytes)} / {formatTransferBytes(progress.total_bytes)}</span>
+      </div>
+      <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+        <div
+          className={cn("h-full rounded-full transition-[width] duration-700", !hasTotal && "animate-pulse")}
+          style={{ width: hasTotal ? `${percent}%` : "35%", background: BRAND }}
+        />
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        <span>
+          {speed > 0 ? `${formatTransferBytes(speed)}/s` : "Waiting for transfer data…"}
+          {eta !== null ? ` · about ${formatDuration(eta)} left` : ""}
+        </span>
+        <span>
+          {progress.active_files > 0
+            ? `${progress.active_files} file${progress.active_files === 1 ? "" : "s"} downloading`
+            : `${progress.completed_files} file${progress.completed_files === 1 ? "" : "s"} received`}
+        </span>
+      </div>
+      <p className="text-[10px] text-muted-foreground">
+        Live size from the model cache · {totalLabel}
+      </p>
+    </div>
+  );
+}
+
 // ── Small reusable sub-components ─────────────────────────────────────────────
 
 function StatusPill({ status, statusErr }: { status: StatusResponse | null; statusErr: boolean }) {
@@ -1060,6 +1121,23 @@ function formatBytes(bytes: number): string {
   const units = ["B", "KB", "MB", "GB", "TB"];
   const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   return `${(bytes / 1024 ** index).toFixed(index >= 3 ? 2 : 0)} ${units[index]}`;
+}
+
+function formatTransferBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "0 B";
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / 1024 ** index).toFixed(index >= 3 ? 2 : 0)} ${units[index]}`;
+}
+
+function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return "calculating";
+  if (seconds < 60) return `${Math.max(1, Math.round(seconds))}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.round(seconds % 60);
+  if (minutes < 60) return `${minutes}m ${remainingSeconds}s`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
 function ImageUploadZone({

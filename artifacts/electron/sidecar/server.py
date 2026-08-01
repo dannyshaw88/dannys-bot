@@ -77,7 +77,9 @@ _loading_from_cache: bool = False           # True when weights are already on d
 _loading_phase: str = "idle"                # checking_cache | hardware_check | downloading | loading_pipeline | moving_to_device
 _loading_started_at: Optional[float] = None
 _loading_detail: str = ""
+_loading_progress: Optional[dict] = None
 _load_lock = threading.Lock()
+_loading_progress_lock = threading.Lock()
 _gpu_info_cache: Optional[dict] = None
 _generation_progress: Optional[dict] = None
 _generation_lock = threading.Lock()
@@ -113,6 +115,129 @@ def _model_cache_dir(model_key: str) -> Optional[Path]:
         return None
     org, name = parts
     return Path(MODELS_DIR) / f"models--{org}--{name}"
+
+
+def _scan_model_cache_progress(model_key: str) -> tuple[int, int, int]:
+    """Return (bytes on disk, completed blobs, in-progress files) for one model."""
+    cache_dir = _model_cache_dir(model_key)
+    blobs_dir = cache_dir / "blobs" if cache_dir else None
+    if not blobs_dir or not blobs_dir.exists():
+        return 0, 0, 0
+
+    downloaded_bytes = 0
+    completed_files = 0
+    active_files = 0
+    try:
+        for file_path in blobs_dir.iterdir():
+            if not file_path.is_file():
+                continue
+            try:
+                size = file_path.stat().st_size
+            except OSError:
+                continue
+            downloaded_bytes += size
+            if file_path.name.endswith(".incomplete"):
+                active_files += 1
+            else:
+                completed_files += 1
+    except OSError:
+        pass
+    return downloaded_bytes, completed_files, active_files
+
+
+def _set_loading_progress(model_key: str, *, phase: Optional[str] = None) -> None:
+    """Refresh download progress from the live Hugging Face cache directory."""
+    global _loading_progress
+    downloaded_bytes, completed_files, active_files = _scan_model_cache_progress(model_key)
+    now = time.monotonic()
+    with _loading_progress_lock:
+        current = _loading_progress or {}
+        previous_bytes = int(current.get("downloaded_bytes", 0))
+        previous_at = float(current.get("_sampled_at", now))
+        elapsed = max(now - previous_at, 0.001)
+        instantaneous_speed = max(0.0, (downloaded_bytes - previous_bytes) / elapsed)
+        previous_speed = float(current.get("speed_bytes_per_second", 0.0))
+        # Smooth the display without hiding a stopped transfer: new samples
+        # contribute quickly, while a zero sample naturally decays to zero.
+        speed = instantaneous_speed if previous_speed <= 0 else (previous_speed * 0.65) + (instantaneous_speed * 0.35)
+        total_bytes = int(current.get("total_bytes", 0))
+        remaining = max(total_bytes - downloaded_bytes, 0)
+        eta = round(remaining / speed) if speed > 1024 and remaining > 0 else None
+        percent = round(min(downloaded_bytes / total_bytes * 100, 100), 1) if total_bytes > 0 else None
+        _loading_progress = {
+            "phase": phase or current.get("phase") or "downloading",
+            "downloaded_bytes": downloaded_bytes,
+            "total_bytes": total_bytes,
+            "percent": percent,
+            "speed_bytes_per_second": round(speed),
+            "eta_seconds": eta,
+            "completed_files": completed_files,
+            "active_files": active_files,
+            "total_files": int(current.get("total_files", 0)),
+            "total_source": current.get("total_source", "model-size estimate"),
+            "total_is_estimate": bool(current.get("total_is_estimate", True)),
+            # Internal sampling timestamp; removed before returning status.
+            "_sampled_at": now,
+        }
+
+
+def _fetch_model_manifest_size(model_key: str) -> None:
+    """Fetch the repository manifest so progress uses the real byte total."""
+    global _loading_progress
+    try:
+        from huggingface_hub import HfApi
+
+        repo_id = MODELS[model_key]["repo"]
+        model_info = HfApi().model_info(repo_id, files_metadata=True)
+        siblings = getattr(model_info, "siblings", []) or []
+        sizes = [int(getattr(file_info, "size", 0) or 0) for file_info in siblings]
+        total_bytes = sum(size for size in sizes if size > 0)
+        if total_bytes <= 0:
+            raise RuntimeError("The model manifest did not include file sizes")
+        with _loading_progress_lock:
+            if _loading_model_key != model_key:
+                return
+            current = _loading_progress or {}
+            _loading_progress = {
+                **current,
+                "total_bytes": total_bytes,
+                "total_files": len(siblings),
+                "total_source": "Hugging Face model manifest",
+                "total_is_estimate": False,
+            }
+        log.info(f"Model manifest size for {model_key}: {total_bytes} bytes across {len(siblings)} files")
+    except Exception as exc:
+        log.warning(f"Could not fetch model manifest sizes for {model_key}; using the model-size estimate: {exc}")
+
+
+def _start_loading_progress(model_key: str, cached: bool) -> None:
+    """Initialize progress immediately, then replace the estimate with manifest data."""
+    global _loading_progress
+    fallback_total = int(float(MODELS[model_key]["size_gb"]) * 1024 ** 3)
+    with _loading_progress_lock:
+        _loading_progress = {
+            "phase": "loading_pipeline" if cached else "downloading",
+            "downloaded_bytes": 0,
+            "total_bytes": fallback_total,
+            "percent": 0,
+            "speed_bytes_per_second": 0,
+            "eta_seconds": None,
+            "completed_files": 0,
+            "active_files": 0,
+            "total_files": 0,
+            "total_source": "model-size estimate",
+            "total_is_estimate": True,
+            "_sampled_at": time.monotonic(),
+        }
+    _set_loading_progress(model_key, phase="loading_pipeline" if cached else "downloading")
+    threading.Thread(target=_fetch_model_manifest_size, args=(model_key,), daemon=True).start()
+
+
+def _public_loading_progress() -> Optional[dict]:
+    with _loading_progress_lock:
+        if not _loading_progress:
+            return None
+        return {key: value for key, value in _loading_progress.items() if not key.startswith("_")}
 
 
 def _nvidia_system_info() -> dict:
@@ -331,7 +456,7 @@ app.add_middleware(
 # ── Load pipeline (runs in a background thread) ───────────────────────────────
 def _do_load(model_key: str) -> None:
     global _pipeline, _loaded_model, _status, _status_message, _loading_model_key
-    global _loading_from_cache, _loading_phase, _loading_started_at, _loading_detail
+    global _loading_from_cache, _loading_phase, _loading_started_at, _loading_detail, _loading_progress
 
     if model_key not in MODELS:
         _status = "error"
@@ -352,6 +477,7 @@ def _do_load(model_key: str) -> None:
     # Detect whether the weights are already cached so we can show the right message
     cached = _model_is_cached(model_key)
     _loading_from_cache = cached
+    _start_loading_progress(model_key, cached)
     if cached:
         _loading_phase = "loading_pipeline"
         _status_message = f"Loading {info['label']} from cache…"
@@ -371,6 +497,7 @@ def _do_load(model_key: str) -> None:
         _loading_phase = "hardware_check"
         _status_message = "Selecting the best available processing device…"
         _loading_detail = "CUDA will be used when available; otherwise loading on the CPU…"
+        _set_loading_progress(model_key, phase="hardware_check")
         gpu_info = _get_gpu_info()
         device = "cuda" if gpu_info["available"] else "cpu"
         if device == "cpu":
@@ -408,12 +535,14 @@ def _do_load(model_key: str) -> None:
         if _loading_from_cache:
             _loading_phase = "loading_pipeline"
             _loading_detail = "Assembling the cached model components…"
+            _set_loading_progress(model_key, phase="loading_pipeline")
         else:
             # from_pretrained() performs the Hugging Face download itself.
             # Keep this phase as "downloading" until it returns so the status
             # endpoint can expose live .incomplete-file progress.
             _loading_phase = "downloading"
             _loading_detail = "Downloading model weights…"
+            _set_loading_progress(model_key, phase="downloading")
         try:
             import huggingface_hub
             hub_version = getattr(huggingface_hub, "__version__", "unknown")
@@ -434,8 +563,10 @@ def _do_load(model_key: str) -> None:
 
         _loading_phase = "loading_pipeline"
         _loading_detail = "Assembling model components; diffusers does not expose percentage progress here…"
+        _set_loading_progress(model_key, phase="loading_pipeline")
         _loading_phase = "moving_to_device"
         _loading_detail = f"Moving the assembled pipeline to {device.upper()} memory…"
+        _set_loading_progress(model_key, phase="moving_to_device")
         if device == "cuda":
             torch.backends.cuda.matmul.allow_tf32 = True
             if info.get("use_cpu_offload"):
@@ -456,6 +587,8 @@ def _do_load(model_key: str) -> None:
         _loading_phase = "idle"
         _loading_started_at = None
         _loading_detail = ""
+        with _loading_progress_lock:
+            _loading_progress = None
         _status = "ready"
         _status_message = f"Ready — {info['label']} on {device.upper()}"
         log.info(_status_message)
@@ -466,6 +599,8 @@ def _do_load(model_key: str) -> None:
         _loading_phase = "error"
         _loading_started_at = None
         _loading_detail = ""
+        with _loading_progress_lock:
+            _loading_progress = None
         _status = "error"
         _status_message = str(exc)
         log.error(f"Failed to load model: {exc}")
@@ -474,6 +609,8 @@ def _do_load(model_key: str) -> None:
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.get("/status")
 def get_status():
+    if _status == "loading" and _loading_model_key and _loading_phase == "downloading":
+        _set_loading_progress(_loading_model_key, phase="downloading")
     phase = _loading_phase
     message = _status_message
     detail = _loading_detail
@@ -494,6 +631,7 @@ def get_status():
             round(time.time() - _loading_started_at, 1)
             if _status == "loading" and _loading_started_at else None
         ),
+        "loading_progress": _public_loading_progress(),
         "available_models": {
             k: {
                 "label": v["label"],
@@ -537,13 +675,15 @@ def set_cpu_threads(req: CpuThreadsRequest):
 def unload_model():
     """Release the pipeline from memory so the rest of the app gets its RAM back."""
     global _pipeline, _loaded_model, _status, _status_message, _loading_phase
-    global _loading_started_at, _loading_detail
+    global _loading_started_at, _loading_detail, _loading_progress
     import gc
     _pipeline = None
     _loaded_model = None
     _loading_phase = "idle"
     _loading_started_at = None
     _loading_detail = ""
+    with _loading_progress_lock:
+        _loading_progress = None
     _status = "idle"
     _status_message = "Model unloaded — RAM freed."
     try:

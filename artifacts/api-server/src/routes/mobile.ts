@@ -11375,8 +11375,31 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const serial = p(req, "serial");
       const cfg    = loadInstanceConfigs();
       const saved  = (cfg[serial] as any)?.phoneApps ?? null;
-      const defaults = { enabled: false, intervalMin: 25, intervalMax: 99 };
-      res.json({ ...defaults, ...saved });
+      const defaults = {
+        enabled: false,
+        intervalMin: 25,
+        intervalMax: 99,
+        chrome: {
+          activatePctMin: 0,
+          activatePctMax: 0,
+          scrollMin: 1,
+          scrollMax: 5,
+          storyTapMin: 0,
+          storyTapMax: 0,
+          tappedStoryScrollMin: 0,
+          tappedStoryScrollMax: 0,
+          internalLinkPctMin: 0,
+          internalLinkPctMax: 0,
+          manualSearches: false,
+          manualSearchPctMin: 0,
+          manualSearchPctMax: 0,
+        },
+      };
+      res.json({
+        ...defaults,
+        ...saved,
+        chrome: { ...defaults.chrome, ...((saved as any)?.chrome ?? {}) },
+      });
     } catch (e: any) { res.status(500).json({ error: e?.message }); }
   });
 
@@ -11384,15 +11407,39 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       const serial   = p(req, "serial");
       const cfg      = loadInstanceConfigs();
-      const existing = (cfg[serial] as any)?.phoneApps ?? { enabled: false, intervalMin: 25, intervalMax: 99 };
+      const existing = (cfg[serial] as any)?.phoneApps ?? {
+        enabled: false,
+        intervalMin: 25,
+        intervalMax: 99,
+        chrome: { manualSearches: false, manualSearchPctMin: 0, manualSearchPctMax: 0 },
+      };
       // All fields optional — caller may send just { enabled } from the card-level
       // toggle without needing to know the current interval values.
       const input = z.object({
         enabled:     z.boolean().optional(),
         intervalMin: z.number().min(1).max(9999).optional(),
         intervalMax: z.number().min(1).max(9999).optional(),
+        chrome: z.object({
+          activatePctMin: z.number().int().min(0).max(100).optional(),
+          activatePctMax: z.number().int().min(0).max(100).optional(),
+          scrollMin: z.number().min(0).max(50).optional(),
+          scrollMax: z.number().min(0).max(50).optional(),
+          storyTapMin: z.number().int().min(0).max(50).optional(),
+          storyTapMax: z.number().int().min(0).max(50).optional(),
+          tappedStoryScrollMin: z.number().int().min(0).max(50).optional(),
+          tappedStoryScrollMax: z.number().int().min(0).max(50).optional(),
+          internalLinkPctMin: z.number().int().min(0).max(100).optional(),
+          internalLinkPctMax: z.number().int().min(0).max(100).optional(),
+          manualSearches: z.boolean().optional(),
+          manualSearchPctMin: z.number().int().min(0).max(100).optional(),
+          manualSearchPctMax: z.number().int().min(0).max(100).optional(),
+        }).passthrough().optional(),
       }).passthrough().parse(req.body);
-      const merged = { ...existing, ...input };
+      const merged = {
+        ...existing,
+        ...input,
+        ...(input.chrome ? { chrome: { ...(existing.chrome ?? {}), ...input.chrome } } : {}),
+      };
       (cfg[serial] as any) = { ...cfg[serial], phoneApps: merged };
       saveInstanceConfigs(cfg);
       res.json({ ok: true });
@@ -11408,6 +11455,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const { app: appId, scrollMin, scrollMax, storyTapMin, storyTapMax,
               tappedStoryScrollMin, tappedStoryScrollMax,
               internalLinkPctMin, internalLinkPctMax,
+              manualSearches, manualSearchPctMin, manualSearchPctMax,
               clickPctMin, clickPctMax,
               watchTimeMin, watchTimeMax,
               clickShortsPctMin, clickShortsPctMax,
@@ -11423,6 +11471,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         tappedStoryScrollMax: z.number().int().min(0).max(50).optional(),
         internalLinkPctMin:   z.number().int().min(0).max(100).optional(),
         internalLinkPctMax:   z.number().int().min(0).max(100).optional(),
+        manualSearches:       z.boolean().optional(),
+        manualSearchPctMin:   z.number().int().min(0).max(100).optional(),
+        manualSearchPctMax:   z.number().int().min(0).max(100).optional(),
         // YouTube-specific
         clickPctMin:          z.number().int().min(0).max(100).optional(),
         clickPctMax:          z.number().int().min(0).max(100).optional(),
@@ -11462,6 +11513,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           scrollMin, scrollMax, storyTapMin, storyTapMax,
           tappedStoryScrollMin, tappedStoryScrollMax,
           internalLinkPctMin, internalLinkPctMax,
+           manualSearches, manualSearchPctMin, manualSearchPctMax,
           dismissDirection: dismissDir,
         });
       } else if (appId === "youtube") {

@@ -749,7 +749,7 @@ function _findCookieAcceptButton(xml: string): { x: number; y: number } | null {
 
 export async function runChromeApp(
   serial: string,
-  opts?: { scrollMin?: number; scrollMax?: number; storyTapMin?: number; storyTapMax?: number; tappedStoryScrollMin?: number; tappedStoryScrollMax?: number; internalLinkPctMin?: number; internalLinkPctMax?: number; dismissDirection?: "left" | "up" },
+  opts?: { scrollMin?: number; scrollMax?: number; storyTapMin?: number; storyTapMax?: number; tappedStoryScrollMin?: number; tappedStoryScrollMax?: number; internalLinkPctMin?: number; internalLinkPctMax?: number; manualSearches?: boolean; manualSearchPctMin?: number; manualSearchPctMax?: number; dismissDirection?: "left" | "up" },
 ): Promise<{ ok: boolean; steps: string[]; error?: string }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
@@ -998,6 +998,123 @@ export async function runChromeApp(
     const tappedStoryScrollMax  = opts?.tappedStoryScrollMax  ?? 0;
     const internalLinkPctMin    = opts?.internalLinkPctMin    ?? 0;
     const internalLinkPctMax    = opts?.internalLinkPctMax    ?? 0;
+    const manualSearches        = opts?.manualSearches        ?? false;
+    const manualSearchPctMin    = opts?.manualSearchPctMin    ?? 0;
+    const manualSearchPctMax    = opts?.manualSearchPctMax    ?? 0;
+
+    // Keep the query pool deliberately ordinary and varied. A single query is
+    // selected per Chrome run, so repeated runs build a small, human-looking
+    // search history rather than replaying one fixed phrase.
+    const manualSearchQueries = [
+      "how to cook fish",
+      "is my food off",
+      "man united football fixtures",
+      "weather today",
+      "what dog is the best breed",
+      "am i happy",
+      "easy dinner ideas",
+      "how to sleep better",
+      "best places to visit",
+      "why is the sky blue",
+      "how long to boil eggs",
+      "local news today",
+      "how to clean white shoes",
+      "best movies to watch",
+      "how to grow tomatoes",
+      "what time does the sun set",
+      "how to save money",
+      "healthy lunch ideas",
+    ];
+
+    const runManualGoogleSearch = async (): Promise<void> => {
+      if (!manualSearches || manualSearchPctMax <= 0) return;
+      const pct = manualSearchPctMin + Math.random() * Math.max(0, manualSearchPctMax - manualSearchPctMin);
+      if (Math.random() * 100 >= pct) {
+        steps.push("Chrome manual search: activation roll did not fire");
+        return;
+      }
+
+      const query = manualSearchQueries[Math.floor(Math.random() * manualSearchQueries.length)];
+      // Navigate with an explicit Chrome VIEW intent instead of guessing where
+      // the toolbar is after a feed scroll has collapsed it. This keeps the
+      // navigation coordinate-free while still creating a real Chrome visit.
+      const openGoogle = spawnSync(adb, [
+        "-s", serial, "shell", "am", "start",
+        "-n", "com.android.chrome/com.google.android.apps.chrome.Main",
+        "-a", "android.intent.action.VIEW",
+        "-d", "https://www.google.com",
+      ], { encoding: "utf8", timeout: 10000 });
+      const openOutput = `${openGoogle.stdout ?? ""}${openGoogle.stderr ?? ""}`;
+      if (openGoogle.status !== 0 || /error|does not exist/i.test(openOutput)) {
+        steps.push(`Chrome manual search: could not open google.com — ${openOutput.trim().slice(0, 120)}`);
+        return;
+      }
+      steps.push("Chrome manual search: opened google.com");
+      await _sleep(2200 + Math.floor(Math.random() * 900));
+
+      const googleXml = await _uiDump(adb, serial);
+      // Google localises the visible hint and changes the resource id between
+      // Chrome builds. Prefer a real EditText node from the current dump and
+      // use its hint/text/resource-id only as a narrowing signal.
+      let searchField: { x: number; y: number } | null = null;
+      const editTextRe = /<node\s([^>]*class="android\.widget\.EditText"[^>]*)>/gi;
+      let editMatch: RegExpExecArray | null;
+      while ((editMatch = editTextRe.exec(googleXml)) !== null) {
+        const attrs = editMatch[1];
+        const bounds = attrs.match(/bounds="([^"]+)"/i);
+        if (!bounds) continue;
+        const label = [
+          attrs.match(/\btext="([^"]*)"/i)?.[1] ?? "",
+          attrs.match(/\bcontent-desc="([^"]*)"/i)?.[1] ?? "",
+          attrs.match(/\bhint="([^"]*)"/i)?.[1] ?? "",
+          attrs.match(/\bresource-id="([^"]*)"/i)?.[1] ?? "",
+        ].join(" ").toLowerCase();
+        if (!/(search|google|query|\bq\b)/i.test(label)) continue;
+        searchField = _parseCenter(bounds[1]);
+        if (searchField) break;
+      }
+      // Some builds expose the field without a useful label. It is still safe
+      // to use only an EditText node, rather than guessing from screen size.
+      if (!searchField) {
+        editTextRe.lastIndex = 0;
+        const fallback = editTextRe.exec(googleXml);
+        const bounds = fallback?.[1].match(/bounds="([^"]+)"/i);
+        if (bounds) searchField = _parseCenter(bounds[1]);
+      }
+      if (!searchField) {
+        steps.push(`Chrome manual search: Google search field not found for "${query}" — skipped safely`);
+        await keyevent(serial, 4); // KEYCODE_BACK
+        await _sleep(900);
+        return;
+      }
+
+      _adbTap(adb, serial, searchField.x, searchField.y);
+      await _sleep(300);
+      await typeViaOnscreenKeyboard(serial, query, msg => steps.push(`Chrome manual search: ${msg}`));
+      await keyevent(serial, 66); // KEYCODE_ENTER
+      steps.push(`Chrome manual search: searched "${query}"`);
+      await _sleep(2500 + Math.floor(Math.random() * 1500));
+
+      // Return to the Chrome homepage so the existing feed/story flow starts
+      // from its normal state. Prefer the live Home button; Back is the safe
+      // fallback when Chrome's toolbar is temporarily collapsed.
+      const resultXml = await _uiDump(adb, serial);
+      const homeButton = _findElem(
+        resultXml,
+        "com.android.chrome:id/home_button",
+        ":id/home_button",
+        "home_button",
+        "Open the homepage",
+      );
+      if (homeButton) {
+        _adbTap(adb, serial, homeButton.x, homeButton.y);
+        await _sleep(1300);
+      } else {
+        await keyevent(serial, 4); // KEYCODE_BACK
+        await _sleep(900);
+      }
+      steps.push("Chrome manual search: returned to homepage");
+    };
 
     const storyTapTotal = storyTapMax > 0
       ? Math.round(storyTapMin + Math.random() * Math.max(0, storyTapMax - storyTapMin)) : 0;
@@ -1199,6 +1316,19 @@ export async function runChromeApp(
       steps.push(`Chrome: scroll/tap error — ${String(scrollErr?.message ?? scrollErr)}`);
     }
     // ─────────────────────────────────────────────────────────────────────────
+
+    // Run the optional search after the normal Chrome activity so it cannot
+    // change the page state used by the existing feed/story flow. It remains
+    // before the verified recents close, so Google history is written normally.
+    if (manualSearches) {
+      try {
+        await runManualGoogleSearch();
+      } catch (searchErr: any) {
+        // Manual search is optional. Never prevent the verified Chrome close
+        // gesture if it fails on a particular device or Chrome build.
+        steps.push(`Chrome manual search: failed safely — ${String(searchErr?.message ?? searchErr)}`);
+      }
+    }
 
     // ── Close Chrome via recents (open floaty windows + swipe gesture) ──────
     // Always runs regardless of whether any scrolls/taps were configured.
