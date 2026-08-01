@@ -1508,58 +1508,90 @@ export async function runChromeApp(
       }
     };
 
-    const findGoogleHomepageStory = (homepageXml: string): { x: number; y: number } | null => {
-      const { w, h } = _getScreenSize(homepageXml);
-      const sectionAnchors: number[] = [];
-      const anchorRe = /<node\s([^>]+?)\s*\/?>/gi;
-      let anchorMatch: RegExpExecArray | null;
-      while ((anchorMatch = anchorRe.exec(homepageXml)) !== null) {
-        const attrs = anchorMatch[1];
-        const label = [
-          attrs.match(/\btext="([^"]*)"/i)?.[1] ?? "",
-          attrs.match(/\bcontent-desc="([^"]*)"/i)?.[1] ?? "",
-        ].join(" ").replace(/\s+/g, " ").trim();
-        if (!/(trending stories|top stories|news|discover|stories)/i.test(label)) continue;
-        const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
-        if (bounds) sectionAnchors.push(Math.round((Number(bounds[2]) + Number(bounds[4])) / 2));
+    /**
+     * Google Trending content is rendered inside a Chrome WebView. On affected
+     * builds UIAutomator exposes only the outer WebView, so the cards have no
+     * useful text, clickable state, or bounds in the dump. Detect the live
+     * repeated neutral-gray separators from the current screenshot instead of
+     * guessing a page coordinate.
+     */
+    const findGoogleTrendingSearchRows = (
+      img: { width: number; height: number; channels: number; pixels: Buffer },
+    ): Array<{ x: number; y: number }> => {
+      const { width, height, channels, pixels } = img;
+      const x1 = Math.round(width * 0.08);
+      const x2 = Math.round(width * 0.92);
+      const scanTop = Math.round(height * 0.22);
+      const scanBottom = Math.round(height * 0.80);
+      const separatorYs: number[] = [];
+
+      for (let y = scanTop; y <= scanBottom; y++) {
+        let neutralGrayPixels = 0;
+        for (let x = x1; x <= x2; x += 2) {
+          const idx = y * width * channels + x * channels;
+          const r = pixels[idx], g = pixels[idx + 1], b = pixels[idx + 2];
+          const luminance = (r + g + b) / 3;
+          if (
+            Math.max(r, g, b) - Math.min(r, g, b) <= 18 &&
+            luminance >= 150 &&
+            luminance <= 245
+          ) {
+            neutralGrayPixels++;
+          }
+        }
+        if (neutralGrayPixels >= Math.round((x2 - x1) * 0.27)) {
+          separatorYs.push(y);
+        }
       }
-      const candidates: Array<{ x: number; y: number; score: number }> = [];
+
+      const separators: number[] = [];
+      for (const y of separatorYs) {
+        if (separators.length === 0 || y - separators[separators.length - 1] > 3) {
+          separators.push(y);
+        } else {
+          separators[separators.length - 1] = Math.round(
+            (separators[separators.length - 1] + y) / 2,
+          );
+        }
+      }
+
+      let bestRun: number[] = [];
+      for (let start = 0; start < separators.length; start++) {
+        const run = [separators[start]];
+        let averageGap = 0;
+        for (let next = start + 1; next < separators.length; next++) {
+          const gap = separators[next] - separators[next - 1];
+          if (gap < Math.max(38, height * 0.025) || gap > height * 0.16) break;
+          if (run.length >= 2 && Math.abs(gap - averageGap) > Math.max(28, averageGap * 0.55)) break;
+          run.push(separators[next]);
+          averageGap = (averageGap * (run.length - 2) + gap) / (run.length - 1);
+        }
+        if (run.length > bestRun.length) bestRun = run;
+      }
+
+      if (bestRun.length < 3) return [];
+      return bestRun.slice(0, -1).map((top, index) => ({
+        x: Math.round(width / 2),
+        y: Math.round((top + bestRun[index + 1]) / 2),
+      }));
+    };
+
+    const readChromeUrl = (xml: string): string | null => {
       const nodeRe = /<node\s([^>]+?)\s*\/?>/gi;
-      let nodeMatch: RegExpExecArray | null;
-      while ((nodeMatch = nodeRe.exec(homepageXml)) !== null) {
-        const attrs = nodeMatch[1];
-        if (!attrs.includes('clickable="true"')) continue;
-        if (/class="android\.widget\.EditText"/i.test(attrs)) continue;
-        if (/resource-id="[^"]*com\.android\.chrome/i.test(attrs)) continue;
-        const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
-        if (!bounds) continue;
-        const x1 = Number(bounds[1]), y1 = Number(bounds[2]);
-        const x2 = Number(bounds[3]), y2 = Number(bounds[4]);
-        const width = x2 - x1;
-        const height = y2 - y1;
-        const cy = Math.round((y1 + y2) / 2);
-        if (width < Math.max(180, w * 0.35) || height < 45 || cy < 120 || cy > h * 0.88) continue;
-        const label = [
-          attrs.match(/\btext="([^"]*)"/i)?.[1] ?? "",
-          attrs.match(/\bcontent-desc="([^"]*)"/i)?.[1] ?? "",
-          attrs.match(/\bhint="([^"]*)"/i)?.[1] ?? "",
-        ].join(" ").replace(/\s+/g, " ").trim();
-        if (label.length < 18) continue;
-        if (/^(search|google|images?|news|maps?|shopping|videos?|more|settings|tools|sign in|next|previous|home|trending stories?|top stories?|latest news|discover|stories)$/i.test(label)) continue;
-        if (/(privacy|terms|about google|advertising|preferences|feedback|copyright)/i.test(label)) continue;
-        const storySignal = /(trending|story|stories|news|headline|breaking|popular|recommended|discover|top stories|latest)/i.test(label);
-        const belowStorySection = sectionAnchors.some(anchorY => cy > anchorY + 10 && cy < anchorY + h * 0.8);
-        const score = (storySignal ? 3 : 0) + (belowStorySection ? 3 : 0) + Math.min(2, Math.floor(label.length / 80));
-        candidates.push({ x: Math.round((x1 + x2) / 2), y: cy, score });
+      let match: RegExpExecArray | null;
+      while ((match = nodeRe.exec(xml)) !== null) {
+        const attrs = match[1];
+        if (!attrs.includes("url_bar")) continue;
+        return attrs.match(/\btext="([^"]*)"/i)?.[1] ?? null;
       }
-      if (candidates.length === 0) return null;
-      const storyCandidates = candidates.filter(candidate => candidate.score >= 3);
-      if (storyCandidates.length === 0) return null;
-      return storyCandidates[Math.floor(Math.random() * storyCandidates.length)];
+      return null;
     };
 
     const runTrendingGoogleStories = async (): Promise<void> => {
-      if (tapTrendingStoryMax <= 0) return;
+      if (tapTrendingStoryMax <= 0) {
+        steps.push("Chrome trending stories: disabled because Tap Trending Storys max is 0");
+        return;
+      }
       const totalStories = Math.max(0, Math.min(50, randomRange(tapTrendingStoryMin, tapTrendingStoryMax, true)));
       if (totalStories <= 0) return;
 
@@ -1578,32 +1610,37 @@ export async function runChromeApp(
       steps.push(`Chrome trending stories: opened google.com for up to ${totalStories} stor${totalStories === 1 ? "y" : "ies"}`);
       await _sleep(2200 + Math.floor(Math.random() * 900));
       const usedCenters = new Set<string>();
-      const { w, h } = _getScreenSize(await _uiDump(adb, serial));
       let tapped = 0;
 
       for (let storyNumber = 1; storyNumber <= totalStories; storyNumber++) {
-        // Always move below the initial homepage/search area first; the
-        // trending/news cards are lower on the Google homepage.
-        await swipe(serial, Math.round(w / 2), Math.round(h * 0.78), Math.round(w / 2), Math.round(h * 0.30), 450 + Math.floor(Math.random() * 250));
-        await _sleep(900 + Math.floor(Math.random() * 700));
-        const homepageXml = await _uiDump(adb, serial);
-        const story = findGoogleHomepageStory(homepageXml);
-        if (!story || usedCenters.has(`${story.x},${story.y}`)) {
-          steps.push(`Chrome trending stories: no confirmed story candidate for ${storyNumber}/${totalStories} — skipped`);
+        const screen = await _captureScreenPixels(serial);
+        const rows = screen
+          ? findGoogleTrendingSearchRows(screen)
+              .filter(row => !usedCenters.has(`${row.x},${row.y}`))
+          : [];
+        if (rows.length === 0) {
+          steps.push(`Chrome trending stories: no screenshot-confirmed row for ${storyNumber}/${totalStories} — skipped`);
           break;
         }
 
+        const story = rows[Math.floor(Math.random() * rows.length)];
         usedCenters.add(`${story.x},${story.y}`);
         _adbTap(adb, serial, story.x, story.y);
-        tapped++;
-        steps.push(`Chrome trending stories: tapped story ${storyNumber}/${totalStories}`);
         await _sleep(1800 + Math.floor(Math.random() * 1200));
 
-        // Briefly view the article, then return to the Google homepage before
-        // searching for the next story. This also avoids blind repeated taps
-        // if the article failed to load.
-        await keyevent(serial, 4);
-        await _sleep(900 + Math.floor(Math.random() * 500));
+        const afterUrl = readChromeUrl(await _uiDump(adb, serial));
+        const navigationConfirmed = !!afterUrl &&
+          afterUrl !== "google.com" &&
+          !/^https?:\/\/(?:www\.)?google\.com\/?$/i.test(afterUrl);
+        if (!navigationConfirmed) {
+          steps.push(`Chrome trending stories: row tap ${storyNumber}/${totalStories} was not confirmed — skipped`);
+          await returnGoogleToHomepage();
+          continue;
+        }
+
+        tapped++;
+        steps.push(`Chrome trending stories: tapped story ${storyNumber}/${totalStories}`);
+        await returnGoogleToHomepage();
       }
 
       await returnGoogleToHomepage();
@@ -1826,12 +1863,10 @@ export async function runChromeApp(
 
     // Run trending-story taps after manual searches and result dwell, before
     // the verified Chrome close path.
-    if (tapTrendingStoryMax > 0) {
-      try {
-        await runTrendingGoogleStories();
-      } catch (trendingErr: any) {
-        steps.push(`Chrome trending stories: failed safely — ${String(trendingErr?.message ?? trendingErr)}`);
-      }
+    try {
+      await runTrendingGoogleStories();
+    } catch (trendingErr: any) {
+      steps.push(`Chrome trending stories: failed safely — ${String(trendingErr?.message ?? trendingErr)}`);
     }
 
     // ── Close Chrome via recents (open floaty windows + swipe gesture) ──────
@@ -8475,10 +8510,7 @@ export async function typeViaOnscreenKeyboard(
     // UIAutomator can't see the keyboard on this device (common on MIUI) —
     // fall back to adb input text so at least something is typed.
     onLog?.(`[keyboard] 0 keys found — falling back to adb input text (use Keyboard Calibration for real taps)`);
-    spawnSync(adb, ["-s", serial, "shell", "input", "text", text.replace(/['"]/g, "")], {
-      encoding: "utf8",
-      timeout: 5000,
-    });
+    runInputShell(serial, ["text", escapeForAdbInput(text)], "text");
     return;
   }
 

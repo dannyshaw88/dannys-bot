@@ -214,6 +214,16 @@ jobs:
           grep -F "Cycle failed — Phone Apps" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
           grep -F "Cycle aborted — Phone Apps" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
           echo "Mobile Phone Apps search variety and debugging-log configuration verified"
+      - name: Verify Chrome search input and Trending WebView safeguards
+        shell: bash
+        run: |
+          grep -F 'runInputShell(serial, ["text", escapeForAdbInput(text)], "text")' artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "findGoogleTrendingSearchRows" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "no screenshot-confirmed row" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "readChromeUrl" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "row tap" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "await runTrendingGoogleStories();" artifacts/api-server/src/mobile/androidManager.ts
+          echo "Chrome search input and Trending WebView safeguards verified"
       - name: Verify per-device keyboard bind execution
         shell: bash
         run: |
