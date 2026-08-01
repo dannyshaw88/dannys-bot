@@ -72,6 +72,16 @@ jobs:
           grep -F 'label: "Posts"' artifacts/dannys-bot/src/pages/StatsPage.tsx
           grep -F "postsDaily" artifacts/dannys-bot/src/pages/StatsPage.tsx
           echo "Account-specific Posted Media and Posts statistics verified"
+      - name: Verify per-device keyboard bind execution
+        shell: bash
+        run: |
+          grep -F "tapCalibratedKeyboardKey" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "const aliases = normalized === \"emoji\"" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "via bind '\${mapKey}'" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "android.tapCalibratedKeyboardKey" artifacts/api-server/src/routes/mobile.ts
+          grep -F "findKeyboardEmojiButton" artifacts/api-server/src/routes/mobile.ts
+          grep -F "Emoji bind and visual key detection unavailable" artifacts/api-server/src/routes/mobile.ts
+          echo "Per-device named keyboard bind execution verified"
       # Upload each dist directory as its own artifact so download-artifact
       # can place files at the exact target path without any copy/rename step.
       - name: Upload API server dist
