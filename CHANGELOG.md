@@ -4,6 +4,17 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.325] — 2026-08-01
+
+### Changed — Align Google Chrome manual-search controls
+
+- Reworked the Google Chrome **Internal Links Clicked %** controls so the title and its min/max fields are left-aligned together instead of being centered within their cell.
+- Added a small vertical offset to keep the Internal Links group visually aligned with the adjacent **Manual Searches Activation %** control.
+- Preserved the existing behavior where the Manual Searches activation fields remain hidden when the checkbox is unticked and stay in their current position when ticked.
+- Added installer workflow source checks for the Chrome Manual Searches labels and conditional UI wiring.
+- Included the latest Mobile Farm UI reference asset in the pushed project files.
+- Bumped the root application and Electron package versions to `1.2.325`.
+
 ## [1.2.324] — 2026-08-01
 
 ### Fixed — Prevent Reel DM shares from selecting WhatsApp or other shortcuts

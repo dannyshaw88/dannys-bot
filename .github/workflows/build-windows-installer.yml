@@ -143,6 +143,15 @@ jobs:
           fi
           echo "Reel DM recipient safety configuration verified"
 
+      - name: Verify Mobile Phone Apps manual-search UI
+        shell: bash
+        run: |
+          grep -F "Internal Links Clicked %" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          grep -F "Manual Searches Activation %" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          grep -F "settings.chrome.manualSearches" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          grep -F "manualSearchPctMin" artifacts/dannys-bot/src/pages/MobilePhoneApps.tsx
+          echo "Mobile Phone Apps manual-search UI configuration verified"
+
       - name: Install Electron deps
         working-directory: artifacts/electron
         run: npm install --ignore-scripts

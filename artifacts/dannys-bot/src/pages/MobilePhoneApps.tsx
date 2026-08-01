@@ -708,8 +708,8 @@ export function MobilePhoneAppsPanel({
                 </>}
                  row3={
                    <div className="basis-full w-full flex flex-wrap items-start justify-start gap-x-8 gap-y-2 pt-2">
-                     <div className="flex flex-col items-center gap-1">
-                       <div className="flex items-center gap-1.5 self-start">
+                     <div className="flex flex-col items-start gap-1 pt-1">
+                       <div className="flex items-center gap-1.5">
                          <span className="text-xs text-muted-foreground whitespace-nowrap">Internal Links Clicked %</span>
                        </div>
                        <div className="flex items-center gap-1">
