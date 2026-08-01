@@ -140,9 +140,9 @@ jobs:
       - name: Verify mobile automation and account display fixes
         shell: bash
         run: |
-          grep -F "REELS-TO-VIEW-REELS" artifacts/api-server/src/routes/mobile.ts
-          grep -F "FEED-TO-VIEW-FEED" artifacts/api-server/src/routes/mobile.ts
-          grep -F "EXPLORE-TO-VIEW-EXPLORE" artifacts/api-server/src/routes/mobile.ts
+          grep -F 'reels: "VIEW REELS"' artifacts/api-server/src/routes/mobile.ts
+          grep -F 'feed: "VIEW FEED"' artifacts/api-server/src/routes/mobile.ts
+          grep -F 'explore: "VIEW EXPLORE"' artifacts/api-server/src/routes/mobile.ts
           grep -F "allowBack=*/i > 0" artifacts/api-server/src/routes/mobile.ts
           grep -F "scanViewFeedA11y" artifacts/api-server/src/routes/mobile.ts
           grep -F "remove from saved" artifacts/api-server/src/routes/mobile.ts

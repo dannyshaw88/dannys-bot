@@ -9333,9 +9333,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           [_toolSeq[_si], _toolSeq[_sj]] = [_toolSeq[_sj], _toolSeq[_si]];
         }
         const _debugToolOrderLabels: Record<string, string> = {
-          reels: "REELS-TO-VIEW-REELS",
-          feed: "FEED-TO-VIEW-FEED",
-          explore: "EXPLORE-TO-VIEW-EXPLORE",
+          reels: "VIEW REELS",
+          feed: "VIEW FEED",
+          explore: "VIEW EXPLORE",
         };
         const _debugToolOrder = _toolSeq.map(_name => _debugToolOrderLabels[_name] ?? _name);
         tLog(`▶ Tool order shuffled: ${_debugToolOrder.length > 0 ? _debugToolOrder.join(' → ') : '(no tools active this execution)'}`);
