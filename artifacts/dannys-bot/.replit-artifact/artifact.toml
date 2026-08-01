@@ -1,0 +1,32 @@
+kind = "web"
+  previewPath = "/"
+  title = "Danny's Bot"
+  version = "1.0.0"
+  id = "artifacts/dannys-bot"
+  router = "path"
+
+  [[integratedSkills]]
+  name = "react-vite"
+  version = "1.0.0"
+
+  [[services]]
+  name = "web"
+  paths = [ "/" ]
+  localPort = 22393
+
+  [services.development]
+  run = "pnpm --filter @workspace/dannys-bot run dev"
+
+  [services.production]
+  build = [ "pnpm", "--filter", "@workspace/dannys-bot", "run", "build" ]
+  publicDir = "artifacts/dannys-bot/dist/public"
+  serve = "static"
+
+  [[services.production.rewrites]]
+  from = "/*"
+  to = "/index.html"
+
+  [services.env]
+  PORT = "22393"
+  BASE_PATH = "/"
+  

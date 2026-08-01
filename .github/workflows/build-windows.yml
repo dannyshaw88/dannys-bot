@@ -1,0 +1,28 @@
+name: (Deprecated) Build Windows Installer
+
+# DEPRECATED — 9 Jul 2026: this file was a second, independently-triggered
+# near-duplicate of `build-windows-installer.yml` (different secret names —
+# UPDATER_TOKEN vs DANNY_BOT_UPDATER_TOKEN/GH_TOKEN — and no `ignore-scripts`
+# on install). Both ran on every push to main, racing two Windows installer
+# builds against each other and confusing "which run actually failed"
+# debugging. Consolidated into `build-windows-installer.yml`, the single
+# canonical workflow. Deletion of this tracked file is blocked in the
+# current environment, so it is kept as an inert stub with no triggers.
+#
+# Do not add a `push` or `workflow_dispatch` trigger back to this file — use
+# `build-windows-installer.yml` for any future changes to the build/release
+# pipeline.
+
+on:
+  workflow_call:
+    inputs:
+      note:
+        required: false
+        type: string
+        default: "deprecated — see build-windows-installer.yml"
+
+jobs:
+  deprecated-noop:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "This workflow is deprecated. See build-windows-installer.yml."
