@@ -270,7 +270,6 @@ function AppSlotRow({ icon, label, className, min, max, onMin, onMax, rowExtras,
               value={min}
               onChange={e => onMin(Math.min(100, Math.max(0, Number(e.target.value))))}
             />
-            <span className="text-muted-foreground text-sm">%</span>
             <span className="text-muted-foreground text-sm">to</span>
             <Input
               type="number"
@@ -280,6 +279,7 @@ function AppSlotRow({ icon, label, className, min, max, onMin, onMax, rowExtras,
               value={max}
               onChange={e => onMax(Math.min(100, Math.max(0, Number(e.target.value))))}
             />
+            <span className="text-muted-foreground text-sm">%</span>
           </div>
         </div>
 
@@ -764,7 +764,6 @@ export function MobilePhoneAppsPanel({
                         value={settings.chrome.internalLinkPctMin ?? 0}
                         onChange={e => patchApp("chrome", { internalLinkPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
                       />
-                      <span className="text-muted-foreground text-sm">%</span>
                       <span className="text-muted-foreground text-sm">to</span>
                       <Input
                         type="number"
@@ -774,6 +773,7 @@ export function MobilePhoneAppsPanel({
                         value={settings.chrome.internalLinkPctMax ?? 0}
                         onChange={e => patchApp("chrome", { internalLinkPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
                       />
+                      <span className="text-muted-foreground text-sm">%</span>
                     </div>
                   </div>
                   <div className="flex flex-col items-center gap-1">
@@ -787,7 +787,6 @@ export function MobilePhoneAppsPanel({
                         value={settings.chrome.manualSearchPctMin ?? 0}
                         onChange={e => patchApp("chrome", { manualSearchPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
                       />
-                      <span className="text-muted-foreground text-sm">%</span>
                       <span className="text-muted-foreground text-sm">to</span>
                       <Input
                         type="number"
@@ -797,15 +796,16 @@ export function MobilePhoneAppsPanel({
                         value={settings.chrome.manualSearchPctMax ?? 0}
                         onChange={e => patchApp("chrome", { manualSearchPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
                       />
+                      <span className="text-muted-foreground text-sm">%</span>
                     </div>
                   </div>
                   <div className="flex flex-col items-center gap-1">
                     <span className="text-xs text-muted-foreground whitespace-nowrap">Search Result Link</span>
                     <div className="flex items-center gap-1">
                       <Input type="number" min={0} max={100} className={PCT_INPUT} value={settings.chrome.manualSearchLinkPctMin ?? 0} onChange={e => patchApp("chrome", { manualSearchLinkPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })} />
-                      <span className="text-muted-foreground text-sm">%</span>
                       <span className="text-muted-foreground text-sm">to</span>
                       <Input type="number" min={0} max={100} className={PCT_INPUT} value={settings.chrome.manualSearchLinkPctMax ?? 0} onChange={e => patchApp("chrome", { manualSearchLinkPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })} />
+                      <span className="text-muted-foreground text-sm">%</span>
                     </div>
                   </div>
                 </>}
@@ -905,7 +905,6 @@ export function MobilePhoneAppsPanel({
                         value={settings.youtube.clickPctMin ?? 0}
                         onChange={e => patchApp("youtube", { clickPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
                       />
-                      <span className="text-muted-foreground text-sm">%</span>
                       <span className="text-muted-foreground text-sm">to</span>
                       <Input
                         type="number"
@@ -915,6 +914,7 @@ export function MobilePhoneAppsPanel({
                         value={settings.youtube.clickPctMax ?? 0}
                         onChange={e => patchApp("youtube", { clickPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
                       />
+                      <span className="text-muted-foreground text-sm">%</span>
                     </div>
                   </div>
                   <div className="flex flex-col items-center gap-1">
@@ -953,7 +953,6 @@ export function MobilePhoneAppsPanel({
                         value={settings.youtube.clickShortsPctMin ?? 0}
                         onChange={e => patchApp("youtube", { clickShortsPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
                       />
-                      <span className="text-muted-foreground text-sm">%</span>
                       <span className="text-muted-foreground text-sm">to</span>
                       <Input
                         type="number"
@@ -963,6 +962,7 @@ export function MobilePhoneAppsPanel({
                         value={settings.youtube.clickShortsPctMax ?? 0}
                         onChange={e => patchApp("youtube", { clickShortsPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
                       />
+                      <span className="text-muted-foreground text-sm">%</span>
                     </div>
                   </div>
                   <div className="flex flex-col items-center gap-1">
@@ -998,7 +998,6 @@ export function MobilePhoneAppsPanel({
                         value={settings.youtube.shortsLikePctMin ?? 0}
                         onChange={e => patchApp("youtube", { shortsLikePctMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
                       />
-                      <span className="text-muted-foreground text-sm">%</span>
                       <span className="text-muted-foreground text-sm">to</span>
                       <Input
                         type="number"
@@ -1008,6 +1007,7 @@ export function MobilePhoneAppsPanel({
                         value={settings.youtube.shortsLikePctMax ?? 0}
                         onChange={e => patchApp("youtube", { shortsLikePctMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
                       />
+                      <span className="text-muted-foreground text-sm">%</span>
                     </div>
                   </div>
                   <div className="flex flex-col items-center gap-1">
