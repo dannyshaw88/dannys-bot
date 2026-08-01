@@ -258,9 +258,9 @@ function AppSlotRow({ icon, label, className, min, max, onMin, onMax, rowExtras,
           <span className="text-sm font-semibold text-foreground">{label}</span>
         </div>
 
-        {/* Activation % */}
+        {/* Activation */}
         <div className="flex flex-col items-center gap-1">
-          <span className="text-xs text-muted-foreground whitespace-nowrap">Activation %</span>
+          <span className="text-xs text-muted-foreground whitespace-nowrap">Activation</span>
           <div className="flex items-center gap-1">
             <Input
               type="number"
@@ -270,6 +270,7 @@ function AppSlotRow({ icon, label, className, min, max, onMin, onMax, rowExtras,
               value={min}
               onChange={e => onMin(Math.min(100, Math.max(0, Number(e.target.value))))}
             />
+            <span className="text-muted-foreground text-sm">%</span>
             <span className="text-muted-foreground text-sm">to</span>
             <Input
               type="number"
@@ -279,7 +280,6 @@ function AppSlotRow({ icon, label, className, min, max, onMin, onMax, rowExtras,
               value={max}
               onChange={e => onMax(Math.min(100, Math.max(0, Number(e.target.value))))}
             />
-            <span className="text-muted-foreground text-sm">%</span>
           </div>
         </div>
 
@@ -754,7 +754,7 @@ export function MobilePhoneAppsPanel({
                     </div>
                   </div>
                   <div className="flex flex-col items-center gap-1">
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">Internal Links Clicked %</span>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Internal Links Clicked</span>
                     <div className="flex items-center gap-1">
                       <Input
                         type="number"
@@ -764,6 +764,7 @@ export function MobilePhoneAppsPanel({
                         value={settings.chrome.internalLinkPctMin ?? 0}
                         onChange={e => patchApp("chrome", { internalLinkPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
                       />
+                      <span className="text-muted-foreground text-sm">%</span>
                       <span className="text-muted-foreground text-sm">to</span>
                       <Input
                         type="number"
@@ -776,7 +777,7 @@ export function MobilePhoneAppsPanel({
                     </div>
                   </div>
                   <div className="flex flex-col items-center gap-1">
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">Manual Searches Activation %</span>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Manual Searches Activation</span>
                     <div className="flex items-center gap-1">
                       <Input
                         type="number"
@@ -786,6 +787,7 @@ export function MobilePhoneAppsPanel({
                         value={settings.chrome.manualSearchPctMin ?? 0}
                         onChange={e => patchApp("chrome", { manualSearchPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
                       />
+                      <span className="text-muted-foreground text-sm">%</span>
                       <span className="text-muted-foreground text-sm">to</span>
                       <Input
                         type="number"
@@ -795,28 +797,27 @@ export function MobilePhoneAppsPanel({
                         value={settings.chrome.manualSearchPctMax ?? 0}
                         onChange={e => patchApp("chrome", { manualSearchPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
                       />
-                      <span className="text-muted-foreground text-sm">%</span>
                     </div>
                   </div>
                   <div className="flex flex-col items-center gap-1">
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">Search Result Link %</span>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Search Result Link</span>
                     <div className="flex items-center gap-1">
                       <Input type="number" min={0} max={100} className={PCT_INPUT} value={settings.chrome.manualSearchLinkPctMin ?? 0} onChange={e => patchApp("chrome", { manualSearchLinkPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })} />
+                      <span className="text-muted-foreground text-sm">%</span>
                       <span className="text-muted-foreground text-sm">to</span>
                       <Input type="number" min={0} max={100} className={PCT_INPUT} value={settings.chrome.manualSearchLinkPctMax ?? 0} onChange={e => patchApp("chrome", { manualSearchLinkPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })} />
-                      <span className="text-muted-foreground text-sm">%</span>
                     </div>
                   </div>
                 </>}
                  row3={
-                   <div className="basis-full w-full flex flex-wrap items-start justify-start gap-x-8 gap-y-3 pt-2 [&>*:first-child]:translate-x-[7px] [&>*:nth-child(2)]:-translate-x-[13px]">
+                   <div className="basis-full w-full flex flex-wrap items-start justify-start gap-x-8 gap-y-3 pt-2 [&>*:first-child]:translate-x-[7px] [&>*:nth-child(2)]:-translate-x-[16px]">
                      <div className="flex shrink-0 flex-col items-start gap-1">
                        <span className="text-xs text-muted-foreground whitespace-nowrap">Result Dwell Seconds</span>
                        <div className="flex items-center gap-1">
                           <Input type="number" min={1} max={10} className={PCT_INPUT} value={settings.chrome.manualSearchDwellMin ?? 3} onChange={e => patchApp("chrome", { manualSearchDwellMin: Math.min(10, Math.max(1, Number(e.target.value))) })} />
                          <span className="text-muted-foreground text-sm">to</span>
                           <Input type="number" min={1} max={10} className={PCT_INPUT} value={settings.chrome.manualSearchDwellMax ?? 8} onChange={e => patchApp("chrome", { manualSearchDwellMax: Math.min(10, Math.max(1, Number(e.target.value))) })} />
-                         <span className="text-muted-foreground text-sm">sec</span>
+                         <span className="text-muted-foreground text-sm">s</span>
                        </div>
                      </div>
                       <div className="flex shrink-0 flex-col items-start gap-1">
@@ -894,7 +895,7 @@ export function MobilePhoneAppsPanel({
                     </div>
                   </div>
                   <div className="flex flex-col items-center gap-1">
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">Tap video %</span>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Tap video</span>
                     <div className="flex items-center gap-1">
                       <Input
                         type="number"
@@ -904,6 +905,7 @@ export function MobilePhoneAppsPanel({
                         value={settings.youtube.clickPctMin ?? 0}
                         onChange={e => patchApp("youtube", { clickPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
                       />
+                      <span className="text-muted-foreground text-sm">%</span>
                       <span className="text-muted-foreground text-sm">to</span>
                       <Input
                         type="number"
@@ -913,7 +915,6 @@ export function MobilePhoneAppsPanel({
                         value={settings.youtube.clickPctMax ?? 0}
                         onChange={e => patchApp("youtube", { clickPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
                       />
-                      <span className="text-muted-foreground text-sm">%</span>
                     </div>
                   </div>
                   <div className="flex flex-col items-center gap-1">
@@ -942,7 +943,7 @@ export function MobilePhoneAppsPanel({
                 </>}
                 row2={<>
                   <div className="flex flex-col items-center gap-1">
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">Click Shorts %</span>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Click Shorts</span>
                     <div className="flex items-center gap-1">
                       <Input
                         type="number"
@@ -952,6 +953,7 @@ export function MobilePhoneAppsPanel({
                         value={settings.youtube.clickShortsPctMin ?? 0}
                         onChange={e => patchApp("youtube", { clickShortsPctMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
                       />
+                      <span className="text-muted-foreground text-sm">%</span>
                       <span className="text-muted-foreground text-sm">to</span>
                       <Input
                         type="number"
@@ -961,7 +963,6 @@ export function MobilePhoneAppsPanel({
                         value={settings.youtube.clickShortsPctMax ?? 0}
                         onChange={e => patchApp("youtube", { clickShortsPctMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
                       />
-                      <span className="text-muted-foreground text-sm">%</span>
                     </div>
                   </div>
                   <div className="flex flex-col items-center gap-1">
@@ -987,7 +988,7 @@ export function MobilePhoneAppsPanel({
                     </div>
                   </div>
                   <div className="flex flex-col items-center gap-1">
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">Shorts Like %</span>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Shorts Like</span>
                     <div className="flex items-center gap-1">
                       <Input
                         type="number"
@@ -997,6 +998,7 @@ export function MobilePhoneAppsPanel({
                         value={settings.youtube.shortsLikePctMin ?? 0}
                         onChange={e => patchApp("youtube", { shortsLikePctMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
                       />
+                      <span className="text-muted-foreground text-sm">%</span>
                       <span className="text-muted-foreground text-sm">to</span>
                       <Input
                         type="number"
@@ -1006,7 +1008,6 @@ export function MobilePhoneAppsPanel({
                         value={settings.youtube.shortsLikePctMax ?? 0}
                         onChange={e => patchApp("youtube", { shortsLikePctMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
                       />
-                      <span className="text-muted-foreground text-sm">%</span>
                     </div>
                   </div>
                   <div className="flex flex-col items-center gap-1">
