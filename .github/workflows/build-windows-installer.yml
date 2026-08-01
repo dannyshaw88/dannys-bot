@@ -122,6 +122,11 @@ jobs:
           grep -F "huggingface_hub>=1.5.0,<2.0" resources/python-embed/requirements.txt
           grep -F -- '"--upgrade"' src/main.ts
           grep -F -- '"--upgrade-strategy", "eager"' src/main.ts
+          grep -F -- '"--ignore-installed"' src/main.ts
+          grep -F "getImageGenPackagesDir" src/main.ts
+          grep -F "fs.rmSync(packagesDir" src/main.ts
+          grep -F "AI package verification failed" src/main.ts
+          grep -F "stopImageGenServer" src/main.ts
           grep -F "Install / Repair AI Libraries" ../dannys-bot/src/pages/ImageGenPage.tsx
           echo "AI dependency repair configuration verified"
 

@@ -91,10 +91,17 @@ function getImageGenPipDir(): string {
   return path.join(getUserDataPath(), "image-gen-pip");
 }
 
+function getImageGenPackagesDir(): string {
+  // Keep the writable pip bootstrap files separate from the AI package layer.
+  // A clean package directory makes repairs deterministic even when an older
+  // --target installation left conflicting package copies in AppData.
+  return path.join(getImageGenPipDir(), "packages");
+}
+
 function isTorchInstalled(): boolean {
   if (app.isPackaged) {
-    // Packages are installed into the writable pipDir, not the embed's Lib/
-    const torchInit = path.join(getImageGenPipDir(), "torch", "__init__.py");
+    // AI packages are installed into the isolated writable package layer.
+    const torchInit = path.join(getImageGenPackagesDir(), "torch", "__init__.py");
     return fs.existsSync(torchInit);
   }
   // Dev mode: assume not available to avoid noisy failures
@@ -122,7 +129,7 @@ function spawnImageGenServer(port: number): void {
   const pythonExe = getPythonPath();
   const modelsDir = getImageGenModelsDir();
   const outputDir = getImageGenOutputDir();
-  const pipDir    = getImageGenPipDir();
+  const packagesDir = getImageGenPackagesDir();
   try { fs.mkdirSync(modelsDir, { recursive: true }); } catch {}
   try { fs.mkdirSync(outputDir, { recursive: true }); } catch {}
 
@@ -132,9 +139,9 @@ function spawnImageGenServer(port: number): void {
     stdio: ["ignore", "pipe", "pipe"],
     env: {
       ...process.env,
-      // Packages are installed into pipDir (writable AppData), not the
+      // Packages are installed into the isolated writable package layer, not
       // read-only Program Files embed — PYTHONPATH makes them importable.
-      PYTHONPATH: pipDir,
+      PYTHONPATH: packagesDir,
       IMAGE_GEN_PORT: String(port),
       IMAGE_GEN_MODELS_DIR: modelsDir,
       IMAGE_GEN_OUTPUT_DIR: outputDir,
@@ -148,9 +155,34 @@ function spawnImageGenServer(port: number): void {
 
   imageGenProc.stdout?.on("data", (d: Buffer) => appendToMainLog(`[image-gen] ${d.toString().trim()}`));
   imageGenProc.stderr?.on("data", (d: Buffer) => appendToMainLog(`[image-gen] ${d.toString().trim()}`));
-  imageGenProc.on("exit", (code) => {
+  const proc = imageGenProc;
+  proc.on("exit", (code) => {
     appendToMainLog(`[image-gen] Server exited with code ${code}`);
-    imageGenProc = null;
+    if (imageGenProc === proc) imageGenProc = null;
+  });
+}
+
+function stopImageGenServer(): Promise<void> {
+  const proc = imageGenProc;
+  if (!proc) return Promise.resolve();
+
+  imageGenProc = null;
+  return new Promise((resolve) => {
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      resolve();
+    };
+    proc.once("exit", finish);
+    try { proc.kill("SIGTERM"); } catch { finish(); return; }
+    // Windows may not deliver SIGTERM to a child promptly. Do not start a
+    // repair install while the old sidecar still has package files open.
+    setTimeout(() => {
+      if (finished) return;
+      try { proc.kill("SIGKILL"); } catch {}
+      finish();
+    }, 5000);
   });
 }
 let splashWin: BrowserWindow | null = null;
@@ -1276,7 +1308,9 @@ async function createWindow() {
     // Packages must go into a user-writable location — Program Files is
     // read-only after installation and causes WinError 5 (Access denied).
     const pipDir = getImageGenPipDir();
+    const packagesDir = getImageGenPackagesDir();
     try { fs.mkdirSync(pipDir, { recursive: true }); } catch {}
+    try { fs.mkdirSync(packagesDir, { recursive: true }); } catch {}
 
     imageGenSetupRunning = true;
     imageGenSetupState = {
@@ -1329,6 +1363,10 @@ async function createWindow() {
 
     try {
       // Step 1: bootstrap pip into pipDir (writable AppData), not the embed dir
+      if (imageGenProc) {
+        sendProgress("Stopping the image-generation server before repair…", false);
+        await stopImageGenServer();
+      }
       if (fs.existsSync(getPipScript)) {
         sendProgress("Installing pip…", false);
         await new Promise<void>((resolve, reject) => {
@@ -1344,11 +1382,18 @@ async function createWindow() {
         });
       }
 
-      // Step 2: install/repair AI libraries in the same writable pipDir.
-      // --target does not reliably replace packages already present in this
-      // directory unless --upgrade is supplied. Without it, an older
-      // huggingface_hub can remain beside a newer diffusers and make both
-      // supported pipelines fail during import.
+      // Step 2: install/repair AI libraries into a clean package directory.
+      // --target can leave conflicting package copies behind in an existing
+      // directory, even with --upgrade. That was the cause of the installed
+      // app continuing to import huggingface_hub==0.36.2 beside new diffusers.
+      // Only this package directory is replaced; the model cache is separate
+      // under image-gen-models and is intentionally preserved.
+      try {
+        fs.rmSync(packagesDir, { recursive: true, force: true });
+        fs.mkdirSync(packagesDir, { recursive: true });
+      } catch (err: any) {
+        throw new Error(`Could not reset the AI package directory: ${err?.message ?? String(err)}`);
+      }
       // Do not rely on --extra-index-url alone: pip may select a CPU Torch
       // wheel from the primary index even when the CUDA index is present.
       // Install Torch with the CUDA index as primary, then install the rest.
@@ -1369,7 +1414,8 @@ async function createWindow() {
       sendProgress("Installing CUDA-enabled Torch (downloading ~2 GB — please wait)…", false);
       await runPip([
         "install",
-        "--target", pipDir,
+        "--target", packagesDir,
+        "--ignore-installed",
         "--upgrade",
         "--upgrade-strategy", "eager",
         "-r", cudaTorchRequirements,
@@ -1380,12 +1426,33 @@ async function createWindow() {
       sendProgress("Installing remaining AI libraries…", false);
       await runPip([
         "install",
-        "--target", pipDir,
+        "--target", packagesDir,
+        "--ignore-installed",
         "--upgrade",
         "--upgrade-strategy", "eager",
         "-r", otherRequirements,
         ...pipNetworkArgs,
       ], "AI library install failed");
+
+      sendProgress("Verifying the repaired AI package versions…", false);
+      await new Promise<void>((resolve, reject) => {
+        const verifyEnv = { ...pipEnv, PYTHONPATH: packagesDir };
+        const verifyCode = [
+          `import sys; sys.path.insert(0, ${JSON.stringify(packagesDir)})`,
+          "import diffusers, huggingface_hub",
+          "print(f'Verified diffusers={diffusers.__version__}, huggingface_hub={huggingface_hub.__version__}')",
+        ].join("; ");
+        const p = spawn(pythonExe, [
+          "-c",
+          verifyCode,
+        ], { stdio: "pipe", env: verifyEnv });
+        p.stdout?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
+        p.stderr?.on("data", (d: Buffer) => sendProgress(d.toString().trim(), false));
+        p.on("error", (err) => reject(new Error(`AI package verification failed: ${err.message}`)));
+        p.on("exit", code => code === 0
+          ? resolve()
+          : reject(new Error(`AI package verification failed (code ${code})`)));
+      });
 
       sendProgress("✅ Setup complete! Starting image gen server…", false);
 
