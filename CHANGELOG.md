@@ -4,6 +4,18 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.341] — 2026-08-02
+
+### Changed — Simplify the selected Phone Farm device view
+
+- Hide the overview-only Metrics and Action Log tabs when a specific Phone Farm device is open.
+- Keep Accounts, Browser, My Device, and Debugging Log available in the device detail view.
+- Changed the My Device tab icon to a distinct tablet-style mobile shape.
+- Improved Story Emoji keyboard resolution by anchoring live nodes to Android’s active input method and handling unlabeled Gboard controls structurally.
+- Bumped the root application and Electron package versions to `1.2.341`.
+
+---
+
 ## [1.2.340] — 2026-08-02
 
 ### Fixed — Resolve visibly rendered Story Emoji controls through live IME structure
