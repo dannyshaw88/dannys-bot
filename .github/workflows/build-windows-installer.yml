@@ -227,6 +227,11 @@ jobs:
       - name: Verify story Emoji uses verified keyboard fallbacks
         shell: bash
         run: |
+          grep -F "findStoryReplyComposerViaA11y" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "[story-composer] no candidate" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "lowerNodes=" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F 'screen=${w}x${h}' artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "reply composer not found" artifacts/api-server/src/routes/mobile.ts
           grep -F "tapKeyboardEmojiNode" artifacts/api-server/src/mobile/androidManager.ts
           grep -F "dumpUiWithIme(serial)" artifacts/api-server/src/mobile/androidManager.ts
           grep -F "live-node, calibrated-tap, or visual fallback" artifacts/api-server/src/routes/mobile.ts
@@ -240,6 +245,10 @@ jobs:
           fi
           if grep -F 'inputText(serial, _chosenEmoji)' artifacts/api-server/src/routes/mobile.ts; then
             echo "Story Emoji flow must not inject Unicode directly"
+            exit 1
+          fi
+          if grep -F "message_composer_container" artifacts/api-server/src/routes/mobile.ts | grep -F "_composerPresent"; then
+            echo "Story Emoji flow must not require the obsolete ID-only composer gate"
             exit 1
           fi
           echo "Story Emoji live-node execution verified"

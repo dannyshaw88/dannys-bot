@@ -4,6 +4,20 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.343] — 2026-08-02
+
+### Fixed — Reach Story Emoji replies on Xiaomi composer layouts
+
+- Fixed Story Emoji replies being skipped before keyboard handling when Instagram rendered the visible “Send message” reply bar without exposing the `message_composer_container` resource ID.
+- Added a live accessibility-tree composer resolver that searches the lower story-viewer area for the current reply control using reply labels, composer resource IDs, `EditText` nodes, and wide interactive controls.
+- Kept the resolver conservative by excluding bottom navigation, story action controls, and unrelated back/home/profile nodes before selecting a tap target.
+- Added matched bounds, candidate scores, lower-node counts, and screen dimensions to the device automation log.
+- Fixed named keyboard controls so a missing calibration map or missing named bind no longer returns early and makes the live IME and visual Emoji fallback unreachable.
+- Preserved Emoji-picker verification after the keyboard control tap so an unverified tap is not counted as a successful Emoji action.
+- Added Windows Actions source checks for the Story reply composer resolver, conservative lower-screen matching, single-dump diagnostics, and reachable keyboard fallbacks.
+- Included the uploaded Xiaomi/Gboard evidence image in the repository for troubleshooting traceability.
+- Bumped the root application and Electron package versions to `1.2.343`.
+
 ## [1.2.342] — 2026-08-02
 
 ### Fixed — Use verified physical fallbacks for Xiaomi/Gboard Emoji controls
