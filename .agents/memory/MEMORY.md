@@ -72,3 +72,4 @@
 - [Random settings single-action flow](random-settings-single-action.md) — tap one validated settings row, optionally scroll once, then Back once; never tap a subsetting
 - [Phone Farm local wallpapers](phone-farm-local-wallpapers.md) — native Electron/browser picker stores a resized image data URL in shared slot customizations
 - [Images workspace local processing](images-workspace-local-processing.md) — reuse Make a Post processing and export copies; Electron should process native-selected paths locally
+- [Dashboard cycle summary icons](dashboard-cycle-summary-icons.md) — use Statistics action icons in cycle activity details, but keep eye-based metrics text-only
