@@ -6725,7 +6725,11 @@ function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 142, hideIco
       </button>
 
       {open && createPortal(
-        <div ref={dropRef} style={dropStyle}>
+        <div
+          ref={dropRef}
+          style={dropStyle}
+          onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
+        >
           {levels.map(lvl => {
             const Icon = lvl.icon;
             const isActive = scoreId === lvl.id;
@@ -6734,6 +6738,7 @@ function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 142, hideIco
                 key={lvl.id}
                 type="button"
                 onClick={e => { e.stopPropagation(); void save(lvl.id); }}
+                onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
                 style={{
                   width: "100%", display: "flex", alignItems: "center", gap: 8,
                   padding: "5px 12px", height: ROW_H,
@@ -6751,6 +6756,7 @@ function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 142, hideIco
             <button
               type="button"
               onClick={e => { e.stopPropagation(); void save(null); }}
+              onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
               style={{
                 width: "100%", display: "flex", alignItems: "center",
                 padding: "5px 12px", height: ROW_H,
