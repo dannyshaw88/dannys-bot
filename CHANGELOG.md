@@ -4,6 +4,20 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.340] — 2026-08-02
+
+### Fixed — Resolve visibly rendered Story Emoji controls through live IME structure
+
+- Fixed Story Emoji reply detection for Gboard/MIUI layouts where the Emoji key is visibly present but exposed without an `emoji` label or resource-id in the accessibility tree.
+- Added a live accessibility-tree structural resolution path that identifies the unlabeled Emoji key immediately to the left of the live Space key in the same keyboard row.
+- Kept explicit Emoji labels restricted to IME-owned nodes so story content containing the word “emoji” cannot become an accidental tap target.
+- Added live IME and Space-node counts to the skip diagnostic so device-specific accessibility failures can be diagnosed from the automation log.
+- Preserved the safety rules that prohibit saved calibration coordinates, screenshot/pixel detection, and direct Unicode injection for Story Emoji actions.
+- Kept the Follow Users control layout aligned so the min/max range label is centered only over its numeric fields, with Spread Follows positioned separately.
+- Bumped the root application and Electron package versions to `1.2.340`.
+
+---
+
 ## [1.2.339] — 2026-08-02
 
 ### Fixed — Prevent normal X typing from being silently skipped

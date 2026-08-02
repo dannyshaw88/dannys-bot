@@ -8743,7 +8743,23 @@ export async function tapCalibratedKeyboardKey(
   // execute this named action. Resolve the current IME node on every run.
   const { xml, imeIncluded } = await dumpUiWithIme(serial);
   const { h: screenH } = getScreenSize(serial);
-  const candidates: Array<{ x: number; y: number; score: number; label: string }> = [];
+  type KeyboardNode = {
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+    x: number;
+    y: number;
+    cy: number;
+    label: string;
+    resourceId: string;
+    imeNode: boolean;
+    clickable: boolean;
+    focusable: boolean;
+    score: number;
+  };
+  const allImeNodes: KeyboardNode[] = [];
+  const candidates: KeyboardNode[] = [];
   const nodeRe = /<node\s([^>]+?)\s*\/?>/gi;
   let match: RegExpExecArray | null;
   while ((match = nodeRe.exec(xml)) !== null) {
@@ -8770,26 +8786,71 @@ export async function tapCalibratedKeyboardKey(
       /(?:inputmethod|keyboard|ime|gboard|swiftkey|latin)/i.test(packageName);
     if (!imeNode && !imeIncluded) continue;
 
-    const labelMatch = aliases.some(alias =>
+    const keyboardNode: KeyboardNode = {
+      x1,
+      y1,
+      x2,
+      y2,
+      x: Math.round((x1 + x2) / 2),
+      y: cy,
+      cy,
+      label,
+      resourceId,
+      imeNode,
+      clickable: isClickable,
+      focusable: isFocusable,
+      score: 0,
+    };
+    // When --include-ime is available, the lower-window nodes are part of the
+    // live IME tree even if this Android build omits the IME package/resource
+    // attributes. Keep those nodes for the structural unlabeled-key lookup.
+    if (imeNode || imeIncluded) allImeNodes.push(keyboardNode);
+
+    // A combined --include-ime dump can also contain the underlying Instagram
+    // window. Do not let an Instagram story label containing "emoji" become a
+    // keyboard target; explicit label/resource matches must identify the IME.
+    const labelMatch = imeNode && aliases.some(alias =>
       label.toLowerCase().includes(alias.toLowerCase()) ||
       resourceId.toLowerCase().includes(alias.toLowerCase()),
     );
     if (!labelMatch) continue;
 
     const exactLabel = aliases.some(alias => label.toLowerCase() === alias.toLowerCase());
-    const score =
+    keyboardNode.score =
       (exactLabel ? 8 : 0) +
       (resourceId.toLowerCase().includes("emoji") ? 4 : 0) +
       (resourceId.toLowerCase().includes("key") ? 1 : 0) +
       (imeNode ? 4 : 0) +
       (isClickable ? 2 : 0) +
       (isFocusable ? 1 : 0);
-    candidates.push({
-      x: Math.round((x1 + x2) / 2),
-      y: cy,
-      score,
-      label: label || resourceId,
-    });
+    candidates.push(keyboardNode);
+  }
+
+  // Some Gboard/MIUI builds visibly render the Emoji key but expose it as an
+  // unlabeled ImageButton (or omit its resource-id).  It is still represented
+  // by the live IME tree.  In that case, use the keyboard's own accessible
+  // structure: the Emoji key is the key immediately to the left of the live
+  // Space key in the same bottom row.  This is deliberately not a screen
+  // coordinate, pixel, or saved-calibration fallback.
+  if (candidates.length === 0 && (normalized === "emoji" || normalized === "emoticon" || normalized === "smiley")) {
+    const spaceNodes = allImeNodes
+      .filter(node => /\bspace(?:bar)?\b/i.test(`${node.label} ${node.resourceId}`))
+      .filter(node => node.clickable || node.focusable)
+      .sort((a, b) => b.score - a.score || b.y2 - a.y2);
+    const space = spaceNodes[0];
+    if (space) {
+      const rowNeighbors = allImeNodes
+        .filter(node => node !== space && (node.clickable || node.focusable))
+        .filter(node => node.x2 <= space.x1)
+        .filter(node => Math.abs(node.cy - space.cy) <= Math.max(node.y2 - node.y1, space.y2 - space.y1))
+        .filter(node => space.x1 - node.x2 <= Math.max(node.y2 - node.y1, space.y2 - space.y1))
+        .sort((a, b) => b.x2 - a.x2);
+      const structuralEmoji = rowNeighbors[0];
+      if (structuralEmoji) {
+        structuralEmoji.score = 6 + (structuralEmoji.imeNode ? 4 : 0);
+        candidates.push(structuralEmoji);
+      }
+    }
   }
 
   candidates.sort((a, b) => b.score - a.score || a.y - b.y);
@@ -8797,7 +8858,8 @@ export async function tapCalibratedKeyboardKey(
   if (!node) {
     onLog?.(
       `[cal-keyboard] bind '${mapKey}' is present, but live IME node '${keyName}' was not found ` +
-      `(ime=${imeIncluded ? "yes" : "no"})`,
+      `(ime=${imeIncluded ? "yes" : "no"}, imeNodes=${allImeNodes.length}, ` +
+      `spaceNodes=${allImeNodes.filter(n => /\bspace(?:bar)?\b/i.test(`${n.label} ${n.resourceId}`)).length})`,
     );
     return false;
   }
@@ -8805,7 +8867,8 @@ export async function tapCalibratedKeyboardKey(
   await tap(serial, node.x, node.y);
   onLog?.(
     `[cal-keyboard] tapped live IME node '${keyName}' via bind '${mapKey}' ` +
-    `(label="${node.label}", ime=${imeIncluded ? "yes" : "no"})`,
+    `(label="${node.label || node.resourceId || "structural-key"}", ` +
+    `ime=${imeIncluded ? "yes" : "no"})`,
   );
   await _sleep(180 + Math.round(Math.random() * 100));
   return true;
