@@ -47,6 +47,12 @@ Additionally: the mobile API client session may be expired by the time the post 
 
 ## Chronological entries (newest first)
 
+### 2026-08-02 — Mobile cycle now dwells after confirmed uploads and reports uploaded posts
+- After each confirmed mobile profile or Story upload, the automation cycle now waits an additional 5 seconds before continuing to the next tool or Instagram cleanup.
+- The cycle tracks successful uploads separately from attempted posts and includes the count in the API response, Phone Farm cycle log, and Dashboard completion activity.
+- A single successful upload is displayed as `1 POST UPLOADED`; partial counts are preserved if a later cycle step errors or is aborted.
+- Status: API and frontend package builds pass; workflows restarted successfully. Physical-device confirmation is still required for the complete Instagram flow.
+
 ### 2026-08-01 — Mobile Make a Post image alteration is now connected to the Android upload path
 - The Mobile Human Session Tool had saved `makePostAlterationEnabled`, the selected level, and custom image settings, but the live profile/Story upload branches only pushed the source image (and optionally Fix AI Slop).
 - The mobile cycle now prepares a temporary copy before ADB push: Fix AI Slop runs first when enabled, then the selected Small/Medium/High alteration and optional custom filter ranges run through the shared `alterJpegBuffer` engine. The source file is never modified.

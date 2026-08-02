@@ -9032,6 +9032,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let followedCount = 0;
     let reelsViewed = 0;
     let reelsLikes = 0;
+    let postsUploaded = 0;
     // Hoisted so the catch block can include partial stats in the COMPLETE log
     // even when the cycle is aborted or errors mid-run.
     let likes = 0, likeFailures = 0, sharesFeed = 0, sharesDm = 0, saves = 0, captionExpands = 0, strayNavRecoveries = 0, audioTaps = 0, hashtagTaps = 0, authorVisits = 0, suggestionBrowses = 0;
@@ -10027,8 +10028,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                       doFixAiSlop: makePostFixAiSlop,
                       onLog: (msg) => tLog(`  ${msg}`),
                     });
-                    if (result.posted) posted++;
-                    else break;
+                    if (result.posted) {
+                      posted++;
+                      postsUploaded++;
+                      tLog("  Make a Post: upload confirmed — dwelling 5 s before continuing…");
+                      await sleepOrAbort(serial, 5000);
+                    } else break;
                   } else if (postToProfile) {
                     tLog(`  Make a Post: destination → Profile (rolled ${profilePct}%)`);
                     const result = await runMakePostStep(serial, {
@@ -10046,8 +10051,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                       captionText: makePostCaptionText,
                       onLog: (msg) => tLog(`  ${msg}`),
                     });
-                    if (result.posted) posted++;
-                    else break;
+                    if (result.posted) {
+                      posted++;
+                      postsUploaded++;
+                      tLog("  Make a Post: upload confirmed — dwelling 5 s before continuing…");
+                      await sleepOrAbort(serial, 5000);
+                    } else break;
                   } else {
                     tLog(`  Make a Post: both story (${storyPct}%) and profile (${profilePct}%) rolls missed — skipping this post`);
                     break;
@@ -10283,6 +10292,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (sharesDm) parts.push(`${sharesDm} DMs`);
         if (sharesFeed) parts.push(`${sharesFeed} feed shares`);
         if (saves) parts.push(`${saves} saves`);
+        if (postsUploaded) parts.push(`${postsUploaded} POST${postsUploaded === 1 ? "" : "S"} UPLOADED`);
         if (feedScrolled) parts.push(`${feedScrolled} posts scrolled`);
         storage.createSessionAction({
           profileId: mobileProfileId ?? 0,
@@ -10296,7 +10306,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           timestamp: new Date().toISOString(),
         }).catch(() => {});
       }
-      res.json({ ok: true, count, likes, likeFailures, sharesFeed, sharesDm, storiesWatched, followedCount, strayNavRecoveries, steps });
+      res.json({ ok: true, count, likes, likeFailures, sharesFeed, sharesDm, storiesWatched, followedCount, postsUploaded, strayNavRecoveries, steps });
     } catch (e: any) {
       const aborted = (e?.message === "cycle-aborted");
       // Emit a log-stream message so the Action Log tab always gets an entry,
@@ -10328,6 +10338,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (sharesDm) parts.push(`${sharesDm} DMs`);
         if (sharesFeed) parts.push(`${sharesFeed} feed shares`);
         if (saves) parts.push(`${saves} saves`);
+        if (postsUploaded) parts.push(`${postsUploaded} POST${postsUploaded === 1 ? "" : "S"} UPLOADED`);
         if (feedScrolled) parts.push(`${feedScrolled} posts scrolled`);
         const statsSuffix = parts.length ? ` — ${parts.join(", ")}` : "";
         storage.createSessionAction({

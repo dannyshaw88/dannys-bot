@@ -3533,6 +3533,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             if (body.followedCount)  parts.push(`${body.followedCount} followed`);
             if (body.sharesDm)       parts.push(`${body.sharesDm} DM'd`);
             if (body.sharesFeed)     parts.push(`${body.sharesFeed} feed-shared`);
+            if (body.postsUploaded)  parts.push(`${body.postsUploaded} POST${body.postsUploaded === 1 ? "" : "S"} UPLOADED`);
             const reelsStep = (body.steps as string[] | undefined)?.find((s: string) => s.startsWith("reels("));
             const reelsViewed = reelsStep ? parseInt(reelsStep.match(/(\d+)\s+viewed/)?.[1] ?? "0", 10) : 0;
             if (reelsViewed)         parts.push(`${reelsViewed} reels`);
