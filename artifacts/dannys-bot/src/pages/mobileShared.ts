@@ -7,6 +7,69 @@
 
 import type { ImageFilterSettings } from "@/components/tools/ImageSettingsDialog";
 
+/**
+ * Read one local wallpaper through the native Electron picker when available,
+ * or the browser file picker in Replit preview. The result is normalized to a
+ * modest JPEG data URL before it is persisted in slot-customizations, keeping
+ * localStorage from filling up with full-resolution camera images.
+ */
+export async function pickLocalWallpaper(): Promise<string | null> {
+  let sourceDataUrl: string | null = null;
+  const electronApi = (window as any).electronAPI;
+
+  if (electronApi?.openWallpaperFileDialog) {
+    const result = await electronApi.openWallpaperFileDialog().catch(() => null);
+    if (!result || result.canceled || !result.dataUrl) return null;
+    sourceDataUrl = result.dataUrl;
+  } else {
+    sourceDataUrl = await new Promise<string | null>((resolve) => {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.oncancel = () => resolve(null);
+      input.onchange = () => {
+        const file = input.files?.[0];
+        if (!file) {
+          resolve(null);
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(file);
+      };
+      input.click();
+    });
+  }
+
+  if (!sourceDataUrl) return null;
+  return normalizeWallpaperDataUrl(sourceDataUrl);
+}
+
+async function normalizeWallpaperDataUrl(sourceDataUrl: string): Promise<string> {
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = reject;
+      element.src = sourceDataUrl;
+    });
+    const maxDimension = 1600;
+    const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext("2d");
+    if (!context) return sourceDataUrl;
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.82);
+  } catch {
+    // Keep unusual but valid browser-supported image formats usable even when
+    // the canvas decoder cannot process them.
+    return sourceDataUrl;
+  }
+}
+
 // ─── UsbPhone ─────────────────────────────────────────────────────────────────
 
 export interface UsbPhone {

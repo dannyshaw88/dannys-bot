@@ -70,3 +70,4 @@
 - [Mobile account posted-media history](mobile-posted-media-history.md) — keep confirmed profile posts per account/slot separate from the device-wide no-repeat cache
 - [Manual PC-to-phone media transfer](manual-pc-phone-media-transfer.md) — native PC picker, temporary DCIM copy, manual Instagram post, and explicit phone-side deletion
 - [Random settings single-action flow](random-settings-single-action.md) — tap one validated settings row, optionally scroll once, then Back once; never tap a subsetting
+- [Phone Farm local wallpapers](phone-farm-local-wallpapers.md) — native Electron/browser picker stores a resized image data URL in shared slot customizations

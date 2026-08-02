@@ -1248,6 +1248,35 @@ async function createWindow() {
     return { canceled: false, filePath, fileName: path.basename(filePath) };
   });
 
+  // Open a native OS image picker for the Phone Farm custom wallpaper control.
+  // Return the image bytes as a data URL because the renderer cannot safely
+  // read arbitrary local Windows paths.
+  ipcMain.handle("open-wallpaper-file-dialog", async () => {
+    const result = await dialog.showOpenDialog({
+      title: "Choose a Phone Farm wallpaper",
+      properties: ["openFile"],
+      filters: [
+        { name: "Images", extensions: ["jpg", "jpeg", "png", "webp", "gif", "heic", "heif", "avif", "bmp"] },
+      ],
+    });
+    if (result.canceled || !result.filePaths.length) return { canceled: true };
+    const filePath = result.filePaths[0];
+    const ext = path.extname(filePath).toLowerCase();
+    const mime = ({
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".png": "image/png",
+      ".webp": "image/webp",
+      ".gif": "image/gif",
+      ".heic": "image/heic",
+      ".heif": "image/heif",
+      ".avif": "image/avif",
+      ".bmp": "image/bmp",
+    } as Record<string, string>)[ext] ?? "application/octet-stream";
+    const dataUrl = `data:${mime};base64,${fs.readFileSync(filePath).toString("base64")}`;
+    return { canceled: false, dataUrl, fileName: path.basename(filePath) };
+  });
+
   // Count media files (images + videos) directly inside a folder (non-recursive).
   ipcMain.handle("count-folder-files", async (_e, folderPath: string) => {
     try {

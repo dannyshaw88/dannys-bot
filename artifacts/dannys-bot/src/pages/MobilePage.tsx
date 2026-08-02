@@ -43,6 +43,7 @@ import {
   CopySection,
   COPY_SECTIONS,
   ALL_SUB_KEYS,
+  pickLocalWallpaper,
 } from "@/pages/mobileShared";
 
 declare const __API_PORT__: string;
@@ -1392,6 +1393,7 @@ function CustomizePanel({
 }) {
   const [tab, setTab] = useState<'wallpaper' | 'text'>('wallpaper');
   const [editId, setEditId] = useState<string | null>(null);
+  const [pickingWallpaper, setPickingWallpaper] = useState(false);
 
   const updateLayer = (id: string, patch: Partial<TextLayer>) =>
     onChange({ ...custom, texts: custom.texts.map(t => t.id === id ? { ...t, ...patch } : t) });
@@ -1406,6 +1408,16 @@ function CustomizePanel({
   const removeLayer = (id: string) => {
     onChange({ ...custom, texts: custom.texts.filter(t => t.id !== id) });
     if (editId === id) setEditId(null);
+  };
+
+  const browseWallpaper = async () => {
+    setPickingWallpaper(true);
+    try {
+      const wallpaper = await pickLocalWallpaper();
+      if (wallpaper) onChange({ ...custom, wallpaper });
+    } finally {
+      setPickingWallpaper(false);
+    }
   };
 
   return (
@@ -1431,8 +1443,32 @@ function CustomizePanel({
         {/* ── Wallpaper tab ── */}
         {tab === 'wallpaper' && (
           <div className="grid grid-cols-4 gap-2">
+            <button
+              type="button"
+              onClick={browseWallpaper}
+              disabled={pickingWallpaper}
+              className={`relative aspect-[9/16] rounded-lg border-2 overflow-hidden transition-all ${
+                custom.wallpaper?.startsWith('data:image/') ? 'border-primary ring-1 ring-primary/40' : 'border-border hover:border-muted-foreground'
+              }`}
+            >
+              {custom.wallpaper?.startsWith('data:image/') ? (
+                <img src={custom.wallpaper} className="w-full h-full object-cover" draggable={false} />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 bg-muted/30">
+                  {pickingWallpaper ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : <ImagePlus className="w-4 h-4 text-primary" />}
+                  <span className="text-[9px] text-muted-foreground font-medium px-1">Browse from PC</span>
+                </div>
+              )}
+              <div className="absolute bottom-0 inset-x-0 bg-black/60 py-0.5 px-1 text-left">
+                <span className="text-[8px] text-white/80 leading-none">From PC</span>
+              </div>
+              {custom.wallpaper?.startsWith('data:image/') && (
+                <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-primary" />
+              )}
+            </button>
             {/* None option */}
             <button
+              type="button"
               onClick={() => onChange({ ...custom, wallpaper: null })}
               className={`relative aspect-[9/16] rounded-lg border-2 flex items-center justify-center bg-zinc-900 transition-all ${
                 !custom.wallpaper ? 'border-primary ring-1 ring-primary/40' : 'border-border hover:border-muted-foreground'
@@ -1444,6 +1480,7 @@ function CustomizePanel({
             {SLOT_WALLPAPERS.map(wp => (
               <button
                 key={wp.id}
+                type="button"
                 onClick={() => onChange({ ...custom, wallpaper: wp.id })}
                 className={`relative aspect-[9/16] rounded-lg border-2 overflow-hidden transition-all ${
                   custom.wallpaper === wp.id ? 'border-primary ring-1 ring-primary/40' : 'border-border hover:border-muted-foreground'
@@ -2542,7 +2579,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
           <div className="absolute inset-0 pointer-events-none overflow-hidden">
             {custom.wallpaper && (
               <img
-                src={`/wallpapers/${custom.wallpaper}`}
+                src={custom.wallpaper.startsWith('data:image/') ? custom.wallpaper : `/wallpapers/${custom.wallpaper}`}
                 className="absolute inset-0 w-full h-full object-cover"
                 draggable={false}
               />
