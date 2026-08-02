@@ -7,4 +7,4 @@ When a repository remote has an unrelated or divergent history, preserve the rem
 
 **Why:** Existing remote branches may contain valuable source history but also accidental private machine state. A force-push can erase collaborators' history, while a blind merge can publish credentials or runtime artifacts.
 
-**How to apply:** Create a local recovery branch, fetch the remote, merge with explicit intent, audit the resulting tracked tree, commit cleanup separately, and push only after verifying the remote tip matches the local commit.
+**How to apply:** Create a local recovery branch, fetch the remote, merge with explicit intent, audit the resulting tracked tree—including newly uploaded files under `attached_assets/`—commit cleanup separately, and push only after verifying the remote tip matches the local commit.
