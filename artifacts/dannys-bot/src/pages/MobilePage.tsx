@@ -5343,29 +5343,31 @@ export function AutomationSettingsPanel({
             </div>
           </div>
 
-          <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground block text-center">Users to follow per operation</Label>
-            <div className="flex items-center gap-3 flex-wrap">
-              <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
-                value={settings.followUsersMin}
-                onChange={e => setSettings(s => ({ ...s, followUsersMin: clamp4(Number(e.target.value)) }))}
-                disabled={loading} />
-              <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
-                value={settings.followUsersMax}
-                onChange={e => setSettings(s => ({ ...s, followUsersMax: clamp4(Number(e.target.value)) }))}
-                disabled={loading} />
-              <label className="flex items-center gap-2 text-sm cursor-pointer select-none ml-1">
-                <input
-                  type="checkbox"
-                  checked={settings.followSpreadFollows}
-                  onChange={e => setSettings(s => ({ ...s, followSpreadFollows: e.target.checked }))}
-                  disabled={loading}
-                  className="w-4 h-4 accent-primary rounded"
-                />
-                <span className="text-foreground font-medium">Spread Follows</span>
-              </label>
+          <div className="flex items-end gap-3 flex-wrap">
+            <div className="space-y-3">
+              <Label className="text-sm text-muted-foreground block text-center">Users to follow per operation</Label>
+              <div className="flex items-center gap-3">
+                <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
+                  value={settings.followUsersMin}
+                  onChange={e => setSettings(s => ({ ...s, followUsersMin: clamp4(Number(e.target.value)) }))}
+                  disabled={loading} />
+                <span className="text-muted-foreground text-sm">to</span>
+                <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
+                  value={settings.followUsersMax}
+                  onChange={e => setSettings(s => ({ ...s, followUsersMax: clamp4(Number(e.target.value)) }))}
+                  disabled={loading} />
+              </div>
             </div>
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none pb-1">
+              <input
+                type="checkbox"
+                checked={settings.followSpreadFollows}
+                onChange={e => setSettings(s => ({ ...s, followSpreadFollows: e.target.checked }))}
+                disabled={loading}
+                className="w-4 h-4 accent-primary rounded"
+              />
+              <span className="text-foreground font-medium">Spread Follows</span>
+            </label>
           </div>
 
         </div>}
