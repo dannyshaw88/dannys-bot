@@ -7039,6 +7039,42 @@ async function getActiveInputMethodPackage(serial: string): Promise<string> {
 }
 
 /**
+ * Gboard's Emoji picker is often exposed as a different lower-window tree
+ * than the normal keyboard. Use its own labels/resource ids as a lightweight
+ * post-tap signal; this is only verification, never a tap target.
+ */
+async function isKeyboardEmojiPickerOpen(serial: string): Promise<boolean> {
+  const { xml } = await dumpUiWithIme(serial);
+  if (!xml) return false;
+  const { h: screenH } = getScreenSize(serial);
+  let emojiCells = 0;
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = nodeRe.exec(xml)) !== null) {
+    const attrs = match[1];
+    const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+    if (!bounds) continue;
+    const y1 = Number(bounds[2]);
+    const y2 = Number(bounds[4]);
+    if ((y1 + y2) / 2 < Math.round(screenH * 0.42)) continue;
+    const label = [
+      attrs.match(/\btext="([^"]*)"/i)?.[1] ?? "",
+      attrs.match(/\bcontent-desc="([^"]*)"/i)?.[1] ?? "",
+      attrs.match(/\bhint="([^"]*)"/i)?.[1] ?? "",
+      attrs.match(/\bresource-id="([^"]*)"/i)?.[1] ?? "",
+    ].join(" ");
+    if (
+      /\p{Extended_Pictographic}/u.test(label) ||
+      /(?:grinning|smiling|smile|laugh|joy|heart|face|thumb|hand|fire|sparkles|kiss|wink|angry|sad|emoji)/i.test(label)
+    ) {
+      emojiCells++;
+      if (emojiCells >= 2) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Switches the active Instagram account to the one matching `username` by
  * triggering Instagram's built-in account switcher:
  *   1. Long-press the profile tab (bottom-right nav) for 2 s → switcher opens
@@ -8804,12 +8840,13 @@ export function loadKeyCalibrationMap(serial: string): KeyCalibrationMap | null 
 }
 
 /**
- * Resolve a named keyboard control from the per-device calibration map and the
- * live IME accessibility tree.
+ * Resolve and tap a named keyboard control.
  *
- * The calibration entry enables the named action, but its saved coordinates
- * are intentionally never used here. Keyboard layouts differ between devices,
- * so the current IME node bounds are the only execution target.
+ * Gboard is inconsistent about exposing its controls through UIAutomator. Use
+ * the live IME node when available, then fall back to the same-device physical
+ * calibration point, and finally to the visual Emoji detector for Emoji. The
+ * calibration point is deliberately bounded to the current screen and lower
+ * keyboard region so a stale/corrupt map cannot turn into a random app tap.
  */
 export async function tapCalibratedKeyboardKey(
   serial: string,
@@ -8832,11 +8869,11 @@ export async function tapCalibratedKeyboardKey(
     return false;
   }
 
-  // The calibration entry is deliberately used only as an enablement/bind
-  // check. Its saved coordinates are device-specific and MUST NOT be used to
-  // execute this named action. Resolve the current IME node on every run.
+  // Prefer the live IME hierarchy whenever Gboard exposes it. Some builds
+  // render the key but omit the node entirely, which is why the calibrated
+  // physical-tap fallback below is necessary.
   const { xml, imeIncluded } = await dumpUiWithIme(serial);
-  const { h: screenH } = getScreenSize(serial);
+  const { w: screenW, h: screenH } = getScreenSize(serial);
   const activeImePackage = await getActiveInputMethodPackage(serial).catch(() => "");
   type KeyboardNode = {
     x1: number;
@@ -8993,30 +9030,92 @@ export async function tapCalibratedKeyboardKey(
 
   candidates.sort((a, b) => b.score - a.score || a.y - b.y);
   const node = candidates[0];
-  if (!node) {
-    onLog?.(
-      `[cal-keyboard] bind '${mapKey}' is present, but live IME node '${keyName}' was not found ` +
-      `(ime=${imeIncluded ? "yes" : "no"}, active-ime=${activeImePackage || "unknown"}, ` +
-      `imeNodes=${allImeNodes.length}, ` +
-      `spaceNodes=${allImeNodes.filter(n => /\bspace(?:bar)?\b/i.test(`${n.label} ${n.resourceId}`)).length}, ` +
-      `bottomNodes=${allImeNodes
-        .filter(n => n.cy >= Math.round(screenH * 0.78))
-        .sort((a, b) => a.x - b.x)
-        .slice(-16)
-        .map(n => `${n.label || "∅"}@${n.x},${n.y}${n.clickable ? ":C" : ""}`)
-        .join("|") || "none"})`,
-    );
+  const isEmojiAction = normalized === "emoji" || normalized === "emoticon" || normalized === "smiley";
+  const tapAndVerify = async (x: number, y: number, source: string): Promise<boolean> => {
+    await tap(serial, x, y);
+    await _sleep(220 + Math.round(Math.random() * 120));
+    if (isEmojiAction) {
+      const pickerOpen = await isKeyboardEmojiPickerOpen(serial);
+      if (!pickerOpen) {
+        onLog?.(`[cal-keyboard] ${source} did not open a detectable Emoji picker`);
+        return false;
+      }
+    }
+    onLog?.(`[cal-keyboard] ${source} succeeded at (${Math.round(x)},${Math.round(y)})`);
+    return true;
+  };
+
+  if (node) {
+    if (await tapAndVerify(
+      node.x,
+      node.y,
+      `tapped live IME node '${keyName}' via bind '${mapKey}'`,
+    )) return true;
+    // Do not fire a second control tap after an attempted live-node tap. If
+    // the picker opened but its nodes are not exposed, the next coordinate
+    // would land on a picker cell rather than on the keyboard.
+    onLog?.(`[cal-keyboard] live-node attempt was not verified; refusing a second control tap`);
     return false;
   }
 
-  await tap(serial, node.x, node.y);
+  const savedPoint = map[mapKey];
+  const savedPointIsSafe = !!savedPoint &&
+    Number.isFinite(savedPoint.x) &&
+    Number.isFinite(savedPoint.y) &&
+    savedPoint.x >= 0 &&
+    savedPoint.x < screenW &&
+    savedPoint.y >= Math.round(screenH * 0.45) &&
+    savedPoint.y < screenH;
+
   onLog?.(
-    `[cal-keyboard] tapped live IME node '${keyName}' via bind '${mapKey}' ` +
-    `(label="${node.label || node.resourceId || "structural-key"}", ` +
-    `ime=${imeIncluded ? "yes" : "no"})`,
+    `[cal-keyboard] live IME node '${keyName}' not found — ` +
+    `trying calibrated physical tap (${savedPointIsSafe ? "available" : "invalid"}) ` +
+    `(ime=${imeIncluded ? "yes" : "no"}, active-ime=${activeImePackage || "unknown"}, ` +
+    `imeNodes=${allImeNodes.length}, ` +
+    `spaceNodes=${allImeNodes.filter(n => /\bspace(?:bar)?\b/i.test(`${n.label} ${n.resourceId}`)).length}, ` +
+    `bottomNodes=${allImeNodes
+      .filter(n => n.cy >= Math.round(screenH * 0.78))
+      .sort((a, b) => a.x - b.x)
+      .slice(-16)
+      .map(n => `${n.label || "∅"}@${n.x},${n.y}${n.clickable ? ":C" : ""}`)
+      .join("|") || "none"})`,
   );
-  await _sleep(180 + Math.round(Math.random() * 100));
-  return true;
+
+  if (savedPointIsSafe) {
+    onLog?.(
+      `[cal-keyboard] trying saved physical bind '${mapKey}' at ` +
+      `(${Math.round(savedPoint.x)},${Math.round(savedPoint.y)})`,
+    );
+    if (await tapAndVerify(
+      savedPoint.x,
+      savedPoint.y,
+      `saved physical bind '${mapKey}'`,
+    )) return true;
+    // Same safety rule as above: once a physical control tap has been sent,
+    // do not guess again while the picker state may be visually open.
+    onLog?.(`[cal-keyboard] calibrated attempt was not verified; refusing a second control tap`);
+    return false;
+  }
+
+  // The pixel detector is intentionally the final fallback and is restricted
+  // to Emoji. It identifies the actual bottom-row key geometry rather than
+  // using a screen-percentage guess.
+  if (normalized === "emoji" || normalized === "emoticon" || normalized === "smiley") {
+    const visualPoint = await findKeyboardEmojiButton(serial);
+    if (visualPoint &&
+        visualPoint.x >= 0 && visualPoint.x < screenW &&
+        visualPoint.y >= Math.round(screenH * 0.45) && visualPoint.y < screenH) {
+      if (await tapAndVerify(
+        visualPoint.x,
+        visualPoint.y,
+        "visually detected Emoji key",
+      )) return true;
+    }
+    onLog?.("[cal-keyboard] calibrated and visual Emoji fallbacks both unavailable");
+  }
+
+  onLog?.(`[cal-keyboard] bind '${mapKey}' could not produce a safe tap`);
+  return false;
 }
 
 /**

@@ -4291,11 +4291,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             await android.tap(serial, _composerX, _composerY);
             await sleepOrAbort(serial, 800); // keyboard animates up
 
-            // ── Open the Emoji picker through live IME accessibility nodes ──
+            // ── Open the Emoji picker through a verified layered tap ──
             //
-            // The calibration entry confirms that this named action is enabled
-            // for the device, but its saved coordinates are never used. The
-            // current keyboard layout is resolved from the live IME dump.
+            // Gboard may render its controls without exposing usable
+            // accessibility nodes. The shared helper tries the live IME node,
+            // then the same-device calibrated physical tap, then visual
+            // keyboard geometry, verifying the Emoji picker after each tap.
             let _emojiKeyPressed = false;
             try {
               _emojiKeyPressed = await android.tapCalibratedKeyboardKey(
@@ -4312,8 +4313,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             }
             if (!_emojiKeyPressed) {
               onLog?.(
-                `View Stories ${s + 1}: Emoji bind exists but live keyboard node was not found — ` +
-                `skipping without coordinate/pixel fallback`,
+                `View Stories ${s + 1}: Emoji picker could not be opened by ` +
+                `live-node, calibrated-tap, or visual fallback`,
               );
               await android.pressBack(serial).catch(() => {});
               continue;

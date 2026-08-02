@@ -4,6 +4,20 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.342] — 2026-08-02
+
+### Fixed — Use verified physical fallbacks for Xiaomi/Gboard Emoji controls
+
+- Investigated the uploaded Xiaomi screenshot and debugging log showing that Gboard was visibly open while the Story Emoji key was missing from the usable accessibility tree.
+- Reworked named Emoji-key execution so it first tries the live IME node, then the same-device calibrated physical tap, and finally the existing screenshot-based keyboard geometry detector when no calibrated point is available.
+- Added screen-boundary and lower-keyboard-region validation before any calibrated fallback tap so an invalid or stale map cannot become an arbitrary app tap.
+- Added post-tap Emoji-picker verification and explicit method-level diagnostics, so a tap is only treated as successful when the picker is detected.
+- Prevented unsafe second control taps after an unverified attempt, avoiding accidental selection of an Emoji cell if the picker opened but its accessibility nodes were incomplete.
+- Updated the Story Emoji route and keyboard-bind documentation to describe the verified layered strategy.
+- Updated the canonical Windows installer workflow checks so CI validates the new fallback and rejects the obsolete “no coordinate/pixel fallback” assumptions.
+- Included the uploaded Xiaomi keyboard evidence image in the repository for release traceability.
+- Bumped the root application and Electron package versions to `1.2.342`.
+
 ## [1.2.341] — 2026-08-02
 
 ### Changed — Simplify the selected Phone Farm device view

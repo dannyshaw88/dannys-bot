@@ -224,15 +224,18 @@ jobs:
           grep -F "row tap" artifacts/api-server/src/mobile/androidManager.ts
           grep -F "await runTrendingGoogleStories();" artifacts/api-server/src/mobile/androidManager.ts
           echo "Chrome search input and Trending WebView safeguards verified"
-      - name: Verify story Emoji uses live accessibility nodes
+      - name: Verify story Emoji uses verified keyboard fallbacks
         shell: bash
         run: |
           grep -F "tapKeyboardEmojiNode" artifacts/api-server/src/mobile/androidManager.ts
           grep -F "dumpUiWithIme(serial)" artifacts/api-server/src/mobile/androidManager.ts
-          grep -F "without coordinate/pixel fallback" artifacts/api-server/src/routes/mobile.ts
+          grep -F "live-node, calibrated-tap, or visual fallback" artifacts/api-server/src/routes/mobile.ts
+          grep -F "calibrated physical tap" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "findKeyboardEmojiButton(serial)" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "isKeyboardEmojiPickerOpen" artifacts/api-server/src/mobile/androidManager.ts
           grep -F "live Emoji picker node not found" artifacts/api-server/src/mobile/androidManager.ts
-          if grep -F "findKeyboardEmojiButton(serial)" artifacts/api-server/src/routes/mobile.ts; then
-            echo "Story Emoji flow must not use pixel detection"
+          if grep -F "without coordinate/pixel fallback" artifacts/api-server/src/routes/mobile.ts; then
+            echo "Obsolete Story Emoji no-fallback diagnostic is still present"
             exit 1
           fi
           if grep -F 'inputText(serial, _chosenEmoji)' artifacts/api-server/src/routes/mobile.ts; then
