@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useProfiles } from "@/hooks/use-profiles";
 import { Activity } from "lucide-react";
+import { normalizeActivityDetail } from "./activityDetailUtils";
 
 interface RecentActivity {
   id: number;
@@ -13,12 +14,6 @@ interface RecentActivity {
   result: string;
   detail: string;
   timestamp: string;
-}
-
-function normalizeActivityDetail(detail: string): string {
-  return detail.replace(/\b(\d+)\s+POSTS?\s+UPLOADED\b/gi, (_match, count: string) =>
-    `${count} post${count === "1" ? "" : "s"} uploaded`,
-  );
 }
 
 function getToolLabel(action: string, detail: string): string {

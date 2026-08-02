@@ -12,6 +12,8 @@ import {
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { TrustScoreBadge, getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
 import { DashboardSlotTrustScoreBadge } from "@/components/DashboardTrustScoreBadge";
+import { ActivityDetailOverview } from "@/components/layout/ActivityDetailOverview";
+import { normalizeActivityDetail } from "@/components/layout/activityDetailUtils";
 import { format } from "date-fns";
 import { type Profile } from "@shared/schema";
 
@@ -11343,12 +11345,6 @@ type FeedItem = {
 
 type LastImport = { ts: number; fileName: string; created: number; updated: number; failed: number; total: number };
 
-function normalizeActivityDetail(detail?: string): string | undefined {
-  return detail?.replace(/\b(\d+)\s+POSTS?\s+UPLOADED\b/gi, (_match, count: string) =>
-    `${count} post${count === "1" ? "" : "s"} uploaded`,
-  );
-}
-
 export function Dashboard() {
   useScrollRestore("dashboard");
   const [lastImport, setLastImport] = useState<LastImport | null>(() => {
@@ -11982,7 +11978,7 @@ export function Dashboard() {
                         const style = ACTION_STYLES[item.action ?? ""] ?? { label: (item.action ?? "event").replace(/_/g, " "), cls: "text-muted-foreground", icon: "·" };
                         if (col === "account") { const acctDisplay = item.sourceType === "phone" && item.targetUsername ? item.targetUsername : label; const acctHref = item.sourceType === "phone" && item.sourceValue?.includes(":") ? `/mobile/farm/${encodeURIComponent(item.sourceValue.split(":")[0])}?slot=${item.sourceValue.split(":")[1]}` : `/profiles/${item.profileId}?tab=human-session`; return <td key={col} className="px-3 py-3 font-medium truncate"><Link href={acctHref} className="flex items-center gap-1.5 text-foreground hover:text-primary transition-colors group min-w-0"><User className="w-3.5 h-3.5 text-primary shrink-0" /><span className="group-hover:underline underline-offset-2 truncate">{acctDisplay}</span></Link></td>; }
                         if (col === "event") return <td key={col} className="px-3 py-3 truncate text-center"><span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider truncate inline-flex items-center gap-1 max-w-full ${style.cls}`}><span>{style.label}</span><span className="shrink-0 leading-none">{style.icon}</span></span></td>;
-                        if (col === "detail") return <td key={col} className="px-3 py-3 text-foreground truncate text-xs" title={item.detail || undefined}>{item.detail || " "}</td>;
+                         if (col === "detail") return <td key={col} className="px-3 py-3 text-foreground truncate text-xs" title={item.detail || undefined}><ActivityDetailOverview detail={item.detail} /></td>;
                         return <td key={col} className="px-3 py-3 text-foreground text-xs font-mono truncate"><span className="flex items-center gap-1 min-w-0"><Clock className="w-3 h-3 shrink-0" /><span className="truncate">{fmtTs(item.ts)}</span></span></td>;
                       };
 
