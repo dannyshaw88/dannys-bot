@@ -367,7 +367,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                 <Button 
                   variant="default" 
                   size="sm" 
-                  className="bg-cyan-600 hover:bg-cyan-700 text-white shadow-sm border-0" 
+                  className="bg-[#1AD2F2] hover:bg-[#14bddb] text-slate-950 shadow-sm border-0"
                    onClick={browseForFiles}
                   disabled={isProcessing}
                 >
