@@ -311,7 +311,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                       <div className="pt-1 text-left animate-in fade-in slide-in-from-top-1 duration-200">
                         <Label className="text-[11px] text-muted-foreground mb-1.5 block text-left">Alteration Level</Label>
                         <Select value={alterationLevel} onValueChange={(val) => setAlterationLevel(val as "small" | "medium" | "high")}>
-                          <SelectTrigger className="h-8 text-xs bg-background shadow-xs">
+                          <SelectTrigger className="relative h-8 text-xs bg-background shadow-xs [&>span]:absolute [&>span]:inset-x-0 [&>span]:text-center [&>span]:pointer-events-none [&>svg]:relative [&>svg]:z-10 [&>svg]:ml-auto">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
