@@ -6706,7 +6706,7 @@ function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 142, hideIco
             {!hideIcon && <current.icon size={10} color={current.text} fill={current.text} strokeWidth={2} style={{ flexShrink: 0 }} />}
           </>
         ) : (
-          <span>Score</span>
+          <span>TrustScore</span>
         )}
       </button>
 

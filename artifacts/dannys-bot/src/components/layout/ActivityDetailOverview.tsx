@@ -36,9 +36,9 @@ function renderMetricPart(part: string, index: number): ReactNode {
 
   const Icon = metric.icon;
   return (
-    <span key={`detail-${index}`} className="inline-flex items-center gap-1 whitespace-nowrap">
+    <span key={`detail-${index}`} className="inline-flex items-center whitespace-nowrap">
       <Icon className={`w-3.5 h-3.5 shrink-0 ${metric.color} ${metric.filled ? "fill-current" : ""}`} aria-hidden />
-      <span>{part}</span>
+      <span className="ml-1">{part}</span>
     </span>
   );
 }
