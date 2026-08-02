@@ -1236,16 +1236,59 @@ async function createWindow() {
   // temporary copy to the connected Android device when the user presses Load.
   ipcMain.handle("open-media-file-dialog", async () => {
     const result = await dialog.showOpenDialog({
-      title: "Choose an image to load onto the phone",
-      properties: ["openFile"],
+      title: "Choose images",
+      properties: ["openFile", "multiSelections"],
       filters: [
         { name: "Images", extensions: ["jpg", "jpeg", "png", "webp", "gif", "heic", "heif", "avif", "bmp"] },
         { name: "All Files", extensions: ["*"] },
       ],
     });
     if (result.canceled || !result.filePaths.length) return { canceled: true };
-    const filePath = result.filePaths[0];
-    return { canceled: false, filePath, fileName: path.basename(filePath) };
+    const files = result.filePaths.map(filePath => {
+      const ext = path.extname(filePath).toLowerCase();
+      const mime = ({
+        ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+        ".webp": "image/webp", ".gif": "image/gif", ".bmp": "image/bmp",
+        ".avif": "image/avif", ".heic": "image/heic", ".heif": "image/heif",
+      } as Record<string, string>)[ext] ?? "application/octet-stream";
+      const data = fs.readFileSync(filePath);
+      return {
+        filePath,
+        fileName: path.basename(filePath),
+        dataUrl: `data:${mime};base64,${data.toString("base64")}`,
+      };
+    });
+    return {
+      canceled: false,
+      files,
+      filePath: files[0].filePath,
+      fileName: files[0].fileName,
+    };
+  });
+
+  ipcMain.handle("save-processed-images", async (_e, files: Array<{ filename: string; dataUrl: string }>) => {
+    const result = await dialog.showOpenDialog(win!, {
+      title: "Choose a folder for processed images",
+      properties: ["openDirectory", "createDirectory"],
+    });
+    if (result.canceled || !result.filePaths.length) return { canceled: true };
+    const folder = result.filePaths[0];
+    const used = new Set<string>();
+    for (const file of files ?? []) {
+      const base = path.basename(file.filename).replace(/[<>:"/\\|?*]/g, "_") || "processed-image.jpg";
+      const ext = path.extname(base);
+      const stem = ext ? base.slice(0, -ext.length) : base;
+      let filename = base;
+      let suffix = 2;
+      while (used.has(filename) || fs.existsSync(path.join(folder, filename))) {
+        filename = `${stem}-${suffix++}${ext}`;
+      }
+      used.add(filename);
+      const match = file.dataUrl.match(/^data:[^;]+;base64,(.*)$/);
+      const data = match ? match[1] : file.dataUrl;
+      fs.writeFileSync(path.join(folder, filename), Buffer.from(data, "base64"));
+    }
+    return { canceled: false, folder, count: files?.length ?? 0 };
   });
 
   // Open a native OS image picker for the Phone Farm custom wallpaper control.

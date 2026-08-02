@@ -123,7 +123,9 @@ export function Sidebar() {
   const navItems = [
     { name: "Dashboard",       shortLabel: "DASHBOARD",      path: "/dashboard",    icon: FilledDashboardIcon   },
     { name: "Phone Farm",      shortLabel: "PHONE FARM",     path: "/mobile",       icon: FilledFarmIcon        },
-    { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon    },
+    { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon, children: [
+      { name: "Images", shortLabel: "IMAGES", path: "/stats/images" },
+    ] },
   ];
   const settingsItem = {
     name: "Settings",
@@ -181,7 +183,24 @@ export function Sidebar() {
                 <span className="text-[9px] font-bold tracking-wide leading-tight text-center text-foreground [hyphens:none]">
                   {item.shortLabel}
                 </span>
-              </button>
+               </button>
+               {"children" in item && item.children?.map(child => {
+                 const childActive = location.startsWith(child.path);
+                 return (
+                   <button
+                     key={child.path}
+                     onClick={() => setLocation(child.path)}
+                     className={cn(
+                       "flex items-center justify-center w-full py-2 text-[8px] font-bold tracking-[0.12em] transition-colors",
+                       childActive
+                         ? "bg-primary/10 text-primary"
+                         : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                     )}
+                   >
+                     {child.shortLabel}
+                   </button>
+                 );
+               })}
             </div>
           );
           })}

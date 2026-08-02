@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import { crc32 as zlibCrc32 } from "node:zlib";
 import fs from "fs";
 import path from "path";
+import os from "os";
 import {
   listAdapters,
   getAdapterIp,
@@ -28,6 +29,12 @@ import { z } from "zod/v4";
 import { verifyInstagramCredentials } from "../instagram/instagramLogin";
 import { triggerBanPipeline } from "../instagram/banPipeline";
 import { computeAnalyticsContext } from "../instagram/analyticsContext";
+import { cleanupAiSlopTemp, fixAiSlop } from "../instagram/fixAiSlop";
+import {
+  alterJpegBuffer,
+  type AlterationLevel,
+  type ImageFilterSettings,
+} from "../instagram/imageAlteration";
 import { createInstagramAccountViaApi, submitSignupCode } from "../instagram/instagramWebClient";
 import { fetchInstagramCodeFromImap } from "../instagram/imapHelper";
 import { IgApiClient } from "instagram-private-api";
@@ -5982,6 +5989,96 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       return res.json({ previewBase64: `data:image/jpeg;base64,${result.toString("base64")}` });
     } catch (e: any) {
       return res.status(500).json({ error: e?.message });
+    }
+  });
+
+  // Local Images workspace processing. The original file never leaves the
+  // renderer's request body and is never written back over by this endpoint.
+  // Each image is processed independently so the UI can report a real result
+  // for every imported item and continue when one file fails.
+  app.post("/api/images/process", async (req, res) => {
+    const {
+      imageBase64,
+      localPath,
+      filename,
+      fixAiSlop: shouldFixAiSlop,
+      alterationEnabled,
+      alterationLevel,
+      imageSettingsEnabled,
+      imageSettings,
+    } = req.body as {
+      imageBase64?: string;
+      localPath?: string;
+      filename?: string;
+      fixAiSlop?: boolean;
+      alterationEnabled?: boolean;
+      alterationLevel?: AlterationLevel;
+      imageSettingsEnabled?: boolean;
+      imageSettings?: ImageFilterSettings;
+    };
+
+    if (!imageBase64 && !localPath) return res.status(400).json({ error: "No image provided" });
+    if (!filename?.trim()) return res.status(400).json({ error: "No filename provided" });
+
+    const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "equinox-images-"));
+    const safeName = path.basename(filename).replace(/[^\w.\- ()[\]]/g, "_") || "image";
+    const sourcePath = path.join(tempDir, safeName);
+    let workingPath = sourcePath;
+
+    try {
+      if (localPath) {
+        await fs.promises.copyFile(localPath, sourcePath);
+      } else {
+        const match = imageBase64!.match(/^data:image\/[^;]+;base64,(.*)$/);
+        const raw = match ? match[1] : imageBase64!;
+        await fs.promises.writeFile(sourcePath, Buffer.from(raw, "base64"));
+      }
+
+      if (shouldFixAiSlop) {
+        workingPath = await fixAiSlop(workingPath);
+      }
+
+      let output = await fs.promises.readFile(workingPath);
+      let outputFilename = safeName;
+
+      if (alterationEnabled) {
+        output = await alterJpegBuffer(
+          output,
+          alterationLevel ?? "small",
+          imageSettingsEnabled ? imageSettings : undefined,
+        );
+      }
+
+      const isJpeg = output.length >= 2 && output[0] === 0xff && output[1] === 0xd8;
+      const isPng = output.length >= 8 &&
+        output[0] === 0x89 && output[1] === 0x50 && output[2] === 0x4e && output[3] === 0x47;
+      const isWebp = output.length >= 12 &&
+        output.toString("ascii", 0, 4) === "RIFF" &&
+        output.toString("ascii", 8, 12) === "WEBP";
+      const isGif = output.toString("ascii", 0, 6) === "GIF87a" ||
+        output.toString("ascii", 0, 6) === "GIF89a";
+      if (isJpeg && !/\.(jpe?g)$/i.test(outputFilename)) {
+        outputFilename = `${outputFilename.replace(/\.[^.]+$/, "")}.jpg`;
+      }
+      const mime = isJpeg ? "image/jpeg"
+        : isPng ? "image/png"
+        : isWebp ? "image/webp"
+        : isGif ? "image/gif"
+        : "application/octet-stream";
+
+      return res.json({
+        ok: true,
+        filename: outputFilename,
+        dataUrl: `data:${mime};base64,${output.toString("base64")}`,
+        size: output.length,
+      });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message ?? "Image processing failed" });
+    } finally {
+      await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+      if (workingPath !== sourcePath) {
+        await cleanupAiSlopTemp(workingPath, sourcePath);
+      }
     }
   });
 
