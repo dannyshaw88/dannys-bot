@@ -1497,6 +1497,9 @@ export function ProfilesPage() {
                     // Let the Checkbox and Switch handle their own clicks — don't double-toggle
                     if ((e.target as HTMLElement).closest('[role="checkbox"]')) return;
                     if ((e.target as HTMLElement).closest('[role="switch"]')) return;
+                    // Trust Score has its own dropdown interaction. Never let
+                    // clicking it start the row's drag-to-select behavior.
+                    if ((e.target as HTMLElement).closest("[data-trust-score-badge]")) return;
                     e.preventDefault();
                     const isSelected = selectedProfileIds.includes(profile.id);
                     dragAddMode.current = !isSelected;
@@ -1547,7 +1550,7 @@ export function ProfilesPage() {
                       </div>
                     );
                     if (key === "trustscore") return (
-                      <div key={key} style={{ width: profColWidths.trustscore }} className="flex items-center justify-center shrink-0" onMouseDown={e => e.stopPropagation()}>
+                      <div key={key} style={{ width: profColWidths.trustscore }} className="flex items-center justify-center shrink-0" onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}>
                         <TrustScoreBadge key={`ts-${profile.id}-${tsVersion}`} profileId={profile.id} />
                       </div>
                     );

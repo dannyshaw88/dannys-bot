@@ -279,11 +279,18 @@ export function TrustScoreBadge({ profileId, width = 120, height = 25 }: TrustSc
   };
 
   return (
-    <div ref={ref} className="relative inline-block shrink-0" onMouseDown={e => e.stopPropagation()}>
+    <div
+      ref={ref}
+      data-trust-score-badge
+      className="relative inline-block shrink-0"
+      onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
+      onClick={e => e.stopPropagation()}
+    >
       <button
+        type="button"
         onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
         onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
-        className="flex items-center justify-center gap-1 rounded-md px-2 transition-all hover:brightness-95"
+        className="flex items-center justify-center gap-1 rounded-md px-2 hover:brightness-95"
         style={{
           background: current ? current.bg : "transparent",
           border: current ? `1px solid ${current.border}` : "1px dashed #94a3b8",
@@ -348,7 +355,9 @@ export function TrustScoreBadge({ profileId, width = 120, height = 25 }: TrustSc
             return (
               <button
                 key={lvl.id}
-                onClick={e => { e.stopPropagation(); handleSelect(lvl.id); }}
+                type="button"
+                onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
+                onClick={e => { e.preventDefault(); e.stopPropagation(); handleSelect(lvl.id); }}
                 style={{
                   width: "100%",
                   display: "flex",
@@ -370,6 +379,8 @@ export function TrustScoreBadge({ profileId, width = 120, height = 25 }: TrustSc
           })}
           {score && (
             <button
+              type="button"
+              onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
               onClick={handleClear}
               style={{
                 width: "100%",
