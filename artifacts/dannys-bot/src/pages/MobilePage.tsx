@@ -8318,6 +8318,18 @@ export function MobilePage() {
   }, [paneEl]);
   const [activeTab, setActiveTab] = useState<MobileTab>("account");
 
+  // Metrics and Action Log are overview-level tabs. Once the user opens a
+  // specific device from the Phone Farm grid, the screen is dedicated to that
+  // device and those two tabs are not useful visually. Keep the tab state
+  // intact for the farm overview, but never leave the detail view showing a
+  // panel whose tab has been hidden.
+  const deviceDetailView = !!targetSerial;
+  useEffect(() => {
+    if (deviceDetailView && (activeTab === "metrics" || activeTab === "actionlog")) {
+      setActiveTab("account");
+    }
+  }, [deviceDetailView, activeTab]);
+
   // Derived phone/slot data — declared here so activeSerial is in scope for
   // all hooks below (useEffect dependency arrays are evaluated synchronously).
   const allPhones = data?.phones ?? [];
@@ -8638,6 +8650,7 @@ export function MobilePage() {
             <div className="w-1/2 border-l border-border h-full min-h-0 flex flex-col">
               <div className="shrink-0 flex items-center border-b border-border px-4">
                 {MOBILE_TABS_LEFT.map(t => (
+                  (!deviceDetailView || t.id !== "metrics") && (
                   <button
                     key={t.id}
                     type="button"
@@ -8653,9 +8666,11 @@ export function MobilePage() {
                   >
                     {t.label}<t.icon className="w-3.5 h-3.5 opacity-70" />
                   </button>
+                  )
                 ))}
                 <div className="flex-1" />
                 {MOBILE_TABS_RIGHT.map(t => (
+                  (!deviceDetailView || t.id !== "actionlog") && (
                   <button
                     key={t.id}
                     type="button"
@@ -8673,6 +8688,7 @@ export function MobilePage() {
                   >
                     {t.label}<t.icon className="w-3.5 h-3.5 opacity-70" />
                   </button>
+                  )
                 ))}
               </div>
               <div className="flex-1 min-h-0 relative">

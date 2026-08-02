@@ -7011,11 +7011,31 @@ export async function dumpUiWithIme(serial: string): Promise<{ xml: string; imeI
   // A valid dump always ends with </hierarchy>. If it's missing or empty the
   // flag isn't supported on this device → fall back to the standard dump.
   if (imeXml && imeXml.includes("</hierarchy>")) {
+    // Keep the combined dump in the same diagnostic stream as ordinary dumps.
+    // This is the only dump that can explain a visible keyboard that is absent
+    // from the app-only tree.
+    recorder.addDump(serial, imeXml);
     return { xml: imeXml, imeIncluded: true };
   }
 
   const fallback = await _uiDump(adb, serial);
   return { xml: fallback, imeIncluded: false };
+}
+
+/**
+ * Return the package portion of Android's active input method setting.
+ *
+ * Gboard's accessibility nodes are not Instagram nodes, but some Android/OEM
+ * builds omit the IME package/resource-id from individual nodes. The active
+ * IME setting gives us a package-level anchor without relying on a keyboard
+ * label (which may be blank or localized).
+ */
+async function getActiveInputMethodPackage(serial: string): Promise<string> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const raw = await runAdb(adb, ["-s", serial, "shell", "settings", "get", "secure", "default_input_method"], 4000);
+  const value = raw.trim().split(/\s+/)[0] ?? "";
+  return value.split("/")[0] ?? "";
 }
 
 /**
@@ -8743,6 +8763,7 @@ export async function tapCalibratedKeyboardKey(
   // execute this named action. Resolve the current IME node on every run.
   const { xml, imeIncluded } = await dumpUiWithIme(serial);
   const { h: screenH } = getScreenSize(serial);
+  const activeImePackage = await getActiveInputMethodPackage(serial).catch(() => "");
   type KeyboardNode = {
     x1: number;
     y1: number;
@@ -8753,13 +8774,20 @@ export async function tapCalibratedKeyboardKey(
     cy: number;
     label: string;
     resourceId: string;
+    packageName: string;
+    className: string;
     imeNode: boolean;
+    activeImeNode: boolean;
     clickable: boolean;
     focusable: boolean;
     score: number;
   };
   const allImeNodes: KeyboardNode[] = [];
   const candidates: KeyboardNode[] = [];
+  const isKeyControl = (node: KeyboardNode): boolean =>
+    node.clickable ||
+    node.focusable ||
+    /(?:button|key|keyboard)/i.test(`${node.className} ${node.resourceId}`);
   const nodeRe = /<node\s([^>]+?)\s*\/?>/gi;
   let match: RegExpExecArray | null;
   while ((match = nodeRe.exec(xml)) !== null) {
@@ -8781,10 +8809,19 @@ export async function tapCalibratedKeyboardKey(
     ].join(" ").replace(/\s+/g, " ").trim();
     const resourceId = attrs.match(/\bresource-id="([^"]*)"/i)?.[1] ?? "";
     const packageName = attrs.match(/\bpackage="([^"]*)"/i)?.[1] ?? "";
+    const className = attrs.match(/\bclass="([^"]*)"/i)?.[1] ?? "";
     const imeNode =
       /(?:inputmethod|keyboard|ime)/i.test(resourceId) ||
       /(?:inputmethod|keyboard|ime|gboard|swiftkey|latin)/i.test(packageName);
-    if (!imeNode && !imeIncluded) continue;
+    const activeImeNode =
+      !!activeImePackage &&
+      !!packageName &&
+      (packageName === activeImePackage || packageName.startsWith(`${activeImePackage}.`));
+    // When --include-ime works, package-less lower-window nodes can still be
+    // part of Gboard's live hierarchy. Do not, however, treat labelled
+    // Instagram nodes in the combined dump as keyboard nodes.
+    const packageLessIncludedNode = imeIncluded && !packageName;
+    if (!imeNode && !activeImeNode && !packageLessIncludedNode) continue;
 
     const keyboardNode: KeyboardNode = {
       x1,
@@ -8796,7 +8833,10 @@ export async function tapCalibratedKeyboardKey(
       cy,
       label,
       resourceId,
+      packageName,
+      className,
       imeNode,
+      activeImeNode,
       clickable: isClickable,
       focusable: isFocusable,
       score: 0,
@@ -8804,12 +8844,12 @@ export async function tapCalibratedKeyboardKey(
     // When --include-ime is available, the lower-window nodes are part of the
     // live IME tree even if this Android build omits the IME package/resource
     // attributes. Keep those nodes for the structural unlabeled-key lookup.
-    if (imeNode || imeIncluded) allImeNodes.push(keyboardNode);
+    if (imeNode || activeImeNode || packageLessIncludedNode) allImeNodes.push(keyboardNode);
 
     // A combined --include-ime dump can also contain the underlying Instagram
     // window. Do not let an Instagram story label containing "emoji" become a
     // keyboard target; explicit label/resource matches must identify the IME.
-    const labelMatch = imeNode && aliases.some(alias =>
+    const labelMatch = (imeNode || activeImeNode) && aliases.some(alias =>
       label.toLowerCase().includes(alias.toLowerCase()) ||
       resourceId.toLowerCase().includes(alias.toLowerCase()),
     );
@@ -8821,6 +8861,7 @@ export async function tapCalibratedKeyboardKey(
       (resourceId.toLowerCase().includes("emoji") ? 4 : 0) +
       (resourceId.toLowerCase().includes("key") ? 1 : 0) +
       (imeNode ? 4 : 0) +
+      (activeImeNode ? 5 : 0) +
       (isClickable ? 2 : 0) +
       (isFocusable ? 1 : 0);
     candidates.push(keyboardNode);
@@ -8833,22 +8874,45 @@ export async function tapCalibratedKeyboardKey(
   // Space key in the same bottom row.  This is deliberately not a screen
   // coordinate, pixel, or saved-calibration fallback.
   if (candidates.length === 0 && (normalized === "emoji" || normalized === "emoticon" || normalized === "smiley")) {
-    const spaceNodes = allImeNodes
+    // Prefer nodes anchored by the active IME package. Only use package-less
+    // nodes when this device exposes no package metadata at all; otherwise an
+    // app node from the combined dump could masquerade as a keyboard key.
+    const packageAnchoredImeNodes = allImeNodes.filter(node => node.imeNode || node.activeImeNode);
+    const structuralPool = packageAnchoredImeNodes.length > 0
+      ? packageAnchoredImeNodes
+      : allImeNodes.filter(node => node.packageName === "");
+    const spaceNodes = structuralPool
       .filter(node => /\bspace(?:bar)?\b/i.test(`${node.label} ${node.resourceId}`))
-      .filter(node => node.clickable || node.focusable)
-      .sort((a, b) => b.score - a.score || b.y2 - a.y2);
+      .sort((a, b) =>
+        Number(b.activeImeNode) - Number(a.activeImeNode) ||
+        b.score - a.score ||
+        b.y2 - a.y2 ||
+        (a.x2 - a.x1) - (b.x2 - b.x1),
+      );
     const space = spaceNodes[0];
     if (space) {
       const rowNeighbors = allImeNodes
-        .filter(node => node !== space && (node.clickable || node.focusable))
+        .filter(node => structuralPool.includes(node))
+        .filter(node => node !== space)
         .filter(node => node.x2 <= space.x1)
         .filter(node => Math.abs(node.cy - space.cy) <= Math.max(node.y2 - node.y1, space.y2 - space.y1))
         .filter(node => space.x1 - node.x2 <= Math.max(node.y2 - node.y1, space.y2 - space.y1))
-        .sort((a, b) => b.x2 - a.x2);
+        .filter(node => isKeyControl(node))
+        .sort((a, b) =>
+          Number(b.activeImeNode) - Number(a.activeImeNode) ||
+          b.x2 - a.x2,
+        );
       const structuralEmoji = rowNeighbors[0];
       if (structuralEmoji) {
-        structuralEmoji.score = 6 + (structuralEmoji.imeNode ? 4 : 0);
+        structuralEmoji.score = 6 +
+          (structuralEmoji.imeNode ? 4 : 0) +
+          (structuralEmoji.activeImeNode ? 5 : 0);
         candidates.push(structuralEmoji);
+        onLog?.(
+          `[cal-keyboard] Gboard Emoji has no label — using live key immediately left of ` +
+          `Space (${structuralEmoji.x},${structuralEmoji.y}; ` +
+          `active-ime=${activeImePackage || "unknown"})`,
+        );
       }
     }
   }
@@ -8858,8 +8922,15 @@ export async function tapCalibratedKeyboardKey(
   if (!node) {
     onLog?.(
       `[cal-keyboard] bind '${mapKey}' is present, but live IME node '${keyName}' was not found ` +
-      `(ime=${imeIncluded ? "yes" : "no"}, imeNodes=${allImeNodes.length}, ` +
-      `spaceNodes=${allImeNodes.filter(n => /\bspace(?:bar)?\b/i.test(`${n.label} ${n.resourceId}`)).length})`,
+      `(ime=${imeIncluded ? "yes" : "no"}, active-ime=${activeImePackage || "unknown"}, ` +
+      `imeNodes=${allImeNodes.length}, ` +
+      `spaceNodes=${allImeNodes.filter(n => /\bspace(?:bar)?\b/i.test(`${n.label} ${n.resourceId}`)).length}, ` +
+      `bottomNodes=${allImeNodes
+        .filter(n => n.cy >= Math.round(screenH * 0.78))
+        .sort((a, b) => a.x - b.x)
+        .slice(-16)
+        .map(n => `${n.label || "∅"}@${n.x},${n.y}${n.clickable ? ":C" : ""}`)
+        .join("|") || "none"})`,
     );
     return false;
   }
@@ -8886,6 +8957,7 @@ export async function tapKeyboardEmojiNode(
 ): Promise<boolean> {
   const { xml, imeIncluded } = await dumpUiWithIme(serial);
   const { h: screenH } = getScreenSize(serial);
+  const activeImePackage = await getActiveInputMethodPackage(serial).catch(() => "");
   const candidates: Array<{ x: number; y: number; label: string; score: number }> = [];
   const nodeRe = /<node\s([^>]+?)\s*\/?>/gi;
   let match: RegExpExecArray | null;
@@ -8910,7 +8982,12 @@ export async function tapKeyboardEmojiNode(
     const imeNode =
       /(?:inputmethod|keyboard|ime)/i.test(resourceId) ||
       /(?:inputmethod|keyboard|ime|gboard|swiftkey|latin)/i.test(packageName);
-    if (!imeNode && !imeIncluded) continue;
+    const activeImeNode =
+      !!activeImePackage &&
+      !!packageName &&
+      (packageName === activeImePackage || packageName.startsWith(`${activeImePackage}.`));
+    const packageLessIncludedNode = imeIncluded && !packageName;
+    if (!imeNode && !activeImeNode && !packageLessIncludedNode) continue;
     if (!label) continue;
 
     // Gboard exposes picker cells as descriptive labels such as "grinning
@@ -8931,6 +9008,7 @@ export async function tapKeyboardEmojiNode(
         (hasEmojiGlyph ? 4 : 0) +
         (namedEmoji ? 3 : 0) +
         (imeNode ? 3 : 0) +
+        (activeImeNode ? 5 : 0) +
         (isClickable ? 2 : 0) +
         (isFocusable ? 1 : 0),
     });
@@ -8939,7 +9017,8 @@ export async function tapKeyboardEmojiNode(
   if (candidates.length === 0) {
     onLog?.(
       `[cal-keyboard] live Emoji picker node not found — skipping reply ` +
-      `(ime=${imeIncluded ? "yes" : "no"})`,
+      `(ime=${imeIncluded ? "yes" : "no"}, active-ime=${activeImePackage || "unknown"}, ` +
+      `labelledCandidates=0)`,
     );
     return false;
   }
