@@ -4,6 +4,20 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.339] — 2026-08-02
+
+### Fixed — Prevent normal X typing from being silently skipped
+
+- Fixed normal on-screen keyboard typing so a partially populated device calibration map cannot take over a text-entry request and silently omit characters that are not calibrated.
+- Added exact requested-key validation before the accessibility keyboard path is used. The bot now checks that the requested letter, including `X`/`x`, is actually present rather than treating unrelated bottom-screen nodes as keyboard keys.
+- Added a real letter-cluster guard so a single matching accessibility node cannot be mistaken for the active keyboard. When the live keyboard tree is incomplete, ordinary ASCII text uses the checked input path and reports which fallback was selected.
+- Changed calibrated character taps to use the checked ADB input helper and log failures instead of discarding ADB exit status and falsely reporting a successful keypress.
+- Kept Story Emoji replies isolated from normal text typing. Emoji replies continue to require live IME accessibility nodes and safely skip when the live Emoji control or picker cell is unavailable; no coordinate, pixel, or direct Unicode fallback was reintroduced.
+- Added Windows Actions source checks for the requested-key validation, letter-cluster guard, checked ASCII fallback, and checked calibrated tap path.
+- Bumped the root application and Electron package versions to `1.2.339`.
+
+---
+
 ## [1.2.338] — 2026-08-01
 
 ### Fixed — Reliable Chrome searches and live-accessibility Emoji replies

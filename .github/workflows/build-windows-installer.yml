@@ -249,6 +249,16 @@ jobs:
           grep -F "android.tapCalibratedKeyboardKey" artifacts/api-server/src/routes/mobile.ts
           grep -F "tapKeyboardEmojiNode" artifacts/api-server/src/routes/mobile.ts
           echo "Per-device named keyboard bind and live-node execution verified"
+      - name: Verify normal X typing cannot silently skip
+        shell: bash
+        run: |
+          grep -F "const requestedLetterMissing" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "const visibleLetterKeys" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "checked ASCII input fallback" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "using normal character typing path" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "runInputShell(" artifacts/api-server/src/mobile/androidManager.ts
+          grep -F "tap failed for" artifacts/api-server/src/mobile/androidManager.ts
+          echo "Normal character keyboard safeguards verified"
 
       - name: Install Electron deps
         working-directory: artifacts/electron
