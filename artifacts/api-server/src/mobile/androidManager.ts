@@ -8427,9 +8427,45 @@ export async function typeViaOnscreenKeyboard(
   // from a human pressing the physical key on screen.
   const calMap = loadKeyCalibrationMap(serial);
   if (calMap && Object.keys(calMap).length > 5) {
-    onLog?.(`[keyboard] using calibration map (${Object.keys(calMap).length} keys)`);
-    await typeViaCalibrationMap(serial, text, calMap, onLog);
-    return;
+    const hasPoint = (key: string): boolean => {
+      const point = calMap[key];
+      return !!point && Number.isFinite(point.x) && Number.isFinite(point.y);
+    };
+    const missingCalKeys = new Set<string>();
+    const moreSymbolChars = new Set([
+      "~", "`", "|", "•", "√", "π", "÷", "×", "§", "∆", "£", "€", "¥",
+      "^", "°", "{", "}", "[", "]", "\\", "<", ">",
+    ]);
+    let needsSymbols = false;
+    let needsMoreSymbols = false;
+    for (const ch of text) {
+      if (ch === " ") {
+        if (!hasPoint("space")) missingCalKeys.add("space");
+      } else if (ch === "\n") {
+        if (!hasPoint("enter")) missingCalKeys.add("enter");
+      } else if (/^[a-z]$/i.test(ch)) {
+        if (!hasPoint(ch.toLowerCase()) && !hasPoint(ch)) missingCalKeys.add(ch.toLowerCase());
+        if (ch !== ch.toLowerCase() && !hasPoint("shift")) missingCalKeys.add("shift");
+      } else {
+        needsSymbols = true;
+        if (moreSymbolChars.has(ch)) needsMoreSymbols = true;
+        if (!hasPoint(ch)) missingCalKeys.add(ch);
+      }
+    }
+    if (needsSymbols && !hasPoint("symbols")) missingCalKeys.add("symbols");
+    if (needsMoreSymbols && !hasPoint("moreSymbols")) missingCalKeys.add("moreSymbols");
+
+    if (missingCalKeys.size === 0) {
+      onLog?.(`[keyboard] using calibration map (${Object.keys(calMap).length} keys)`);
+      const result = await typeViaCalibrationMap(serial, text, calMap, onLog);
+      if (result.ok) return;
+      onLog?.(`[keyboard] calibration typing incomplete — missing ${result.missing.join(", ")}`);
+    } else {
+      onLog?.(
+        `[keyboard] calibration map missing requested key(s): ${[...missingCalKeys].join(", ")} — ` +
+        `using normal character typing path`,
+      );
+    }
   }
 
   const tools = detectToolset();
@@ -8506,10 +8542,26 @@ export async function typeViaOnscreenKeyboard(
 
   await refreshKeyMap("letters");
 
-  if (keyMap.size < 5) {
-    // UIAutomator can't see the keyboard on this device (common on MIUI) —
-    // fall back to adb input text so at least something is typed.
-    onLog?.(`[keyboard] 0 keys found — falling back to adb input text (use Keyboard Calibration for real taps)`);
+  const visibleLetterKeys = new Set(
+    [...keyMap.keys()].filter(key => /^[a-z]$/.test(key)),
+  );
+  const requestedLetterMissing = [...text].some(
+    ch => /^[a-z]$/i.test(ch) && !keyMap.has(ch.toLowerCase()) && !keyMap.has(ch),
+  );
+  const asciiText = /^[\x20-\x7e]*$/.test(text);
+  if (keyMap.size < 5 || visibleLetterKeys.size < 8 || (requestedLetterMissing && asciiText)) {
+    // UIAutomator may return a few unrelated bottom-screen nodes while still
+    // exposing no actual keyboard key. Check the requested key itself rather
+    // than trusting a single matching node, otherwise an X/x press can
+    // silently tap an unrelated app control.
+    // This fallback is for ordinary ASCII typing only; the Story Emoji route
+    // never calls this function and never injects Unicode.
+    const reason = keyMap.size < 5
+      ? "too few keyboard nodes"
+      : visibleLetterKeys.size < 8
+        ? `only ${visibleLetterKeys.size} keyboard letters found`
+        : "requested letter missing";
+    onLog?.(`[keyboard] ${reason} — using checked ASCII input fallback for ${text.length} character(s)`);
     runInputShell(serial, ["text", escapeForAdbInput(text)], "text");
     return;
   }
@@ -8702,7 +8754,9 @@ export async function tapCalibratedKeyboardKey(
     const x2 = Number(bounds[3]), y2 = Number(bounds[4]);
     const cy = Math.round((y1 + y2) / 2);
     if (cy < Math.round(screenH * 0.45)) continue;
-    if (!attrs.includes('clickable="true"') && !attrs.includes('focusable="true"')) continue;
+    const isClickable = attrs.includes('clickable="true"');
+    const isFocusable = attrs.includes('focusable="true"');
+    if (attrs.includes('enabled="false"')) continue;
 
     const label = [
       attrs.match(/\btext="([^"]*)"/i)?.[1] ?? "",
@@ -8714,7 +8768,7 @@ export async function tapCalibratedKeyboardKey(
     const imeNode =
       /(?:inputmethod|keyboard|ime)/i.test(resourceId) ||
       /(?:inputmethod|keyboard|ime|gboard|swiftkey|latin)/i.test(packageName);
-    if (!imeNode) continue;
+    if (!imeNode && !imeIncluded) continue;
 
     const labelMatch = aliases.some(alias =>
       label.toLowerCase().includes(alias.toLowerCase()) ||
@@ -8726,7 +8780,10 @@ export async function tapCalibratedKeyboardKey(
     const score =
       (exactLabel ? 8 : 0) +
       (resourceId.toLowerCase().includes("emoji") ? 4 : 0) +
-      (resourceId.toLowerCase().includes("key") ? 1 : 0);
+      (resourceId.toLowerCase().includes("key") ? 1 : 0) +
+      (imeNode ? 4 : 0) +
+      (isClickable ? 2 : 0) +
+      (isFocusable ? 1 : 0);
     candidates.push({
       x: Math.round((x1 + x2) / 2),
       y: cy,
@@ -8766,7 +8823,7 @@ export async function tapKeyboardEmojiNode(
 ): Promise<boolean> {
   const { xml, imeIncluded } = await dumpUiWithIme(serial);
   const { h: screenH } = getScreenSize(serial);
-  const candidates: Array<{ x: number; y: number; label: string }> = [];
+  const candidates: Array<{ x: number; y: number; label: string; score: number }> = [];
   const nodeRe = /<node\s([^>]+?)\s*\/?>/gi;
   let match: RegExpExecArray | null;
   while ((match = nodeRe.exec(xml)) !== null) {
@@ -8777,7 +8834,9 @@ export async function tapKeyboardEmojiNode(
     const x2 = Number(bounds[3]), y2 = Number(bounds[4]);
     const cy = Math.round((y1 + y2) / 2);
     if (cy < Math.round(screenH * 0.42)) continue;
-    if (!attrs.includes('clickable="true"') && !attrs.includes('focusable="true"')) continue;
+    const isClickable = attrs.includes('clickable="true"');
+    const isFocusable = attrs.includes('focusable="true"');
+    if (attrs.includes('enabled="false"')) continue;
 
     const label = [
       attrs.match(/\btext="([^"]*)"/i)?.[1] ?? "",
@@ -8788,12 +8847,14 @@ export async function tapKeyboardEmojiNode(
     const imeNode =
       /(?:inputmethod|keyboard|ime)/i.test(resourceId) ||
       /(?:inputmethod|keyboard|ime|gboard|swiftkey|latin)/i.test(packageName);
-    if (!imeNode || !label) continue;
+    if (!imeNode && !imeIncluded) continue;
+    if (!label) continue;
 
     // Gboard exposes picker cells as descriptive labels such as "grinning
     // face" or as the emoji glyph itself. Exclude navigation/category and
     // keyboard controls so only an actual picker cell can be selected.
-    if (/(?:emoji|emoticon|smiley|backspace|delete|enter|return|space|shift|settings|search|category|sticker|gif|clipboard)/i.test(label)) {
+    if (/(?:emoji|emoticon|smiley|backspace|delete|enter|return|space|shift|settings|search|category|sticker|gif|clipboard)/i.test(label) &&
+        !/\p{Extended_Pictographic}/u.test(label)) {
       continue;
     }
     const hasEmojiGlyph = /\p{Extended_Pictographic}/u.test(label);
@@ -8803,6 +8864,12 @@ export async function tapKeyboardEmojiNode(
       x: Math.round((x1 + x2) / 2),
       y: cy,
       label,
+      score:
+        (hasEmojiGlyph ? 4 : 0) +
+        (namedEmoji ? 3 : 0) +
+        (imeNode ? 3 : 0) +
+        (isClickable ? 2 : 0) +
+        (isFocusable ? 1 : 0),
     });
   }
 
@@ -8816,6 +8883,7 @@ export async function tapKeyboardEmojiNode(
 
   // Keep selection deterministic and node-based. The picker itself provides
   // the ordering; no screen coordinate or pixel heuristic is involved.
+  candidates.sort((a, b) => b.score - a.score || a.y - b.y || a.x - b.x);
   const node = candidates[0];
   await tap(serial, node.x, node.y);
   onLog?.(
@@ -8964,11 +9032,23 @@ export async function typeViaCalibrationMap(
 
   const tapMapped = async (label: string, description = label): Promise<boolean> => {
     const pos = map[label];
-    if (!pos) {
+    if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) {
       onLog?.(`[cal-keyboard] '${description}' is not in calibration map`);
       return false;
     }
-    _adbTap(adb, serial, pos.x, pos.y);
+    try {
+      // Use the checked input path here. The old helper discarded adb's
+      // exit/stderr, so a dead device or rejected input tap looked like a
+      // successful character press.
+      runInputShell(
+        serial,
+        ["tap", String(Math.round(pos.x)), String(Math.round(pos.y))],
+        "tap",
+      );
+    } catch (e: any) {
+      onLog?.(`[cal-keyboard] tap failed for ${description} at (${pos.x},${pos.y}) — ${e?.message}`);
+      return false;
+    }
     onLog?.(`[cal-keyboard] tapped ${description} at (${pos.x},${pos.y})`);
     await _sleep(180 + Math.round(Math.random() * 100));
     return true;
