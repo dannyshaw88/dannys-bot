@@ -308,10 +308,10 @@ export default function ImagesPage(props: ImagesPageProps) {
                     </div>
                     
                     {alterationEnabled && (
-                      <div className="pl-5 ml-1.5 pt-1 text-left animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="pt-1 text-left animate-in fade-in slide-in-from-top-1 duration-200">
                         <Label className="text-[11px] text-muted-foreground mb-1.5 block text-left">Alteration Level</Label>
                         <Select value={alterationLevel} onValueChange={(val) => setAlterationLevel(val as "small" | "medium" | "high")}>
-                          <SelectTrigger className="h-8 justify-start text-left text-xs bg-background shadow-xs">
+                          <SelectTrigger className="h-8 text-xs bg-background shadow-xs">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -337,8 +337,8 @@ export default function ImagesPage(props: ImagesPageProps) {
                     </div>
                     
                     {imageSettingsEnabled && (
-                      <div className="pl-5 ml-1.5 pt-1 text-left animate-in fade-in slide-in-from-top-1 duration-200">
-                         <Button variant="outline" size="sm" className="w-full h-8 justify-start text-left text-xs bg-background shadow-xs" onClick={() => setDialogOpen(true)}>
+                      <div className="pt-1 text-left animate-in fade-in slide-in-from-top-1 duration-200">
+                         <Button variant="outline" size="sm" className="w-full h-8 text-xs bg-background shadow-xs" onClick={() => setDialogOpen(true)}>
                            Configure Filters
                          </Button>
                       </div>
