@@ -10352,7 +10352,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (sharesDm) parts.push(`${sharesDm} DMs`);
         if (sharesFeed) parts.push(`${sharesFeed} feed shares`);
         if (saves) parts.push(`${saves} saves`);
-        if (postsUploaded) parts.push(`${postsUploaded} POST${postsUploaded === 1 ? "" : "S"} UPLOADED`);
+        if (postsUploaded) parts.push(`${postsUploaded} post${postsUploaded === 1 ? "" : "s"} uploaded`);
         if (feedScrolled) parts.push(`${feedScrolled} posts scrolled`);
         storage.createSessionAction({
           profileId: mobileProfileId ?? 0,
@@ -10398,7 +10398,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (sharesDm) parts.push(`${sharesDm} DMs`);
         if (sharesFeed) parts.push(`${sharesFeed} feed shares`);
         if (saves) parts.push(`${saves} saves`);
-        if (postsUploaded) parts.push(`${postsUploaded} POST${postsUploaded === 1 ? "" : "S"} UPLOADED`);
+        if (postsUploaded) parts.push(`${postsUploaded} post${postsUploaded === 1 ? "" : "s"} uploaded`);
         if (feedScrolled) parts.push(`${feedScrolled} posts scrolled`);
         const statsSuffix = parts.length ? ` — ${parts.join(", ")}` : "";
         storage.createSessionAction({

@@ -11343,6 +11343,12 @@ type FeedItem = {
 
 type LastImport = { ts: number; fileName: string; created: number; updated: number; failed: number; total: number };
 
+function normalizeActivityDetail(detail?: string): string | undefined {
+  return detail?.replace(/\b(\d+)\s+POSTS?\s+UPLOADED\b/gi, (_match, count: string) =>
+    `${count} post${count === "1" ? "" : "s"} uploaded`,
+  );
+}
+
 export function Dashboard() {
   useScrollRestore("dashboard");
   const [lastImport, setLastImport] = useState<LastImport | null>(() => {
@@ -11487,7 +11493,7 @@ export function Dashboard() {
         kind: "session",
         action: a.action,
         targetUsername: a.targetUsername,
-        detail: a.detail,
+        detail: normalizeActivityDetail(a.detail),
         profileLabel: a.profileLabel,
         sourceValue: a.sourceValue,
         sourceType: a.sourceType,

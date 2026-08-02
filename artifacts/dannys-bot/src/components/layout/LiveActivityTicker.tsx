@@ -15,6 +15,12 @@ interface RecentActivity {
   timestamp: string;
 }
 
+function normalizeActivityDetail(detail: string): string {
+  return detail.replace(/\b(\d+)\s+POSTS?\s+UPLOADED\b/gi, (_match, count: string) =>
+    `${count} post${count === "1" ? "" : "s"} uploaded`,
+  );
+}
+
 function getToolLabel(action: string, detail: string): string {
   switch (action) {
     case "follow":
@@ -94,17 +100,18 @@ function buildLabel(
   latest: RecentActivity,
   profiles: { id: number; accountLabel?: string | null; username: string }[] | undefined,
 ): string {
+  const detail = normalizeActivityDetail(latest.detail);
   // Phone farm event — profileId may be 0 if the slot has no linked EB profile
   if (latest.sourceType === "phone") {
     const account = latest.targetUsername ? `@${latest.targetUsername}` : "Phone Farm";
-    const actionPart = formatActionPart(latest.action, latest.targetUsername ? `@${latest.targetUsername}` : "", latest.detail);
+    const actionPart = formatActionPart(latest.action, latest.targetUsername ? `@${latest.targetUsername}` : "", detail);
     return `${account} | Phone Farm: ${actionPart}`;
   }
   // Regular IG-profile event
   const profile = profiles?.find(p => p.id === latest.profileId);
   const accountName = profile?.accountLabel || profile?.username || `#${latest.profileId}`;
-  const toolLabel = getToolLabel(latest.action, latest.detail);
-  const actionPart = formatActionPart(latest.action, latest.targetUsername ? `@${latest.targetUsername}` : "", latest.detail);
+  const toolLabel = getToolLabel(latest.action, detail);
+  const actionPart = formatActionPart(latest.action, latest.targetUsername ? `@${latest.targetUsername}` : "", detail);
   return toolLabel
     ? `@${accountName} | ${toolLabel}: ${actionPart}`
     : `@${accountName} ${actionPart}`;
