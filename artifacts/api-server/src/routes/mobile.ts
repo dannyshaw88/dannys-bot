@@ -3841,7 +3841,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     commentPercentMin: number; commentPercentMax: number;
     clickAuthorPercentMin: number; clickAuthorPercentMax: number;
     onLog?: (msg: string) => void;
-  }): Promise<{ storiesWatched: number }> {
+  }): Promise<{ storiesWatched: number; storyLikes: number }> {
     const {
       slidesMin, slidesMax,
       slideWatchPctMin, slideWatchPctMax,
@@ -3856,7 +3856,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       Math.min(slidesMin, slidesMax) +
       Math.random() * (Math.max(slidesMin, slidesMax) - Math.min(slidesMin, slidesMax) + 1)
     );
-    if (totalStories <= 0) return { storiesWatched: 0 };
+    if (totalStories <= 0) return { storiesWatched: 0, storyLikes: 0 };
 
     const { w, h } = getScreenSize(serial);
     // Logged once per run so a bad like/share tap or a false "sharing
@@ -3957,12 +3957,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // accidentally interacting with the wrong screen.
     if (!storyOpened) {
       onLog?.("Story tray: no story opened — skipping story actions for this cycle");
-      return { storiesWatched: 0 };
+      return { storiesWatched: 0, storyLikes: 0 };
     }
 
     await sleepOrAbort(serial, 1800); // let viewer animate open
 
     let storiesWatched = 0;
+    let storyLikes = 0;
 
     for (let s = 0; s < totalStories; s++) {
       if (isCycleAborted(serial)) break;
@@ -4023,6 +4024,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const likeBtn = await android.findStoryLikeButtonViaA11y(serial).catch(() => null);
         if (likeBtn) {
           await android.tap(serial, likeBtn.x, likeBtn.y);
+          storyLikes++;
           logger.info({ serial, story: s + 1, x: likeBtn.x, y: likeBtn.y }, "[view-stories] liked story via a11y toolbar_like_button");
           onLog?.(`View Stories ${s + 1}: liked via a11y at (${likeBtn.x},${likeBtn.y})`);
         } else {
@@ -4556,7 +4558,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
     }
 
-    return { storiesWatched };
+    return { storiesWatched, storyLikes };
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -7787,6 +7789,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     serial: string,
     browsing: InjectBrowsingParams,
     onLog?: (msg: string) => void,
+    onLike?: () => void,
   ): Promise<number> {
     const { w, h } = getScreenSize(serial);
 
@@ -7982,6 +7985,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             onLog?.(`Inject Browsing: tapping heart icon at (${icons.like.x},${icons.like.y})…`);
             await android.tap(serial, icons.like.x, icons.like.y);
           }
+          onLike?.();
           onLog?.("Inject Browsing: ✓ liked the post");
           await sleepOrAbort(serial, 300);
         } catch { /* best effort */ }
@@ -8206,6 +8210,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       sources: { type: string; value: string }[];
       onLog?: (msg: string) => void;
       recordFollow?: (username: string, source: string) => void;
+      onLike?: () => void;
       browsing?: InjectBrowsingParams;
       /** Pre-built set of lowercase usernames already followed — candidates
        *  matching any entry are dropped before the follow loop begins, so no
@@ -8248,7 +8253,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       };
     },
   ): Promise<number> {
-    const { usersMin, usersMax, sources, onLog, recordFollow, browsing, skipFollowedUsernames, skipSkippedUsernames, filters } = params;
+    const { usersMin, usersMax, sources, onLog, onLike, recordFollow, browsing, skipFollowedUsernames, skipSkippedUsernames, filters } = params;
 
     // ── Shared state — populated by either the normal fetch path or the
     //    spread-mode preloaded path, then consumed by the shared follow loop. ──
@@ -8770,7 +8775,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
         if (browsing && willBrowse && browseBeforeFollow) {
           onLog?.("Inject Browsing: rolled to browse this profile before following");
-          const didScroll = await runProfileBrowsingSequence(serial, browsing, onLog).catch((e: any) => {
+          const didScroll = await runProfileBrowsingSequence(serial, browsing, onLog, onLike).catch((e: any) => {
             if (e?.message === "cycle-aborted") throw e;
             onLog?.(`Inject Browsing: error — ${e?.message}`);
             return 0;
@@ -8851,7 +8856,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // succeeded (a missed/duplicate Follow tap shouldn't also skip the
         // browsing that was already decided for this user).
         if (browsing && willBrowse && !browseBeforeFollow) {
-          await runProfileBrowsingSequence(serial, browsing, onLog).catch((e: any) => {
+          await runProfileBrowsingSequence(serial, browsing, onLog, onLike).catch((e: any) => {
             if (e?.message === "cycle-aborted") throw e;
             onLog?.(`Inject Browsing: error — ${e?.message}`);
           });
@@ -9089,9 +9094,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     checkFeedInProgress.add(serial); // also blocks a concurrent manual Check Feed call
     const steps: string[] = [];
     let storiesWatched = 0;
+    let storyLikes = 0;
     let followedCount = 0;
     let reelsViewed = 0;
     let reelsLikes = 0;
+    let exploreLikes = 0;
+    let injectBrowsingLikes = 0;
     let postsUploaded = 0;
     // Hoisted so the catch block can include partial stats in the COMPLETE log
     // even when the cycle is aborted or errors mid-run.
@@ -9705,8 +9713,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // deviation recovery + swipe-down). Control returns here only
             // once the phone is back on the home feed — no extra exit step.
             storiesWatched = result.storiesWatched;
+            storyLikes = result.storyLikes;
             steps.push(`stories(${result.storiesWatched} watched)`);
-            tLog(`▶ Stories done — ${result.storiesWatched} watched`);
+            tLog(`▶ Stories done — ${result.storiesWatched} watched, ${result.storyLikes} likes`);
           } else if (!storiesEnabled) {
             steps.push("stories(skipped — View Stories from Feed disabled)");
             tLog("▶ View Stories from Feed disabled — skipping stories");
@@ -9741,6 +9750,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               onLog: (msg) => tLog(`  ${msg}`),
             });
             exploreScrolled = exploreResult.postsScrolled;
+            exploreLikes = exploreResult.likes;
             steps.push(`explore(${exploreResult.postsScrolled} scrolls, ${exploreResult.postsClicked} clicked, ${exploreResult.likes} likes, ${exploreResult.sharesFeed} feed-shares, ${exploreResult.sharesDm} dm-shares, ${exploreResult.saves} saves, ${exploreResult.authorVisits} author-visits)`);
             tLog(`▶ View Explore Page done — ${exploreResult.postsScrolled} scrolls, ${exploreResult.postsClicked} clicked, ${exploreResult.likes} likes`);
           } else if (!viewExploreEnabled) {
@@ -9889,6 +9899,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               },
               onLog: (msg) => tLog(`  ${msg}`),
               recordFollow: (u, src) => recordMobileFollow(serial, slotIdx, u, src),
+              onLike: () => { injectBrowsingLikes++; },
               skipFollowedUsernames: _ssSkipFollowed,
               skipSkippedUsernames:  _ssSkipSkipped,
               writeSkippedUsers:     globalSkipSkipped,
@@ -9993,6 +10004,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 maxScrapeSessions: globalFollowMaxScrapeSessions,
                 onLog: (msg) => tLog(`  ${msg}`),
                 recordFollow: (username, source) => recordMobileFollow(serial, slotIdx, username, source),
+                onLike: () => { injectBrowsingLikes++; },
                 skipFollowedUsernames: await (async () => {
                   if (!globalSkipFollowed) return undefined;
                   const local = new Set(getMobileFollowedList(serial, slotIdx).map(e => e.username.toLowerCase()));
@@ -10311,9 +10323,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await android.swipeUpFromBottom(serial);
       steps.push("swipe-up");
       {
+        const totalLikes = likes + storyLikes + exploreLikes + reelsLikes + injectBrowsingLikes;
         const parts: string[] = [];
         if (followedCount)            parts.push(`${followedCount} follow${followedCount === 1 ? ' done' : 's done'}`);
-        if (likes + reelsLikes)       parts.push(`${likes + reelsLikes} like${(likes + reelsLikes) === 1 ? ' done' : 's done'}`);
+        if (totalLikes)               parts.push(`${totalLikes} like${totalLikes === 1 ? ' done' : 's done'}`);
         if (storiesWatched)           parts.push(`${storiesWatched} stor${storiesWatched === 1 ? 'ie watched' : 'ies watched'}`);
         if (reelsViewed)              parts.push(`${reelsViewed} reel${reelsViewed === 1 ? ' watched' : 's watched'}`);
         if (sharesDm)                 parts.push(`${sharesDm} DMs`);
@@ -10328,7 +10341,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Persist cycle stats to DB so the Metrics tab survives software restarts.
       if (slotUsername) {
         storage.incrementMobileStats(slotUsername, {
-          likes: likes + reelsLikes,
+          likes: likes + storyLikes + exploreLikes + reelsLikes + injectBrowsingLikes,
           follows: followedCount,
           stories: storiesWatched,
           reels: reelsViewed,
@@ -10344,9 +10357,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Always log regardless of whether slotUsername matched an EB profile —
       // use profileId 0 as a system sentinel so entries are always visible.
       {
+        const totalLikes = likes + storyLikes + exploreLikes + reelsLikes + injectBrowsingLikes;
         const parts: string[] = [];
         if (followedCount) parts.push(`${followedCount} follow${followedCount === 1 ? ' done' : 's done'}`);
-        if (likes + reelsLikes) parts.push(`${likes + reelsLikes} like${(likes + reelsLikes) === 1 ? ' done' : 's done'}`);
+        if (totalLikes) parts.push(`${totalLikes} like${totalLikes === 1 ? ' done' : 's done'}`);
         if (storiesWatched) parts.push(`${storiesWatched} stor${storiesWatched === 1 ? 'ie watched' : 'ies watched'}`);
         if (reelsViewed) parts.push(`${reelsViewed} reel${reelsViewed === 1 ? ' watched' : 's watched'}`);
         if (sharesDm) parts.push(`${sharesDm} DMs`);
@@ -10366,15 +10380,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           timestamp: new Date().toISOString(),
         }).catch(() => {});
       }
-      res.json({ ok: true, count, likes, likeFailures, sharesFeed, sharesDm, storiesWatched, followedCount, postsUploaded, strayNavRecoveries, steps });
+      res.json({
+        ok: true,
+        count,
+        likes: likes + storyLikes + exploreLikes + reelsLikes + injectBrowsingLikes,
+        likeFailures,
+        sharesFeed,
+        sharesDm,
+        storiesWatched,
+        followedCount,
+        postsUploaded,
+        strayNavRecoveries,
+        steps,
+      });
     } catch (e: any) {
       const aborted = (e?.message === "cycle-aborted");
       // Emit a log-stream message so the Action Log tab always gets an entry,
       // even when the cycle errors or is aborted before reaching the end.
       {
+        const totalLikes = likes + storyLikes + exploreLikes + reelsLikes + injectBrowsingLikes;
         const parts: string[] = [];
         if (followedCount)            parts.push(`${followedCount} follow${followedCount === 1 ? ' done' : 's done'}`);
-        if (likes + reelsLikes)       parts.push(`${likes + reelsLikes} like${(likes + reelsLikes) === 1 ? ' done' : 's done'}`);
+        if (totalLikes)               parts.push(`${totalLikes} like${totalLikes === 1 ? ' done' : 's done'}`);
         if (storiesWatched)           parts.push(`${storiesWatched} stor${storiesWatched === 1 ? 'ie watched' : 'ies watched'}`);
         if (reelsViewed)              parts.push(`${reelsViewed} reel${reelsViewed === 1 ? ' watched' : 's watched'}`);
         if (sharesDm)                 parts.push(`${sharesDm} DMs`);
@@ -10390,9 +10417,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Always stamp COMPLETE so the Dashboard never leaves a dangling STARTED.
       // Accumulate whatever partial stats were collected before the abort/error.
       if (_slotUsername || _mobileProfileId !== null) {
+        const totalLikes = likes + storyLikes + exploreLikes + reelsLikes + injectBrowsingLikes;
         const parts: string[] = [];
         if (followedCount) parts.push(`${followedCount} follow${followedCount === 1 ? ' done' : 's done'}`);
-        if (likes + reelsLikes) parts.push(`${likes + reelsLikes} like${(likes + reelsLikes) === 1 ? ' done' : 's done'}`);
+        if (totalLikes) parts.push(`${totalLikes} like${totalLikes === 1 ? ' done' : 's done'}`);
         if (storiesWatched) parts.push(`${storiesWatched} stor${storiesWatched === 1 ? 'ie watched' : 'ies watched'}`);
         if (reelsViewed) parts.push(`${reelsViewed} reel${reelsViewed === 1 ? ' watched' : 's watched'}`);
         if (sharesDm) parts.push(`${sharesDm} DMs`);

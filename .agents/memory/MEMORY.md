@@ -73,3 +73,4 @@
 - [Phone Farm local wallpapers](phone-farm-local-wallpapers.md) — native Electron/browser picker stores a resized image data URL in shared slot customizations
 - [Images workspace local processing](images-workspace-local-processing.md) — reuse Make a Post processing and export copies; Electron should process native-selected paths locally
 - [Dashboard cycle summary icons](dashboard-cycle-summary-icons.md) — use Statistics action icons in cycle activity details, but keep eye-based metrics text-only
+- [Mobile cycle all-likes statistic](mobile-cycle-all-likes.md) — MobilePage Likes combines successful likes from Feed, Stories, Explore, and Reels everywhere it is shown or saved
