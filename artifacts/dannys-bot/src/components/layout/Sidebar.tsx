@@ -4,7 +4,7 @@ import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
 import { useNavigationHistory } from "@/contexts/NavigationHistoryContext";
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Image as ImageIcon, Loader2 } from "lucide-react";
 
 function FilledDashboardIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
@@ -124,7 +124,7 @@ export function Sidebar() {
     { name: "Dashboard",       shortLabel: "DASHBOARD",      path: "/dashboard",    icon: FilledDashboardIcon   },
     { name: "Phone Farm",      shortLabel: "PHONE FARM",     path: "/mobile",       icon: FilledFarmIcon        },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon, children: [
-      { name: "Images", shortLabel: "IMAGES", path: "/stats/images" },
+      { name: "Images", shortLabel: "IMAGES", path: "/stats/images", icon: ImageIcon },
     ] },
   ];
   const settingsItem = {
@@ -197,6 +197,7 @@ export function Sidebar() {
                          : "text-muted-foreground hover:bg-accent hover:text-foreground",
                      )}
                    >
+                     <child.icon className="w-3.5 h-3.5 mr-1.5" />
                      {child.shortLabel}
                    </button>
                  );
