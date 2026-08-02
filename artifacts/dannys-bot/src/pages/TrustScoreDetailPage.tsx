@@ -16,6 +16,7 @@ import {
   type CopySection,
 } from "@/pages/mobileShared";
 import { AutomationSettingsPanel } from "@/pages/MobilePage";
+import { FakeTrustScoreMirror } from "@/components/FakeTrustScoreMirror";
 
 // ── CopyTrustScoreDialog ──────────────────────────────────────────────────────
 // Exact same two-panel layout as the mobile slot CopySettingsDialog.
@@ -413,16 +414,19 @@ function TrustScoreAutomationEditor({
         sourceSettings={settings}
       />
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <AutomationSettingsPanel
-          phone={phone}
-          settings={settings}
-          setSettings={setSettings}
-          setEnabledByUser={(enabled) => setSettings(current => ({ ...current, enabled }))}
-          loading={loading}
-          saveError={saveError}
-          running={false}
-          nextRunAt={null}
-        />
+        <div className="grid items-start gap-6 p-4 lg:grid-cols-[minmax(250px,340px)_minmax(0,1fr)]">
+          <FakeTrustScoreMirror trustScoreLabel={level.label} />
+          <AutomationSettingsPanel
+            phone={phone}
+            settings={settings}
+            setSettings={setSettings}
+            setEnabledByUser={(enabled) => setSettings(current => ({ ...current, enabled }))}
+            loading={loading}
+            saveError={saveError}
+            running={false}
+            nextRunAt={null}
+          />
+        </div>
       </div>
     </div>
   );
