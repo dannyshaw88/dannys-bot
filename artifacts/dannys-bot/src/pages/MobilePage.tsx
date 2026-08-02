@@ -2065,7 +2065,7 @@ function CalibrationDialog({
 
 type PhoneSlotHandle = { getVideoSize: () => { w: number; h: number } | null };
 
-function ManualPhoneMediaPanel({ serial, onLog }: { serial: string; onLog?: (msg: string) => void }) {
+function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: string; onLog?: (msg: string) => void; open: boolean; onClose: () => void }) {
   const storageKey = `mobile-manual-media:${serial}`;
   const [selectedPath, setSelectedPath] = useState("");
   const [selectedFileName, setSelectedFileName] = useState("");
@@ -2182,7 +2182,7 @@ function ManualPhoneMediaPanel({ serial, onLog }: { serial: string; onLog?: (msg
   };
 
   return (
-    <div className="shrink-0 border-t border-white/10 bg-zinc-900/95 px-3 py-2">
+    <div className={`absolute bottom-10 left-2 z-40 w-[min(620px,calc(100%-1rem))] rounded-lg border border-cyan-400/25 bg-zinc-900/95 px-3 py-2 shadow-2xl backdrop-blur-sm ${open ? "" : "hidden"}`}>
       <input
         ref={browserFileRef}
         type="file"
@@ -2190,10 +2190,21 @@ function ManualPhoneMediaPanel({ serial, onLog }: { serial: string; onLog?: (msg
         className="hidden"
         onChange={e => onBrowserFile(e.target.files?.[0])}
       />
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center justify-between gap-2 mb-1.5">
         <span className="text-[10px] font-semibold text-white/70 flex items-center gap-1.5">
           <ImagePlus className="w-3.5 h-3.5 text-cyan-300" /> Manual post image
         </span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded p-0.5 text-white/45 hover:bg-white/10 hover:text-white/80"
+          aria-label="Close manual post image options"
+          title="Close"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
         <button
           type="button"
           onClick={selectFromPc}
@@ -2266,6 +2277,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
   const [clickTestMode, setClickTestMode] = useState(false);
   const [showCustomize, setShowCustomize] = useState(false);
   const [showCalibration, setShowCalibration] = useState(false);
+  const [showManualMedia, setShowManualMedia] = useState(false);
 
   // ── Element tree inspector ─────────────────────────────────────────────────
   // Full UIAutomator node tree shown below the mirror when inspect mode is on.
@@ -2602,10 +2614,6 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
         )}
       </div>
 
-      {isReady && phone && (
-        <ManualPhoneMediaPanel serial={phone.serial} onLog={onLog} />
-      )}
-
       {/* ── Element Inspector Panel ─────────────────────────────────────────────
            Two tabs below the mirror:
            TREE — Full UIAutomator accessibility node list. Hover row → bounds
@@ -2892,8 +2900,9 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
 
       {/* Nav bar */}
       {isReady && phone && (
-        <div ref={navRef} className="flex items-center justify-center gap-2 py-2 bg-zinc-900 border-t border-white/6 shrink-0">
+        <div ref={navRef} className="relative flex items-center justify-start gap-2 px-2 py-2 bg-zinc-900 border-t border-white/6 shrink-0">
           <NavBtn icon={<ChevronLeft className="w-3.5 h-3.5" />} label="Back"   onClick={() => sendKey(phone.serial, 4,   "Back",   onLog)} />
+          <NavBtn icon={<ImagePlus className="w-3.5 h-3.5" />} label="Image" onClick={() => setShowManualMedia(v => !v)} />
           <NavBtn icon={<Home        className="w-3.5 h-3.5" />} label="Home"   onClick={() => sendKey(phone.serial, 3,   "Home",   onLog)} />
           <NavBtn icon={<LayoutGrid  className="w-3.5 h-3.5" />} label="Recent" onClick={() => sendKey(phone.serial, 187, "Recent", onLog)} />
           <div className="w-px h-4 bg-white/10" />
@@ -2903,6 +2912,15 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
           <div className="w-px h-4 bg-white/10" />
           <NavBtn icon={<Keyboard    className="w-3 h-3" />}     label="Keyboard" onClick={() => setShowCalibration(true)} />
         </div>
+      )}
+
+      {isReady && phone && (
+        <ManualPhoneMediaPanel
+          serial={phone.serial}
+          onLog={onLog}
+          open={showManualMedia}
+          onClose={() => setShowManualMedia(false)}
+        />
       )}
 
       {phone && (
