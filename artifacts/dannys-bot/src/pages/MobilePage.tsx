@@ -22,7 +22,7 @@ import {
   ChevronLeft, Home, LayoutGrid, Power, Volume2, VolumeX, Trash2,
   FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim,
   Palette, Plus, X, RotateCcw, Sun, Keyboard,
-  Users, Globe, BarChart2, ClipboardList, Bug, ImagePlus,
+  Users, Globe, BarChart2, ClipboardList, Bug, ImagePlus, Tablet,
 } from "lucide-react";
 
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
@@ -8245,7 +8245,7 @@ const MOBILE_TABS_LEFT: { id: MobileTab; label: string; icon: React.ComponentTyp
   { id: "account",      label: "Accounts",  icon: Users       },
   { id: "browser",      label: "Browser",   icon: Globe       },
   { id: "metrics",      label: "Metrics",   icon: BarChart2   },
-  { id: "phonesettings",label: "My Device", icon: Smartphone  },
+  { id: "phonesettings",label: "My Device", icon: Tablet      },
 ];
 // Right-side tabs — pushed to the far right with ml-auto on the first one.
 const MOBILE_TABS_RIGHT: { id: MobileTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
