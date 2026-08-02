@@ -3,7 +3,6 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, useMemo, type ReactNode } from "react";
-import { createPortal } from "react-dom";
 import { useParams, useSearch } from "wouter";
 import { _hstTimers, _hstStop, _hstNextRunAt } from "@/lib/hstRunner";
 import { BrowserPanel } from "@/components/BrowserPanel";
@@ -6672,8 +6671,10 @@ function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 142, hideIco
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  // Dropdown position
-  const [dropStyle, setDropStyle] = useState<React.CSSProperties>({});
+  // Keep the menu inside this control's positioning context. Rendering it
+  // inline avoids document-level focus/scroll reflow when the first option is
+  // clicked in the Accounts list.
+  const [dropAbove, setDropAbove] = useState(false);
   useEffect(() => {
     if (!open || !btnRef.current) return;
     const rect = btnRef.current.getBoundingClientRect();
@@ -6681,23 +6682,7 @@ function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 142, hideIco
     const maxH = Math.min(rowCount, MAX_VISIBLE_ROWS) * ROW_H + 8;
     const spaceBelow = window.innerHeight - rect.bottom - 8;
     const spaceAbove = rect.top - 8;
-    const top = spaceBelow >= maxH || spaceBelow >= spaceAbove
-      ? rect.bottom + 4
-      : rect.top - maxH - 4;
-    setDropStyle({
-      position: "fixed",
-      zIndex: 99999,
-      top,
-      left: rect.left,
-      width: 200,
-      maxHeight: maxH,
-      overflowY: "auto",
-      background: "hsl(var(--background, 0 0% 100%))",
-      border: "1px solid var(--border, #e5e7eb)",
-      borderRadius: 8,
-      boxShadow: "0 8px 32px rgba(0,0,0,0.24)",
-      padding: "4px 0",
-    });
+    setDropAbove(spaceBelow < maxH && spaceAbove > spaceBelow);
   }, [open, levels.length, scoreId]);
 
   return (
@@ -6706,6 +6691,7 @@ function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 142, hideIco
         ref={btnRef}
         type="button"
         onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+         onPointerDown={e => { e.preventDefault(); e.stopPropagation(); }}
         onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
         className="inline-flex items-center justify-center gap-1.5 rounded-md border px-2 text-[11px] font-semibold transition-all hover:brightness-125"
         style={current
@@ -6724,10 +6710,23 @@ function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 142, hideIco
         )}
       </button>
 
-      {open && createPortal(
+      {open && (
         <div
           ref={dropRef}
-          style={dropStyle}
+          style={{
+            position: "absolute",
+            zIndex: 99999,
+            ...(dropAbove ? { bottom: "calc(100% + 4px)" } : { top: "calc(100% + 4px)" }),
+            left: 0,
+            width: 200,
+            maxHeight: Math.min(levels.length + (scoreId ? 1 : 0), MAX_VISIBLE_ROWS) * ROW_H + 8,
+            overflowY: "auto",
+            background: "hsl(var(--background, 0 0% 100%))",
+            border: "1px solid var(--border, #e5e7eb)",
+            borderRadius: 8,
+            boxShadow: "0 8px 32px rgba(0,0,0,0.24)",
+            padding: "4px 0",
+          }}
           onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
         >
           {levels.map(lvl => {
@@ -6768,8 +6767,7 @@ function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 142, hideIco
               <span style={{ fontSize: 11, fontWeight: 500, color: "#6b7280", letterSpacing: "0.05em" }}>Clear score</span>
             </button>
           )}
-        </div>,
-        document.body
+        </div>
       )}
     </div>
   );
