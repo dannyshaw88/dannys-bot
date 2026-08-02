@@ -268,7 +268,7 @@ export default function ImagesPage(props: ImagesPageProps) {
         <Card className="flex flex-col lg:flex-row h-full overflow-hidden border-border/60 shadow-sm bg-background">
           
           {/* Sidebar Settings */}
-          <div className="w-full lg:w-80 shrink-0 border-b lg:border-b-0 lg:border-r border-border/60 bg-muted/10 flex flex-col z-10">
+          <div className="w-full lg:w-80 shrink-0 border-b lg:border-b-0 bg-muted/10 flex flex-col z-10">
             <div className="p-5 border-b border-border/60 bg-background/50">
               <h1 className="text-base font-semibold tracking-tight flex items-center gap-2 text-foreground">
                 <FileImage className="w-4 h-4 text-cyan-500" />
@@ -308,7 +308,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                     </div>
                     
                     {alterationEnabled && (
-                      <div className="pl-5 border-l-2 border-border/40 ml-1.5 pt-1 animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="pl-5 ml-1.5 pt-1 animate-in fade-in slide-in-from-top-1 duration-200">
                         <Label className="text-[11px] text-muted-foreground mb-1.5 block">Alteration Level</Label>
                         <Select value={alterationLevel} onValueChange={(val) => setAlterationLevel(val as "small" | "medium" | "high")}>
                           <SelectTrigger className="h-8 text-xs bg-background shadow-xs">
@@ -337,7 +337,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                     </div>
                     
                     {imageSettingsEnabled && (
-                      <div className="pl-5 border-l-2 border-border/40 ml-1.5 pt-1 animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="pl-5 ml-1.5 pt-1 animate-in fade-in slide-in-from-top-1 duration-200">
                          <Button variant="outline" size="sm" className="w-full h-8 text-xs bg-background shadow-xs" onClick={() => setDialogOpen(true)}>
                            Configure Filters
                          </Button>
@@ -373,7 +373,6 @@ export default function ImagesPage(props: ImagesPageProps) {
                )}
                {items.length > 0 && !isProcessing && (
                   <>
-                    <div className="w-px h-4 bg-border/60 mx-1 hidden sm:block" />
                     <Button variant="ghost" size="sm" onClick={handleClearAll} className="text-muted-foreground hover:text-foreground h-8 px-3">
                       Clear All
                     </Button>
