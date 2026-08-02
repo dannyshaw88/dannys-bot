@@ -191,14 +191,22 @@ export function Sidebar() {
                      key={child.path}
                      onClick={() => setLocation(child.path)}
                      className={cn(
-                       "flex items-center justify-center w-full py-2 text-[8px] font-bold tracking-[0.12em] transition-colors",
+                       "flex flex-col items-center justify-center w-full py-[23.5px] gap-1 transition-all duration-200 rounded-none",
                        childActive
                          ? "bg-primary/10 text-primary"
                          : "text-muted-foreground hover:bg-accent hover:text-foreground",
                      )}
                    >
-                     <child.icon className="w-3.5 h-3.5 mr-1.5" />
-                     {child.shortLabel}
+                     <child.icon
+                       className={cn(
+                         "w-[32px] h-[32px] shrink-0 transition-colors",
+                         childActive ? "text-primary" : "text-muted-foreground",
+                       )}
+                       style={{ color: BRAND }}
+                     />
+                     <span className="text-[9px] font-bold tracking-wide leading-tight text-center text-foreground [hyphens:none]">
+                       {child.shortLabel}
+                     </span>
                    </button>
                  );
                })}
