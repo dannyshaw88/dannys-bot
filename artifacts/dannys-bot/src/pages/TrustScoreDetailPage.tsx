@@ -413,9 +413,11 @@ function TrustScoreAutomationEditor({
         sourceTrustScoreId={trustScoreId}
         sourceSettings={settings}
       />
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="grid items-start gap-6 p-4 lg:grid-cols-[minmax(250px,340px)_minmax(0,1fr)]">
+      <div className="flex-1 min-h-0 flex">
+        <div className="w-1/2 h-full min-h-0 flex items-center justify-center">
           <FakeTrustScoreMirror trustScoreLabel={level.label} />
+        </div>
+        <div className="w-1/2 h-full min-h-0 border-l border-border">
           <AutomationSettingsPanel
             phone={phone}
             settings={settings}
