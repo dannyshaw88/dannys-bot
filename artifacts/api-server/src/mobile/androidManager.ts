@@ -4839,6 +4839,132 @@ export async function findStoryLikeButtonViaA11y(
 }
 
 /**
+ * Locate the story reply composer before opening the keyboard.
+ *
+ * Instagram has shipped several story-viewer layouts where the visible
+ * "Send message" bar is present but `message_composer_container` is absent
+ * from the accessibility tree. Keep this locator tied to the current story
+ * viewer's lower bar rather than requiring one resource-id from one build.
+ */
+export async function findStoryReplyComposerViaA11y(
+  serial: string,
+  onLog?: (msg: string) => void,
+): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const { w, h } = getScreenSize(serial);
+
+  type Candidate = {
+    x: number;
+    y: number;
+    width: number;
+    score: number;
+    reason: string;
+    bounds: string;
+  };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const xml = await _uiDump(adb, serial).catch(() => "");
+    if (!xml) {
+      onLog?.(`[story-composer] UI dump unavailable (attempt ${attempt + 1}/3)`);
+      if (attempt < 2) await _sleep(180);
+      continue;
+    }
+
+    const candidates: Candidate[] = [];
+    const nodeRe = /<node\s([^>]+?)\s*\/?>/gi;
+    let match: RegExpExecArray | null;
+    let lowerNodeCount = 0;
+
+    while ((match = nodeRe.exec(xml)) !== null) {
+      const attrs = match[1];
+      const boundsMatch = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+      if (!boundsMatch) continue;
+
+      const x1 = Number(boundsMatch[1]);
+      const y1 = Number(boundsMatch[2]);
+      const x2 = Number(boundsMatch[3]);
+      const y2 = Number(boundsMatch[4]);
+      const width = x2 - x1;
+      const height = y2 - y1;
+      const x = Math.round((x1 + x2) / 2);
+      const y = Math.round((y1 + y2) / 2);
+      if (y < h * 0.65 || y > h * 0.95) continue;
+      lowerNodeCount++;
+      if (width < w * 0.12 || height <= 0 || height > h * 0.18) continue;
+
+      const resourceId = attrs.match(/\bresource-id="([^"]*)"/i)?.[1] ?? "";
+      const text = attrs.match(/\btext="([^"]*)"/i)?.[1] ?? "";
+      const contentDesc = attrs.match(/\bcontent-desc="([^"]*)"/i)?.[1] ?? "";
+      const hint = attrs.match(/\bhint="([^"]*)"/i)?.[1] ?? "";
+      const className = attrs.match(/\bclass="([^"]*)"/i)?.[1] ?? "";
+      const searchable = `${resourceId} ${text} ${contentDesc} ${hint}`.replace(/\s+/g, " ").trim();
+      const lowerSearchable = searchable.toLowerCase();
+
+      // Never mistake the bottom navigation or a known story action icon for
+      // the reply bar. The composer is a wide lower-screen control.
+      if (/(?:feed_tab|home_tab|clips_tab|reels_tab|profile_tab|toolbar_like|reshare|send_button|back|home|profile)/i.test(resourceId)) {
+        continue;
+      }
+
+      let score = 0;
+      let reason = "";
+      if (/message_composer_container/i.test(resourceId)) {
+        score += 100;
+        reason = "message_composer_container";
+      }
+      if (/(?:composer_text|story_reply|reply_composer|thread_composer)/i.test(resourceId)) {
+        score += 90;
+        reason ||= "composer resource-id";
+      }
+      if (/(?:send message|message or reaction|reply to|reply)/i.test(lowerSearchable)) {
+        score += 80;
+        reason ||= `reply label "${searchable}"`;
+      }
+      if (/android\.widget\.EditText/i.test(className)) {
+        score += 65;
+        reason ||= "lower EditText";
+      }
+      if (
+        (attrs.includes('clickable="true"') || attrs.includes('focusable="true"')) &&
+        width >= w * 0.35
+      ) {
+        score += 35;
+        reason ||= "wide interactive lower control";
+      }
+      if (score === 0) continue;
+
+      candidates.push({
+        x,
+        y,
+        width,
+        score,
+        reason,
+        bounds: `[${x1},${y1}][${x2},${y2}]`,
+      });
+    }
+
+    candidates.sort((a, b) => b.score - a.score || b.width - a.width);
+    const best = candidates[0];
+    if (best) {
+      onLog?.(
+        `[story-composer] matched ${best.reason} at (${best.x},${best.y}) ` +
+        `bounds=${best.bounds} score=${best.score} candidates=${candidates.length} ` +
+        `lowerNodes=${lowerNodeCount} attempt=${attempt + 1}/3`,
+      );
+      return { x: best.x, y: best.y };
+    }
+
+    onLog?.(
+      `[story-composer] no candidate (lowerNodes=${lowerNodeCount}, ` +
+      `screen=${w}x${h}, attempt=${attempt + 1}/3)`,
+    );
+    if (attempt < 2) await _sleep(180);
+  }
+
+  return null;
+}
+
+/**
  * Fast, screenshot-based "is the story viewer still on screen?" check.
  *
  * Why this exists: the story per-slide loop in `runViewStoriesFromFeedLoop`
@@ -8853,20 +8979,21 @@ export async function tapCalibratedKeyboardKey(
   keyName: string,
   onLog?: (msg: string) => void,
 ): Promise<boolean> {
+  const normalized = keyName.trim().toLowerCase();
+  const isEmojiAction = normalized === "emoji" || normalized === "emoticon" || normalized === "smiley";
   const map = loadKeyCalibrationMap(serial);
   if (!map) {
-    onLog?.(`[cal-keyboard] '${keyName}' has no saved calibration map`);
-    return false;
+    onLog?.(`[cal-keyboard] '${keyName}' has no saved calibration map — continuing with live/visual lookup`);
   }
-
-  const normalized = keyName.trim().toLowerCase();
   const aliases = normalized === "emoji" || normalized === "emoticon" || normalized === "smiley"
     ? ["emoji", "emoticon", "smiley"]
     : [normalized, keyName];
-  const mapKey = aliases.find(alias => map[alias] != null);
+  const mapKey = map ? aliases.find(alias => map[alias] != null) : undefined;
   if (!mapKey) {
-    onLog?.(`[cal-keyboard] '${keyName}' is not in calibration map`);
-    return false;
+    onLog?.(
+      `[cal-keyboard] '${keyName}' is not in calibration map — ` +
+      `continuing with ${isEmojiAction ? "live/visual" : "live-node"} lookup`,
+    );
   }
 
   // Prefer the live IME hierarchy whenever Gboard exposes it. Some builds
@@ -9030,7 +9157,6 @@ export async function tapCalibratedKeyboardKey(
 
   candidates.sort((a, b) => b.score - a.score || a.y - b.y);
   const node = candidates[0];
-  const isEmojiAction = normalized === "emoji" || normalized === "emoticon" || normalized === "smiley";
   const tapAndVerify = async (x: number, y: number, source: string): Promise<boolean> => {
     await tap(serial, x, y);
     await _sleep(220 + Math.round(Math.random() * 120));
@@ -9058,7 +9184,7 @@ export async function tapCalibratedKeyboardKey(
     return false;
   }
 
-  const savedPoint = map[mapKey];
+  const savedPoint = mapKey && map ? map[mapKey] : undefined;
   const savedPointIsSafe = !!savedPoint &&
     Number.isFinite(savedPoint.x) &&
     Number.isFinite(savedPoint.y) &&
@@ -9100,7 +9226,7 @@ export async function tapCalibratedKeyboardKey(
   // The pixel detector is intentionally the final fallback and is restricted
   // to Emoji. It identifies the actual bottom-row key geometry rather than
   // using a screen-percentage guess.
-  if (normalized === "emoji" || normalized === "emoticon" || normalized === "smiley") {
+  if (isEmojiAction) {
     const visualPoint = await findKeyboardEmojiButton(serial);
     if (visualPoint &&
         visualPoint.x >= 0 && visualPoint.x < screenW &&

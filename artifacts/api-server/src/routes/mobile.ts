@@ -4242,17 +4242,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (willComment && (await stillInStoryViewer(/* fastOnly= */ true))) {
         try {
           const _cXml = await android.dumpUi(serial).catch(() => "");
-          // Instagram exposes the reply bar differently across builds.  On
-          // this Xiaomi/Instagram combination the parent keeps the stable
-          // message_composer_container resource-id, but the old
-          // "Send Message or Reaction" content-desc is absent; the visible
-          // label is exposed by its composer_text child instead:
-          //   message_composer_container ... clickable="true"
-          //   composer_text ... text="Send message"
-          //
-          // The resource-id is the primary signal that replies are enabled.
-          // Accept the legacy desc and the current child-label variant so a
-          // valid reply bar is not misreported as "comments disabled".
           const _hasComposerContainer =
             /(?:id|resource-id)="[^"]*message_composer_container"/.test(_cXml);
           const _hasLegacyComposerLabel =
@@ -4260,37 +4249,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           const _hasVisibleComposerLabel =
             /(?:id|resource-id)="[^"]*composer_text"/.test(_cXml) &&
             /(?:text|content-desc)="Send message"/i.test(_cXml);
-          // The parent resource-id is the authoritative signal.  Labels are
-          // diagnostic only because Android XML may expose them on a child,
-          // omit them, or localize them between Instagram builds.
-          const _composerPresent = _hasComposerContainer;
           onLog?.(
             `View Stories ${s + 1}: message composer probe — ` +
             `container=${_hasComposerContainer ? "yes" : "no"}, ` +
             `legacy-label=${_hasLegacyComposerLabel ? "yes" : "no"}, ` +
             `visible-label=${_hasVisibleComposerLabel ? "yes" : "no"}`,
           );
-          if (!_composerPresent) {
+
+          // Do not require one Instagram resource-id. Xiaomi/Instagram builds
+          // can render the visible reply bar while exposing only a generic
+          // lower-screen node (or composer_text) in UIAutomator.
+          const _composer = await android.findStoryReplyComposerViaA11y(
+            serial,
+            msg => onLog?.(`View Stories ${s + 1}: ${msg}`),
+          );
+          if (!_composer) {
             onLog?.(`View Stories ${s + 1}: emoji comment skipped — author has message replies disabled`);
-            logger.info({ serial, story: s + 1 }, "[view-stories] emoji comment skipped — no message_composer_container");
+            logger.info({ serial, story: s + 1 }, "[view-stories] emoji comment skipped — reply composer not found");
           } else {
-            // Parse the composer tap coords from the matching node.  The live
-            // Android XML uses resource-id/content-desc; exported inspection
-            // views shorten those to id/desc, so support both attribute forms.
-            const _composerNode = [..._cXml.matchAll(/<node\s([^>]+?)\s*\/?>/g)]
-              .find(m => /(?:id|resource-id)="[^"]*message_composer_container"/.test(m[1]));
-            const _composerMatch = _composerNode?.[1].match(
-              /bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/,
-            );
-            if (!_composerMatch) {
-              onLog?.(`View Stories ${s + 1}: emoji comment skipped — composer bounds not found in a11y node`);
-              logger.warn({ serial, story: s + 1 }, "[view-stories] emoji comment skipped — composer bounds missing");
-              continue;
-            }
-            const _composerX = Math.round((+_composerMatch[1] + +_composerMatch[3]) / 2);
-            const _composerY = Math.round((+_composerMatch[2] + +_composerMatch[4]) / 2);
-            onLog?.(`View Stories ${s + 1}: tapping message composer at (${_composerX},${_composerY})…`);
-            await android.tap(serial, _composerX, _composerY);
+            onLog?.(`View Stories ${s + 1}: tapping message composer at (${_composer.x},${_composer.y})…`);
+            await android.tap(serial, _composer.x, _composer.y);
             await sleepOrAbort(serial, 800); // keyboard animates up
 
             // ── Open the Emoji picker through a verified layered tap ──
