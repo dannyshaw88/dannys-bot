@@ -2065,6 +2065,181 @@ function CalibrationDialog({
 
 type PhoneSlotHandle = { getVideoSize: () => { w: number; h: number } | null };
 
+function ManualPhoneMediaPanel({ serial, onLog }: { serial: string; onLog?: (msg: string) => void }) {
+  const storageKey = `mobile-manual-media:${serial}`;
+  const [selectedPath, setSelectedPath] = useState("");
+  const [selectedFileName, setSelectedFileName] = useState("");
+  const [devicePath, setDevicePath] = useState("");
+  const [loadedFileName, setLoadedFileName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const browserFileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) ?? "null");
+      if (saved?.devicePath) {
+        setDevicePath(String(saved.devicePath));
+        setLoadedFileName(String(saved.fileName ?? "image"));
+      }
+    } catch {}
+  }, [storageKey]);
+
+  const rememberLoaded = (nextDevicePath: string, fileName: string) => {
+    setDevicePath(nextDevicePath);
+    setLoadedFileName(fileName);
+    try { localStorage.setItem(storageKey, JSON.stringify({ devicePath: nextDevicePath, fileName })); } catch {}
+  };
+
+  const selectFromPc = async () => {
+    setMessage(null);
+    const api = (window as any).electronAPI;
+    if (api?.openMediaFileDialog) {
+      const result = await api.openMediaFileDialog().catch((e: any) => ({ error: e?.message ?? "Picker failed" }));
+      if (result?.error) { setMessage(result.error); return; }
+      if (result?.canceled || !result?.filePath) return;
+      setSelectedPath(String(result.filePath));
+      setSelectedFileName(String(result.fileName ?? result.filePath.split(/[\\/]/).pop() ?? "image"));
+      onLog?.(`Manual media: selected ${result.fileName ?? result.filePath}`);
+      return;
+    }
+    browserFileRef.current?.click();
+  };
+
+  const onBrowserFile = (file: File | undefined) => {
+    if (!file) return;
+    setSelectedPath("");
+    setSelectedFileName(file.name);
+    setMessage(null);
+    onLog?.(`Manual media: selected ${file.name}`);
+  };
+
+  const loadToPhone = async () => {
+    if (!selectedFileName || devicePath) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const body: Record<string, string> = { fileName: selectedFileName };
+      if (selectedPath) {
+        body.localPath = selectedPath;
+      } else {
+        const file = browserFileRef.current?.files?.[0];
+        if (!file) throw new Error("Choose an image first");
+        const data = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onerror = () => reject(new Error("Could not read the selected image"));
+          reader.onload = () => resolve(String(reader.result));
+          reader.readAsDataURL(file);
+        });
+        body.fileData = data;
+      }
+      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/manual-media/load`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const result = await r.json().catch(() => null);
+      if (!r.ok || !result?.ok) throw new Error(result?.error ?? `Load failed (${r.status})`);
+      rememberLoaded(result.devicePath, result.fileName ?? selectedFileName);
+      setSelectedPath("");
+      setSelectedFileName("");
+      setMessage("Loaded onto phone. Finish the post manually in Instagram, then delete it here.");
+      onLog?.(`Manual media: loaded ${result.fileName ?? selectedFileName} → ${result.devicePath}`);
+    } catch (e: any) {
+      setMessage(e?.message ?? "Could not load image onto phone");
+      onLog?.(`Manual media: load failed — ${e?.message ?? "unknown error"}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteFromPhone = async () => {
+    if (!devicePath) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/manual-media`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ devicePath }),
+      });
+      const result = await r.json().catch(() => null);
+      if (!r.ok || !result?.ok) throw new Error(result?.error ?? `Delete failed (${r.status})`);
+      onLog?.(`Manual media: deleted ${loadedFileName} from phone`);
+      setDevicePath("");
+      setLoadedFileName("");
+      setSelectedPath("");
+      setSelectedFileName("");
+      if (browserFileRef.current) browserFileRef.current.value = "";
+      try { localStorage.removeItem(storageKey); } catch {}
+      setMessage("Deleted from phone.");
+    } catch (e: any) {
+      setMessage(e?.message ?? "Could not delete image from phone");
+      onLog?.(`Manual media: delete failed — ${e?.message ?? "unknown error"}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="shrink-0 border-t border-white/10 bg-zinc-900/95 px-3 py-2">
+      <input
+        ref={browserFileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={e => onBrowserFile(e.target.files?.[0])}
+      />
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[10px] font-semibold text-white/70 flex items-center gap-1.5">
+          <ImagePlus className="w-3.5 h-3.5 text-cyan-300" /> Manual post image
+        </span>
+        <button
+          type="button"
+          onClick={selectFromPc}
+          disabled={busy || !!devicePath}
+          className="inline-flex items-center gap-1.5 rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[10px] font-semibold text-cyan-200 hover:bg-cyan-400/20 disabled:opacity-40 disabled:cursor-not-allowed"
+          title={devicePath ? "Delete the current phone copy before selecting another image" : "Choose one image from the Windows PC"}
+        >
+          <FolderOpen className="w-3 h-3" /> Select from PC
+        </button>
+        <button
+          type="button"
+          onClick={loadToPhone}
+          disabled={busy || !selectedFileName || !!devicePath}
+          className="inline-flex items-center gap-1.5 rounded border border-emerald-400/30 bg-emerald-400/10 px-2 py-1 text-[10px] font-semibold text-emerald-200 hover:bg-emerald-400/20 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {busy && !devicePath ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+          Load to phone
+        </button>
+        <button
+          type="button"
+          onClick={deleteFromPhone}
+          disabled={busy || !devicePath}
+          className="inline-flex items-center gap-1.5 rounded border border-red-400/30 bg-red-400/10 px-2 py-1 text-[10px] font-semibold text-red-200 hover:bg-red-400/20 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {busy && devicePath ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+          Delete from phone
+        </button>
+        {selectedFileName && !devicePath && (
+          <span className="text-[10px] text-white/55 truncate max-w-[260px]" title={selectedPath || selectedFileName}>
+            Selected: {selectedFileName}
+          </span>
+        )}
+        {devicePath && (
+          <span className="text-[10px] text-emerald-300/80 truncate max-w-[330px]" title={devicePath}>
+            On phone: {loadedFileName}
+          </span>
+        )}
+      </div>
+      <p className="mt-1 text-[9px] text-white/35">
+        Select one image, load it into Instagram’s gallery, post manually, then delete the phone copy here.
+      </p>
+      {message && <p className={`mt-1 text-[9px] ${message.startsWith("Deleted") || message.startsWith("Loaded") ? "text-emerald-300" : "text-red-300"}`}>{message}</p>}
+    </div>
+  );
+}
+
 const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; live: boolean; onPower: () => void; phoneDims: { w: number; h: number } | null; paneSize: { w: number; h: number } | null; inspectMode?: boolean; logRecMode?: boolean; logMarkers?: LogMarker[]; onExpectedTap?: (x: number, y: number, kind?: "expected" | "vicinity") => void; custom: SlotCustomization; onCustomChange: (c: SlotCustomization) => void }>(function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower, phoneDims, paneSize, inspectMode = false, logRecMode, logMarkers, onExpectedTap, custom, onCustomChange }, ref) {
   const liveCanvasRef = useRef<LiveCanvasHandle>(null);
   // Re-exposes LiveCanvas's own handle so the page-level Log tab (rendered
@@ -2426,6 +2601,10 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
           </div>
         )}
       </div>
+
+      {isReady && phone && (
+        <ManualPhoneMediaPanel serial={phone.serial} onLog={onLog} />
+      )}
 
       {/* ── Element Inspector Panel ─────────────────────────────────────────────
            Two tabs below the mirror:

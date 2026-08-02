@@ -1231,6 +1231,23 @@ async function createWindow() {
     }
   });
 
+  // Open a native OS media-file picker for manual phone uploads.
+  // The selected path stays on the Windows machine; the API server pushes a
+  // temporary copy to the connected Android device when the user presses Load.
+  ipcMain.handle("open-media-file-dialog", async () => {
+    const result = await dialog.showOpenDialog({
+      title: "Choose an image to load onto the phone",
+      properties: ["openFile"],
+      filters: [
+        { name: "Images", extensions: ["jpg", "jpeg", "png", "webp", "gif", "heic", "heif", "avif", "bmp"] },
+        { name: "All Files", extensions: ["*"] },
+      ],
+    });
+    if (result.canceled || !result.filePaths.length) return { canceled: true };
+    const filePath = result.filePaths[0];
+    return { canceled: false, filePath, fileName: path.basename(filePath) };
+  });
+
   // Count media files (images + videos) directly inside a folder (non-recursive).
   ipcMain.handle("count-folder-files", async (_e, folderPath: string) => {
     try {

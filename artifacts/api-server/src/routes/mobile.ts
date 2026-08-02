@@ -1256,6 +1256,67 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(500).json({ error: e?.message }); }
   });
 
+  // ── Manual PC → phone media transfer ─────────────────────────────────────
+  // This is intentionally separate from automated Make a Post. The user
+  // chooses one image, loads it into DCIM/Camera, completes the Instagram post
+  // manually in the mirror, and explicitly deletes the phone copy afterward.
+  app.post("/api/mobile/devices/:serial/manual-media/load", async (req: Request, res: Response) => {
+    let tempPath: string | null = null;
+    try {
+      const serial = p(req, "serial");
+      const body = z.object({
+        localPath: z.string().trim().min(1).optional(),
+        fileName: z.string().trim().min(1).max(255),
+        fileData: z.string().min(1).optional(),
+      }).refine(v => !!v.localPath || !!v.fileData, { message: "localPath or fileData is required" }).parse(req.body);
+
+      const ext = path.extname(body.fileName).toLowerCase();
+      const allowedExts = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".heif", ".avif", ".bmp"]);
+      if (!allowedExts.has(ext)) {
+        res.status(400).json({ ok: false, error: "Choose an image file (JPG, PNG, WEBP, GIF, HEIC, HEIF, AVIF, or BMP)." });
+        return;
+      }
+
+      let sourcePath = body.localPath;
+      if (body.fileData) {
+        const safeName = body.fileName.replace(/[^a-zA-Z0-9_.-]/g, "_");
+        tempPath = path.join(os.tmpdir(), `equinox-manual-media-${Date.now()}-${safeName}`);
+        const buffer = Buffer.from(body.fileData.replace(/^data:[^;]+;base64,/, ""), "base64");
+        if (!buffer.length) throw new Error("Selected image data was empty");
+        await fsPromises.writeFile(tempPath, buffer);
+        sourcePath = tempPath;
+      }
+      if (!sourcePath) throw new Error("No image source was provided");
+      const stat = await fsPromises.stat(sourcePath);
+      if (!stat.isFile()) throw new Error("Selected image path is not a file");
+      if (stat.size > 100 * 1024 * 1024) throw new Error("Image is larger than 100 MB");
+
+      const devicePath = await android.pushFileToDevice(serial, sourcePath, body.fileName);
+      logger.info({ serial, fileName: body.fileName, devicePath }, "[manual-media] loaded image onto phone");
+      res.json({ ok: true, fileName: body.fileName, devicePath });
+    } catch (e: any) {
+      logger.warn({ err: e }, "[manual-media] load failed");
+      res.status(400).json({ ok: false, error: e?.message ?? "Could not load image onto phone" });
+    } finally {
+      if (tempPath) await fsPromises.unlink(tempPath).catch(() => {});
+    }
+  });
+
+  app.delete("/api/mobile/devices/:serial/manual-media", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const devicePath = z.string()
+        .regex(/^\/sdcard\/DCIM\/Camera\/equinox_[a-zA-Z0-9_.-]+$/, "Invalid manual media path")
+        .parse(req.body?.devicePath);
+      await android.removeDeviceFile(serial, devicePath);
+      logger.info({ serial, devicePath }, "[manual-media] deleted image from phone");
+      res.json({ ok: true, devicePath });
+    } catch (e: any) {
+      logger.warn({ err: e }, "[manual-media] delete failed");
+      res.status(400).json({ ok: false, error: e?.message ?? "Could not delete image from phone" });
+    }
+  });
+
   // BANNED: `adb shell wm size reset` (and any command that changes phone display settings)
   // is permanently removed. The code handles coordinate differences in software via
   // rescaleForDevice() — the phone's display settings must never be touched by this app.
