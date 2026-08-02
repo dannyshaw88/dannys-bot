@@ -287,7 +287,8 @@ type AutomationSettings = {
   // Visit Saved — navigates to own Saved media page via profile → hamburger → Saved, scrolls.
   visitSavedPctMin?: number;
   visitSavedPctMax?: number;
-  // Visit Random Settings — opens profile → hamburger → scrolls settings 1–10 rows, taps once, backs out.
+  // Visit Random Settings — opens profile → hamburger → taps one validated
+  // settings row, optionally scrolls once, then backs out once.
   visitSettingsPctMin?: number;
   visitSettingsPctMax?: number;
   // App Switch — presses square button, opens SMS app for a random dwell, returns to Instagram.
@@ -1542,7 +1543,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Visit Saved — go to profile → hamburger → Saved, scroll 1–10 times, return.
     visitSavedPctMin: z.number().min(0).max(100).default(0),
     visitSavedPctMax: z.number().min(0).max(100).default(0),
-    // Visit Random Settings — profile → hamburger → scroll settings 1–10 rows, tap once, back×2.
+    // Visit Random Settings — profile → hamburger → tap one row, optionally
+    // scroll once, then press Back once.
     visitSettingsPctMin: z.number().min(0).max(100).default(0),
     visitSettingsPctMax: z.number().min(0).max(100).default(0),
     // App Switch: press square button, open SMS for random dwell, return to Instagram.
@@ -5817,7 +5819,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Visit Saved: profile → hamburger → Saved page, scrolls 1–10×, returns.
     visitSavedPctMin: z.number().min(0).max(100).default(0),
     visitSavedPctMax: z.number().min(0).max(100).default(0),
-    // Visit Random Settings: profile → hamburger → scroll settings 1–10 rows, tap once, back×2.
+    // Visit Random Settings: profile → hamburger → tap one row, optionally
+    // scroll once, then press Back once.
     visitSettingsPctMin: z.number().min(0).max(100).default(0),
     visitSettingsPctMax: z.number().min(0).max(100).default(0),
     // App Switch: press square button, open SMS for random 10–30 s, return to Instagram.
@@ -7042,11 +7045,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   }
 
   /**
-   * Visit Random Settings — navigates to the Settings and activity page via:
-   *   Profile tab → hamburger "Options" button
-   * then scrolls 1–10 rows through the settings list, taps once anywhere on
-   * screen (simulating curiosity / mis-tap), presses Back twice to exit back
-   * through Settings and activity → profile, then returns to the home feed.
+   * Visit Random Settings — navigates to Settings and activity via Profile →
+   * Options, taps exactly one validated top-level settings row, optionally
+   * scrolls that destination once, then presses Back exactly once.
+   *
+   * Never use a blind coordinate tap and never tap a second-level setting.
    */
   async function runVisitSettings(serial: string, onLog?: (msg: string) => void): Promise<void> {
     // 1. Ensure we're on the home feed first.
@@ -7087,42 +7090,37 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 600));
     onLog?.("Visit Settings: ✓ opened Settings and activity");
 
-    // 4. Scroll through the settings list 1–10 rows.
-    const scrollCount = rollRange(1, 10);
+    // 4. Tap exactly one real settings row. Never guess at a screen coordinate.
+    const settingsRow = await android.findInstagramSettingsRow(serial).catch(() => null);
+    if (!settingsRow) {
+      onLog?.("Visit Settings: no validated settings row found — skipping");
+      logger.warn({ serial }, "[jitter-visit-settings] no validated settings row");
+      await android.pressBack(serial);
+      await sleepOrAbort(serial, 800);
+      return;
+    }
+    await android.tap(serial, settingsRow.x, settingsRow.y);
+    await sleepOrAbort(serial, 1200 + Math.round(Math.random() * 600));
+    onLog?.(`Visit Settings: ✓ tapped one setting row (${settingsRow.label})`);
+
+    // 5. Either scroll once then Back, or Back immediately. There is never a
+    // second setting/subsetting tap in this flow.
     const { w, h } = getScreenSize(serial);
-    for (let i = 0; i < scrollCount; i++) {
+    if (Math.random() < 0.5) {
       await android.swipe(
         serial,
-        Math.round(w * 0.5), Math.round(h * 0.65),
-        Math.round(w * 0.5), Math.round(h * 0.30),
-        350 + Math.round(Math.random() * 150),
+        Math.round(w * 0.5), Math.round(h * 0.68),
+        Math.round(w * 0.5), Math.round(h * 0.34),
+        420 + Math.round(Math.random() * 120),
       );
-      await sleepOrAbort(serial, 400 + Math.round(Math.random() * 500));
+      await sleepOrAbort(serial, 500 + Math.round(Math.random() * 400));
+      onLog?.("Visit Settings: ✓ scrolled once");
     }
-    onLog?.(`Visit Settings: ✓ scrolled ${scrollCount} row(s)`);
 
-    // 5. Tap once anywhere on screen (random mid-screen point).
-    const tapX = Math.round(w * (0.2 + Math.random() * 0.6));
-    const tapY = Math.round(h * (0.3 + Math.random() * 0.4));
-    await android.tap(serial, tapX, tapY);
-    await sleepOrAbort(serial, 1500 + Math.round(Math.random() * 800));
-    onLog?.("Visit Settings: ✓ tapped screen");
-
-    // 6. Back×2: exit whatever was tapped / Settings and activity → profile.
+    // 6. Back once only.
     await android.pressBack(serial);
     await sleepOrAbort(serial, 800);
-    await android.pressBack(serial);
-    await sleepOrAbort(serial, 800);
-
-    // 7. Return to home feed.
-    const homeTab = await android.findHomeTab(serial).catch(() => null);
-    if (homeTab) {
-      await android.tap(serial, homeTab.x, homeTab.y);
-    } else {
-      await android.pressBack(serial);
-    }
-    await sleepOrAbort(serial, 600);
-    onLog?.("Visit Settings: ✓ done, returned to home feed");
+    onLog?.("Visit Settings: ✓ done after one Back");
   }
 
   /**

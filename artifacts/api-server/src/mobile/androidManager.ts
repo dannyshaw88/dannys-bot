@@ -8020,6 +8020,80 @@ export async function findInstagramProfileOptionsButton(serial: string): Promise
 }
 
 /**
+ * Find one safe, top-level row on Instagram's "Settings and activity" page.
+ *
+ * This deliberately returns only a single validated row. The random-settings
+ * flow must never guess at a coordinate or tap a second-level setting after
+ * the first tap, because a second navigation tap can leave the flow in an
+ * unexpected screen on different Instagram builds.
+ */
+export async function findInstagramSettingsRow(
+  serial: string,
+): Promise<{ x: number; y: number; label: string } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+  const { w, h } = _getScreenSize(xml);
+  const top = Math.round(h * 0.10);
+  const bottom = Math.round(h * 0.88);
+  const knownLabels = [
+    "Your activity",
+    "Notifications",
+    "Time spent",
+    "Privacy",
+    "Supervision",
+    "Saved",
+    "Close Friends",
+    "Favorites",
+    "Muted",
+    "Blocked",
+    "Security",
+    "Ads",
+    "Account",
+    "Help",
+    "About",
+  ];
+  const excluded = /^(Settings and activity|Accounts Center|Log out|Add account|Switch account|Meta Verified)$/i;
+  const candidates: Array<{ x: number; y: number; label: string }> = [];
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+  let match: RegExpExecArray | null;
+  while ((match = nodeRe.exec(xml)) !== null) {
+    const attrs = match[1];
+    if (!/clickable="true"/.test(attrs)) continue;
+    const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+    if (!bounds) continue;
+    const x1 = Number(bounds[1]);
+    const y1 = Number(bounds[2]);
+    const x2 = Number(bounds[3]);
+    const y2 = Number(bounds[4]);
+    const width = x2 - x1;
+    const height = y2 - y1;
+    const x = Math.round((x1 + x2) / 2);
+    const y = Math.round((y1 + y2) / 2);
+    if (y < top || y > bottom || width < w * 0.60 || height < 32 || height > 220) continue;
+
+    const text = attrs.match(/\btext="([^"]*)"/)?.[1] ?? "";
+    const desc = attrs.match(/\bcontent-desc="([^"]*)"/)?.[1] ?? "";
+    const label = text || desc;
+    if (!label || excluded.test(label)) continue;
+    const known = knownLabels.find(candidate => label.toLowerCase().includes(candidate.toLowerCase()));
+    if (!known && !/^[A-Za-z][A-Za-z '&·.-]{2,48}$/.test(label)) continue;
+    candidates.push({ x, y, label: known ?? label });
+  }
+
+  // Collapse parent/child duplicates from the same row before choosing one.
+  const deduped = candidates.filter((candidate, index, all) =>
+    all.findIndex(other =>
+      Math.abs(other.x - candidate.x) < 45 &&
+      Math.abs(other.y - candidate.y) < 45,
+    ) === index,
+  );
+  if (deduped.length === 0) return null;
+  return deduped[Math.floor(Math.random() * deduped.length)];
+}
+
+/**
  * Find the "Saved" row on Instagram's Settings and activity page.
  * Confirmed UIAutomator node: View content-desc="Saved" at ~(540,1033) on this farm.
  *
