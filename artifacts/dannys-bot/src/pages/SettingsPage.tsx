@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
-import { Users, Ban, Shield, ShieldAlert, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power, Terminal, Download, Pencil, X, Crown, LogOut, UserCircle, Camera, Upload, Plus } from "lucide-react";
+import { Users, Ban, Shield, ShieldAlert, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power, Terminal, Download, Pencil, X, Crown, LogOut, UserCircle, Camera, Upload, Plus, Settings } from "lucide-react";
 import type { GlobalSettings } from "@shared/schema";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTheme, THEME_COLORS } from "@/hooks/use-theme";
@@ -19,6 +19,19 @@ import { useTheme, THEME_COLORS } from "@/hooks/use-theme";
 type BackupEntry = { id: string; date: string; size: number };
 const eAPI = () => (window as any).electronAPI;
 const isElectron = typeof window !== "undefined" && typeof eAPI()?.createBackup === "function";
+
+const SETTINGS_TABS = [
+  { label: "My Account", icon: UserCircle },
+  { label: "General", icon: Settings },
+  { label: "Evasion Stats", icon: ShieldAlert },
+  { label: "Trust Scores", icon: Shield },
+  { label: "Fix Images", icon: Palette },
+  { label: "Import", icon: Upload },
+  { label: "Scraping", icon: Database },
+  { label: "Automation", icon: Timer },
+  { label: "Security", icon: ShieldAlert },
+  { label: "Data", icon: HardDrive },
+] as const;
 
 // ─── Jarvee parser helpers ───────────────────────────────────────────────────
 
@@ -440,13 +453,14 @@ export function SettingsPage() {
       </div>
 
       <div className="flex items-center gap-0 mb-6 border-b border-border/60 flex-wrap">
-        {(["My Account", "General", "Evasion Stats", "Trust Scores", "Fix Images", "Import", "Scraping", "Automation", "Security", "Data"] as const).map(tab => (
+        {SETTINGS_TABS.map(({ label, icon: TabIcon }) => (
           <button
-            key={tab}
-            onClick={() => setTab(tab.toLowerCase())}
-            className={`px-5 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${settingsTab === tab.toLowerCase() ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            key={label}
+            onClick={() => setTab(label.toLowerCase())}
+            className={`inline-flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${settingsTab === label.toLowerCase() ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           >
-            {tab}
+            {label}
+            <TabIcon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
           </button>
         ))}
       </div>

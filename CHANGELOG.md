@@ -1,3 +1,11 @@
+## [1.2.349] — 2026-08-03
+
+### Changed — Added icons to Settings tabs
+
+- Added a suitable icon after the title of every Settings tab: My Account, General, Evasion Stats, Trust Scores, Fix Images, Import, Scraping, Automation, Security, and Data.
+- Kept the existing tab labels, selection behavior, URL state, and content unchanged.
+- Bumped the root application and Electron package versions to `1.2.349`.
+
 ## [1.2.348] — 2026-08-03
 
 ### Added — Previous and Next navigation for TrustScore settings
