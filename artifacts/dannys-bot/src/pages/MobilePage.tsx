@@ -6040,7 +6040,7 @@ export function AutomationSettingsPanel({
                   id={`filter-private-users-${slotIdx ?? 0}`}
                   checked={settings.followFilterPrivateUsers}
                   onChange={e => setSettings(s => ({ ...s, followFilterPrivateUsers: e.target.checked }))}
-                  disabled={loading}
+                  disabled={fieldDisabled("followFilterPrivateUsers")}
                   className="w-4 h-4 accent-primary cursor-pointer"
                 />
                 <label htmlFor={`filter-private-users-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Private Users</label>
@@ -6051,7 +6051,7 @@ export function AutomationSettingsPanel({
                   id={`filter-english-speaking-${slotIdx ?? 0}`}
                   checked={settings.followFilterEnglishSpeaking}
                   onChange={e => setSettings(s => ({ ...s, followFilterEnglishSpeaking: e.target.checked }))}
-                  disabled={loading}
+                  disabled={fieldDisabled("followFilterEnglishSpeaking")}
                   className="w-4 h-4 accent-primary cursor-pointer"
                 />
                 <label htmlFor={`filter-english-speaking-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">English Speaking</label>
@@ -6062,7 +6062,7 @@ export function AutomationSettingsPanel({
                   id={`filter-min-followers-250-${slotIdx ?? 0}`}
                   checked={settings.followFilterMinFollowers50}
                   onChange={e => setSettings(s => ({ ...s, followFilterMinFollowers50: e.target.checked }))}
-                  disabled={loading}
+                  disabled={fieldDisabled("followFilterMinFollowers50")}
                   className="w-4 h-4 accent-primary cursor-pointer"
                 />
                 <label htmlFor={`filter-min-followers-250-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">50 Followers+</label>
@@ -6073,7 +6073,7 @@ export function AutomationSettingsPanel({
                   id={`filter-verified-users-${slotIdx ?? 0}`}
                   checked={settings.followFilterVerifiedUsers}
                   onChange={e => setSettings(s => ({ ...s, followFilterVerifiedUsers: e.target.checked }))}
-                  disabled={loading}
+                  disabled={fieldDisabled("followFilterVerifiedUsers")}
                   className="w-4 h-4 accent-primary cursor-pointer"
                 />
                 <label htmlFor={`filter-verified-users-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Skip Verified</label>
@@ -6084,7 +6084,7 @@ export function AutomationSettingsPanel({
                   id={`filter-max-followers-25k-${slotIdx ?? 0}`}
                   checked={settings.followFilterMaxFollowers25k}
                   onChange={e => setSettings(s => ({ ...s, followFilterMaxFollowers25k: e.target.checked }))}
-                  disabled={loading}
+                  disabled={fieldDisabled("followFilterMaxFollowers25k")}
                   className="w-4 h-4 accent-primary cursor-pointer"
                 />
                 <label htmlFor={`filter-max-followers-25k-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">-25K Followers</label>
