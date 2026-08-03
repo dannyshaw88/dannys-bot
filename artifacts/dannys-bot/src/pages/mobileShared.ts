@@ -547,12 +547,11 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'postAlteration',    label: 'Image Alteration',              fields: ['makePostAlterationEnabled','makePostAlterationLevel'] },
     { key: 'postImgSettings',   label: 'Image Settings',                fields: ['makePostImageSettingsEnabled','makePostImageSettings'] },
     { key: 'postLocalFolder',   label: 'My Computer directory',          fields: ['makePostLocalFolderPath'] },
-    { key: 'postLocalOpts',     label: 'My Computer options',            fields: ['makePostLocalFolderNoRepeat','makePostLocalFolderRandom','makePostLocalFolderDeleteAfterUpload'] },
+    { key: 'postLocalOpts',     label: 'My Computer options',            fields: ['makePostLocalFolderNoRepeat','makePostLocalFolderRandom'] },
     { key: 'postDisableAt',     label: 'Disable when no more posts are found', fields: ['makePostDisableWhenExhausted'] },
     { key: 'postChatGptCaption',label: 'ChatGPT / caption settings',    fields: ['makePostUseChatGpt','makePostCaptionText'] },
     { key: 'postFixAiSlop',      label: 'Fix AI Slop',                   fields: ['makePostFixAiSlop'] },
     { key: 'postMakeUnique',     label: 'Make it unique',                fields: ['makePostMakeUnique'] },
-    { key: 'postDestination',   label: 'Post to Profile / Story %',     fields: ['makePostPostToProfilePctMin','makePostPostToProfilePctMax','makePostPostToStoryPctMin','makePostPostToStoryPctMax'] },
   ]},
   { key: 'postStory',      label: 'Post a Story', sub: [
     { key: 'storyPostEnabled',   label: 'Enabled',             fields: ['postStoryEnabled'] },

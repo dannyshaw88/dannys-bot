@@ -49,7 +49,6 @@ export function TrustScoresPage() {
   const dragOverIdxRef = useRef<number | null>(null);
 
   const refreshLevels = () => setLevels(getTrustLevels());
-
   const handleDeleteClick = (e: React.MouseEvent, level: TrustLevelEntry) => {
     e.stopPropagation();
     setDeleteTarget(level);
@@ -206,7 +205,6 @@ export function TrustScoresPage() {
                         {level.label}
                       </span>
                     </button>
-
                     <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={e => openEdit(e, level)}

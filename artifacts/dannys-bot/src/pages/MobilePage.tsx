@@ -26,6 +26,7 @@ import {
 
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
 import { ImageSettingsDialog, type ImageFilterSettings } from "@/components/tools/ImageSettingsDialog";
+import { TrustScoreCountdown } from "@/components/TrustScoreCountdown";
 import { getTrustLevels, getTrustScore, type TrustLevelEntry } from "@/components/TrustScoreBadge";
 import { MobilePhoneApps, MobilePhoneAppsPanel, type MobilePhoneAppsPanelHandle } from "@/pages/MobilePhoneApps";
 import {
@@ -3734,7 +3735,6 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             makePostLocalFolderPath: s.makePostLocalFolderPath,
             makePostLocalFolderNoRepeat: s.makePostLocalFolderNoRepeat,
             makePostLocalFolderRandom: s.makePostLocalFolderRandom,
-            makePostLocalFolderDeleteAfterUpload: s.makePostLocalFolderDeleteAfterUpload,
             updateProfilePicActivatePctMin: s.updateProfilePicActivatePctMin,
             updateProfilePicActivatePctMax: s.updateProfilePicActivatePctMax,
             updateProfilePicFolderPath: s.updateProfilePicFolderPath,
@@ -3748,10 +3748,6 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             makePostMakeUnique: s.makePostMakeUnique,
             makePostCaptionText: s.makePostCaptionText,
             makePostImageSettings: s.makePostImageSettings,
-            makePostPostToProfilePctMin: s.makePostPostToProfilePctMin,
-            makePostPostToProfilePctMax: s.makePostPostToProfilePctMax,
-            makePostPostToStoryPctMin: s.makePostPostToStoryPctMin,
-            makePostPostToStoryPctMax: s.makePostPostToStoryPctMax,
             postStoryEnabled: s.postStoryEnabled,
             postStoryActivatePctMin: s.postStoryActivatePctMin,
             postStoryActivatePctMax: s.postStoryActivatePctMax,
@@ -6505,14 +6501,6 @@ export function AutomationSettingsPanel({
                         <label htmlFor={`make-a-post-local-random-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Pick at random</label>
                       </div>
                       <div className="flex items-center gap-2">
-                        <input type="checkbox" id={`make-a-post-local-delete-after-${slotIdx ?? 0}`}
-                          checked={settings.makePostLocalFolderDeleteAfterUpload === true}
-                          onChange={e => setSettings(s => ({ ...s, makePostLocalFolderDeleteAfterUpload: e.target.checked }))}
-                          disabled={fieldDisabled("makePostLocalFolderDeleteAfterUpload")}
-                          className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                        <label htmlFor={`make-a-post-local-delete-after-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Delete from PC after posting</label>
-                      </div>
-                      <div className="flex items-center gap-2">
                         <input type="checkbox" id={`make-a-post-disable-exhausted-${slotIdx ?? 0}`}
                           checked={settings.makePostDisableWhenExhausted}
                           onChange={e => setSettings(s => ({ ...s, makePostDisableWhenExhausted: e.target.checked }))}
@@ -6642,36 +6630,6 @@ export function AutomationSettingsPanel({
                       disabled={fieldDisabled("makePostMakeUnique")}
                       className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                     <label htmlFor={`make-a-post-make-unique-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Make it unique</label>
-                  </div>
-                  {/* Post to Profile % */}
-                  <div className="space-y-3">
-                    <Label className="text-sm text-muted-foreground block text-center">Post to Profile %</Label>
-                    <div className="flex items-center gap-2">
-                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                        value={settings.makePostPostToProfilePctMin}
-                        onChange={e => setSettings(s => ({ ...s, makePostPostToProfilePctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
-                        disabled={loading} />
-                      <span className="text-muted-foreground text-sm">to</span>
-                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                        value={settings.makePostPostToProfilePctMax}
-                        onChange={e => setSettings(s => ({ ...s, makePostPostToProfilePctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
-                        disabled={loading} />
-                    </div>
-                  </div>
-                  {/* Post to Story % */}
-                  <div className="space-y-3">
-                    <Label className="text-sm text-muted-foreground block text-center">Post to Story %</Label>
-                    <div className="flex items-center gap-2">
-                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                        value={settings.makePostPostToStoryPctMin}
-                        onChange={e => setSettings(s => ({ ...s, makePostPostToStoryPctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
-                        disabled={loading} />
-                      <span className="text-muted-foreground text-sm">to</span>
-                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                        value={settings.makePostPostToStoryPctMax}
-                        onChange={e => setSettings(s => ({ ...s, makePostPostToStoryPctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
-                        disabled={loading} />
-                    </div>
                   </div>
                 </div>
               </div>
@@ -6977,7 +6935,7 @@ function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 142, hideIco
     setScoreId(id);
     setOpen(false);
     try {
-      await saveSlotTrustScore(serial, slotIdx, id);
+      await saveSlotTrustScore(serial, slotIdx, id, levels.findIndex(level => level.id === id) < levels.length - 1);
     } catch {
       // Keep the optimistic UI/cache value. The next hydration will retry the
       // server read and the user can choose the value again if needed.
@@ -7794,6 +7752,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                     so styling changes here don't affect other badge placements */}
                 <div style={{ display: "flex", alignSelf: "flex-end", height: "36px" }}>
                   <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={i} width={114} />
+                  <TrustScoreCountdown serial={phone?.serial ?? ""} slotIdx={i} />
                 </div>
               </div>
           </div>

@@ -1,3 +1,5 @@
+import { getTrustLevels } from "./TrustScoreBadge";
+
 const LOCAL_STORAGE_PREFIX = "mobile_ts_";
 
 export function slotTrustScoreKey(serial: string, slotIdx: number): string {
@@ -53,6 +55,9 @@ export async function saveSlotTrustScore(
   serial: string,
   slotIdx: number,
   scoreId: string | null,
+  hasNextScore = scoreId === null
+    ? false
+    : getTrustLevels().findIndex(level => level.id === scoreId) < getTrustLevels().length - 1,
 ): Promise<void> {
   writeLocalSlotTrustScore(serial, slotIdx, scoreId);
   const response = await fetch(
@@ -61,13 +66,13 @@ export async function saveSlotTrustScore(
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scoreId }),
+      body: JSON.stringify({ scoreId, hasNextScore }),
     },
   );
   if (!response.ok) {
     throw new Error(`Trust score save failed (${response.status})`);
   }
   window.dispatchEvent(new CustomEvent("mobile_trustscore_changed", {
-    detail: { serial, slotIdx, scoreId },
+    detail: { serial, slotIdx, scoreId, hasNextScore },
   }));
 }

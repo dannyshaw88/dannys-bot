@@ -1836,6 +1836,52 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // a template snapshot into the slot, so later template edits propagate.
   const trustScoreAutomationKey = (trustScoreId: string) =>
     `trust_score_mobile_settings_${trustScoreId}`;
+  const trustScoreDurationKey = (trustScoreId: string) =>
+    `trust_score_duration_hours_${trustScoreId}`;
+  const trustScoreTimerKey = (serial: string, slotIdx: number) =>
+    `mobile_trust_score_timer_${serial}_${slotIdx}`;
+  type TrustScoreTimerState = {
+    scoreId: string;
+    durationHours: number;
+    startedAt: number | null;
+    remainingMs: number | null;
+    paused: boolean;
+  };
+  const readTrustScoreTimer = (
+    all: Record<string, string>,
+    serial: string,
+    slotIdx: number,
+  ): TrustScoreTimerState | null => {
+    const raw = all[trustScoreTimerKey(serial, slotIdx)];
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (
+        typeof parsed?.scoreId !== "string" ||
+        typeof parsed?.durationHours !== "number" ||
+        typeof parsed?.paused !== "boolean"
+      ) return null;
+      return parsed as TrustScoreTimerState;
+    } catch {
+      return null;
+    }
+  };
+  const trustScoreTimerRemainingMs = (timer: TrustScoreTimerState, now = Date.now()) =>
+    timer.paused
+      ? Math.max(0, timer.remainingMs ?? 0)
+      : Math.max(0, (timer.startedAt ?? now) + timer.durationHours * 60 * 60 * 1000 - now);
+  const writeTrustScoreTimer = async (
+    serial: string,
+    slotIdx: number,
+    timer: TrustScoreTimerState,
+  ) => {
+    await storage.setGlobalSetting(trustScoreTimerKey(serial, slotIdx), JSON.stringify(timer));
+  };
+  const clearTrustScoreTimer = async (serial: string, slotIdx: number) => {
+    // An empty JSON value is used instead of deleting global settings because
+    // the storage abstraction intentionally exposes only set/get operations.
+    await storage.setGlobalSetting(trustScoreTimerKey(serial, slotIdx), "");
+  };
   const trustScoreIdSchema = z.string().min(1).max(100);
   const trustScoreAutomationDefaults = (): Record<string, any> => automationSchema.parse({
     actionDelayMin: 5,
@@ -2275,6 +2321,73 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
   });
 
+  // TrustScore durations are deliberately separate from Human Session Tool
+  // settings. They are configured once per badge and used by physical slots
+  // assigned to that badge. Missing/blank durations remain timer-free.
+  app.get("/api/trust-scores/durations", async (_req: Request, res: Response) => {
+    try {
+      const all = await storage.getGlobalSettings();
+      const durations: Record<string, number> = {};
+      const prefix = "trust_score_duration_hours_";
+      for (const [key, raw] of Object.entries(all)) {
+        if (!key.startsWith(prefix)) continue;
+        const hours = Number(raw);
+        if (Number.isInteger(hours) && hours >= 1 && hours <= 999) {
+          durations[key.slice(prefix.length)] = hours;
+        }
+      }
+      res.json({ durations });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message ?? "Failed to load TrustScore durations" });
+    }
+  });
+
+  app.post("/api/trust-scores/:trustScoreId/duration", async (req: Request, res: Response) => {
+    try {
+      const trustScoreId = trustScoreIdSchema.parse(p(req, "trustScoreId"));
+      const body = z.object({
+        hours: z.number().int().min(1).max(999).nullable(),
+        hasNextScore: z.boolean().default(true),
+      }).parse(req.body);
+      const key = trustScoreDurationKey(trustScoreId);
+      const all = await storage.getGlobalSettings();
+      if (body.hours === null) {
+        await storage.setGlobalSetting(key, "");
+      } else {
+        await storage.setGlobalSetting(key, String(body.hours));
+      }
+
+      // Adding a duration after a badge is already assigned must initialize
+      // that slot immediately. Clearing a duration removes its running timer.
+      const assignmentPrefix = "mobile_trust_score_";
+      for (const [assignmentKey, rawScore] of Object.entries(all)) {
+        if (!assignmentKey.startsWith(assignmentPrefix) || rawScore !== JSON.stringify(trustScoreId)) continue;
+        const match = assignmentKey.slice(assignmentPrefix.length).match(/^(.*)_(\d+)$/);
+        if (!match) continue;
+        const serial = match[1];
+        const slotIdx = Number(match[2]);
+        if (!Number.isInteger(slotIdx) || slotIdx < 0) continue;
+        if (body.hours === null || !body.hasNextScore) {
+          await clearTrustScoreTimer(serial, slotIdx);
+          continue;
+        }
+        const existing = readTrustScoreTimer(all, serial, slotIdx);
+        if (!existing || existing.durationHours !== body.hours) {
+          await writeTrustScoreTimer(serial, slotIdx, {
+            scoreId: trustScoreId,
+            durationHours: body.hours,
+            startedAt: Date.now(),
+            remainingMs: null,
+            paused: false,
+          });
+        }
+      }
+      res.json({ ok: true, hours: body.hours });
+    } catch (e: any) {
+      res.status(400).json({ error: e?.message ?? "Failed to save TrustScore duration" });
+    }
+  });
+
   // ── Per-device prefs (hardware-level, not per-slot) ────────────────────────
   // Stored separately from automation settings so they can never be
   // accidentally overwritten by an autosave of the automation panel.
@@ -2328,16 +2441,190 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         res.status(400).json({ error: "Invalid slot index" });
         return;
       }
-      const { scoreId } = z.object({
+      const { scoreId, hasNextScore } = z.object({
         scoreId: z.string().min(1).max(100).nullable(),
+        hasNextScore: z.boolean().default(true),
       }).parse(req.body);
+      const assignmentKey = `mobile_trust_score_${serial}_${slotIdx}`;
+      const all = await storage.getGlobalSettings();
+      let previousScoreId: string | null = null;
+      try {
+        const parsed = JSON.parse(all[assignmentKey] ?? "null");
+        previousScoreId = typeof parsed === "string" ? parsed : null;
+      } catch {}
+      const existingTimer = readTrustScoreTimer(all, serial, slotIdx);
+      const now = Date.now();
       await storage.setGlobalSetting(
-        `mobile_trust_score_${serial}_${slotIdx}`,
+        assignmentKey,
         JSON.stringify(scoreId),
       );
+      if (scoreId === null) {
+        if (previousScoreId && existingTimer?.scoreId === previousScoreId) {
+          await writeTrustScoreTimer(serial, slotIdx, {
+            ...existingTimer,
+            remainingMs: trustScoreTimerRemainingMs(existingTimer, now),
+            startedAt: null,
+            paused: true,
+          });
+        }
+      } else {
+        const durationRaw = all[trustScoreDurationKey(scoreId)];
+        const durationHours = Number(durationRaw);
+        const hasDuration = Number.isInteger(durationHours) && durationHours >= 1 && durationHours <= 999;
+        const canRunTimer = hasDuration && hasNextScore;
+        const canResume =
+          previousScoreId === null &&
+          existingTimer?.paused === true &&
+          existingTimer.scoreId === scoreId &&
+          trustScoreTimerRemainingMs(existingTimer, now) > 0;
+        const sameScore = previousScoreId === scoreId && existingTimer?.scoreId === scoreId;
+        if (!canRunTimer) {
+          await clearTrustScoreTimer(serial, slotIdx);
+        } else if (canResume) {
+          const remainingMs = trustScoreTimerRemainingMs(existingTimer!, now);
+          await writeTrustScoreTimer(serial, slotIdx, {
+            scoreId,
+            durationHours,
+            startedAt: now - (durationHours * 60 * 60 * 1000 - remainingMs),
+            remainingMs: null,
+            paused: false,
+          });
+        } else if (sameScore && !existingTimer?.paused) {
+          // Re-saving the same assignment must not reset its countdown.
+        } else {
+          await writeTrustScoreTimer(serial, slotIdx, {
+            scoreId,
+            durationHours,
+            startedAt: now,
+            remainingMs: null,
+            paused: false,
+          });
+        }
+      }
       res.json({ ok: true, scoreId });
     } catch (e: any) {
       res.status(400).json({ error: e?.message ?? "Failed to save trust score" });
+    }
+  });
+
+  app.get("/api/mobile/devices/:serial/slots/:slotIdx/trust-score-timer", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const slotIdx = parseInt(String(req.params.slotIdx), 10);
+      if (isNaN(slotIdx) || slotIdx < 0) {
+        res.status(400).json({ error: "Invalid slot index" });
+        return;
+      }
+      const all = await storage.getGlobalSettings();
+      const assignmentRaw = all[`mobile_trust_score_${serial}_${slotIdx}`];
+      let scoreId: string | null = null;
+      try {
+        const parsed = JSON.parse(assignmentRaw ?? "null");
+        scoreId = typeof parsed === "string" ? parsed : null;
+      } catch {}
+      const timer = scoreId ? readTrustScoreTimer(all, serial, slotIdx) : null;
+      if (scoreId && !timer) {
+        const durationHours = Number(all[trustScoreDurationKey(scoreId)]);
+        if (Number.isInteger(durationHours) && durationHours >= 1 && durationHours <= 999) {
+          await writeTrustScoreTimer(serial, slotIdx, {
+            scoreId,
+            durationHours,
+            startedAt: Date.now(),
+            remainingMs: null,
+            paused: false,
+          });
+          res.json({
+            scoreId,
+            running: true,
+            paused: false,
+            durationHours,
+            expiresAt: Date.now() + durationHours * 60 * 60 * 1000,
+            remainingMs: durationHours * 60 * 60 * 1000,
+          });
+          return;
+        }
+      }
+      if (!scoreId && timer?.paused) {
+        const remainingMs = trustScoreTimerRemainingMs(timer);
+        res.json({
+          scoreId: null,
+          paused: true,
+          running: false,
+          durationHours: timer.durationHours,
+          remainingMs,
+          expiresAt: null,
+        });
+        return;
+      }
+      if (!scoreId || !timer) {
+        res.json({ scoreId, running: false, paused: false, remainingMs: null, expiresAt: null });
+        return;
+      }
+      const remainingMs = trustScoreTimerRemainingMs(timer);
+      res.json({
+        scoreId,
+        running: !timer.paused && remainingMs > 0,
+        paused: timer.paused,
+        durationHours: timer.durationHours,
+        remainingMs,
+        expiresAt: timer.paused ? null : Date.now() + remainingMs,
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message ?? "Failed to load TrustScore timer" });
+    }
+  });
+
+  app.post("/api/mobile/devices/:serial/slots/:slotIdx/trust-score-timer/advance", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const slotIdx = parseInt(String(req.params.slotIdx), 10);
+      if (isNaN(slotIdx) || slotIdx < 0) {
+        res.status(400).json({ error: "Invalid slot index" });
+        return;
+      }
+      const { expectedScoreId, nextScoreId, hasNextScore } = z.object({
+        expectedScoreId: z.string().min(1).max(100),
+        nextScoreId: z.string().min(1).max(100).nullable(),
+        hasNextScore: z.boolean().default(true),
+      }).parse(req.body);
+      const assignmentKey = `mobile_trust_score_${serial}_${slotIdx}`;
+      const all = await storage.getGlobalSettings();
+      let currentScoreId: string | null = null;
+      try {
+        const parsed = JSON.parse(all[assignmentKey] ?? "null");
+        currentScoreId = typeof parsed === "string" ? parsed : null;
+      } catch {}
+      if (currentScoreId !== expectedScoreId) {
+        res.json({ ok: false, scoreId: currentScoreId });
+        return;
+      }
+      if (!nextScoreId) {
+        await clearTrustScoreTimer(serial, slotIdx);
+        res.json({ ok: true, scoreId: currentScoreId });
+        return;
+      }
+      const durationHours = Number(all[trustScoreDurationKey(nextScoreId)]);
+      await storage.setGlobalSetting(assignmentKey, JSON.stringify(nextScoreId));
+      const canRunTimer =
+        hasNextScore &&
+        Number.isInteger(durationHours) &&
+        durationHours >= 1 &&
+        durationHours <= 999;
+      if (canRunTimer) {
+        const now = Date.now();
+        await writeTrustScoreTimer(serial, slotIdx, {
+          scoreId: nextScoreId,
+          durationHours,
+          startedAt: now,
+          remainingMs: null,
+          paused: false,
+        });
+      } else {
+        await clearTrustScoreTimer(serial, slotIdx);
+      }
+      res.json({ ok: true, scoreId: nextScoreId });
+    } catch (e: any) {
+      res.status(400).json({ error: e?.message ?? "Failed to advance TrustScore" });
     }
   });
 
@@ -9558,11 +9845,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostEnabled, makePostActivatePctMin, makePostActivatePctMax,
         makePostPerSessionMin, makePostPerSessionMax,
         makePostLocalFolderEnabled, makePostLocalFolderPath,
-        makePostLocalFolderNoRepeat, makePostLocalFolderRandom, makePostLocalFolderDeleteAfterUpload,
+        makePostLocalFolderNoRepeat, makePostLocalFolderRandom,
         makePostAlterationEnabled, makePostAlterationLevel, makePostImageSettingsEnabled,
         makePostImageSettings, makePostFixAiSlop, makePostCaptionText,
-        makePostPostToProfilePctMin, makePostPostToProfilePctMax,
-        makePostPostToStoryPctMin, makePostPostToStoryPctMax,
         postStoryEnabled, postStoryActivatePctMin, postStoryActivatePctMax,
         postStoryLocalFolderPath, postStoryLocalFolderNoRepeat, postStoryLocalFolderRandom,
         postStoryAlterationEnabled, postStoryAlterationLevel, postStoryImageSettingsEnabled,
@@ -10441,61 +10726,29 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               let posted = 0;
               for (let i = 0; i < postCount; i++) {
                 try {
-                  // ── Destination roll ─────────────────────────────────────
-                  // Story is checked first. If that roll misses, profile is
-                  // tried. Both default to 100%/0% so existing behaviour
-                  // (always profile) is preserved unless the user changes them.
-                  const storyPct = rollRange(makePostPostToStoryPctMin, makePostPostToStoryPctMax);
-                  const profilePct = rollRange(makePostPostToProfilePctMin, makePostPostToProfilePctMax);
-                  const postToStory = storyPct > 0 && Math.random() * 100 < storyPct;
-                  const postToProfile = !postToStory && Math.random() * 100 < profilePct;
-                  if (postToStory) {
-                    tLog(`  Make a Post: destination → Story (rolled ${storyPct}%)`);
-                    const result = await runMakePostStoryStep(serial, {
-                      localFolderPath: resolvedFolderPath,
-                      localFolderRandom: makePostLocalFolderRandom,
-                      localFolderNoRepeat: makePostLocalFolderNoRepeat,
-                      deleteAfterUpload: makePostLocalFolderDeleteAfterUpload,
-                      alterationEnabled: makePostAlterationEnabled,
-                      alterationLevel: makePostAlterationLevel,
-                      imageSettingsEnabled: makePostImageSettingsEnabled,
-                      imageSettings: makePostImageSettings,
-                      doFixAiSlop: makePostFixAiSlop,
-                      onLog: (msg) => tLog(`  ${msg}`),
-                    });
-                    if (result.posted) {
-                      posted++;
-                      postsUploaded++;
-                      tLog("  Make a Post: upload confirmed — dwelling 5 s before continuing…");
-                      await sleepOrAbort(serial, 5000);
-                    } else break;
-                  } else if (postToProfile) {
-                    tLog(`  Make a Post: destination → Profile (rolled ${profilePct}%)`);
-                    const result = await runMakePostStep(serial, {
-                      localFolderPath: resolvedFolderPath,
-                      localFolderRandom: makePostLocalFolderRandom,
-                      localFolderNoRepeat: makePostLocalFolderNoRepeat,
-                      deleteAfterUpload: makePostLocalFolderDeleteAfterUpload,
-                      accountUsername: slotUsername,
-                      slotIdx,
-                      alterationEnabled: makePostAlterationEnabled,
-                      alterationLevel: makePostAlterationLevel,
-                      imageSettingsEnabled: makePostImageSettingsEnabled,
-                      imageSettings: makePostImageSettings,
-                      doFixAiSlop: makePostFixAiSlop,
-                      captionText: makePostCaptionText,
-                      onLog: (msg) => tLog(`  ${msg}`),
-                    });
-                    if (result.posted) {
-                      posted++;
-                      postsUploaded++;
-                      tLog("  Make a Post: upload confirmed — dwelling 5 s before continuing…");
-                      await sleepOrAbort(serial, 5000);
-                    } else break;
-                  } else {
-                    tLog(`  Make a Post: both story (${storyPct}%) and profile (${profilePct}%) rolls missed — skipping this post`);
-                    break;
-                  }
+                  // Make a Post is feed-only. The preserved Story routine is
+                  // dispatched by the standalone Post a Story tool below.
+                  tLog("  Make a Post: destination → normal feed");
+                  const result = await runMakePostStep(serial, {
+                    localFolderPath: resolvedFolderPath,
+                    localFolderRandom: makePostLocalFolderRandom,
+                    localFolderNoRepeat: makePostLocalFolderNoRepeat,
+                    accountUsername: slotUsername,
+                    slotIdx,
+                    alterationEnabled: makePostAlterationEnabled,
+                    alterationLevel: makePostAlterationLevel,
+                    imageSettingsEnabled: makePostImageSettingsEnabled,
+                    imageSettings: makePostImageSettings,
+                    doFixAiSlop: makePostFixAiSlop,
+                    captionText: makePostCaptionText,
+                    onLog: (msg) => tLog(`  ${msg}`),
+                  });
+                  if (result.posted) {
+                    posted++;
+                    postsUploaded++;
+                    tLog("  Make a Post: upload confirmed — dwelling 5 s before continuing…");
+                    await sleepOrAbort(serial, 5000);
+                  } else break;
                 } catch (e: any) {
                   if (e?.message === "cycle-aborted") throw e;
                   tLog(`▶ Make a Post attempt error — ${e?.message}`);

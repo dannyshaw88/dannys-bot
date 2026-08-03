@@ -1,3 +1,15 @@
+## [1.2.351] — 2026-08-03
+
+### Added — TrustScore duration countdowns and restored Human Session Tool behavior
+
+- Added a **Duration** column to **Settings → TrustScores**, positioned between each TrustScore badge and its Notes field.
+- Added a blank-by-default duration input accepting `1`–`999` hours with a fixed three-digit-sized field. Saving a duration starts the countdown for slots already assigned to that TrustScore.
+- Added real-time hours/minutes countdowns to Phone Farm account slots. When a countdown reaches zero, the slot advances from TrustScore 1 to 2 and onward in the configured top-to-bottom list order; the maximum TrustScore has no timer.
+- Added persistent pause/resume behavior when a slot’s TrustScore is cleared and restored to the same badge. Assigning a different badge starts that badge’s duration from the beginning, and manually changing badges starts the new badge’s timer.
+- Restored **Make a Post** to its intended feed-only behavior. Removed the reappeared Post to Profile / Post to Story controls and the **Delete from PC after posting** checkbox from the active UI, HST request payload, Copy Settings, and cycle dispatcher.
+- Kept the standalone **Post a Story** tool, its independent slot directory, image controls, Assign Directory behavior, Avatar/Bio controls, and Bio Spin editor intact.
+- Bumped the root application and Electron package versions to `1.2.351`.
+
 ## [1.2.350] — 2026-08-03
 
 ### Added — Standalone Post a Story tool for Human Session Tool

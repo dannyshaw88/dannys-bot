@@ -1,6 +1,6 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { BanAnalyticsPage } from "@/pages/BanAnalyticsPage";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient, useQuery, useQueries } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -64,11 +64,48 @@ export function TrustScoresTabContent() {
   const [newLabel, setNewLabel] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [editState, setEditState] = useState<TsEditState | null>(null);
+  const [durations, setDurations] = useState<Record<string, number | null>>({});
+  const durationTimers = useRef<Record<string, number>>({});
 
   const dragIdxRef = useRef<number | null>(null);
   const dragOverIdxRef = useRef<number | null>(null);
 
   const refreshLevels = () => setLevels(getTrustLevels());
+
+  useEffect(() => {
+    fetch("/api/trust-scores/durations", { credentials: "include", cache: "no-store" })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => {
+        if (!data?.durations) return;
+        const loaded: Record<string, number | null> = {};
+        for (const [id, value] of Object.entries(data.durations)) {
+          const hours = Number(value);
+          if (Number.isInteger(hours) && hours >= 1 && hours <= 999) loaded[id] = hours;
+        }
+        setDurations(loaded);
+      })
+      .catch(() => {});
+    return () => {
+      for (const timer of Object.values(durationTimers.current)) window.clearTimeout(timer);
+    };
+  }, []);
+
+  const updateDuration = (levelId: string, raw: string, hasNextScore: boolean) => {
+    const hours = raw === ""
+      ? null
+      : Math.min(999, Math.max(1, Number.parseInt(raw.replace(/\D/g, ""), 10) || 1));
+    setDurations(current => ({ ...current, [levelId]: hours }));
+    const existing = durationTimers.current[levelId];
+    if (existing) window.clearTimeout(existing);
+    durationTimers.current[levelId] = window.setTimeout(() => {
+      void fetch(`/api/trust-scores/${encodeURIComponent(levelId)}/duration`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hours, hasNextScore }),
+      });
+    }, 400);
+  };
 
   const handleNoteChange = (id: string, val: string) => {
     setNotes(prev => ({ ...prev, [id]: val }));
@@ -162,7 +199,13 @@ export function TrustScoresTabContent() {
     <div className="space-y-3">
         <p className="text-sm text-muted-foreground">Drag to reorder. Click a badge to open its mobile Human Session Tool settings.</p>
 
-      <div className="space-y-1.5 w-full">
+      <div className="w-full overflow-x-auto">
+        <div className="flex items-center gap-2 px-2 mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <span className="w-[185px]">TrustScore</span>
+          <span className="w-[9rem]">Duration</span>
+          <span className="flex-1">Notes</span>
+        </div>
+        <div className="space-y-1.5 w-full">
         {levels.map((level, idx) => {
           const Icon = level.icon;
           const note = notes[level.id] ?? "";
@@ -200,6 +243,19 @@ export function TrustScoresTabContent() {
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
+              {/* Duration — immediately after the TrustScore badge and before Notes. */}
+              <div className="flex items-center gap-1.5 shrink-0" onMouseDown={e => e.stopPropagation()}>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={3}
+                  aria-label={`Duration for ${level.label} in hours`}
+                  value={durations[level.id] ?? ""}
+                  onChange={e => updateDuration(level.id, e.target.value, idx < levels.length - 1)}
+                  className="w-[4.5rem] h-7 px-2 text-sm text-right border border-border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <span className="text-xs text-muted-foreground">hours</span>
+              </div>
               {/* Right: note field — fixed width, right-aligned text */}
               <textarea
                 value={note}
@@ -227,6 +283,7 @@ export function TrustScoresTabContent() {
         >
           <Plus className="w-3.5 h-3.5" /> Add Trust Score
         </button>
+        </div>
       </div>
 
       {editState && !editState.showIconPicker && (
