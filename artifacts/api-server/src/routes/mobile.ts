@@ -331,13 +331,10 @@ type AutomationSettings = {
   makePostActivatePctMax?: number;
   makePostPerSessionMin?: number;
   makePostPerSessionMax?: number;
-  makePostSourceUsername?: string;
-  makePostDisableUsernameSource?: boolean;
   makePostAlterationEnabled?: boolean;
   makePostAlterationLevel?: "small" | "medium" | "high";
   makePostImageSettingsEnabled?: boolean;
   makePostUseHikerApi?: boolean;
-  makePostDisableAtPostCount?: number;
   makePostDisableWhenExhausted?: boolean;
   makePostLocalFolderEnabled?: boolean;
   makePostLocalFolderPath?: string;
@@ -1606,15 +1603,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostActivatePctMax: z.number().min(0).max(100).default(100),
     makePostPerSessionMin: z.number().min(1).max(20).default(1),
     makePostPerSessionMax: z.number().min(1).max(20).default(1),
-    makePostSourceUsername: z.string().default(""),
-    makePostDisableUsernameSource: z.boolean().default(false),
     makePostAlterationEnabled: z.boolean().default(true),
     makePostAlterationLevel: z.enum(["small", "medium", "high"]).default("small"),
     makePostImageSettingsEnabled: z.boolean().default(true),
     makePostUseHikerApi: z.boolean().default(false),
-    makePostDisableAtPostCount: z.number().min(0).default(0),
     makePostDisableWhenExhausted: z.boolean().default(true),
-    makePostLocalFolderEnabled: z.boolean().default(false),
+    // My Computer is the only Make a Post source. Keep this field for
+    // compatibility with older saved payloads, but normalize it to true at
+    // every mobile-settings boundary.
+    makePostLocalFolderEnabled: z.boolean().default(true),
     makePostLocalFolderPath: z.string().default(""),
     makePostLocalFolderNoRepeat: z.boolean().default(false),
     makePostLocalFolderRandom: z.boolean().default(false),
@@ -1730,11 +1727,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       makePostEnabled: false,
       makePostActivatePctMin: 100, makePostActivatePctMax: 100,
       makePostPerSessionMin: 1, makePostPerSessionMax: 1,
-      makePostSourceUsername: "", makePostDisableUsernameSource: false,
       makePostAlterationEnabled: true, makePostAlterationLevel: "small",
       makePostImageSettingsEnabled: true, makePostUseHikerApi: false,
-      makePostDisableAtPostCount: 0, makePostDisableWhenExhausted: true,
-      makePostLocalFolderEnabled: false, makePostLocalFolderPath: "",
+      makePostDisableWhenExhausted: true,
+      makePostLocalFolderEnabled: true, makePostLocalFolderPath: "",
       makePostLocalFolderNoRepeat: false, makePostLocalFolderRandom: false,
       makePostLocalFolderDeleteAfterUpload: false,
       makePostUseChatGpt: false, makePostFixAiSlop: false, makePostMakeUnique: false,
@@ -1791,8 +1787,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "followFilterVerifiedUsers",
     "followFilterMaxFollowers25k",
     "updateProfilePicFolderPath",
-    "makePostSourceUsername",
-    "makePostDisableUsernameSource",
     "makePostAlterationEnabled",
     "makePostAlterationLevel",
     "makePostImageSettingsEnabled",
@@ -1805,14 +1799,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "makePostLocalFolderRandom",
     "makePostLocalFolderDeleteAfterUpload",
   ]);
+  const TRUST_SCORE_TEMPLATE_LOCKED_FIELDS = new Set(
+    [...TRUST_SCORE_SLOT_OWNED_FIELDS].filter(field => ![
+      "injectBrowsingEnabled",
+      "followFiltersEnabled",
+      "followFilterPrivateUsers",
+      "followFilterEnglishSpeaking",
+      "followFilterMinFollowers50",
+      "followFilterVerifiedUsers",
+      "followFilterMaxFollowers25k",
+    ].includes(field)),
+  );
   const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
     "followSources",
     "updateProfilePicFolderPath",
     "updateBioText",
-    "makePostSourceUsername",
-    "makePostDisableUsernameSource",
-    "makePostLocalFolderEnabled",
-    "makePostLocalFolderPath",
   ]);
   const TRUST_SCORE_TOOL_FIELDS = new Set([
     "feedEnabled",
@@ -1998,11 +1999,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostEnabled: false,
         makePostActivatePctMin: 100, makePostActivatePctMax: 100,
         makePostPerSessionMin: 1, makePostPerSessionMax: 1,
-        makePostSourceUsername: "", makePostDisableUsernameSource: false,
         makePostAlterationEnabled: true, makePostAlterationLevel: "small",
         makePostImageSettingsEnabled: true, makePostUseHikerApi: false,
-        makePostDisableAtPostCount: 0, makePostDisableWhenExhausted: true,
-        makePostLocalFolderEnabled: false, makePostLocalFolderPath: "",
+        makePostDisableWhenExhausted: true,
+        makePostLocalFolderEnabled: true, makePostLocalFolderPath: "",
         makePostLocalFolderNoRepeat: false, makePostLocalFolderRandom: false,
         makePostLocalFolderDeleteAfterUpload: false,
         makePostUseChatGpt: false, makePostFixAiSlop: false, makePostMakeUnique: false,
@@ -2037,6 +2037,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const dedicatedProfilePicPath = getProfilePicFolderPath(serial, slotIdx);
       if (dedicatedProfilePicPath) merged.updateProfilePicFolderPath = dedicatedProfilePicPath;
       const resolved = await resolveTrustScoreSettings(serial, slotIdx, merged);
+      // My Computer is the implicit and always-enabled Make a Post source.
+      resolved.settings.makePostLocalFolderEnabled = true;
       logger.info(`[TOGGLE-DBG] GET slot settings  serial=${serial} slotIdx=${slotIdx} enabled=${resolved.settings.enabled} trustScore=${resolved.scoreId ?? "manual"}`);
       res.json({
         ...resolved.settings,
@@ -2109,6 +2111,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         delete body.trustScoreCopy;
       }
       const input = automationSchema.parse({ ...base, ...body });
+      // Ignore legacy false values from old UI/settings payloads.
+      input.makePostLocalFolderEnabled = true;
       logger.info(`[TOGGLE-DBG] POST slot settings serial=${serial} slotIdx=${slotIdx} enabled=${input.enabled} (all slots after save: ${JSON.stringify(Object.entries({ ...cfg[serial]?.slotAutomation, [String(slotIdx)]: input }).map(([k,v]: [string,any]) => ({ slot: k, enabled: v?.enabled })))})`);
       cfg[serial] = {
         ...cfg[serial],
@@ -2146,7 +2150,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const savedRaw = all[trustScoreAutomationKey(trustScoreId)];
       const saved = savedRaw ? JSON.parse(savedRaw) : {};
       const settings = { ...trustScoreAutomationDefaults(), ...saved };
-      for (const field of TRUST_SCORE_SLOT_OWNED_FIELDS) delete settings[field];
+      for (const field of TRUST_SCORE_TEMPLATE_LOCKED_FIELDS) delete settings[field];
       res.json(settings);
     } catch (e: any) {
       res.status(400).json({ error: e?.message ?? "Failed to load Trust Score settings" });
@@ -2161,9 +2165,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // persistence boundary instead of allowing them to become part of the
       // template by accident.
       const body = { ...req.body };
-      for (const field of TRUST_SCORE_SLOT_OWNED_FIELDS) delete body[field];
+      for (const field of TRUST_SCORE_TEMPLATE_LOCKED_FIELDS) delete body[field];
       const input = automationSchema.parse(body);
-      for (const field of TRUST_SCORE_SLOT_OWNED_FIELDS) delete input[field];
+      for (const field of TRUST_SCORE_TEMPLATE_LOCKED_FIELDS) delete input[field];
       await storage.setGlobalSetting(
         trustScoreAutomationKey(trustScoreId),
         JSON.stringify(input),
@@ -6028,7 +6032,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostActivatePctMax: z.number().min(0).max(100).default(100),
     makePostPerSessionMin: z.number().min(1).max(20).default(1),
     makePostPerSessionMax: z.number().min(1).max(20).default(1),
-    makePostLocalFolderEnabled: z.boolean().default(false),
+    makePostLocalFolderEnabled: z.boolean().default(true),
     makePostLocalFolderPath: z.string().default(""),
     makePostLocalFolderNoRepeat: z.boolean().default(false),
     makePostLocalFolderRandom: z.boolean().default(false),
@@ -10249,7 +10253,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // the authoritative source and survives everything that can clear
             // the JSON store.
             const resolvedFolderPath = makePostLocalFolderPath || getMakePostFolderPath(serial, slotIdx);
-            if (!makePostLocalFolderEnabled || !resolvedFolderPath) {
+            if (!resolvedFolderPath) {
               steps.push("make-a-post(skipped — Local Folder source not configured)");
               tLog("▶ Make a Post enabled but no Local Folder path configured — skipping");
             } else {

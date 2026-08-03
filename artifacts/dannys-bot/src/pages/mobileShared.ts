@@ -202,14 +202,12 @@ export interface AutomationSettingsData {
   makePostEnabled: boolean;
   makePostActivatePctMin: number; makePostActivatePctMax: number;
   makePostPerSessionMin: number; makePostPerSessionMax: number;
-  makePostSourceUsername: string;
-  makePostDisableUsernameSource: boolean;
   makePostAlterationEnabled: boolean;
   makePostAlterationLevel: "small" | "medium" | "high";
   makePostImageSettingsEnabled: boolean;
   makePostUseHikerApi: boolean;
-  makePostDisableAtPostCount: number;
   makePostDisableWhenExhausted: boolean;
+  /** Kept for runtime/backward compatibility; My Computer is always enabled. */
   makePostLocalFolderEnabled: boolean;
   makePostLocalFolderPath: string;
   makePostLocalFolderNoRepeat: boolean;
@@ -319,15 +317,12 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   makePostEnabled: false,
   makePostActivatePctMin: 100, makePostActivatePctMax: 100,
   makePostPerSessionMin: 1, makePostPerSessionMax: 1,
-  makePostSourceUsername: "",
-  makePostDisableUsernameSource: false,
   makePostAlterationEnabled: true,
   makePostAlterationLevel: "small",
   makePostImageSettingsEnabled: true,
   makePostUseHikerApi: false,
-  makePostDisableAtPostCount: 0,
   makePostDisableWhenExhausted: true,
-  makePostLocalFolderEnabled: false,
+  makePostLocalFolderEnabled: true,
   makePostLocalFolderPath: "",
   makePostLocalFolderNoRepeat: false,
   makePostLocalFolderRandom: false,
@@ -376,8 +371,6 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
   "followFilterVerifiedUsers",
   "followFilterMaxFollowers25k",
   "updateProfilePicFolderPath",
-  "makePostSourceUsername",
-  "makePostDisableUsernameSource",
   "makePostAlterationEnabled",
   "makePostAlterationLevel",
   "makePostImageSettingsEnabled",
@@ -391,15 +384,26 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
   "makePostLocalFolderDeleteAfterUpload",
 ]);
 
+/** Fields that stay restricted in Settings → TrustScores. Inject Browsing
+ * and Follow Filters are intentionally omitted because their controls must
+ * remain editable in the TrustScore editor. */
+export const TRUST_SCORE_TEMPLATE_LOCKED_FIELDS = new Set(
+  [...TRUST_SCORE_SLOT_OWNED_FIELDS].filter(field => ![
+    "injectBrowsingEnabled",
+    "followFiltersEnabled",
+    "followFilterPrivateUsers",
+    "followFilterEnglishSpeaking",
+    "followFilterMinFollowers50",
+    "followFilterVerifiedUsers",
+    "followFilterMaxFollowers25k",
+  ].includes(field)),
+);
+
 /** Account-specific values that may be copied between Human Session Tool slots. */
 export const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
   "followSources",
   "updateProfilePicFolderPath",
   "updateBioText",
-  "makePostSourceUsername",
-  "makePostDisableUsernameSource",
-  "makePostLocalFolderEnabled",
-  "makePostLocalFolderPath",
 ]);
 
 export const COPY_SECTIONS: CopySection[] = [
@@ -510,12 +514,10 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'postEnabled',       label: 'Enabled',                       fields: ['makePostEnabled'] },
     { key: 'postActivate',      label: 'Activate Percentage',           fields: ['makePostActivatePctMin','makePostActivatePctMax'] },
     { key: 'postPerSession',    label: 'Posts per session',             fields: ['makePostPerSessionMin','makePostPerSessionMax'] },
-    { key: 'postSource',        label: 'Instagram Account source',       fields: ['makePostSourceUsername','makePostDisableUsernameSource'] },
     { key: 'postAlteration',    label: 'Image Alteration',              fields: ['makePostAlterationEnabled','makePostAlterationLevel'] },
     { key: 'postImgSettings',   label: 'Image Settings',                fields: ['makePostImageSettingsEnabled','makePostImageSettings'] },
-    { key: 'postHikerApi',      label: 'Use Hiker API',                 fields: ['makePostUseHikerApi'] },
-    { key: 'postDisableAt',     label: 'Disable at post count',         fields: ['makePostDisableAtPostCount','makePostDisableWhenExhausted'] },
-    { key: 'postLocalFolder',   label: 'My Computer source + assigned directory', fields: ['makePostLocalFolderEnabled','makePostLocalFolderPath'] },
+    { key: 'postHikerApi',      label: 'Use Hiker API',                  fields: ['makePostUseHikerApi'] },
+    { key: 'postDisableAt',     label: 'Disable when no more posts are found', fields: ['makePostDisableWhenExhausted'] },
     { key: 'postChatGptCaption',label: 'ChatGPT / caption settings',    fields: ['makePostUseChatGpt','makePostCaptionText'] },
     { key: 'postFixAiSlop',      label: 'Fix AI Slop',                   fields: ['makePostFixAiSlop'] },
     { key: 'postMakeUnique',     label: 'Make it unique',                fields: ['makePostMakeUnique'] },

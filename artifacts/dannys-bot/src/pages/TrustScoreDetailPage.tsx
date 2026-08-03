@@ -14,6 +14,7 @@ import {
   type UsbPhone,
   type CopySection,
   TRUST_SCORE_SLOT_OWNED_FIELDS,
+  TRUST_SCORE_TEMPLATE_LOCKED_FIELDS,
 } from "@/pages/mobileShared";
 import { AutomationSettingsPanel } from "@/pages/MobilePage";
 import { FakeTrustScoreMirror } from "@/components/FakeTrustScoreMirror";
@@ -467,7 +468,7 @@ function TrustScoreAutomationEditor({
             saveError={saveError}
             running={false}
             nextRunAt={null}
-            templateLockedFields={[...TRUST_SCORE_SLOT_OWNED_FIELDS]}
+            templateLockedFields={[...TRUST_SCORE_TEMPLATE_LOCKED_FIELDS]}
           />
         </div>
       </div>

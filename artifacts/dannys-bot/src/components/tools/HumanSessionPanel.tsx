@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Bell, User, RefreshCw, Settings, PlaySquare, BookOpen, Bookmark,
-  MessageSquare, Repeat2, AtSign, Clock, ExternalLink, Image as ImageIcon,
+  MessageSquare, Repeat2, Clock, ExternalLink, Image as ImageIcon,
   ChevronDown, ChevronUp, Heart, Copy, FolderOpen, UserPlus, UserMinus, Zap, Film, Percent, AlignLeft, Trash2, Globe, Compass, Music, Hash,
 } from "lucide-react";
 import { format } from "date-fns";
@@ -131,12 +131,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         { key: "dm_order",   label: "Execution order",        settingKeys: ["checkDmOrderMin","checkDmOrderMax"] },
         { key: "dm_chance",  label: "Skip chance %", settingKeys: ["checkDmNotUsedMin","checkDmNotUsedMax"] },
       ]},
-      { key: "repost", label: "Repost", description: "Repost settings for source account, local folder, alteration, caption and stop conditions", subOptions: [
+      { key: "repost", label: "Repost", description: "Repost settings for local folder, alteration, caption and stop conditions", subOptions: [
         { key: "rp_enabled",         label: "Enabled",                          settingKeys: ["repostEnabled"] },
-        { key: "rp_source",          label: "Source account",                   settingKeys: ["repostSourceUsername"] },
-        { key: "rp_disable_src",     label: "Disable username source",          settingKeys: ["repostDisableUsernameSource"] },
         { key: "rp_hiker",           label: "Use HikerAPI",                     settingKeys: ["repostUseHikerApi"] },
-        { key: "rp_local_folder",    label: "Local folder (path + enabled)",    settingKeys: ["repostLocalFolderEnabled","repostLocalFolderPath"] },
         { key: "rp_local_opts",      label: "Local folder options",             settingKeys: ["repostLocalFolderDeleteAfterUpload","repostLocalFolderNoRepeat","repostLocalFolderRandom"] },
         { key: "rp_count",           label: "Posts per session",                settingKeys: ["repostMin","repostMax"] },
         { key: "rp_alteration",      label: "Alteration & image settings",      settingKeys: ["repostAlterationLevel","repostImageSettings"] },
@@ -600,7 +597,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       repostUseHikerApi: false,
       repostSourceUsername: "",
       repostDisableUsernameSource: false,
-      repostLocalFolderEnabled: false,
+      repostLocalFolderEnabled: true,
       repostLocalFolderPath: "",
       repostLocalFolderDeleteAfterUpload: true,
       repostLocalFolderNoRepeat: false,
@@ -649,7 +646,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       webBrowsingTimeOnLinksMin: 1,
       webBrowsingTimeOnLinksMax: 2,
     };
-    return { ...def, ...(tool.settings as Record<string, any> || {}) };
+    return { ...def, ...(tool.settings as Record<string, any> || {}), repostLocalFolderEnabled: true };
   });
 
   const isMounted = useRef(false);
@@ -707,7 +704,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       exploreProfileScrollMin: 3, exploreProfileScrollMax: 8,
       exploreProfileClickMin: 1, exploreProfileClickMax: 3,
       repostEnabled: false, repostUseHikerApi: false, repostSourceUsername: "",
-      repostDisableUsernameSource: false, repostLocalFolderEnabled: false,
+      repostDisableUsernameSource: false, repostLocalFolderEnabled: true,
       repostLocalFolderPath: "", repostLocalFolderDeleteAfterUpload: true,
       repostLocalFolderNoRepeat: false, repostUseChatGpt: false,
       repostAlterationLevel: "small", repostCaptionText: "",
@@ -734,7 +731,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       webBrowsingTimeOnSiteMin: 1, webBrowsingTimeOnSiteMax: 3,
       webBrowsingTimeOnLinksMin: 1, webBrowsingTimeOnLinksMax: 2,
     };
-    setSettings(prev => ({ ...def, ...(tool.settings as Record<string, any> || {}), ...prev }));
+    setSettings(prev => ({ ...def, ...(tool.settings as Record<string, any> || {}), ...prev, repostLocalFolderEnabled: true }));
   }, [tool.id]);
 
   const latestHsSettings = useRef(settings);
@@ -1887,35 +1884,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             </div>
           </div>
 
-          {/* Source 1: @username */}
+          {/* Make a Post settings */}
           <div className="border border-border/60 rounded-lg p-3 space-y-2">
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="repostUsernameSourceEnabled"
-                checked={!settings.repostDisableUsernameSource}
-                onChange={(e) => setSettings({ ...settings, repostDisableUsernameSource: !e.target.checked })}
-                className="w-3.5 h-3.5 accent-primary cursor-pointer"
-              />
-              <label htmlFor="repostUsernameSourceEnabled" className="text-xs font-semibold text-foreground cursor-pointer select-none tracking-wide">
-                INSTAGRAM ACCOUNT
-              </label>
-            </div>
-            {!settings.repostDisableUsernameSource && (<>
-            <div className={`flex flex-wrap items-end gap-4`}>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Account username <span className="text-muted-foreground/60">(without @)</span></Label>
-              <div className="relative max-w-[220px]">
-                <AtSign className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                <Input
-                  type="text"
-                  placeholder="username"
-                  className="h-8 text-xs pl-7"
-                  value={settings.repostSourceUsername ?? ""}
-                  onChange={(e) => setSettings({ ...settings, repostSourceUsername: e.target.value.replace(/^@/, '') })}
-                />
-              </div>
-            </div>
+            <div className="flex flex-wrap items-end gap-4">
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Alteration level</Label>
               <div className="flex gap-1">
@@ -1981,26 +1952,19 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 </label>
               </div>
             </div>
-            </>)}
-          </div>{/* end Source 1 border */}
+          </div>{/* end Make a Post settings */}
 
-          {/* Source 2: Local PC Folder */}
+          {/* Source: Local PC Folder — always enabled; the directory is per account. */}
           <div className="border border-border/60 rounded-lg p-3 space-y-2">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5">
-                <input
-                  type="checkbox"
-                  id="repostLocalFolderEnabled"
-                  checked={!!settings.repostLocalFolderEnabled}
-                  onChange={(e) => setSettings({ ...settings, repostLocalFolderEnabled: e.target.checked })}
-                  className="w-3.5 h-3.5 accent-primary cursor-pointer"
-                />
-                <label htmlFor="repostLocalFolderEnabled" className="text-xs font-semibold text-foreground flex items-center gap-1.5 cursor-pointer select-none">
-                  <FolderOpen className="w-3.5 h-3.5 text-muted-foreground" /> Source: Local PC Folder
-                </label>
+                <span className="w-3.5 h-3.5 rounded-sm border border-primary bg-primary flex items-center justify-center text-[10px] text-primary-foreground">✓</span>
+                <span className="text-xs font-semibold text-foreground flex items-center gap-1.5 select-none">
+                  <FolderOpen className="w-3.5 h-3.5 text-muted-foreground" /> Source: Local PC Folder <span className="text-muted-foreground font-normal">(always enabled)</span>
+                </span>
               </div>
             </div>
-            <div className={`space-y-2 transition-opacity ${!settings.repostLocalFolderEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className="space-y-2">
               <div className="space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <Input

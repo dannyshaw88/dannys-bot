@@ -14,6 +14,7 @@
 - Each individual Human Session Tool Follow Filter is now editable per assigned slot and independently available in Copy Settings.
 - Human Session Tool Copy Settings now permits only Follow Sources, Random Actions profile-picture directory, Random Actions Bio spin text, and Make a Post source/directory settings; all other rows are disabled regardless of tool state.
 - TrustScore template settings now allow HikerAPI configuration; it is inherited and locked for assigned Phone Farm slots, but it is not a template-editor lock.
+- Settings → TrustScores keeps Inject Browsing and all Follow Filters controls editable; these controls are excluded from the template-editor lock list even though Phone Farm slots retain their own runtime ownership.
 
 # Changelog
 

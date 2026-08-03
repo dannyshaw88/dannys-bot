@@ -3320,7 +3320,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       .then(r => r.json())
       .then(d => {
         if (!active) return;
-        const merged = { ...AUTOMATION_DEFAULTS, ...d };
+        const merged = { ...AUTOMATION_DEFAULTS, ...d, makePostLocalFolderEnabled: true };
         lastSavedRef.current = JSON.stringify(merged);
         // Set settings AND hydrated in the same React batch so the run-loop
         // fires exactly once with the correct loaded values.  Doing this in
@@ -3726,13 +3726,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             makePostActivatePctMax: s.makePostActivatePctMax,
             makePostPerSessionMin: s.makePostPerSessionMin,
             makePostPerSessionMax: s.makePostPerSessionMax,
-            makePostSourceUsername: s.makePostSourceUsername,
-            makePostDisableUsernameSource: s.makePostDisableUsernameSource,
             makePostAlterationEnabled: s.makePostAlterationEnabled,
             makePostAlterationLevel: s.makePostAlterationLevel,
             makePostImageSettingsEnabled: s.makePostImageSettingsEnabled,
             makePostUseHikerApi: s.makePostUseHikerApi,
-            makePostDisableAtPostCount: s.makePostDisableAtPostCount,
             makePostDisableWhenExhausted: s.makePostDisableWhenExhausted,
             makePostLocalFolderEnabled: s.makePostLocalFolderEnabled,
             makePostLocalFolderPath: s.makePostLocalFolderPath,
@@ -4551,6 +4548,7 @@ export function AutomationSettingsPanel({
   trustScoreAssigned?: boolean;
 }) {
   const trustScoreActive = trustScoreAssigned === true || Boolean(settings.trustScoreId);
+  const isTrustScoreTemplateEditor = templateLockedFields !== undefined;
   const TRUST_SCORE_FEATURE_FIELDS = new Set([
     "feedEnabled", "storiesEnabled", "viewExploreEnabled", "viewReelsEnabled",
     "checkDmEnabled", "followEnabled", "randomJitterEnabled", "makePostEnabled",
@@ -5927,8 +5925,8 @@ export function AutomationSettingsPanel({
           )}
         </div>
 
-        {/* ── Inject Browsing — only visible when Follow Users is ticked ── */}
-        {settings.followEnabled && <div className="space-y-3">
+        {/* ── Inject Browsing — templates can configure it before enabling Follow Users ── */}
+        {(settings.followEnabled || isTrustScoreTemplateEditor) && <div className="space-y-3">
           {/* Row 1: title + checkbox only */}
           <div className="flex items-center gap-3">
             <input
@@ -5936,7 +5934,7 @@ export function AutomationSettingsPanel({
               id={`inject-browsing-enabled-${slotIdx ?? 0}`}
               checked={settings.injectBrowsingEnabled}
               onChange={e => setSettings(s => ({ ...s, injectBrowsingEnabled: e.target.checked }))}
-              disabled={fieldDisabled("injectBrowsingEnabled") || !settings.followEnabled}
+              disabled={fieldDisabled("injectBrowsingEnabled") || (!settings.followEnabled && !isTrustScoreTemplateEditor)}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
             <label htmlFor={`inject-browsing-enabled-${slotIdx ?? 0}`} className={`text-sm font-semibold cursor-pointer select-none ${settings.followEnabled ? 'text-foreground' : 'text-muted-foreground'}`}>Inject Browsing</label>
@@ -6023,17 +6021,17 @@ export function AutomationSettingsPanel({
           </>)}
 
           {/* ── Filters — profile-quality gates applied before each follow ── */}
-          <div className="flex items-center gap-3" style={{ paddingTop: "6px" }}>
+          {(settings.followEnabled || isTrustScoreTemplateEditor) && <div className="flex items-center gap-3" style={{ paddingTop: "6px" }}>
             <input
               type="checkbox"
               id={`follow-filters-enabled-${slotIdx ?? 0}`}
               checked={settings.followFiltersEnabled}
               onChange={e => setSettings(s => ({ ...s, followFiltersEnabled: e.target.checked }))}
-              disabled={fieldDisabled("followFiltersEnabled") || !settings.followEnabled}
+              disabled={fieldDisabled("followFiltersEnabled") || (!settings.followEnabled && !isTrustScoreTemplateEditor)}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
             <label htmlFor={`follow-filters-enabled-${slotIdx ?? 0}`} className={`text-sm font-semibold cursor-pointer select-none ${settings.followEnabled ? 'text-foreground' : 'text-muted-foreground'}`}>Filters</label>
-          </div>
+          </div>}
 
           {settings.followFiltersEnabled && (
             <div className="flex items-center gap-6 flex-wrap" style={{ paddingTop: "5px" }}>
@@ -6413,71 +6411,15 @@ export function AutomationSettingsPanel({
                 </div>
               </div>
 
-              {/* Source: Instagram Account */}
+              {/* Source: My Computer — always enabled; the directory is per slot. */}
               <div className="border border-border/60 rounded-lg p-3 space-y-2">
                 <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id={`make-a-post-username-source-enabled-${slotIdx ?? 0}`}
-                    checked={!settings.makePostDisableUsernameSource}
-                    onChange={e => setSettings(s => ({ ...s, makePostDisableUsernameSource: !e.target.checked }))}
-                    disabled={fieldDisabled("makePostDisableUsernameSource")}
-                    className="w-3.5 h-3.5 accent-primary cursor-pointer"
-                  />
-                  <label htmlFor={`make-a-post-username-source-enabled-${slotIdx ?? 0}`} className="text-xs font-semibold text-foreground cursor-pointer select-none tracking-wide">
-                    SOURCE: INSTAGRAM ACCOUNT
-                  </label>
+                  <span className="w-3.5 h-3.5 rounded-sm border border-primary bg-primary flex items-center justify-center text-[10px] text-primary-foreground">✓</span>
+                  <span className="text-xs font-semibold text-foreground tracking-wide">SOURCE: MY COMPUTER <span className="text-muted-foreground font-normal">(always enabled)</span></span>
                 </div>
-                {!settings.makePostDisableUsernameSource && (
-                  <div className="flex flex-wrap items-end gap-4">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground block text-center">Account username <span className="text-muted-foreground/60">(without @)</span></Label>
-                      <Input type="text" placeholder="username" className="h-8 text-xs max-w-[220px]"
-                        value={settings.makePostSourceUsername}
-                        onChange={e => setSettings(s => ({ ...s, makePostSourceUsername: e.target.value.replace(/^@/, '') }))}
-                        disabled={fieldDisabled("makePostSourceUsername")} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground block text-center">Disable when my posts reach <span className="text-muted-foreground/60">(0 = off)</span></Label>
-                      <Input type="number" min={0} maxLength={5} className="w-20 h-8 text-xs text-center"
-                        value={settings.makePostDisableAtPostCount}
-                        onChange={e => setSettings(s => ({ ...s, makePostDisableAtPostCount: clamp4(Number(e.target.value)) }))}
-                        disabled={loading} />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input type="checkbox" id={`make-a-post-hiker-api-${slotIdx ?? 0}`}
-                        checked={settings.makePostUseHikerApi}
-                        onChange={e => setSettings(s => ({ ...s, makePostUseHikerApi: e.target.checked }))}
-                        disabled={fieldDisabled("makePostUseHikerApi")}
-                        className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                      <label htmlFor={`make-a-post-hiker-api-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Use HikerAPI for scraping</label>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input type="checkbox" id={`make-a-post-disable-exhausted-${slotIdx ?? 0}`}
-                        checked={settings.makePostDisableWhenExhausted}
-                        onChange={e => setSettings(s => ({ ...s, makePostDisableWhenExhausted: e.target.checked }))}
-                        disabled={loading}
-                        className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                      <label htmlFor={`make-a-post-disable-exhausted-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Disable when no more posts are found</label>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Source: Local Folder */}
-              <div className="border border-border/60 rounded-lg p-3 space-y-2">
-                <div className="flex items-center gap-2">
-                  <input type="checkbox" id={`make-a-post-local-folder-enabled-${slotIdx ?? 0}`}
-                    checked={settings.makePostLocalFolderEnabled}
-                    onChange={e => setSettings(s => ({ ...s, makePostLocalFolderEnabled: e.target.checked }))}
-                    disabled={fieldDisabled("makePostLocalFolderEnabled")}
-                    className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                  <label htmlFor={`make-a-post-local-folder-enabled-${slotIdx ?? 0}`} className="text-xs font-semibold text-foreground cursor-pointer select-none tracking-wide">SOURCE: MY COMPUTER</label>
-                </div>
-                {settings.makePostLocalFolderEnabled && (
-                  <div className="space-y-1.5">
+                <div className="space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2">
-                      <button
+                      {!isTrustScoreTemplateEditor && <button
                         type="button"
                         disabled={fieldDisabled("makePostLocalFolderPath")}
                         onClick={async () => {
@@ -6511,7 +6453,10 @@ export function AutomationSettingsPanel({
                         className="h-7 px-3 text-xs rounded border border-border bg-background hover:border-foreground/30 hover:bg-accent transition-colors shrink-0 font-medium text-foreground"
                       >
                         {settings.makePostLocalFolderPath ? "Assigned Directory" : "Browse"}
-                      </button>
+                      </button>}
+                      {isTrustScoreTemplateEditor && (
+                        <span className="text-xs text-muted-foreground">Directory is configured per Phone Farm account slot</span>
+                      )}
                       <div className="flex items-center gap-2">
                         <input type="checkbox" id={`make-a-post-local-no-repeat-${slotIdx ?? 0}`}
                           checked={settings.makePostLocalFolderNoRepeat}
@@ -6536,10 +6481,17 @@ export function AutomationSettingsPanel({
                           className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                         <label htmlFor={`make-a-post-local-delete-after-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Delete from PC after posting</label>
                       </div>
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" id={`make-a-post-disable-exhausted-${slotIdx ?? 0}`}
+                          checked={settings.makePostDisableWhenExhausted}
+                          onChange={e => setSettings(s => ({ ...s, makePostDisableWhenExhausted: e.target.checked }))}
+                          disabled={loading}
+                          className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                        <label htmlFor={`make-a-post-disable-exhausted-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Disable when no more posts are found</label>
+                      </div>
                     </div>
 
-                  </div>
-                )}
+                </div>
               </div>
 
               {/* Posted Media panel — shown when the Posted Media button is toggled */}
@@ -6691,6 +6643,14 @@ export function AutomationSettingsPanel({
                     </div>
                   </div>
                 </div>
+              </div>
+              <div className="flex items-center gap-2 self-end pb-1">
+                <input type="checkbox" id={`make-a-post-hiker-api-${slotIdx ?? 0}`}
+                  checked={settings.makePostUseHikerApi}
+                  onChange={e => setSettings(s => ({ ...s, makePostUseHikerApi: e.target.checked }))}
+                  disabled={fieldDisabled("makePostUseHikerApi")}
+                  className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                <label htmlFor={`make-a-post-hiker-api-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Use HikerAPI for scraping</label>
               </div>
             </div>
           )}

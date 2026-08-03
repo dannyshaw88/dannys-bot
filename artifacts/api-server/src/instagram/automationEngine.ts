@@ -3711,7 +3711,7 @@ class AutomationEngine {
       ebEnqueue("repost", "repostOrderMin", "repostOrderMax", async () => {
         const repostSourceUsernameEb = String(s.repostSourceUsername ?? "").trim();
         const repostLocalFolderPathEb = String(s.repostLocalFolderPath ?? "").trim();
-        const repostLocalFolderEnabledEb = !!(s.repostLocalFolderEnabled && repostLocalFolderPathEb);
+        const repostLocalFolderEnabledEb = !!repostLocalFolderPathEb;
         const repostUsernameSourceActiveEb = !s.repostDisableUsernameSource && !!repostSourceUsernameEb;
         const repostEnabledEb = !!(s.repostEnabled && (repostUsernameSourceActiveEb || repostLocalFolderEnabledEb));
 
@@ -5455,7 +5455,7 @@ class AutomationEngine {
     // ── Repost ───────────────────────────────────────────────────────────────
     const repostSourceUsername = String(s.repostSourceUsername ?? "").trim();
     const repostLocalFolderPath = String(s.repostLocalFolderPath ?? "").trim();
-    const repostLocalFolderEnabled = !!(s.repostLocalFolderEnabled && repostLocalFolderPath);
+    const repostLocalFolderEnabled = !!repostLocalFolderPath;
     const repostUsernameSourceActive = !s.repostDisableUsernameSource && !!repostSourceUsername;
 
     // Resolve the HikerAPI client once (used only when repostUseHikerApi is ON).
