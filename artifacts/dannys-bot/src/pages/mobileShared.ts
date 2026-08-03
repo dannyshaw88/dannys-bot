@@ -381,8 +381,33 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
   "makePostLocalFolderDeleteAfterUpload",
 ]);
 
+/** Account-specific values that may be copied between Human Session Tool slots. */
+export const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
+  "enabled",
+  "cycleIntervalMin",
+  "cycleIntervalMax",
+  "feedEnabled",
+  "storiesEnabled",
+  "viewExploreEnabled",
+  "viewReelsEnabled",
+  "checkDmEnabled",
+  "followEnabled",
+  "randomJitterEnabled",
+  "makePostEnabled",
+  "followSources",
+  "updateProfilePicFolderPath",
+  "makePostSourceUsername",
+  "makePostDisableUsernameSource",
+  "makePostUseHikerApi",
+  "makePostLocalFolderEnabled",
+  "makePostLocalFolderNoRepeat",
+  "makePostLocalFolderRandom",
+  "makePostLocalFolderDeleteAfterUpload",
+]);
+
 export const COPY_SECTIONS: CopySection[] = [
   { key: 'runInterval',   label: 'Human Session Tool', sub: [
+    { key: 'masterEnabled',      label: 'Enabled',                       fields: ['enabled'] },
     { key: 'cycleInterval',     label: 'Run every X - Y minutes',      fields: ['cycleIntervalMin','cycleIntervalMax'] },
     { key: 'shuffleToolOrder',  label: 'Shuffle tool order',           fields: ['shuffleToolOrder'] },
   ]},
@@ -479,7 +504,8 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'jitterVisitSaved',     label: 'Visit Saved %',              fields: ['visitSavedPctMin','visitSavedPctMax'] },
     { key: 'jitterVisitSettings',  label: 'Visit Random Settings %',   fields: ['visitSettingsPctMin','visitSettingsPctMax'] },
     { key: 'jitterAppSwitch',      label: 'App Switch %',              fields: ['appSwitchPctMin','appSwitchPctMax'] },
-    { key: 'jitterUpdateProfilePic', label: 'Update Profile Picture',  fields: ['updateProfilePicActivatePctMin','updateProfilePicActivatePctMax','updateProfilePicFolderPath','updateProfilePicDisableAfterUsed'] },
+    { key: 'jitterUpdateProfilePic', label: 'Update Profile Picture',  fields: ['updateProfilePicActivatePctMin','updateProfilePicActivatePctMax','updateProfilePicDisableAfterUsed'] },
+    { key: 'jitterUpdateProfilePicFolder', label: 'Profile-picture directory', fields: ['updateProfilePicFolderPath'] },
     { key: 'jitterUpdateBio',        label: 'Update Bio',              fields: ['updateBioActivatePctMin','updateBioActivatePctMax','updateBioText','updateBioDisableAfterUsed'] },
   ]},
   { key: 'makePost',      label: 'Make a Post', sub: [
@@ -496,5 +522,3 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'postDestination',   label: 'Post to Profile / Story %',     fields: ['makePostPostToProfilePctMin','makePostPostToProfilePctMax','makePostPostToStoryPctMin','makePostPostToStoryPctMax'] },
   ]},
 ];
-
-export const ALL_SUB_KEYS = COPY_SECTIONS.flatMap(s => s.sub.map(sub => sub.key));

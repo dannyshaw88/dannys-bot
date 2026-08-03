@@ -1795,6 +1795,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "makePostLocalFolderRandom",
     "makePostLocalFolderDeleteAfterUpload",
   ]);
+  const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
+    "enabled",
+    "cycleIntervalMin",
+    "cycleIntervalMax",
+    "feedEnabled",
+    "storiesEnabled",
+    "viewExploreEnabled",
+    "viewReelsEnabled",
+    "checkDmEnabled",
+    "followEnabled",
+    "randomJitterEnabled",
+    "makePostEnabled",
+    "followSources",
+    "updateProfilePicFolderPath",
+    "makePostSourceUsername",
+    "makePostDisableUsernameSource",
+    "makePostUseHikerApi",
+    "makePostLocalFolderEnabled",
+    "makePostLocalFolderNoRepeat",
+    "makePostLocalFolderRandom",
+    "makePostLocalFolderDeleteAfterUpload",
+  ]);
   const TRUST_SCORE_TOOL_FIELDS = new Set([
     "feedEnabled",
     "storiesEnabled",
@@ -2072,10 +2094,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         };
         body.trustScoreToolOverrides = toolOverrides;
         for (const field of Object.keys(body)) {
+          const allowedForRequest = isTrustScoreCopy
+            ? COPYABLE_ACCOUNT_SPECIFIC_FIELDS.has(field)
+            : TRUST_SCORE_SLOT_OWNED_FIELDS.has(field) || field.startsWith("trustScore");
           if (
             field !== "trustScoreCopy" &&
-            !TRUST_SCORE_SLOT_OWNED_FIELDS.has(field) &&
-            !field.startsWith("trustScore")
+            !allowedForRequest
+          ) delete body[field];
+        }
+        delete body.trustScoreCopy;
+      } else if (body.trustScoreCopy === true) {
+        for (const field of Object.keys(body)) {
+          if (
+            field !== "trustScoreCopy" &&
+            !COPYABLE_ACCOUNT_SPECIFIC_FIELDS.has(field)
           ) delete body[field];
         }
         delete body.trustScoreCopy;

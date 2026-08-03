@@ -10,7 +10,6 @@ import {
 import {
   AUTOMATION_DEFAULTS,
   COPY_SECTIONS,
-  ALL_SUB_KEYS,
   type AutomationSettingsData,
   type UsbPhone,
   type CopySection,
@@ -64,7 +63,14 @@ function CopyTrustScoreDialog({
     try {
       const rawS = sessionStorage.getItem(COPY_TS_SUBKEYS_KEY);
       if (rawS) {
-        setSelectedSubKeys(new Set(JSON.parse(rawS) as string[]));
+        const allowed = new Set(
+          COPY_SECTIONS.flatMap(section => section.sub)
+            .filter(sub => sub.fields.every(field => !TRUST_SCORE_SLOT_OWNED_FIELDS.has(field)))
+            .map(sub => sub.key),
+        );
+        setSelectedSubKeys(new Set(
+          (JSON.parse(rawS) as string[]).filter(key => allowed.has(key)),
+        ));
       } else {
         setSelectedSubKeys(new Set());
       }
@@ -83,6 +89,8 @@ function CopyTrustScoreDialog({
 
   // ── Right panel helpers ──
   const toggleSub = (key: string, checked: boolean) => setSelectedSubKeys(prev => {
+    const sub = COPY_SECTIONS.flatMap(section => section.sub).find(candidate => candidate.key === key);
+    if (!sub || sub.fields.some(field => TRUST_SCORE_SLOT_OWNED_FIELDS.has(field))) return prev;
     const n = new Set(prev);
     checked ? n.add(key) : n.delete(key);
     sessionStorage.setItem(COPY_TS_SUBKEYS_KEY, JSON.stringify([...n]));
@@ -90,17 +98,30 @@ function CopyTrustScoreDialog({
   });
   const toggleSection = (section: CopySection, checked: boolean) => setSelectedSubKeys(prev => {
     const n = new Set(prev);
-    section.sub.forEach(sub => checked ? n.add(sub.key) : n.delete(sub.key));
+    section.sub
+      .filter(sub => sub.fields.every(field => !TRUST_SCORE_SLOT_OWNED_FIELDS.has(field)))
+      .forEach(sub => checked ? n.add(sub.key) : n.delete(sub.key));
     sessionStorage.setItem(COPY_TS_SUBKEYS_KEY, JSON.stringify([...n]));
     return n;
   });
   const sectionState = (section: CopySection): "all" | "some" | "none" => {
-    const sel = section.sub.filter(sub => selectedSubKeys.has(sub.key)).length;
+    const copyableSubs = section.sub.filter(sub =>
+      sub.fields.every(field => !TRUST_SCORE_SLOT_OWNED_FIELDS.has(field)),
+    );
+    const sel = copyableSubs.filter(sub => selectedSubKeys.has(sub.key)).length;
     if (sel === 0) return "none";
-    if (sel === section.sub.length) return "all";
+    if (sel === copyableSubs.length) return "all";
     return "some";
   };
-  const selectAllSubs  = () => { const s = new Set(ALL_SUB_KEYS); sessionStorage.setItem(COPY_TS_SUBKEYS_KEY, JSON.stringify([...s])); setSelectedSubKeys(s); };
+  const selectAllSubs  = () => {
+    const s = new Set(
+      COPY_SECTIONS.flatMap(section => section.sub)
+        .filter(sub => sub.fields.every(field => !TRUST_SCORE_SLOT_OWNED_FIELDS.has(field)))
+        .map(sub => sub.key),
+    );
+    sessionStorage.setItem(COPY_TS_SUBKEYS_KEY, JSON.stringify([...s]));
+    setSelectedSubKeys(s);
+  };
   const selectNoneSubs = () => { sessionStorage.removeItem(COPY_TS_SUBKEYS_KEY); setSelectedSubKeys(new Set()); };
 
   // ── Copy action ──
@@ -238,31 +259,47 @@ function CopyTrustScoreDialog({
             <div className="overflow-y-auto flex-1 space-y-1 pr-1">
               {COPY_SECTIONS.map(section => {
                 const state = sectionState(section);
+                const sectionCopyable = section.sub.some(sub =>
+                  sub.fields.every(field => !TRUST_SCORE_SLOT_OWNED_FIELDS.has(field)),
+                );
                 return (
                   <div key={section.key} className="rounded-md border border-border/50 overflow-hidden">
-                    <label className="flex items-center gap-2 px-2.5 py-1.5 bg-muted/40 cursor-pointer select-none hover:bg-muted/60 transition-colors">
+                    <label className={`flex items-center gap-2 px-2.5 py-1.5 bg-muted/40 select-none transition-colors ${
+                      sectionCopyable ? "cursor-pointer hover:bg-muted/60" : "cursor-default opacity-50"
+                    }`}>
                       <input
                         type="checkbox"
                         className="w-3.5 h-3.5 accent-primary shrink-0"
                         checked={state === "all"}
                         ref={el => { if (el) el.indeterminate = state === "some"; }}
                         onChange={e => toggleSection(section, e.target.checked)}
+                        disabled={!sectionCopyable}
                       />
-                      <span className="text-xs font-bold text-foreground">{section.label}</span>
+                      <span className={`text-xs font-bold ${
+                        sectionCopyable ? "text-foreground" : "text-muted-foreground"
+                      }`}>{section.label}</span>
                     </label>
                     {section.sub.length > 1 && (
                       <div className="divide-y divide-border/30">
-                        {section.sub.map(sub => (
-                          <label key={sub.key} className="flex items-center gap-2 px-3 pl-6 py-1 cursor-pointer select-none hover:bg-muted/20 transition-colors">
+                        {section.sub.map(sub => {
+                          const subCopyable = sub.fields.every(field =>
+                            !TRUST_SCORE_SLOT_OWNED_FIELDS.has(field),
+                          );
+                          return (
+                          <label key={sub.key} className={`flex items-center gap-2 px-3 pl-6 py-1 select-none transition-colors ${
+                            subCopyable ? "cursor-pointer hover:bg-muted/20" : "cursor-default opacity-45"
+                          }`}>
                             <input
                               type="checkbox"
                               className="w-3 h-3 accent-primary shrink-0"
                               checked={selectedSubKeys.has(sub.key)}
                               onChange={e => toggleSub(sub.key, e.target.checked)}
+                              disabled={!subCopyable}
                             />
                             <span className="text-xs text-muted-foreground">{sub.label}</span>
                           </label>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
