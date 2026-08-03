@@ -9,7 +9,7 @@ TrustScore-assigned Phone Farm slots must use explicit field-level disable rules
 
 **How to apply:** Keep the existing slot-level editing policy for assigned slots, but restrict Human Session Tool Copy Settings to exactly Follow Sources, Random Actions profile-picture directory, Random Actions Bio spin text, Make a Post Instagram Account source, and Make a Post My Computer source plus assigned directory. Grey out every other Copy Settings row regardless of tool toggle state, and enforce the same allow-list in the API. Keep Copy Settings visible independently of the current device's username count; its dialog should determine whether valid targets exist.
 
-Existing Phone Farm accounts also need a one-time identity bridge: match each saved slot username/account label to the profile's TrustScore badge and create the device/slot assignment only when that slot has never been explicitly configured. Never replace the slot's saved automation object during this migration. HikerAPI is template-controlled, not slot-owned.
+Existing Phone Farm accounts also need a one-time identity bridge: match each saved slot username/account label to the profile's TrustScore badge and create the device/slot assignment only when that slot has never been explicitly configured. Never replace the slot's saved automation object during this migration. HikerAPI remains template-controlled and editable in the TrustScore editor.
 
 **Why:** TrustScore badges predate the device/slot assignment store, so legacy accounts can have both a saved manual HST baseline and a profile badge without any assignment for the resolver to find.
 

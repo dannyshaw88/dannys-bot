@@ -13,7 +13,7 @@ import {
   type AutomationSettingsData,
   type UsbPhone,
   type CopySection,
-  TRUST_SCORE_HST_SLOT_EDITABLE_FIELDS,
+  TRUST_SCORE_SLOT_OWNED_FIELDS,
 } from "@/pages/mobileShared";
 import { AutomationSettingsPanel } from "@/pages/MobilePage";
 import { FakeTrustScoreMirror } from "@/components/FakeTrustScoreMirror";
@@ -65,7 +65,7 @@ function CopyTrustScoreDialog({
       if (rawS) {
         const allowed = new Set(
           COPY_SECTIONS.flatMap(section => section.sub)
-            .filter(sub => sub.fields.every(field => !TRUST_SCORE_HST_SLOT_EDITABLE_FIELDS.has(field)))
+            .filter(sub => sub.fields.every(field => !TRUST_SCORE_SLOT_OWNED_FIELDS.has(field)))
             .map(sub => sub.key),
         );
         setSelectedSubKeys(new Set(
@@ -90,7 +90,7 @@ function CopyTrustScoreDialog({
   // ── Right panel helpers ──
   const toggleSub = (key: string, checked: boolean) => setSelectedSubKeys(prev => {
     const sub = COPY_SECTIONS.flatMap(section => section.sub).find(candidate => candidate.key === key);
-    if (!sub || sub.fields.some(field => TRUST_SCORE_HST_SLOT_EDITABLE_FIELDS.has(field))) return prev;
+    if (!sub || sub.fields.some(field => TRUST_SCORE_SLOT_OWNED_FIELDS.has(field))) return prev;
     const n = new Set(prev);
     checked ? n.add(key) : n.delete(key);
     sessionStorage.setItem(COPY_TS_SUBKEYS_KEY, JSON.stringify([...n]));
@@ -99,14 +99,14 @@ function CopyTrustScoreDialog({
   const toggleSection = (section: CopySection, checked: boolean) => setSelectedSubKeys(prev => {
     const n = new Set(prev);
     section.sub
-      .filter(sub => sub.fields.every(field => !TRUST_SCORE_HST_SLOT_EDITABLE_FIELDS.has(field)))
+      .filter(sub => sub.fields.every(field => !TRUST_SCORE_SLOT_OWNED_FIELDS.has(field)))
       .forEach(sub => checked ? n.add(sub.key) : n.delete(sub.key));
     sessionStorage.setItem(COPY_TS_SUBKEYS_KEY, JSON.stringify([...n]));
     return n;
   });
   const sectionState = (section: CopySection): "all" | "some" | "none" => {
     const copyableSubs = section.sub.filter(sub =>
-      sub.fields.every(field => !TRUST_SCORE_HST_SLOT_EDITABLE_FIELDS.has(field)),
+      sub.fields.every(field => !TRUST_SCORE_SLOT_OWNED_FIELDS.has(field)),
     );
     const sel = copyableSubs.filter(sub => selectedSubKeys.has(sub.key)).length;
     if (sel === 0) return "none";
@@ -116,7 +116,7 @@ function CopyTrustScoreDialog({
   const selectAllSubs  = () => {
     const s = new Set(
       COPY_SECTIONS.flatMap(section => section.sub)
-        .filter(sub => sub.fields.every(field => !TRUST_SCORE_HST_SLOT_EDITABLE_FIELDS.has(field)))
+        .filter(sub => sub.fields.every(field => !TRUST_SCORE_SLOT_OWNED_FIELDS.has(field)))
         .map(sub => sub.key),
     );
     sessionStorage.setItem(COPY_TS_SUBKEYS_KEY, JSON.stringify([...s]));
@@ -136,7 +136,7 @@ function CopyTrustScoreDialog({
       for (const sub of section.sub) {
         if (selectedSubKeys.has(sub.key)) {
           for (const field of sub.fields) {
-            if (!TRUST_SCORE_HST_SLOT_EDITABLE_FIELDS.has(field)) {
+            if (!TRUST_SCORE_SLOT_OWNED_FIELDS.has(field)) {
               partial[field] = (sourceSettings as unknown as Record<string, unknown>)[field];
             }
           }
@@ -260,7 +260,7 @@ function CopyTrustScoreDialog({
               {COPY_SECTIONS.map(section => {
                 const state = sectionState(section);
                 const sectionCopyable = section.sub.some(sub =>
-                  sub.fields.every(field => !TRUST_SCORE_HST_SLOT_EDITABLE_FIELDS.has(field)),
+                  sub.fields.every(field => !TRUST_SCORE_SLOT_OWNED_FIELDS.has(field)),
                 );
                 return (
                   <div key={section.key} className="rounded-md border border-border/50 overflow-hidden">
@@ -283,7 +283,7 @@ function CopyTrustScoreDialog({
                       <div className="divide-y divide-border/30">
                         {section.sub.map(sub => {
                           const subCopyable = sub.fields.every(field =>
-                            !TRUST_SCORE_HST_SLOT_EDITABLE_FIELDS.has(field),
+                            !TRUST_SCORE_SLOT_OWNED_FIELDS.has(field),
                           );
                           return (
                           <label key={sub.key} className={`flex items-center gap-2 px-3 pl-6 py-1 select-none transition-colors ${
@@ -467,7 +467,7 @@ function TrustScoreAutomationEditor({
             saveError={saveError}
             running={false}
             nextRunAt={null}
-            templateLockedFields={[...TRUST_SCORE_HST_SLOT_EDITABLE_FIELDS]}
+            templateLockedFields={[...TRUST_SCORE_SLOT_OWNED_FIELDS]}
           />
         </div>
       </div>
