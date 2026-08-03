@@ -1,5 +1,7 @@
 ### Fixed — TrustScore Human Session Tool locking and Copy Settings visibility
 
+- Existing Phone Farm accounts now inherit the Human Session Tool template associated with their profile's TrustScore badge on first load, even when they were saved before device/slot TrustScore assignments existed.
+- The migration matches saved account usernames or account labels, preserves explicit slot assignments and explicit cleared/manual mode, and never overwrites the slot's existing automation settings baseline.
 - TrustScore-assigned Phone Farm slots now keep all inherited Human Session Tool settings disabled, with only the master toggle, individual tool toggles, and physical-slot-owned source/data controls editable.
 - Restored the **Copy Settings** button for single-slot devices; the dialog still determines whether other farm slots are available as targets.
 - Account Slot HST panels now use the persisted slot assignment directly as the lock authority, so effective-settings caching cannot leave TrustScore-controlled fields editable.

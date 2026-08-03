@@ -26,7 +26,7 @@ import {
 
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
 import { ImageSettingsDialog, type ImageFilterSettings } from "@/components/tools/ImageSettingsDialog";
-import { getTrustLevels, type TrustLevelEntry } from "@/components/TrustScoreBadge";
+import { getTrustLevels, getTrustScore, type TrustLevelEntry } from "@/components/TrustScoreBadge";
 import { MobilePhoneApps, MobilePhoneAppsPanel, type MobilePhoneAppsPanelHandle } from "@/pages/MobilePhoneApps";
 import {
   loadSlotTrustScore,
@@ -7062,6 +7062,79 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
 type AccountSettingsPanelHandle = { backToSlots: () => void; backToSlot: (idx: number | null) => void };
 type AccountSettingsPanelProps  = { phone: UsbPhone | null; addLog: (msg: string) => void; onSlotChange?: (slotIdx: number | null) => void; initialSlot?: number | null; onAnyEnabled?: (anyEnabled: boolean) => void; onPhoneAppsRunning?: (running: boolean) => void };
 
+/**
+ * Connect legacy Account Settings records to the TrustScore inheritance
+ * system. TrustScore badges on ProfilesPage are profile-local, while the
+ * Human Session Tool resolves assignments by device serial + slot index.
+ *
+ * Only create the device/slot assignment when that slot has never had one.
+ * This keeps an existing slot assignment authoritative and, more
+ * importantly, never writes over the slot's saved automation baseline.
+ */
+async function hydrateAccountTrustScoreAssignments(
+  serial: string,
+  accountSlots: AccountSlot[],
+): Promise<number[]> {
+  const refreshedSlotIdxs: number[] = [];
+  try {
+    const profilesResponse = await fetch("/api/profiles?creatorMode=0&trustScoreHydration=1", {
+      credentials: "include",
+      cache: "no-store",
+    });
+    if (!profilesResponse.ok) return refreshedSlotIdxs;
+    const profiles = await profilesResponse.json();
+    if (!Array.isArray(profiles)) return refreshedSlotIdxs;
+
+    const normalizeUsername = (value: unknown) =>
+      String(value ?? "").trim().replace(/^@/, "").toLowerCase();
+    const profileByUsername = new Map<string, any>();
+    for (const profile of profiles) {
+      for (const identity of [profile?.username, profile?.accountLabel]) {
+        const username = normalizeUsername(identity);
+        if (username && !profileByUsername.has(username)) {
+          profileByUsername.set(username, profile);
+        }
+      }
+    }
+
+    await Promise.all(accountSlots.map(async (slot, slotIdx) => {
+      const username = normalizeUsername(slot.username);
+      if (!username) return;
+      const profile = profileByUsername.get(username);
+      const profileScoreId = typeof profile?.id === "number"
+        ? getTrustScore(profile.id)
+        : null;
+      const assignmentResponse = await fetch(
+        `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/trust-score`,
+        { credentials: "include", cache: "no-store" },
+      ).catch(() => null);
+      if (!assignmentResponse?.ok) return;
+      const assignment = await assignmentResponse.json().catch(() => null);
+
+      // configured:true includes an explicit clear (scoreId:null), which
+      // must remain manual mode rather than being re-populated from the badge.
+      if (assignment?.configured) return;
+
+      // Preserve any older browser-local slot assignment before falling back
+      // to the account profile's TrustScore badge.
+      const existingLocalScore = readLocalSlotTrustScore(serial, slotIdx);
+      const scoreId = existingLocalScore || profileScoreId;
+      if (!scoreId) return;
+      try {
+        await saveSlotTrustScore(serial, slotIdx, scoreId);
+        refreshedSlotIdxs.push(slotIdx);
+      } catch {
+        // Keep the existing saved slot data untouched if persistence fails.
+      }
+    }));
+    return refreshedSlotIdxs;
+  } catch {
+    // Account settings remain usable if profile or TrustScore hydration is
+    // temporarily unavailable. The existing saved slot data is untouched.
+    return refreshedSlotIdxs;
+  }
+}
+
 const AccountSettingsPanel = React.forwardRef<AccountSettingsPanelHandle, AccountSettingsPanelProps>(
 function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyEnabled, onPhoneAppsRunning }, ref) {
   const [slotRefreshKeys, setSlotRefreshKeys] = useState<Record<number, number>>({});
@@ -7144,7 +7217,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
     setLoading(true);
     fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/account`)
       .then(r => r.json())
-      .then(d => {
+      .then(async d => {
         if (!active) return;
         // Server returns { slots: [...] }; also handle legacy { username, password }
         let loaded: AccountSlot[];
@@ -7163,6 +7236,19 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
           loaded = [{ username: d.username, password: d.password ?? "", totpSecret: "", emailAddress: "", emailPassword: "", phoneNumber: "" }];
         } else {
           loaded = Array.from({ length: ACCT_SLOT_COUNT }, emptySlot);
+        }
+        // Existing accounts may already have saved Human Session Tool
+        // settings but no device/slot TrustScore assignment. Hydrate that
+        // assignment from the account's existing profile badge. This does not
+        // modify the saved automation baseline.
+        const trustScoreSlots = await hydrateAccountTrustScoreAssignments(phone.serial, loaded);
+        if (!active) return;
+        if (trustScoreSlots.length > 0) {
+          setSlotRefreshKeys(prev => {
+            const next = { ...prev };
+            for (const idx of trustScoreSlots) next[idx] = (next[idx] ?? 0) + 1;
+            return next;
+          });
         }
         lastSavedRef.current = JSON.stringify(loaded);
         setSlots(loaded);
