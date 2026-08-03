@@ -4769,11 +4769,12 @@ export function AutomationSettingsPanel({
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
           <Fingerprint className="w-4 h-4 shrink-0" style={{ color: "#1AD2F2" }} />
-          <h2 className="text-lg font-bold text-foreground whitespace-nowrap">
-            Human Session Tool{slotUsername ? ` for @${slotUsername}` : ""}
-          </h2>
+          <h2 className="text-lg font-bold text-foreground whitespace-nowrap">Human Session Tool</h2>
           {slotIdx !== undefined && (
             <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={slotIdx} width={121} />
+          )}
+          {slotUsername && (
+            <span className="text-lg font-bold text-foreground whitespace-nowrap">for @{slotUsername}</span>
           )}
         </div>
       </div>

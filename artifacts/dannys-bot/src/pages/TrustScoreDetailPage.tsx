@@ -422,12 +422,6 @@ function TrustScoreAutomationEditor({
   return (
     <div className="h-full flex flex-col">
       <div className="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-border bg-background">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ChevronLeft className="w-3.5 h-3.5" /> TrustScores
-        </button>
         <div
           className="flex items-center gap-1.5 rounded-full px-3 py-1"
           style={{ background: level.bg, border: `1px solid ${level.border}` }}
@@ -438,14 +432,22 @@ function TrustScoreAutomationEditor({
           </span>
         </div>
         <div className="flex-1" />
-        <Button
-          size="sm"
-          variant="outline"
-          className="gap-1.5 text-xs h-7 px-2.5"
-          onClick={() => setShowCopyDialog(true)}
-        >
-          <Copy className="w-3 h-3" /> Copy Settings
-        </Button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-2 text-2xl font-bold text-black hover:text-black/70 transition-colors"
+          >
+            <ChevronLeft className="w-7 h-7" /> Back to TrustScores
+          </button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5 text-xs h-7 px-2.5"
+            onClick={() => setShowCopyDialog(true)}
+          >
+            <Copy className="w-3 h-3" /> Copy Settings
+          </Button>
+        </div>
       </div>
       <CopyTrustScoreDialog
         open={showCopyDialog}
