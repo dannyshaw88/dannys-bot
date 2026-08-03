@@ -10,6 +10,7 @@
 - Added 2px of separation above the Inject Browsing → Abandon Follow fields.
 - Vertically centered the Post a Story Browse button, checkboxes, and labels beside the activation controls in both Human Session Tool and TrustScore editors.
 - Kept `.github/workflows/build-windows-installer.yml` as the single canonical Windows installer workflow, with deprecated duplicate workflow files left inert to prevent duplicate builds.
+- Fixed the Windows installer workflow's Posted Media verification, which still searched for removed `made from @` wording even though the current UI correctly renders each entry's filename and posting time.
 - Bumped the root application and Electron package versions to `1.2.357`.
 
 ## [1.2.356] — 2026-08-03

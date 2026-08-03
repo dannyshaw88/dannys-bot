@@ -91,7 +91,8 @@ jobs:
           grep -F "recordPostedProfileMedia(serial, opts.slotIdx" artifacts/api-server/src/routes/mobile.ts
           grep -F "accountUsername: slotUsername" artifacts/api-server/src/routes/mobile.ts
           grep -F "posted-profile-media" artifacts/dannys-bot/src/pages/MobilePage.tsx
-          grep -F "made from @" artifacts/dannys-bot/src/pages/MobilePage.tsx
+          grep -F "entry.filename" artifacts/dannys-bot/src/pages/MobilePage.tsx
+          grep -F "entry.postedAt" artifacts/dannys-bot/src/pages/MobilePage.tsx
           grep -F 'key: "posts"' artifacts/dannys-bot/src/pages/StatsPage.tsx
           grep -F 'label: "Posts"' artifacts/dannys-bot/src/pages/StatsPage.tsx
           grep -F "postsDaily" artifacts/dannys-bot/src/pages/StatsPage.tsx

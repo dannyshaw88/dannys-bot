@@ -80,3 +80,4 @@
 - [Merge regression verification](merge-regression-verification.md) — conflict-recovery merges can reintroduce removed UI; compare both parents and verify active render, payload, and runtime before pushing
 - [TrustScore ownership parity](trustscore-ownership-parity.md) — every slot-owned setting must be registered in both frontend and API ownership maps
 - [TrustScore duration navigation save](trustscore-duration-navigation-save.md) — debounced duration inputs must flush pending writes when the TrustScore view unmounts
+- [Windows installer CI assertions](windows-installer-ci-assertions.md) — keep text-based workflow checks aligned with the current UI, especially after copy changes
