@@ -6203,12 +6203,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     username: string;
     slotIdx: number;
     postedAt: string;
+    thumbnailFile?: string;
   };
   const mobilePostedProfileMedia = new Map<string, PostedProfileMediaEntry[]>();
   const POSTED_PROFILE_MEDIA_DIR = process.env.EQUINOX_DATA_DIR
     ? path.join(process.env.EQUINOX_DATA_DIR, "mobile-posted-profile-media")
     : path.join(path.dirname(path.resolve(process.argv[1] ?? ".")), "..", "mobile-posted-profile-media");
+  const POSTED_PROFILE_MEDIA_THUMBNAILS_DIR = path.join(POSTED_PROFILE_MEDIA_DIR, "thumbnails");
   try { fs.mkdirSync(POSTED_PROFILE_MEDIA_DIR, { recursive: true }); } catch { /* already exists */ }
+  try { fs.mkdirSync(POSTED_PROFILE_MEDIA_THUMBNAILS_DIR, { recursive: true }); } catch { /* already exists */ }
   const _postedProfileMediaPath = (serial: string) =>
     path.join(POSTED_PROFILE_MEDIA_DIR, `${serial.replace(/[^a-zA-Z0-9_\-]/g, "_")}.json`);
   const getPostedProfileMedia = (serial: string): PostedProfileMediaEntry[] => {
@@ -6223,21 +6226,64 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     return mobilePostedProfileMedia.get(serial)!;
   };
-  const recordPostedProfileMedia = (serial: string, slotIdx: number, username: string, filename: string) => {
+  const recordPostedProfileMedia = (
+    serial: string,
+    slotIdx: number,
+    username: string,
+    filename: string,
+    thumbnail?: Buffer,
+  ) => {
     const normalizedUsername = username.replace(/^@/, "").trim();
     if (!normalizedUsername) return;
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    let thumbnailFile: string | undefined;
+    if (thumbnail?.length) {
+      thumbnailFile = `${id}.jpg`;
+      try {
+        fs.writeFileSync(path.join(POSTED_PROFILE_MEDIA_THUMBNAILS_DIR, thumbnailFile), thumbnail);
+      } catch {
+        thumbnailFile = undefined;
+      }
+    }
     const entry: PostedProfileMediaEntry = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+      id,
       filename,
       username: normalizedUsername,
       slotIdx,
       postedAt: new Date().toISOString(),
+      thumbnailFile,
     };
     const list = getPostedProfileMedia(serial);
     list.unshift(entry);
     try {
       fs.writeFileSync(_postedProfileMediaPath(serial), JSON.stringify(list.slice(0, 5000)), "utf8");
     } catch { /* best effort — posting has already succeeded */ }
+  };
+
+  const ensurePostedProfileMediaThumbnail = async (
+    serial: string,
+    entry: PostedProfileMediaEntry,
+  ): Promise<boolean> => {
+    if (entry.thumbnailFile) return false;
+    const folderPath = getMakePostFolderPath(serial, entry.slotIdx);
+    if (!folderPath) return false;
+
+    const folderRoot = path.resolve(folderPath);
+    const sourcePath = path.resolve(folderRoot, path.basename(entry.filename));
+    if (!sourcePath.startsWith(`${folderRoot}${path.sep}`)) return false;
+    try {
+      if (!(await fsPromises.stat(sourcePath)).isFile()) return false;
+      const thumbnail = await sharp(sourcePath)
+        .resize(150, 150, { fit: "cover", position: "centre" })
+        .jpeg({ quality: 82 })
+        .toBuffer();
+      const thumbnailFile = `${entry.id}.jpg`;
+      await fsPromises.writeFile(path.join(POSTED_PROFILE_MEDIA_THUMBNAILS_DIR, thumbnailFile), thumbnail);
+      entry.thumbnailFile = thumbnailFile;
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
@@ -6422,6 +6468,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       imageSettings,
       onLog,
     });
+    // Keep a small preview of the exact prepared image. It is only persisted
+    // after Instagram confirms the profile post, and the original PC file is
+    // never modified.
+    let postedThumbnail: Buffer | undefined;
+    try {
+      postedThumbnail = await sharp(prepared.pushFilePath)
+        .resize(150, 150, { fit: "cover", position: "centre" })
+        .jpeg({ quality: 82 })
+        .toBuffer();
+    } catch {
+      // A thumbnail is helpful but must never prevent a confirmed post.
+    }
 
     onLog?.(`Make a Post: pushing "${fileName}" to device…`);
     let devicePath: string;
@@ -6725,7 +6783,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
 
     recordPostedLocalFile(serial, fileName);
-    recordPostedProfileMedia(serial, opts.slotIdx ?? 0, opts.accountUsername ?? "", fileName);
+    recordPostedProfileMedia(serial, opts.slotIdx ?? 0, opts.accountUsername ?? "", fileName, postedThumbnail);
     // Always remove the temp copy pushed to the device — it is only needed
     // for the picker/upload. Leaving it behind fills up the camera roll.
     await android.removeDeviceFile(serial, devicePath).catch(() => {});
@@ -9188,7 +9246,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // Confirmed profile-feed posts for one account slot. This is intentionally
   // separate from posted-media, which is the device-wide no-repeat cache and
   // includes Story uploads.
-  app.get("/api/mobile/devices/:serial/posted-profile-media", (req: Request, res: Response) => {
+    app.get("/api/mobile/devices/:serial/posted-profile-media", async (req: Request, res: Response) => {
     const serial = req.params.serial as string;
     const username = String(req.query.username ?? "").replace(/^@/, "").trim().toLowerCase();
     const slotIdxRaw = Number(req.query.slotIdx);
@@ -9199,13 +9257,44 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       entry.username.replace(/^@/, "").trim().toLowerCase() === username &&
       (slotIdx === null || entry.slotIdx === slotIdx)
     );
+      let changed = false;
+      for (const entry of entries) {
+        changed = (await ensurePostedProfileMediaThumbnail(serial, entry)) || changed;
+      }
+      if (changed) {
+        try {
+          fs.writeFileSync(
+            _postedProfileMediaPath(serial),
+            JSON.stringify(getPostedProfileMedia(serial).slice(0, 5000)),
+            "utf8",
+          );
+        } catch { /* best effort */ }
+      }
     const today = new Date().toISOString().slice(0, 10);
     res.json({
       ok: true,
-      entries,
+        entries: entries.map(entry => ({
+          ...entry,
+          thumbnailUrl: entry.thumbnailFile
+            ? `/api/mobile/devices/${encodeURIComponent(serial)}/posted-profile-media/${encodeURIComponent(entry.id)}/thumbnail`
+            : undefined,
+        })),
       count: entries.length,
       dailyCount: entries.filter(entry => entry.postedAt.slice(0, 10) === today).length,
     });
+  });
+
+  app.get("/api/mobile/devices/:serial/posted-profile-media/:entryId/thumbnail", (req: Request, res: Response) => {
+    const serial = req.params.serial as string;
+    const entryId = req.params.entryId as string;
+    const entry = getPostedProfileMedia(serial).find(candidate => candidate.id === entryId);
+    if (!entry?.thumbnailFile) return res.status(404).end();
+
+    const thumbnailRoot = path.resolve(POSTED_PROFILE_MEDIA_THUMBNAILS_DIR);
+    const thumbnailPath = path.resolve(thumbnailRoot, entry.thumbnailFile);
+    if (!thumbnailPath.startsWith(`${thumbnailRoot}${path.sep}`)) return res.status(400).end();
+    if (!fs.existsSync(thumbnailPath)) return res.status(404).end();
+    res.type("image/jpeg").sendFile(thumbnailPath);
   });
 
   // Abort endpoint — called by the frontend when the master toggle is switched

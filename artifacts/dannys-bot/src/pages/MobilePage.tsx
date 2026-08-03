@@ -4692,6 +4692,7 @@ export function AutomationSettingsPanel({
     username: string;
     slotIdx: number;
     postedAt: string;
+    thumbnailUrl?: string;
   }[]>([]);
   const [loadingPostedMedia, setLoadingPostedMedia] = useState(false);
 
@@ -6120,7 +6121,7 @@ export function AutomationSettingsPanel({
         {/* ── Random Actions — probabilistic human-like actions each cycle ─ */}
         <div className="border-t border-border" />
 
-        <div className="space-y-3">
+        <div className="space-y-3 relative">
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -6393,13 +6394,14 @@ export function AutomationSettingsPanel({
               className="w-4 h-4 accent-primary cursor-pointer"
             />
             <label htmlFor={`make-a-post-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">Make a Post</label>
-            <Button
-              variant="outline" size="sm"
-              className="h-7 text-xs px-3 ml-auto gap-1.5"
-              onClick={() => { setShowPostedMedia(v => !v); if (!showPostedMedia) loadPostedMedia(); }}
-              disabled={loadingExternal}
-            ><ImagePlus className="w-3.5 h-3.5" />{showPostedMedia ? 'Hide' : 'Posted Media'}</Button>
           </div>
+
+          <Button
+            variant="outline" size="sm"
+            className="h-8 w-full justify-start text-xs px-3 gap-1.5"
+            onClick={() => { setShowPostedMedia(v => !v); if (!showPostedMedia) loadPostedMedia(); }}
+            disabled={loadingExternal}
+          ><ImagePlus className="w-3.5 h-3.5" />Posted Media</Button>
 
           {settings.makePostEnabled && (
             <div className="pl-1 space-y-4">
@@ -6502,39 +6504,6 @@ export function AutomationSettingsPanel({
 
                 </div>
               </div>
-
-              {/* Posted Media panel — shown when the Posted Media button is toggled */}
-              {showPostedMedia && (
-                <div className="border border-border rounded-lg p-3 space-y-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs text-muted-foreground flex-1">
-                      {postedMediaEntries.length} profile post{postedMediaEntries.length !== 1 ? 's' : ''} made from @{slotUsername}
-                    </span>
-                    <Button
-                      variant="outline" size="sm" className="h-7 text-xs px-2.5 gap-1 shrink-0"
-                      onClick={loadPostedMedia}
-                      disabled={loadingPostedMedia}
-                    >Refresh</Button>
-                  </div>
-                  {postedMediaEntries.length > 0 ? (
-                    <div className="space-y-1 max-h-[260px] overflow-y-auto pr-0.5">
-                      {postedMediaEntries.map(entry => (
-                        <div key={entry.id} className="flex items-center gap-2 text-xs">
-                          <ImagePlus className="w-3.5 h-3.5 text-primary shrink-0" />
-                          <span className="flex-1 text-foreground font-mono truncate">{entry.filename}</span>
-                          <span className="text-muted-foreground shrink-0">
-                            {new Date(entry.postedAt).toLocaleString()}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : loadingPostedMedia ? (
-                    <p className="text-xs text-muted-foreground">Loading…</p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">No profile posts have been made from this account yet.</p>
-                  )}
-                </div>
-              )}
 
               {/* Caption */}
               <div className="space-y-2">
@@ -6652,6 +6621,59 @@ export function AutomationSettingsPanel({
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {showPostedMedia && (
+            <div className="absolute inset-x-0 bottom-0 top-[4.5rem] z-30 flex min-h-[320px] flex-col rounded-lg border border-border bg-background shadow-xl">
+              <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+                <ImagePlus className="h-4 w-4 text-primary shrink-0" />
+                <span className="text-sm font-semibold text-foreground">Posted Media</span>
+                <span className="text-xs text-muted-foreground">
+                  {postedMediaEntries.length} profile post{postedMediaEntries.length !== 1 ? "s" : ""}
+                </span>
+                <Button
+                  variant="outline" size="sm" className="ml-auto h-7 text-xs px-2.5 gap-1 shrink-0"
+                  onClick={loadPostedMedia}
+                  disabled={loadingPostedMedia}
+                ><RefreshCw className={`h-3.5 w-3.5 ${loadingPostedMedia ? "animate-spin" : ""}`} />Refresh</Button>
+                <Button
+                  variant="outline" size="sm" className="h-7 text-xs px-2.5 shrink-0"
+                  onClick={() => setShowPostedMedia(false)}
+                >Hide</Button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                {postedMediaEntries.length > 0 ? (
+                  <div className="space-y-2">
+                    {postedMediaEntries.map(entry => (
+                      <div key={entry.id} className="flex items-center gap-3 rounded-md border border-border/60 bg-muted/20 p-2">
+                        <div className="h-[150px] w-[150px] shrink-0 overflow-hidden rounded-md border border-border bg-muted/30">
+                          {entry.thumbnailUrl ? (
+                            <img
+                              src={entry.thumbnailUrl}
+                              alt={entry.filename}
+                              className="h-full w-full object-cover"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center p-2 text-center text-[10px] text-muted-foreground">
+                              Thumbnail unavailable
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0 space-y-1">
+                          <p className="truncate text-xs font-mono text-foreground" title={entry.filename}>{entry.filename}</p>
+                          <p className="text-xs text-muted-foreground">{new Date(entry.postedAt).toLocaleString()}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : loadingPostedMedia ? (
+                  <p className="text-xs text-muted-foreground">Loading…</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No profile posts have been made from this account yet.</p>
+                )}
               </div>
             </div>
           )}

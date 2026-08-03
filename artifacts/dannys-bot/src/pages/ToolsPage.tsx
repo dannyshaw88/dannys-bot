@@ -1,5 +1,4 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { BanAnalyticsPage } from "@/pages/BanAnalyticsPage";
 import { useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient, useQuery, useQueries } from "@tanstack/react-query";
@@ -725,11 +724,11 @@ export function BulkImportTabContent() {
 
 // ─── Tools Page ───────────────────────────────────────────────────────────────
 
-const TOOLS_TABS = ["Evasion Stats", "Trust Scores", "Import"] as const;
+const TOOLS_TABS = ["Trust Scores", "Import"] as const;
 type ToolsTab = typeof TOOLS_TABS[number];
 
 export function ToolsPageContent() {
-  const [activeTab, setActiveTab] = useState<ToolsTab>("Evasion Stats");
+  const [activeTab, setActiveTab] = useState<ToolsTab>("Trust Scores");
 
   return (
     <div>
@@ -749,8 +748,6 @@ export function ToolsPageContent() {
         ))}
       </div>
 
-      {activeTab === "Evasion Stats" && <BanAnalyticsPage />}
-
       {activeTab === "Trust Scores" && (
         <div className="desktop-card p-6">
           <TrustScoresTabContent />
@@ -767,7 +764,7 @@ export function ToolsPage() {
     <AppLayout>
       <div className="mb-6">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Tools</h1>
-        <p className="text-muted-foreground mt-1">Evasion analytics, bulk import, and trust score configuration.</p>
+        <p className="text-muted-foreground mt-1">Trust score configuration and bulk import.</p>
       </div>
       <ToolsPageContent />
     </AppLayout>

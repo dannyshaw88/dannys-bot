@@ -3178,7 +3178,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.1.192",
     date: "27 Jun 2026",
     items: [
-      { category: "Update", text: "Evasion Stats — The Recipe tab renamed to The Rules. Updated with 4 confirmed/tested survival rules: 125s–250s minimum between all API calls, 150–250 min between sessions, instant ban for heavy endpoints or budget overruns, and 400 API calls required before the first follow. Sub-details removed for clarity." },
     ],
   },
   {
@@ -3270,8 +3269,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     date: "26 Jun 2026",
     items: [
       { category: "Fix", text: "HikerAPI cache miss (Extract Now / DM Tool / Follow Tool): when HikerAPI has no cached data for an account's followers, the tool now skips cleanly with a log message instead of crashing with a 400 error. No account fallback — the session is simply skipped and retried next time." },
-      { category: "Improvement", text: "Ban Analytics — Theories tab: every detection theory now has a Disprove button. Dismissed theories dim, strike through, get a 'Disproved [date]' badge, hide their bar and evidence, and sink to the bottom of the list. A Restore button brings them back. State is saved per error tab and survives restarts." },
-      { category: "Fix", text: "Ban Analytics — endpoint diversity display: the broken 'X% diverse' figure (which collapsed toward 0% for long-running accounts) has been replaced. Unique endpoints now shows 'X of N calls' and Shannon entropy is labelled as the actual diversity metric. The cross-stats Diversity ratio row is marked as misleading for long sessions." },
     ],
   },
   {
@@ -3451,7 +3448,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.1.157",
     date: "25 Jun 2026",
     items: [
-      { category: "Feature", text: "Evasion Stats — Theories tab: 'The Recipe' card is now pinned at the top of every error tab. It shows the two current survivor findings: slow API calls (99–250s, confirmed) and the 3-day warmup protocol (session interval 90–250min, feed/stories/DMs at low-probability sub-actions, being tested)." },
       { category: "Fix", text: "Proxy manager assign dropdown: account names are now visible — the option text was appearing white-on-white in some system themes. Inline colour is now forced so the text always shows correctly." },
     ],
   },
@@ -3766,16 +3762,12 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.1.116",
     date: "22 Jun 2026",
     items: [
-      { category: "Fix", text: "Ban Analytics — Survivors tab: removed all passive/active/session category labels from the endpoint frequency map and per-account cards. The previous version was colouring and labelling endpoints as passive or active — those are assumptions about what Instagram scores, not facts. The map now shows raw endpoint names, what percentage of survivors called each one, and how many times per session, with no interpretation applied." },
     ],
   },
   {
     version: "1.1.115",
     date: "22 Jun 2026",
     items: [
-      { category: "Improvement", text: "Ban Analytics — Survivors tab now shows a session recipe panel with the actual numbers from surviving accounts: what percentage of their calls were passive, how many passive calls they made per action, how many warmup calls happened before their first follow, and how many had zero follows at all." },
-      { category: "Improvement", text: "Ban Analytics — Survivors tab now includes an endpoint frequency map showing every Instagram endpoint the survivors actually called, how often they called it, and what share of survivor sessions included that endpoint." },
-      { category: "Improvement", text: "Ban Analytics — each surviving account card now shows a visual passive/action split bar and up to 12 colour-coded endpoint chips, replacing the previous 3-chip summary." },
     ],
   },
   {
@@ -3906,9 +3898,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "Fix", text: "Dashboard activity log: Open EB column header is now centred over its column." },
       { category: "Improvement", text: "Statistics page: Select column is now fully draggable and reorderable — drag it anywhere in the table just like every other column. It also appears in the Columns panel so you can adjust its pixel width or hide it." },
       { category: "Fix", text: "Verify without proxy: error message simplified to 'Please assign a proxy before verifying' — removed the ugly account status prefix." },
-      { category: "Improvement", text: "Evasion Stats: Recommended Action labels removed from all theory cards — advice text is shown directly without the heading." },
-      { category: "Improvement", text: "Evasion Stats — IP TrustScore Budget: algorithm no longer counts circularly. A proxy is now only flagged as 'hot' for an account if it already had 2+ other bans before that account's ban event — so the bar drops when your recent bans were on fresh proxies." },
-      { category: "Improvement", text: "Evasion Stats — Endpoint & Action Timing: evidence text now clearly states whether a high or low percentage supports or contradicts the theory. Advice updated to reflect confirmed field data: accounts consistently survive after per-call delays are increased to 30s+." },
     ],
   },
   {
@@ -4027,7 +4016,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.1.90",
     date: "20 Jun 2026",
     items: [
-      { category: "New", text: "Evasion Stats: added 'Endpoint & Action Timing' theory card to all error type tabs — shows what percentage of your flagged accounts were running API calls faster than 30 seconds apart, with evidence and recommended actions based on your own data." },
     ],
   },
   {
@@ -4072,7 +4060,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.1.84",
     date: "20 Jun 2026",
     items: [
-      { category: "Analytics", text: "New Evasion Stats card: Verify-Only Device Fingerprint. Isolates accounts that were banned with zero tool activity (only the API bootstrap sequence ran) and compares their leak test results side by side." },
       { category: "Analytics", text: "The fingerprint card shows a bar chart per leak test (WebRTC, Bot Detection, Canvas, Audio, Timezone, Hardware) with red/yellow/green proportions across all verify-only banned accounts, sorted by fail rate." },
       { category: "Analytics", text: "If a test fails on the majority of these accounts the card calls it out directly and advises fixing it before verifying new accounts. If all pass, it points back to the IP Login Rate Limit theory instead." },
     ],
@@ -4089,14 +4076,12 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.1.81",
     date: "20 Jun 2026",
     items: [
-      { category: "Analytics", text: "Export Evasion Stats now runs live proxy leak checks for ALL accounts — banned, flagged, and surviving — not just survivors. Results are saved and compared in the export." },
     ],
   },
   {
     version: "1.1.80",
     date: "20 Jun 2026",
     items: [
-      { category: "Analytics", text: "Clicking Export Evasion Stats now automatically runs a live IP/DNS/proxy leak check for every surviving account through its configured proxy — no browser window needed. Results are saved and included in the export JSON." },
     ],
   },
   {
@@ -4134,7 +4119,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "UI", text: "Copy Settings: the NONE and Select None buttons are now blue to match the ALL and Select All buttons." },
       { category: "UI", text: "Copy Settings: both search boxes now show SEARCH as placeholder text." },
       { category: "UI", text: "Nav bar: SESSION LOG moved to sit after METRICS. COPY SETTINGS is now pushed to the far right of the bar on its own." },
-      { category: "Fix", text: "Evasion Stats: the activity ticker strip at the top of the page was appearing twice — the duplicate has been removed." },
     ],
   },
   {
@@ -4257,7 +4241,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     date: "19 Jun 2026",
     items: [
       { category: "Fix", text: "Repost: previous fix attempt — added auth fields to signed request body. Did not fully resolve the issue (root cause fixed in 1.1.56)." },
-      { category: "UI", text: "Tools: sidebar nav item is live. Evasion Stats, Bulk Import, and Trust Scores are now all under Tools." },
     ],
   },
   {
@@ -4267,7 +4250,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "Fix", text: "Repost: fixed 'upload id is missing' error — the publish step was missing required auth fields in the signed request body, causing Instagram to silently reject it. The correct fields are now included and reposts complete successfully." },
       { category: "UI", text: "Dashboard: Repost, Check DM, View Post, and Visit Profile actions now each have their own icon in the action badge instead of showing a plain dot." },
       { category: "UI", text: "Dashboard: story tray empty message simplified to '0 stories in feed the tray is empty'." },
-      { category: "UI", text: "Tools: new sidebar nav item replaces Evasion Stats. The Tools page contains Evasion Stats, Bulk Import, and Trust Scores as sub-tabs." },
     ],
   },
   {
@@ -4341,7 +4323,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "Tweak", text: "Nav buttons (Account Settings, Human Session Tool, Session Log, Dash, Browser, Metrics, Copy Settings) are now darker blue." },
       { category: "Fix", text: "Ghost Browser: Username / Password / DOB / Bio and Email / IMAP fields no longer overlap — layout changed to 2-column grid." },
       { category: "Tweak", text: "Aura Farming Bot: simplified welcome message." },
-      { category: "New", text: "Settings: Evasion Stats is now its own tab in Settings." },
       { category: "New", text: "Settings: new Tools tab (wrench icon) contains Import and TrustScores as sub-tabs, with Import as the landing tab." },
     ],
   },
@@ -4641,7 +4622,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.1.014",
     date: "17 Jun 2026",
     items: [
-      { category: "Analytics", text: "Evasion Stats: banned accounts are now split into three sub-populations — Never Ran (0 follows, banned at Verify), First Follow (1–9 follows, early ban), and Long Runners (10+ follows, sustained sessions). Select a group to see stats computed only for that population — averages are now meaningful instead of mixing three very different account types together." },
     ],
   },
   {
@@ -4675,7 +4655,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.1.009",
     date: "17 Jun 2026",
     items: [
-      { category: "Improvement", text: "Evasion Stats: added three new detection theory cards — Total API Call Rate Too High, Below Survivor Warmup Threshold, and No Burst-Idle Session Rhythm — derived from cross-proxy survivor analysis." },
     ],
   },
   {
@@ -4751,29 +4730,24 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.997",
     date: "16 Jun 2026",
     items: [
-      { category: "Fix", text: "Evasion Stats: the Pre-[ErrorType] Endpoint Risk Ranking table is now on the Data tab of each error tab, not the Theories tab. It shows up to 15 endpoints ranked by their presence rate in the final 20 calls before each error event." },
     ],
   },
   {
     version: "1.0.996",
     date: "16 Jun 2026",
     items: [
-      { category: "Fix", text: "Evasion Stats: the ranked endpoint table is now visible directly inside the Pre-[ErrorType] Endpoint Risk Pattern theory card on each error tab — showing each endpoint, its category, account count, and pre-event percentage." },
     ],
   },
   {
     version: "1.0.995",
     date: "16 Jun 2026",
     items: [
-      { category: "UI", text: "Evasion Stats: Endpoint Risk is no longer a standalone tab. It is now a theory card inside each of the four error tabs (Banned, Automated, Captcha, Locked), showing the pre-event endpoint pattern specific to that error type — pre-ban for Banned, pre-captcha for Captcha, etc." },
-      { category: "New", text: "Evasion Stats: each error tab's Theories section now shows a Pre-[ErrorType] Endpoint Risk Pattern card with a likelihood percentage bar, evidence text naming the top 3 endpoints and their account-presence rates, and action advice." },
     ],
   },
   {
     version: "1.0.993",
     date: "16 Jun 2026",
     items: [
-      { category: "New", text: "Evasion Stats: new Endpoint Risk tab — data-driven table showing which API endpoints appear most in the final 20 calls before each ban/automated/captcha/locked event. Ranked by pre-ban presence %, with HIGH/MED/LOW risk labels and a TopicalExplore callout." },
       { category: "New", text: "Account Manager: new Verify Health column (turn on via Manage Columns) shows CLEAN (green) when an account's verify used only the core 10 ops, or +N (amber) when extra operations were triggered beyond the baseline." },
     ],
   },
@@ -4792,7 +4766,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.984",
     date: "16 Jun 2026",
     items: [
-      { category: "Fix", text: "Evasion Stats: build error in the Survivors tab fixed — the page now compiles and loads correctly." },
     ],
   },
   {
@@ -4802,7 +4775,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "Fix", text: "Accounts page: clicking the Verify button next to an account name no longer accidentally ticks that account's checkbox." },
       { category: "Fix", text: "Embedded browser login: pressing Tab after filling the password now flushes all keystrokes before the login button is clicked, preventing the last character from landing in the wrong position." },
       { category: "Fix", text: "Bulk Verify (Actions → Verify Selected): now uses the same logic as the individual Verify button — accounts that get a sessionid cookie even after a redirect or challenge now correctly proceed to the mobile API check instead of being marked as failed." },
-      { category: "UI", text: "Evasion Stats: Theories moved inside each error tab (Banned, Automated, Captcha, Locked) as a dedicated sub-tab. Each theory's progress bar now shows the likelihood computed from that specific error type's accounts only, not combined across all error types." },
     ],
   },
   {
@@ -4836,7 +4808,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     date: "16 Jun 2026",
     items: [
       { category: "New", text: "Statistics page: Proxy IP column added — shows the proxy host assigned to each account, visible by default and toggleable/reorderable like all other columns." },
-      { category: "Content", text: "Evasion Stats: Session Uniqueness Fingerprint theory updated with counter-evidence from latest dataset — accounts with highly diverse randomised session fingerprints (CoV 1.6-1.7, diversity 72-82%) were still banned within minutes on proxies with 4-5 flagged accounts already present, challenging session diversification as a primary prevention measure." },
     ],
   },
   {
@@ -4847,20 +4818,12 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "UI", text: "Account Settings: Fire Random Endpoints at Login — Min/Max fields are now vertically centred in their row." },
       { category: "New", text: "Account Settings: added Chance of Making a Post option (Min % / Max % fields) inside Fire Random Endpoints at Login. When the chance is hit during a verify, it uses the Human Session Make a Post settings and inserts the action at a random position among the endpoint calls." },
       { category: "UI", text: "Metrics page: account name dropdown is now scrollable with a max height of 25 rows so large account lists are easier to navigate." },
-      { category: "UI", text: "Evasion Stats: Data / Theories toggle tabs are now 50% larger for better visibility." },
-      { category: "UI", text: "Evasion Stats: Proxy Risk Ranking and Concurrent Usage Alerts are now hidden when the Theories inner tab is active — they only appear in the Data view." },
-      { category: "UI", text: "Evasion Stats: removed double-hyphen separators from all cause signal descriptions — text now reads as plain sentences." },
-      { category: "Content", text: "Evasion Stats Theories: all theory descriptions now open with 'What is being theorised is...' framing to make clear these are data-derived hypotheses, not confirmed facts." },
-      { category: "Content", text: "Evasion Stats Theories: all recommended actions now reference only patterns observable in the flagged dataset, removing any advice derived from external third-party testing." },
     ],
   },
   {
     version: "1.0.986",
     date: "16 Jun 2026",
     items: [
-      { category: "New", text: "Evasion Stats Theories: added Session-to-Action Ratio theory — tracks two failure modes: over-camouflaged accounts (too many passive calls, almost no actions) and raw-spam accounts (all actions, no passive calls), which each trigger independent Instagram classifiers." },
-      { category: "New", text: "Evasion Stats Theories: added Low Endpoint Diversity + High Follow Ratio theory — tracks accounts that repeated a small set of endpoints heavily while making a large fraction of them follow actions, the distinguishing pattern behind automated-behaviour detection." },
-      { category: "Improvement", text: "Evasion Stats Theories: all theory cards now auto-sort from highest to lowest likelihood percentage as your data grows — most confirmed theories rise to the top automatically." },
       { category: "Fix", text: "Account Settings METRICS button now opens the Metrics page pre-selected to that specific account instead of always defaulting to the first account in the list." },
       { category: "Fix", text: "Stats page Metrics tab account dropdown is now sorted alphabetically." },
     ],
@@ -4926,7 +4889,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.977",
     date: "15 Jun 2026",
     items: [
-      { category: "New", text: "Ban Analytics: added Session Uniqueness Fingerprint theory card — tracks how many flagged accounts share a /24 subnet, highlighting the risk of identical cold-start call sequences across accounts on the same IP." },
       { category: "New", text: "Account Settings: added 'Fire Random Endpoints at Login' checkbox with Min/Max fields — when enabled, a random selection of extra API calls is fired after each login to make every session's call fingerprint unique." },
       { category: "Fix", text: "Test Timing button now shows the full min–max range of per-call delay instead of a single random sample, so the result is always meaningful regardless of how your settings are configured." },
     ],
@@ -4943,7 +4905,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     date: "15 Jun 2026",
     items: [
       { category: "Fix", text: "Logged Out status pill in account settings now shows the same yellow colour as on the accounts page." },
-      { category: "Fix", text: "Evasion Stats page no longer crashes with 'warmupList is not defined' when opened." },
     ],
   },
   {
@@ -4974,7 +4935,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.971",
     date: "15 Jun 2026",
     items: [
-      { category: "Fix", text: "Evasion Stats: follow call density metric now measures the average number of API calls already logged before each individual follow call in the session, averaged across all follows. Sessions with no follow calls show — instead of a count." },
       { category: "Fix", text: "The 'Follow Call Density' theory card now describes exactly what is measured with no causal claims — it is a factual log count, not a safety indicator." },
       { category: "Fix", text: "FOLLOW EARLY badge now appears on event cards where the average position of follow calls was fewer than 3 calls into the session." },
     ],
@@ -4983,7 +4943,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.970",
     date: "15 Jun 2026",
     items: [
-      { category: "Fix", text: "Evasion Stats: removed all 'warmup calls' language — no call category can be claimed as safe or warmup. The metric is now labelled 'Calls before first action' everywhere and shows the raw count with no interpretation." },
       { category: "Fix", text: "The 'Minimum Warmup Gate' theory card has been rewritten as 'Action-First Sessions' — it now describes what the log shows factually rather than claiming Instagram expects warmup behaviour." },
       { category: "Fix", text: "Survivor vs Flagged comparison: 'Warmup calls' row no longer implies higher is better — it is a neutral count of calls logged before the first action endpoint." },
     ],
@@ -4992,17 +4951,12 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.969",
     date: "15 Jun 2026",
     items: [
-      { category: "New", text: "Evasion Stats Survivors tab: now shows live call patterns for every surviving account — warmup count, session-to-action ratio, follow count, timing CoV, action velocity, and top 3 endpoints pulled directly from the API call log." },
-      { category: "New", text: "Evasion Stats Survivors tab: comparison panel shows the average warmup calls, session ratio, follow count, timing CoV, and total calls for surviving accounts side by side against the average for flagged accounts, so you can see exactly what the survivors are doing differently." },
     ],
   },
   {
     version: "1.0.968",
     date: "15 Jun 2026",
     items: [
-      { category: "New", text: "Evasion Stats: 7 new diagnostic fields are now captured at the moment any account is flagged — account age in days, verify operations in the last 24 hours, number of other accounts on the same proxy, follow count, session-to-action ratio, session time span, and last operation before the flag." },
-      { category: "New", text: "Evasion Stats export: computed metrics (timing CoV, call velocity, Shannon entropy, anomaly score, burst count, top 10 endpoints) are now included per entry in the JSON file so future analysis has all the numbers ready without re-computing them." },
-      { category: "New", text: "Evasion Stats Theories tab: added New Account Trust Ramp theory — tracks the percentage of bans on accounts under 7 days old that had at least one follow operation, the primary pattern behind confirm-you-are-human bans." },
     ],
   },
   {
@@ -5032,7 +4986,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.965",
     date: "14 Jun 2026",
     items: [
-      { category: "New", text: "Evasion Stats Theories: added IP Login Rate Limit theory — Instagram appears to limit how many browser + API login pairs an IP can perform per hour. Each verify = 2 logins. Theory threshold: ~1–2 verifies per 90 min per IP. The likelihood bar is computed live from your flagged accounts that were banned with zero tool activity." },
     ],
   },
   {
@@ -5176,8 +5129,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     date: "16 Jun 2026",
     items: [
       { category: "Fix", text: "Statistics page: no longer crashes when the Proxy IP column is present in the column order." },
-      { category: "Fix", text: "Evasion Stats export: verify count per account now correctly counts successful verifies (browser + API both confirmed) instead of counting individual API calls within a verify session." },
-      { category: "Fix", text: "Evasion Stats export: added verify timeline section showing how many accounts verified through each proxy per day." },
       { category: "Fix", text: "Proxy pause on ban: accounts using a direct proxy host (without a proxy ID) are now correctly paused when a sibling account is banned on the same proxy." },
     ],
   },
@@ -5216,7 +5167,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.944",
     date: "14 Jun 2026",
     items: [
-      { category: "Fix", text: "Evasion Stats: Scan with AI removed from the Theories tab — it required an API key that frequently hit quota limits." },
       { category: "Fix", text: "Accounts: When a ban is detected, accounts on the same proxy are paused silently — no 'Proxy taint' message is written to their notes any more." },
       { category: "Fix", text: "Ghost Browser: Text entry now uses clipboard-style insertion (same as pasting on Android) instead of simulated keyboard typing, which was detectable by Instagram's input-timing classifier." },
     ],
@@ -5226,9 +5176,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     date: "14 Jun 2026",
     items: [
       { category: "Fix", text: "Accounts: Sync and Last API Call column text is now full black instead of grey — easier to read at a glance." },
-      { category: "Improvement", text: "Evasion Stats: Verify-only ban detection now also catches accounts where the EB login (browser phase) was the only activity — not just API Verify calls." },
-      { category: "New", text: "Evasion Stats: Verify Cluster Fingerprint added as a hardcoded theory — detects when multiple accounts were verified on the same proxy within 30 minutes of each other, which is a high-signal bot cluster pattern." },
-      { category: "New", text: "Evasion Stats: Scan with AI button on the Theories tab sends your ban data summary to Aura Farming AI to find patterns beyond the 6 built-in theories (requires OpenAI key in Settings)." },
       { category: "Fix", text: "Proxy Manager: IP:port, username, and password input text is now full black instead of grey." },
     ],
   },
@@ -5238,8 +5185,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     items: [
       { category: "Fix", text: "Accounts: IP:PORT column font is now the same size and weight as the username column — easier to read." },
       { category: "Fix", text: "Accounts: IP:PORT column sort now correctly orders accounts that use a linked proxy (not just inline proxies)." },
-      { category: "Improvement", text: "Evasion Stats: EB login events are now tracked as API calls so they show up in the endpoint log and stats." },
-      { category: "New", text: "Evasion Stats: new Live IP Occupancy panel shows how many accounts are on each proxy right now, how long they've been on it, and how long they've been sharing it." },
     ],
   },
   {
@@ -5312,9 +5257,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.929",
     date: "14 Jun 2026",
     items: [
-      { category: "New", text: "Evasion Stats: added Theories tab — 6 detection theory cards (IP TrustScore Budget, Minimum Warmup Gate, Robotic Timing, Auth Overcalling, Velocity Cap, TrustScore Decay Chain) each with a live likelihood bar calculated from your flagged account data." },
-      { category: "Improvement", text: "Evasion Stats: Proxy Risk Ranking and Concurrent Usage Alerts now collapse to 3 rows by default with a Show more / Show less toggle, keeping the page tidy when lists are long." },
-      { category: "Fix", text: "Evasion Stats: Concurrent Usage Alerts now use the actual last API call timestamp from the session snapshot for timing comparisons, not the manual mark time — gives more accurate 30-minute proximity detection." },
       { category: "Fix", text: "Embedded Browser: new windows now use the available work area instead of maximize(), so the browser never covers the Windows taskbar." },
       { category: "Fix", text: "Embedded Browser: Login and 2FA autofill buttons now focus the correct field and add a short delay before filling, fixing a focus-steal issue caused by the toolbar stealing OS focus." },
     ],
@@ -5332,14 +5274,12 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.927",
     date: "13 Jun 2026",
     items: [
-      { category: "Fix", text: "Evasion Stats: HikerAPI calls are now excluded from endpoint counts and snapshots when an account is flagged — only calls the account made itself are counted." },
     ],
   },
   {
     version: "1.0.926",
     date: "13 Jun 2026",
     items: [
-      { category: "New", text: "Evasion Stats: added an Export Evasion Stats button in the page header — downloads a full JSON snapshot of all flagged accounts, survivors, proxy risks, and trust score data." },
       { category: "Fix", text: "Copy Settings dialogs (Account Settings, Human Sessions, and all tools) now remember the previously selected accounts and settings across opens — selections were being silently wiped on every close." },
       { category: "New", text: "TrustScores page: added an info panel explaining that scores are sorted from 1 upwards and that higher numbers mean a better TrustScore." },
     ],
@@ -5348,7 +5288,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.925",
     date: "13 Jun 2026",
     items: [
-      { category: "Fix", text: "Evasion Stats: TrustScore data now correctly appears for flagged accounts — the lookup was silently failing due to a username-matching issue; it now uses the profile's ID directly." },
       { category: "Fix", text: "New accounts added to a proxy that is already in a ban countdown now automatically inherit the remaining pause time instead of starting active immediately." },
     ],
   },
@@ -5367,10 +5306,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.923",
     date: "13 Jun 2026",
     items: [
-      { category: "Improved", text: "Evasion Stats: each error tab (Ban, Automated, Captcha, Locked) now shows a mathematical causation panel explaining exactly what causes that specific error type, with each theoretical signal validated against your actual data and shown as confirmed, partial, or not seen." },
-      { category: "Improved", text: "Evasion Stats: TrustScore correlation panel added — shows the TrustScore distribution of flagged accounts vs surviving accounts, with automatic insight generation based on whether low-trust or high-trust accounts are being flagged." },
-      { category: "Improved", text: "Evasion Stats: data reliability weighting added — accounts with 2+ re-adds in their notes are flagged as lower-confidence data points and shown with reliability badges on each entry card." },
-      { category: "Improved", text: "Evasion Stats: each flagged event card now shows the account's current TrustScore rank badge and any re-add count warning inline." },
       { category: "Improved", text: "Survivors tab now displays TrustScore distribution for all surviving accounts — showing the rank tier breakdown that characterises accounts Instagram rewards." },
     ],
   },
@@ -5378,7 +5313,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.922",
     date: "13 Jun 2026",
     items: [
-      { category: "Improved", text: "Evasion Stats analysis expanded with every measurable dimension: timing Coefficient of Variation (robotic vs human pacing), Shannon entropy (endpoint diversity), pre-action warmup depth, action velocity per hour, minimum/maximum inter-call gap, subnet-level (/24) concurrency grouping, time-of-day flag patterns, first/last endpoint sequence analysis, and full session call composition breakdown." },
       { category: "Improved", text: "Per-event anomaly scoring now factors in 7 dimensions: call rate, session noise, timing CoV, Shannon entropy, burst presence, warmup depth, and session span — each compared to the group median via z-score." },
     ],
   },
@@ -5390,7 +5324,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "Fix", text: "Accounts in proxy-taint cooldown no longer show a Verify button next to their name — Verify implies logged out, which these accounts are not." },
       { category: "Fix", text: "Proxy-taint cooldown now toggles the Active switch OFF for sibling accounts (rather than setting a custom status), and auto-toggles it back ON when the 90-minute timer expires — no verify step involved." },
       { category: "Fix", text: "The Resuming countdown badge now shows correctly for accounts that are toggled off due to proxy taint — it appears inside the Stopped badge with a live timer." },
-      { category: "Improved", text: "Evasion Stats completely rebuilt: all static theory text removed. The page now computes real mathematics from your actual API call data — mean/median/std dev of call rates and session noise ratios, distribution histograms, burst detection, common endpoint denominators, and data-derived anomaly scoring per event." },
     ],
   },
   {
@@ -5406,12 +5339,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.919",
     date: "13 Jun 2026",
     items: [
-      { category: "Improved", text: "Evasion Stats: removed the 4 summary blocks at the top — counts are already shown in the tab headers so they were redundant." },
-      { category: "New", text: "Evasion Stats: replaced the Common Endpoints list with an Endpoint Ratio Analysis showing timeline, DM, like, follow, and auth call ratios vs healthy targets." },
-      { category: "New", text: "Evasion Stats: each tab now shows a Logic & Reasoning panel explaining what triggers that specific flag type and how Instagram detects it." },
-      { category: "Improved", text: "Evasion Stats: Event History now shows the 3 most recent entries by default with a 'Show all' button — prevents the page flooding when many events are recorded." },
-      { category: "Improved", text: "Evasion Stats: Concurrent Usage Alerts moved below Proxy Risk Ranking." },
-      { category: "Improved", text: "Evasion Stats: Proxy Risk Ranking no longer lists which accounts were on each proxy — that detail is available in each individual event entry." },
       { category: "New", text: "Account Settings: Notes field moved to the far right of the settings panel, visible at all times starting from the Group row — no longer buried inside the collapsed Account Details section." },
       { category: "New", text: "Account history is now auto-logged to Notes when an account is flagged as Banned, Automated Behaviour, Captcha Error, or Locked Account — each entry includes a date and UTC timestamp." },
       { category: "Fix", text: "Accounts page Actions menu: 'Flag as Automated Behaviour' text now stays on a single line and never wraps to two lines." },
@@ -5421,9 +5348,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.918",
     date: "12 Jun 2026",
     items: [
-      { category: "Fix", text: "Evasion Stats: page header icon now matches the magnifying glass shown in the sidebar nav — they were showing different icons before." },
-      { category: "Improved", text: "Evasion Stats: proxy address in each log entry now appears on its own line below the @username instead of next to it on the same row." },
-      { category: "New", text: "Evasion Stats: Proxy Risk Ranking rows now have a red × delete button (appears on hover) that removes all log entries for that proxy across all tabs at once." },
       { category: "Improved", text: "Proxy Manager: status ping result and accounts count are now centred in their columns instead of left-aligned. The status badge no longer stretches across the full column width." },
       { category: "Improved", text: "Proxy Manager: USERNAME and PASSWORD column headers are now centred within their column width." },
     ],
@@ -5433,9 +5357,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     date: "12 Jun 2026",
     items: [
       { category: "Fix", text: "EQX and bulk imports now stamp a 'Re-imported' date and time in Account Settings → Notes every time an existing account is re-imported, so you have a full history of when each account was added." },
-      { category: "New", text: "Evasion Stats: each log entry across all tabs now has a small red × button to delete it individually — useful for removing entries with missing data such as no proxy recorded." },
-      { category: "Improved", text: "Evasion Stats: 'Top Surviving Accounts' moved to its own tab inside the main panel so it no longer crowds the page. Survival timer now resets on each re-import, showing only genuine long-running sessions." },
-      { category: "Improved", text: "Evasion Stats: 'Ban Events' tab renamed to 'Banned Accounts'. Proxy Risk Ranking moved to the bottom of the page. All @usernames across the page are now clickable links to that account's settings." },
       { category: "Improved", text: "Account Settings: the Followers, Following, Posts stat cards and Last Synced timestamp are now on the same row as the Auto Sync controls instead of on a separate block below." },
     ],
   },
@@ -5445,17 +5366,12 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     items: [
       { category: "Fix", text: "Login button flow in the embedded browser now presses Tab, Tab, Enter after typing the password — matching the expected keyboard sequence and submitting the form directly without waiting for the button to become clickable." },
       { category: "Fix", text: "Copy Settings dialog now remembers which accounts were ticked, which settings were ticked, and the sort order you chose — all restored next time you open it. Only resets when the app restarts." },
-      { category: "New", text: "Evasion Stats: new 'Top Surviving Accounts' section lists your valid accounts ranked by how long they've been running, sourced from the date stamp in Account Settings → Notes. Re-added accounts show a badge and the latest re-add date." },
     ],
   },
   {
     version: "1.0.915",
     date: "12 Jun 2026",
     items: [
-      { category: "Improved", text: "Evasion Stats: removed severity labels (High/Medium/Low) — they were misleading and irrelevant. All flagged accounts show data only: call counts, rate, action totals, and endpoint breakdown." },
-      { category: "Improved", text: "Evasion Stats: removed speculative findings. If there is not enough data to identify what happened, it now says that plainly instead of guessing." },
-      { category: "Improved", text: "Evasion Stats: HikerAPI calls are now excluded from endpoint counts and top-endpoints lists — only Instagram session calls count toward the analysis." },
-      { category: "Improved", text: "Evasion Stats: removed the three summary stat boxes (Events / API Calls / Unique Endpoints) — not useful at a glance. The expandable per-account cards now show all detail including follows, unfollows, DMs, likes, call rate, and full endpoint list." },
     ],
   },
   {
@@ -5463,16 +5379,12 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     date: "12 Jun 2026",
     items: [
       { category: "Fix", text: "Flag as Banned no longer deletes the account — it now sets the status to Banned and keeps the account in Aura Farming so you can still access and recover it, matching the behaviour of all other flag actions." },
-      { category: "Fix", text: "Proxy shown as 'no proxy' in Evasion Stats is fixed — all four flag actions now correctly resolve the proxy host from the Proxy Manager when the account uses a linked proxy rather than manual host settings." },
-      { category: "Improved", text: "Evasion Stats completely overhauled: each flagged account now shows a smart diagnosis explaining why it was flagged — follow/DM/like call counts, API call rate, high-risk endpoint identification, and plain-English findings instead of raw endpoint lists." },
-      { category: "Improved", text: "Evasion Stats: cross-account pattern analysis now highlights endpoints that appear in 50%+ of all flagged accounts, making it easy to spot which tool or behaviour is consistently triggering flags." },
     ],
   },
   {
     version: "1.0.913",
     date: "12 Jun 2026",
     items: [
-      { category: "Feature", text: "Evasion Stats: new Locked Account tab tracks accounts flagged as locked, with proxy risk ranking and concurrency alerts." },
       { category: "Feature", text: "Account Actions: new 'Flag as Locked Account' option snapshots API calls and marks the account status as Locked." },
       { category: "Fix", text: "Login auto-fill now sends two Tab presses (username → checkbox → password) instead of one, matching Instagram's updated form layout." },
       { category: "Fix", text: "Wrong password no longer triggers a page-refresh loop — auto-fill is suppressed for 90 seconds after the first login attempt." },
@@ -5486,7 +5398,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "Fix", text: "Clicking Verify now responds instantly regardless of how many other accounts are already being verified — the 3-account concurrent limit has been removed and the route no longer hangs waiting for a queue slot." },
       { category: "Fix", text: "Verify button moved to appear immediately after the account name instead of next to the status pill." },
       { category: "Fix", text: "Logged Out status pill is now red with white text so it stands out clearly from other statuses." },
-      { category: "Fix", text: "Evasion Stats sidebar icon changed to a thick filled magnifying glass in cyan." },
       { category: "Fix", text: "Embedded browser window now uses maximize() on open so it reliably fills the full work area on all DPI and taskbar configurations." },
     ],
   },
@@ -5494,7 +5405,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.911",
     date: "12 Jun 2026",
     items: [
-      { category: "Fix", text: "Evasion Stats sidebar icon updated to a spy figure with magnifying glass crosshairs for a more distinct malware-scanner look." },
       { category: "Fix", text: "Accounts page Select All / Select None / Actions toolbar is now pinned to the bottom of the window at all times, regardless of how many accounts are loaded." },
       { category: "Fix", text: "Metrics page: HS Cycles moved into the Action Totals group alongside Follow, Unfollow, DMs etc. Human Session 'current status / Enabled' card removed from Account Health." },
       { category: "Fix", text: "Browser auto-login no longer types the password into the username field — it now uses the Tab key to move focus from username to password, which is immune to Instagram's form re-render shifting coordinates." },
@@ -5509,11 +5419,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     items: [
       { category: "Fix", text: "Fixed the embedded browser window crashing (SIGSEGV) every time it opened — the crash was caused by the mobile layout flag in the device setup step. The browser now uses a compact mobile viewport and touch emulation without the flag that was causing Chromium to crash." },
       { category: "Fix", text: "Removed the screen orientation field from the ghost browser device setup that was supposed to have been removed in a previous version but was still present." },
-      { category: "Feature", text: "Ban Analytics renamed to Evasion Stats with a new spy icon in the sidebar." },
-      { category: "Feature", text: "Evasion Stats now has three tabs: Ban Events, Automated Behaviour, and Captcha Errors — each showing which API endpoints were called before the event, and the average call rate." },
-      { category: "Feature", text: "Evasion Stats now shows a Proxy Risk Ranking table listing which proxy IPs appear most often across all three event types, so you can see which proxies are causing the most problems." },
-      { category: "Feature", text: "Evasion Stats now shows Concurrent Usage Alerts when multiple accounts on the same proxy were flagged within 30 minutes of each other — a strong signal of suspicious pattern detection by Instagram." },
-      { category: "Feature", text: "Accounts page now has two new flag options: Flag as Automated Behaviour and Flag as Captcha Error. Both snapshot the account's API call history into Evasion Stats but keep the account in Aura Farming so you can still verify and recover it." },
     ],
   },
   {
@@ -5558,7 +5463,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     date: "12 Jun 2026",
     items: [
       { category: "Fix", text: "Pressing the browser icon no longer crashes the app — fixed two additional crash points: the app was calling into the browser window up to 14 seconds into setup (after proxy timezone, user-agent, and device metric configuration) and again at the final navigation step, both without checking if the window was still alive." },
-      { category: "Fix", text: "Ban Analytics now opens inside the app with the sidebar visible, instead of taking over the full screen." },
     ],
   },
   {
@@ -5604,7 +5508,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     date: "12 Jun 2026",
     items: [
       { category: "Fix", text: "Human Session: Skip Chance % and Exec Order labels restored on Follow, Unfollow, and Contact tool headers — a previous update had incorrectly renamed them to Run Chance % and Execution Order without approval." },
-      { category: "Fix", text: "Ban Analytics: fixed crash when navigating to the page." },
     ],
   },
   {
@@ -5613,7 +5516,6 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     items: [
       { category: "Fix", text: "Ghost Browser warm-up: websites are now visited in fully random order — the first website was previously used as a fixed landing page, causing it to be visited twice before any other site." },
       { category: "Fix", text: "Ghost Browser: Verification Code title now appears inline on the same row as the code input field instead of on its own separate row above." },
-      { category: "New", text: "Ban Analytics: Flag as Banned in Accounts → Actions snapshots the account's full API call history, saves it to a ban analytics database, then removes the account — the new Ban Analytics page in the sidebar shows which endpoints appear most before bans." },
     ],
   },
   {
