@@ -1803,6 +1803,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "followSources",
     "updateProfilePicFolderPath",
     "updateBioText",
+    "makePostLocalFolderPath",
   ]);
   const TRUST_SCORE_TOOL_FIELDS = new Set([
     "feedEnabled",
@@ -9096,8 +9097,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // ── Make a Post — dedicated folder path endpoints ─────────────────────────
   // These endpoints read/write the per-slot dedicated folder-path text file,
   // which is the authoritative source of truth for makePostLocalFolderPath.
-  // Using a dedicated file means the assigned directory can never be wiped by
-  // Copy Settings or an autosave race against mobile-instances.json.
+  // Using a dedicated file means the assigned directory survives normal
+  // autosave/schema races; the explicit HST Copy Settings flow may update it
+  // for a selected target slot.
   app.get("/api/mobile/devices/:serial/slots/:slotIdx/folder-path", (req: Request, res: Response) => {
     const serial  = req.params.serial as string;
     const slotIdx = parseInt(req.params.slotIdx, 10);
