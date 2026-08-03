@@ -1,3 +1,12 @@
+## [1.2.353] — 2026-08-03
+
+### Fixed — Bio Spin remains Human Session Tool-owned
+
+- Bio Spin text is now owned by the physical Human Session Tool account slot instead of the Settings → TrustScores template.
+- TrustScore-assigned slots can still edit their own Bio Spin text, while TrustScore templates no longer inherit or overwrite it.
+- Bio Spin remains available as a selectable, copyable field in Human Session Tool Copy Settings.
+- Bumped the root application and Electron package versions to `1.2.353`.
+
 ## [1.2.352] — 2026-08-03
 
 ### Changed — Identical Post a Story media controls in HST and TrustScores

@@ -1905,6 +1905,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "followFilterVerifiedUsers",
     "followFilterMaxFollowers25k",
     "updateProfilePicFolderPath",
+    "updateBioText",
     "makePostLocalFolderEnabled",
     "makePostLocalFolderPath",
     "postStoryLocalFolderPath",
