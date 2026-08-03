@@ -212,9 +212,9 @@ export function TrustScoresTabContent() {
 
       <div className="w-full overflow-x-auto">
         <div className="flex items-center gap-2 px-2 mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          <span className="w-[185px]">TrustScore</span>
+          <span className="w-[185px] text-center">TrustScore</span>
           <span className="w-[9rem] text-center">Duration</span>
-          <span className="flex-1 text-center">Notes</span>
+          <span className="w-[50ch] text-center">Notes</span>
         </div>
         <div className="space-y-1.5 w-full">
         {levels.map((level, idx) => {
@@ -269,8 +269,9 @@ export function TrustScoresTabContent() {
                 />
                 <span className="text-xs text-muted-foreground">hours</span>
               </div>
-              {/* Notes — centered within the remaining Notes column. */}
-              <div className="flex flex-1 justify-center">
+              {/* Notes stay directly beside Duration and use the same fixed
+                  maximum width as the Notes heading. */}
+              <div className="flex w-[50ch] justify-start shrink-0">
                 <textarea
                   value={note}
                   onChange={e => handleNoteChange(level.id, e.target.value)}

@@ -6725,7 +6725,7 @@ export function AutomationSettingsPanel({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 self-center">
                     <button
                       type="button"
                       disabled={fieldDisabled("postStoryLocalFolderPath")}
@@ -7847,7 +7847,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
 
                 {/* Trust Score — independent instance (mobile_ts_<serial>_<slotIdx>)
                     so styling changes here don't affect other badge placements */}
-                <div style={{ display: "flex", alignSelf: "flex-end", height: "36px" }}>
+                <div style={{ display: "flex", alignSelf: "flex-end", height: "36px", gap: "8px" }}>
                   <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={i} width={114} />
                   <TrustScoreCountdown serial={phone?.serial ?? ""} slotIdx={i} />
                 </div>

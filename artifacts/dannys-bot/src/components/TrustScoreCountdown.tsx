@@ -11,6 +11,7 @@ type TimerResponse = {
   running?: boolean;
   paused?: boolean;
   remainingMs?: number | null;
+  expiresAt?: number | null;
 };
 
 function formatRemaining(ms: number): string {
@@ -37,7 +38,7 @@ export function TrustScoreCountdown({
     readLocalSlotTrustScore(serial, slotIdx),
   );
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
-  const [receivedAt, setReceivedAt] = useState<number | null>(null);
+  const [expiresAt, setExpiresAt] = useState<number | null>(null);
   const [advancing, setAdvancing] = useState(false);
 
   const currentIndex = levels.findIndex(level => level.id === scoreId);
@@ -46,6 +47,7 @@ export function TrustScoreCountdown({
   const load = useCallback(async () => {
     if (!serial) {
       setRemainingMs(null);
+      setExpiresAt(null);
       return;
     }
     try {
@@ -62,6 +64,7 @@ export function TrustScoreCountdown({
       const liveNextScore = liveIndex >= 0 ? levels[liveIndex + 1] : null;
       if (!liveScoreId || !liveNextScore) {
         setRemainingMs(null);
+        setExpiresAt(null);
         return;
       }
       const response = await fetch(
@@ -72,10 +75,15 @@ export function TrustScoreCountdown({
       const data = await response.json() as TimerResponse;
       if (data.scoreId !== liveScoreId || data.paused || !data.running || !data.remainingMs) {
         setRemainingMs(null);
+        setExpiresAt(null);
         return;
       }
       setRemainingMs(data.remainingMs);
-      setReceivedAt(Date.now());
+      setExpiresAt(
+        typeof data.expiresAt === "number" && Number.isFinite(data.expiresAt)
+          ? data.expiresAt
+          : Date.now() + data.remainingMs,
+      );
     } catch {
       // A transient request failure should not make a persisted timer vanish.
     }
@@ -120,7 +128,7 @@ export function TrustScoreCountdown({
         );
         setScoreId(data.scoreId);
         setRemainingMs(null);
-        setReceivedAt(null);
+        setExpiresAt(null);
       } else {
         await load();
       }
@@ -130,20 +138,20 @@ export function TrustScoreCountdown({
   }, [advancing, currentIndex, levels.length, load, nextScore, scoreId, serial, slotIdx]);
 
   useEffect(() => {
-    if (remainingMs === null || receivedAt === null) return;
+    if (remainingMs === null || expiresAt === null) return;
     const interval = window.setInterval(() => {
-      const left = Math.max(0, remainingMs - (Date.now() - receivedAt));
+      const left = Math.max(0, expiresAt - Date.now());
       setRemainingMs(left);
       if (left === 0) void advance();
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [advance, receivedAt, remainingMs]);
+  }, [advance, expiresAt, remainingMs]);
 
   if (remainingMs === null || !scoreId || !nextScore) return null;
 
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/30 px-2 h-7 text-[11px] font-semibold text-muted-foreground whitespace-nowrap"
+      className="relative top-0.5 inline-flex items-center gap-1 rounded-md border border-border bg-muted/30 px-2 h-7 text-[11px] font-semibold text-muted-foreground whitespace-nowrap"
       title={`Time remaining on ${levels[currentIndex]?.label ?? "TrustScore"}`}
     >
       <Clock3 className="w-3 h-3 shrink-0" />
