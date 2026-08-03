@@ -1785,6 +1785,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "trustScoreDisabledTools",
     "trustScoreToolOverrides",
     "followSources",
+    "injectBrowsingEnabled",
+    "followFiltersEnabled",
     "updateProfilePicFolderPath",
     "makePostSourceUsername",
     "makePostDisableUsernameSource",

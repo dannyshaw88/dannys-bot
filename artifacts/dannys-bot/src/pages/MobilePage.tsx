@@ -5933,7 +5933,7 @@ export function AutomationSettingsPanel({
               id={`inject-browsing-enabled-${slotIdx ?? 0}`}
               checked={settings.injectBrowsingEnabled}
               onChange={e => setSettings(s => ({ ...s, injectBrowsingEnabled: e.target.checked }))}
-              disabled={loading || !settings.followEnabled}
+              disabled={fieldDisabled("injectBrowsingEnabled") || !settings.followEnabled}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
             <label htmlFor={`inject-browsing-enabled-${slotIdx ?? 0}`} className={`text-sm font-semibold cursor-pointer select-none ${settings.followEnabled ? 'text-foreground' : 'text-muted-foreground'}`}>Inject Browsing</label>
@@ -6026,7 +6026,7 @@ export function AutomationSettingsPanel({
               id={`follow-filters-enabled-${slotIdx ?? 0}`}
               checked={settings.followFiltersEnabled}
               onChange={e => setSettings(s => ({ ...s, followFiltersEnabled: e.target.checked }))}
-              disabled={loading || !settings.followEnabled}
+              disabled={fieldDisabled("followFiltersEnabled") || !settings.followEnabled}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
             <label htmlFor={`follow-filters-enabled-${slotIdx ?? 0}`} className={`text-sm font-semibold cursor-pointer select-none ${settings.followEnabled ? 'text-foreground' : 'text-muted-foreground'}`}>Filters</label>

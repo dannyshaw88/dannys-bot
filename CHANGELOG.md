@@ -5,6 +5,7 @@
 - Account Slot HST panels now use the persisted slot assignment directly as the lock authority, so effective-settings caching cannot leave TrustScore-controlled fields editable.
 - Follow Users per-operation counts, spread behavior, and all follower filters are TrustScore-controlled and disabled in Account Slot HST panels; only Follow Sources remains slot-owned.
 - Human Session Tool Copy Settings now greys out every inherited setting. Only account-specific controls remain selectable: the master/tool toggles, run interval, Follow Sources, profile-picture directory, and approved Make a Post source/media controls.
+- Inject Browsing and Follow Filters master checkboxes are now clickable per assigned Human Session Tool slot; their detailed settings remain TrustScore-controlled.
 
 # Changelog
 

@@ -370,6 +370,8 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
   "trustScoreDisabledTools",
   "trustScoreToolOverrides",
   "followSources",
+  "injectBrowsingEnabled",
+  "followFiltersEnabled",
   "updateProfilePicFolderPath",
   "makePostSourceUsername",
   "makePostDisableUsernameSource",
