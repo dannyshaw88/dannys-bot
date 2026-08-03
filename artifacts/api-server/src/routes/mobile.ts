@@ -1794,6 +1794,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "makePostAlterationLevel",
     "makePostImageSettingsEnabled",
     "makePostImageSettings",
+    "makePostFixAiSlop",
+    "makePostMakeUnique",
     "makePostUseHikerApi",
     "makePostLocalFolderEnabled",
     "makePostLocalFolderPath",

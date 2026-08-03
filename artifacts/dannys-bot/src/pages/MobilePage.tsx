@@ -6644,7 +6644,7 @@ export function AutomationSettingsPanel({
                     <input type="checkbox" id={`make-a-post-fix-ai-slop-${slotIdx ?? 0}`}
                       checked={settings.makePostFixAiSlop}
                       onChange={e => setSettings(s => ({ ...s, makePostFixAiSlop: e.target.checked }))}
-                      disabled={loading}
+                      disabled={fieldDisabled("makePostFixAiSlop")}
                       className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                     <label htmlFor={`make-a-post-fix-ai-slop-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Fix AI Slop</label>
                   </div>
@@ -6653,7 +6653,7 @@ export function AutomationSettingsPanel({
                     <input type="checkbox" id={`make-a-post-make-unique-${slotIdx ?? 0}`}
                       checked={settings.makePostMakeUnique}
                       onChange={e => setSettings(s => ({ ...s, makePostMakeUnique: e.target.checked }))}
-                      disabled={loading}
+                      disabled={fieldDisabled("makePostMakeUnique")}
                       className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                     <label htmlFor={`make-a-post-make-unique-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Make it unique</label>
                   </div>

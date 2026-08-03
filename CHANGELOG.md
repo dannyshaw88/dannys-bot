@@ -7,6 +7,7 @@
 - Human Session Tool Copy Settings now greys out every inherited setting. Only account-specific controls remain selectable: the master/tool toggles, run interval, Follow Sources, profile-picture directory, and approved Make a Post source/media controls.
 - Inject Browsing and Follow Filters master checkboxes are now clickable per assigned Human Session Tool slot; their detailed settings remain TrustScore-controlled.
 - Make a Post Alteration Level and Image Settings controls are now clickable per assigned Human Session Tool slot, including the nested Image Settings configuration; other Make a Post settings remain TrustScore-controlled.
+- Make a Post Fix AI Slop and Make it Unique controls are now clickable per assigned Human Session Tool slot, and all four post-image controls are available in Human Session Tool Copy Settings.
 
 # Changelog
 
