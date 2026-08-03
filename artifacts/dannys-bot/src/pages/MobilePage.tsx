@@ -6942,22 +6942,23 @@ export function AutomationSettingsPanel({
 
       {/* Bio Spin editor — keep the spin text out of the normal Random Actions row. */}
       <Dialog open={bioSpinEditorOpen} onOpenChange={setBioSpinEditorOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-[calc(28rem+15ch)]">
           <DialogHeader>
             <DialogTitle>Bio Spin</DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Enter bio spin text</Label>
-            <Input
-              type="text"
+            <textarea
               autoFocus
+              rows={5}
               value={settings.updateBioText}
               onChange={e => setSettings(s => ({ ...s, updateBioText: e.target.value }))}
               disabled={fieldDisabled("updateBioText")}
               placeholder="Enter bio text or spin syntax"
+              className="min-h-[7.5rem] w-[calc(100%+15ch)] max-w-none resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm leading-relaxed outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             />
             <p className="text-[10px] text-muted-foreground/70">
-              Supports spin syntax such as {"{hello|hi|hey}"}.
+              Up to 5 lines; each line becomes a line break in the Instagram bio. Supports spin syntax such as {"{hello|hi|hey}"}.
             </p>
           </div>
           <div className="flex justify-end pt-1">
@@ -6979,7 +6980,7 @@ export function AutomationSettingsPanel({
           <DialogHeader>
             <DialogTitle>Spin Preview</DialogTitle>
           </DialogHeader>
-          <p className="text-sm break-words py-2">{spinPreview}</p>
+          <p className="whitespace-pre-wrap break-words py-2 text-sm">{spinPreview}</p>
           <div className="flex justify-end gap-2 pt-1">
             <button
               type="button"
