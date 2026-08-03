@@ -44,6 +44,16 @@ jobs:
           test -f artifacts/electron/build.mjs
           test -f artifacts/electron/electron-builder.json
           echo "Building Aura Farming version $root_version"
+      - name: Verify TrustScore Human Session Tool split layout
+        shell: bash
+        run: |
+          grep -F 'className="w-1/2 h-full min-h-0 flex items-center justify-center"' artifacts/dannys-bot/src/pages/TrustScoreDetailPage.tsx
+          grep -F 'className="w-1/2 h-full min-h-0 border-l border-border"' artifacts/dannys-bot/src/pages/TrustScoreDetailPage.tsx
+          grep -F '<FakeTrustScoreMirror trustScoreLabel={level.label} />' artifacts/dannys-bot/src/pages/TrustScoreDetailPage.tsx
+          grep -F 'ref={paneRef} className="h-full w-full min-h-0 flex items-center justify-center p-4"' artifacts/dannys-bot/src/components/FakeTrustScoreMirror.tsx
+          grep -F 'const availableScreenH = Math.max(0, paneRect.height - chromeH)' artifacts/dannys-bot/src/components/FakeTrustScoreMirror.tsx
+          grep -F 'const phoneRatio = 9 / 16' artifacts/dannys-bot/src/components/FakeTrustScoreMirror.tsx
+          echo "TrustScore Human Session Tool split layout verified"
       - name: Verify Browser persistence and removed AI Images sources
         shell: bash
         run: |

@@ -4,6 +4,20 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.345] — 2026-08-03
+
+### Changed — Match TrustScore Human Session Tool layout to Phone Farm
+
+- Updated each TrustScore detail editor so its visual-only device mirror occupies the full left half of the Human Session Tool workspace instead of appearing as a narrow card.
+- Kept the Human Session Tool configuration on the full right half, preserving the same two-pane arrangement used when configuring a real Phone Farm device.
+- Made the fake mirror fill the available pane height and calculate its phone shell size from the actual workspace dimensions.
+- Preserved the phone screen’s 9:16 aspect ratio while sizing the header and bottom device controls outside the screen area, preventing the phone preview from being stretched or distorted.
+- Kept the mirror intentionally visual-only: it has no device serial, device stream, API calls, or active controls.
+- Added Windows Actions validation so the installer pipeline checks that the TrustScore detail page uses the full split-pane mirror layout and the sizing component is included.
+- Bumped the root application and Electron package versions to `1.2.345`.
+
+---
+
 ## [1.2.344] — 2026-08-02
 
 ### Changed — Refine Dashboard activity icons and move image preparation into Settings
