@@ -205,9 +205,8 @@ export interface AutomationSettingsData {
   makePostAlterationEnabled: boolean;
   makePostAlterationLevel: "small" | "medium" | "high";
   makePostImageSettingsEnabled: boolean;
-  makePostUseHikerApi: boolean;
   makePostDisableWhenExhausted: boolean;
-  /** Kept for runtime/backward compatibility; My Computer is always enabled. */
+  /** Kept for runtime/backward compatibility with older saved settings. */
   makePostLocalFolderEnabled: boolean;
   makePostLocalFolderPath: string;
   makePostLocalFolderNoRepeat: boolean;
@@ -320,7 +319,6 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   makePostAlterationEnabled: true,
   makePostAlterationLevel: "small",
   makePostImageSettingsEnabled: true,
-  makePostUseHikerApi: false,
   makePostDisableWhenExhausted: true,
   makePostLocalFolderEnabled: true,
   makePostLocalFolderPath: "",
@@ -371,17 +369,8 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
   "followFilterVerifiedUsers",
   "followFilterMaxFollowers25k",
   "updateProfilePicFolderPath",
-  "makePostAlterationEnabled",
-  "makePostAlterationLevel",
-  "makePostImageSettingsEnabled",
-  "makePostImageSettings",
-  "makePostFixAiSlop",
-  "makePostMakeUnique",
   "makePostLocalFolderEnabled",
   "makePostLocalFolderPath",
-  "makePostLocalFolderNoRepeat",
-  "makePostLocalFolderRandom",
-  "makePostLocalFolderDeleteAfterUpload",
 ]);
 
 /** Fields that stay restricted in Settings → TrustScores. Inject Browsing
@@ -516,7 +505,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'postPerSession',    label: 'Posts per session',             fields: ['makePostPerSessionMin','makePostPerSessionMax'] },
     { key: 'postAlteration',    label: 'Image Alteration',              fields: ['makePostAlterationEnabled','makePostAlterationLevel'] },
     { key: 'postImgSettings',   label: 'Image Settings',                fields: ['makePostImageSettingsEnabled','makePostImageSettings'] },
-    { key: 'postHikerApi',      label: 'Use Hiker API',                  fields: ['makePostUseHikerApi'] },
+    { key: 'postLocalOpts',     label: 'My Computer options',            fields: ['makePostLocalFolderNoRepeat','makePostLocalFolderRandom','makePostLocalFolderDeleteAfterUpload'] },
     { key: 'postDisableAt',     label: 'Disable when no more posts are found', fields: ['makePostDisableWhenExhausted'] },
     { key: 'postChatGptCaption',label: 'ChatGPT / caption settings',    fields: ['makePostUseChatGpt','makePostCaptionText'] },
     { key: 'postFixAiSlop',      label: 'Fix AI Slop',                   fields: ['makePostFixAiSlop'] },

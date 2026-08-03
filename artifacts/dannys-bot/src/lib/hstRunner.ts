@@ -282,7 +282,6 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
         makePostAlterationEnabled: s.makePostAlterationEnabled,
         makePostAlterationLevel: s.makePostAlterationLevel,
         makePostImageSettingsEnabled: s.makePostImageSettingsEnabled,
-        makePostUseHikerApi: s.makePostUseHikerApi,
         makePostDisableWhenExhausted: s.makePostDisableWhenExhausted,
         makePostLocalFolderEnabled: true,
         makePostLocalFolderPath: s.makePostLocalFolderPath,

@@ -133,7 +133,6 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       ]},
       { key: "repost", label: "Repost", description: "Repost settings for local folder, alteration, caption and stop conditions", subOptions: [
         { key: "rp_enabled",         label: "Enabled",                          settingKeys: ["repostEnabled"] },
-        { key: "rp_hiker",           label: "Use HikerAPI",                     settingKeys: ["repostUseHikerApi"] },
         { key: "rp_local_opts",      label: "Local folder options",             settingKeys: ["repostLocalFolderDeleteAfterUpload","repostLocalFolderNoRepeat","repostLocalFolderRandom"] },
         { key: "rp_count",           label: "Posts per session",                settingKeys: ["repostMin","repostMax"] },
         { key: "rp_alteration",      label: "Alteration & image settings",      settingKeys: ["repostAlterationLevel","repostImageSettings"] },
@@ -594,7 +593,6 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       exploreProfileClickMin: 1,
       exploreProfileClickMax: 3,
       repostEnabled: false,
-      repostUseHikerApi: false,
       repostSourceUsername: "",
       repostDisableUsernameSource: false,
       repostLocalFolderEnabled: true,
@@ -703,7 +701,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       exploreVisitProfilePctMin: 0, exploreVisitProfilePctMax: 20,
       exploreProfileScrollMin: 3, exploreProfileScrollMax: 8,
       exploreProfileClickMin: 1, exploreProfileClickMax: 3,
-      repostEnabled: false, repostUseHikerApi: false, repostSourceUsername: "",
+      repostEnabled: false, repostSourceUsername: "",
       repostDisableUsernameSource: false, repostLocalFolderEnabled: true,
       repostLocalFolderPath: "", repostLocalFolderDeleteAfterUpload: true,
       repostLocalFolderNoRepeat: false, repostUseChatGpt: false,
@@ -1930,18 +1928,6 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  id="repostUseHikerApi"
-                  checked={!!settings.repostUseHikerApi}
-                  onChange={(e) => setSettings({ ...settings, repostUseHikerApi: e.target.checked })}
-                  className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-                />
-                <label htmlFor="repostUseHikerApi" className="text-xs text-muted-foreground cursor-pointer select-none">
-                  Use HikerAPI for scraping
-                </label>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
                   id="repostDisableWhenExhausted"
                   checked={!!settings.repostDisableWhenExhausted}
                   onChange={(e) => setSettings({ ...settings, repostDisableWhenExhausted: e.target.checked })}
@@ -1954,16 +1940,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             </div>
           </div>{/* end Make a Post settings */}
 
-          {/* Source: Local PC Folder — always enabled; the directory is per account. */}
+          {/* My Computer directory — configured independently per account. */}
           <div className="border border-border/60 rounded-lg p-3 space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5">
-                <span className="w-3.5 h-3.5 rounded-sm border border-primary bg-primary flex items-center justify-center text-[10px] text-primary-foreground">✓</span>
-                <span className="text-xs font-semibold text-foreground flex items-center gap-1.5 select-none">
-                  <FolderOpen className="w-3.5 h-3.5 text-muted-foreground" /> Source: Local PC Folder <span className="text-muted-foreground font-normal">(always enabled)</span>
-                </span>
-              </div>
-            </div>
             <div className="space-y-2">
               <div className="space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2">

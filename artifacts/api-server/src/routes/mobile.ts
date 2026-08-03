@@ -334,7 +334,6 @@ type AutomationSettings = {
   makePostAlterationEnabled?: boolean;
   makePostAlterationLevel?: "small" | "medium" | "high";
   makePostImageSettingsEnabled?: boolean;
-  makePostUseHikerApi?: boolean;
   makePostDisableWhenExhausted?: boolean;
   makePostLocalFolderEnabled?: boolean;
   makePostLocalFolderPath?: string;
@@ -1606,7 +1605,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostAlterationEnabled: z.boolean().default(true),
     makePostAlterationLevel: z.enum(["small", "medium", "high"]).default("small"),
     makePostImageSettingsEnabled: z.boolean().default(true),
-    makePostUseHikerApi: z.boolean().default(false),
     makePostDisableWhenExhausted: z.boolean().default(true),
     // My Computer is the only Make a Post source. Keep this field for
     // compatibility with older saved payloads, but normalize it to true at
@@ -1728,7 +1726,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       makePostActivatePctMin: 100, makePostActivatePctMax: 100,
       makePostPerSessionMin: 1, makePostPerSessionMax: 1,
       makePostAlterationEnabled: true, makePostAlterationLevel: "small",
-      makePostImageSettingsEnabled: true, makePostUseHikerApi: false,
+      makePostImageSettingsEnabled: true,
       makePostDisableWhenExhausted: true,
       makePostLocalFolderEnabled: true, makePostLocalFolderPath: "",
       makePostLocalFolderNoRepeat: false, makePostLocalFolderRandom: false,
@@ -1787,17 +1785,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "followFilterVerifiedUsers",
     "followFilterMaxFollowers25k",
     "updateProfilePicFolderPath",
-    "makePostAlterationEnabled",
-    "makePostAlterationLevel",
-    "makePostImageSettingsEnabled",
-    "makePostImageSettings",
-    "makePostFixAiSlop",
-    "makePostMakeUnique",
     "makePostLocalFolderEnabled",
     "makePostLocalFolderPath",
-    "makePostLocalFolderNoRepeat",
-    "makePostLocalFolderRandom",
-    "makePostLocalFolderDeleteAfterUpload",
   ]);
   const TRUST_SCORE_TEMPLATE_LOCKED_FIELDS = new Set(
     [...TRUST_SCORE_SLOT_OWNED_FIELDS].filter(field => ![
@@ -2000,7 +1989,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostActivatePctMin: 100, makePostActivatePctMax: 100,
         makePostPerSessionMin: 1, makePostPerSessionMax: 1,
         makePostAlterationEnabled: true, makePostAlterationLevel: "small",
-        makePostImageSettingsEnabled: true, makePostUseHikerApi: false,
+        makePostImageSettingsEnabled: true,
         makePostDisableWhenExhausted: true,
         makePostLocalFolderEnabled: true, makePostLocalFolderPath: "",
         makePostLocalFolderNoRepeat: false, makePostLocalFolderRandom: false,

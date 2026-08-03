@@ -3729,7 +3729,6 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             makePostAlterationEnabled: s.makePostAlterationEnabled,
             makePostAlterationLevel: s.makePostAlterationLevel,
             makePostImageSettingsEnabled: s.makePostImageSettingsEnabled,
-            makePostUseHikerApi: s.makePostUseHikerApi,
             makePostDisableWhenExhausted: s.makePostDisableWhenExhausted,
             makePostLocalFolderEnabled: s.makePostLocalFolderEnabled,
             makePostLocalFolderPath: s.makePostLocalFolderPath,
@@ -6411,12 +6410,8 @@ export function AutomationSettingsPanel({
                 </div>
               </div>
 
-              {/* Source: My Computer — always enabled; the directory is per slot. */}
+              {/* My Computer directory — configured independently per slot. */}
               <div className="border border-border/60 rounded-lg p-3 space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="w-3.5 h-3.5 rounded-sm border border-primary bg-primary flex items-center justify-center text-[10px] text-primary-foreground">✓</span>
-                  <span className="text-xs font-semibold text-foreground tracking-wide">SOURCE: MY COMPUTER <span className="text-muted-foreground font-normal">(always enabled)</span></span>
-                </div>
                 <div className="space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2">
                       {!isTrustScoreTemplateEditor && <button
@@ -6454,9 +6449,6 @@ export function AutomationSettingsPanel({
                       >
                         {settings.makePostLocalFolderPath ? "Assigned Directory" : "Browse"}
                       </button>}
-                      {isTrustScoreTemplateEditor && (
-                        <span className="text-xs text-muted-foreground">Directory is configured per Phone Farm account slot</span>
-                      )}
                       <div className="flex items-center gap-2">
                         <input type="checkbox" id={`make-a-post-local-no-repeat-${slotIdx ?? 0}`}
                           checked={settings.makePostLocalFolderNoRepeat}
@@ -6643,14 +6635,6 @@ export function AutomationSettingsPanel({
                     </div>
                   </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2 self-end pb-1">
-                <input type="checkbox" id={`make-a-post-hiker-api-${slotIdx ?? 0}`}
-                  checked={settings.makePostUseHikerApi}
-                  onChange={e => setSettings(s => ({ ...s, makePostUseHikerApi: e.target.checked }))}
-                  disabled={fieldDisabled("makePostUseHikerApi")}
-                  className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                <label htmlFor={`make-a-post-hiker-api-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Use HikerAPI for scraping</label>
               </div>
             </div>
           )}
