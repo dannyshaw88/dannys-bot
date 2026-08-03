@@ -4634,6 +4634,7 @@ export function AutomationSettingsPanel({
   const [showFollowedUsers, setShowFollowedUsers] = useState(false);
   const [showSurplus, setShowSurplus] = useState(false);
   const [showSources, setShowSources] = useState(false);
+  const [bioSpinEditorOpen, setBioSpinEditorOpen] = useState(false);
   const [spinPreview, setSpinPreview] = useState<string | null>(null);
   const [newFollowSourceType, setNewFollowSourceType] = useState<'hashtag' | 'target_followers'>('hashtag');
   const [newFollowSourceValue, setNewFollowSourceValue] = useState('');
@@ -6334,26 +6335,15 @@ export function AutomationSettingsPanel({
                   value={settings.updateBioActivatePctMax}
                   onChange={e => setSettings(s => ({ ...s, updateBioActivatePctMax: clamp4(Number(e.target.value)) }))}
                   disabled={loading} />
-                {/* Bio text + Spin button — spin floats above, input stays row-centered */}
-                <div className="relative shrink-0">
-                  <button
-                    type="button"
-                    disabled={fieldDisabled("updateBioText") || !settings.updateBioText.trim()}
-                    onClick={() => setSpinPreview(resolveSpinSyntax(settings.updateBioText))}
-                    className="absolute -top-4 left-0 text-xs font-medium text-primary hover:opacity-80 disabled:cursor-not-allowed px-1 leading-none"
-                  >
-                    Spin
-                  </button>
-                  <Input
-                    type="text"
-                    placeholder=""
-                    className="h-7 text-xs px-2"
-                    style={{ width: "calc(17.5ch - 2px)" }}
-                    value={settings.updateBioText}
-                    onChange={e => setSettings(s => ({ ...s, updateBioText: e.target.value }))}
-                    disabled={fieldDisabled("updateBioText")}
-                  />
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setBioSpinEditorOpen(true)}
+                  disabled={fieldDisabled("updateBioText")}
+                  className="h-7 px-3 text-xs rounded border border-border bg-background hover:border-foreground/30 hover:bg-accent transition-colors shrink-0 font-medium text-foreground text-center justify-center disabled:cursor-not-allowed disabled:opacity-50"
+                  style={{ width: "124.4px" }}
+                >
+                  Bio Spin
+                </button>
                 {/* Disable After Used */}
                 <div className="flex items-center gap-1.5">
                   <input
@@ -6665,6 +6655,39 @@ export function AutomationSettingsPanel({
           onCopied={onCopied}
         />
       )}
+
+      {/* Bio Spin editor — the spin text stays out of the normal Random Actions row. */}
+      <Dialog open={bioSpinEditorOpen} onOpenChange={setBioSpinEditorOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Bio Spin</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Enter bio spin text</Label>
+            <Input
+              type="text"
+              autoFocus
+              value={settings.updateBioText}
+              onChange={e => setSettings(s => ({ ...s, updateBioText: e.target.value }))}
+              disabled={fieldDisabled("updateBioText")}
+              placeholder="Enter bio text or spin syntax"
+            />
+            <p className="text-[10px] text-muted-foreground/70">
+              Supports spin syntax such as {"{hello|hi|hey}"}.
+            </p>
+          </div>
+          <div className="flex justify-end pt-1">
+            <button
+              type="button"
+              disabled={fieldDisabled("updateBioText") || !settings.updateBioText.trim()}
+              onClick={() => setSpinPreview(resolveSpinSyntax(settings.updateBioText))}
+              className="h-8 px-4 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Spin
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Spin syntax preview dialog */}
       <Dialog open={spinPreview !== null} onOpenChange={open => { if (!open) setSpinPreview(null); }}>
