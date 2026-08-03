@@ -6604,12 +6604,12 @@ export function AutomationSettingsPanel({
                     <input type="checkbox" id={`make-a-post-alteration-enabled-${slotIdx ?? 0}`}
                       checked={settings.makePostAlterationEnabled}
                       onChange={e => setSettings(s => ({ ...s, makePostAlterationEnabled: e.target.checked }))}
-                      disabled={loading}
+                      disabled={fieldDisabled("makePostAlterationEnabled")}
                       className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0" />
                     <label htmlFor={`make-a-post-alteration-enabled-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none shrink-0">Alteration level</label>
                     <div className="flex gap-1">
                       {(["small", "medium", "high"] as const).map(lvl => (
-                        <button key={lvl} type="button" disabled={loading || !settings.makePostAlterationEnabled}
+                        <button key={lvl} type="button" disabled={fieldDisabled("makePostAlterationLevel") || !settings.makePostAlterationEnabled}
                           onClick={() => setSettings(s => ({ ...s, makePostAlterationLevel: lvl }))}
                           className={`h-8 px-3 text-xs rounded border transition-colors capitalize ${
                             !settings.makePostAlterationEnabled
@@ -6627,10 +6627,10 @@ export function AutomationSettingsPanel({
                     <input type="checkbox" id={`make-a-post-image-settings-enabled-${slotIdx ?? 0}`}
                       checked={settings.makePostImageSettingsEnabled}
                       onChange={e => setSettings(s => ({ ...s, makePostImageSettingsEnabled: e.target.checked }))}
-                      disabled={loading}
+                      disabled={fieldDisabled("makePostImageSettingsEnabled")}
                       className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0" />
                     <label htmlFor={`make-a-post-image-settings-enabled-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none shrink-0">Image settings</label>
-                    <button type="button" disabled={loading || !settings.makePostImageSettingsEnabled}
+                    <button type="button" disabled={fieldDisabled("makePostImageSettings") || !settings.makePostImageSettingsEnabled}
                       onClick={() => setMakePostImageSettingsOpen(true)}
                       className={`h-8 px-3 text-xs rounded border transition-colors ${
                         settings.makePostImageSettingsEnabled
