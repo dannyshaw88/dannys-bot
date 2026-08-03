@@ -1,19 +1,63 @@
 {
-  "name": "workspace",
-  "version": "0.0.0",
+  "name": "dannys-bot",
+  "version": "1.2.349",
   "license": "MIT",
+  "private": true,
   "scripts": {
-    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
-    "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "start": "node index.js",
+    "build": "npm run build:server && npm run build:client",
+    "build:server": "node server/build.mjs",
+    "build:client": "node_modules/.bin/vite build --config artifacts/dannys-bot/vite.config.ts",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
-  "private": true,
   "dependencies": {
-    "@replit/connectors-sdk": "^0.4.1"
+    "better-sqlite3": "^12.0.0",
+    "cors": "^2.8.5",
+    "drizzle-orm": "^0.45.2",
+    "drizzle-zod": "^0.8.3",
+    "express": "^5.1.0",
+    "https-proxy-agent": "^9.0.0",
+    "instagram-private-api": "^1.46.1",
+    "libsodium-wrappers": "^0.8.4",
+    "otplib": "^13.4.0",
+    "pino": "^9.6.0",
+    "pino-http": "^10.4.0",
+    "pino-pretty": "^13.0.0",
+    "puppeteer": "^24.0.0",
+    "socks-proxy-agent": "^8.0.5",
+    "tweetsodium": "^0.0.6",
+    "ws": "^8.18.2",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
-    "prettier": "^3.9.6",
-    "typescript": "~5.9.3"
+    "@replit/connectors-sdk": "^0.4.0",
+    "@tailwindcss/vite": "^4.1.6",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.15.18",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^4.4.1",
+    "esbuild": "0.27.3",
+    "esbuild-plugin-pino": "^2.3.3",
+    "prettier": "^3.8.1",
+    "tailwindcss": "^4.1.6",
+    "thread-stream": "^3.1.0",
+    "typescript": "~5.9.2",
+    "vite": "^6.3.5"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "electron",
+      "esbuild",
+      "puppeteer",
+      "sharp"
+    ],
+    "overrides": {
+      "tar": "^7.4.3",
+      "form-data": "^4.0.2"
+    }
   }
 }
