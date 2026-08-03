@@ -84,6 +84,17 @@ jobs:
           grep -F "Post a Story" artifacts/dannys-bot/src/pages/mobileShared.ts
           grep -F "postStoryLocalFolderPath" artifacts/dannys-bot/src/pages/mobileShared.ts
           echo "Standalone Post a Story configuration verified"
+      - name: Verify TrustScore layout and countdown timing
+        shell: bash
+        run: |
+          grep -F 'className="w-[185px] text-center"' artifacts/dannys-bot/src/pages/ToolsPage.tsx
+          grep -F 'w-[50ch] justify-start shrink-0' artifacts/dannys-bot/src/pages/ToolsPage.tsx
+          grep -F 'className="flex items-center gap-2 self-center"' artifacts/dannys-bot/src/pages/MobilePage.tsx
+          grep -F 'gap: "8px"' artifacts/dannys-bot/src/pages/MobilePage.tsx
+          grep -F "expiresAt?: number | null" artifacts/dannys-bot/src/components/TrustScoreCountdown.tsx
+          grep -F "expiresAt - Date.now()" artifacts/dannys-bot/src/components/TrustScoreCountdown.tsx
+          grep -F "relative top-0.5" artifacts/dannys-bot/src/components/TrustScoreCountdown.tsx
+          echo "TrustScore layout and countdown timing verified"
       - name: Verify account-specific Posted Media and Posts statistics
         shell: bash
         run: |

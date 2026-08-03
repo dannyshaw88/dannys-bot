@@ -1,3 +1,17 @@
+## [1.2.358] — 2026-08-03
+
+### Fixed — TrustScore layout and countdown accuracy
+
+- Centered the **TrustScore** heading over the TrustScore column in Settings → Trust Scores.
+- Kept the **Notes** field directly beside **Duration** in a fixed-width column, with the field aligned beneath its header instead of expanding into unused page space.
+- Vertically centered the **Post a Story → Browse** control within its activation/media row without changing random-picking behavior or folder-selection handling.
+- Added visible separation between each Phone Farm account-slot TrustScore badge and its countdown timer.
+- Nudged the countdown timer down by 2px to align its baseline with the TrustScore badge.
+- Changed countdown rendering to calculate remaining time from the server-provided absolute `expiresAt` timestamp, preventing minutes from decrementing at the wrong rate after refreshes or delayed responses.
+- Extended the canonical Windows installer workflow with source checks for these UI and timer invariants, so a future regression fails before packaging.
+- Confirmed `.github/workflows/build-windows-installer.yml` remains the only active Windows installer workflow; deprecated duplicate files remain inert to prevent duplicate builds.
+- Bumped the root application and Electron package versions to `1.2.358`.
+
 ## [1.2.357] — 2026-08-03
 
 ### Fixed — TrustScore duration persistence and Post a Story ownership
