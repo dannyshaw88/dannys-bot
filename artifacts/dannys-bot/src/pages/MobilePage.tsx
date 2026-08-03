@@ -7210,8 +7210,10 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   onCopied?: (targetSlotIdxs: number[]) => void;
   onAutomationState?: (slotIdx: number, state: SlotAutomationState) => void;
   collisionConfig?: CollisionPreventerConfig;
+  isOpen?: boolean;
+  sharedScrollTopRef?: React.MutableRefObject<number>;
 }>(function SlotHumanSessionView(
-  { phone, slotIdx, slotUsername, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, onCopied, onAutomationState, collisionConfig },
+  { phone, slotIdx, slotUsername, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, onCopied, onAutomationState, collisionConfig, isOpen, sharedScrollTopRef },
   ref,
 ) {
   const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, collisionConfig);
@@ -7219,6 +7221,19 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   const isLast = slotIdx === (slotCount ?? 1) - 1;
 
   const [showCopyDialog, setShowCopyDialog] = useState(false);
+  const settingsScrollRef = useRef<HTMLDivElement | null>(null);
+
+  // All slot editors represent the same settings section. Keep its vertical
+  // position when the header's previous/next slot buttons swap the editor.
+  useEffect(() => {
+    if (!isOpen || !settingsScrollRef.current) return;
+    const frame = requestAnimationFrame(() => {
+      if (settingsScrollRef.current) {
+        settingsScrollRef.current.scrollTop = sharedScrollTopRef?.current ?? 0;
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isOpen, sharedScrollTopRef]);
   // Read the Account Slot assignment directly.  The effective automation
   // payload is template-resolved and may be cached, so it must not be the
   // authority for whether this editor is allowed to be changed.
@@ -7289,7 +7304,15 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
           SLOT {slotIdx + 2}
         </Button>
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div
+        ref={settingsScrollRef}
+        onScroll={event => {
+          if (sharedScrollTopRef) {
+            sharedScrollTopRef.current = event.currentTarget.scrollTop;
+          }
+        }}
+        className="flex-1 min-h-0 overflow-y-auto"
+      >
         <AutomationSettingsPanel
           phone={phone}
           {...automation}
@@ -7433,6 +7456,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   // initialSlot lets the Dashboard (or any deep-link) open a specific slot's
   // Human Session Tool directly on mount (e.g. ?slot=0 in the URL).
   const [openSlotTool,      setOpenSlotTool]      = useState<number | null>(initialSlot ?? null);
+  const sharedSlotScrollTopRef = useRef(0);
   const [openPhoneAppsTool,  setOpenPhoneAppsTool]  = useState(false);
   const [phoneAppsEnabled,   setPhoneAppsEnabled]   = useState(false);
   const [phoneAppsNextRunAt, setPhoneAppsNextRunAt] = useState<number | null>(null);
@@ -7621,6 +7645,8 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
             onBack={() => setOpenSlotTool(null)}
             onPrevSlot={i > 0 ? () => setOpenSlotTool(i - 1) : undefined}
             onNextSlot={i < slots.length - 1 ? () => setOpenSlotTool(i + 1) : undefined}
+            isOpen={openSlotTool === i}
+            sharedScrollTopRef={sharedSlotScrollTopRef}
             slotCount={slots.length}
             requestSlot={requestSlot}
             releaseSlot={releaseSlot}
