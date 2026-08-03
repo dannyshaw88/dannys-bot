@@ -81,3 +81,4 @@
 - [TrustScore ownership parity](trustscore-ownership-parity.md) — every slot-owned setting must be registered in both frontend and API ownership maps
 - [TrustScore duration navigation save](trustscore-duration-navigation-save.md) — debounced duration inputs must flush pending writes when the TrustScore view unmounts
 - [Windows installer CI assertions](windows-installer-ci-assertions.md) — keep text-based workflow checks aligned with the current UI, especially after copy changes
+- [Uploaded attachment auto-commit](uploaded-attachment-auto-commit.md) — an uploaded asset may be committed automatically during a later push even when it was not manually staged
