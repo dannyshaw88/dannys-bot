@@ -3,6 +3,7 @@
 - TrustScore-assigned Phone Farm slots now keep all inherited Human Session Tool settings disabled, with only the master toggle, individual tool toggles, and physical-slot-owned source/data controls editable.
 - Restored the **Copy Settings** button for single-slot devices; the dialog still determines whether other farm slots are available as targets.
 - Account Slot HST panels now use the persisted slot assignment directly as the lock authority, so effective-settings caching cannot leave TrustScore-controlled fields editable.
+- Follow Users per-operation counts, spread behavior, and all follower filters are TrustScore-controlled and disabled in Account Slot HST panels; only Follow Sources remains slot-owned.
 
 # Changelog
 
