@@ -4,6 +4,16 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.347] — 2026-08-03
+
+### Fixed — Add visible spacing between dashboard task metrics
+
+- Added explicit spacing between each activity-detail task so completed summaries render as separate phrases, such as `8 likes done 6 stories watched 22 reels watched`.
+- Applied the same spacing to the live activity ticker.
+- Bumped the root application and Electron package versions to `1.2.347`.
+
+---
+
 ## [1.2.346] — 2026-08-03
 
 ### Changed — Fully wire Phone Farm TrustScores into Human Session Tool

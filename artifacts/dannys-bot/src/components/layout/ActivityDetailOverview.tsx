@@ -53,12 +53,14 @@ export function ActivityDetailOverview({
   const normalized = normalizeActivityDetail(detail);
   if (!normalized) return null;
 
-  const parts = normalized.split(/,\s*/);
+  const parts = normalized
+    .split(/,\s*/)
+    .map(part => part.trim())
+    .filter(Boolean);
   return (
-    <span className={`inline-flex items-center whitespace-nowrap ${className}`}>
+    <span className={`inline-flex items-center gap-2 whitespace-nowrap ${className}`}>
       {parts.map((part, index) => (
         <span key={`part-${index}`} className="inline-flex items-center">
-          {index > 0 && <span aria-hidden>{" "}</span>}
           {renderMetricPart(part, index)}
         </span>
       ))}
