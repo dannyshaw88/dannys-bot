@@ -5691,10 +5691,10 @@ export function AutomationSettingsPanel({
             feature below — same card/step (STEP2). */}
         <div className="border-t border-border" />
 
-        {/* ── Follow Users header — tickbox, label, Sources, Followed all
-               on one row (Sources/Followed panels are collapsible below,
-               same pattern as before — only the buttons live on this row). */}
-        <div className="flex items-center gap-2">
+        {/* ── Follow Users — Sources, Surplus, and Followed expand over this
+               tool's settings only, matching the Posted Media pattern. ─── */}
+        <div className="space-y-3 relative">
+          <div className="flex items-center gap-2">
           <input
             type="checkbox"
             id={`follow-enabled-${slotIdx ?? 0}`}
@@ -5707,12 +5707,27 @@ export function AutomationSettingsPanel({
           <Button
             variant="outline" size="sm"
             className="h-7 text-xs px-3 ml-auto"
-            onClick={() => setShowSources(v => !v)}
+            onClick={() => setShowSources(v => {
+              if (!v) {
+                setShowSurplus(false);
+                setShowFollowedUsers(false);
+              }
+              return !v;
+            })}
           >{showSources ? 'Hide' : 'Sources'}</Button>
           <Button
             variant="outline" size="sm" className="h-7 text-xs px-3"
             disabled={loadingOverspill}
-            onClick={() => { setShowSurplus(v => !v); if (!showSurplus) loadSurplus(); }}
+            onClick={() => {
+              setShowSurplus(v => {
+                if (!v) {
+                  setShowSources(false);
+                  setShowFollowedUsers(false);
+                }
+                return !v;
+              });
+              if (!showSurplus) loadSurplus();
+            }}
           >
             {showSurplus ? 'Hide' : 'Surplus'}
             {mobileOverspillList.length > 0 && !showSurplus && (
@@ -5722,9 +5737,18 @@ export function AutomationSettingsPanel({
           <Button
             variant="outline" size="sm" className="h-7 text-xs px-3"
             disabled={loadingFollowed}
-            onClick={() => { setShowFollowedUsers(v => !v); if (!showFollowedUsers) loadFollowedUsers(); }}
+            onClick={() => {
+              setShowFollowedUsers(v => {
+                if (!v) {
+                  setShowSources(false);
+                  setShowSurplus(false);
+                }
+                return !v;
+              });
+              if (!showFollowedUsers) loadFollowedUsers();
+            }}
           >{showFollowedUsers ? 'Hide' : 'Followed'}</Button>
-        </div>
+          </div>
 
         {/* ── Activate Percentage + Users to follow per operation ────── */}
           {settings.followEnabled && <div className="flex items-start gap-6 flex-wrap">
@@ -5774,7 +5798,9 @@ export function AutomationSettingsPanel({
         </div>}
 
         {/* ── Surplus panel (toggled via the Surplus button above) ────── */}
-        <div className="space-y-2">
+        <div className={showSurplus
+          ? "absolute inset-x-0 bottom-0 top-[2.75rem] z-30 overflow-y-auto rounded-lg border border-border bg-background p-3 shadow-xl"
+          : "hidden"}>
           {showSurplus && (
             <div className="border border-border rounded-lg overflow-hidden">
               {loadingOverspill && mobileOverspillList.length === 0 ? (
@@ -5808,7 +5834,9 @@ export function AutomationSettingsPanel({
         </div>
 
         {/* ── Followed Users panel (toggled via the Followed button above) */}
-        <div className="space-y-2">
+        <div className={showFollowedUsers
+          ? "absolute inset-x-0 bottom-0 top-[2.75rem] z-30 overflow-y-auto rounded-lg border border-border bg-background p-3 shadow-xl"
+          : "hidden"}>
           {showFollowedUsers && (
             <div className="border border-border rounded-lg overflow-hidden">
               {loadingFollowed ? (
@@ -5842,7 +5870,9 @@ export function AutomationSettingsPanel({
         </div>
 
         {/* ── Target Sources panel (toggled via the Sources button above) ─ */}
-        <div className="space-y-2">
+        <div className={showSources
+          ? "absolute inset-x-0 bottom-0 top-[2.75rem] z-30 overflow-y-auto rounded-lg border border-border bg-background p-3 shadow-xl"
+          : "hidden"}>
           {showSources && (
             <div className="border border-border rounded-lg p-3 space-y-2">
               {/* Hidden file input for CSV/TSV import */}
@@ -5944,6 +5974,7 @@ export function AutomationSettingsPanel({
               </div>
             </div>
           )}
+        </div>
         </div>
 
         {/* ── Inject Browsing — templates can configure it before enabling Follow Users ── */}
@@ -6265,96 +6296,95 @@ export function AutomationSettingsPanel({
 
             </div>
 
-            {/* ── Row 3: Update Profile Picture ── */}
-            <div className="space-y-1.5" style={{marginTop:"20px"}}>
-              <span className="text-sm text-muted-foreground select-none">Update Avatar&nbsp;&nbsp;Activation %</span>
-              <div className="flex items-center gap-2">
-                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                  value={settings.updateProfilePicActivatePctMin}
-                  onChange={e => setSettings(s => ({ ...s, updateProfilePicActivatePctMin: clamp4(Number(e.target.value)) }))}
-                  disabled={loading} />
-                <span className="text-muted-foreground text-sm">to</span>
-                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                  value={settings.updateProfilePicActivatePctMax}
-                  onChange={e => setSettings(s => ({ ...s, updateProfilePicActivatePctMax: clamp4(Number(e.target.value)) }))}
-                  disabled={loading} />
-                {/* Assign Directory */}
-                <button
-                  type="button"
-                  disabled={fieldDisabled("updateProfilePicFolderPath")}
-                  onClick={async () => {
-                    const api = (window as any).electronAPI;
-                    if (!api?.openFolderDialog) return;
-                    const result = await api.openFolderDialog(settings.updateProfilePicFolderPath || undefined);
-                    if (result?.canceled || !result?.folder) return;
-                    const updatedSettings = { ...settings, updateProfilePicFolderPath: result.folder };
-                    setSettings(() => updatedSettings);
-                    if (phone && slotIdx !== undefined) {
-                      fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/profile-pic-folder-path`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ path: result.folder }),
-                      }).catch(() => {});
-                    } else if (phone) {
-                      fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/automation-settings`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(updatedSettings),
-                      }).catch(() => {});
-                    }
-                  }}
-                  className="h-7 px-3 text-xs rounded border border-border bg-background hover:border-foreground/30 hover:bg-accent transition-colors shrink-0 font-medium text-foreground"
-                >
-                  {settings.updateProfilePicFolderPath ? "Assigned Directory" : "Assign Directory"}
-                </button>
-                {/* Disable After Used */}
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="checkbox"
-                    id={`update-profile-pic-disable-after-used-${slotIdx ?? 0}`}
-                    checked={settings.updateProfilePicDisableAfterUsed}
-                    onChange={e => setSettings(s => ({ ...s, updateProfilePicDisableAfterUsed: e.target.checked }))}
-                    disabled={loading}
-                    className="w-4 h-4 accent-primary cursor-pointer"
-                  />
-                  <label htmlFor={`update-profile-pic-disable-after-used-${slotIdx ?? 0}`} className="text-xs text-foreground cursor-pointer select-none">Disable After Used</label>
+            {/* ── Update Avatar + Update Bio ── */}
+            <div className="flex items-end gap-6 flex-nowrap" style={{ marginTop: "20px" }}>
+              <div className="space-y-1.5 shrink-0">
+                <span className="text-sm text-muted-foreground select-none">Update Avatar&nbsp;&nbsp;Activation %</span>
+                <div className="flex items-center gap-2">
+                  <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                    value={settings.updateProfilePicActivatePctMin}
+                    onChange={e => setSettings(s => ({ ...s, updateProfilePicActivatePctMin: clamp4(Number(e.target.value)) }))}
+                    disabled={loading} />
+                  <span className="text-muted-foreground text-sm">to</span>
+                  <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                    value={settings.updateProfilePicActivatePctMax}
+                    onChange={e => setSettings(s => ({ ...s, updateProfilePicActivatePctMax: clamp4(Number(e.target.value)) }))}
+                    disabled={loading} />
+                  <button
+                    type="button"
+                    disabled={fieldDisabled("updateProfilePicFolderPath")}
+                    onClick={async () => {
+                      const api = (window as any).electronAPI;
+                      if (!api?.openFolderDialog) return;
+                      const result = await api.openFolderDialog(settings.updateProfilePicFolderPath || undefined);
+                      if (result?.canceled || !result?.folder) return;
+                      const updatedSettings = { ...settings, updateProfilePicFolderPath: result.folder };
+                      setSettings(() => updatedSettings);
+                      if (phone && slotIdx !== undefined) {
+                        fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/profile-pic-folder-path`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ path: result.folder }),
+                        }).catch(() => {});
+                      } else if (phone) {
+                        fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/automation-settings`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify(updatedSettings),
+                        }).catch(() => {});
+                      }
+                    }}
+                    className="h-7 px-3 text-xs rounded border border-border bg-background hover:border-foreground/30 hover:bg-accent transition-colors shrink-0 font-medium text-foreground text-center justify-center"
+                    style={{ width: "112px" }}
+                  >
+                    Assign
+                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      id={`update-profile-pic-disable-after-used-${slotIdx ?? 0}`}
+                      checked={settings.updateProfilePicDisableAfterUsed}
+                      onChange={e => setSettings(s => ({ ...s, updateProfilePicDisableAfterUsed: e.target.checked }))}
+                      disabled={loading}
+                      className="w-4 h-4 accent-primary cursor-pointer"
+                    />
+                    <label htmlFor={`update-profile-pic-disable-after-used-${slotIdx ?? 0}`} className="text-xs text-foreground cursor-pointer select-none">Disable After Use</label>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* ── Row 4: Update Bio ── */}
-            <div className="space-y-1.5" style={{marginTop:"20px"}}>
-              <span className="text-sm text-muted-foreground select-none">Update Bio&nbsp;&nbsp;Activation %</span>
-              <div className="flex items-center gap-2">
-                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                  value={settings.updateBioActivatePctMin}
-                  onChange={e => setSettings(s => ({ ...s, updateBioActivatePctMin: clamp4(Number(e.target.value)) }))}
-                  disabled={loading} />
-                <span className="text-muted-foreground text-sm">to</span>
-                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                  value={settings.updateBioActivatePctMax}
-                  onChange={e => setSettings(s => ({ ...s, updateBioActivatePctMax: clamp4(Number(e.target.value)) }))}
-                  disabled={loading} />
-                <button
-                  type="button"
-                  onClick={() => setBioSpinEditorOpen(true)}
-                  disabled={fieldDisabled("updateBioText")}
-                  className="h-7 px-3 text-xs rounded border border-border bg-background hover:border-foreground/30 hover:bg-accent transition-colors shrink-0 font-medium text-foreground text-center justify-center disabled:cursor-not-allowed disabled:opacity-50"
-                  style={{ width: "112px" }}
-                >
-                  Bio Spin
-                </button>
-                {/* Disable After Used */}
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="checkbox"
-                    id={`update-bio-disable-after-used-${slotIdx ?? 0}`}
-                    checked={settings.updateBioDisableAfterUsed}
-                    onChange={e => setSettings(s => ({ ...s, updateBioDisableAfterUsed: e.target.checked }))}
-                    disabled={loading}
-                    className="w-4 h-4 accent-primary cursor-pointer"
-                  />
-                  <label htmlFor={`update-bio-disable-after-used-${slotIdx ?? 0}`} className="text-xs text-foreground cursor-pointer select-none">Disable After Used</label>
+              <div className="space-y-1.5 shrink-0">
+                <span className="text-sm text-muted-foreground select-none">Update Bio&nbsp;&nbsp;Activation %</span>
+                <div className="flex items-center gap-2">
+                  <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                    value={settings.updateBioActivatePctMin}
+                    onChange={e => setSettings(s => ({ ...s, updateBioActivatePctMin: clamp4(Number(e.target.value)) }))}
+                    disabled={loading} />
+                  <span className="text-muted-foreground text-sm">to</span>
+                  <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                    value={settings.updateBioActivatePctMax}
+                    onChange={e => setSettings(s => ({ ...s, updateBioActivatePctMax: clamp4(Number(e.target.value)) }))}
+                    disabled={loading} />
+                  <button
+                    type="button"
+                    onClick={() => setBioSpinEditorOpen(true)}
+                    disabled={fieldDisabled("updateBioText")}
+                    className="h-7 px-3 text-xs rounded border border-border bg-background hover:border-foreground/30 hover:bg-accent transition-colors shrink-0 font-medium text-foreground text-center justify-center disabled:cursor-not-allowed disabled:opacity-50"
+                    style={{ width: "112px" }}
+                  >
+                    Bio Spin
+                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      id={`update-bio-disable-after-used-${slotIdx ?? 0}`}
+                      checked={settings.updateBioDisableAfterUsed}
+                      onChange={e => setSettings(s => ({ ...s, updateBioDisableAfterUsed: e.target.checked }))}
+                      disabled={loading}
+                      className="w-4 h-4 accent-primary cursor-pointer"
+                    />
+                    <label htmlFor={`update-bio-disable-after-used-${slotIdx ?? 0}`} className="text-xs text-foreground cursor-pointer select-none">Disable After Use</label>
+                  </div>
                 </div>
               </div>
             </div>
