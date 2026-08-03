@@ -1,6 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { TrustScoresTabContent, BulkImportTabContent } from "@/pages/ToolsPage";
-import { BanAnalyticsPage } from "@/pages/BanAnalyticsPage";
 import ImagesPage from "@/pages/ImagesPage";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -23,7 +22,6 @@ const isElectron = typeof window !== "undefined" && typeof eAPI()?.createBackup 
 const SETTINGS_TABS = [
   { label: "My Account", icon: UserCircle },
   { label: "General", icon: Settings },
-  { label: "Evasion Stats", icon: ShieldAlert },
   { label: "Trust Scores", icon: Shield },
   { label: "Fix Images", icon: Palette },
   { label: "Import", icon: Upload },
@@ -471,12 +469,6 @@ export function SettingsPage() {
         </div>
       )}
 
-      {settingsTab === "evasion stats" && (
-        <div>
-          <BanAnalyticsPage />
-        </div>
-      )}
-
       {settingsTab === "trust scores" && (
         <div>
           <TrustScoresTabContent />
@@ -493,7 +485,7 @@ export function SettingsPage() {
         </div>
       )}
 
-      <div className={`space-y-4 w-full ${["my account", "evasion stats", "trust scores", "fix images", "import"].includes(settingsTab) ? "hidden" : ""}`}>
+      <div className={`space-y-4 w-full ${["my account", "trust scores", "fix images", "import"].includes(settingsTab) ? "hidden" : ""}`}>
 
         {/* Talk to Equinox Bot shortcut */}
         <button
@@ -774,7 +766,7 @@ export function SettingsPage() {
             <h3 className="text-base font-semibold">Gemini API Key (AI Bot)</h3>
           </div>
           <p className="text-sm text-muted-foreground mb-5">
-            Powers the Aura Farming Bot chat and the Scan with AI feature in Evasion Stats. Gemini has a generous free tier —
+            Powers the Aura Farming Bot chat. Gemini has a generous free tier —
             get your key at <span className="font-medium">aistudio.google.com</span> → Get API Key. If both Gemini and OpenAI keys are set, Gemini is used.
           </p>
           <div className="space-y-3">

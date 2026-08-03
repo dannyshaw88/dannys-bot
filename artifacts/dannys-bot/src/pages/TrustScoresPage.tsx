@@ -171,7 +171,7 @@ export function TrustScoresPage() {
 
         <div className="flex items-start gap-2 p-3 rounded-lg border border-border bg-muted/20 text-sm text-muted-foreground">
           <Info className="w-4 h-4 shrink-0 mt-0.5 text-cyan-500" />
-          <span>TrustScores are sorted from 1 onwards. The higher the number, the better the TrustScore. Important for Evasion Stats and Account Health.</span>
+          <span>TrustScores are sorted from 1 onwards. The higher the number, the better the TrustScore.</span>
         </div>
 
         <div className="space-y-1 w-full overflow-x-auto">

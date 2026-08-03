@@ -1,3 +1,13 @@
+## [1.2.352] — 2026-08-03
+
+### Changed — Identical Post a Story media controls in HST and TrustScores
+
+- Moved the standalone **Post a Story** activation percentage, **Browse**, **Do not post**, and **Pick at random** controls into one shared horizontal row.
+- Applied the same row to both the live Human Session Tool account-slot editor and every TrustScore Human Session Tool template editor because both surfaces use the same settings panel.
+- Kept the Story directory physically slot-owned: Browse is available on account slots and remains visibly present but disabled in TrustScore templates, preventing a template from replacing a device/account directory.
+- Kept the Story behavioral settings TrustScore-controlled and copyable.
+- Bumped the root application and Electron package versions to `1.2.352`.
+
 ## [1.2.351] — 2026-08-03
 
 ### Added — TrustScore duration countdowns and restored Human Session Tool behavior
