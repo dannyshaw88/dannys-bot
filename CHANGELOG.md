@@ -1,3 +1,18 @@
+## [1.2.350] — 2026-08-03
+
+### Added — Standalone Post a Story tool for Human Session Tool
+
+- Added a separate **Post a Story** tool immediately after **Make a Post** in Human Session Tool Step 2. Make a Post remains feed-only; Story publishing no longer depends on Make a Post destination percentages.
+- Added independent minimum and maximum activation percentages for Story publishing, with the Story tool included in the normal and shuffled Step 2 execution order.
+- Added a per-device/account-slot **Browse** directory selector for Story media. Each physical slot keeps its own Story directory, including when the slot inherits behavioral settings from a TrustScore.
+- Added Story directory controls for **Pick at random** and **Do not repost the same image**.
+- Added Story-specific image controls for alteration level, Image Settings, Fix AI Slop, and Make it unique. Make it unique uses the existing image uniquification pipeline and never modifies the original PC file.
+- Connected the preserved Instagram Story upload routine to the new tool, including local image preparation, device transfer, Story composer flow, upload confirmation, temporary-device-file cleanup, and cycle logging.
+- Added Story settings to TrustScore templates and Copy Settings. Behavioral settings can be inherited/copied, while the physical slot’s Story directory remains isolated.
+- Added a dedicated per-slot Story directory API/persistence path so autosave, TrustScore resolution, and Copy Settings cannot accidentally replace a slot’s local media source.
+- Extended the Windows installer Actions validation to verify the standalone Story schema, UI, slot-directory endpoint, shuffled dispatcher entry, preserved Story routine, and unique-image wiring.
+- Bumped the root application and Electron package versions to `1.2.350`.
+
 ## [1.2.349] — 2026-08-03
 
 ### Changed — Added icons to Settings tabs

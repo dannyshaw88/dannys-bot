@@ -81,3 +81,4 @@
 - [Mobile local post source retention](mobile-local-post-source-retention.md) — Phone Farm posting retains the original PC media; only the temporary device copy is removed
 - [Make a Post story settings retention](make-post-story-settings-retention.md) — keep legacy Story settings stored for a future tool, but never expose or use them in normal Make a Post
 - [Follow tool detail overlays](follow-tool-detail-overlays.md) — Sources, Surplus, and Followed expand over Follow Users only, with one panel open at a time
+- [Standalone Post a Story settings](standalone-post-story-settings.md) — Story behavior is Trust Score/copyable, while its local media directory remains independently owned per device/account slot

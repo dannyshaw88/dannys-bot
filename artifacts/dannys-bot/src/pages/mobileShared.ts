@@ -224,6 +224,17 @@ export interface AutomationSettingsData {
   makePostPostToStoryPctMin: number; makePostPostToStoryPctMax: number;
   makePostCaptionText: string;
   makePostImageSettings: ImageFilterSettings;
+  postStoryEnabled: boolean;
+  postStoryActivatePctMin: number; postStoryActivatePctMax: number;
+  postStoryLocalFolderPath: string;
+  postStoryLocalFolderNoRepeat: boolean;
+  postStoryLocalFolderRandom: boolean;
+  postStoryAlterationEnabled: boolean;
+  postStoryAlterationLevel: "small" | "medium" | "high";
+  postStoryImageSettingsEnabled: boolean;
+  postStoryImageSettings: ImageFilterSettings;
+  postStoryFixAiSlop: boolean;
+  postStoryMakeUnique: boolean;
   dismissDirection: "auto" | "left" | "up";
   /** Slot metadata returned by the effective-settings endpoint. */
   trustScoreId?: string | null;
@@ -342,6 +353,23 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
     sharpen:   { enabled: true, min: 1.0, max: 2.0 },
     pixelate:  { enabled: true, min: 0.9, max: 2.1 },
   },
+  postStoryEnabled: false,
+  postStoryActivatePctMin: 100, postStoryActivatePctMax: 100,
+  postStoryLocalFolderPath: "",
+  postStoryLocalFolderNoRepeat: false,
+  postStoryLocalFolderRandom: false,
+  postStoryAlterationEnabled: true,
+  postStoryAlterationLevel: "small",
+  postStoryImageSettingsEnabled: true,
+  postStoryImageSettings: {
+    contrast: { enabled: true, min: 5, max: 250 },
+    brightness: { enabled: true, min: 5, max: 250 },
+    noise: { enabled: true, min: 5, max: 15 },
+    sharpen: { enabled: true, min: 1.0, max: 2.0 },
+    pixelate: { enabled: true, min: 0.9, max: 2.1 },
+  },
+  postStoryFixAiSlop: false,
+  postStoryMakeUnique: false,
   dismissDirection: "auto",
 };
 
@@ -370,6 +398,7 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
   "updateBioText",
   "makePostLocalFolderEnabled",
   "makePostLocalFolderPath",
+  "postStoryLocalFolderPath",
 ]);
 
 /** Fields that stay restricted in Settings → TrustScores. Inject Browsing
@@ -393,6 +422,17 @@ export const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
   "updateProfilePicFolderPath",
   "updateBioText",
   "makePostLocalFolderPath",
+  "postStoryEnabled",
+  "postStoryActivatePctMin",
+  "postStoryActivatePctMax",
+  "postStoryLocalFolderNoRepeat",
+  "postStoryLocalFolderRandom",
+  "postStoryAlterationEnabled",
+  "postStoryAlterationLevel",
+  "postStoryImageSettingsEnabled",
+  "postStoryImageSettings",
+  "postStoryFixAiSlop",
+  "postStoryMakeUnique",
 ]);
 
 export const COPY_SECTIONS: CopySection[] = [
@@ -511,5 +551,14 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'postChatGptCaption',label: 'ChatGPT / caption settings',    fields: ['makePostUseChatGpt','makePostCaptionText'] },
     { key: 'postFixAiSlop',      label: 'Fix AI Slop',                   fields: ['makePostFixAiSlop'] },
     { key: 'postMakeUnique',     label: 'Make it unique',                fields: ['makePostMakeUnique'] },
+  ]},
+  { key: 'postStory',      label: 'Post a Story', sub: [
+    { key: 'storyPostEnabled',   label: 'Enabled',             fields: ['postStoryEnabled'] },
+    { key: 'storyPostActivate',  label: 'Activate Percentage', fields: ['postStoryActivatePctMin','postStoryActivatePctMax'] },
+    { key: 'storyPostOptions',   label: 'Directory options',   fields: ['postStoryLocalFolderNoRepeat','postStoryLocalFolderRandom'] },
+    { key: 'storyPostAlteration', label: 'Image Alteration',    fields: ['postStoryAlterationEnabled','postStoryAlterationLevel'] },
+    { key: 'storyPostImageSettings', label: 'Image Settings',   fields: ['postStoryImageSettingsEnabled','postStoryImageSettings'] },
+    { key: 'storyPostFixAiSlop', label: 'Fix AI Slop',           fields: ['postStoryFixAiSlop'] },
+    { key: 'storyPostUnique',    label: 'Make it unique',      fields: ['postStoryMakeUnique'] },
   ]},
 ];
