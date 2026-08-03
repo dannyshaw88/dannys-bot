@@ -1,0 +1,81 @@
+# See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
+
+# compiled output
+dist
+tmp
+out-tsc
+*.tsbuildinfo
+.expo
+.expo-shared
+
+# dependencies
+node_modules
+
+# auto-downloaded ADB tooling (fetched on demand by /api/mobile/adb-auto-install)
+vendor/
+adb-path-override.json
+
+# IDEs and editors
+/.idea
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# IDE - VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# misc
+/.sass-cache
+/connect.lock
+/coverage
+/libpeerconnection.log
+npm-debug.log
+yarn-error.log
+testem.log
+/typings
+
+# System Files
+.DS_Store
+Thumbs.db
+
+.cursor/rules/nx-rules.mdc
+.github/instructions/nx.instructions.md
+
+# Replit
+.cache/
+.local/
+
+# SQLite WAL/SHM files (transient runtime state)
+*.db-shm
+*.db-wal
+
+# SQLite databases (runtime state — do not commit)
+*.db
+server/server/db.sqlite
+
+# Browser session data and cookies (sensitive credentials)
+**/browser-data/
+**/cookies-*.json
+
+# Debug / server logs
+*.log
+
+# Sensitive files that should never be committed
+attached_assets/*.txt
+
+# Local mobile-device runtime state — may contain account credentials or
+# emulator-specific configuration and is not part of the application source.
+artifacts/api-server/mobile-instances.json
+artifacts/api-server/fake-phone-count.json
+artifacts/api-server/fake-phone-list.json
+artifacts/api-server/platform-tools/
+
+# Generated mockup preview state
+artifacts/mockup-sandbox/.vite/

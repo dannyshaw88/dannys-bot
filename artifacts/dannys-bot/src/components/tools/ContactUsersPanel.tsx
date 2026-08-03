@@ -1,0 +1,535 @@
+import { useState, useEffect, useRef } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useUpdateTool } from "@/hooks/use-tools";
+import { useProfileEngineStatus } from "@/hooks/use-engine-status";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Clock, Send, Timer, Undo2, Trash2, RefreshCw, Users, CheckCircle2, Zap, Shuffle,
+} from "lucide-react";
+import { format } from "date-fns";
+import { type Tool, type Profile, type ContactPendingMessage } from "@shared/schema";
+
+interface Props {
+  tool: Tool;
+  profile: Profile;
+  embedded?: boolean;
+}
+
+const TYPE_LABELS: Record<string, string> = {
+  new_follower: "New Follower",
+  auto_reply: "Auto Reply",
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  pending: "text-amber-600 bg-amber-50 border-amber-200",
+  sent: "text-green-600 bg-green-50 border-green-200",
+  failed: "text-red-600 bg-red-50 border-red-200",
+  unsent: "text-gray-500 bg-gray-50 border-gray-200",
+};
+
+export function ContactUsersPanel({ tool, profile, embedded }: Props) {
+  const updateToolMutation = useUpdateTool();
+  const queryClient = useQueryClient();
+  const engineStatus = useProfileEngineStatus(tool.profileId);
+
+  const { data: allMessages, isLoading } = useQuery<ContactPendingMessage[]>({
+    queryKey: [`/api/profiles/${profile.id}/contact-pending-messages`],
+    refetchInterval: 10000,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/contact-pending-messages/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [`/api/profiles/${profile.id}/contact-pending-messages`] }),
+  });
+
+  const sendNowMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/profiles/${profile.id}/tools/contact/send-now`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to trigger send");
+    },
+    onSuccess: () => {
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: [`/api/profiles/${profile.id}/contact-pending-messages`] }), 3000);
+    },
+  });
+
+  const clearPendingMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/profiles/${profile.id}/contact-pending-messages/clear`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to clear pending messages");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [`/api/profiles/${profile.id}/contact-pending-messages`] }),
+  });
+
+  const clearAllPendingMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/contact-pending-messages/clear-all`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to clear all pending messages");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [`/api/profiles/${profile.id}/contact-pending-messages`] }),
+  });
+
+  const pending = [...(allMessages?.filter(m => m.status === "pending") ?? [])]
+    .sort((a, b) => new Date(b.queuedAt).getTime() - new Date(a.queuedAt).getTime());
+  const sent = [...(allMessages?.filter(m => m.status !== "pending") ?? [])]
+    .sort((a, b) => new Date(b.sentAt ?? b.queuedAt).getTime() - new Date(a.sentAt ?? a.queuedAt).getTime());
+
+  const [auraFarmingPreview, setAuraFarmingPreview] = useState("");
+
+  function applySpintax(text: string): string {
+    return text.replace(/\{([^}]+)\}/g, (_, group) => {
+      const parts = group.split("|");
+      return parts[Math.floor(Math.random() * parts.length)];
+    });
+  }
+
+  const [settings, setSettings] = useState(() => {
+    const def: Record<string, any> = {
+      contactUsersEnabled: true,
+      contactEquinoxUserEnabled: false,
+      contactEquinoxMessage: "",
+      contactEquinoxNoRepeat: true,
+      contactUsersSendCountMin: 1,
+      contactUsersSendCountMax: 5,
+      contactUsersDelayBetweenMin: 5,
+      contactUsersDelayBetweenMax: 15,
+      contactUsersPickRandom: false,
+      contactUsersUnsendEnabled: false,
+      contactUsersUnsendMin: 30,
+      contactUsersUnsendMax: 60,
+      stopOnBlockEnabled: false,
+      stopOnBlockMinutes: 60,
+    };
+    return { ...def, ...(tool.settings as object || {}) };
+  });
+
+  const isMounted = useRef(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!isMounted.current) { isMounted.current = true; return; }
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      updateToolMutation.mutate({ id: tool.id, profileId: tool.profileId, settings });
+    }, 600);
+    return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
+  }, [settings]);
+
+  const numInput = (key: string, min: number, max: number, width = "w-14") => (
+    <Input
+      type="number"
+      min={min}
+      max={max}
+      className={`${width} h-7 text-xs`}
+      value={settings[key] ?? min}
+      onChange={(e) => setSettings({ ...settings, [key]: Math.max(min, Math.min(max, Number(e.target.value))) })}
+    />
+  );
+
+  const checkRow = (id: string, key: string, label: string, description?: string) => (
+    <div className="flex items-start gap-3">
+      <input
+        type="checkbox"
+        id={id}
+        checked={!!settings[key]}
+        onChange={(e) => setSettings({ ...settings, [key]: e.target.checked })}
+        className="w-3.5 h-3.5 mt-0.5 accent-primary cursor-pointer shrink-0"
+      />
+      <div>
+        <label htmlFor={id} className="text-sm font-medium cursor-pointer select-none">{label}</label>
+        {description && <p className="text-[11px] text-muted-foreground mt-0.5">{description}</p>}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4 animate-in fade-in duration-300">
+
+      {/* Master Enable */}
+      <div className="flex items-center gap-3 px-1">
+        <input
+          type="checkbox"
+          id="contactUsersEnabled"
+          checked={!!settings.contactUsersEnabled}
+          onChange={(e) => setSettings({ ...settings, contactUsersEnabled: e.target.checked })}
+          className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+        />
+        <div>
+          <label htmlFor="contactUsersEnabled" className="text-sm font-semibold cursor-pointer select-none">Contact Users Sending</label>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-[11px] text-muted-foreground">Automatically send DMs from the Pending Messages queue.</p>
+            {!embedded && (() => {
+              if (!settings.contactUsersEnabled) return null;
+              const nextAt = engineStatus?.nextContactAt ?? 0;
+              if (!nextAt) return null;
+              const executing = nextAt <= Date.now();
+              const label = executing ? null : format(new Date(nextAt), "d MMM, HH:mm:ss");
+              return (
+                <span className="flex items-center gap-1 text-[11px] font-bold" style={{ color: executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
+                  <Clock className="w-3 h-3 shrink-0" />
+                  {executing
+                    ? <span>Executing</span>
+                    : <span>Scheduled for: <span className="text-foreground">{label}</span></span>}
+                </span>
+              );
+            })()}
+          </div>
+        </div>
+      </div>
+
+      <div className={settings.contactUsersEnabled ? "space-y-4" : "hidden"}><div className="border border-border rounded-xl p-4 space-y-4">
+        <div className="flex items-center gap-2">
+          <Send className="w-4 h-4 text-blue-500" />
+          <h4 className="font-semibold text-sm">Send Settings</h4>
+        </div>
+
+        {/* Messages per batch · Delay between messages */}
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+          <div className="flex items-center gap-2">
+            <Users className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Per Batch</span>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Min</Label>
+              {numInput("contactUsersSendCountMin", 1, 500)}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Max</Label>
+              {numInput("contactUsersSendCountMax", 1, 500)}
+            </div>
+          </div>
+          <div className="w-px self-stretch bg-border/50 hidden sm:block" />
+          <div className="flex items-center gap-2">
+            <Timer className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Delay Between (s)</span>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Min</Label>
+              {numInput("contactUsersDelayBetweenMin", 1, 3600)}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Max</Label>
+              {numInput("contactUsersDelayBetweenMax", 1, 3600)}
+            </div>
+          </div>
+        </div>
+
+        {/* Pick random + Unsend — same row */}
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="contactUsersPickRandom"
+              checked={!!settings.contactUsersPickRandom}
+              onChange={(e) => setSettings({ ...settings, contactUsersPickRandom: e.target.checked })}
+              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+            />
+            <label htmlFor="contactUsersPickRandom" className="text-sm font-medium cursor-pointer select-none">
+              Pick a random message rather than in order
+            </label>
+          </div>
+          <div className="flex items-center gap-x-3 gap-y-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="contactUsersUnsendEnabled"
+                checked={!!settings.contactUsersUnsendEnabled}
+                onChange={(e) => setSettings({ ...settings, contactUsersUnsendEnabled: e.target.checked })}
+                className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+              />
+              <label htmlFor="contactUsersUnsendEnabled" className="text-sm font-medium cursor-pointer select-none whitespace-nowrap">
+                Unsend message after a delay
+              </label>
+            </div>
+            {settings.contactUsersUnsendEnabled && (
+              <div className="flex items-center gap-2">
+                <Undo2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Unsend After (min)</span>
+                <div className="flex items-center gap-1.5">
+                  <Label className="text-xs text-muted-foreground">Min</Label>
+                  {numInput("contactUsersUnsendMin", 1, 10000)}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Label className="text-xs text-muted-foreground">Max</Label>
+                  {numInput("contactUsersUnsendMax", 1, 10000)}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Message an Equinox User */}
+        <div className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            id="contactEquinoxUserEnabled"
+            checked={!!settings.contactEquinoxUserEnabled}
+            onChange={(e) => setSettings({ ...settings, contactEquinoxUserEnabled: e.target.checked })}
+            className="w-3.5 h-3.5 mt-0.5 accent-primary cursor-pointer shrink-0"
+          />
+          <div>
+            <label htmlFor="contactEquinoxUserEnabled" className="text-sm font-medium cursor-pointer select-none">
+              Message an Aura Farming User
+            </label>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Each session, queue a DM to a randomly picked account from this software's Accounts page.
+            </p>
+          </div>
+        </div>
+
+        {settings.contactEquinoxUserEnabled && (
+          <div className="space-y-2 pl-6">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Message</Label>
+              <button
+                onClick={() => setAuraFarmingPreview(applySpintax(settings.contactEquinoxMessage ?? ""))}
+                className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 font-medium transition-colors"
+              >
+                <Shuffle className="w-3 h-3" />
+                Preview spin
+              </button>
+            </div>
+            <textarea
+              rows={3}
+              className="w-full text-sm border border-border rounded-lg p-3 bg-background resize-none focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+              placeholder={`{Hi|Hey|Hello} @USERNAME, {check out|have a look at} our latest posts!`}
+              value={settings.contactEquinoxMessage ?? ""}
+              onChange={(e) => {
+                setSettings({ ...settings, contactEquinoxMessage: e.target.value });
+                setAuraFarmingPreview("");
+              }}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Use <code className="bg-muted px-1 rounded">{"{Hi|Hello|Hey}"}</code> syntax to randomly pick one option per send.
+            </p>
+            {auraFarmingPreview && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-sm text-blue-800">
+                <span className="font-semibold text-[11px] text-blue-500 uppercase tracking-wider block mb-0.5">Preview</span>
+                {auraFarmingPreview}
+              </div>
+            )}
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="checkbox"
+                id="contactEquinoxNoRepeat"
+                checked={settings.contactEquinoxNoRepeat ?? true}
+                onChange={(e) => setSettings({ ...settings, contactEquinoxNoRepeat: e.target.checked })}
+                className="h-4 w-4 rounded border-input accent-primary"
+              />
+              <label htmlFor="contactEquinoxNoRepeat" className="text-sm text-foreground cursor-pointer select-none">
+                Don't message the same account twice
+              </label>
+            </div>
+          </div>
+        )}
+
+        {/* Stop on block */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-2 border-t border-border/50">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="contactStopOnBlockEnabled"
+              checked={!!settings.stopOnBlockEnabled}
+              onChange={(e) => setSettings({ ...settings, stopOnBlockEnabled: e.target.checked })}
+              className="w-3.5 h-3.5 accent-primary cursor-pointer"
+            />
+            <label htmlFor="contactStopOnBlockEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap">
+              Stop tool if blocked for
+            </label>
+          </div>
+          <div className={`flex items-center gap-1.5 transition-opacity ${!settings.stopOnBlockEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <Input
+              type="number"
+              min="1"
+              max="1440"
+              className="w-16 h-7 text-xs"
+              value={settings.stopOnBlockMinutes ?? 60}
+              onChange={(e) => setSettings({ ...settings, stopOnBlockMinutes: Math.max(1, Number(e.target.value)) })}
+            />
+            <span className="text-xs text-muted-foreground">minutes</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Pending Messages ──────────────────────────────────── */}
+      <div className="border border-border rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-amber-500" />
+            <span className="text-sm font-semibold">Pending Messages</span>
+            <span className="text-xs text-muted-foreground">({pending.length})</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1.5 text-xs px-2.5"
+              disabled={sendNowMutation.isPending || !pending.length}
+              onClick={() => sendNowMutation.mutate()}
+              title="Trigger an immediate send session now"
+            >
+              <Zap className="w-3 h-3" />
+              {sendNowMutation.isPending ? "Sending…" : "Send Now"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1.5 text-xs px-2.5 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
+              disabled={clearPendingMutation.isPending || !pending.length}
+              onClick={() => clearPendingMutation.mutate()}
+              title="Clear all pending messages for this account"
+            >
+              <Trash2 className="w-3 h-3" />
+              {clearPendingMutation.isPending ? "Clearing…" : "Clear Pending"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1.5 text-xs px-2.5 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
+              disabled={clearAllPendingMutation.isPending}
+              onClick={() => clearAllPendingMutation.mutate()}
+              title="Clear pending messages on ALL accounts"
+            >
+              <Users className="w-3 h-3" />
+              {clearAllPendingMutation.isPending ? "Clearing…" : "Clear All Accounts"}
+            </Button>
+            <button
+              onClick={() => queryClient.invalidateQueries({ queryKey: [`/api/profiles/${profile.id}/contact-pending-messages`] })}
+              className="p-1.5 rounded-lg hover:bg-accent/50 transition-colors text-muted-foreground"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+        <div className="overflow-x-auto max-h-72">
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground px-4 py-6 text-center">Loading…</p>
+          ) : !pending.length ? (
+            <p className="text-sm text-muted-foreground px-4 py-6 text-center">No pending messages.</p>
+          ) : (
+            <table className="w-full text-sm text-left">
+              <thead className="text-xs uppercase bg-muted/30 text-muted-foreground font-bold border-b border-border/50 sticky top-0 z-10">
+                <tr>
+                  <th className="px-4 py-2 bg-muted/30">User</th>
+                  <th className="px-4 py-2 bg-muted/30">Type</th>
+                  <th className="px-4 py-2 bg-muted/30">Message Preview</th>
+                  <th className="px-4 py-2 bg-muted/30 whitespace-nowrap">Queued At</th>
+                  <th className="px-4 py-2 bg-muted/30"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/40">
+                {pending.map((msg) => (
+                  <tr key={msg.id} className="hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-2 font-medium text-primary">
+                      <a
+                        href={`https://instagram.com/${msg.instagramUsername}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:underline"
+                      >
+                        @{msg.instagramUsername}
+                      </a>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="text-xs border rounded px-1.5 py-0.5 text-muted-foreground">
+                        {TYPE_LABELS[msg.messageType] ?? msg.messageType}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-muted-foreground text-xs max-w-xs truncate">{msg.messageText}</td>
+                    <td className="px-4 py-2 text-muted-foreground text-xs whitespace-nowrap">
+                      {format(new Date(msg.queuedAt), "MMM d, HH:mm")}
+                    </td>
+                    <td className="px-4 py-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => deleteMutation.mutate(msg.id)}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* ── Sent Messages ────────────────────────────────────── */}
+      <div className="border border-border rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-green-500" />
+            <span className="text-sm font-semibold">Sent Messages</span>
+            <span className="text-xs text-muted-foreground">({sent.length})</span>
+          </div>
+        </div>
+        <div className="overflow-x-auto max-h-72">
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground px-4 py-6 text-center">Loading…</p>
+          ) : !sent.length ? (
+            <p className="text-sm text-muted-foreground px-4 py-6 text-center">No messages sent yet.</p>
+          ) : (
+            <table className="w-full text-sm text-left">
+              <thead className="text-xs uppercase bg-muted/30 text-muted-foreground font-bold border-b border-border/50 sticky top-0 z-10">
+                <tr>
+                  <th className="px-4 py-2 bg-muted/30">User</th>
+                  <th className="px-4 py-2 bg-muted/30">Type</th>
+                  <th className="px-4 py-2 bg-muted/30">Status</th>
+                  <th className="px-4 py-2 bg-muted/30">Message Preview</th>
+                  <th className="px-4 py-2 bg-muted/30 whitespace-nowrap">Sent At</th>
+                  <th className="px-4 py-2 bg-muted/30"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/40">
+                {sent.map((msg) => (
+                  <tr key={msg.id} className="hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-2 font-medium text-primary">
+                      <a
+                        href={`https://instagram.com/${msg.instagramUsername}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:underline"
+                      >
+                        @{msg.instagramUsername}
+                      </a>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="text-xs border rounded px-1.5 py-0.5 text-muted-foreground">
+                        {TYPE_LABELS[msg.messageType] ?? msg.messageType}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className={`text-xs border rounded px-1.5 py-0.5 ${STATUS_COLORS[msg.status] ?? ""}`}>
+                        {msg.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-muted-foreground text-xs max-w-xs truncate">{msg.messageText}</td>
+                    <td className="px-4 py-2 text-muted-foreground text-xs whitespace-nowrap">
+                      {msg.sentAt ? format(new Date(msg.sentAt), "MMM d, HH:mm") : " "}
+                    </td>
+                    <td className="px-4 py-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => deleteMutation.mutate(msg.id)}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+      </div>
+    </div>
+  );
+}
