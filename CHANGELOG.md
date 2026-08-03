@@ -2,13 +2,11 @@
 
 ### Fixed — preview activity alignment and multiline TrustScore bios
 
-- Corrected the top preview activity bar so its icon and activity stamp are centered as one independent group across the full application content area, instead of being positioned off-center by the surrounding layout.
-- Updated **Phone Farm → Human Session Tool → Random Actions → Update Bio** with a multiline Bio Spin editor.
-- Expanded the Bio Spin editor by approximately 15 characters in width and provided five visible rows for composing a complete Instagram bio.
-- Preserved newline characters so each entered row becomes a separate line when the generated bio is pasted into Instagram.
-- Updated Spin Preview to preserve and display the bio’s line breaks instead of collapsing the content into one paragraph.
-- Kept the existing spin syntax support, including options such as `{hello|hi|hey}`.
-- Bumped the root application and Electron package versions to `1.2.359`.
+- Corrected the top preview activity bar so its icon and activity stamp are centered as one independent group across the full application content area.
+- Updated Phone Farm → Human Session Tool → Random Actions → Update Bio with a five-row multiline Bio Spin editor widened by approximately 15 characters.
+- Preserved newline characters so each entered row becomes a separate line when pasted into Instagram.
+- Updated Spin Preview to preserve bio line breaks while retaining existing spin syntax support.
+- Bumped the root application and Electron package versions to 1.2.359.
 
 ## [1.2.358] — 2026-08-03
 
