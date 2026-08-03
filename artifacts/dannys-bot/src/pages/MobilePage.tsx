@@ -6632,15 +6632,6 @@ export function AutomationSettingsPanel({
                 <span className="text-xs text-muted-foreground">
                   {postedMediaEntries.length} profile post{postedMediaEntries.length !== 1 ? "s" : ""}
                 </span>
-                <Button
-                  variant="outline" size="sm" className="ml-auto h-7 text-xs px-2.5 gap-1 shrink-0"
-                  onClick={loadPostedMedia}
-                  disabled={loadingPostedMedia}
-                ><RefreshCw className={`h-3.5 w-3.5 ${loadingPostedMedia ? "animate-spin" : ""}`} />Refresh</Button>
-                <Button
-                  variant="outline" size="sm" className="h-7 text-xs px-2.5 shrink-0"
-                  onClick={() => setShowPostedMedia(false)}
-                >Hide</Button>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto p-3">
                 {postedMediaEntries.length > 0 ? (
