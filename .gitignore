@@ -11,6 +11,10 @@ out-tsc
 # dependencies
 node_modules
 
+# auto-downloaded ADB tooling (fetched on demand by /api/mobile/adb-auto-install)
+vendor/
+adb-path-override.json
+
 # IDEs and editors
 /.idea
 .project
@@ -47,3 +51,31 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# SQLite WAL/SHM files (transient runtime state)
+*.db-shm
+*.db-wal
+
+# SQLite databases (runtime state — do not commit)
+*.db
+server/server/db.sqlite
+
+# Browser session data and cookies (sensitive credentials)
+**/browser-data/
+**/cookies-*.json
+
+# Debug / server logs
+*.log
+
+# Sensitive files that should never be committed
+attached_assets/*.txt
+
+# Local mobile-device runtime state — may contain account credentials or
+# emulator-specific configuration and is not part of the application source.
+artifacts/api-server/mobile-instances.json
+artifacts/api-server/fake-phone-count.json
+artifacts/api-server/fake-phone-list.json
+artifacts/api-server/platform-tools/
+
+# Generated mockup preview state
+artifacts/mockup-sandbox/.vite/

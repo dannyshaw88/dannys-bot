@@ -1,0 +1,31 @@
+{
+  "name": "@workspace/electron",
+  "version": "1.2.358",
+  "private": true,
+  "main": "dist/main.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dannyshaw88/dannys-bot.git"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs && electron .",
+    "package": "electron-builder --win --publish always"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.0.0",
+    "cycletls": "^2.0.5",
+    "electron-updater": "^6.3.9",
+    "imapflow": "^1.3.3",
+    "puppeteer": "^24.40.0",
+    "puppeteer-core": "^24.40.0",
+    "ffmpeg-static": "^5.2.0",
+    "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "electron": "33.4.11",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.27.3"
+  }
+}
