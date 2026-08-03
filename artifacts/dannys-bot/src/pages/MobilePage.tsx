@@ -4525,7 +4525,7 @@ function CopySettingsDialog({
 export function AutomationSettingsPanel({
   phone, settings, setSettings: setSettingsExternal, setEnabledByUser, loading: loadingExternal, saveError, running, nextRunAt,
   slotIdx, slotUsername, slotUsernames, onCopied, showCopyDialog, setShowCopyDialog,
-  templateLockedFields, trustScoreAssigned,
+  templateLockedFields, trustScoreAssigned, trustScoreLabel,
 }: {
   phone: UsbPhone | null;
   settings: AutomationSettingsData;
@@ -4545,6 +4545,14 @@ export function AutomationSettingsPanel({
   templateLockedFields?: string[];
   /** Explicit Account Slot assignment state; independent of effective settings. */
   trustScoreAssigned?: boolean;
+  /** TrustScore badge to display beside the Human Session Tool title in templates. */
+  trustScoreLabel?: {
+    label: string;
+    bg: string;
+    border: string;
+    text: string;
+    icon: React.ComponentType<{ size?: number; color?: string; fill?: string; strokeWidth?: number }>;
+  };
 }) {
   const trustScoreActive = trustScoreAssigned === true || Boolean(settings.trustScoreId);
   const isTrustScoreTemplateEditor = templateLockedFields !== undefined;
@@ -4770,6 +4778,22 @@ export function AutomationSettingsPanel({
         <div className="flex items-center gap-2 flex-wrap">
           <Fingerprint className="w-4 h-4 shrink-0" style={{ color: "#1AD2F2" }} />
           <h2 className="text-lg font-bold text-foreground whitespace-nowrap">Human Session Tool</h2>
+          {trustScoreLabel && (
+            <div
+              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1"
+              style={{ background: trustScoreLabel.bg, border: `1px solid ${trustScoreLabel.border}` }}
+            >
+              <trustScoreLabel.icon
+                size={12}
+                color={trustScoreLabel.text}
+                fill={trustScoreLabel.text}
+                strokeWidth={2}
+              />
+              <span style={{ fontSize: 11, fontWeight: 700, color: trustScoreLabel.text, letterSpacing: "0.05em" }}>
+                {trustScoreLabel.label}
+              </span>
+            </div>
+          )}
           {slotIdx !== undefined && (
             <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={slotIdx} width={121} />
           )}

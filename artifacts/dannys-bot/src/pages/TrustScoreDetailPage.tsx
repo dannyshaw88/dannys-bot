@@ -422,22 +422,13 @@ function TrustScoreAutomationEditor({
   return (
     <div className="h-full flex flex-col">
       <div className="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-border bg-background">
-        <div
-          className="flex items-center gap-1.5 rounded-full px-3 py-1"
-          style={{ background: level.bg, border: `1px solid ${level.border}` }}
-        >
-          <LevelIcon size={12} color={level.text} fill={level.text} strokeWidth={2} />
-          <span style={{ fontSize: 11, fontWeight: 700, color: level.text, letterSpacing: "0.05em" }}>
-            {level.label}
-          </span>
-        </div>
         <div className="flex-1" />
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
-            className="flex items-center gap-2 text-2xl font-bold text-black hover:text-black/70 transition-colors"
+            className="flex items-center gap-1.5 text-lg font-bold text-black hover:text-black/70 transition-colors"
           >
-            <ChevronLeft className="w-7 h-7" /> Back to TrustScores
+            <ChevronLeft className="w-5 h-5" /> Back to TrustScores
           </button>
           <Button
             size="sm"
@@ -470,6 +461,13 @@ function TrustScoreAutomationEditor({
             running={false}
             nextRunAt={null}
             templateLockedFields={[...TRUST_SCORE_TEMPLATE_LOCKED_FIELDS]}
+            trustScoreLabel={{
+              label: level.label,
+              bg: level.bg,
+              border: level.border,
+              text: level.text,
+              icon: LevelIcon,
+            }}
           />
         </div>
       </div>
