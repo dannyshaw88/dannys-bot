@@ -6121,7 +6121,7 @@ export function AutomationSettingsPanel({
         {/* ── Random Actions — probabilistic human-like actions each cycle ─ */}
         <div className="border-t border-border" />
 
-        <div className="space-y-3 relative">
+        <div className="space-y-3">
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -6383,7 +6383,7 @@ export function AutomationSettingsPanel({
              up yet, this just saves the settings for when that's built. ─ */}
         <div className="border-t border-border" />
 
-        <div className="space-y-3">
+        <div className="space-y-3 relative">
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -6394,14 +6394,13 @@ export function AutomationSettingsPanel({
               className="w-4 h-4 accent-primary cursor-pointer"
             />
             <label htmlFor={`make-a-post-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">Make a Post</label>
+            <Button
+              variant="outline" size="sm"
+              className="h-7 text-xs px-3 ml-auto gap-1.5"
+              onClick={() => { setShowPostedMedia(v => !v); if (!showPostedMedia) loadPostedMedia(); }}
+              disabled={loadingExternal}
+            ><ImagePlus className="w-3.5 h-3.5" />{showPostedMedia ? 'Hide' : 'Posted Media'}</Button>
           </div>
-
-          <Button
-            variant="outline" size="sm"
-            className="h-8 w-full justify-start text-xs px-3 gap-1.5"
-            onClick={() => { setShowPostedMedia(v => !v); if (!showPostedMedia) loadPostedMedia(); }}
-            disabled={loadingExternal}
-          ><ImagePlus className="w-3.5 h-3.5" />Posted Media</Button>
 
           {settings.makePostEnabled && (
             <div className="pl-1 space-y-4">
@@ -6626,7 +6625,7 @@ export function AutomationSettingsPanel({
           )}
 
           {showPostedMedia && (
-            <div className="absolute inset-x-0 bottom-0 top-[4.5rem] z-30 flex min-h-[320px] flex-col rounded-lg border border-border bg-background shadow-xl">
+            <div className="absolute inset-x-0 bottom-0 top-[2.75rem] z-30 flex min-h-[320px] flex-col rounded-lg border border-border bg-background shadow-xl">
               <div className="flex items-center gap-2 border-b border-border px-3 py-2">
                 <ImagePlus className="h-4 w-4 text-primary shrink-0" />
                 <span className="text-sm font-semibold text-foreground">Posted Media</span>
