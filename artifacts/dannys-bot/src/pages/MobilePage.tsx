@@ -6340,7 +6340,7 @@ export function AutomationSettingsPanel({
                   onClick={() => setBioSpinEditorOpen(true)}
                   disabled={fieldDisabled("updateBioText")}
                   className="h-7 px-3 text-xs rounded border border-border bg-background hover:border-foreground/30 hover:bg-accent transition-colors shrink-0 font-medium text-foreground text-center justify-center disabled:cursor-not-allowed disabled:opacity-50"
-                  style={{ width: "124.4px" }}
+                  style={{ width: "112px" }}
                 >
                   Bio Spin
                 </button>
