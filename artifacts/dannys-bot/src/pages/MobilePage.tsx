@@ -5855,13 +5855,13 @@ export function AutomationSettingsPanel({
           ? "absolute inset-x-0 bottom-0 top-[2.75rem] z-30 overflow-y-auto rounded-lg border border-border bg-background p-3 shadow-xl"
           : "hidden"}>
           {showFollowedUsers && (
-            <div className="border border-border rounded-lg overflow-hidden">
+            <div className="h-full border border-border rounded-lg overflow-hidden flex flex-col">
               {loadingFollowed ? (
                 <p className="text-xs text-muted-foreground p-3">Loading…</p>
               ) : mobileFollowedList.length === 0 ? (
                 <p className="text-xs text-muted-foreground p-3">No users followed in this server session yet.</p>
               ) : (
-                <div className="max-h-40 overflow-y-auto">
+                <div className="min-h-0 flex-1 overflow-y-auto">
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 bg-muted">
                       <tr>
