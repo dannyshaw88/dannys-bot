@@ -9,6 +9,7 @@ import { BrowserPanel } from "@/components/BrowserPanel";
 import { Sidebar, FilledFarmIcon } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
 import { useDeviceLog } from "@/contexts/DeviceLogContext";
+import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { Label } from "@/components/ui/label";
 import { Input as BaseInput } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -4536,6 +4537,7 @@ export function AutomationSettingsPanel({
   phone, settings, setSettings: setSettingsExternal, setEnabledByUser, loading: loadingExternal, saveError, running, nextRunAt,
   slotIdx, slotUsername, slotUsernames, onCopied, showCopyDialog, setShowCopyDialog,
   templateLockedFields, trustScoreAssigned, trustScoreLabel,
+  onOpenBrowserProfile,
 }: {
   phone: UsbPhone | null;
   settings: AutomationSettingsData;
@@ -4563,6 +4565,7 @@ export function AutomationSettingsPanel({
     text: string;
     icon: React.ComponentType<{ size?: number; color?: string; fill?: string; strokeWidth?: number }>;
   };
+  onOpenBrowserProfile?: (username: string) => void;
 }) {
   const trustScoreActive = trustScoreAssigned === true || Boolean(settings.trustScoreId);
   const isTrustScoreTemplateEditor = templateLockedFields !== undefined;
@@ -5873,7 +5876,16 @@ export function AutomationSettingsPanel({
                     <tbody>
                       {mobileFollowedList.map((u, i) => (
                         <tr key={i} className="border-t border-border">
-                          <td className="px-3 py-1.5 text-foreground">@{u.username}</td>
+                          <td className="px-3 py-1.5 text-foreground">
+                            <button
+                              type="button"
+                              className="text-primary hover:underline cursor-pointer"
+                              onClick={() => onOpenBrowserProfile?.(u.username)}
+                              title={`Open @${u.username} in Browser`}
+                            >
+                              @{u.username}
+                            </button>
+                          </td>
                           <td className="px-3 py-1.5 text-muted-foreground">{u.source ?? '—'}</td>
                           <td className="px-3 py-1.5 text-muted-foreground">{new Date(u.followedAt).toLocaleTimeString()}</td>
                         </tr>
@@ -7212,8 +7224,9 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   collisionConfig?: CollisionPreventerConfig;
   isOpen?: boolean;
   sharedScrollTopRef?: React.MutableRefObject<number>;
+  onOpenBrowserProfile?: (username: string) => void;
 }>(function SlotHumanSessionView(
-  { phone, slotIdx, slotUsername, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, onCopied, onAutomationState, collisionConfig, isOpen, sharedScrollTopRef },
+  { phone, slotIdx, slotUsername, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, onCopied, onAutomationState, collisionConfig, isOpen, sharedScrollTopRef, onOpenBrowserProfile },
   ref,
 ) {
   const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, collisionConfig);
@@ -7323,6 +7336,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
           showCopyDialog={showCopyDialog}
           setShowCopyDialog={setShowCopyDialog}
           trustScoreAssigned={trustScoreAssigned || Boolean(automation.settings.trustScoreId)}
+          onOpenBrowserProfile={onOpenBrowserProfile}
         />
       </div>
     </div>
@@ -7330,7 +7344,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
 });
 
 type AccountSettingsPanelHandle = { backToSlots: () => void; backToSlot: (idx: number | null) => void };
-type AccountSettingsPanelProps  = { phone: UsbPhone | null; addLog: (msg: string) => void; onSlotChange?: (slotIdx: number | null) => void; initialSlot?: number | null; onAnyEnabled?: (anyEnabled: boolean) => void; onPhoneAppsRunning?: (running: boolean) => void };
+type AccountSettingsPanelProps  = { phone: UsbPhone | null; addLog: (msg: string) => void; onSlotChange?: (slotIdx: number | null) => void; initialSlot?: number | null; onAnyEnabled?: (anyEnabled: boolean) => void; onPhoneAppsRunning?: (running: boolean) => void; onOpenBrowserProfile?: (username: string) => void };
 
 /**
  * Connect legacy Account Settings records to the TrustScore inheritance
@@ -7406,7 +7420,7 @@ async function hydrateAccountTrustScoreAssignments(
 }
 
 const AccountSettingsPanel = React.forwardRef<AccountSettingsPanelHandle, AccountSettingsPanelProps>(
-function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyEnabled, onPhoneAppsRunning }, ref) {
+function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyEnabled, onPhoneAppsRunning, onOpenBrowserProfile }, ref) {
   const [slotRefreshKeys, setSlotRefreshKeys] = useState<Record<number, number>>({});
   const phoneAppsPanelRef = useRef<MobilePhoneAppsPanelHandle>(null);
   const handleCopied = useCallback((targetSlotIdxs: number[]) => {
@@ -7655,6 +7669,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
             refreshKey={slotRefreshKeys[i] ?? 0}
             onCopied={handleCopied}
             onAutomationState={handleSlotAutomationState}
+            onOpenBrowserProfile={onOpenBrowserProfile}
           />
         </div>
       ))}
@@ -9062,6 +9077,7 @@ const BOT_TAP_RE = /tapp(?:ing|ed)[^\n(]*\((\d+),\s*(\d+)\)/i;
 const ACTION_LOG_RE = /Cycle\s+(complete|failed|aborted)/i;
 
 export function MobilePage() {
+  const { navigateTo } = useBrowserWindows();
   // When navigated from the Phone Farm grid (/mobile/farm/:serial), only this
   // phone's serial is shown. When navigated directly (/mobile/farm with no
   // param) all connected phones are shown as before.
@@ -9124,6 +9140,17 @@ export function MobilePage() {
     : [...allPhones].sort((a, b) => a.serial.localeCompare(b.serial));
   const slots: (UsbPhone | null)[] = Array.from({ length: TOTAL_SLOTS }, (_, i) => phones[i] ?? null);
   const activeSerial = slots[0]?.serial ?? null;
+  const openBrowserProfile = useCallback((username: string) => {
+    const cleanUsername = username.trim().replace(/^@+/, "");
+    if (!cleanUsername || !activeSerial) return;
+    setActiveTab("browser");
+    navigateTo(
+      serialToBrowserId(activeSerial),
+      activeSerial,
+      "",
+      `https://www.instagram.com/${encodeURIComponent(cleanUsername)}/`,
+    );
+  }, [activeSerial, navigateTo]);
 
   // ── Device Browser proxy config ───────────────────────────────────────────
   const [browserProxyHostPort, setBrowserProxyHostPort] = useState("");
@@ -9481,7 +9508,7 @@ export function MobilePage() {
                 {/* Accounts panel: always mounted so each slot's automation
                     hook persists across tab switches and navigation. */}
                 <div className={activeTab === "account" ? "h-full" : "hidden"}>
-                  <AccountSettingsPanel ref={accountPanelRef} phone={stickySlot0Ref.current} addLog={addLog} onSlotChange={setOpenAccountSlot} initialSlot={initialSlot} onAnyEnabled={setHstEnabled} onPhoneAppsRunning={setPhoneAppsRunning} />
+                   <AccountSettingsPanel ref={accountPanelRef} phone={stickySlot0Ref.current} addLog={addLog} onSlotChange={setOpenAccountSlot} initialSlot={initialSlot} onAnyEnabled={setHstEnabled} onPhoneAppsRunning={setPhoneAppsRunning} onOpenBrowserProfile={openBrowserProfile} />
                 </div>
                 {/* Browser tab — isolated ghost browser per device serial */}
                 {/* Positioned absolutely so it spans the full split-view width
