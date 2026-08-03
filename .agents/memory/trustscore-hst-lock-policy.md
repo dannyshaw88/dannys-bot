@@ -3,7 +3,7 @@ name: TrustScore HST lock policy
 description: Rules for keeping inherited Human Session Tool settings disabled while preserving slot-level controls.
 ---
 
-TrustScore-assigned Phone Farm slots must use explicit field-level disable rules for every HST control. The generic loading state is not a substitute because it cannot distinguish inherited template settings from editable slot controls. Follow Users operation counts, spread behavior, Inject Browsing details, and unrelated Make a Post settings are template-controlled; the Inject Browsing master, Follow Filters master and each individual filter, Follow Sources, and Make a Post alteration/image/caption-quality controls are slot-owned.
+TrustScore-assigned Phone Farm slots must use explicit field-level disable rules for every HST control. The generic loading state is not a substitute because it cannot distinguish inherited template settings from editable slot controls. Follow Users operation counts, spread behavior, Inject Browsing details, and unrelated Make a Post settings are template-controlled; the Inject Browsing master, Follow Filters master and each individual filter, Follow Sources, and Make a Post alteration/image/caption-quality controls are slot-owned on assigned physical slots. TrustScore-to-TrustScore copying is a separate template operation and must use TRUST_SCORE_TEMPLATE_LOCKED_FIELDS, not the physical-slot ownership list, so Inject Browsing and Follow Filters can copy between templates.
 
 **Why:** The HST form contains many controls that historically used the generic loading flag, which allowed inherited settings to appear editable after TrustScore resolution or accidentally disabled intended slot controls.
 
