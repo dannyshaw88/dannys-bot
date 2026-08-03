@@ -65,11 +65,23 @@ export function TrustScoresTabContent() {
   const [editState, setEditState] = useState<TsEditState | null>(null);
   const [durations, setDurations] = useState<Record<string, number | null>>({});
   const durationTimers = useRef<Record<string, number>>({});
+  const pendingDurationWrites = useRef<Record<string, { hours: number | null; hasNextScore: boolean }>>({});
 
   const dragIdxRef = useRef<number | null>(null);
   const dragOverIdxRef = useRef<number | null>(null);
 
   const refreshLevels = () => setLevels(getTrustLevels());
+
+  const persistDuration = (levelId: string, hours: number | null, hasNextScore: boolean) => {
+    delete pendingDurationWrites.current[levelId];
+    void fetch(`/api/trust-scores/${encodeURIComponent(levelId)}/duration`, {
+      method: "POST",
+      credentials: "include",
+      keepalive: true,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hours, hasNextScore }),
+    }).catch(() => {});
+  };
 
   useEffect(() => {
     fetch("/api/trust-scores/durations", { credentials: "include", cache: "no-store" })
@@ -85,7 +97,11 @@ export function TrustScoresTabContent() {
       })
       .catch(() => {});
     return () => {
-      for (const timer of Object.values(durationTimers.current)) window.clearTimeout(timer);
+      for (const [levelId, timer] of Object.entries(durationTimers.current)) {
+        window.clearTimeout(timer);
+        const pending = pendingDurationWrites.current[levelId];
+        if (pending) persistDuration(levelId, pending.hours, pending.hasNextScore);
+      }
     };
   }, []);
 
@@ -94,15 +110,11 @@ export function TrustScoresTabContent() {
       ? null
       : Math.min(999, Math.max(1, Number.parseInt(raw.replace(/\D/g, ""), 10) || 1));
     setDurations(current => ({ ...current, [levelId]: hours }));
+    pendingDurationWrites.current[levelId] = { hours, hasNextScore };
     const existing = durationTimers.current[levelId];
     if (existing) window.clearTimeout(existing);
     durationTimers.current[levelId] = window.setTimeout(() => {
-      void fetch(`/api/trust-scores/${encodeURIComponent(levelId)}/duration`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hours, hasNextScore }),
-      });
+      persistDuration(levelId, hours, hasNextScore);
     }, 400);
   };
 

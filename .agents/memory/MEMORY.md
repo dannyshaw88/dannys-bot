@@ -79,3 +79,4 @@
 - [TrustScore HST lock policy](trustscore-hst-lock-policy.md) — assigned slots need explicit field-level locks; keep Copy Settings visible independently of username count
 - [Merge regression verification](merge-regression-verification.md) — conflict-recovery merges can reintroduce removed UI; compare both parents and verify active render, payload, and runtime before pushing
 - [TrustScore ownership parity](trustscore-ownership-parity.md) — every slot-owned setting must be registered in both frontend and API ownership maps
+- [TrustScore duration navigation save](trustscore-duration-navigation-save.md) — debounced duration inputs must flush pending writes when the TrustScore view unmounts

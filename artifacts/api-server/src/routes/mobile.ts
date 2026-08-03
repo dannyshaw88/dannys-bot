@@ -1931,18 +1931,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "updateProfilePicFolderPath",
     "updateBioText",
     "makePostLocalFolderPath",
-    "postStoryEnabled",
-    "postStoryActivatePctMin",
-    "postStoryActivatePctMax",
-    "postStoryLocalFolderNoRepeat",
-    "postStoryLocalFolderRandom",
-    "postStoryAlterationEnabled",
-    "postStoryAlterationLevel",
-    "postStoryImageSettingsEnabled",
-    "postStoryImageSettings",
-    "postStoryFixAiSlop",
-    "postStoryMakeUnique",
-    "postStoryAddLink",
     "postStoryLinkUrl",
   ]);
   const TRUST_SCORE_TOOL_FIELDS = new Set([

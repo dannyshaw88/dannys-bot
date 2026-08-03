@@ -6076,7 +6076,7 @@ export function AutomationSettingsPanel({
               </div>
             </div>
           </div>
-          <div className="flex items-start flex-wrap gap-6 mt-2">
+          <div className="flex items-start flex-wrap gap-6 mt-[10px]">
             <div className="space-y-1.5">
               <Label className="text-sm text-muted-foreground block text-center">Abandon Follow %</Label>
               <div className="flex items-center gap-2">
@@ -6705,7 +6705,7 @@ export function AutomationSettingsPanel({
               {/* Keep activation and Story media controls on one shared row in
                   both the live HST and the TrustScore template editor. */}
               <div className="border border-border/60 rounded-lg p-3">
-                <div className="flex items-end flex-wrap gap-x-5 gap-y-3">
+                <div className="flex items-center flex-wrap gap-x-5 gap-y-3">
                   <div className="space-y-1.5">
                     <Label className="text-sm text-muted-foreground block text-center">Activate Percentage</Label>
                     <div className="flex items-center gap-2">

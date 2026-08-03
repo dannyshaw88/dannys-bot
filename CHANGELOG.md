@@ -1,3 +1,17 @@
+## [1.2.357] — 2026-08-03
+
+### Fixed — TrustScore duration persistence and Post a Story ownership
+
+- Fixed TrustScore duration values being lost when navigating away from the Settings → TrustScores section before the normal debounce completed.
+- Pending duration writes are now flushed during page unmount/navigation with a navigation-safe request, so configured hours persist and assigned Phone Farm account slots can initialize their countdown timers.
+- Updated Phone Farm account-slot Human Session Tool → Copy Settings so every Post a Story setting is greyed out except **Link URL**.
+- Split **Add Link** and **Link URL** into separate Copy Settings rows; the Add Link checkbox is no longer copyable, while the URL remains the only slot-owned Post a Story value that can be copied.
+- Enforced the same restriction in the API allowlist so locked Post a Story settings cannot be copied through a direct request.
+- Added 2px of separation above the Inject Browsing → Abandon Follow fields.
+- Vertically centered the Post a Story Browse button, checkboxes, and labels beside the activation controls in both Human Session Tool and TrustScore editors.
+- Kept `.github/workflows/build-windows-installer.yml` as the single canonical Windows installer workflow, with deprecated duplicate workflow files left inert to prevent duplicate builds.
+- Bumped the root application and Electron package versions to `1.2.357`.
+
 ## [1.2.356] — 2026-08-03
 
 ### Fixed — Trust Score table column alignment
