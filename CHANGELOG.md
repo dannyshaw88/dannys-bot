@@ -1,3 +1,12 @@
+## [1.2.356] — 2026-08-03
+
+### Fixed — Trust Score table column alignment
+
+- Centered the **Duration** and **Notes** headers within their respective columns.
+- Centered the Duration controls and Notes fields beneath those headers.
+- Grouped the TrustScore badge and row actions into the fixed TrustScore column so all three columns remain aligned.
+- Bumped the root application and Electron package versions to `1.2.356`.
+
 ## [1.2.355] — 2026-08-03
 
 ### Fixed — Post a Story link ownership parity

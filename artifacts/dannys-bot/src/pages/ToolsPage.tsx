@@ -201,8 +201,8 @@ export function TrustScoresTabContent() {
       <div className="w-full overflow-x-auto">
         <div className="flex items-center gap-2 px-2 mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
           <span className="w-[185px]">TrustScore</span>
-          <span className="w-[9rem]">Duration</span>
-          <span className="flex-1">Notes</span>
+          <span className="w-[9rem] text-center">Duration</span>
+          <span className="flex-1 text-center">Notes</span>
         </div>
         <div className="space-y-1.5 w-full">
         {levels.map((level, idx) => {
@@ -215,35 +215,37 @@ export function TrustScoresTabContent() {
               onDragEnd={onDragEnd}
               className="group flex items-center gap-2 rounded-lg border border-transparent hover:border-border hover:bg-accent/40 transition-colors select-none px-2 py-1.5"
             >
-              {/* Drag handle — only this area initiates drag */}
-              <div
-                draggable
-                onDragStart={e => onDragStart(e, idx)}
-                className="flex items-center gap-1 cursor-grab active:cursor-grabbing shrink-0"
-              >
-                <GripVertical className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
-                <span className="w-5 text-[11px] font-bold text-muted-foreground text-left">{idx + 1}</span>
-                <button
-                  onClick={() => setLocation(`/trust-scores/${level.id}`)}
-                  onMouseDown={e => e.stopPropagation()}
-                  className="flex items-center justify-center gap-1.5 rounded-full px-3.5 py-1.5 hover:opacity-80 active:scale-95 transition-all"
-                  style={{ background: level.bg, border: `1px solid ${level.border}`, width: 130, minWidth: 130, maxWidth: 130, overflow: "hidden" }}
-                  title="Open mobile Human Session Tool settings for this trust score"
+              <div className="flex items-center gap-2 w-[185px] shrink-0">
+                {/* Drag handle — only this area initiates drag */}
+                <div
+                  draggable
+                  onDragStart={e => onDragStart(e, idx)}
+                  className="flex items-center gap-1 cursor-grab active:cursor-grabbing shrink-0"
                 >
-                  <span style={{ fontSize: 13, fontWeight: 700, color: level.text, letterSpacing: "0.05em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{level.label}</span>
-                  <Icon size={13} color={level.text} fill={level.text} strokeWidth={2} className="shrink-0" />
-                </button>
-              </div>
-              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                <button onClick={e => openEdit(e, level)} onMouseDown={e => e.stopPropagation()} className="p-0.5 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors" title="Edit badge style">
-                  <Pencil className="w-3 h-3" />
-                </button>
-                <button onClick={e => handleDeleteClick(e, level)} onMouseDown={e => e.stopPropagation()} className="p-0.5 rounded text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Delete this trust score">
-                  <X className="w-3.5 h-3.5" />
-                </button>
+                  <GripVertical className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+                  <span className="w-5 text-[11px] font-bold text-muted-foreground text-left">{idx + 1}</span>
+                  <button
+                    onClick={() => setLocation(`/trust-scores/${level.id}`)}
+                    onMouseDown={e => e.stopPropagation()}
+                    className="flex items-center justify-center gap-1.5 rounded-full px-3.5 py-1.5 hover:opacity-80 active:scale-95 transition-all"
+                    style={{ background: level.bg, border: `1px solid ${level.border}`, width: 130, minWidth: 130, maxWidth: 130, overflow: "hidden" }}
+                    title="Open mobile Human Session Tool settings for this trust score"
+                  >
+                    <span style={{ fontSize: 13, fontWeight: 700, color: level.text, letterSpacing: "0.05em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{level.label}</span>
+                    <Icon size={13} color={level.text} fill={level.text} strokeWidth={2} className="shrink-0" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  <button onClick={e => openEdit(e, level)} onMouseDown={e => e.stopPropagation()} className="p-0.5 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors" title="Edit badge style">
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                  <button onClick={e => handleDeleteClick(e, level)} onMouseDown={e => e.stopPropagation()} className="p-0.5 rounded text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Delete this trust score">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
               {/* Duration — immediately after the TrustScore badge and before Notes. */}
-              <div className="flex items-center gap-1.5 shrink-0" onMouseDown={e => e.stopPropagation()}>
+              <div className="flex w-[9rem] items-center justify-center gap-1.5 shrink-0" onMouseDown={e => e.stopPropagation()}>
                 <input
                   type="text"
                   inputMode="numeric"
@@ -255,22 +257,24 @@ export function TrustScoresTabContent() {
                 />
                 <span className="text-xs text-muted-foreground">hours</span>
               </div>
-              {/* Right: note field — fixed width, right-aligned text */}
-              <textarea
-                value={note}
-                onChange={e => handleNoteChange(level.id, e.target.value)}
-                onMouseDown={e => e.stopPropagation()}
-                onDragStart={e => e.preventDefault()}
-                placeholder="Add a note…"
-                rows={1}
-                className="ml-2 px-2 py-1 text-xs bg-background border border-border rounded resize-none focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/40 cursor-text"
-                style={{ minHeight: 28, maxHeight: 72, width: "50ch", maxWidth: "50ch", flexShrink: 0, textAlign: "left", direction: "ltr" }}
-                onInput={e => {
-                  const t = e.currentTarget;
-                  t.style.height = "auto";
-                  t.style.height = Math.min(t.scrollHeight, 72) + "px";
-                }}
-              />
+              {/* Notes — centered within the remaining Notes column. */}
+              <div className="flex flex-1 justify-center">
+                <textarea
+                  value={note}
+                  onChange={e => handleNoteChange(level.id, e.target.value)}
+                  onMouseDown={e => e.stopPropagation()}
+                  onDragStart={e => e.preventDefault()}
+                  placeholder="Add a note…"
+                  rows={1}
+                  className="px-2 py-1 text-xs bg-background border border-border rounded resize-none focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/40 cursor-text"
+                  style={{ minHeight: 28, maxHeight: 72, width: "50ch", maxWidth: "50ch", flexShrink: 0, textAlign: "left", direction: "ltr" }}
+                  onInput={e => {
+                    const t = e.currentTarget;
+                    t.style.height = "auto";
+                    t.style.height = Math.min(t.scrollHeight, 72) + "px";
+                  }}
+                />
+              </div>
             </div>
           );
         })}
