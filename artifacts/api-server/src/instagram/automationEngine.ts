@@ -3736,7 +3736,6 @@ class AutomationEngine {
                 );
                 const level = ((s.repostAlterationLevel ?? "small") as AlterationLevel);
                 const captionTemplate = String(s.repostCaptionText ?? "").trim();
-                const deleteAfterUpload = s.repostLocalFolderDeleteAfterUpload !== false;
                 const noRepeat = !!(s as any).repostLocalFolderNoRepeat;
                 const makeUnique = !!(s as any).repostMakeUnique;
                 const pickRandom = !!(s as any).repostLocalFolderRandom;
@@ -3793,11 +3792,6 @@ class AutomationEngine {
                           mediaId: `local:${fileName}`, shortcode: "", caption: "",
                           thumbnailUrl: "", repostedAt: new Date().toISOString(), postedShortcode: "",
                         }).catch(() => {});
-                      }
-                      if (deleteAfterUpload) {
-                        try { await fsPromises.unlink(filePath); } catch (e: any) {
-                          console.warn(`[engine] @${profile.username}: [EB-only] could not delete ${filePath}: ${e?.message}`);
-                        }
                       }
                     } else {
                       console.warn(`[engine] @${profile.username}: [EB-only] 🔁 local folder upload failed: ${fileName} — ${bpResult.message}`);
@@ -5488,7 +5482,6 @@ class AutomationEngine {
             );
             const level = ((s.repostAlterationLevel ?? "small") as AlterationLevel);
             const captionTemplate = String(s.repostCaptionText ?? "").trim();
-            const deleteAfterUpload = s.repostLocalFolderDeleteAfterUpload !== false;
             const noRepeat = !!(s as any).repostLocalFolderNoRepeat;
             const useChatGptCaption = !!(s as any).repostUseChatGpt;
             const makeUnique = !!(s as any).repostMakeUnique;
@@ -5633,11 +5626,6 @@ class AutomationEngine {
                   } catch { /* non-fatal */ }
                 }
                 uploadedCount++;
-                if (deleteAfterUpload) {
-                  try { await fsPromises.unlink(filePath); } catch (e: any) {
-                    console.warn(`[engine] @${profile.username}: could not delete ${filePath}: ${e?.message}`);
-                  }
-                }
               } else {
                 const uploadErr = browserPostErr || client.lastUploadError || "Upload failed";
                 console.warn(`[engine] @${profile.username}: 🔁 local folder upload failed: ${fileName} — ${uploadErr}`);

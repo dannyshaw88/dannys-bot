@@ -77,3 +77,5 @@
 - [Accounts Trust Score interaction isolation](accounts-trustscore-no-row-drag.md) — Trust Score badge clicks must not trigger Accounts row drag-to-select or browser focus movement
 - [Story emoji composer gate](story-emoji-composer-gate.md) — don't require one Instagram composer resource-id before reaching the keyboard path
 - [TrustScore HST lock policy](trustscore-hst-lock-policy.md) — assigned slots need explicit field-level locks; keep Copy Settings visible independently of username count
+- [Mobile Bio Spin slot ownership](mobile-bio-spin-slot-ownership.md) — Random Actions Bio Spin text is slot-owned and copyable through HST, never pre-determined by Trust Score templates
+- [Mobile local post source retention](mobile-local-post-source-retention.md) — Phone Farm posting retains the original PC media; only the temporary device copy is removed

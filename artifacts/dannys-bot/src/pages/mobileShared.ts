@@ -211,7 +211,6 @@ export interface AutomationSettingsData {
   makePostLocalFolderPath: string;
   makePostLocalFolderNoRepeat: boolean;
   makePostLocalFolderRandom: boolean;
-  makePostLocalFolderDeleteAfterUpload: boolean;
   updateProfilePicActivatePctMin: number; updateProfilePicActivatePctMax: number;
   updateProfilePicFolderPath: string;
   updateProfilePicDisableAfterUsed: boolean;
@@ -324,7 +323,6 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   makePostLocalFolderPath: "",
   makePostLocalFolderNoRepeat: false,
   makePostLocalFolderRandom: false,
-  makePostLocalFolderDeleteAfterUpload: false,
   updateProfilePicActivatePctMin: 0, updateProfilePicActivatePctMax: 0,
   updateProfilePicFolderPath: "",
   updateProfilePicDisableAfterUsed: false,
@@ -369,6 +367,7 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
   "followFilterVerifiedUsers",
   "followFilterMaxFollowers25k",
   "updateProfilePicFolderPath",
+  "updateBioText",
   "makePostLocalFolderEnabled",
   "makePostLocalFolderPath",
 ]);
@@ -507,7 +506,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'postAlteration',    label: 'Image Alteration',              fields: ['makePostAlterationEnabled','makePostAlterationLevel'] },
     { key: 'postImgSettings',   label: 'Image Settings',                fields: ['makePostImageSettingsEnabled','makePostImageSettings'] },
     { key: 'postLocalFolder',   label: 'My Computer directory',          fields: ['makePostLocalFolderPath'] },
-    { key: 'postLocalOpts',     label: 'My Computer options',            fields: ['makePostLocalFolderNoRepeat','makePostLocalFolderRandom','makePostLocalFolderDeleteAfterUpload'] },
+    { key: 'postLocalOpts',     label: 'My Computer options',            fields: ['makePostLocalFolderNoRepeat','makePostLocalFolderRandom'] },
     { key: 'postDisableAt',     label: 'Disable when no more posts are found', fields: ['makePostDisableWhenExhausted'] },
     { key: 'postChatGptCaption',label: 'ChatGPT / caption settings',    fields: ['makePostUseChatGpt','makePostCaptionText'] },
     { key: 'postFixAiSlop',      label: 'Fix AI Slop',                   fields: ['makePostFixAiSlop'] },

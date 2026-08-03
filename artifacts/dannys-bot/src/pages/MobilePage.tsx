@@ -3734,7 +3734,6 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             makePostLocalFolderPath: s.makePostLocalFolderPath,
             makePostLocalFolderNoRepeat: s.makePostLocalFolderNoRepeat,
             makePostLocalFolderRandom: s.makePostLocalFolderRandom,
-            makePostLocalFolderDeleteAfterUpload: s.makePostLocalFolderDeleteAfterUpload,
             updateProfilePicActivatePctMin: s.updateProfilePicActivatePctMin,
             updateProfilePicActivatePctMax: s.updateProfilePicActivatePctMax,
             updateProfilePicFolderPath: s.updateProfilePicFolderPath,
@@ -6342,7 +6341,7 @@ export function AutomationSettingsPanel({
                 <div className="relative shrink-0">
                   <button
                     type="button"
-                    disabled={loading || !settings.updateBioText.trim()}
+                    disabled={fieldDisabled("updateBioText") || !settings.updateBioText.trim()}
                     onClick={() => setSpinPreview(resolveSpinSyntax(settings.updateBioText))}
                     className="absolute -top-4 left-0 text-xs font-medium text-primary hover:opacity-80 disabled:cursor-not-allowed px-1 leading-none"
                   >
@@ -6351,10 +6350,11 @@ export function AutomationSettingsPanel({
                   <Input
                     type="text"
                     placeholder=""
-                    className="h-7 text-xs px-2 w-[17.5ch]"
+                    className="h-7 text-xs px-2"
+                    style={{ width: "calc(17.5ch - 2px)" }}
                     value={settings.updateBioText}
                     onChange={e => setSettings(s => ({ ...s, updateBioText: e.target.value }))}
-                    disabled={loading}
+                    disabled={fieldDisabled("updateBioText")}
                   />
                 </div>
                 {/* Disable After Used */}
@@ -6489,14 +6489,6 @@ export function AutomationSettingsPanel({
                           disabled={fieldDisabled("makePostLocalFolderRandom")}
                           className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                         <label htmlFor={`make-a-post-local-random-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Pick at random</label>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input type="checkbox" id={`make-a-post-local-delete-after-${slotIdx ?? 0}`}
-                          checked={settings.makePostLocalFolderDeleteAfterUpload === true}
-                          onChange={e => setSettings(s => ({ ...s, makePostLocalFolderDeleteAfterUpload: e.target.checked }))}
-                          disabled={fieldDisabled("makePostLocalFolderDeleteAfterUpload")}
-                          className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                        <label htmlFor={`make-a-post-local-delete-after-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Delete from PC after posting</label>
                       </div>
                       <div className="flex items-center gap-2">
                         <input type="checkbox" id={`make-a-post-disable-exhausted-${slotIdx ?? 0}`}

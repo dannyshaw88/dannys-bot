@@ -339,7 +339,6 @@ type AutomationSettings = {
   makePostLocalFolderPath?: string;
   makePostLocalFolderNoRepeat?: boolean;
   makePostLocalFolderRandom?: boolean;
-  makePostLocalFolderDeleteAfterUpload?: boolean;
   makePostUseChatGpt?: boolean;
   makePostFixAiSlop?: boolean;
   makePostMakeUnique?: boolean;
@@ -1613,7 +1612,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostLocalFolderPath: z.string().default(""),
     makePostLocalFolderNoRepeat: z.boolean().default(false),
     makePostLocalFolderRandom: z.boolean().default(false),
-    makePostLocalFolderDeleteAfterUpload: z.boolean().default(false),
     makePostUseChatGpt: z.boolean().default(false),
     makePostFixAiSlop: z.boolean().default(false),
     makePostMakeUnique: z.boolean().default(false),
@@ -1730,7 +1728,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       makePostDisableWhenExhausted: true,
       makePostLocalFolderEnabled: true, makePostLocalFolderPath: "",
       makePostLocalFolderNoRepeat: false, makePostLocalFolderRandom: false,
-      makePostLocalFolderDeleteAfterUpload: false,
       makePostUseChatGpt: false, makePostFixAiSlop: false, makePostMakeUnique: false,
       makePostCaptionText: "",
       makePostImageSettings: {
@@ -1785,6 +1782,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "followFilterVerifiedUsers",
     "followFilterMaxFollowers25k",
     "updateProfilePicFolderPath",
+    "updateBioText",
     "makePostLocalFolderEnabled",
     "makePostLocalFolderPath",
   ]);
@@ -1994,7 +1992,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostDisableWhenExhausted: true,
         makePostLocalFolderEnabled: true, makePostLocalFolderPath: "",
         makePostLocalFolderNoRepeat: false, makePostLocalFolderRandom: false,
-        makePostLocalFolderDeleteAfterUpload: false,
         makePostUseChatGpt: false, makePostFixAiSlop: false, makePostMakeUnique: false,
         makePostPostToProfilePctMin: 100, makePostPostToProfilePctMax: 100,
         makePostPostToStoryPctMin: 0, makePostPostToStoryPctMax: 0,
@@ -6026,7 +6023,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostLocalFolderPath: z.string().default(""),
     makePostLocalFolderNoRepeat: z.boolean().default(false),
     makePostLocalFolderRandom: z.boolean().default(false),
-    makePostLocalFolderDeleteAfterUpload: z.boolean().default(false),
     makePostCaptionText: z.string().default(""),
     makePostAlterationEnabled: z.boolean().default(true),
     makePostAlterationLevel: z.enum(["small", "medium", "high"]).default("small"),
@@ -6397,7 +6393,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   async function runMakePostStep(serial: string, opts: {
     localFolderPath: string; localFolderRandom: boolean; localFolderNoRepeat: boolean;
-    deleteAfterUpload: boolean; captionText: string;
+     captionText: string;
     accountUsername?: string; slotIdx?: number;
     doFixAiSlop?: boolean;
     alterationEnabled?: boolean;
@@ -6407,7 +6403,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     onLog?: (msg: string) => void;
   }): Promise<{ posted: boolean; fileName?: string }> {
     const {
-      localFolderPath, localFolderRandom, localFolderNoRepeat, deleteAfterUpload,
+      localFolderPath, localFolderRandom, localFolderNoRepeat,
       captionText, doFixAiSlop, alterationEnabled, alterationLevel,
       imageSettingsEnabled, imageSettings, onLog,
     } = opts;
@@ -6730,9 +6726,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     recordPostedLocalFile(serial, fileName);
     recordPostedProfileMedia(serial, opts.slotIdx ?? 0, opts.accountUsername ?? "", fileName);
-    if (deleteAfterUpload) {
-      try { await fsPromises.unlink(localFilePath); } catch { /* best effort */ }
-    }
     // Always remove the temp copy pushed to the device — it is only needed
     // for the picker/upload. Leaving it behind fills up the camera roll.
     await android.removeDeviceFile(serial, devicePath).catch(() => {});
@@ -6746,7 +6739,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   //       → forward arrow → Share → Finished → dismiss Stories archive popup.
   async function runMakePostStoryStep(serial: string, opts: {
     localFolderPath: string; localFolderRandom: boolean; localFolderNoRepeat: boolean;
-    deleteAfterUpload: boolean;
     doFixAiSlop?: boolean;
     alterationEnabled?: boolean;
     alterationLevel?: AlterationLevel;
@@ -6755,7 +6747,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     onLog?: (msg: string) => void;
   }): Promise<{ posted: boolean; fileName?: string }> {
     const {
-      localFolderPath, localFolderRandom, localFolderNoRepeat, deleteAfterUpload,
+      localFolderPath, localFolderRandom, localFolderNoRepeat,
       doFixAiSlop, alterationEnabled, alterationLevel,
       imageSettingsEnabled, imageSettings, onLog,
     } = opts;
@@ -6914,9 +6906,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     await android.dismissInstagramInterstitials(serial).catch(() => null);
 
     recordPostedLocalFile(serial, fileName);
-    if (deleteAfterUpload) {
-      try { await fsPromises.unlink(localFilePath); } catch { /* best effort */ }
-    }
     await android.removeDeviceFile(serial, devicePath).catch(() => {});
     onLog?.(`Make a Post (Story): ✓ story posted "${fileName}"`);
     return { posted: true, fileName };
@@ -9376,7 +9365,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostEnabled, makePostActivatePctMin, makePostActivatePctMax,
         makePostPerSessionMin, makePostPerSessionMax,
         makePostLocalFolderEnabled, makePostLocalFolderPath,
-        makePostLocalFolderNoRepeat, makePostLocalFolderRandom, makePostLocalFolderDeleteAfterUpload,
+        makePostLocalFolderNoRepeat, makePostLocalFolderRandom,
         makePostAlterationEnabled, makePostAlterationLevel, makePostImageSettingsEnabled,
         makePostImageSettings, makePostFixAiSlop, makePostCaptionText,
         makePostPostToProfilePctMin, makePostPostToProfilePctMax,
@@ -10267,7 +10256,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                       localFolderPath: resolvedFolderPath,
                       localFolderRandom: makePostLocalFolderRandom,
                       localFolderNoRepeat: makePostLocalFolderNoRepeat,
-                      deleteAfterUpload: makePostLocalFolderDeleteAfterUpload,
                       alterationEnabled: makePostAlterationEnabled,
                       alterationLevel: makePostAlterationLevel,
                       imageSettingsEnabled: makePostImageSettingsEnabled,
@@ -10287,7 +10275,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                       localFolderPath: resolvedFolderPath,
                       localFolderRandom: makePostLocalFolderRandom,
                       localFolderNoRepeat: makePostLocalFolderNoRepeat,
-                      deleteAfterUpload: makePostLocalFolderDeleteAfterUpload,
                       accountUsername: slotUsername,
                       slotIdx,
                       alterationEnabled: makePostAlterationEnabled,
