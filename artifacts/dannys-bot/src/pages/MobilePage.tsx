@@ -4505,6 +4505,17 @@ export function AutomationSettingsPanel({
     "feedEnabled", "storiesEnabled", "viewExploreEnabled", "viewReelsEnabled",
     "checkDmEnabled", "followEnabled", "randomJitterEnabled", "makePostEnabled",
   ]);
+  // These are the only settings a physical slot may change while its
+  // effective values come from a TrustScore template.  Everything else in
+  // the HST form is template-controlled and must stay visibly disabled.
+  const TRUST_SCORE_SLOT_EDITABLE_FIELDS = useMemo(
+    () => new Set([
+      "enabled",
+      ...TRUST_SCORE_FEATURE_FIELDS,
+      ...TRUST_SCORE_SLOT_OWNED_FIELDS,
+    ]),
+    [],
+  );
   const lockedFields = useMemo(
     () => new Set(
       templateLockedFields ??
@@ -4549,7 +4560,7 @@ export function AutomationSettingsPanel({
   const fieldDisabled = (...fields: string[]) =>
     loadingExternal || fields.some(field =>
       trustScoreActive && !templateLockedFields
-        ? !TRUST_SCORE_SLOT_OWNED_FIELDS.has(field)
+        ? !TRUST_SCORE_SLOT_EDITABLE_FIELDS.has(field)
         : fieldLocked(field),
     );
   // Follow Users UI local state — hooks must come before any conditional return.
@@ -4714,7 +4725,7 @@ export function AutomationSettingsPanel({
           <Switch
             checked={settings.enabled}
             onCheckedChange={setEnabledByUser}
-            disabled={loadingExternal}
+            disabled={fieldDisabled("enabled")}
             className="shrink-0"
           />
           <div className="flex flex-col min-w-0">
@@ -4773,7 +4784,7 @@ export function AutomationSettingsPanel({
               id={`feed-enabled-${slotIdx ?? 0}`}
               checked={settings.feedEnabled}
               onChange={e => setSettings(s => ({ ...s, feedEnabled: e.target.checked }))}
-              disabled={loadingExternal}
+              disabled={fieldDisabled("feedEnabled")}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
             <label htmlFor={`feed-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">View Feed</label>
@@ -5106,7 +5117,7 @@ export function AutomationSettingsPanel({
               id={`explore-enabled-${slotIdx ?? 0}`}
               checked={settings.viewExploreEnabled}
               onChange={e => setSettings(s => ({ ...s, viewExploreEnabled: e.target.checked }))}
-              disabled={loadingExternal}
+              disabled={fieldDisabled("viewExploreEnabled")}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
             <label htmlFor={`explore-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">View Explore Page</label>
@@ -5261,7 +5272,7 @@ export function AutomationSettingsPanel({
               id={`stories-enabled-${slotIdx ?? 0}`}
               checked={settings.storiesEnabled}
               onChange={e => setSettings(s => ({ ...s, storiesEnabled: e.target.checked }))}
-              disabled={loadingExternal}
+              disabled={fieldDisabled("storiesEnabled")}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
             <label htmlFor={`stories-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">View Stories from Feed</label>
@@ -5393,7 +5404,7 @@ export function AutomationSettingsPanel({
               id={`reels-enabled-${slotIdx ?? 0}`}
               checked={settings.viewReelsEnabled}
               onChange={e => setSettings(s => ({ ...s, viewReelsEnabled: e.target.checked }))}
-              disabled={loadingExternal}
+              disabled={fieldDisabled("viewReelsEnabled")}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
             <label htmlFor={`reels-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">View Reels</label>
@@ -5539,7 +5550,7 @@ export function AutomationSettingsPanel({
               id={`checkdm-enabled-${slotIdx ?? 0}`}
               checked={settings.checkDmEnabled}
               onChange={e => setSettings(s => ({ ...s, checkDmEnabled: e.target.checked }))}
-              disabled={loadingExternal}
+              disabled={fieldDisabled("checkDmEnabled")}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
             <label htmlFor={`checkdm-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">Direct Messaging</label>
@@ -5606,7 +5617,7 @@ export function AutomationSettingsPanel({
             id={`follow-enabled-${slotIdx ?? 0}`}
             checked={settings.followEnabled}
             onChange={e => setSettings(s => ({ ...s, followEnabled: e.target.checked }))}
-            disabled={loadingExternal}
+            disabled={fieldDisabled("followEnabled")}
             className="w-4 h-4 accent-primary cursor-pointer"
           />
           <label htmlFor={`follow-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">Follow Users</label>
@@ -6031,7 +6042,7 @@ export function AutomationSettingsPanel({
               id={`random-jitter-enabled-${slotIdx ?? 0}`}
               checked={settings.randomJitterEnabled}
               onChange={e => setSettings(s => ({ ...s, randomJitterEnabled: e.target.checked }))}
-              disabled={loadingExternal}
+              disabled={fieldDisabled("randomJitterEnabled")}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
             <label htmlFor={`random-jitter-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">Random Actions</label>
@@ -6292,7 +6303,7 @@ export function AutomationSettingsPanel({
               id={`make-a-post-enabled-${slotIdx ?? 0}`}
               checked={settings.makePostEnabled}
               onChange={e => setSettings(s => ({ ...s, makePostEnabled: e.target.checked }))}
-              disabled={loadingExternal}
+              disabled={fieldDisabled("makePostEnabled")}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
             <label htmlFor={`make-a-post-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">Make a Post</label>
@@ -6918,7 +6929,10 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [automation.settings.enabled, automation.running, automation.nextRunAt]);
-  const canCopy = slotUsernames && slotUsernames.length > 1;
+  // Keep the entry point visible for every slot.  The dialog discovers
+  // targets across the farm, so hiding this based on the current device's
+  // username count made Copy Settings disappear for single-slot devices.
+  const canCopy = slotIdx !== undefined;
   return (
     <div className="h-full flex flex-col">
       <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
