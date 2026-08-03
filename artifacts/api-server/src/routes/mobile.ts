@@ -375,6 +375,8 @@ type AutomationSettings = {
   postStoryImageSettingsEnabled?: boolean;
   postStoryFixAiSlop?: boolean;
   postStoryMakeUnique?: boolean;
+  postStoryAddLink?: boolean;
+  postStoryLinkUrl?: string;
   postStoryImageSettings?: {
     contrast: { enabled: boolean; min: number; max: number };
     brightness: { enabled: boolean; min: number; max: number };
@@ -1682,6 +1684,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     postStoryImageSettingsEnabled: z.boolean().default(true),
     postStoryFixAiSlop: z.boolean().default(false),
     postStoryMakeUnique: z.boolean().default(false),
+    postStoryAddLink: z.boolean().default(false),
+    postStoryLinkUrl: z.string().default(""),
     postStoryImageSettings: z.object({
       contrast: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
       brightness: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
@@ -1908,7 +1912,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "updateBioText",
     "makePostLocalFolderEnabled",
     "makePostLocalFolderPath",
-    "postStoryLocalFolderPath",
+    "postStoryAddLink",
+    "postStoryLinkUrl",
   ]);
   const TRUST_SCORE_TEMPLATE_LOCKED_FIELDS = new Set(
     [...TRUST_SCORE_SLOT_OWNED_FIELDS].filter(field => ![
@@ -1937,6 +1942,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "postStoryImageSettings",
     "postStoryFixAiSlop",
     "postStoryMakeUnique",
+    "postStoryAddLink",
+    "postStoryLinkUrl",
   ]);
   const TRUST_SCORE_TOOL_FIELDS = new Set([
     "feedEnabled",
@@ -2154,6 +2161,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           pixelate: { enabled: true, min: 0.9, max: 2.1 },
         },
         postStoryFixAiSlop: false, postStoryMakeUnique: false,
+        postStoryAddLink: false, postStoryLinkUrl: "",
         dismissDirection: "auto" as const,
       };
       const saved = cfg[serial]?.slotAutomation?.[String(slotIdx)];
@@ -6478,6 +6486,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }),
     postStoryFixAiSlop: z.boolean().default(false),
     postStoryMakeUnique: z.boolean().default(false),
+    postStoryAddLink: z.boolean().default(false),
+    postStoryLinkUrl: z.string().default(""),
     // Which Instagram account slot is driving this cycle. When set the cycle
     // switches to that account via the built-in Instagram switcher before
     // running any tools, so each slot's settings are always applied to the

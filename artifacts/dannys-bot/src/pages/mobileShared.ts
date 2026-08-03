@@ -236,6 +236,8 @@ export interface AutomationSettingsData {
   postStoryImageSettings: ImageFilterSettings;
   postStoryFixAiSlop: boolean;
   postStoryMakeUnique: boolean;
+  postStoryAddLink: boolean;
+  postStoryLinkUrl: string;
   dismissDirection: "auto" | "left" | "up";
   /** Slot metadata returned by the effective-settings endpoint. */
   trustScoreId?: string | null;
@@ -372,6 +374,8 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   },
   postStoryFixAiSlop: false,
   postStoryMakeUnique: false,
+  postStoryAddLink: false,
+  postStoryLinkUrl: "",
   dismissDirection: "auto",
 };
 
@@ -400,7 +404,6 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
   "updateBioText",
   "makePostLocalFolderEnabled",
   "makePostLocalFolderPath",
-  "postStoryLocalFolderPath",
 ]);
 
 /** Fields that stay restricted in Settings → TrustScores. Inject Browsing
@@ -424,6 +427,8 @@ export const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
   "updateProfilePicFolderPath",
   "updateBioText",
   "makePostLocalFolderPath",
+  "postStoryAddLink",
+  "postStoryLinkUrl",
   "postStoryEnabled",
   "postStoryActivatePctMin",
   "postStoryActivatePctMax",
@@ -558,6 +563,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'storyPostEnabled',   label: 'Enabled',             fields: ['postStoryEnabled'] },
     { key: 'storyPostActivate',  label: 'Activate Percentage', fields: ['postStoryActivatePctMin','postStoryActivatePctMax'] },
     { key: 'storyPostOptions',   label: 'Directory options',   fields: ['postStoryLocalFolderNoRepeat','postStoryLocalFolderRandom'] },
+    { key: 'storyPostLink',      label: 'Add Link',             fields: ['postStoryAddLink','postStoryLinkUrl'] },
     { key: 'storyPostAlteration', label: 'Image Alteration',    fields: ['postStoryAlterationEnabled','postStoryAlterationLevel'] },
     { key: 'storyPostImageSettings', label: 'Image Settings',   fields: ['postStoryImageSettingsEnabled','postStoryImageSettings'] },
     { key: 'storyPostFixAiSlop', label: 'Fix AI Slop',           fields: ['postStoryFixAiSlop'] },

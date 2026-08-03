@@ -3760,6 +3760,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             postStoryImageSettings: s.postStoryImageSettings,
             postStoryFixAiSlop: s.postStoryFixAiSlop,
             postStoryMakeUnique: s.postStoryMakeUnique,
+            postStoryAddLink: s.postStoryAddLink,
+            postStoryLinkUrl: s.postStoryLinkUrl,
             shuffleToolOrder: s.shuffleToolOrder,
             dismissDirection: s.dismissDirection,
             slotUsername: slotUsername ?? "",
@@ -6701,8 +6703,7 @@ export function AutomationSettingsPanel({
           {settings.postStoryEnabled && (
             <div className="pl-1 space-y-4">
               {/* Keep activation and Story media controls on one shared row in
-                  both the live HST and the TrustScore template editor. The
-                  directory itself is still writable only from a physical slot. */}
+                  both the live HST and the TrustScore template editor. */}
               <div className="border border-border/60 rounded-lg p-3">
                 <div className="flex items-end flex-wrap gap-x-5 gap-y-3">
                   <div className="space-y-1.5">
@@ -6727,8 +6728,7 @@ export function AutomationSettingsPanel({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      disabled={isTrustScoreTemplateEditor || fieldDisabled("postStoryLocalFolderPath")}
-                      title={isTrustScoreTemplateEditor ? "Choose the Story directory on an account slot" : undefined}
+                      disabled={fieldDisabled("postStoryLocalFolderPath")}
                       onClick={async () => {
                         const api = (window as any).electronAPI;
                         if (!api?.openFolderDialog) return;
@@ -6789,6 +6789,32 @@ export function AutomationSettingsPanel({
                     </label>
                   </div>
                 </div>
+              </div>
+
+              {/* Link is the only Post a Story setting owned by the physical
+                  HST account slot. It is intentionally not part of the
+                  TrustScore template settings. */}
+              <div className="flex w-full items-center gap-3">
+                <input
+                  type="checkbox"
+                  id={`post-a-story-add-link-${slotIdx ?? 0}`}
+                  checked={settings.postStoryAddLink}
+                  onChange={e => setSettings(s => ({ ...s, postStoryAddLink: e.target.checked }))}
+                  disabled={fieldDisabled("postStoryAddLink")}
+                  className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                />
+                <label htmlFor={`post-a-story-add-link-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none shrink-0">
+                  Add Link
+                </label>
+                <Input
+                  type="url"
+                  value={settings.postStoryLinkUrl}
+                  onChange={e => setSettings(s => ({ ...s, postStoryLinkUrl: e.target.value }))}
+                  disabled={fieldDisabled("postStoryLinkUrl") || !settings.postStoryAddLink}
+                  placeholder="https://example.com"
+                  aria-label="Post a Story link URL"
+                  className="h-8 min-w-0 flex-1 w-full"
+                />
               </div>
 
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2">

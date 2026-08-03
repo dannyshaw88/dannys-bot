@@ -312,6 +312,8 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
         postStoryImageSettings: s.postStoryImageSettings,
         postStoryFixAiSlop: s.postStoryFixAiSlop,
         postStoryMakeUnique: s.postStoryMakeUnique,
+        postStoryAddLink: s.postStoryAddLink,
+        postStoryLinkUrl: s.postStoryLinkUrl,
         shuffleToolOrder: s.shuffleToolOrder,
         dismissDirection: s.dismissDirection,
       }),

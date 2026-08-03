@@ -1,3 +1,13 @@
+## [1.2.354] — 2026-08-03
+
+### Added — Post a Story link placeholder
+
+- Added a new **Add Link** checkbox and full-width URL field on its own row beneath the Post a Story activation/media controls.
+- Persisted the link setting through Human Session Tool settings and the background HST request path without using it in Story automation yet.
+- Made all other Post a Story settings, including the Browse directory, TrustScore-controlled. Add Link and its URL are the only physical account-slot-owned Story settings.
+- Added Add Link and its URL to HST Copy Settings.
+- Bumped the root application and Electron package versions to `1.2.354`.
+
 ## [1.2.353] — 2026-08-03
 
 ### Fixed — Bio Spin remains Human Session Tool-owned
