@@ -511,6 +511,5 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'postChatGptCaption',label: 'ChatGPT / caption settings',    fields: ['makePostUseChatGpt','makePostCaptionText'] },
     { key: 'postFixAiSlop',      label: 'Fix AI Slop',                   fields: ['makePostFixAiSlop'] },
     { key: 'postMakeUnique',     label: 'Make it unique',                fields: ['makePostMakeUnique'] },
-    { key: 'postDestination',   label: 'Post to Profile / Story %',     fields: ['makePostPostToProfilePctMin','makePostPostToProfilePctMax','makePostPostToStoryPctMin','makePostPostToStoryPctMax'] },
   ]},
 ];

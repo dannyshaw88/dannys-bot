@@ -3747,10 +3747,6 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             makePostMakeUnique: s.makePostMakeUnique,
             makePostCaptionText: s.makePostCaptionText,
             makePostImageSettings: s.makePostImageSettings,
-            makePostPostToProfilePctMin: s.makePostPostToProfilePctMin,
-            makePostPostToProfilePctMax: s.makePostPostToProfilePctMax,
-            makePostPostToStoryPctMin: s.makePostPostToStoryPctMin,
-            makePostPostToStoryPctMax: s.makePostPostToStoryPctMax,
             shuffleToolOrder: s.shuffleToolOrder,
             dismissDirection: s.dismissDirection,
             slotUsername: slotUsername ?? "",
@@ -6588,36 +6584,6 @@ export function AutomationSettingsPanel({
                       disabled={fieldDisabled("makePostMakeUnique")}
                       className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                     <label htmlFor={`make-a-post-make-unique-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Make it unique</label>
-                  </div>
-                  {/* Post to Profile % */}
-                  <div className="space-y-3">
-                    <Label className="text-sm text-muted-foreground block text-center">Post to Profile %</Label>
-                    <div className="flex items-center gap-2">
-                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                        value={settings.makePostPostToProfilePctMin}
-                        onChange={e => setSettings(s => ({ ...s, makePostPostToProfilePctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
-                        disabled={loading} />
-                      <span className="text-muted-foreground text-sm">to</span>
-                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                        value={settings.makePostPostToProfilePctMax}
-                        onChange={e => setSettings(s => ({ ...s, makePostPostToProfilePctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
-                        disabled={loading} />
-                    </div>
-                  </div>
-                  {/* Post to Story % */}
-                  <div className="space-y-3">
-                    <Label className="text-sm text-muted-foreground block text-center">Post to Story %</Label>
-                    <div className="flex items-center gap-2">
-                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                        value={settings.makePostPostToStoryPctMin}
-                        onChange={e => setSettings(s => ({ ...s, makePostPostToStoryPctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
-                        disabled={loading} />
-                      <span className="text-muted-foreground text-sm">to</span>
-                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                        value={settings.makePostPostToStoryPctMax}
-                        onChange={e => setSettings(s => ({ ...s, makePostPostToStoryPctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
-                        disabled={loading} />
-                    </div>
                   </div>
                 </div>
               </div>

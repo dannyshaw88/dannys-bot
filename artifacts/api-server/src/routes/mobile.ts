@@ -9456,9 +9456,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostLocalFolderEnabled, makePostLocalFolderPath,
         makePostLocalFolderNoRepeat, makePostLocalFolderRandom,
         makePostAlterationEnabled, makePostAlterationLevel, makePostImageSettingsEnabled,
-        makePostImageSettings, makePostFixAiSlop, makePostCaptionText,
-        makePostPostToProfilePctMin, makePostPostToProfilePctMax,
-        makePostPostToStoryPctMin, makePostPostToStoryPctMax,
+         makePostImageSettings, makePostFixAiSlop, makePostCaptionText,
         slotUsername, slotIdx,
         shuffleToolOrder,
         dismissDirection,
@@ -10331,59 +10329,31 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               let posted = 0;
               for (let i = 0; i < postCount; i++) {
                 try {
-                  // ── Destination roll ─────────────────────────────────────
-                  // Story is checked first. If that roll misses, profile is
-                  // tried. Both default to 100%/0% so existing behaviour
-                  // (always profile) is preserved unless the user changes them.
-                  const storyPct = rollRange(makePostPostToStoryPctMin, makePostPostToStoryPctMax);
-                  const profilePct = rollRange(makePostPostToProfilePctMin, makePostPostToProfilePctMax);
-                  const postToStory = storyPct > 0 && Math.random() * 100 < storyPct;
-                  const postToProfile = !postToStory && Math.random() * 100 < profilePct;
-                  if (postToStory) {
-                    tLog(`  Make a Post: destination → Story (rolled ${storyPct}%)`);
-                    const result = await runMakePostStoryStep(serial, {
-                      localFolderPath: resolvedFolderPath,
-                      localFolderRandom: makePostLocalFolderRandom,
-                      localFolderNoRepeat: makePostLocalFolderNoRepeat,
-                      alterationEnabled: makePostAlterationEnabled,
-                      alterationLevel: makePostAlterationLevel,
-                      imageSettingsEnabled: makePostImageSettingsEnabled,
-                      imageSettings: makePostImageSettings,
-                      doFixAiSlop: makePostFixAiSlop,
-                      onLog: (msg) => tLog(`  ${msg}`),
-                    });
-                    if (result.posted) {
-                      posted++;
-                      postsUploaded++;
-                      tLog("  Make a Post: upload confirmed — dwelling 5 s before continuing…");
-                      await sleepOrAbort(serial, 5000);
-                    } else break;
-                  } else if (postToProfile) {
-                    tLog(`  Make a Post: destination → Profile (rolled ${profilePct}%)`);
-                    const result = await runMakePostStep(serial, {
-                      localFolderPath: resolvedFolderPath,
-                      localFolderRandom: makePostLocalFolderRandom,
-                      localFolderNoRepeat: makePostLocalFolderNoRepeat,
-                      accountUsername: slotUsername,
-                      slotIdx,
-                      alterationEnabled: makePostAlterationEnabled,
-                      alterationLevel: makePostAlterationLevel,
-                      imageSettingsEnabled: makePostImageSettingsEnabled,
-                      imageSettings: makePostImageSettings,
-                      doFixAiSlop: makePostFixAiSlop,
-                      captionText: makePostCaptionText,
-                      onLog: (msg) => tLog(`  ${msg}`),
-                    });
-                    if (result.posted) {
-                      posted++;
-                      postsUploaded++;
-                      tLog("  Make a Post: upload confirmed — dwelling 5 s before continuing…");
-                      await sleepOrAbort(serial, 5000);
-                    } else break;
-                  } else {
-                    tLog(`  Make a Post: both story (${storyPct}%) and profile (${profilePct}%) rolls missed — skipping this post`);
-                    break;
-                  }
+                  // Make a Post now always uses the normal Instagram feed-post
+                  // flow. The legacy story routine remains stored in the
+                  // server for the future standalone Story tool, but is not
+                  // reachable from this tool.
+                  tLog("  Make a Post: destination → normal feed");
+                  const result = await runMakePostStep(serial, {
+                    localFolderPath: resolvedFolderPath,
+                    localFolderRandom: makePostLocalFolderRandom,
+                    localFolderNoRepeat: makePostLocalFolderNoRepeat,
+                    accountUsername: slotUsername,
+                    slotIdx,
+                    alterationEnabled: makePostAlterationEnabled,
+                    alterationLevel: makePostAlterationLevel,
+                    imageSettingsEnabled: makePostImageSettingsEnabled,
+                    imageSettings: makePostImageSettings,
+                    doFixAiSlop: makePostFixAiSlop,
+                    captionText: makePostCaptionText,
+                    onLog: (msg) => tLog(`  ${msg}`),
+                  });
+                  if (result.posted) {
+                    posted++;
+                    postsUploaded++;
+                    tLog("  Make a Post: upload confirmed — dwelling 5 s before continuing…");
+                    await sleepOrAbort(serial, 5000);
+                  } else break;
                 } catch (e: any) {
                   if (e?.message === "cycle-aborted") throw e;
                   tLog(`▶ Make a Post attempt error — ${e?.message}`);
