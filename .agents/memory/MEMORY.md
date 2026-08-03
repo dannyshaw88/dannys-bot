@@ -76,3 +76,4 @@
 - [Mobile cycle all-likes statistic](mobile-cycle-all-likes.md) — MobilePage Likes combines successful likes from Feed, Stories, Explore, and Reels everywhere it is shown or saved
 - [Accounts Trust Score interaction isolation](accounts-trustscore-no-row-drag.md) — Trust Score badge clicks must not trigger Accounts row drag-to-select or browser focus movement
 - [Story emoji composer gate](story-emoji-composer-gate.md) — don't require one Instagram composer resource-id before reaching the keyboard path
+- [TrustScore HST lock policy](trustscore-hst-lock-policy.md) — assigned slots need explicit field-level locks; keep Copy Settings visible independently of username count
