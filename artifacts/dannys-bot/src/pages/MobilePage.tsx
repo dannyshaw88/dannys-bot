@@ -6,10 +6,10 @@ import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, u
 import { useParams, useSearch } from "wouter";
 import { _hstTimers, _hstStop, _hstNextRunAt } from "@/lib/hstRunner";
 import { BrowserPanel } from "@/components/BrowserPanel";
+import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { Sidebar, FilledFarmIcon } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
 import { useDeviceLog } from "@/contexts/DeviceLogContext";
-import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { Label } from "@/components/ui/label";
 import { Input as BaseInput } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -4536,8 +4536,7 @@ function CopySettingsDialog({
 export function AutomationSettingsPanel({
   phone, settings, setSettings: setSettingsExternal, setEnabledByUser, loading: loadingExternal, saveError, running, nextRunAt,
   slotIdx, slotUsername, slotUsernames, onCopied, showCopyDialog, setShowCopyDialog,
-  templateLockedFields, trustScoreAssigned, trustScoreLabel,
-  onOpenBrowserProfile,
+  templateLockedFields, trustScoreAssigned, trustScoreLabel, onOpenBrowserProfile,
 }: {
   phone: UsbPhone | null;
   settings: AutomationSettingsData;
@@ -5858,13 +5857,13 @@ export function AutomationSettingsPanel({
           ? "absolute inset-x-0 bottom-0 top-[2.75rem] z-30 overflow-y-auto rounded-lg border border-border bg-background p-3 shadow-xl"
           : "hidden"}>
           {showFollowedUsers && (
-            <div className="h-full border border-border rounded-lg overflow-hidden flex flex-col">
+            <div className="border border-border rounded-lg overflow-hidden">
               {loadingFollowed ? (
                 <p className="text-xs text-muted-foreground p-3">Loading…</p>
               ) : mobileFollowedList.length === 0 ? (
                 <p className="text-xs text-muted-foreground p-3">No users followed in this server session yet.</p>
               ) : (
-                <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="max-h-40 overflow-y-auto">
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 bg-muted">
                       <tr>
@@ -5877,12 +5876,7 @@ export function AutomationSettingsPanel({
                       {mobileFollowedList.map((u, i) => (
                         <tr key={i} className="border-t border-border">
                           <td className="px-3 py-1.5 text-foreground">
-                            <button
-                              type="button"
-                              className="text-primary hover:underline cursor-pointer"
-                              onClick={() => onOpenBrowserProfile?.(u.username)}
-                              title={`Open @${u.username} in Browser`}
-                            >
+                            <button type="button" className="hover:underline" onClick={() => onOpenBrowserProfile?.(u.username)}>
                               @{u.username}
                             </button>
                           </td>
@@ -7222,11 +7216,9 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   onCopied?: (targetSlotIdxs: number[]) => void;
   onAutomationState?: (slotIdx: number, state: SlotAutomationState) => void;
   collisionConfig?: CollisionPreventerConfig;
-  isOpen?: boolean;
-  sharedScrollTopRef?: React.MutableRefObject<number>;
   onOpenBrowserProfile?: (username: string) => void;
 }>(function SlotHumanSessionView(
-  { phone, slotIdx, slotUsername, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, onCopied, onAutomationState, collisionConfig, isOpen, sharedScrollTopRef, onOpenBrowserProfile },
+  { phone, slotIdx, slotUsername, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, onCopied, onAutomationState, collisionConfig, onOpenBrowserProfile },
   ref,
 ) {
   const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, collisionConfig);
@@ -7234,19 +7226,6 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   const isLast = slotIdx === (slotCount ?? 1) - 1;
 
   const [showCopyDialog, setShowCopyDialog] = useState(false);
-  const settingsScrollRef = useRef<HTMLDivElement | null>(null);
-
-  // All slot editors represent the same settings section. Keep its vertical
-  // position when the header's previous/next slot buttons swap the editor.
-  useEffect(() => {
-    if (!isOpen || !settingsScrollRef.current) return;
-    const frame = requestAnimationFrame(() => {
-      if (settingsScrollRef.current) {
-        settingsScrollRef.current.scrollTop = sharedScrollTopRef?.current ?? 0;
-      }
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [isOpen, sharedScrollTopRef]);
   // Read the Account Slot assignment directly.  The effective automation
   // payload is template-resolved and may be cached, so it must not be the
   // authority for whether this editor is allowed to be changed.
@@ -7317,15 +7296,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
           SLOT {slotIdx + 2}
         </Button>
       </div>
-      <div
-        ref={settingsScrollRef}
-        onScroll={event => {
-          if (sharedScrollTopRef) {
-            sharedScrollTopRef.current = event.currentTarget.scrollTop;
-          }
-        }}
-        className="flex-1 min-h-0 overflow-y-auto"
-      >
+      <div className="flex-1 min-h-0 overflow-y-auto">
         <AutomationSettingsPanel
           phone={phone}
           {...automation}
@@ -7470,7 +7441,6 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   // initialSlot lets the Dashboard (or any deep-link) open a specific slot's
   // Human Session Tool directly on mount (e.g. ?slot=0 in the URL).
   const [openSlotTool,      setOpenSlotTool]      = useState<number | null>(initialSlot ?? null);
-  const sharedSlotScrollTopRef = useRef(0);
   const [openPhoneAppsTool,  setOpenPhoneAppsTool]  = useState(false);
   const [phoneAppsEnabled,   setPhoneAppsEnabled]   = useState(false);
   const [phoneAppsNextRunAt, setPhoneAppsNextRunAt] = useState<number | null>(null);
@@ -7659,8 +7629,6 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
             onBack={() => setOpenSlotTool(null)}
             onPrevSlot={i > 0 ? () => setOpenSlotTool(i - 1) : undefined}
             onNextSlot={i < slots.length - 1 ? () => setOpenSlotTool(i + 1) : undefined}
-            isOpen={openSlotTool === i}
-            sharedScrollTopRef={sharedSlotScrollTopRef}
             slotCount={slots.length}
             requestSlot={requestSlot}
             releaseSlot={releaseSlot}
@@ -9077,7 +9045,6 @@ const BOT_TAP_RE = /tapp(?:ing|ed)[^\n(]*\((\d+),\s*(\d+)\)/i;
 const ACTION_LOG_RE = /Cycle\s+(complete|failed|aborted)/i;
 
 export function MobilePage() {
-  const { navigateTo } = useBrowserWindows();
   // When navigated from the Phone Farm grid (/mobile/farm/:serial), only this
   // phone's serial is shown. When navigated directly (/mobile/farm with no
   // param) all connected phones are shown as before.
@@ -9140,6 +9107,7 @@ export function MobilePage() {
     : [...allPhones].sort((a, b) => a.serial.localeCompare(b.serial));
   const slots: (UsbPhone | null)[] = Array.from({ length: TOTAL_SLOTS }, (_, i) => phones[i] ?? null);
   const activeSerial = slots[0]?.serial ?? null;
+  const { navigateTo } = useBrowserWindows();
   const openBrowserProfile = useCallback((username: string) => {
     const cleanUsername = username.trim().replace(/^@+/, "");
     if (!cleanUsername || !activeSerial) return;
@@ -9508,7 +9476,7 @@ export function MobilePage() {
                 {/* Accounts panel: always mounted so each slot's automation
                     hook persists across tab switches and navigation. */}
                 <div className={activeTab === "account" ? "h-full" : "hidden"}>
-                   <AccountSettingsPanel ref={accountPanelRef} phone={stickySlot0Ref.current} addLog={addLog} onSlotChange={setOpenAccountSlot} initialSlot={initialSlot} onAnyEnabled={setHstEnabled} onPhoneAppsRunning={setPhoneAppsRunning} onOpenBrowserProfile={openBrowserProfile} />
+                  <AccountSettingsPanel ref={accountPanelRef} phone={stickySlot0Ref.current} addLog={addLog} onSlotChange={setOpenAccountSlot} initialSlot={initialSlot} onAnyEnabled={setHstEnabled} onPhoneAppsRunning={setPhoneAppsRunning} onOpenBrowserProfile={openBrowserProfile} />
                 </div>
                 {/* Browser tab — isolated ghost browser per device serial */}
                 {/* Positioned absolutely so it spans the full split-view width

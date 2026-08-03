@@ -3,10 +3,9 @@
 ### Added — clickable Followed Users profiles
 
 - Made usernames in the Follow tool’s **Followed Users** list clickable.
-- Clicking a username now switches from **Accounts** to **Browser** for the active device.
-- The browser navigates directly to the matching Instagram profile URL, with leading `@` characters removed safely.
-- Reused the existing browser-window navigation and active-device identity flow so the profile opens in the correct browser session.
-- Kept `.github/workflows/build-windows-installer.yml` as the single canonical Windows installer workflow. It runs from pushes to `main`, builds the web bundle and Windows installer, and uploads the installer as `Aura-Farming-Windows-Installer` in the GitHub Actions run.
+- Clicking a username switches from **Accounts** to **Browser** for the active device and opens the matching Instagram profile.
+- Leading `@` characters are removed safely before navigation.
+- Kept `.github/workflows/build-windows-installer.yml` as the single canonical Windows installer workflow for GitHub Actions builds.
 - Bumped the root application and Electron package versions to `1.2.360`.
 
 ## [1.2.359] — 2026-08-03
