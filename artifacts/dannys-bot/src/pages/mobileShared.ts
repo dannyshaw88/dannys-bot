@@ -404,6 +404,8 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
   "updateBioText",
   "makePostLocalFolderEnabled",
   "makePostLocalFolderPath",
+  "postStoryAddLink",
+  "postStoryLinkUrl",
 ]);
 
 /** Fields that stay restricted in Settings → TrustScores. Inject Browsing

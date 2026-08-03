@@ -1,3 +1,11 @@
+## [1.2.355] — 2026-08-03
+
+### Fixed — Post a Story link ownership parity
+
+- Kept **Add Link** and its URL as physical account-slot-owned settings in the shared Human Session Tool ownership map.
+- This now matches the API behavior, so assigned TrustScore templates cannot overwrite the link while physical account slots remain editable and copyable.
+- Bumped the root application and Electron package versions to `1.2.355`.
+
 ## [1.2.354] — 2026-08-03
 
 ### Added — Post a Story link placeholder
