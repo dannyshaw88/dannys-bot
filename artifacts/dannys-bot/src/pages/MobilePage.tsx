@@ -3752,6 +3752,18 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             makePostPostToProfilePctMax: s.makePostPostToProfilePctMax,
             makePostPostToStoryPctMin: s.makePostPostToStoryPctMin,
             makePostPostToStoryPctMax: s.makePostPostToStoryPctMax,
+            postStoryEnabled: s.postStoryEnabled,
+            postStoryActivatePctMin: s.postStoryActivatePctMin,
+            postStoryActivatePctMax: s.postStoryActivatePctMax,
+            postStoryLocalFolderPath: s.postStoryLocalFolderPath,
+            postStoryLocalFolderNoRepeat: s.postStoryLocalFolderNoRepeat,
+            postStoryLocalFolderRandom: s.postStoryLocalFolderRandom,
+            postStoryAlterationEnabled: s.postStoryAlterationEnabled,
+            postStoryAlterationLevel: s.postStoryAlterationLevel,
+            postStoryImageSettingsEnabled: s.postStoryImageSettingsEnabled,
+            postStoryImageSettings: s.postStoryImageSettings,
+            postStoryFixAiSlop: s.postStoryFixAiSlop,
+            postStoryMakeUnique: s.postStoryMakeUnique,
             shuffleToolOrder: s.shuffleToolOrder,
             dismissDirection: s.dismissDirection,
             slotUsername: slotUsername ?? "",
@@ -4559,6 +4571,7 @@ export function AutomationSettingsPanel({
   const TRUST_SCORE_FEATURE_FIELDS = new Set([
     "feedEnabled", "storiesEnabled", "viewExploreEnabled", "viewReelsEnabled",
     "checkDmEnabled", "followEnabled", "randomJitterEnabled", "makePostEnabled",
+    "postStoryEnabled",
   ]);
   // These are the only settings a physical slot may change while its
   // effective values come from a TrustScore template.  Everything else in
@@ -4686,6 +4699,7 @@ export function AutomationSettingsPanel({
   const [loadingOverspill, setLoadingOverspill] = useState(false);
   // Make a Post UI local state
   const [makePostImageSettingsOpen, setMakePostImageSettingsOpen] = useState(false);
+  const [postStoryImageSettingsOpen, setPostStoryImageSettingsOpen] = useState(false);
   const [showPostedMedia, setShowPostedMedia] = useState(false);
   const [postedMediaEntries, setPostedMediaEntries] = useState<{
     id: string;
@@ -6671,6 +6685,214 @@ export function AutomationSettingsPanel({
           settings={settings.makePostImageSettings}
           alterationLevel={settings.makePostAlterationLevel}
           onSave={saved => setSettings(s => ({ ...s, makePostImageSettings: saved }))}
+        />
+
+        {/* ── Post a Story — standalone Story publisher. The directory is
+             persisted per physical device/account slot; the behavioral
+             settings are inherited from and copyable with Trust Scores. ─ */}
+        <div className="border-t border-border" />
+        <div className="space-y-3 relative">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id={`post-a-story-enabled-${slotIdx ?? 0}`}
+              checked={settings.postStoryEnabled}
+              onChange={e => setSettings(s => ({ ...s, postStoryEnabled: e.target.checked }))}
+              disabled={fieldDisabled("postStoryEnabled")}
+              className="w-4 h-4 accent-primary cursor-pointer"
+            />
+            <label htmlFor={`post-a-story-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">
+              Post a Story
+            </label>
+          </div>
+
+          {settings.postStoryEnabled && (
+            <div className="pl-1 space-y-4">
+              <div className="flex items-start gap-8 flex-wrap">
+                <div className="space-y-1.5">
+                  <Label className="text-sm text-muted-foreground block text-center">Activate Percentage</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.postStoryActivatePctMin}
+                      onChange={e => setSettings(s => ({ ...s, postStoryActivatePctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                      disabled={fieldDisabled("postStoryActivatePctMin")}
+                    />
+                    <span className="text-muted-foreground text-sm">to</span>
+                    <Input
+                      type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.postStoryActivatePctMax}
+                      onChange={e => setSettings(s => ({ ...s, postStoryActivatePctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                      disabled={fieldDisabled("postStoryActivatePctMax")}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border border-border/60 rounded-lg p-3 space-y-2">
+                <div className="flex flex-wrap items-center gap-3">
+                  {!isTrustScoreTemplateEditor && (
+                    <button
+                      type="button"
+                      disabled={fieldDisabled("postStoryLocalFolderPath")}
+                      onClick={async () => {
+                        const api = (window as any).electronAPI;
+                        if (!api?.openFolderDialog) return;
+                        const result = await api.openFolderDialog(settings.postStoryLocalFolderPath || undefined);
+                        if (result?.canceled || !result?.folder) return;
+                        const updatedSettings = { ...settings, postStoryLocalFolderPath: result.folder };
+                        setSettings(() => updatedSettings);
+                        if (phone && slotIdx !== undefined) {
+                          fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/post-story-folder-path`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ path: result.folder }),
+                          }).catch(() => {});
+                        } else if (phone) {
+                          fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/automation-settings`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify(updatedSettings),
+                          }).catch(() => {});
+                        }
+                      }}
+                      className="h-7 px-3 text-xs rounded border border-border bg-background hover:border-foreground/30 hover:bg-accent transition-colors shrink-0 font-medium text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {settings.postStoryLocalFolderPath ? "Assigned Directory" : "Browse"}
+                    </button>
+                  )}
+                  {settings.postStoryLocalFolderPath && (
+                    <span className="max-w-[340px] truncate text-xs text-muted-foreground" title={settings.postStoryLocalFolderPath}>
+                      {settings.postStoryLocalFolderPath}
+                    </span>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id={`post-a-story-local-no-repeat-${slotIdx ?? 0}`}
+                      checked={settings.postStoryLocalFolderNoRepeat}
+                      onChange={e => setSettings(s => ({ ...s, postStoryLocalFolderNoRepeat: e.target.checked }))}
+                      disabled={fieldDisabled("postStoryLocalFolderNoRepeat")}
+                      className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                    />
+                    <label htmlFor={`post-a-story-local-no-repeat-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">
+                      Do not repost the same image
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id={`post-a-story-local-random-${slotIdx ?? 0}`}
+                      checked={settings.postStoryLocalFolderRandom}
+                      onChange={e => setSettings(s => ({ ...s, postStoryLocalFolderRandom: e.target.checked }))}
+                      disabled={fieldDisabled("postStoryLocalFolderRandom")}
+                      className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                    />
+                    <label htmlFor={`post-a-story-local-random-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">
+                      Pick at random
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id={`post-a-story-alteration-enabled-${slotIdx ?? 0}`}
+                    checked={settings.postStoryAlterationEnabled}
+                    onChange={e => setSettings(s => ({ ...s, postStoryAlterationEnabled: e.target.checked }))}
+                    disabled={fieldDisabled("postStoryAlterationEnabled")}
+                    className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                  />
+                  <label htmlFor={`post-a-story-alteration-enabled-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none shrink-0">
+                    Alteration level
+                  </label>
+                  <div className="flex gap-1">
+                    {(["small", "medium", "high"] as const).map(lvl => (
+                      <button
+                        key={lvl}
+                        type="button"
+                        disabled={fieldDisabled("postStoryAlterationLevel") || !settings.postStoryAlterationEnabled}
+                        onClick={() => setSettings(s => ({ ...s, postStoryAlterationLevel: lvl }))}
+                        className={`h-8 px-3 text-xs rounded border transition-colors capitalize ${
+                          !settings.postStoryAlterationEnabled
+                            ? "bg-background border-border text-muted-foreground/40 cursor-not-allowed"
+                            : settings.postStoryAlterationLevel === lvl
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-background border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                        }`}
+                      >
+                        {lvl}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id={`post-a-story-image-settings-enabled-${slotIdx ?? 0}`}
+                    checked={settings.postStoryImageSettingsEnabled}
+                    onChange={e => setSettings(s => ({ ...s, postStoryImageSettingsEnabled: e.target.checked }))}
+                    disabled={fieldDisabled("postStoryImageSettingsEnabled")}
+                    className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                  />
+                  <label htmlFor={`post-a-story-image-settings-enabled-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none shrink-0">
+                    Image settings
+                  </label>
+                  <button
+                    type="button"
+                    disabled={fieldDisabled("postStoryImageSettings") || !settings.postStoryImageSettingsEnabled}
+                    onClick={() => setPostStoryImageSettingsOpen(true)}
+                    className={`h-8 px-3 text-xs rounded border transition-colors ${
+                      settings.postStoryImageSettingsEnabled
+                        ? "bg-background border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                        : "bg-background border-border text-muted-foreground/40 cursor-not-allowed"
+                    }`}
+                  >
+                    Configure
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    id={`post-a-story-fix-ai-slop-${slotIdx ?? 0}`}
+                    checked={settings.postStoryFixAiSlop}
+                    onChange={e => setSettings(s => ({ ...s, postStoryFixAiSlop: e.target.checked }))}
+                    disabled={fieldDisabled("postStoryFixAiSlop")}
+                    className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                  />
+                  <label htmlFor={`post-a-story-fix-ai-slop-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">
+                    Fix AI Slop
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    id={`post-a-story-make-unique-${slotIdx ?? 0}`}
+                    checked={settings.postStoryMakeUnique}
+                    onChange={e => setSettings(s => ({ ...s, postStoryMakeUnique: e.target.checked }))}
+                    disabled={fieldDisabled("postStoryMakeUnique")}
+                    className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                  />
+                  <label htmlFor={`post-a-story-make-unique-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">
+                    Make it unique
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <ImageSettingsDialog
+          open={postStoryImageSettingsOpen}
+          onClose={() => setPostStoryImageSettingsOpen(false)}
+          settings={settings.postStoryImageSettings}
+          alterationLevel={settings.postStoryAlterationLevel}
+          onSave={saved => setSettings(s => ({ ...s, postStoryImageSettings: saved }))}
         />
 
       </div>

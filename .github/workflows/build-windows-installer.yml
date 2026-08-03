@@ -70,6 +70,20 @@ jobs:
             exit 1
           fi
           echo "Browser persistence and AI Images removal verified"
+      - name: Verify standalone Post a Story tool
+        shell: bash
+        run: |
+          grep -F "postStoryEnabled: z.boolean().default(false)" artifacts/api-server/src/routes/mobile.ts
+          grep -F 'post-story-folder-path' artifacts/api-server/src/routes/mobile.ts
+          grep -F "postStory: postStoryEnabled && rollActivate" artifacts/api-server/src/routes/mobile.ts
+          grep -F "'postStory'" artifacts/api-server/src/routes/mobile.ts
+          grep -F "runMakePostStoryStep" artifacts/api-server/src/routes/mobile.ts
+          grep -F "makeUnique: postStoryMakeUnique" artifacts/api-server/src/routes/mobile.ts
+          grep -F 'label htmlFor={`post-a-story-enabled-' artifacts/dannys-bot/src/pages/MobilePage.tsx
+          grep -F "postStoryImageSettingsOpen" artifacts/dannys-bot/src/pages/MobilePage.tsx
+          grep -F "Post a Story" artifacts/dannys-bot/src/pages/mobileShared.ts
+          grep -F "postStoryLocalFolderPath" artifacts/dannys-bot/src/pages/mobileShared.ts
+          echo "Standalone Post a Story configuration verified"
       - name: Verify account-specific Posted Media and Posts statistics
         shell: bash
         run: |
