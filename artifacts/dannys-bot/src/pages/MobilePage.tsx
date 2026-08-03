@@ -6143,11 +6143,12 @@ export function AutomationSettingsPanel({
             </div>
            )}
          </div>}
+         {/* This separator is the stable bottom boundary for the Follow
+             Users overlays, even as the settings above change height. */}
+         <div className="border-t border-border" />
         </div>
 
         {/* ── Random Actions — probabilistic human-like actions each cycle ─ */}
-        <div className="border-t border-border" />
-
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <input
@@ -6296,7 +6297,7 @@ export function AutomationSettingsPanel({
             </div>
 
             {/* ── Update Avatar + Update Bio ── */}
-            <div className="flex items-end gap-6 flex-nowrap" style={{ marginTop: "20px" }}>
+            <div className="flex items-end gap-2 flex-nowrap" style={{ marginTop: "20px" }}>
               <div className="space-y-1.5 shrink-0">
                 <span className="text-sm text-muted-foreground select-none">Update Avatar&nbsp;&nbsp;Activation %</span>
                 <div className="flex items-center gap-2">
@@ -6334,7 +6335,7 @@ export function AutomationSettingsPanel({
                       }
                     }}
                     className="h-7 px-3 text-xs rounded border border-border bg-background hover:border-foreground/30 hover:bg-accent transition-colors shrink-0 font-medium text-foreground text-center justify-center"
-                    style={{ width: "112px" }}
+                    style={{ width: "76px" }}
                   >
                     Assign
                   </button>
@@ -6369,7 +6370,7 @@ export function AutomationSettingsPanel({
                     onClick={() => setBioSpinEditorOpen(true)}
                     disabled={fieldDisabled("updateBioText")}
                     className="h-7 px-3 text-xs rounded border border-border bg-background hover:border-foreground/30 hover:bg-accent transition-colors shrink-0 font-medium text-foreground text-center justify-center disabled:cursor-not-allowed disabled:opacity-50"
-                    style={{ width: "112px" }}
+                    style={{ width: "76px" }}
                   >
                     Bio Spin
                   </button>
