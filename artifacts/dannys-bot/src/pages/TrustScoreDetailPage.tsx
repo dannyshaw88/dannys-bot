@@ -14,6 +14,7 @@ import {
   type AutomationSettingsData,
   type UsbPhone,
   type CopySection,
+  TRUST_SCORE_SLOT_OWNED_FIELDS,
 } from "@/pages/mobileShared";
 import { AutomationSettingsPanel } from "@/pages/MobilePage";
 import { FakeTrustScoreMirror } from "@/components/FakeTrustScoreMirror";
@@ -114,7 +115,9 @@ function CopyTrustScoreDialog({
       for (const sub of section.sub) {
         if (selectedSubKeys.has(sub.key)) {
           for (const field of sub.fields) {
-            partial[field] = (sourceSettings as Record<string, unknown>)[field];
+            if (!TRUST_SCORE_SLOT_OWNED_FIELDS.has(field)) {
+              partial[field] = (sourceSettings as unknown as Record<string, unknown>)[field];
+            }
           }
         }
       }
@@ -427,6 +430,7 @@ function TrustScoreAutomationEditor({
             saveError={saveError}
             running={false}
             nextRunAt={null}
+            templateLockedFields={[...TRUST_SCORE_SLOT_OWNED_FIELDS]}
           />
         </div>
       </div>

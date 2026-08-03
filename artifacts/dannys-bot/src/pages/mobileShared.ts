@@ -229,6 +229,13 @@ export interface AutomationSettingsData {
   makePostCaptionText: string;
   makePostImageSettings: ImageFilterSettings;
   dismissDirection: "auto" | "left" | "up";
+  /** Slot metadata returned by the effective-settings endpoint. */
+  trustScoreId?: string | null;
+  trustScoreConfigured?: boolean;
+  trustScoreControlledFields?: string[];
+  /** Tool switches intentionally disabled for this slot while inherited. */
+  trustScoreDisabledTools?: string[];
+  trustScoreToolOverrides?: Record<string, boolean>;
 }
 
 // ─── AUTOMATION_DEFAULTS ──────────────────────────────────────────────────────
@@ -351,6 +358,31 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
 
 export type CopySubSetting = { key: string; label: string; fields: string[] };
 export type CopySection    = { key: string; label: string; sub: CopySubSetting[] };
+
+/** Values owned by a physical slot rather than a TrustScore template. */
+export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
+  "enabled",
+  "cycleIntervalMin",
+  "cycleIntervalMax",
+  "trustScoreId",
+  "trustScoreConfigured",
+  "trustScoreControlledFields",
+  "trustScoreDisabledTools",
+  "trustScoreToolOverrides",
+  "followSources",
+  "followUsersMin",
+  "followUsersMax",
+  "followSpreadFollows",
+  "updateProfilePicFolderPath",
+  "makePostSourceUsername",
+  "makePostDisableUsernameSource",
+  "makePostUseHikerApi",
+  "makePostLocalFolderEnabled",
+  "makePostLocalFolderPath",
+  "makePostLocalFolderNoRepeat",
+  "makePostLocalFolderRandom",
+  "makePostLocalFolderDeleteAfterUpload",
+]);
 
 export const COPY_SECTIONS: CopySection[] = [
   { key: 'runInterval',   label: 'Human Session Tool', sub: [

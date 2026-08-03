@@ -10,7 +10,7 @@ import { Sidebar, FilledFarmIcon } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
 import { useDeviceLog } from "@/contexts/DeviceLogContext";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
+import { Input as BaseInput } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -42,6 +42,7 @@ import {
   CopySection,
   COPY_SECTIONS,
   ALL_SUB_KEYS,
+  TRUST_SCORE_SLOT_OWNED_FIELDS,
   pickLocalWallpaper,
 } from "@/pages/mobileShared";
 
@@ -3099,6 +3100,8 @@ function NoPhonesPanel({ rawOutput }: { rawOutput?: string | null }) {
 // 4-digit-wide number inputs, shared by every field in this panel.
 const NUM_INPUT_CLASS = "w-16 text-center";
 
+const Input = BaseInput;
+
 /** Resolve Jarvee-style spin syntax: {a|b|c} groups are each replaced with a
  *  randomly chosen variant. Multiple groups in the same string are each rolled
  *  independently, so "Hi {there|you} — {love|hate} it!" produces one of four
@@ -3131,7 +3134,7 @@ const clamp4 = (n: number) => Math.min(9999, Math.max(0, Math.trunc(Number.isFin
 // the Human Session Tool tab never unmounts this and interrupts an
 // in-progress automation cycle — the loop must keep running in the
 // background regardless of which tab is currently visible.
-function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void, slotIdx?: number, slotUsername?: string, requestSlot?: (idx: number, readyAt: number) => Promise<boolean>, releaseSlot?: (idx: number, skipRest?: boolean) => void, cancelQueuedSlot?: (idx: number) => void, refreshKey?: number, collisionPreventerConfig?: CollisionPreventerConfig) {
+function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void, slotIdx?: number, slotUsername?: string, requestSlot?: (idx: number, readyAt: number, onQueued?: () => void) => Promise<boolean>, releaseSlot?: (idx: number, skipRest?: boolean) => void, cancelQueuedSlot?: (idx: number) => void, refreshKey?: number, collisionPreventerConfig?: CollisionPreventerConfig) {
   const [settings, setSettings] = useState<AutomationSettingsData>(AUTOMATION_DEFAULTS);
   const [loading,  setLoading]  = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -3221,6 +3224,22 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       explicitToggleOffRef.current = true; // explicit user action — cleanup should abort
     }
     setSettings(s => ({ ...s, enabled }));
+  }, [phone?.serial, slotIdx]);
+
+  // A TrustScore badge can be changed from the slot list while this HST
+  // remains mounted in the background. Re-hydrate the effective settings
+  // immediately so the open editor and the next cycle use the new tier.
+  useEffect(() => {
+    const serial = phone?.serial;
+    if (!serial || slotIdx === undefined) return;
+    const onTrustScoreChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ serial?: string; slotIdx?: number }>).detail;
+      if (detail?.serial === serial && detail.slotIdx === slotIdx) {
+        setConnectedKey(value => value + 1);
+      }
+    };
+    window.addEventListener("mobile_trustscore_changed", onTrustScoreChanged);
+    return () => window.removeEventListener("mobile_trustscore_changed", onTrustScoreChanged);
   }, [phone?.serial, slotIdx]);
 
   // Listen for toggle signals broadcast by the Statistics page
@@ -4267,7 +4286,9 @@ function CopySettingsDialog({
       for (const sub of section.sub) {
         if (selectedSubKeys.has(sub.key)) {
           for (const field of sub.fields) {
-            partial[field] = (settings as Record<string, unknown>)[field];
+            if (!TRUST_SCORE_SLOT_OWNED_FIELDS.has(field)) {
+              partial[field] = (settings as unknown as Record<string, unknown>)[field];
+            }
           }
         }
       }
@@ -4278,7 +4299,7 @@ function CopySettingsDialog({
       try {
         const r = await fetch(
           `/api/mobile/devices/${encodeURIComponent(target.serial)}/slots/${target.slotIdx}/automation-settings`,
-          { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(partial) },
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...partial, trustScoreCopy: true }) },
         );
         if (r.ok) {
           ok++;
@@ -4458,8 +4479,9 @@ function CopySettingsDialog({
 }
 
 export function AutomationSettingsPanel({
-  phone, settings, setSettings, setEnabledByUser, loading, saveError, running, nextRunAt,
+  phone, settings, setSettings: setSettingsExternal, setEnabledByUser, loading: loadingExternal, saveError, running, nextRunAt,
   slotIdx, slotUsername, slotUsernames, onCopied, showCopyDialog, setShowCopyDialog,
+  templateLockedFields,
 }: {
   phone: UsbPhone | null;
   settings: AutomationSettingsData;
@@ -4475,7 +4497,61 @@ export function AutomationSettingsPanel({
   onCopied?: (targetSlotIdxs: number[]) => void;
   showCopyDialog?: boolean;
   setShowCopyDialog?: (v: boolean) => void;
+  /** Used by the TrustScore editor to lock slot-owned fields in templates. */
+  templateLockedFields?: string[];
 }) {
+  const trustScoreActive = Boolean(settings.trustScoreId);
+  const TRUST_SCORE_FEATURE_FIELDS = new Set([
+    "feedEnabled", "storiesEnabled", "viewExploreEnabled", "viewReelsEnabled",
+    "checkDmEnabled", "followEnabled", "randomJitterEnabled", "makePostEnabled",
+  ]);
+  const lockedFields = useMemo(
+    () => new Set(
+      templateLockedFields ??
+      (trustScoreActive
+        ? (settings.trustScoreControlledFields ?? []).filter(field => !TRUST_SCORE_FEATURE_FIELDS.has(field))
+        : []),
+    ),
+    [templateLockedFields, trustScoreActive, settings.trustScoreControlledFields],
+  );
+  const fieldLocked = useCallback(
+    (...fields: string[]) => fields.some(field => lockedFields.has(field)),
+    [lockedFields],
+  );
+  const setSettings = useCallback<React.Dispatch<React.SetStateAction<AutomationSettingsData>>>((update) => {
+    setSettingsExternal(previous => {
+      const proposed = typeof update === "function" ? update(previous) : update;
+      const next = { ...proposed };
+      for (const field of lockedFields) {
+        if (field in previous) (next as unknown as Record<string, unknown>)[field] = (previous as unknown as Record<string, unknown>)[field];
+      }
+      if (trustScoreActive) {
+        const overrides = { ...(previous.trustScoreToolOverrides ?? {}) };
+        for (const field of TRUST_SCORE_FEATURE_FIELDS) {
+          if ((proposed as unknown as Record<string, unknown>)[field] !== (previous as unknown as Record<string, unknown>)[field]) {
+            overrides[field] = Boolean((proposed as unknown as Record<string, unknown>)[field]);
+          }
+        }
+        next.trustScoreToolOverrides = overrides;
+      }
+      return next;
+    });
+  }, [setSettingsExternal, lockedFields, trustScoreActive]);
+  // When a slot has an assigned TrustScore, the displayed values are inherited
+  // and must be read-only. The exceptions below intentionally keep the master
+  // switch, per-tool switches, and slot-owned source controls editable.
+  // A live slot inherits the template values and therefore starts with the
+  // whole HST form locked.  The field-level exceptions below reopen only the
+  // master switch, individual tool switches, and physical-slot-owned sources.
+  // The TrustScore editor passes templateLockedFields, so its normal template
+  // values remain editable while excluded slot fields stay locked.
+  const loading = loadingExternal || (trustScoreActive && !templateLockedFields);
+  const fieldDisabled = (...fields: string[]) =>
+    loadingExternal || fields.some(field =>
+      trustScoreActive && !templateLockedFields
+        ? !TRUST_SCORE_SLOT_OWNED_FIELDS.has(field)
+        : fieldLocked(field),
+    );
   // Follow Users UI local state — hooks must come before any conditional return.
   const [_localShowCopyDialog, _localSetShowCopyDialog] = useState(false);
   const showCopyDialogResolved = showCopyDialog ?? _localShowCopyDialog;
@@ -4524,7 +4600,7 @@ export function AutomationSettingsPanel({
     a.href = url; a.download = 'follow-sources.csv'; a.click();
     URL.revokeObjectURL(url);
   };
-  const [mobileFollowedList, setMobileFollowedList] = useState<{username:string;followedAt:number}[]>([]);
+  const [mobileFollowedList, setMobileFollowedList] = useState<{username:string;source?:string;followedAt:number}[]>([]);
   const [loadingFollowed, setLoadingFollowed] = useState(false);
   const [mobileOverspillList, setMobileOverspillList] = useState<{id:number;instagramUsername:string;sourceValue:string;scrapedAt:string}[]>([]);
   const [loadingOverspill, setLoadingOverspill] = useState(false);
@@ -4638,7 +4714,7 @@ export function AutomationSettingsPanel({
           <Switch
             checked={settings.enabled}
             onCheckedChange={setEnabledByUser}
-            disabled={loading}
+            disabled={loadingExternal}
             className="shrink-0"
           />
           <div className="flex flex-col min-w-0">
@@ -4659,7 +4735,7 @@ export function AutomationSettingsPanel({
             className={NUM_INPUT_CLASS}
             value={settings.cycleIntervalMin}
             onChange={e => setSettings(s => ({ ...s, cycleIntervalMin: Math.max(1, clamp4(Number(e.target.value))) }))}
-            disabled={loading}
+            disabled={fieldDisabled("cycleIntervalMin", "cycleIntervalMax")}
           />
           <span className="text-muted-foreground text-sm">to</span>
           <Input
@@ -4668,7 +4744,7 @@ export function AutomationSettingsPanel({
             className={NUM_INPUT_CLASS}
             value={settings.cycleIntervalMax}
             onChange={e => setSettings(s => ({ ...s, cycleIntervalMax: Math.max(1, clamp4(Number(e.target.value))) }))}
-            disabled={loading}
+            disabled={fieldDisabled("cycleIntervalMin", "cycleIntervalMax")}
           />
           <Label className="text-sm text-muted-foreground whitespace-nowrap">minutes</Label>
         </div>
@@ -4684,7 +4760,7 @@ export function AutomationSettingsPanel({
                 id={`shuffle-tool-order-${slotIdx ?? 0}`}
                 checked={settings.shuffleToolOrder}
                 onChange={e => setSettings(s => ({ ...s, shuffleToolOrder: e.target.checked }))}
-                disabled={loading}
+                disabled={fieldDisabled("shuffleToolOrder")}
                 className="w-4 h-4 accent-primary cursor-pointer"
               />
               <span className="text-sm text-muted-foreground">Shuffle tool order</span>
@@ -4697,7 +4773,7 @@ export function AutomationSettingsPanel({
               id={`feed-enabled-${slotIdx ?? 0}`}
               checked={settings.feedEnabled}
               onChange={e => setSettings(s => ({ ...s, feedEnabled: e.target.checked }))}
-              disabled={loading}
+              disabled={loadingExternal}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
             <label htmlFor={`feed-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">View Feed</label>
@@ -5030,7 +5106,7 @@ export function AutomationSettingsPanel({
               id={`explore-enabled-${slotIdx ?? 0}`}
               checked={settings.viewExploreEnabled}
               onChange={e => setSettings(s => ({ ...s, viewExploreEnabled: e.target.checked }))}
-              disabled={loading}
+              disabled={loadingExternal}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
             <label htmlFor={`explore-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">View Explore Page</label>
@@ -5185,7 +5261,7 @@ export function AutomationSettingsPanel({
               id={`stories-enabled-${slotIdx ?? 0}`}
               checked={settings.storiesEnabled}
               onChange={e => setSettings(s => ({ ...s, storiesEnabled: e.target.checked }))}
-              disabled={loading}
+              disabled={loadingExternal}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
             <label htmlFor={`stories-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">View Stories from Feed</label>
@@ -5317,7 +5393,7 @@ export function AutomationSettingsPanel({
               id={`reels-enabled-${slotIdx ?? 0}`}
               checked={settings.viewReelsEnabled}
               onChange={e => setSettings(s => ({ ...s, viewReelsEnabled: e.target.checked }))}
-              disabled={loading}
+              disabled={loadingExternal}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
             <label htmlFor={`reels-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">View Reels</label>
@@ -5463,7 +5539,7 @@ export function AutomationSettingsPanel({
               id={`checkdm-enabled-${slotIdx ?? 0}`}
               checked={settings.checkDmEnabled}
               onChange={e => setSettings(s => ({ ...s, checkDmEnabled: e.target.checked }))}
-              disabled={loading}
+              disabled={loadingExternal}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
             <label htmlFor={`checkdm-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">Direct Messaging</label>
@@ -5530,7 +5606,7 @@ export function AutomationSettingsPanel({
             id={`follow-enabled-${slotIdx ?? 0}`}
             checked={settings.followEnabled}
             onChange={e => setSettings(s => ({ ...s, followEnabled: e.target.checked }))}
-            disabled={loading}
+            disabled={loadingExternal}
             className="w-4 h-4 accent-primary cursor-pointer"
           />
           <label htmlFor={`follow-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">Follow Users</label>
@@ -5557,7 +5633,7 @@ export function AutomationSettingsPanel({
         </div>
 
         {/* ── Activate Percentage + Users to follow per operation ────── */}
-        {settings.followEnabled && <div className="flex items-start gap-6 flex-wrap">
+          {settings.followEnabled && <div className="flex items-start gap-6 flex-wrap">
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground block text-center">Activate Percentage</Label>
             <div className="flex items-center gap-3">
@@ -5581,12 +5657,12 @@ export function AutomationSettingsPanel({
                 <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
                   value={settings.followUsersMin}
                   onChange={e => setSettings(s => ({ ...s, followUsersMin: clamp4(Number(e.target.value)) }))}
-                  disabled={loading} />
+                  disabled={fieldDisabled("followUsersMin")} />
                 <span className="text-muted-foreground text-sm">to</span>
                 <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
                   value={settings.followUsersMax}
                   onChange={e => setSettings(s => ({ ...s, followUsersMax: clamp4(Number(e.target.value)) }))}
-                  disabled={loading} />
+                  disabled={fieldDisabled("followUsersMax")} />
               </div>
             </div>
             <label className="flex items-center gap-2 text-sm cursor-pointer select-none pb-1">
@@ -5594,7 +5670,7 @@ export function AutomationSettingsPanel({
                 type="checkbox"
                 checked={settings.followSpreadFollows}
                 onChange={e => setSettings(s => ({ ...s, followSpreadFollows: e.target.checked }))}
-                disabled={loading}
+                disabled={fieldDisabled("followSpreadFollows")}
                 className="w-4 h-4 accent-primary rounded"
               />
               <span className="text-foreground font-medium">Spread Follows</span>
@@ -5692,21 +5768,21 @@ export function AutomationSettingsPanel({
                 <Button
                   variant="outline" size="sm" className="h-7 text-xs px-2.5 gap-1 shrink-0"
                   onClick={() => importSourceFileRef.current?.click()}
-                  disabled={loading}
+                  disabled={fieldDisabled("followSources")}
                 >
                   <Upload className="w-3 h-3" /> Import
                 </Button>
                 <Button
                   variant="outline" size="sm" className="h-7 text-xs px-2.5 gap-1 shrink-0"
                   onClick={handleExportFollowSources}
-                  disabled={loading || !settings.followSources.length}
+                  disabled={fieldDisabled("followSources") || !settings.followSources.length}
                 >
                   <Download className="w-3 h-3" /> Export
                 </Button>
                 {settings.followSources.length > 0 && (
                   <Button
                     variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:text-destructive shrink-0"
-                    disabled={loading}
+                    disabled={fieldDisabled("followSources")}
                     onClick={() => setSettings(s => ({ ...s, followSources: [] }))}
                   >Clear all</Button>
                 )}
@@ -5723,7 +5799,7 @@ export function AutomationSettingsPanel({
                       <span className="flex-1 text-foreground truncate">{src.value}</span>
                       <button
                         onClick={() => setSettings(s => ({ ...s, followSources: s.followSources.filter((_, j) => j !== i) }))}
-                        disabled={loading}
+                        disabled={fieldDisabled("followSources")}
                         className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
                       >✕</button>
                     </div>
@@ -5738,7 +5814,7 @@ export function AutomationSettingsPanel({
                 <select
                   value={newFollowSourceType}
                   onChange={e => setNewFollowSourceType(e.target.value as 'hashtag' | 'target_followers')}
-                  disabled={loading}
+                  disabled={fieldDisabled("followSources")}
                   className="text-xs bg-muted border border-border rounded px-2 py-1 text-foreground cursor-pointer"
                 >
                   <option value="hashtag">Hashtag</option>
@@ -5749,7 +5825,7 @@ export function AutomationSettingsPanel({
                   placeholder={newFollowSourceType === 'hashtag' ? 'e.g. fitness' : 'e.g. @username'}
                   value={newFollowSourceValue}
                   onChange={e => setNewFollowSourceValue(e.target.value)}
-                  disabled={loading}
+                  disabled={fieldDisabled("followSources")}
                   onKeyDown={e => {
                     if (e.key === 'Enter' && newFollowSourceValue.trim()) {
                       const val = newFollowSourceValue.trim().replace(/^[@#]/, '');
@@ -5762,7 +5838,7 @@ export function AutomationSettingsPanel({
                 />
                 <Button
                   variant="outline" size="sm" className="h-8 text-xs shrink-0"
-                  disabled={loading || !newFollowSourceValue.trim()}
+                  disabled={fieldDisabled("followSources") || !newFollowSourceValue.trim()}
                   onClick={() => {
                     const val = newFollowSourceValue.trim().replace(/^[@#]/, '');
                     if (val) {
@@ -5955,7 +6031,7 @@ export function AutomationSettingsPanel({
               id={`random-jitter-enabled-${slotIdx ?? 0}`}
               checked={settings.randomJitterEnabled}
               onChange={e => setSettings(s => ({ ...s, randomJitterEnabled: e.target.checked }))}
-              disabled={loading}
+              disabled={loadingExternal}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
             <label htmlFor={`random-jitter-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">Random Actions</label>
@@ -6111,7 +6187,7 @@ export function AutomationSettingsPanel({
                 {/* Assign Directory */}
                 <button
                   type="button"
-                  disabled={loading}
+                  disabled={fieldDisabled("updateProfilePicFolderPath")}
                   onClick={async () => {
                     const api = (window as any).electronAPI;
                     if (!api?.openFolderDialog) return;
@@ -6216,7 +6292,7 @@ export function AutomationSettingsPanel({
               id={`make-a-post-enabled-${slotIdx ?? 0}`}
               checked={settings.makePostEnabled}
               onChange={e => setSettings(s => ({ ...s, makePostEnabled: e.target.checked }))}
-              disabled={loading}
+              disabled={loadingExternal}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
             <label htmlFor={`make-a-post-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">Make a Post</label>
@@ -6224,7 +6300,7 @@ export function AutomationSettingsPanel({
               variant="outline" size="sm"
               className="h-7 text-xs px-3 ml-auto gap-1.5"
               onClick={() => { setShowPostedMedia(v => !v); if (!showPostedMedia) loadPostedMedia(); }}
-              disabled={loading}
+              disabled={loadingExternal}
             ><ImagePlus className="w-3.5 h-3.5" />{showPostedMedia ? 'Hide' : 'Posted Media'}</Button>
           </div>
 
@@ -6270,7 +6346,7 @@ export function AutomationSettingsPanel({
                     id={`make-a-post-username-source-enabled-${slotIdx ?? 0}`}
                     checked={!settings.makePostDisableUsernameSource}
                     onChange={e => setSettings(s => ({ ...s, makePostDisableUsernameSource: !e.target.checked }))}
-                    disabled={loading}
+                    disabled={fieldDisabled("makePostDisableUsernameSource")}
                     className="w-3.5 h-3.5 accent-primary cursor-pointer"
                   />
                   <label htmlFor={`make-a-post-username-source-enabled-${slotIdx ?? 0}`} className="text-xs font-semibold text-foreground cursor-pointer select-none tracking-wide">
@@ -6284,7 +6360,7 @@ export function AutomationSettingsPanel({
                       <Input type="text" placeholder="username" className="h-8 text-xs max-w-[220px]"
                         value={settings.makePostSourceUsername}
                         onChange={e => setSettings(s => ({ ...s, makePostSourceUsername: e.target.value.replace(/^@/, '') }))}
-                        disabled={loading} />
+                        disabled={fieldDisabled("makePostSourceUsername")} />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground block text-center">Disable when my posts reach <span className="text-muted-foreground/60">(0 = off)</span></Label>
@@ -6297,7 +6373,7 @@ export function AutomationSettingsPanel({
                       <input type="checkbox" id={`make-a-post-hiker-api-${slotIdx ?? 0}`}
                         checked={settings.makePostUseHikerApi}
                         onChange={e => setSettings(s => ({ ...s, makePostUseHikerApi: e.target.checked }))}
-                        disabled={loading}
+                        disabled={fieldDisabled("makePostUseHikerApi")}
                         className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                       <label htmlFor={`make-a-post-hiker-api-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Use HikerAPI for scraping</label>
                     </div>
@@ -6319,7 +6395,7 @@ export function AutomationSettingsPanel({
                   <input type="checkbox" id={`make-a-post-local-folder-enabled-${slotIdx ?? 0}`}
                     checked={settings.makePostLocalFolderEnabled}
                     onChange={e => setSettings(s => ({ ...s, makePostLocalFolderEnabled: e.target.checked }))}
-                    disabled={loading}
+                    disabled={fieldDisabled("makePostLocalFolderEnabled")}
                     className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                   <label htmlFor={`make-a-post-local-folder-enabled-${slotIdx ?? 0}`} className="text-xs font-semibold text-foreground cursor-pointer select-none tracking-wide">SOURCE: MY COMPUTER</label>
                 </div>
@@ -6328,7 +6404,7 @@ export function AutomationSettingsPanel({
                     <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
-                        disabled={loading}
+                        disabled={fieldDisabled("makePostLocalFolderPath")}
                         onClick={async () => {
                           const api = (window as any).electronAPI;
                           if (!api?.openFolderDialog) return;
@@ -6365,7 +6441,7 @@ export function AutomationSettingsPanel({
                         <input type="checkbox" id={`make-a-post-local-no-repeat-${slotIdx ?? 0}`}
                           checked={settings.makePostLocalFolderNoRepeat}
                           onChange={e => setSettings(s => ({ ...s, makePostLocalFolderNoRepeat: e.target.checked }))}
-                          disabled={loading}
+                          disabled={fieldDisabled("makePostLocalFolderNoRepeat")}
                           className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                         <label htmlFor={`make-a-post-local-no-repeat-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Do not repost the same image</label>
                       </div>
@@ -6373,7 +6449,7 @@ export function AutomationSettingsPanel({
                         <input type="checkbox" id={`make-a-post-local-random-${slotIdx ?? 0}`}
                           checked={settings.makePostLocalFolderRandom}
                           onChange={e => setSettings(s => ({ ...s, makePostLocalFolderRandom: e.target.checked }))}
-                          disabled={loading}
+                          disabled={fieldDisabled("makePostLocalFolderRandom")}
                           className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                         <label htmlFor={`make-a-post-local-random-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Pick at random</label>
                       </div>
@@ -6381,7 +6457,7 @@ export function AutomationSettingsPanel({
                         <input type="checkbox" id={`make-a-post-local-delete-after-${slotIdx ?? 0}`}
                           checked={settings.makePostLocalFolderDeleteAfterUpload === true}
                           onChange={e => setSettings(s => ({ ...s, makePostLocalFolderDeleteAfterUpload: e.target.checked }))}
-                          disabled={loading}
+                          disabled={fieldDisabled("makePostLocalFolderDeleteAfterUpload")}
                           className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                         <label htmlFor={`make-a-post-local-delete-after-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Delete from PC after posting</label>
                       </div>

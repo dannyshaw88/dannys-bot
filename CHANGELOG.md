@@ -4,6 +4,22 @@ All notable changes to Aura Farming are documented here.
 
 ---
 
+## [1.2.346] — 2026-08-03
+
+### Changed — Fully wire Phone Farm TrustScores into Human Session Tool
+
+- Persisted TrustScore templates and slot assignments through the local server-backed settings flow.
+- Dynamically resolved assigned slots from their current TrustScore template at load time and execution time, so template edits propagate without copying values into slots.
+- Preserved each slot’s manual baseline so clearing a TrustScore restores its prior settings.
+- Added immediate assignment/settings refreshes, per-slot disabled-tool overrides, and server-side execution checks.
+- Locked inherited TrustScore-controlled fields while keeping the master switch, individual tool switches, and physical-slot-owned source controls editable.
+- Prevented Copy Settings from overwriting TrustScore-controlled or slot-owned values and added the TrustScore copy marker for safe tool handling.
+- Kept excluded slot-owned fields disabled in TrustScore template editors.
+- Verified the web and API workflows restart cleanly with no TrustScore-related type errors or browser console errors.
+- Bumped the root application and Electron package versions to `1.2.346`.
+
+---
+
 ## [1.2.345] — 2026-08-03
 
 ### Changed — Match TrustScore Human Session Tool layout to Phone Farm

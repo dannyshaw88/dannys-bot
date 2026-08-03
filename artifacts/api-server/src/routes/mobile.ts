@@ -156,6 +156,11 @@ type AutomationSettings = {
   cycleIntervalMin?: number;
   cycleIntervalMax?: number;
   enabled: boolean;
+  trustScoreId?: string | null;
+  trustScoreDisabledTools?: string[];
+  trustScoreToolOverrides?: Record<string, boolean>;
+  injectBrowsingFeedChanceMin?: number;
+  injectBrowsingFeedChanceMax?: number;
   feedEnabled?: boolean;
   storiesEnabled?: boolean;
   actionDelayMin: number;
@@ -343,6 +348,18 @@ type AutomationSettings = {
   makePostFixAiSlop?: boolean;
   makePostMakeUnique?: boolean;
   makePostCaptionText?: string;
+  makePostPostToProfilePctMin?: number;
+  makePostPostToProfilePctMax?: number;
+  makePostPostToStoryPctMin?: number;
+  makePostPostToStoryPctMax?: number;
+  updateProfilePicActivatePctMin?: number;
+  updateProfilePicActivatePctMax?: number;
+  updateProfilePicFolderPath?: string;
+  updateProfilePicDisableAfterUsed?: boolean;
+  updateBioActivatePctMin?: number;
+  updateBioActivatePctMax?: number;
+  updateBioText?: string;
+  updateBioDisableAfterUsed?: boolean;
   makePostImageSettings?: {
     contrast: { enabled: boolean; min: number; max: number };
     brightness: { enabled: boolean; min: number; max: number };
@@ -1627,6 +1644,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     //    zod to silently strip it on every POST so Copy Settings never saved it
     //    and the value reset to false on every restart.
     shuffleToolOrder: z.boolean().default(false),
+    // TrustScore assignment metadata is persisted with the slot, while the
+    // actual inherited values continue to live in the TrustScore template.
+    // This keeps a slot's manual values recoverable when its TrustScore is
+    // cleared.
+    trustScoreId: z.string().max(100).nullable().default(null),
+    trustScoreDisabledTools: z.array(z.string().max(40)).default([]),
+    trustScoreToolOverrides: z.record(z.string().max(40), z.boolean()).default({}),
     // ── Device profile: OEM dismiss gesture direction for the recents/floating-
     //    windows app switcher. 'auto' = look up the model in DEVICE_PROFILES on
     //    the server; 'left'/'up' = manual override stored per device.
@@ -1737,6 +1761,118 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to save automation settings" }); }
   });
 
+  // ── TrustScore inheritance ────────────────────────────────────────────────
+  // A slot keeps its own manual baseline in slotAutomation. When a TrustScore
+  // is assigned, only template-controlled fields are resolved from the
+  // current template at read/execution time. This deliberately avoids copying
+  // a template snapshot into the slot, so later template edits propagate.
+  const trustScoreAutomationKey = (trustScoreId: string) =>
+    `trust_score_mobile_settings_${trustScoreId}`;
+  const trustScoreIdSchema = z.string().min(1).max(100);
+  const trustScoreAutomationDefaults = (): Record<string, any> => automationSchema.parse({
+    actionDelayMin: 5,
+    actionDelayMax: 10,
+    likePercentMin: 3,
+    likePercentMax: 5,
+    feedScrollMin: 5,
+    feedScrollMax: 10,
+  });
+  const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
+    "enabled",
+    "cycleIntervalMin",
+    "cycleIntervalMax",
+    "trustScoreId",
+    "trustScoreDisabledTools",
+    "trustScoreToolOverrides",
+    "followSources",
+    "followUsersMin",
+    "followUsersMax",
+    "followSpreadFollows",
+    "updateProfilePicFolderPath",
+    "makePostSourceUsername",
+    "makePostDisableUsernameSource",
+    "makePostUseHikerApi",
+    "makePostLocalFolderEnabled",
+    "makePostLocalFolderPath",
+    "makePostLocalFolderNoRepeat",
+    "makePostLocalFolderRandom",
+    "makePostLocalFolderDeleteAfterUpload",
+  ]);
+  const TRUST_SCORE_TOOL_FIELDS = new Set([
+    "feedEnabled",
+    "storiesEnabled",
+    "viewExploreEnabled",
+    "viewReelsEnabled",
+    "checkDmEnabled",
+    "followEnabled",
+    "randomJitterEnabled",
+    "makePostEnabled",
+  ]);
+
+  const loadTrustScoreAssignment = async (serial: string, slotIdx: number) => {
+    const all = await storage.getGlobalSettings();
+    const key = `mobile_trust_score_${serial}_${slotIdx}`;
+    const configured = Object.prototype.hasOwnProperty.call(all, key);
+    let scoreId: string | null = null;
+    if (configured) {
+      try {
+        const parsed = JSON.parse(all[key]);
+        scoreId = typeof parsed === "string" && parsed.length > 0 ? parsed : null;
+      } catch {
+        scoreId = null;
+      }
+    }
+    return { all, configured, scoreId };
+  };
+
+  const resolveTrustScoreSettings = async (
+    serial: string,
+    slotIdx: number,
+    base: Record<string, any>,
+  ): Promise<{ settings: Record<string, any>; scoreId: string | null; configured: boolean }> => {
+    const { all, configured, scoreId } = await loadTrustScoreAssignment(serial, slotIdx);
+    if (!scoreId) return { settings: base, scoreId: null, configured };
+
+    let template: Record<string, any> = {};
+    const raw = all[trustScoreAutomationKey(scoreId)];
+    if (raw) {
+      try {
+        template = automationSchema.parse({
+          ...trustScoreAutomationDefaults(),
+          ...JSON.parse(raw),
+        });
+      } catch {
+        template = {};
+      }
+    }
+
+    const disabledTools = Array.isArray(base.trustScoreDisabledTools)
+      ? base.trustScoreDisabledTools.filter((key: unknown): key is string => typeof key === "string")
+      : [];
+    const toolOverrides = base.trustScoreToolOverrides &&
+      typeof base.trustScoreToolOverrides === "object"
+      ? base.trustScoreToolOverrides as Record<string, boolean>
+      : {};
+    const effective = { ...base };
+    for (const [field, value] of Object.entries(template)) {
+      if (TRUST_SCORE_SLOT_OWNED_FIELDS.has(field)) continue;
+      if (Object.prototype.hasOwnProperty.call(toolOverrides, field)) continue;
+      if (TRUST_SCORE_TOOL_FIELDS.has(field) && disabledTools.includes(field)) continue;
+      effective[field] = value;
+    }
+    for (const field of TRUST_SCORE_TOOL_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(toolOverrides, field)) {
+        effective[field] = Boolean(toolOverrides[field]);
+      } else if (disabledTools.includes(field)) {
+        effective[field] = false;
+      }
+    }
+    effective.trustScoreId = scoreId;
+    effective.trustScoreDisabledTools = disabledTools;
+    effective.trustScoreToolOverrides = toolOverrides;
+    return { settings: effective, scoreId, configured };
+  };
+
   // ── Startup auto-restart helper ──────────────────────────────────────────────
   // Returns every {serial, slotIdx} pair that has enabled:true in the persisted
   // config.  The frontend calls this once on mount and calls startHstLoop for
@@ -1763,9 +1899,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // ── Per-slot Human Session Tool automation settings ─────────────────────────
   // Each Instagram account slot stores its own independent copy of all
   // automation settings. Settings are keyed by slot index in slotAutomation.
-  app.get("/api/mobile/devices/:serial/slots/:slotIdx/automation-settings", (req: Request, res: Response) => {
+  app.get("/api/mobile/devices/:serial/slots/:slotIdx/automation-settings", async (req: Request, res: Response) => {
     try {
-      const slotIdx = parseInt(req.params.slotIdx, 10);
+      const slotIdx = parseInt(String(req.params.slotIdx), 10);
       if (isNaN(slotIdx) || slotIdx < 0) { res.status(400).json({ error: "Invalid slot index" }); return; }
       const cfg = loadInstanceConfigs();
       const serial = p(req, "serial");
@@ -1868,7 +2004,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         dismissDirection: "auto" as const,
       };
       const saved = cfg[serial]?.slotAutomation?.[String(slotIdx)];
-      const merged = {
+      const merged: Record<string, any> = {
         ...defaults,
         ...saved,
         // The background HST runner is mounted outside MobilePage and cannot
@@ -1885,13 +2021,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (dedicatedFolderPath) merged.makePostLocalFolderPath = dedicatedFolderPath;
       const dedicatedProfilePicPath = getProfilePicFolderPath(serial, slotIdx);
       if (dedicatedProfilePicPath) merged.updateProfilePicFolderPath = dedicatedProfilePicPath;
-      logger.info(`[TOGGLE-DBG] GET slot settings  serial=${serial} slotIdx=${slotIdx} enabled=${merged.enabled}`);
-      res.json(merged);
+      const resolved = await resolveTrustScoreSettings(serial, slotIdx, merged);
+      logger.info(`[TOGGLE-DBG] GET slot settings  serial=${serial} slotIdx=${slotIdx} enabled=${resolved.settings.enabled} trustScore=${resolved.scoreId ?? "manual"}`);
+      res.json({
+        ...resolved.settings,
+        trustScoreId: resolved.scoreId,
+        trustScoreConfigured: resolved.configured,
+        trustScoreControlledFields: resolved.scoreId
+          ? Object.keys(resolved.settings).filter(field => !TRUST_SCORE_SLOT_OWNED_FIELDS.has(field))
+          : [],
+      });
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to load slot automation settings" }); }
   });
-  app.post("/api/mobile/devices/:serial/slots/:slotIdx/automation-settings", (req: Request, res: Response) => {
+  app.post("/api/mobile/devices/:serial/slots/:slotIdx/automation-settings", async (req: Request, res: Response) => {
     try {
-      const slotIdx = parseInt(req.params.slotIdx, 10);
+      const slotIdx = parseInt(String(req.params.slotIdx), 10);
       if (isNaN(slotIdx) || slotIdx < 0) { res.status(400).json({ error: "Invalid slot index" }); return; }
       const serial = p(req, "serial");
       const cfg = loadInstanceConfigs();
@@ -1901,7 +2045,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Also provide hard-coded fallbacks for the few schema fields that have
       // no zod .default() so a brand-new slot never fails validation.
       const existing = cfg[serial]?.slotAutomation?.[String(slotIdx)] ?? {};
-      const base = {
+      const base: Record<string, any> = {
         actionDelayMin: 5, actionDelayMax: 10,
         likePercentMin: 3, likePercentMax: 5,
         feedScrollMin:  5, feedScrollMax:  10,
@@ -1915,6 +2059,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // path in `base` (from mobile-instances.json) is preserved instead.
       const body = { ...req.body };
       if (body.makePostLocalFolderPath === "") delete body.makePostLocalFolderPath;
+      const assignment = await loadTrustScoreAssignment(serial, slotIdx);
+      // Never let a full effective-settings response write template values
+      // back into the slot's manual baseline. Feature switches are represented
+      // by trustScoreDisabledTools instead.
+      if (assignment.scoreId) {
+        const isTrustScoreCopy = body.trustScoreCopy === true;
+        const toolOverrides = {
+          ...(base.trustScoreToolOverrides ?? {}),
+          ...(isTrustScoreCopy ? {} : Object.fromEntries(
+            [...TRUST_SCORE_TOOL_FIELDS]
+              .filter(field => typeof body[field] === "boolean")
+              .map(field => [field, body[field]]),
+          )),
+        };
+        body.trustScoreToolOverrides = toolOverrides;
+        for (const field of Object.keys(body)) {
+          if (
+            field !== "trustScoreCopy" &&
+            !TRUST_SCORE_SLOT_OWNED_FIELDS.has(field) &&
+            !field.startsWith("trustScore")
+          ) delete body[field];
+        }
+        delete body.trustScoreCopy;
+      }
       const input = automationSchema.parse({ ...base, ...body });
       logger.info(`[TOGGLE-DBG] POST slot settings serial=${serial} slotIdx=${slotIdx} enabled=${input.enabled} (all slots after save: ${JSON.stringify(Object.entries({ ...cfg[serial]?.slotAutomation, [String(slotIdx)]: input }).map(([k,v]: [string,any]) => ({ slot: k, enabled: v?.enabled })))})`);
       cfg[serial] = {
@@ -1946,18 +2114,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // they are templates rather than physical devices/slots. Keep their
   // configuration in global settings so editing a tier never requires a
   // connected phone and never starts a live automation cycle.
-  const trustScoreAutomationDefaults = () => automationSchema.parse({
-    actionDelayMin: 5,
-    actionDelayMax: 10,
-    likePercentMin: 3,
-    likePercentMax: 5,
-    feedScrollMin: 5,
-    feedScrollMax: 10,
-  });
-  const trustScoreAutomationKey = (trustScoreId: string) =>
-    `trust_score_mobile_settings_${trustScoreId}`;
-  const trustScoreIdSchema = z.string().min(1).max(100);
-
   app.get("/api/trust-score-templates/:trustScoreId/mobile-settings", async (req: Request, res: Response) => {
     try {
       const trustScoreId = trustScoreIdSchema.parse(p(req, "trustScoreId"));
@@ -1973,7 +2129,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.post("/api/trust-score-templates/:trustScoreId/mobile-settings", async (req: Request, res: Response) => {
     try {
       const trustScoreId = trustScoreIdSchema.parse(p(req, "trustScoreId"));
-      const input = automationSchema.parse(req.body);
+      // A template never owns physical-slot values. The editor sends a full
+      // effective-settings-shaped object, so strip excluded fields at the
+      // persistence boundary instead of allowing them to become part of the
+      // template by accident.
+      const body = { ...req.body };
+      for (const field of TRUST_SCORE_SLOT_OWNED_FIELDS) delete body[field];
+      const input = automationSchema.parse(body);
       await storage.setGlobalSetting(
         trustScoreAutomationKey(trustScoreId),
         JSON.stringify(input),
@@ -2010,7 +2172,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.get("/api/mobile/devices/:serial/slots/:slotIdx/trust-score", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
-      const slotIdx = parseInt(req.params.slotIdx, 10);
+      const slotIdx = parseInt(String(req.params.slotIdx), 10);
       if (isNaN(slotIdx) || slotIdx < 0) {
         res.status(400).json({ error: "Invalid slot index" });
         return;
@@ -2032,7 +2194,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.post("/api/mobile/devices/:serial/slots/:slotIdx/trust-score", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
-      const slotIdx = parseInt(req.params.slotIdx, 10);
+      const slotIdx = parseInt(String(req.params.slotIdx), 10);
       if (isNaN(slotIdx) || slotIdx < 0) {
         res.status(400).json({ error: "Invalid slot index" });
         return;
@@ -9107,6 +9269,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
     };
     try {
+      const parsedCycle = automationCycleSchema.parse(req.body);
+      // Re-resolve the assigned TrustScore at execution time. The browser
+      // normally sends the same effective values it displayed, but the server
+      // must remain authoritative when a template was edited in another tab
+      // or the request came from the background runner.
+      const savedSlotSettings =
+        loadInstanceConfigs()[serial]?.slotAutomation?.[String(incomingSlotIdx)] ?? {};
+      const effectiveCycle = await resolveTrustScoreSettings(serial, incomingSlotIdx, {
+        ...savedSlotSettings,
+        ...parsedCycle,
+      });
+      const effectiveSettings: any = effectiveCycle.settings;
       const {
         count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
         airplaneWaitMinSec, airplaneWaitMaxSec,
@@ -9187,7 +9361,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         slotUsername, slotIdx,
         shuffleToolOrder,
         dismissDirection,
-      } = automationCycleSchema.parse(req.body);
+      } = effectiveSettings;
 
       // ── Global followed / skipped settings ─────────────────────────────────
       // Read the shared global settings store (Settings → Scraping).  These
