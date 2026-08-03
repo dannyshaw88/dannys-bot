@@ -5975,8 +5975,6 @@ export function AutomationSettingsPanel({
             </div>
           )}
         </div>
-        </div>
-
         {/* ── Inject Browsing — templates can configure it before enabling Follow Users ── */}
         {(settings.followEnabled || isTrustScoreTemplateEditor) && <div className="space-y-3">
           {/* Row 1: title + checkbox only */}
@@ -6143,8 +6141,9 @@ export function AutomationSettingsPanel({
                 <label htmlFor={`filter-max-followers-25k-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">-25K Followers</label>
               </div>
             </div>
-          )}
-        </div>}
+           )}
+         </div>}
+        </div>
 
         {/* ── Random Actions — probabilistic human-like actions each cycle ─ */}
         <div className="border-t border-border" />
