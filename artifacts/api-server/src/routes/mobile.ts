@@ -1779,8 +1779,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   });
   const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
     "enabled",
-    "cycleIntervalMin",
-    "cycleIntervalMax",
     "trustScoreId",
     "trustScoreDisabledTools",
     "trustScoreToolOverrides",
@@ -1805,8 +1803,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   ]);
   const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
     "enabled",
-    "cycleIntervalMin",
-    "cycleIntervalMax",
     "feedEnabled",
     "storiesEnabled",
     "viewExploreEnabled",

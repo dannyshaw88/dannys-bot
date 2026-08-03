@@ -362,8 +362,6 @@ export type CopySection    = { key: string; label: string; sub: CopySubSetting[]
 /** Values owned by a physical slot rather than a TrustScore template. */
 export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
   "enabled",
-  "cycleIntervalMin",
-  "cycleIntervalMax",
   "trustScoreId",
   "trustScoreConfigured",
   "trustScoreControlledFields",
@@ -392,8 +390,6 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
 /** Account-specific values that may be copied between Human Session Tool slots. */
 export const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
   "enabled",
-  "cycleIntervalMin",
-  "cycleIntervalMax",
   "feedEnabled",
   "storiesEnabled",
   "viewExploreEnabled",
