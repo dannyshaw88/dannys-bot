@@ -28,6 +28,7 @@ import { api } from "../shared/routes";
 import { z } from "zod/v4";
 import { verifyInstagramCredentials } from "../instagram/instagramLogin";
 import { triggerBanPipeline } from "../instagram/banPipeline";
+import { computeAnalyticsContext } from "../instagram/analyticsContext";
 import { cleanupAiSlopTemp, fixAiSlop } from "../instagram/fixAiSlop";
 import {
   alterJpegBuffer,
@@ -1445,6 +1446,452 @@ export async function registerInstagramRoutes(
     res.status(204).end();
   });
 
+  // ── Shared helper: resolve proxy host for analytics snapshots ───────────────
+  async function resolveProxyHost(profile: { proxyHost?: string | null; proxyId?: number | null }): Promise<string> {
+    if (profile.proxyHost) return profile.proxyHost;
+    if (profile.proxyId) {
+      const allProxies = await storage.getProxies().catch(() => []);
+      const linked = allProxies.find((p: { id: number; host: string }) => p.id === profile.proxyId);
+      if (linked) return linked.host;
+    }
+    return "";
+  }
+
+  // ── Flag as Banned: snapshot API calls → save to analytics → set status to banned (no deletion) ──
+  app.post("/api/profiles/:id/flag-banned", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const profile = await storage.getProfile(profileId).catch(() => null);
+    if (!profile) { res.status(404).json({ error: "Profile not found" }); return; }
+    try {
+      await triggerBanPipeline(profileId, "manual");
+      const allCalls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
+      const endpointCount = allCalls.filter((c: { source?: string | null }) => c.source !== "HikerAPI").length;
+      req.log.info(`[flag-banned] @${profile.username} (id=${profileId}) — pipeline complete, ${endpointCount} calls snapshotted`);
+      res.status(200).json({ ok: true, username: profile.username, endpointCount });
+    } catch (err) {
+      req.log.error({ err }, "[flag-banned] error");
+      res.status(500).json({ error: "Failed to flag account as banned" });
+    }
+  });
+
+  // ── Ban Analytics: return all ban event records ─────────────────────────────
+  app.get("/api/analytics/ban-patterns", async (req, res) => {
+    try {
+      const records = await storage.getBanAnalytics();
+      res.json(records);
+    } catch (err) {
+      req.log.error({ err }, "[ban-analytics] error");
+      res.status(500).json({ error: "Failed to fetch ban analytics" });
+    }
+  });
+
+  // ── Verify-Only Fingerprint Analysis ─────────────────────────────────────────
+  // Returns banned accounts whose every non-HikerAPI endpoint came exclusively
+  // from the verify/eb/system bootstrap sequence (no tool activity), joined with
+  // each account's leakSnapshot from the live profiles table.
+  app.get("/api/analytics/verify-fingerprint", async (req, res) => {
+    try {
+      const records = await storage.getBanAnalytics();
+      const allProfiles = await storage.getProfiles();
+      const profileByUsername = new Map<string, any>();
+      for (const p of allProfiles) profileByUsername.set(p.username, p);
+
+      const verifyOnly = records.filter((r: any) => {
+        let eps: Array<{ source?: string | null }> = [];
+        try { eps = JSON.parse(r.endpointSnapshot); } catch { return false; }
+        eps = eps.filter((e: any) => (e.source ?? "").toLowerCase() !== "hiker_api");
+        if (eps.length === 0) return false;
+        return eps.every((ep: any) => {
+          const s = (ep.source ?? "").toLowerCase();
+          return s === "verify" || s === "eb" || s === "system" || s === "";
+        });
+      });
+
+      const results = verifyOnly.map((r: any) => {
+        const profile = profileByUsername.get(r.username);
+        let leakData: any = null;
+        const raw = (profile as any)?.leakSnapshot ?? null;
+        if (raw) { try { leakData = JSON.parse(raw); } catch { leakData = raw; } }
+        return {
+          id: r.id,
+          username: r.username,
+          bannedAt: r.bannedAt ?? r.flaggedAt ?? null,
+          proxyHost: r.proxyHost ?? null,
+          leakData,
+        };
+      });
+
+      res.json(results);
+    } catch (err) {
+      req.log.error({ err }, "[verify-fingerprint] error");
+      res.status(500).json({ error: "Failed to fetch verify-only fingerprint data" });
+    }
+  });
+
+  // ── Flag as Automated Behaviour: snapshot → analytics → update status (no delete) ──
+  app.post("/api/profiles/:id/flag-automated", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const profile = await storage.getProfile(profileId).catch(() => null);
+    if (!profile) { res.status(404).json({ error: "Profile not found" }); return; }
+    try {
+      const allCalls_a = await storage.getInstagramApiCallsByProfile(profileId, 2000);
+      const calls = allCalls_a.filter((c: { source?: string | null }) => c.source !== "HikerAPI");
+      const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date, source: c.source ?? null })));
+      const proxyHost = await resolveProxyHost(profile);
+      let proxyAccountCount_a = 0;
+      if (profile.proxyId) {
+        const sp_a = await storage.getProfilesByProxyId(profile.proxyId).catch(() => []);
+        proxyAccountCount_a = sp_a.filter((p: { id: number; accountStatus?: string | null }) => p.id !== profileId && p.accountStatus !== "banned").length;
+      }
+      const ctx_a = computeAnalyticsContext(calls, profile.notes, proxyAccountCount_a);
+      const now_a = new Date();
+      const pad_a = (n: number) => String(n).padStart(2, "0");
+      const stamp_a = `Flagged as Automated Behaviour: ${now_a.getUTCFullYear()}-${pad_a(now_a.getUTCMonth()+1)}-${pad_a(now_a.getUTCDate())} ${pad_a(now_a.getUTCHours())}:${pad_a(now_a.getUTCMinutes())}:${pad_a(now_a.getUTCSeconds())} UTC`;
+      const freshNotes_a = (await storage.getProfile(profileId).catch(() => null))?.notes ?? "";
+      await storage.insertAutomatedBehaviourAnalytics({
+        username: profile.username,
+        proxyHost,
+        flaggedAt: now_a.toISOString(),
+        endpointCount: calls.length,
+        endpointSnapshot: snapshot,
+        ...ctx_a,
+      });
+      await storage.updateProfile(profileId, { accountStatus: "automated_behaviour_detected", notes: freshNotes_a ? `${freshNotes_a}\n${stamp_a}` : stamp_a });
+      req.log.info(`[flag-automated] @${profile.username} (id=${profileId}) — ${calls.length} account API calls snapshotted (HikerAPI excluded)`);
+      res.status(200).json({ ok: true, username: profile.username, endpointCount: calls.length });
+    } catch (err) {
+      req.log.error({ err }, "[flag-automated] error");
+      res.status(500).json({ error: "Failed to flag account as automated behaviour" });
+    }
+  });
+
+  // ── Flag as Captcha Error: snapshot → analytics → update status (no delete) ──
+  app.post("/api/profiles/:id/flag-captcha", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const profile = await storage.getProfile(profileId).catch(() => null);
+    if (!profile) { res.status(404).json({ error: "Profile not found" }); return; }
+    try {
+      const allCalls_c = await storage.getInstagramApiCallsByProfile(profileId, 2000);
+      const calls = allCalls_c.filter((c: { source?: string | null }) => c.source !== "HikerAPI");
+      const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date, source: c.source ?? null })));
+      const proxyHost = await resolveProxyHost(profile);
+      let proxyAccountCount_c = 0;
+      if (profile.proxyId) {
+        const sp_c = await storage.getProfilesByProxyId(profile.proxyId).catch(() => []);
+        proxyAccountCount_c = sp_c.filter((p: { id: number; accountStatus?: string | null }) => p.id !== profileId && p.accountStatus !== "banned").length;
+      }
+      const ctx_c = computeAnalyticsContext(calls, profile.notes, proxyAccountCount_c);
+      const now_c = new Date();
+      const pad_c = (n: number) => String(n).padStart(2, "0");
+      const stamp_c = `Flagged as Captcha Error: ${now_c.getUTCFullYear()}-${pad_c(now_c.getUTCMonth()+1)}-${pad_c(now_c.getUTCDate())} ${pad_c(now_c.getUTCHours())}:${pad_c(now_c.getUTCMinutes())}:${pad_c(now_c.getUTCSeconds())} UTC`;
+      const freshNotes_c = (await storage.getProfile(profileId).catch(() => null))?.notes ?? "";
+      await storage.insertCaptchaAnalytics({
+        username: profile.username,
+        proxyHost,
+        flaggedAt: now_c.toISOString(),
+        endpointCount: calls.length,
+        endpointSnapshot: snapshot,
+        ...ctx_c,
+      });
+      await storage.updateProfile(profileId, { accountStatus: "captcha", notes: freshNotes_c ? `${freshNotes_c}\n${stamp_c}` : stamp_c });
+      req.log.info(`[flag-captcha] @${profile.username} (id=${profileId}) — ${calls.length} account API calls snapshotted (HikerAPI excluded)`);
+      res.status(200).json({ ok: true, username: profile.username, endpointCount: calls.length });
+    } catch (err) {
+      req.log.error({ err }, "[flag-captcha] error");
+      res.status(500).json({ error: "Failed to flag account as captcha error" });
+    }
+  });
+
+  // ── Automated Behaviour Analytics: return all records ───────────────────────
+  app.get("/api/analytics/automated-patterns", async (req, res) => {
+    try {
+      const records = await storage.getAutomatedBehaviourAnalytics();
+      res.json(records);
+    } catch (err) {
+      req.log.error({ err }, "[automated-analytics] error");
+      res.status(500).json({ error: "Failed to fetch automated behaviour analytics" });
+    }
+  });
+
+  // ── Captcha Analytics: return all records ───────────────────────────────────
+  app.get("/api/analytics/captcha-patterns", async (req, res) => {
+    try {
+      const records = await storage.getCaptchaAnalytics();
+      res.json(records);
+    } catch (err) {
+      req.log.error({ err }, "[captcha-analytics] error");
+      res.status(500).json({ error: "Failed to fetch captcha analytics" });
+    }
+  });
+
+  // ── Flag as Locked Account: snapshot → analytics → update status (no delete) ──
+  app.post("/api/profiles/:id/flag-locked", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const profile = await storage.getProfile(profileId).catch(() => null);
+    if (!profile) { res.status(404).json({ error: "Profile not found" }); return; }
+    try {
+      const allCalls_l = await storage.getInstagramApiCallsByProfile(profileId, 2000);
+      const calls = allCalls_l.filter((c: { source?: string | null }) => c.source !== "HikerAPI");
+      const snapshot = JSON.stringify(calls.map(c => ({ operationName: c.operationName, date: c.date, source: c.source ?? null })));
+      const proxyHost = await resolveProxyHost(profile);
+      let proxyAccountCount_l = 0;
+      if (profile.proxyId) {
+        const sp_l = await storage.getProfilesByProxyId(profile.proxyId).catch(() => []);
+        proxyAccountCount_l = sp_l.filter((p: { id: number; accountStatus?: string | null }) => p.id !== profileId && p.accountStatus !== "banned").length;
+      }
+      const ctx_l = computeAnalyticsContext(calls, profile.notes, proxyAccountCount_l);
+      const now_l = new Date();
+      const pad_l = (n: number) => String(n).padStart(2, "0");
+      const stamp_l = `Flagged as Locked Account: ${now_l.getUTCFullYear()}-${pad_l(now_l.getUTCMonth()+1)}-${pad_l(now_l.getUTCDate())} ${pad_l(now_l.getUTCHours())}:${pad_l(now_l.getUTCMinutes())}:${pad_l(now_l.getUTCSeconds())} UTC`;
+      const freshNotes_l = (await storage.getProfile(profileId).catch(() => null))?.notes ?? "";
+      await storage.insertLockedAnalytics({
+        username: profile.username,
+        proxyHost,
+        flaggedAt: now_l.toISOString(),
+        endpointCount: calls.length,
+        endpointSnapshot: snapshot,
+        ...ctx_l,
+      });
+      await storage.updateProfile(profileId, { accountStatus: "locked", notes: freshNotes_l ? `${freshNotes_l}\n${stamp_l}` : stamp_l });
+      req.log.info(`[flag-locked] @${profile.username} (id=${profileId}) — ${calls.length} account API calls snapshotted (HikerAPI excluded)`);
+      res.status(200).json({ ok: true, username: profile.username, endpointCount: calls.length });
+    } catch (err) {
+      req.log.error({ err }, "[flag-locked] error");
+      res.status(500).json({ error: "Failed to flag account as locked" });
+    }
+  });
+
+  // ── Locked Account Analytics: return all records ─────────────────────────────
+  app.get("/api/analytics/locked-patterns", async (req, res) => {
+    try {
+      const records = await storage.getLockedAnalytics();
+      res.json(records);
+    } catch (err) {
+      req.log.error({ err }, "[locked-analytics] error");
+      res.status(500).json({ error: "Failed to fetch locked account analytics" });
+    }
+  });
+
+  // ── Refresh endpoint snapshots from live instagram_api_calls ─────────────────
+  // Called at export time so automated/captcha/locked entries reflect ALL calls
+  // made after the flag event, not just the frozen snapshot taken at flag time.
+  // Non-fatal per profile — missing/deleted profiles are simply omitted.
+  app.post("/api/analytics/refresh-endpoint-snapshots", async (req, res) => {
+    try {
+      const { profileIds } = req.body as { profileIds: number[] };
+      if (!Array.isArray(profileIds) || profileIds.length === 0) {
+        res.json({ ok: true, results: {} });
+        return;
+      }
+      const results: Record<string, { username: string; endpointSnapshot: string; endpointCount: number }> = {};
+      await Promise.all(profileIds.map(async (profileId) => {
+        try {
+          const profile = await storage.getProfile(profileId).catch(() => null);
+          if (!profile) return;
+          const allCalls = await storage.getInstagramApiCallsByProfile(profileId, 2000);
+          const calls = allCalls.filter((c: { source?: string | null }) => c.source !== "HikerAPI");
+          const snapshot = JSON.stringify(calls.map((c: { operationName: string; date: string; source?: string | null }) => ({
+            operationName: c.operationName,
+            date: c.date,
+            source: c.source ?? null,
+          })));
+          results[String(profileId)] = {
+            username: profile.username,
+            endpointSnapshot: snapshot,
+            endpointCount: calls.length,
+          };
+        } catch { /* non-fatal — skip this profile */ }
+      }));
+      req.log.info({ profileCount: Object.keys(results).length }, "[refresh-endpoint-snapshots] done");
+      res.json({ ok: true, results });
+    } catch (err) {
+      req.log.error({ err }, "[refresh-endpoint-snapshots] error");
+      res.status(500).json({ error: "Failed to refresh endpoint snapshots" });
+    }
+  });
+
+  // ── Endpoint Risk Analysis: which endpoints correlate most with bans ────────
+  // For each account's endpointSnapshot, the last WINDOW calls = "pre-ban window".
+  // Pre-ban presence % = how many accounts had this endpoint in their pre-ban window.
+  // Proximity score = pre-ban appearances / total appearances (0–1, higher = disproportionately near ban).
+  // Composite risk = (proximity × 0.5 + presence × 0.5) × log(1+totalCalls) — prevents rare no-op endpoints scoring artificially high.
+  app.get("/api/analytics/endpoint-risk", async (req, res) => {
+    try {
+      const [bans, automated, captcha, locked] = await Promise.all([
+        storage.getBanAnalytics(),
+        storage.getAutomatedBehaviourAnalytics(),
+        storage.getCaptchaAnalytics(),
+        storage.getLockedAnalytics(),
+      ]);
+      const allRecords: { endpointSnapshot: string }[] = [...bans, ...automated, ...captcha, ...locked];
+      const totalAccounts = allRecords.length;
+
+      if (totalAccounts === 0) {
+        res.json({ endpoints: [], totalAccounts: 0, windowSize: 20 });
+        return;
+      }
+
+      const WINDOW = 20;
+      const preBanCount: Record<string, number>          = {};
+      const totalCount: Record<string, number>           = {};
+      const preBanAccountSet: Record<string, Set<number>> = {};
+      const sourceTally: Record<string, Record<string, number>> = {};
+      const posSum: Record<string, number>               = {};
+      const posCnt: Record<string, number>               = {};
+
+      for (let ai = 0; ai < allRecords.length; ai++) {
+        const snap = allRecords[ai].endpointSnapshot;
+        if (!snap) continue;
+        let calls: Array<{ operationName: string; source?: string | null }>;
+        try { calls = JSON.parse(snap); } catch { continue; }
+        if (!Array.isArray(calls) || calls.length === 0) continue;
+        calls = calls.filter(c => c.source !== "HikerAPI");
+
+        for (const c of calls) {
+          const op = c.operationName; if (!op) continue;
+          totalCount[op] = (totalCount[op] ?? 0) + 1;
+          if (!sourceTally[op]) sourceTally[op] = {};
+          const src = c.source ?? "unknown";
+          sourceTally[op][src] = (sourceTally[op][src] ?? 0) + 1;
+        }
+
+        const window = calls.slice(0, WINDOW);
+        for (let pos = 0; pos < window.length; pos++) {
+          const op = window[pos].operationName; if (!op) continue;
+          preBanCount[op] = (preBanCount[op] ?? 0) + 1;
+          if (!preBanAccountSet[op]) preBanAccountSet[op] = new Set();
+          preBanAccountSet[op].add(ai);
+          posSum[op] = (posSum[op] ?? 0) + pos;
+          posCnt[op] = (posCnt[op] ?? 0) + 1;
+        }
+      }
+
+      const endpoints = Object.keys(totalCount).map(op => {
+        const total    = totalCount[op];
+        const preBan   = preBanCount[op] ?? 0;
+        const acctHits = preBanAccountSet[op]?.size ?? 0;
+        const avgPos   = posCnt[op] > 0 ? posSum[op] / posCnt[op] : null;
+        const proximity         = total > 0 ? preBan / total : 0;
+        const preBanPresencePct = (acctHits / totalAccounts) * 100;
+        const srcs = sourceTally[op] ?? {};
+        const dominantSource = Object.entries(srcs).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "unknown";
+        const compositeRisk  = (proximity * 0.5 + (acctHits / totalAccounts) * 0.5) * Math.log(1 + total);
+        return {
+          operationName: op,
+          totalCount: total,
+          preBanCount: preBan,
+          preBanAccountCount: acctHits,
+          preBanPresencePct: Math.round(preBanPresencePct * 10) / 10,
+          proximityScore: Math.round(proximity * 1000) / 1000,
+          avgPositionFromEnd: avgPos !== null ? Math.round(avgPos * 10) / 10 : null,
+          compositeRisk: Math.round(compositeRisk * 1000) / 1000,
+          dominantSource,
+        };
+      }).sort((a, b) => b.compositeRisk - a.compositeRisk);
+
+      res.json({ endpoints, totalAccounts, windowSize: WINDOW });
+    } catch (err) {
+      req.log.error({ err }, "[endpoint-risk] error");
+      res.status(500).json({ error: "Failed to compute endpoint risk" });
+    }
+  });
+
+  // ── Survivor call patterns: live call history for valid surviving accounts ──
+  // Returns each valid account's recent API call snapshot in the same format
+  // as ban entries so the frontend can compute the same metrics and compare.
+  app.get("/api/analytics/survivor-call-patterns", async (req, res) => {
+    try {
+      const allProfiles = await storage.getProfiles();
+      const validProfiles = allProfiles.filter(p => (p.accountStatus ?? "").toLowerCase() === "valid");
+
+      // Parse first "Added:" date from notes (same logic as frontend parseFirstAddedDate)
+      function parseFirstAdded(notes: string | null | undefined): Date | null {
+        if (!notes) return null;
+        const m = notes.match(/Added[^:]*:\s*(\d{4}-\d{2}-\d{2})/);
+        if (!m) return null;
+        const d = new Date(m[1]);
+        return isNaN(d.getTime()) ? null : d;
+      }
+
+      // Filter to accounts with an "Added:" date — same criterion as Survivors tab
+      const survivors = validProfiles
+        .filter(p => parseFirstAdded(p.notes) !== null)
+        .slice(0, 30); // cap at 30
+
+      const now = new Date();
+      const results = await Promise.all(survivors.map(async p => {
+        const firstDate = parseFirstAdded(p.notes);
+        const accountAgeDays = firstDate ? Math.floor((now.getTime() - firstDate.getTime()) / 86400000) : null;
+        const allCalls = await storage.getInstagramApiCallsByProfile(p.id, 2000).catch(() => []);
+        const calls = allCalls.filter((c: { source?: string | null }) => c.source !== "HikerAPI");
+        const snapshot = JSON.stringify(calls.map((c: { operationName: string; date: string; source?: string | null }) => ({
+          operationName: c.operationName,
+          date: c.date,
+          source: c.source ?? null,
+        })));
+        return {
+          profileId: p.id,
+          username: p.username,
+          accountAgeDays,
+          endpointCount: calls.length,
+          endpointSnapshot: snapshot,
+          capturedAt: now.toISOString(),
+          userAgentApi: (p as any).userAgentApi ?? null,
+          userAgentEmbedded: (p as any).userAgentEmbedded ?? null,
+          igDeviceState: (p as any).igDeviceState ?? null,
+          ebFingerprint: (p as any).ebFingerprint ?? null,
+          leakSnapshot: (p as any).leakSnapshot ?? null,
+        };
+      }));
+
+      res.json(results);
+    } catch (err) {
+      req.log.error({ err }, "[survivor-patterns] error");
+      res.status(500).json({ error: "Failed to fetch survivor call patterns" });
+    }
+  });
+
+  // ── Analytics entry deletion ──────────────────────────────────────────────
+  app.delete("/api/analytics/ban-patterns/:id", async (req, res) => {
+    try {
+      await storage.deleteBanAnalytics(Number(req.params.id));
+      res.json({ ok: true });
+    } catch (err) {
+      req.log.error({ err }, "[ban-analytics] delete error");
+      res.status(500).json({ error: "Failed to delete ban entry" });
+    }
+  });
+
+  app.delete("/api/analytics/automated-patterns/:id", async (req, res) => {
+    try {
+      await storage.deleteAutomatedBehaviourAnalytics(Number(req.params.id));
+      res.json({ ok: true });
+    } catch (err) {
+      req.log.error({ err }, "[automated-analytics] delete error");
+      res.status(500).json({ error: "Failed to delete automated entry" });
+    }
+  });
+
+  app.delete("/api/analytics/captcha-patterns/:id", async (req, res) => {
+    try {
+      await storage.deleteCaptchaAnalytics(Number(req.params.id));
+      res.json({ ok: true });
+    } catch (err) {
+      req.log.error({ err }, "[captcha-analytics] delete error");
+      res.status(500).json({ error: "Failed to delete captcha entry" });
+    }
+  });
+
+  app.delete("/api/analytics/locked-patterns/:id", async (req, res) => {
+    try {
+      await storage.deleteLockedAnalytics(Number(req.params.id));
+      res.json({ ok: true });
+    } catch (err) {
+      req.log.error({ err }, "[locked-analytics] delete error");
+      res.status(500).json({ error: "Failed to delete locked entry" });
+    }
+  });
+
   // ── Shared helper: seed browser cookie JSON from igApiCookies string ────────
   // Called by both the bulk import and EQX import routes immediately after a
   // profile is created/updated with igApiCookies.  Without this file Chrome
@@ -1756,7 +2203,7 @@ export async function registerInstagramRoutes(
       apiUA:         profile.userAgentApi      ?? undefined,
       ebFingerprint: profile.ebFingerprint     ?? undefined,
     };
-    // Log the EB login attempt as an API call so the system can account for the
+    // Log the EB login attempt as an API call so Evasion Stats can account for the
     // Instagram requests the embedded browser makes during the login flow.
     storage.createInstagramApiCall({
       profileId,
@@ -2357,7 +2804,7 @@ export async function registerInstagramRoutes(
     }
 
     if (finalStatus === "banned" || finalStatus === "suspended") {
-       // Full ban safety pipeline: persist status and apply proxy taint
+      // Full ban pipeline: snapshot API calls + analytics + proxy taint
       await triggerBanPipeline(profile.id, "verify").catch((e: any) =>
         console.error(`[verify] triggerBanPipeline failed for @${profile.username}: ${e?.message}`)
       );
@@ -2851,6 +3298,17 @@ export async function registerInstagramRoutes(
       return { ...a, profileLabel: p?.accountLabel || p?.username || `#${a.profileId}` };
     });
     res.json(enriched);
+  });
+
+  // Purge all evasion stats — clears instagram_api_calls + all four analytics tables
+  // so the Evasion Stats page starts fresh. Irreversible.
+  app.delete("/api/analytics/purge-evasion-stats", async (_req, res) => {
+    try {
+      const result = await storage.purgeEvasionStats();
+      res.json({ ok: true, ...result });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e?.message ?? "Purge failed" });
+    }
   });
 
   app.get("/api/instagram-api-calls", async (req, res) => {
@@ -3839,6 +4297,250 @@ export async function registerInstagramRoutes(
         mobileHeaders: { title: "Mobile App Header Set",    ...mobileHeaderResult },
       },
     });
+  });
+
+  // ── Server-side proxy leak check — called at export time, no browser needed ──
+  // Runs IP/DNS checks through each account's proxy using Node.js https.request
+  // + HttpsProxyAgent / SocksProxyAgent. Saves the result to leakSnapshot in the
+  // DB and returns a fresh map so the export can include the latest data.
+  app.post("/api/analytics/refresh-leak-snapshots", async (req, res) => {
+    try {
+      const { profileIds } = req.body as { profileIds?: number[] };
+      if (!Array.isArray(profileIds) || profileIds.length === 0) {
+        return res.status(400).json({ error: "profileIds required" });
+      }
+
+      const https = await import("node:https");
+
+      // Makes one HTTPS request through a proxy agent, returns the body text or null on failure.
+      async function proxyGet(url: string, agent: any, timeoutMs = 9000): Promise<string | null> {
+        const parsed = new URL(url);
+        return new Promise(resolve => {
+          try {
+            const req2 = https.request(
+              {
+                host: parsed.hostname,
+                port: 443,
+                path: parsed.pathname + parsed.search,
+                method: "GET",
+                agent,
+                rejectUnauthorized: false,
+                headers: { "User-Agent": "curl/7.68.0", Accept: "*/*" },
+              },
+              (r) => {
+                const chunks: Buffer[] = [];
+                r.on("data", (c: Buffer) => chunks.push(c));
+                r.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+                r.on("error", () => resolve(null));
+              },
+            );
+            req2.on("error", () => resolve(null));
+            req2.setTimeout(timeoutMs, () => { req2.destroy(); resolve(null); });
+            req2.end();
+          } catch { resolve(null); }
+        });
+      }
+
+      type IpResult = { source: string; ip: string | null; ok: boolean };
+
+      async function checkProfile(profileId: number): Promise<{ username: string; snapshot: string } | null> {
+        const profile = await storage.getProfile(profileId).catch(() => null);
+        if (!profile) return null;
+
+        const capturedAt = new Date().toISOString();
+
+        // Resolve proxy details — profile columns first, then linked proxy table
+        let proxyHost: string | null = (profile as any).proxyHost || null;
+        let proxyPort: number | null = (profile as any).proxyPort || null;
+        let proxyType: string = (profile as any).proxyType || "http";
+        let proxyUser: string | null = (profile as any).proxyUsername || null;
+        let proxyPass: string | null = (profile as any).proxyPassword || null;
+
+        if (!proxyHost && profile.proxyId) {
+          try {
+            const [linked] = await db.select().from(proxies).where(eq(proxies.id, profile.proxyId));
+            if (linked) {
+              proxyHost = linked.host;
+              proxyPort = linked.port;
+              proxyType = (linked as any).proxyType || "http";
+              proxyUser = (linked as any).username || null;
+              proxyPass = (linked as any).password || null;
+            }
+          } catch {}
+        }
+
+        if (!proxyHost || !proxyPort) {
+          const _ebUA  = (profile as any).userAgentEmbedded ?? null;
+          const _apiUA = (profile as any).userAgentApi ?? null;
+          let _igDs: Record<string, unknown> | null = null;
+          try { const r = (profile as any).igDeviceState; if (r) _igDs = typeof r === "string" ? JSON.parse(r) : r; } catch {}
+          const snapshot = JSON.stringify({
+            capturedAt, source: "server-side", proxyConfigured: false,
+            ebUA: _ebUA, apiUA: _apiUA, igDeviceState: _igDs,
+            ebFingerprint: (profile as any).ebFingerprint ?? null,
+            results: {
+              Proxy:   { status: "warn", label: "No proxy configured" },
+              IP:      { status: "na",   label: "No proxy — cannot test" },
+              DNS:     { status: "na",   label: "No proxy — cannot test" },
+              IPMatch: { status: "na",   label: "No proxy — cannot test" },
+              UAMatch: _ebUA ? { status: "info", label: `EB UA configured` } : { status: "warn", label: "No EB UA set" },
+              WebRTC:  { status: "na",   label: "Requires browser session" },
+              Bot:     { status: "na",   label: "Requires browser session" },
+              Canvas:  { status: "na",   label: "Requires browser session" },
+              Audio:   { status: "na",   label: "Requires browser session" },
+              Timezone:{ status: "na",   label: "Requires browser session" },
+              Hardware:{ status: "na",   label: "Requires browser session" },
+            },
+          });
+          await storage.saveLeakSnapshot(profileId, snapshot).catch(() => {});
+          return { username: profile.username, snapshot };
+        }
+
+        const auth = proxyUser && proxyPass
+          ? `${encodeURIComponent(proxyUser)}:${encodeURIComponent(proxyPass)}@`
+          : "";
+        const proxyUrl = `${proxyType === "socks5" ? "socks5" : "http"}://${auth}${proxyHost}:${proxyPort}`;
+
+        let agent: any;
+        try {
+          if (proxyType === "socks5") {
+            const { SocksProxyAgent } = await import("socks-proxy-agent");
+            agent = new SocksProxyAgent(proxyUrl);
+          } else {
+            const { HttpsProxyAgent } = await import("https-proxy-agent");
+            agent = new HttpsProxyAgent(proxyUrl, { keepAlive: false });
+          }
+        } catch {
+          const _ebUA2  = (profile as any).userAgentEmbedded ?? null;
+          const _apiUA2 = (profile as any).userAgentApi ?? null;
+          let _igDs2: Record<string, unknown> | null = null;
+          try { const r = (profile as any).igDeviceState; if (r) _igDs2 = typeof r === "string" ? JSON.parse(r) : r; } catch {}
+          const snapshot = JSON.stringify({
+            capturedAt, source: "server-side", proxyConfigured: true,
+            proxy: `${proxyHost}:${proxyPort}`, proxyType,
+            ebUA: _ebUA2, apiUA: _apiUA2, igDeviceState: _igDs2,
+            ebFingerprint: (profile as any).ebFingerprint ?? null,
+            results: {
+              Proxy:   { status: "fail", label: "Agent init failed" },
+              IP:      { status: "fail", label: "Proxy agent init failed" },
+              DNS:     { status: "fail", label: "Proxy agent init failed" },
+              IPMatch: { status: "na",   label: "Cannot test — proxy failed" },
+              UAMatch: _ebUA2 ? { status: "info", label: `EB UA configured` } : { status: "warn", label: "No EB UA set" },
+              WebRTC:  { status: "na",   label: "Requires browser session" },
+              Bot:     { status: "na",   label: "Requires browser session" },
+              Canvas:  { status: "na",   label: "Requires browser session" },
+              Audio:   { status: "na",   label: "Requires browser session" },
+              Timezone:{ status: "na",   label: "Requires browser session" },
+              Hardware:{ status: "na",   label: "Requires browser session" },
+            },
+          });
+          await storage.saveLeakSnapshot(profileId, snapshot).catch(() => {});
+          return { username: profile.username, snapshot };
+        }
+
+        // Run 3 IP endpoints in parallel through the proxy
+        const [ipifyRaw, cfRaw, myipRaw] = await Promise.all([
+          proxyGet("https://api.ipify.org?format=text", agent),
+          proxyGet("https://1.1.1.1/cdn-cgi/trace", agent),
+          proxyGet("https://api4.my-ip.io/v2/ip.json", agent),
+        ]);
+
+        const ipSources: IpResult[] = [
+          { source: "ipify",      ip: ipifyRaw?.trim() || null,                                                ok: !!ipifyRaw },
+          { source: "cloudflare", ip: cfRaw?.match(/ip=([^\n]+)/)?.[1]?.trim() || null,                       ok: !!cfRaw },
+          { source: "myip",       ip: (() => { try { return JSON.parse(myipRaw ?? "")?.ip ?? null; } catch { return myipRaw?.trim() || null; } })(), ok: !!myipRaw },
+        ];
+
+        const validIps = ipSources.filter(r => r.ok && r.ip).map(r => r.ip!);
+        const uniqueIps = [...new Set(validIps)];
+        const exitIp = validIps[0] ?? null;
+        const ipStatus = validIps.length === 0 ? "fail" : uniqueIps.length > 1 ? "warn" : "pass";
+        const dnsStatus = validIps.length === 0 ? "fail" : uniqueIps.length > 1 ? "warn" : "pass";
+
+        // ── Device data from DB ──────────────────────────────────────────────
+        const ebUA  = (profile as any).userAgentEmbedded ?? null;
+        const apiUA = (profile as any).userAgentApi ?? null;
+        let igDeviceStateParsed: Record<string, unknown> | null = null;
+        try {
+          const raw = (profile as any).igDeviceState;
+          if (raw) igDeviceStateParsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+        } catch {}
+        const ebFingerprintData = (profile as any).ebFingerprint ?? null;
+
+        // ── IP Match: exit IP vs configured proxy host ───────────────────────
+        const ipMatchStatus = !exitIp ? "na"
+          : exitIp === proxyHost ? "pass"
+          : "warn"; // warn not fail — rotating proxies have different exit IPs
+        const ipMatchLabel = !exitIp ? "No IP detected"
+          : exitIp === proxyHost ? `Match (${exitIp})`
+          : `Exit ${exitIp} ≠ Host ${proxyHost} (may be rotating proxy)`;
+
+        // ── UA analysis: parse Android API UA string for device info ─────────
+        // Format: "Android_ver/API_level; DPIdpi; WxH; Brand; Model; Codename; CPU; Locale"
+        let uaDeviceRows: Record<string, string> = {};
+        if (apiUA) {
+          const parts = apiUA.split(";").map((s: string) => s.trim());
+          if (parts.length >= 8) {
+            uaDeviceRows = {
+              "Android / API Level": parts[0] ?? "",
+              "DPI":                 parts[1] ?? "",
+              "Resolution":          parts[2] ?? "",
+              "Brand":               parts[3] ?? "",
+              "Model":               parts[4] ?? "",
+              "Codename":            parts[5] ?? "",
+              "Chipset":             parts[6] ?? "",
+              "Locale":              parts[7] ?? "",
+            };
+          }
+        }
+
+        const snapshot = JSON.stringify({
+          capturedAt,
+          source: "server-side",
+          proxyConfigured: true,
+          proxy: `${proxyHost}:${proxyPort}`,
+          proxyType,
+          ebUA,
+          apiUA,
+          igDeviceState: igDeviceStateParsed,
+          ebFingerprint: ebFingerprintData,
+          uaDevice: Object.keys(uaDeviceRows).length ? uaDeviceRows : null,
+          results: {
+            IP:       { status: ipStatus,    label: exitIp ?? "No response" },
+            IPMatch:  { status: ipMatchStatus, label: ipMatchLabel },
+            DNS:      { status: dnsStatus,   label: uniqueIps.length <= 1 && validIps.length > 0 ? `${validIps.length}/3 consistent` : uniqueIps.length > 1 ? `${uniqueIps.length} different IPs detected` : "No response" },
+            Proxy:    { status: validIps.length > 0 ? "pass" : "fail", label: validIps.length > 0 ? `Connected (${proxyHost})` : "Connection failed" },
+            UAMatch:  ebUA ? { status: "info", label: `EB UA configured (${ebUA.slice(0, 60)}${ebUA.length > 60 ? "…" : ""})` } : { status: "warn", label: "No EB UA set" },
+            WebRTC:   { status: "na", label: "Requires browser session" },
+            Bot:      { status: "na", label: "Requires browser session" },
+            Canvas:   { status: "na", label: "Requires browser session" },
+            Audio:    { status: "na", label: "Requires browser session" },
+            Timezone: { status: "na", label: "Requires browser session" },
+            Hardware: { status: "na", label: "Requires browser session" },
+          },
+          ipSources,
+        });
+
+        await storage.saveLeakSnapshot(profileId, snapshot).catch(() => {});
+        return { username: profile.username, snapshot };
+      }
+
+      // Process up to 5 concurrently
+      const CONCURRENCY = 5;
+      const out: Record<number, { username: string; snapshot: string }> = {};
+      for (let i = 0; i < profileIds.length; i += CONCURRENCY) {
+        const chunk = profileIds.slice(i, i + CONCURRENCY);
+        const settled = await Promise.allSettled(chunk.map(id => checkProfile(id)));
+        settled.forEach((r, idx) => {
+          if (r.status === "fulfilled" && r.value) out[chunk[idx]] = r.value;
+        });
+      }
+
+      res.json({ ok: true, count: Object.keys(out).length, results: out });
+    } catch (err) {
+      req.log.error({ err }, "[refresh-leak-snapshots] error");
+      res.status(500).json({ error: "Failed to refresh leak snapshots" });
+    }
   });
 
   app.get("/api/browser/debug", async (_req, res) => {

@@ -3734,6 +3734,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             makePostLocalFolderPath: s.makePostLocalFolderPath,
             makePostLocalFolderNoRepeat: s.makePostLocalFolderNoRepeat,
             makePostLocalFolderRandom: s.makePostLocalFolderRandom,
+            makePostLocalFolderDeleteAfterUpload: s.makePostLocalFolderDeleteAfterUpload,
             updateProfilePicActivatePctMin: s.updateProfilePicActivatePctMin,
             updateProfilePicActivatePctMax: s.updateProfilePicActivatePctMax,
             updateProfilePicFolderPath: s.updateProfilePicFolderPath,
@@ -3747,18 +3748,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             makePostMakeUnique: s.makePostMakeUnique,
             makePostCaptionText: s.makePostCaptionText,
             makePostImageSettings: s.makePostImageSettings,
-             postStoryEnabled: s.postStoryEnabled,
-             postStoryActivatePctMin: s.postStoryActivatePctMin,
-             postStoryActivatePctMax: s.postStoryActivatePctMax,
-             postStoryLocalFolderPath: s.postStoryLocalFolderPath,
-             postStoryLocalFolderNoRepeat: s.postStoryLocalFolderNoRepeat,
-             postStoryLocalFolderRandom: s.postStoryLocalFolderRandom,
-             postStoryAlterationEnabled: s.postStoryAlterationEnabled,
-             postStoryAlterationLevel: s.postStoryAlterationLevel,
-             postStoryImageSettingsEnabled: s.postStoryImageSettingsEnabled,
-             postStoryImageSettings: s.postStoryImageSettings,
-             postStoryFixAiSlop: s.postStoryFixAiSlop,
-             postStoryMakeUnique: s.postStoryMakeUnique,
+            makePostPostToProfilePctMin: s.makePostPostToProfilePctMin,
+            makePostPostToProfilePctMax: s.makePostPostToProfilePctMax,
+            makePostPostToStoryPctMin: s.makePostPostToStoryPctMin,
+            makePostPostToStoryPctMax: s.makePostPostToStoryPctMax,
             shuffleToolOrder: s.shuffleToolOrder,
             dismissDirection: s.dismissDirection,
             slotUsername: slotUsername ?? "",
@@ -4566,7 +4559,6 @@ export function AutomationSettingsPanel({
   const TRUST_SCORE_FEATURE_FIELDS = new Set([
     "feedEnabled", "storiesEnabled", "viewExploreEnabled", "viewReelsEnabled",
     "checkDmEnabled", "followEnabled", "randomJitterEnabled", "makePostEnabled",
-    "postStoryEnabled",
   ]);
   // These are the only settings a physical slot may change while its
   // effective values come from a TrustScore template.  Everything else in
@@ -4647,7 +4639,6 @@ export function AutomationSettingsPanel({
   const [showFollowedUsers, setShowFollowedUsers] = useState(false);
   const [showSurplus, setShowSurplus] = useState(false);
   const [showSources, setShowSources] = useState(false);
-  const [bioSpinEditorOpen, setBioSpinEditorOpen] = useState(false);
   const [spinPreview, setSpinPreview] = useState<string | null>(null);
   const [newFollowSourceType, setNewFollowSourceType] = useState<'hashtag' | 'target_followers'>('hashtag');
   const [newFollowSourceValue, setNewFollowSourceValue] = useState('');
@@ -4695,7 +4686,6 @@ export function AutomationSettingsPanel({
   const [loadingOverspill, setLoadingOverspill] = useState(false);
   // Make a Post UI local state
   const [makePostImageSettingsOpen, setMakePostImageSettingsOpen] = useState(false);
-  const [postStoryImageSettingsOpen, setPostStoryImageSettingsOpen] = useState(false);
   const [showPostedMedia, setShowPostedMedia] = useState(false);
   const [postedMediaEntries, setPostedMediaEntries] = useState<{
     id: string;
@@ -4703,7 +4693,6 @@ export function AutomationSettingsPanel({
     username: string;
     slotIdx: number;
     postedAt: string;
-    thumbnailUrl?: string;
   }[]>([]);
   const [loadingPostedMedia, setLoadingPostedMedia] = useState(false);
 
@@ -5705,10 +5694,10 @@ export function AutomationSettingsPanel({
             feature below — same card/step (STEP2). */}
         <div className="border-t border-border" />
 
-        {/* ── Follow Users — Sources, Surplus, and Followed expand over this
-               tool's settings only, matching the Posted Media pattern. ─── */}
-        <div className="space-y-3 relative">
-          <div className="flex items-center gap-2">
+        {/* ── Follow Users header — tickbox, label, Sources, Followed all
+               on one row (Sources/Followed panels are collapsible below,
+               same pattern as before — only the buttons live on this row). */}
+        <div className="flex items-center gap-2">
           <input
             type="checkbox"
             id={`follow-enabled-${slotIdx ?? 0}`}
@@ -5721,27 +5710,12 @@ export function AutomationSettingsPanel({
           <Button
             variant="outline" size="sm"
             className="h-7 text-xs px-3 ml-auto"
-            onClick={() => setShowSources(v => {
-              if (!v) {
-                setShowSurplus(false);
-                setShowFollowedUsers(false);
-              }
-              return !v;
-            })}
+            onClick={() => setShowSources(v => !v)}
           >{showSources ? 'Hide' : 'Sources'}</Button>
           <Button
             variant="outline" size="sm" className="h-7 text-xs px-3"
             disabled={loadingOverspill}
-            onClick={() => {
-              setShowSurplus(v => {
-                if (!v) {
-                  setShowSources(false);
-                  setShowFollowedUsers(false);
-                }
-                return !v;
-              });
-              if (!showSurplus) loadSurplus();
-            }}
+            onClick={() => { setShowSurplus(v => !v); if (!showSurplus) loadSurplus(); }}
           >
             {showSurplus ? 'Hide' : 'Surplus'}
             {mobileOverspillList.length > 0 && !showSurplus && (
@@ -5751,18 +5725,9 @@ export function AutomationSettingsPanel({
           <Button
             variant="outline" size="sm" className="h-7 text-xs px-3"
             disabled={loadingFollowed}
-            onClick={() => {
-              setShowFollowedUsers(v => {
-                if (!v) {
-                  setShowSources(false);
-                  setShowSurplus(false);
-                }
-                return !v;
-              });
-              if (!showFollowedUsers) loadFollowedUsers();
-            }}
+            onClick={() => { setShowFollowedUsers(v => !v); if (!showFollowedUsers) loadFollowedUsers(); }}
           >{showFollowedUsers ? 'Hide' : 'Followed'}</Button>
-          </div>
+        </div>
 
         {/* ── Activate Percentage + Users to follow per operation ────── */}
           {settings.followEnabled && <div className="flex items-start gap-6 flex-wrap">
@@ -5812,9 +5777,7 @@ export function AutomationSettingsPanel({
         </div>}
 
         {/* ── Surplus panel (toggled via the Surplus button above) ────── */}
-        <div className={showSurplus
-          ? "absolute inset-x-0 bottom-0 top-[2.75rem] z-30 overflow-y-auto rounded-lg border border-border bg-background p-3 shadow-xl"
-          : "hidden"}>
+        <div className="space-y-2">
           {showSurplus && (
             <div className="border border-border rounded-lg overflow-hidden">
               {loadingOverspill && mobileOverspillList.length === 0 ? (
@@ -5848,9 +5811,7 @@ export function AutomationSettingsPanel({
         </div>
 
         {/* ── Followed Users panel (toggled via the Followed button above) */}
-        <div className={showFollowedUsers
-          ? "absolute inset-x-0 bottom-0 top-[2.75rem] z-30 overflow-y-auto rounded-lg border border-border bg-background p-3 shadow-xl"
-          : "hidden"}>
+        <div className="space-y-2">
           {showFollowedUsers && (
             <div className="border border-border rounded-lg overflow-hidden">
               {loadingFollowed ? (
@@ -5884,9 +5845,7 @@ export function AutomationSettingsPanel({
         </div>
 
         {/* ── Target Sources panel (toggled via the Sources button above) ─ */}
-        <div className={showSources
-          ? "absolute inset-x-0 bottom-0 top-[2.75rem] z-30 overflow-y-auto rounded-lg border border-border bg-background p-3 shadow-xl"
-          : "hidden"}>
+        <div className="space-y-2">
           {showSources && (
             <div className="border border-border rounded-lg p-3 space-y-2">
               {/* Hidden file input for CSV/TSV import */}
@@ -5989,6 +5948,7 @@ export function AutomationSettingsPanel({
             </div>
           )}
         </div>
+
         {/* ── Inject Browsing — templates can configure it before enabling Follow Users ── */}
         {(settings.followEnabled || isTrustScoreTemplateEditor) && <div className="space-y-3">
           {/* Row 1: title + checkbox only */}
@@ -6155,14 +6115,12 @@ export function AutomationSettingsPanel({
                 <label htmlFor={`filter-max-followers-25k-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">-25K Followers</label>
               </div>
             </div>
-           )}
-         </div>}
-         {/* This separator is the stable bottom boundary for the Follow
-             Users overlays, even as the settings above change height. */}
-         <div className="border-t border-border" />
-        </div>
+          )}
+        </div>}
 
         {/* ── Random Actions — probabilistic human-like actions each cycle ─ */}
+        <div className="border-t border-border" />
+
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <input
@@ -6310,95 +6268,106 @@ export function AutomationSettingsPanel({
 
             </div>
 
-            {/* ── Update Avatar + Update Bio ── */}
-            <div className="flex items-end gap-2 flex-nowrap" style={{ marginTop: "20px" }}>
-              <div className="space-y-1.5 shrink-0">
-                <span className="text-sm text-muted-foreground select-none">Update Avatar&nbsp;&nbsp;Activation %</span>
-                <div className="flex items-center gap-2">
-                  <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                    value={settings.updateProfilePicActivatePctMin}
-                    onChange={e => setSettings(s => ({ ...s, updateProfilePicActivatePctMin: clamp4(Number(e.target.value)) }))}
-                    disabled={loading} />
-                  <span className="text-muted-foreground text-sm">to</span>
-                  <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                    value={settings.updateProfilePicActivatePctMax}
-                    onChange={e => setSettings(s => ({ ...s, updateProfilePicActivatePctMax: clamp4(Number(e.target.value)) }))}
-                    disabled={loading} />
-                  <button
-                    type="button"
-                    disabled={fieldDisabled("updateProfilePicFolderPath")}
-                    onClick={async () => {
-                      const api = (window as any).electronAPI;
-                      if (!api?.openFolderDialog) return;
-                      const result = await api.openFolderDialog(settings.updateProfilePicFolderPath || undefined);
-                      if (result?.canceled || !result?.folder) return;
-                      const updatedSettings = { ...settings, updateProfilePicFolderPath: result.folder };
-                      setSettings(() => updatedSettings);
-                      if (phone && slotIdx !== undefined) {
-                        fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/profile-pic-folder-path`, {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ path: result.folder }),
-                        }).catch(() => {});
-                      } else if (phone) {
-                        fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/automation-settings`, {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify(updatedSettings),
-                        }).catch(() => {});
-                      }
-                    }}
-                    className="h-7 px-3 text-xs rounded border border-border bg-background hover:border-foreground/30 hover:bg-accent transition-colors shrink-0 font-medium text-foreground text-center justify-center"
-                    style={{ width: "76px" }}
-                  >
-                    Assign
-                  </button>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="checkbox"
-                      id={`update-profile-pic-disable-after-used-${slotIdx ?? 0}`}
-                      checked={settings.updateProfilePicDisableAfterUsed}
-                      onChange={e => setSettings(s => ({ ...s, updateProfilePicDisableAfterUsed: e.target.checked }))}
-                      disabled={loading}
-                      className="w-4 h-4 accent-primary cursor-pointer"
-                    />
-                    <label htmlFor={`update-profile-pic-disable-after-used-${slotIdx ?? 0}`} className="text-xs text-foreground cursor-pointer select-none">Disable After Use</label>
-                  </div>
+            {/* ── Row 3: Update Profile Picture ── */}
+            <div className="space-y-1.5" style={{marginTop:"20px"}}>
+              <span className="text-sm text-muted-foreground select-none">Update Avatar&nbsp;&nbsp;Activation %</span>
+              <div className="flex items-center gap-2">
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                  value={settings.updateProfilePicActivatePctMin}
+                  onChange={e => setSettings(s => ({ ...s, updateProfilePicActivatePctMin: clamp4(Number(e.target.value)) }))}
+                  disabled={loading} />
+                <span className="text-muted-foreground text-sm">to</span>
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                  value={settings.updateProfilePicActivatePctMax}
+                  onChange={e => setSettings(s => ({ ...s, updateProfilePicActivatePctMax: clamp4(Number(e.target.value)) }))}
+                  disabled={loading} />
+                {/* Assign Directory */}
+                <button
+                  type="button"
+                  disabled={fieldDisabled("updateProfilePicFolderPath")}
+                  onClick={async () => {
+                    const api = (window as any).electronAPI;
+                    if (!api?.openFolderDialog) return;
+                    const result = await api.openFolderDialog(settings.updateProfilePicFolderPath || undefined);
+                    if (result?.canceled || !result?.folder) return;
+                    const updatedSettings = { ...settings, updateProfilePicFolderPath: result.folder };
+                    setSettings(() => updatedSettings);
+                    if (phone && slotIdx !== undefined) {
+                      fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/profile-pic-folder-path`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ path: result.folder }),
+                      }).catch(() => {});
+                    } else if (phone) {
+                      fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/automation-settings`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(updatedSettings),
+                      }).catch(() => {});
+                    }
+                  }}
+                  className="h-7 px-3 text-xs rounded border border-border bg-background hover:border-foreground/30 hover:bg-accent transition-colors shrink-0 font-medium text-foreground"
+                >
+                  {settings.updateProfilePicFolderPath ? "Assigned Directory" : "Assign Directory"}
+                </button>
+                {/* Disable After Used */}
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    id={`update-profile-pic-disable-after-used-${slotIdx ?? 0}`}
+                    checked={settings.updateProfilePicDisableAfterUsed}
+                    onChange={e => setSettings(s => ({ ...s, updateProfilePicDisableAfterUsed: e.target.checked }))}
+                    disabled={loading}
+                    className="w-4 h-4 accent-primary cursor-pointer"
+                  />
+                  <label htmlFor={`update-profile-pic-disable-after-used-${slotIdx ?? 0}`} className="text-xs text-foreground cursor-pointer select-none">Disable After Used</label>
                 </div>
               </div>
+            </div>
 
-              <div className="space-y-1.5 shrink-0">
-                <span className="text-sm text-muted-foreground select-none">Update Bio&nbsp;&nbsp;Activation %</span>
-                <div className="flex items-center gap-2">
-                  <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                    value={settings.updateBioActivatePctMin}
-                    onChange={e => setSettings(s => ({ ...s, updateBioActivatePctMin: clamp4(Number(e.target.value)) }))}
-                    disabled={loading} />
-                  <span className="text-muted-foreground text-sm">to</span>
-                  <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                    value={settings.updateBioActivatePctMax}
-                    onChange={e => setSettings(s => ({ ...s, updateBioActivatePctMax: clamp4(Number(e.target.value)) }))}
-                    disabled={loading} />
+            {/* ── Row 4: Update Bio ── */}
+            <div className="space-y-1.5" style={{marginTop:"20px"}}>
+              <span className="text-sm text-muted-foreground select-none">Update Bio&nbsp;&nbsp;Activation %</span>
+              <div className="flex items-center gap-2">
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                  value={settings.updateBioActivatePctMin}
+                  onChange={e => setSettings(s => ({ ...s, updateBioActivatePctMin: clamp4(Number(e.target.value)) }))}
+                  disabled={loading} />
+                <span className="text-muted-foreground text-sm">to</span>
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                  value={settings.updateBioActivatePctMax}
+                  onChange={e => setSettings(s => ({ ...s, updateBioActivatePctMax: clamp4(Number(e.target.value)) }))}
+                  disabled={loading} />
+                {/* Bio text + Spin button — spin floats above, input stays row-centered */}
+                <div className="relative shrink-0">
                   <button
                     type="button"
-                    onClick={() => setBioSpinEditorOpen(true)}
-                    disabled={fieldDisabled("updateBioText")}
-                    className="h-7 px-3 text-xs rounded border border-border bg-background hover:border-foreground/30 hover:bg-accent transition-colors shrink-0 font-medium text-foreground text-center justify-center disabled:cursor-not-allowed disabled:opacity-50"
-                    style={{ width: "76px" }}
+                    disabled={loading || !settings.updateBioText.trim()}
+                    onClick={() => setSpinPreview(resolveSpinSyntax(settings.updateBioText))}
+                    className="absolute -top-4 left-0 text-xs font-medium text-primary hover:opacity-80 disabled:cursor-not-allowed px-1 leading-none"
                   >
-                    Bio Spin
+                    Spin
                   </button>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="checkbox"
-                      id={`update-bio-disable-after-used-${slotIdx ?? 0}`}
-                      checked={settings.updateBioDisableAfterUsed}
-                      onChange={e => setSettings(s => ({ ...s, updateBioDisableAfterUsed: e.target.checked }))}
-                      disabled={loading}
-                      className="w-4 h-4 accent-primary cursor-pointer"
-                    />
-                    <label htmlFor={`update-bio-disable-after-used-${slotIdx ?? 0}`} className="text-xs text-foreground cursor-pointer select-none">Disable After Use</label>
-                  </div>
+                  <Input
+                    type="text"
+                    placeholder=""
+                    className="h-7 text-xs px-2 w-[17.5ch]"
+                    value={settings.updateBioText}
+                    onChange={e => setSettings(s => ({ ...s, updateBioText: e.target.value }))}
+                    disabled={loading}
+                  />
+                </div>
+                {/* Disable After Used */}
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    id={`update-bio-disable-after-used-${slotIdx ?? 0}`}
+                    checked={settings.updateBioDisableAfterUsed}
+                    onChange={e => setSettings(s => ({ ...s, updateBioDisableAfterUsed: e.target.checked }))}
+                    disabled={loading}
+                    className="w-4 h-4 accent-primary cursor-pointer"
+                  />
+                  <label htmlFor={`update-bio-disable-after-used-${slotIdx ?? 0}`} className="text-xs text-foreground cursor-pointer select-none">Disable After Used</label>
                 </div>
               </div>
             </div>
@@ -6413,7 +6382,7 @@ export function AutomationSettingsPanel({
              up yet, this just saves the settings for when that's built. ─ */}
         <div className="border-t border-border" />
 
-        <div className="space-y-3 relative">
+        <div className="space-y-3">
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -6522,6 +6491,14 @@ export function AutomationSettingsPanel({
                         <label htmlFor={`make-a-post-local-random-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Pick at random</label>
                       </div>
                       <div className="flex items-center gap-2">
+                        <input type="checkbox" id={`make-a-post-local-delete-after-${slotIdx ?? 0}`}
+                          checked={settings.makePostLocalFolderDeleteAfterUpload === true}
+                          onChange={e => setSettings(s => ({ ...s, makePostLocalFolderDeleteAfterUpload: e.target.checked }))}
+                          disabled={fieldDisabled("makePostLocalFolderDeleteAfterUpload")}
+                          className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                        <label htmlFor={`make-a-post-local-delete-after-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Delete from PC after posting</label>
+                      </div>
+                      <div className="flex items-center gap-2">
                         <input type="checkbox" id={`make-a-post-disable-exhausted-${slotIdx ?? 0}`}
                           checked={settings.makePostDisableWhenExhausted}
                           onChange={e => setSettings(s => ({ ...s, makePostDisableWhenExhausted: e.target.checked }))}
@@ -6533,6 +6510,39 @@ export function AutomationSettingsPanel({
 
                 </div>
               </div>
+
+              {/* Posted Media panel — shown when the Posted Media button is toggled */}
+              {showPostedMedia && (
+                <div className="border border-border rounded-lg p-3 space-y-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs text-muted-foreground flex-1">
+                      {postedMediaEntries.length} profile post{postedMediaEntries.length !== 1 ? 's' : ''} made from @{slotUsername}
+                    </span>
+                    <Button
+                      variant="outline" size="sm" className="h-7 text-xs px-2.5 gap-1 shrink-0"
+                      onClick={loadPostedMedia}
+                      disabled={loadingPostedMedia}
+                    >Refresh</Button>
+                  </div>
+                  {postedMediaEntries.length > 0 ? (
+                    <div className="space-y-1 max-h-[260px] overflow-y-auto pr-0.5">
+                      {postedMediaEntries.map(entry => (
+                        <div key={entry.id} className="flex items-center gap-2 text-xs">
+                          <ImagePlus className="w-3.5 h-3.5 text-primary shrink-0" />
+                          <span className="flex-1 text-foreground font-mono truncate">{entry.filename}</span>
+                          <span className="text-muted-foreground shrink-0">
+                            {new Date(entry.postedAt).toLocaleString()}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : loadingPostedMedia ? (
+                    <p className="text-xs text-muted-foreground">Loading…</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No profile posts have been made from this account yet.</p>
+                  )}
+                </div>
+              )}
 
               {/* Caption */}
               <div className="space-y-2">
@@ -6619,51 +6629,37 @@ export function AutomationSettingsPanel({
                       className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                     <label htmlFor={`make-a-post-make-unique-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Make it unique</label>
                   </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {showPostedMedia && (
-            <div className="absolute inset-x-0 bottom-0 top-[2.75rem] z-30 flex min-h-[320px] flex-col rounded-lg border border-border bg-background shadow-xl">
-              <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-                <ImagePlus className="h-4 w-4 text-primary shrink-0" />
-                <span className="text-sm font-semibold text-foreground">Posted Media</span>
-                <span className="text-xs text-muted-foreground">
-                  {postedMediaEntries.length} profile post{postedMediaEntries.length !== 1 ? "s" : ""}
-                </span>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                {postedMediaEntries.length > 0 ? (
-                  <div className="space-y-2">
-                    {postedMediaEntries.map(entry => (
-                      <div key={entry.id} className="flex items-center gap-3 rounded-md border border-border/60 bg-muted/20 p-2">
-                        <div className="h-[150px] w-[150px] shrink-0 overflow-hidden rounded-md border border-border bg-muted/30">
-                          {entry.thumbnailUrl ? (
-                            <img
-                              src={entry.thumbnailUrl}
-                              alt={entry.filename}
-                              className="h-full w-full object-cover"
-                              loading="lazy"
-                            />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center p-2 text-center text-[10px] text-muted-foreground">
-                              Thumbnail unavailable
-                            </div>
-                          )}
-                        </div>
-                        <div className="min-w-0 space-y-1">
-                          <p className="truncate text-xs font-mono text-foreground" title={entry.filename}>{entry.filename}</p>
-                          <p className="text-xs text-muted-foreground">{new Date(entry.postedAt).toLocaleString()}</p>
-                        </div>
-                      </div>
-                    ))}
+                  {/* Post to Profile % */}
+                  <div className="space-y-3">
+                    <Label className="text-sm text-muted-foreground block text-center">Post to Profile %</Label>
+                    <div className="flex items-center gap-2">
+                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                        value={settings.makePostPostToProfilePctMin}
+                        onChange={e => setSettings(s => ({ ...s, makePostPostToProfilePctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                        disabled={loading} />
+                      <span className="text-muted-foreground text-sm">to</span>
+                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                        value={settings.makePostPostToProfilePctMax}
+                        onChange={e => setSettings(s => ({ ...s, makePostPostToProfilePctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                        disabled={loading} />
+                    </div>
                   </div>
-                ) : loadingPostedMedia ? (
-                  <p className="text-xs text-muted-foreground">Loading…</p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">No profile posts have been made from this account yet.</p>
-                )}
+                  {/* Post to Story % */}
+                  <div className="space-y-3">
+                    <Label className="text-sm text-muted-foreground block text-center">Post to Story %</Label>
+                    <div className="flex items-center gap-2">
+                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                        value={settings.makePostPostToStoryPctMin}
+                        onChange={e => setSettings(s => ({ ...s, makePostPostToStoryPctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                        disabled={loading} />
+                      <span className="text-muted-foreground text-sm">to</span>
+                      <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                        value={settings.makePostPostToStoryPctMax}
+                        onChange={e => setSettings(s => ({ ...s, makePostPostToStoryPctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                        disabled={loading} />
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -6675,214 +6671,6 @@ export function AutomationSettingsPanel({
           settings={settings.makePostImageSettings}
           alterationLevel={settings.makePostAlterationLevel}
           onSave={saved => setSettings(s => ({ ...s, makePostImageSettings: saved }))}
-        />
-
-        {/* ── Post a Story — standalone Story publisher. The directory is
-             persisted per physical device/account slot; the behavioral
-             settings are inherited from and copyable with Trust Scores. ─ */}
-        <div className="border-t border-border" />
-        <div className="space-y-3 relative">
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id={`post-a-story-enabled-${slotIdx ?? 0}`}
-              checked={settings.postStoryEnabled}
-              onChange={e => setSettings(s => ({ ...s, postStoryEnabled: e.target.checked }))}
-              disabled={fieldDisabled("postStoryEnabled")}
-              className="w-4 h-4 accent-primary cursor-pointer"
-            />
-            <label htmlFor={`post-a-story-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">
-              Post a Story
-            </label>
-          </div>
-
-          {settings.postStoryEnabled && (
-            <div className="pl-1 space-y-4">
-              <div className="flex items-start gap-8 flex-wrap">
-                <div className="space-y-1.5">
-                  <Label className="text-sm text-muted-foreground block text-center">Activate Percentage</Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                      value={settings.postStoryActivatePctMin}
-                      onChange={e => setSettings(s => ({ ...s, postStoryActivatePctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
-                      disabled={fieldDisabled("postStoryActivatePctMin")}
-                    />
-                    <span className="text-muted-foreground text-sm">to</span>
-                    <Input
-                      type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                      value={settings.postStoryActivatePctMax}
-                      onChange={e => setSettings(s => ({ ...s, postStoryActivatePctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
-                      disabled={fieldDisabled("postStoryActivatePctMax")}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="border border-border/60 rounded-lg p-3 space-y-2">
-                <div className="flex flex-wrap items-center gap-3">
-                  {!isTrustScoreTemplateEditor && (
-                    <button
-                      type="button"
-                      disabled={fieldDisabled("postStoryLocalFolderPath")}
-                      onClick={async () => {
-                        const api = (window as any).electronAPI;
-                        if (!api?.openFolderDialog) return;
-                        const result = await api.openFolderDialog(settings.postStoryLocalFolderPath || undefined);
-                        if (result?.canceled || !result?.folder) return;
-                        const updatedSettings = { ...settings, postStoryLocalFolderPath: result.folder };
-                        setSettings(() => updatedSettings);
-                        if (phone && slotIdx !== undefined) {
-                          fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/post-story-folder-path`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ path: result.folder }),
-                          }).catch(() => {});
-                        } else if (phone) {
-                          fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/automation-settings`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify(updatedSettings),
-                          }).catch(() => {});
-                        }
-                      }}
-                      className="h-7 px-3 text-xs rounded border border-border bg-background hover:border-foreground/30 hover:bg-accent transition-colors shrink-0 font-medium text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {settings.postStoryLocalFolderPath ? "Assigned Directory" : "Browse"}
-                    </button>
-                  )}
-                  {settings.postStoryLocalFolderPath && (
-                    <span className="max-w-[340px] truncate text-xs text-muted-foreground" title={settings.postStoryLocalFolderPath}>
-                      {settings.postStoryLocalFolderPath}
-                    </span>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id={`post-a-story-local-no-repeat-${slotIdx ?? 0}`}
-                      checked={settings.postStoryLocalFolderNoRepeat}
-                      onChange={e => setSettings(s => ({ ...s, postStoryLocalFolderNoRepeat: e.target.checked }))}
-                      disabled={fieldDisabled("postStoryLocalFolderNoRepeat")}
-                      className="w-3.5 h-3.5 accent-primary cursor-pointer"
-                    />
-                    <label htmlFor={`post-a-story-local-no-repeat-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">
-                      Do not repost the same image
-                    </label>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id={`post-a-story-local-random-${slotIdx ?? 0}`}
-                      checked={settings.postStoryLocalFolderRandom}
-                      onChange={e => setSettings(s => ({ ...s, postStoryLocalFolderRandom: e.target.checked }))}
-                      disabled={fieldDisabled("postStoryLocalFolderRandom")}
-                      className="w-3.5 h-3.5 accent-primary cursor-pointer"
-                    />
-                    <label htmlFor={`post-a-story-local-random-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">
-                      Pick at random
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id={`post-a-story-alteration-enabled-${slotIdx ?? 0}`}
-                    checked={settings.postStoryAlterationEnabled}
-                    onChange={e => setSettings(s => ({ ...s, postStoryAlterationEnabled: e.target.checked }))}
-                    disabled={fieldDisabled("postStoryAlterationEnabled")}
-                    className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-                  />
-                  <label htmlFor={`post-a-story-alteration-enabled-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none shrink-0">
-                    Alteration level
-                  </label>
-                  <div className="flex gap-1">
-                    {(["small", "medium", "high"] as const).map(lvl => (
-                      <button
-                        key={lvl}
-                        type="button"
-                        disabled={fieldDisabled("postStoryAlterationLevel") || !settings.postStoryAlterationEnabled}
-                        onClick={() => setSettings(s => ({ ...s, postStoryAlterationLevel: lvl }))}
-                        className={`h-8 px-3 text-xs rounded border transition-colors capitalize ${
-                          !settings.postStoryAlterationEnabled
-                            ? "bg-background border-border text-muted-foreground/40 cursor-not-allowed"
-                            : settings.postStoryAlterationLevel === lvl
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "bg-background border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
-                        }`}
-                      >
-                        {lvl}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id={`post-a-story-image-settings-enabled-${slotIdx ?? 0}`}
-                    checked={settings.postStoryImageSettingsEnabled}
-                    onChange={e => setSettings(s => ({ ...s, postStoryImageSettingsEnabled: e.target.checked }))}
-                    disabled={fieldDisabled("postStoryImageSettingsEnabled")}
-                    className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-                  />
-                  <label htmlFor={`post-a-story-image-settings-enabled-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none shrink-0">
-                    Image settings
-                  </label>
-                  <button
-                    type="button"
-                    disabled={fieldDisabled("postStoryImageSettings") || !settings.postStoryImageSettingsEnabled}
-                    onClick={() => setPostStoryImageSettingsOpen(true)}
-                    className={`h-8 px-3 text-xs rounded border transition-colors ${
-                      settings.postStoryImageSettingsEnabled
-                        ? "bg-background border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
-                        : "bg-background border-border text-muted-foreground/40 cursor-not-allowed"
-                    }`}
-                  >
-                    Configure
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="checkbox"
-                    id={`post-a-story-fix-ai-slop-${slotIdx ?? 0}`}
-                    checked={settings.postStoryFixAiSlop}
-                    onChange={e => setSettings(s => ({ ...s, postStoryFixAiSlop: e.target.checked }))}
-                    disabled={fieldDisabled("postStoryFixAiSlop")}
-                    className="w-3.5 h-3.5 accent-primary cursor-pointer"
-                  />
-                  <label htmlFor={`post-a-story-fix-ai-slop-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">
-                    Fix AI Slop
-                  </label>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="checkbox"
-                    id={`post-a-story-make-unique-${slotIdx ?? 0}`}
-                    checked={settings.postStoryMakeUnique}
-                    onChange={e => setSettings(s => ({ ...s, postStoryMakeUnique: e.target.checked }))}
-                    disabled={fieldDisabled("postStoryMakeUnique")}
-                    className="w-3.5 h-3.5 accent-primary cursor-pointer"
-                  />
-                  <label htmlFor={`post-a-story-make-unique-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">
-                    Make it unique
-                  </label>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <ImageSettingsDialog
-          open={postStoryImageSettingsOpen}
-          onClose={() => setPostStoryImageSettingsOpen(false)}
-          settings={settings.postStoryImageSettings}
-          alterationLevel={settings.postStoryAlterationLevel}
-          onSave={saved => setSettings(s => ({ ...s, postStoryImageSettings: saved }))}
         />
 
       </div>
@@ -6907,39 +6695,6 @@ export function AutomationSettingsPanel({
           onCopied={onCopied}
         />
       )}
-
-      {/* Bio Spin editor — the spin text stays out of the normal Random Actions row. */}
-      <Dialog open={bioSpinEditorOpen} onOpenChange={setBioSpinEditorOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Bio Spin</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Enter bio spin text</Label>
-            <Input
-              type="text"
-              autoFocus
-              value={settings.updateBioText}
-              onChange={e => setSettings(s => ({ ...s, updateBioText: e.target.value }))}
-              disabled={fieldDisabled("updateBioText")}
-              placeholder="Enter bio text or spin syntax"
-            />
-            <p className="text-[10px] text-muted-foreground/70">
-              Supports spin syntax such as {"{hello|hi|hey}"}.
-            </p>
-          </div>
-          <div className="flex justify-end pt-1">
-            <button
-              type="button"
-              disabled={fieldDisabled("updateBioText") || !settings.updateBioText.trim()}
-              onClick={() => setSpinPreview(resolveSpinSyntax(settings.updateBioText))}
-              className="h-8 px-4 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Spin
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Spin syntax preview dialog */}
       <Dialog open={spinPreview !== null} onOpenChange={open => { if (!open) setSpinPreview(null); }}>

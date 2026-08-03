@@ -2574,6 +2574,8 @@ class AutomationEngine {
             );
             const level = ((s.repostAlterationLevel ?? "small") as AlterationLevel);
             const captionTemplate = String(s.repostCaptionText ?? "").trim();
+            const deleteAfterUpload = s.repostLocalFolderDeleteAfterUpload !== false;
+
             // Shuffle and pick targetCount files
             const shuffled = [...imageFiles].sort(() => Math.random() - 0.5);
             const picked = shuffled.slice(0, targetCount);
@@ -2595,6 +2597,11 @@ class AutomationEngine {
                 console.log(`[engine] @${profile.username}: 🔁 uploaded from local folder: ${fileName} [${uploadedCount + 1}/${targetCount}]`);
                 this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, fileName, "", "ok", `Uploaded from local folder: ${fileName} (alteration: ${level}) [${uploadedCount + 1}/${targetCount}]`);
                 uploadedCount++;
+                if (deleteAfterUpload) {
+                  try { await fsPromises.unlink(filePath); } catch (e: any) {
+                    console.warn(`[engine] @${profile.username}: could not delete ${filePath}: ${e?.message}`);
+                  }
+                }
               } else {
                 console.warn(`[engine] @${profile.username}: 🔁 local folder upload failed: ${fileName}`);
                 this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, fileName, "", "fail", `Upload failed for: ${fileName}`);

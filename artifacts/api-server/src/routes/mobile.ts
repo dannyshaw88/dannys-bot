@@ -14,7 +14,6 @@ import * as proxyRelay from "../mobile/proxyRelay";
 import * as sessionRecorder from "../mobile/sessionRecorder";
 import { getDeviceLabel } from "./usb-phones";
 import { fixAiSlop } from "../instagram/fixAiSlop";
-import { makeUniqueImage } from "../instagram/makeUnique";
 import {
   alterJpegBuffer,
   type AlterationLevel,
@@ -340,6 +339,7 @@ type AutomationSettings = {
   makePostLocalFolderPath?: string;
   makePostLocalFolderNoRepeat?: boolean;
   makePostLocalFolderRandom?: boolean;
+  makePostLocalFolderDeleteAfterUpload?: boolean;
   makePostUseChatGpt?: boolean;
   makePostFixAiSlop?: boolean;
   makePostMakeUnique?: boolean;
@@ -357,24 +357,6 @@ type AutomationSettings = {
   updateBioText?: string;
   updateBioDisableAfterUsed?: boolean;
   makePostImageSettings?: {
-    contrast: { enabled: boolean; min: number; max: number };
-    brightness: { enabled: boolean; min: number; max: number };
-    noise: { enabled: boolean; min: number; max: number };
-    sharpen: { enabled: boolean; min: number; max: number };
-    pixelate: { enabled: boolean; min: number; max: number };
-  };
-  postStoryEnabled?: boolean;
-  postStoryActivatePctMin?: number;
-  postStoryActivatePctMax?: number;
-  postStoryLocalFolderPath?: string;
-  postStoryLocalFolderNoRepeat?: boolean;
-  postStoryLocalFolderRandom?: boolean;
-  postStoryAlterationEnabled?: boolean;
-  postStoryAlterationLevel?: "small" | "medium" | "high";
-  postStoryImageSettingsEnabled?: boolean;
-  postStoryFixAiSlop?: boolean;
-  postStoryMakeUnique?: boolean;
-  postStoryImageSettings?: {
     contrast: { enabled: boolean; min: number; max: number };
     brightness: { enabled: boolean; min: number; max: number };
     noise: { enabled: boolean; min: number; max: number };
@@ -596,23 +578,6 @@ function setMakePostFolderPath(serial: string, slotIdx: number, folderPath: stri
   try {
     fs.mkdirSync(FOLDER_PATHS_DIR, { recursive: true }); // re-ensure dir on every write
     fs.writeFileSync(_folderPathFile(serial, slotIdx), folderPath, "utf8");
-  } catch { /* best effort */ }
-}
-
-function _postStoryFolderPathFile(serial: string, slotIdx: number): string {
-  return path.join(FOLDER_PATHS_DIR, `${serial.replace(/[^a-zA-Z0-9_\-]/g, "_")}_slot${slotIdx}_post_story.txt`);
-}
-
-function getPostStoryFolderPath(serial: string, slotIdx: number): string {
-  try { return fs.readFileSync(_postStoryFolderPathFile(serial, slotIdx), "utf8").trim(); }
-  catch { return ""; }
-}
-
-function setPostStoryFolderPath(serial: string, slotIdx: number, folderPath: string): void {
-  if (!folderPath) return;
-  try {
-    fs.mkdirSync(FOLDER_PATHS_DIR, { recursive: true });
-    fs.writeFileSync(_postStoryFolderPathFile(serial, slotIdx), folderPath, "utf8");
   } catch { /* best effort */ }
 }
 
@@ -1648,6 +1613,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostLocalFolderPath: z.string().default(""),
     makePostLocalFolderNoRepeat: z.boolean().default(false),
     makePostLocalFolderRandom: z.boolean().default(false),
+    makePostLocalFolderDeleteAfterUpload: z.boolean().default(false),
     makePostUseChatGpt: z.boolean().default(false),
     makePostFixAiSlop: z.boolean().default(false),
     makePostMakeUnique: z.boolean().default(false),
@@ -1657,30 +1623,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostPostToStoryPctMax: z.number().min(0).max(100).default(0),
     makePostCaptionText: z.string().default(""),
     makePostImageSettings: z.object({
-      contrast: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
-      brightness: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
-      noise: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
-      sharpen: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
-      pixelate: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
-    }).default({
-      contrast: { enabled: true, min: 5, max: 250 },
-      brightness: { enabled: true, min: 5, max: 250 },
-      noise: { enabled: true, min: 5, max: 15 },
-      sharpen: { enabled: true, min: 1.0, max: 2.0 },
-      pixelate: { enabled: true, min: 0.9, max: 2.1 },
-    }),
-    postStoryEnabled: z.boolean().default(false),
-    postStoryActivatePctMin: z.number().min(0).max(100).default(100),
-    postStoryActivatePctMax: z.number().min(0).max(100).default(100),
-    postStoryLocalFolderPath: z.string().default(""),
-    postStoryLocalFolderNoRepeat: z.boolean().default(false),
-    postStoryLocalFolderRandom: z.boolean().default(false),
-    postStoryAlterationEnabled: z.boolean().default(true),
-    postStoryAlterationLevel: z.enum(["small", "medium", "high"]).default("small"),
-    postStoryImageSettingsEnabled: z.boolean().default(true),
-    postStoryFixAiSlop: z.boolean().default(false),
-    postStoryMakeUnique: z.boolean().default(false),
-    postStoryImageSettings: z.object({
       contrast: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
       brightness: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
       noise: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
@@ -1788,23 +1730,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       makePostDisableWhenExhausted: true,
       makePostLocalFolderEnabled: true, makePostLocalFolderPath: "",
       makePostLocalFolderNoRepeat: false, makePostLocalFolderRandom: false,
+      makePostLocalFolderDeleteAfterUpload: false,
       makePostUseChatGpt: false, makePostFixAiSlop: false, makePostMakeUnique: false,
       makePostCaptionText: "",
       makePostImageSettings: {
-        contrast: { enabled: true, min: 5, max: 250 },
-        brightness: { enabled: true, min: 5, max: 250 },
-        noise: { enabled: true, min: 5, max: 15 },
-        sharpen: { enabled: true, min: 1.0, max: 2.0 },
-        pixelate: { enabled: true, min: 0.9, max: 2.1 },
-      },
-      postStoryEnabled: false,
-      postStoryActivatePctMin: 100, postStoryActivatePctMax: 100,
-      postStoryLocalFolderPath: "",
-      postStoryLocalFolderNoRepeat: false, postStoryLocalFolderRandom: false,
-      postStoryAlterationEnabled: true, postStoryAlterationLevel: "small",
-      postStoryImageSettingsEnabled: true,
-      postStoryFixAiSlop: false, postStoryMakeUnique: false,
-      postStoryImageSettings: {
         contrast: { enabled: true, min: 5, max: 250 },
         brightness: { enabled: true, min: 5, max: 250 },
         noise: { enabled: true, min: 5, max: 15 },
@@ -1856,10 +1785,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "followFilterVerifiedUsers",
     "followFilterMaxFollowers25k",
     "updateProfilePicFolderPath",
-    "updateBioText",
     "makePostLocalFolderEnabled",
     "makePostLocalFolderPath",
-    "postStoryLocalFolderPath",
   ]);
   const TRUST_SCORE_TEMPLATE_LOCKED_FIELDS = new Set(
     [...TRUST_SCORE_SLOT_OWNED_FIELDS].filter(field => ![
@@ -1877,17 +1804,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "updateProfilePicFolderPath",
     "updateBioText",
     "makePostLocalFolderPath",
-    "postStoryEnabled",
-    "postStoryActivatePctMin",
-    "postStoryActivatePctMax",
-    "postStoryLocalFolderNoRepeat",
-    "postStoryLocalFolderRandom",
-    "postStoryAlterationEnabled",
-    "postStoryAlterationLevel",
-    "postStoryImageSettingsEnabled",
-    "postStoryImageSettings",
-    "postStoryFixAiSlop",
-    "postStoryMakeUnique",
   ]);
   const TRUST_SCORE_TOOL_FIELDS = new Set([
     "feedEnabled",
@@ -1898,7 +1814,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "followEnabled",
     "randomJitterEnabled",
     "makePostEnabled",
-    "postStoryEnabled",
   ]);
   const loadTrustScoreAssignment = async (serial: string, slotIdx: number) => {
     const all = await storage.getGlobalSettings();
@@ -2079,6 +1994,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostDisableWhenExhausted: true,
         makePostLocalFolderEnabled: true, makePostLocalFolderPath: "",
         makePostLocalFolderNoRepeat: false, makePostLocalFolderRandom: false,
+        makePostLocalFolderDeleteAfterUpload: false,
         makePostUseChatGpt: false, makePostFixAiSlop: false, makePostMakeUnique: false,
         makePostPostToProfilePctMin: 100, makePostPostToProfilePctMax: 100,
         makePostPostToStoryPctMin: 0, makePostPostToStoryPctMax: 0,
@@ -2090,20 +2006,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           sharpen: { enabled: true, min: 1.0, max: 2.0 },
           pixelate: { enabled: true, min: 0.9, max: 2.1 },
         },
-        postStoryEnabled: false,
-        postStoryActivatePctMin: 100, postStoryActivatePctMax: 100,
-        postStoryLocalFolderPath: "",
-        postStoryLocalFolderNoRepeat: false, postStoryLocalFolderRandom: false,
-        postStoryAlterationEnabled: true, postStoryAlterationLevel: "small",
-        postStoryImageSettingsEnabled: true,
-        postStoryImageSettings: {
-          contrast: { enabled: true, min: 5, max: 250 },
-          brightness: { enabled: true, min: 5, max: 250 },
-          noise: { enabled: true, min: 5, max: 15 },
-          sharpen: { enabled: true, min: 1.0, max: 2.0 },
-          pixelate: { enabled: true, min: 0.9, max: 2.1 },
-        },
-        postStoryFixAiSlop: false, postStoryMakeUnique: false,
         dismissDirection: "auto" as const,
       };
       const saved = cfg[serial]?.slotAutomation?.[String(slotIdx)];
@@ -2122,8 +2024,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // race that could overwrite mobile-instances.json with a stale "".
       const dedicatedFolderPath = getMakePostFolderPath(serial, slotIdx);
       if (dedicatedFolderPath) merged.makePostLocalFolderPath = dedicatedFolderPath;
-      const dedicatedStoryFolderPath = getPostStoryFolderPath(serial, slotIdx);
-      if (dedicatedStoryFolderPath) merged.postStoryLocalFolderPath = dedicatedStoryFolderPath;
       const dedicatedProfilePicPath = getProfilePicFolderPath(serial, slotIdx);
       if (dedicatedProfilePicPath) merged.updateProfilePicFolderPath = dedicatedProfilePicPath;
       const resolved = await resolveTrustScoreSettings(serial, slotIdx, merged);
@@ -2166,7 +2066,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // path in `base` (from mobile-instances.json) is preserved instead.
       const body = { ...req.body };
       if (body.makePostLocalFolderPath === "") delete body.makePostLocalFolderPath;
-      if (body.postStoryLocalFolderPath === "") delete body.postStoryLocalFolderPath;
       const assignment = await loadTrustScoreAssignment(serial, slotIdx);
       // Never let a full effective-settings response write template values
       // back into the slot's manual baseline. Feature switches are represented
@@ -2221,9 +2120,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // be lost on restart.
       if (input.makePostLocalFolderPath) {
         setMakePostFolderPath(serial, slotIdx, input.makePostLocalFolderPath);
-      }
-      if (input.postStoryLocalFolderPath) {
-        setPostStoryFolderPath(serial, slotIdx, input.postStoryLocalFolderPath);
       }
       if (input.updateProfilePicFolderPath) {
         setProfilePicFolderPath(serial, slotIdx, input.updateProfilePicFolderPath);
@@ -6130,6 +6026,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostLocalFolderPath: z.string().default(""),
     makePostLocalFolderNoRepeat: z.boolean().default(false),
     makePostLocalFolderRandom: z.boolean().default(false),
+    makePostLocalFolderDeleteAfterUpload: z.boolean().default(false),
     makePostCaptionText: z.string().default(""),
     makePostAlterationEnabled: z.boolean().default(true),
     makePostAlterationLevel: z.enum(["small", "medium", "high"]).default("small"),
@@ -6161,31 +6058,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostPostToProfilePctMax: z.number().min(0).max(100).default(100),
     makePostPostToStoryPctMin: z.number().min(0).max(100).default(0),
     makePostPostToStoryPctMax: z.number().min(0).max(100).default(0),
-    // ── Post a Story — standalone Story publisher, separate from Make a Post.
-    postStoryEnabled: z.boolean().default(false),
-    postStoryActivatePctMin: z.number().min(0).max(100).default(100),
-    postStoryActivatePctMax: z.number().min(0).max(100).default(100),
-    postStoryLocalFolderPath: z.string().default(""),
-    postStoryLocalFolderNoRepeat: z.boolean().default(false),
-    postStoryLocalFolderRandom: z.boolean().default(false),
-    postStoryAlterationEnabled: z.boolean().default(true),
-    postStoryAlterationLevel: z.enum(["small", "medium", "high"]).default("small"),
-    postStoryImageSettingsEnabled: z.boolean().default(true),
-    postStoryImageSettings: z.object({
-      contrast: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
-      brightness: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
-      noise: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
-      sharpen: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
-      pixelate: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
-    }).default({
-      contrast: { enabled: true, min: 5, max: 250 },
-      brightness: { enabled: true, min: 5, max: 250 },
-      noise: { enabled: true, min: 5, max: 15 },
-      sharpen: { enabled: true, min: 1.0, max: 2.0 },
-      pixelate: { enabled: true, min: 0.9, max: 2.1 },
-    }),
-    postStoryFixAiSlop: z.boolean().default(false),
-    postStoryMakeUnique: z.boolean().default(false),
     // Which Instagram account slot is driving this cycle. When set the cycle
     // switches to that account via the built-in Instagram switcher before
     // running any tools, so each slot's settings are always applied to the
@@ -6335,15 +6207,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     username: string;
     slotIdx: number;
     postedAt: string;
-    thumbnailFile?: string;
   };
   const mobilePostedProfileMedia = new Map<string, PostedProfileMediaEntry[]>();
   const POSTED_PROFILE_MEDIA_DIR = process.env.EQUINOX_DATA_DIR
     ? path.join(process.env.EQUINOX_DATA_DIR, "mobile-posted-profile-media")
     : path.join(path.dirname(path.resolve(process.argv[1] ?? ".")), "..", "mobile-posted-profile-media");
-  const POSTED_PROFILE_MEDIA_THUMBNAILS_DIR = path.join(POSTED_PROFILE_MEDIA_DIR, "thumbnails");
   try { fs.mkdirSync(POSTED_PROFILE_MEDIA_DIR, { recursive: true }); } catch { /* already exists */ }
-  try { fs.mkdirSync(POSTED_PROFILE_MEDIA_THUMBNAILS_DIR, { recursive: true }); } catch { /* already exists */ }
   const _postedProfileMediaPath = (serial: string) =>
     path.join(POSTED_PROFILE_MEDIA_DIR, `${serial.replace(/[^a-zA-Z0-9_\-]/g, "_")}.json`);
   const getPostedProfileMedia = (serial: string): PostedProfileMediaEntry[] => {
@@ -6358,32 +6227,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     return mobilePostedProfileMedia.get(serial)!;
   };
-  const recordPostedProfileMedia = (
-    serial: string,
-    slotIdx: number,
-    username: string,
-    filename: string,
-    thumbnail?: Buffer,
-  ) => {
+  const recordPostedProfileMedia = (serial: string, slotIdx: number, username: string, filename: string) => {
     const normalizedUsername = username.replace(/^@/, "").trim();
     if (!normalizedUsername) return;
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    let thumbnailFile: string | undefined;
-    if (thumbnail?.length) {
-      thumbnailFile = `${id}.jpg`;
-      try {
-        fs.writeFileSync(path.join(POSTED_PROFILE_MEDIA_THUMBNAILS_DIR, thumbnailFile), thumbnail);
-      } catch {
-        thumbnailFile = undefined;
-      }
-    }
     const entry: PostedProfileMediaEntry = {
-      id,
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
       filename,
       username: normalizedUsername,
       slotIdx,
       postedAt: new Date().toISOString(),
-      thumbnailFile,
     };
     const list = getPostedProfileMedia(serial);
     list.unshift(entry);
@@ -6392,37 +6244,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch { /* best effort — posting has already succeeded */ }
   };
 
-  const ensurePostedProfileMediaThumbnail = async (
-    serial: string,
-    entry: PostedProfileMediaEntry,
-  ): Promise<boolean> => {
-    if (entry.thumbnailFile) return false;
-    const folderPath = getMakePostFolderPath(serial, entry.slotIdx);
-    if (!folderPath) return false;
-
-    const folderRoot = path.resolve(folderPath);
-    const sourcePath = path.resolve(folderRoot, path.basename(entry.filename));
-    if (!sourcePath.startsWith(`${folderRoot}${path.sep}`)) return false;
-    try {
-      if (!(await fsPromises.stat(sourcePath)).isFile()) return false;
-      const thumbnail = await sharp(sourcePath)
-        .resize(150, 150, { fit: "cover", position: "centre" })
-        .jpeg({ quality: 82 })
-        .toBuffer();
-      const thumbnailFile = `${entry.id}.jpg`;
-      await fsPromises.writeFile(path.join(POSTED_PROFILE_MEDIA_THUMBNAILS_DIR, thumbnailFile), thumbnail);
-      entry.thumbnailFile = thumbnailFile;
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
   const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 
   type MakePostImageOptions = {
     doFixAiSlop?: boolean;
-    makeUnique?: boolean;
     alterationEnabled?: boolean;
     alterationLevel?: AlterationLevel;
     imageSettingsEnabled?: boolean;
@@ -6445,7 +6270,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     pushFileName: string;
     cleanup: () => Promise<void>;
   }> {
-    const { doFixAiSlop, makeUnique, alterationEnabled, alterationLevel, imageSettingsEnabled, imageSettings, onLog } = opts;
+    const { doFixAiSlop, alterationEnabled, alterationLevel, imageSettingsEnabled, imageSettings, onLog } = opts;
     const tempFiles: string[] = [];
     const tempDirs: string[] = [];
     const prefix = fileName.includes("/") ? "Make a Post" : "Make a Post";
@@ -6497,24 +6322,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         onLog?.(`${prefix}: ${level} image alteration ✓ — pushing processed copy`);
       } catch (e: any) {
         onLog?.(`${prefix}: image alteration error — ${e?.message ?? "unknown error"}, continuing with previous image`);
-      }
-    }
-
-    if (makeUnique) {
-      onLog?.(`${prefix}: making a unique image copy…`);
-      try {
-        const input = await fsPromises.readFile(pushFilePath);
-        const unique = await makeUniqueImage(input);
-        const tempDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "equinox-mobile-unique-"));
-        const uniquePath = path.join(tempDir, "unique.jpg");
-        await fsPromises.writeFile(uniquePath, unique);
-        tempDirs.push(tempDir);
-        tempFiles.push(uniquePath);
-        pushFilePath = uniquePath;
-        pushFileName = `${path.basename(fileName, path.extname(fileName))}.jpg`;
-        onLog?.(`${prefix}: unique image ✓ — pushing processed copy`);
-      } catch (e: any) {
-        onLog?.(`${prefix}: unique image error — ${e?.message ?? "unknown error"}, continuing with previous image`);
       }
     }
 
@@ -6590,7 +6397,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   async function runMakePostStep(serial: string, opts: {
     localFolderPath: string; localFolderRandom: boolean; localFolderNoRepeat: boolean;
-     captionText: string;
+    deleteAfterUpload: boolean; captionText: string;
     accountUsername?: string; slotIdx?: number;
     doFixAiSlop?: boolean;
     alterationEnabled?: boolean;
@@ -6600,7 +6407,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     onLog?: (msg: string) => void;
   }): Promise<{ posted: boolean; fileName?: string }> {
     const {
-      localFolderPath, localFolderRandom, localFolderNoRepeat,
+      localFolderPath, localFolderRandom, localFolderNoRepeat, deleteAfterUpload,
       captionText, doFixAiSlop, alterationEnabled, alterationLevel,
       imageSettingsEnabled, imageSettings, onLog,
     } = opts;
@@ -6619,18 +6426,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       imageSettings,
       onLog,
     });
-    // Keep a small preview of the exact prepared image. It is only persisted
-    // after Instagram confirms the profile post, and the original PC file is
-    // never modified.
-    let postedThumbnail: Buffer | undefined;
-    try {
-      postedThumbnail = await sharp(prepared.pushFilePath)
-        .resize(150, 150, { fit: "cover", position: "centre" })
-        .jpeg({ quality: 82 })
-        .toBuffer();
-    } catch {
-      // A thumbnail is helpful but must never prevent a confirmed post.
-    }
 
     onLog?.(`Make a Post: pushing "${fileName}" to device…`);
     let devicePath: string;
@@ -6934,7 +6729,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
 
     recordPostedLocalFile(serial, fileName);
-    recordPostedProfileMedia(serial, opts.slotIdx ?? 0, opts.accountUsername ?? "", fileName, postedThumbnail);
+    recordPostedProfileMedia(serial, opts.slotIdx ?? 0, opts.accountUsername ?? "", fileName);
+    if (deleteAfterUpload) {
+      try { await fsPromises.unlink(localFilePath); } catch { /* best effort */ }
+    }
     // Always remove the temp copy pushed to the device — it is only needed
     // for the picker/upload. Leaving it behind fills up the camera roll.
     await android.removeDeviceFile(serial, devicePath).catch(() => {});
@@ -6948,8 +6746,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   //       → forward arrow → Share → Finished → dismiss Stories archive popup.
   async function runMakePostStoryStep(serial: string, opts: {
     localFolderPath: string; localFolderRandom: boolean; localFolderNoRepeat: boolean;
+    deleteAfterUpload: boolean;
     doFixAiSlop?: boolean;
-    makeUnique?: boolean;
     alterationEnabled?: boolean;
     alterationLevel?: AlterationLevel;
     imageSettingsEnabled?: boolean;
@@ -6957,8 +6755,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     onLog?: (msg: string) => void;
   }): Promise<{ posted: boolean; fileName?: string }> {
     const {
-      localFolderPath, localFolderRandom, localFolderNoRepeat,
-      doFixAiSlop, makeUnique, alterationEnabled, alterationLevel,
+      localFolderPath, localFolderRandom, localFolderNoRepeat, deleteAfterUpload,
+      doFixAiSlop, alterationEnabled, alterationLevel,
       imageSettingsEnabled, imageSettings, onLog,
     } = opts;
 
@@ -6970,7 +6768,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     const prepared = await prepareMakePostImage(localFilePath, fileName, {
       doFixAiSlop,
-      makeUnique,
       alterationEnabled,
       alterationLevel,
       imageSettingsEnabled,
@@ -7117,6 +6914,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     await android.dismissInstagramInterstitials(serial).catch(() => null);
 
     recordPostedLocalFile(serial, fileName);
+    if (deleteAfterUpload) {
+      try { await fsPromises.unlink(localFilePath); } catch { /* best effort */ }
+    }
     await android.removeDeviceFile(serial, devicePath).catch(() => {});
     onLog?.(`Make a Post (Story): ✓ story posted "${fileName}"`);
     return { posted: true, fileName };
@@ -9336,35 +9136,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     res.json({ ok: true });
   });
 
-  app.get("/api/mobile/devices/:serial/slots/:slotIdx/post-story-folder-path", (req: Request, res: Response) => {
-    const serial = req.params.serial as string;
-    const slotIdx = parseInt(req.params.slotIdx, 10);
-    if (isNaN(slotIdx) || slotIdx < 0) { res.status(400).json({ error: "Invalid slot index" }); return; }
-    res.json({ ok: true, path: getPostStoryFolderPath(serial, slotIdx) });
-  });
-
-  app.post("/api/mobile/devices/:serial/slots/:slotIdx/post-story-folder-path", (req: Request, res: Response) => {
-    const serial = req.params.serial as string;
-    const slotIdx = parseInt(req.params.slotIdx, 10);
-    if (isNaN(slotIdx) || slotIdx < 0) { res.status(400).json({ error: "Invalid slot index" }); return; }
-    const folderPath = typeof req.body?.path === "string" ? req.body.path.trim() : "";
-    if (!folderPath) { res.json({ ok: true }); return; }
-    setPostStoryFolderPath(serial, slotIdx, folderPath);
-    try {
-      const cfg = loadInstanceConfigs();
-      const existing = cfg[serial]?.slotAutomation?.[String(slotIdx)] ?? {};
-      cfg[serial] = {
-        ...cfg[serial],
-        slotAutomation: {
-          ...cfg[serial]?.slotAutomation,
-          [String(slotIdx)]: { ...existing, postStoryLocalFolderPath: folderPath },
-        },
-      };
-      saveInstanceConfigs(cfg);
-    } catch { /* dedicated file remains authoritative */ }
-    res.json({ ok: true });
-  });
-
   // ── Update Profile Picture folder-path endpoint ──────────────────────────────
   // POST with a non-empty path sets the dedicated file; POST with "" clears both.
   app.post("/api/mobile/devices/:serial/slots/:slotIdx/profile-pic-folder-path", (req: Request, res: Response) => {
@@ -9428,7 +9199,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // Confirmed profile-feed posts for one account slot. This is intentionally
   // separate from posted-media, which is the device-wide no-repeat cache and
   // includes Story uploads.
-    app.get("/api/mobile/devices/:serial/posted-profile-media", async (req: Request, res: Response) => {
+  app.get("/api/mobile/devices/:serial/posted-profile-media", (req: Request, res: Response) => {
     const serial = req.params.serial as string;
     const username = String(req.query.username ?? "").replace(/^@/, "").trim().toLowerCase();
     const slotIdxRaw = Number(req.query.slotIdx);
@@ -9439,44 +9210,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       entry.username.replace(/^@/, "").trim().toLowerCase() === username &&
       (slotIdx === null || entry.slotIdx === slotIdx)
     );
-      let changed = false;
-      for (const entry of entries) {
-        changed = (await ensurePostedProfileMediaThumbnail(serial, entry)) || changed;
-      }
-      if (changed) {
-        try {
-          fs.writeFileSync(
-            _postedProfileMediaPath(serial),
-            JSON.stringify(getPostedProfileMedia(serial).slice(0, 5000)),
-            "utf8",
-          );
-        } catch { /* best effort */ }
-      }
     const today = new Date().toISOString().slice(0, 10);
     res.json({
       ok: true,
-        entries: entries.map(entry => ({
-          ...entry,
-          thumbnailUrl: entry.thumbnailFile
-            ? `/api/mobile/devices/${encodeURIComponent(serial)}/posted-profile-media/${encodeURIComponent(entry.id)}/thumbnail`
-            : undefined,
-        })),
+      entries,
       count: entries.length,
       dailyCount: entries.filter(entry => entry.postedAt.slice(0, 10) === today).length,
     });
-  });
-
-  app.get("/api/mobile/devices/:serial/posted-profile-media/:entryId/thumbnail", (req: Request, res: Response) => {
-    const serial = req.params.serial as string;
-    const entryId = req.params.entryId as string;
-    const entry = getPostedProfileMedia(serial).find(candidate => candidate.id === entryId);
-    if (!entry?.thumbnailFile) return res.status(404).end();
-
-    const thumbnailRoot = path.resolve(POSTED_PROFILE_MEDIA_THUMBNAILS_DIR);
-    const thumbnailPath = path.resolve(thumbnailRoot, entry.thumbnailFile);
-    if (!thumbnailPath.startsWith(`${thumbnailRoot}${path.sep}`)) return res.status(400).end();
-    if (!fs.existsSync(thumbnailPath)) return res.status(404).end();
-    res.type("image/jpeg").sendFile(thumbnailPath);
   });
 
   // Abort endpoint — called by the frontend when the master toggle is switched
@@ -9636,13 +9376,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostEnabled, makePostActivatePctMin, makePostActivatePctMax,
         makePostPerSessionMin, makePostPerSessionMax,
         makePostLocalFolderEnabled, makePostLocalFolderPath,
-        makePostLocalFolderNoRepeat, makePostLocalFolderRandom,
+        makePostLocalFolderNoRepeat, makePostLocalFolderRandom, makePostLocalFolderDeleteAfterUpload,
         makePostAlterationEnabled, makePostAlterationLevel, makePostImageSettingsEnabled,
-         makePostImageSettings, makePostFixAiSlop, makePostCaptionText,
-         postStoryEnabled, postStoryActivatePctMin, postStoryActivatePctMax,
-         postStoryLocalFolderPath, postStoryLocalFolderNoRepeat, postStoryLocalFolderRandom,
-         postStoryAlterationEnabled, postStoryAlterationLevel, postStoryImageSettingsEnabled,
-         postStoryImageSettings, postStoryFixAiSlop, postStoryMakeUnique,
+        makePostImageSettings, makePostFixAiSlop, makePostCaptionText,
+        makePostPostToProfilePctMin, makePostPostToProfilePctMax,
+        makePostPostToStoryPctMin, makePostPostToStoryPctMax,
         slotUsername, slotIdx,
         shuffleToolOrder,
         dismissDirection,
@@ -9843,12 +9581,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         checkDm: (checkDmEnabled ?? false) && rollActivate(checkDmActivatePctMin ?? 100, checkDmActivatePctMax ?? 100),
         follow:  followEnabled && rollActivate(followActivatePctMin, followActivatePctMax),
         post:    makePostEnabled && rollActivate(makePostActivatePctMin, makePostActivatePctMax),
-        postStory: postStoryEnabled && rollActivate(postStoryActivatePctMin, postStoryActivatePctMax),
         'Random Actions':  randomJitterEnabled && rollActivate(randomJitterActivatePctMin, randomJitterActivatePctMax),
       };
 
       // Build the sequence from only the tools that passed their activate gate.
-      const _toolSeq = ['feed', 'stories', 'explore', 'reels', 'checkDm', 'follow', 'post', 'postStory', 'Random Actions']
+      const _toolSeq = ['feed', 'stories', 'explore', 'reels', 'checkDm', 'follow', 'post', 'Random Actions']
         .filter(t => _toolActivated[t]);
       if (shuffleToolOrder) {
         for (let _si = _toolSeq.length - 1; _si > 0; _si--) {
@@ -9863,7 +9600,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           checkDm: "DIRECT MESSAGING",
           follow: "FOLLOW USERS",
           post: "MAKE A POST",
-          postStory: "POST A STORY",
           "Random Actions": "RANDOM ACTIONS",
         };
         const _debugToolOrder = _toolSeq.map(_name => _debugToolOrderLabels[_name] ?? _name);
@@ -10517,31 +10253,61 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               let posted = 0;
               for (let i = 0; i < postCount; i++) {
                 try {
-                  // Make a Post now always uses the normal Instagram feed-post
-                  // flow. The legacy story routine remains stored in the
-                  // server for the future standalone Story tool, but is not
-                  // reachable from this tool.
-                  tLog("  Make a Post: destination → normal feed");
-                  const result = await runMakePostStep(serial, {
-                    localFolderPath: resolvedFolderPath,
-                    localFolderRandom: makePostLocalFolderRandom,
-                    localFolderNoRepeat: makePostLocalFolderNoRepeat,
-                    accountUsername: slotUsername,
-                    slotIdx,
-                    alterationEnabled: makePostAlterationEnabled,
-                    alterationLevel: makePostAlterationLevel,
-                    imageSettingsEnabled: makePostImageSettingsEnabled,
-                    imageSettings: makePostImageSettings,
-                    doFixAiSlop: makePostFixAiSlop,
-                    captionText: makePostCaptionText,
-                    onLog: (msg) => tLog(`  ${msg}`),
-                  });
-                  if (result.posted) {
-                    posted++;
-                    postsUploaded++;
-                    tLog("  Make a Post: upload confirmed — dwelling 5 s before continuing…");
-                    await sleepOrAbort(serial, 5000);
-                  } else break;
+                  // ── Destination roll ─────────────────────────────────────
+                  // Story is checked first. If that roll misses, profile is
+                  // tried. Both default to 100%/0% so existing behaviour
+                  // (always profile) is preserved unless the user changes them.
+                  const storyPct = rollRange(makePostPostToStoryPctMin, makePostPostToStoryPctMax);
+                  const profilePct = rollRange(makePostPostToProfilePctMin, makePostPostToProfilePctMax);
+                  const postToStory = storyPct > 0 && Math.random() * 100 < storyPct;
+                  const postToProfile = !postToStory && Math.random() * 100 < profilePct;
+                  if (postToStory) {
+                    tLog(`  Make a Post: destination → Story (rolled ${storyPct}%)`);
+                    const result = await runMakePostStoryStep(serial, {
+                      localFolderPath: resolvedFolderPath,
+                      localFolderRandom: makePostLocalFolderRandom,
+                      localFolderNoRepeat: makePostLocalFolderNoRepeat,
+                      deleteAfterUpload: makePostLocalFolderDeleteAfterUpload,
+                      alterationEnabled: makePostAlterationEnabled,
+                      alterationLevel: makePostAlterationLevel,
+                      imageSettingsEnabled: makePostImageSettingsEnabled,
+                      imageSettings: makePostImageSettings,
+                      doFixAiSlop: makePostFixAiSlop,
+                      onLog: (msg) => tLog(`  ${msg}`),
+                    });
+                    if (result.posted) {
+                      posted++;
+                      postsUploaded++;
+                      tLog("  Make a Post: upload confirmed — dwelling 5 s before continuing…");
+                      await sleepOrAbort(serial, 5000);
+                    } else break;
+                  } else if (postToProfile) {
+                    tLog(`  Make a Post: destination → Profile (rolled ${profilePct}%)`);
+                    const result = await runMakePostStep(serial, {
+                      localFolderPath: resolvedFolderPath,
+                      localFolderRandom: makePostLocalFolderRandom,
+                      localFolderNoRepeat: makePostLocalFolderNoRepeat,
+                      deleteAfterUpload: makePostLocalFolderDeleteAfterUpload,
+                      accountUsername: slotUsername,
+                      slotIdx,
+                      alterationEnabled: makePostAlterationEnabled,
+                      alterationLevel: makePostAlterationLevel,
+                      imageSettingsEnabled: makePostImageSettingsEnabled,
+                      imageSettings: makePostImageSettings,
+                      doFixAiSlop: makePostFixAiSlop,
+                      captionText: makePostCaptionText,
+                      onLog: (msg) => tLog(`  ${msg}`),
+                    });
+                    if (result.posted) {
+                      posted++;
+                      postsUploaded++;
+                      tLog("  Make a Post: upload confirmed — dwelling 5 s before continuing…");
+                      await sleepOrAbort(serial, 5000);
+                    } else break;
+                  } else {
+                    tLog(`  Make a Post: both story (${storyPct}%) and profile (${profilePct}%) rolls missed — skipping this post`);
+                    break;
+                  }
                 } catch (e: any) {
                   if (e?.message === "cycle-aborted") throw e;
                   tLog(`▶ Make a Post attempt error — ${e?.message}`);
@@ -10554,48 +10320,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           } else if (makePostEnabled) {
             steps.push("make-a-post(skipped — Activate Percentage roll missed this execution)");
             tLog("▶ Make a Post Activate Percentage roll missed — skipping this execution");
-          }
-
-        // ── Post a Story ──────────────────────────────────────────────────
-        } else if (_tool === 'postStory') {
-          if (_toolActivated[_tool]) {
-            const resolvedStoryFolderPath =
-              postStoryLocalFolderPath || getPostStoryFolderPath(serial, slotIdx);
-            if (!resolvedStoryFolderPath) {
-              steps.push("post-a-story(skipped — Local Folder source not configured)");
-              tLog("▶ Post a Story enabled but no Local Folder path configured — skipping");
-            } else {
-              tLog("▶ Post a Story — attempting one story from local folder…");
-              let posted = 0;
-              try {
-                const result = await runMakePostStoryStep(serial, {
-                  localFolderPath: resolvedStoryFolderPath,
-                  localFolderRandom: postStoryLocalFolderRandom,
-                  localFolderNoRepeat: postStoryLocalFolderNoRepeat,
-                  alterationEnabled: postStoryAlterationEnabled,
-                  alterationLevel: postStoryAlterationLevel,
-                  imageSettingsEnabled: postStoryImageSettingsEnabled,
-                  imageSettings: postStoryImageSettings,
-                  doFixAiSlop: postStoryFixAiSlop,
-                  makeUnique: postStoryMakeUnique,
-                  onLog: (msg) => tLog(`  ${msg}`),
-                });
-                if (result.posted) {
-                  posted++;
-                  postsUploaded++;
-                  tLog("  Post a Story: upload confirmed — dwelling 5 s before continuing…");
-                  await sleepOrAbort(serial, 5000);
-                }
-              } catch (e: any) {
-                if (e?.message === "cycle-aborted") throw e;
-                tLog(`▶ Post a Story attempt error — ${e?.message}`);
-              }
-              steps.push(`post-a-story(${posted}/1 posted)`);
-              tLog(`▶ Post a Story done — ${posted}/1 posted`);
-            }
-          } else if (postStoryEnabled) {
-            steps.push("post-a-story(skipped — Activate Percentage roll missed this execution)");
-            tLog("▶ Post a Story Activate Percentage roll missed — skipping this execution");
           }
 
         // ── Random Jitter ───────────────────────────────────────────────

@@ -414,6 +414,100 @@ export const insertApiCreatedAccountSchema = createInsertSchema(apiCreatedAccoun
 export type ApiCreatedAccount = typeof apiCreatedAccounts.$inferSelect;
 export type InsertApiCreatedAccount = z.infer<typeof insertApiCreatedAccountSchema>;
 
+export const bannedAccountsAnalytics = sqliteTable("banned_accounts_analytics", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  username: text("username").notNull(),
+  proxyHost: text("proxy_host").default(""),
+  bannedAt: text("banned_at").notNull(),
+  endpointCount: integer("endpoint_count").default(0),
+  endpointSnapshot: text("endpoint_snapshot").default("[]"),
+  verifyCountLast24h: integer("verify_count_last_24h").default(0),
+  accountAgeDays: integer("account_age_days"),
+  proxyAccountCount: integer("proxy_account_count").default(0),
+  followCountBeforeBan: integer("follow_count_before_ban").default(0),
+  sessionToActionRatio: text("session_to_action_ratio"),
+  spanHours: text("span_hours"),
+  lastOperationBeforeBan: text("last_operation_before_ban"),
+  userAgentApi: text("user_agent_api"),
+  userAgentEmbedded: text("user_agent_embedded"),
+  igDeviceState: text("ig_device_state"),
+  ebFingerprint: text("eb_fingerprint"),
+  leakSnapshot: text("leak_snapshot"),
+});
+
+export const insertBannedAccountAnalyticsSchema = createInsertSchema(bannedAccountsAnalytics).omit({ id: true });
+export type BannedAccountAnalytics = typeof bannedAccountsAnalytics.$inferSelect;
+export type InsertBannedAccountAnalytics = z.infer<typeof insertBannedAccountAnalyticsSchema>;
+
+export const automatedBehaviourAnalytics = sqliteTable("automated_behaviour_analytics", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  username: text("username").notNull(),
+  proxyHost: text("proxy_host").default(""),
+  flaggedAt: text("flagged_at").notNull(),
+  endpointCount: integer("endpoint_count").default(0),
+  endpointSnapshot: text("endpoint_snapshot").default("[]"),
+  verifyCountLast24h: integer("verify_count_last_24h").default(0),
+  accountAgeDays: integer("account_age_days"),
+  proxyAccountCount: integer("proxy_account_count").default(0),
+  followCountBeforeBan: integer("follow_count_before_ban").default(0),
+  sessionToActionRatio: text("session_to_action_ratio"),
+  spanHours: text("span_hours"),
+  lastOperationBeforeBan: text("last_operation_before_ban"),
+  userAgentApi: text("user_agent_api"),
+  userAgentEmbedded: text("user_agent_embedded"),
+  igDeviceState: text("ig_device_state"),
+  ebFingerprint: text("eb_fingerprint"),
+  leakSnapshot: text("leak_snapshot"),
+});
+
+export type AutomatedBehaviourAnalytics = typeof automatedBehaviourAnalytics.$inferSelect;
+
+export const captchaAnalytics = sqliteTable("captcha_analytics", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  username: text("username").notNull(),
+  proxyHost: text("proxy_host").default(""),
+  flaggedAt: text("flagged_at").notNull(),
+  endpointCount: integer("endpoint_count").default(0),
+  endpointSnapshot: text("endpoint_snapshot").default("[]"),
+  verifyCountLast24h: integer("verify_count_last_24h").default(0),
+  accountAgeDays: integer("account_age_days"),
+  proxyAccountCount: integer("proxy_account_count").default(0),
+  followCountBeforeBan: integer("follow_count_before_ban").default(0),
+  sessionToActionRatio: text("session_to_action_ratio"),
+  spanHours: text("span_hours"),
+  lastOperationBeforeBan: text("last_operation_before_ban"),
+  userAgentApi: text("user_agent_api"),
+  userAgentEmbedded: text("user_agent_embedded"),
+  igDeviceState: text("ig_device_state"),
+  ebFingerprint: text("eb_fingerprint"),
+  leakSnapshot: text("leak_snapshot"),
+});
+
+export type CaptchaAnalytics = typeof captchaAnalytics.$inferSelect;
+
+export const lockedAccountsAnalytics = sqliteTable("locked_accounts_analytics", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  username: text("username").notNull(),
+  proxyHost: text("proxy_host").default(""),
+  flaggedAt: text("flagged_at").notNull(),
+  endpointCount: integer("endpoint_count").default(0),
+  endpointSnapshot: text("endpoint_snapshot").default("[]"),
+  verifyCountLast24h: integer("verify_count_last_24h").default(0),
+  accountAgeDays: integer("account_age_days"),
+  proxyAccountCount: integer("proxy_account_count").default(0),
+  followCountBeforeBan: integer("follow_count_before_ban").default(0),
+  sessionToActionRatio: text("session_to_action_ratio"),
+  spanHours: text("span_hours"),
+  lastOperationBeforeBan: text("last_operation_before_ban"),
+  userAgentApi: text("user_agent_api"),
+  userAgentEmbedded: text("user_agent_embedded"),
+  igDeviceState: text("ig_device_state"),
+  ebFingerprint: text("eb_fingerprint"),
+  leakSnapshot: text("leak_snapshot"),
+});
+
+export type LockedAccountAnalytics = typeof lockedAccountsAnalytics.$inferSelect;
+
 export const insertProxySchema = createInsertSchema(proxies).omit({ id: true }).extend({
   name: z.string().optional(),
   host: z.string().default("0.0.0.0"),

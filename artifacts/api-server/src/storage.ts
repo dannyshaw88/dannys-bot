@@ -10,7 +10,9 @@ statusEvents.setMaxListeners(200);
 import {
   proxies, profiles, tools, sources, stats, instagramApiCalls, followedUsers, sessionActions,
   globalSettings, skippedUsers, repostedPosts, contactDmSent, contactPendingMessages,
-  hashtagCursors, scrapedUsersGlobal, apiCreatedAccounts, overspillUsers,
+  hashtagCursors, scrapedUsersGlobal, apiCreatedAccounts, bannedAccountsAnalytics,
+  automatedBehaviourAnalytics, captchaAnalytics, lockedAccountsAnalytics, overspillUsers,
+  type AutomatedBehaviourAnalytics, type CaptchaAnalytics, type LockedAccountAnalytics,
   type Proxy, type InsertProxy,
   type Profile, type InsertProfile,
   type Tool, type InsertTool,
@@ -23,6 +25,7 @@ import {
   type ContactDmSent, type InsertContactDmSent,
   type ContactPendingMessage, type InsertContactPendingMessage,
   type ApiCreatedAccount, type InsertApiCreatedAccount,
+  type BannedAccountAnalytics,
 } from "./shared/schema";
 import { eq, desc, and, sql, like, gt, ne, or, isNull, isNotNull, not, inArray } from "drizzle-orm";
 
@@ -75,6 +78,8 @@ export interface IStorage {
   getVerifyOpsByProfile(): Promise<Record<number, string[]>>;
   createInstagramApiCall(call: { profileId: number; username?: string; operationName: string; date: string; message?: string; source?: string; navChain?: string; ipAddress?: string; durationMs?: number; isError?: boolean; transport?: string }): Promise<any>;
   resetStuckVerifyingAccounts(): Promise<number>;
+  purgeEvasionStats(): Promise<{ deletedApiCalls: number; deletedBan: number; deletedAutomated: number; deletedCaptcha: number; deletedLocked: number }>;
+
   // Pre-Status-Change Hit Tracking
   getPreStatusChangeHits(profileId: number): Promise<{ operationName: string; perAccountCount: number }[]>;
   getGlobalPreStatusChangeHits(): Promise<{ operationName: string; globalCount: number }[]>;
@@ -153,6 +158,22 @@ export interface IStorage {
   getApiCreatedAccounts(): Promise<ApiCreatedAccount[]>;
   listApiCreatedAccounts(): Promise<ApiCreatedAccount[]>;
   deleteApiCreatedAccount(id: number): Promise<void>;
+
+  // Ban Analytics
+  insertBanAnalytics(entry: { username: string; proxyHost: string; bannedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null; userAgentApi?: string | null; userAgentEmbedded?: string | null; igDeviceState?: string | null; ebFingerprint?: string | null; leakSnapshot?: string | null }): Promise<void>;
+  getBanAnalytics(): Promise<BannedAccountAnalytics[]>;
+
+  // Automated Behaviour Analytics
+  insertAutomatedBehaviourAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null; userAgentApi?: string | null; userAgentEmbedded?: string | null; igDeviceState?: string | null; ebFingerprint?: string | null; leakSnapshot?: string | null }): Promise<void>;
+  getAutomatedBehaviourAnalytics(): Promise<AutomatedBehaviourAnalytics[]>;
+
+  // Captcha Analytics
+  insertCaptchaAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null; userAgentApi?: string | null; userAgentEmbedded?: string | null; igDeviceState?: string | null; ebFingerprint?: string | null; leakSnapshot?: string | null }): Promise<void>;
+  getCaptchaAnalytics(): Promise<CaptchaAnalytics[]>;
+
+  // Locked Account Analytics
+  insertLockedAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null; userAgentApi?: string | null; userAgentEmbedded?: string | null; igDeviceState?: string | null; ebFingerprint?: string | null; leakSnapshot?: string | null }): Promise<void>;
+  getLockedAnalytics(): Promise<LockedAccountAnalytics[]>;
 
   // Leak Snapshot
   saveLeakSnapshot(profileId: number, snapshot: string): Promise<void>;
@@ -629,6 +650,25 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async purgeEvasionStats(): Promise<{ deletedApiCalls: number; deletedBan: number; deletedAutomated: number; deletedCaptcha: number; deletedLocked: number }> {
+    const [apiCallsResult, banResult, autoResult, captchaResult, lockedResult] = await Promise.all([
+      db.run(sql`DELETE FROM instagram_api_calls`),
+      db.delete(bannedAccountsAnalytics),
+      db.delete(automatedBehaviourAnalytics),
+      db.delete(captchaAnalytics),
+      db.delete(lockedAccountsAnalytics),
+    ]);
+    // Reset the insert counter so the next prune cycle doesn't try to prune an empty table
+    this._apiCallInsertCount = 0;
+    return {
+      deletedApiCalls: (apiCallsResult as any).changes ?? 0,
+      deletedBan: (banResult as any).rowsAffected ?? 0,
+      deletedAutomated: (autoResult as any).rowsAffected ?? 0,
+      deletedCaptcha: (captchaResult as any).rowsAffected ?? 0,
+      deletedLocked: (lockedResult as any).rowsAffected ?? 0,
+    };
+  }
+
   async incrementStat(profileId: number, toolType: string): Promise<void> {
     const today = new Date().toISOString().split('T')[0];
     
@@ -1100,6 +1140,54 @@ export class DatabaseStorage implements IStorage {
 
   async deleteApiCreatedAccount(id: number): Promise<void> {
     await db.delete(apiCreatedAccounts).where(eq(apiCreatedAccounts.id, id));
+  }
+
+  async insertBanAnalytics(entry: { username: string; proxyHost: string; bannedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null; userAgentApi?: string | null; userAgentEmbedded?: string | null; igDeviceState?: string | null; ebFingerprint?: string | null; leakSnapshot?: string | null }): Promise<void> {
+    await db.insert(bannedAccountsAnalytics).values(entry);
+  }
+
+  async getBanAnalytics(): Promise<BannedAccountAnalytics[]> {
+    return await db.select().from(bannedAccountsAnalytics).orderBy(desc(bannedAccountsAnalytics.id));
+  }
+
+  async deleteBanAnalytics(id: number): Promise<void> {
+    await db.delete(bannedAccountsAnalytics).where(eq(bannedAccountsAnalytics.id, id));
+  }
+
+  async insertAutomatedBehaviourAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null; userAgentApi?: string | null; userAgentEmbedded?: string | null; igDeviceState?: string | null; ebFingerprint?: string | null; leakSnapshot?: string | null }): Promise<void> {
+    await db.insert(automatedBehaviourAnalytics).values(entry);
+  }
+
+  async getAutomatedBehaviourAnalytics(): Promise<AutomatedBehaviourAnalytics[]> {
+    return await db.select().from(automatedBehaviourAnalytics).orderBy(desc(automatedBehaviourAnalytics.id));
+  }
+
+  async deleteAutomatedBehaviourAnalytics(id: number): Promise<void> {
+    await db.delete(automatedBehaviourAnalytics).where(eq(automatedBehaviourAnalytics.id, id));
+  }
+
+  async insertCaptchaAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null; userAgentApi?: string | null; userAgentEmbedded?: string | null; igDeviceState?: string | null; ebFingerprint?: string | null; leakSnapshot?: string | null }): Promise<void> {
+    await db.insert(captchaAnalytics).values(entry);
+  }
+
+  async getCaptchaAnalytics(): Promise<CaptchaAnalytics[]> {
+    return await db.select().from(captchaAnalytics).orderBy(desc(captchaAnalytics.id));
+  }
+
+  async deleteCaptchaAnalytics(id: number): Promise<void> {
+    await db.delete(captchaAnalytics).where(eq(captchaAnalytics.id, id));
+  }
+
+  async insertLockedAnalytics(entry: { username: string; proxyHost: string; flaggedAt: string; endpointCount: number; endpointSnapshot: string; verifyCountLast24h?: number; accountAgeDays?: number | null; proxyAccountCount?: number; followCountBeforeBan?: number; sessionToActionRatio?: string | null; spanHours?: string | null; lastOperationBeforeBan?: string | null; userAgentApi?: string | null; userAgentEmbedded?: string | null; igDeviceState?: string | null; ebFingerprint?: string | null; leakSnapshot?: string | null }): Promise<void> {
+    await db.insert(lockedAccountsAnalytics).values(entry);
+  }
+
+  async getLockedAnalytics(): Promise<LockedAccountAnalytics[]> {
+    return await db.select().from(lockedAccountsAnalytics).orderBy(desc(lockedAccountsAnalytics.id));
+  }
+
+  async deleteLockedAnalytics(id: number): Promise<void> {
+    await db.delete(lockedAccountsAnalytics).where(eq(lockedAccountsAnalytics.id, id));
   }
 
   async saveLeakSnapshot(profileId: number, snapshot: string): Promise<void> {

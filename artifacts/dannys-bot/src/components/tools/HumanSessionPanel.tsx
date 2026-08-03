@@ -133,7 +133,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       ]},
       { key: "repost", label: "Repost", description: "Repost settings for local folder, alteration, caption and stop conditions", subOptions: [
         { key: "rp_enabled",         label: "Enabled",                          settingKeys: ["repostEnabled"] },
-        { key: "rp_local_opts",      label: "Local folder options",             settingKeys: ["repostLocalFolderNoRepeat","repostLocalFolderRandom"] },
+        { key: "rp_local_opts",      label: "Local folder options",             settingKeys: ["repostLocalFolderDeleteAfterUpload","repostLocalFolderNoRepeat","repostLocalFolderRandom"] },
         { key: "rp_count",           label: "Posts per session",                settingKeys: ["repostMin","repostMax"] },
         { key: "rp_alteration",      label: "Alteration & image settings",      settingKeys: ["repostAlterationLevel","repostImageSettings"] },
         { key: "rp_make_unique",     label: "Make it unique",                   settingKeys: ["repostMakeUnique"] },
@@ -597,6 +597,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       repostDisableUsernameSource: false,
       repostLocalFolderEnabled: true,
       repostLocalFolderPath: "",
+      repostLocalFolderDeleteAfterUpload: true,
       repostLocalFolderNoRepeat: false,
       repostUseChatGpt: false,
       repostAlterationLevel: "small",
@@ -702,7 +703,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       exploreProfileClickMin: 1, exploreProfileClickMax: 3,
       repostEnabled: false, repostSourceUsername: "",
       repostDisableUsernameSource: false, repostLocalFolderEnabled: true,
-      repostLocalFolderPath: "",
+      repostLocalFolderPath: "", repostLocalFolderDeleteAfterUpload: true,
       repostLocalFolderNoRepeat: false, repostUseChatGpt: false,
       repostAlterationLevel: "small", repostCaptionText: "",
       repostImageSettings: {
@@ -2001,6 +2002,19 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                       Pick at random
                     </label>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="repostLocalFolderDeleteAfterUpload"
+                      checked={settings.repostLocalFolderDeleteAfterUpload !== false}
+                      onChange={(e) => setSettings({ ...settings, repostLocalFolderDeleteAfterUpload: e.target.checked })}
+                      className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                    />
+                    <label htmlFor="repostLocalFolderDeleteAfterUpload" className="text-xs text-muted-foreground cursor-pointer select-none">
+                      Delete from PC after upload
+                    </label>
+                  </div>
+
                 </div>
                 {localFolderFileCount !== null && (
                   <p className="text-[11px] text-muted-foreground flex items-center gap-1">
