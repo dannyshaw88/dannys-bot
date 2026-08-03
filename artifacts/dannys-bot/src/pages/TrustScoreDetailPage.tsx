@@ -358,6 +358,7 @@ function TrustScoreAutomationEditor({
   level: TrustLevelEntry;
   onBack: () => void;
 }) {
+  const [, setLocation] = useLocation();
   const [showCopyDialog, setShowCopyDialog] = useState(false);
   const [settings, setSettings] = useState<AutomationSettingsData>(AUTOMATION_DEFAULTS);
   const [loading, setLoading] = useState(true);
@@ -418,6 +419,12 @@ function TrustScoreAutomationEditor({
     manufacturer: "Aura Farming",
   };
 
+  const levels = getTrustLevels();
+  const currentIndex = levels.findIndex(entry => entry.id === trustScoreId);
+  const previousLevel = currentIndex > 0 ? levels[currentIndex - 1] : null;
+  const nextLevel = currentIndex >= 0 && currentIndex < levels.length - 1
+    ? levels[currentIndex + 1]
+    : null;
   const LevelIcon = level.icon;
   return (
     <div className="h-full flex flex-col">
@@ -430,6 +437,26 @@ function TrustScoreAutomationEditor({
           >
             <ChevronLeft className="w-5 h-5" /> Back to TrustScores
           </button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => previousLevel && setLocation(`/trust-scores/${previousLevel.id}`)}
+            disabled={!previousLevel}
+            className="gap-1 h-7 px-2"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+            SCORE
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => nextLevel && setLocation(`/trust-scores/${nextLevel.id}`)}
+            disabled={!nextLevel}
+            className="gap-1 h-7 px-2 flex-row-reverse"
+          >
+            <ChevronLeft className="w-3.5 h-3.5 rotate-180" />
+            SCORE
+          </Button>
           <Button
             size="sm"
             variant="outline"

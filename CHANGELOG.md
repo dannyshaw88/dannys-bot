@@ -1,3 +1,13 @@
+## [1.2.348] — 2026-08-03
+
+### Added — Previous and Next navigation for TrustScore settings
+
+- Added simple **SCORE** Previous and Next buttons to the Settings → TrustScores Human Session Tool editor.
+- The buttons sit between **Back to TrustScores** and **Copy Settings**, use directional chevrons, and move through the TrustScores in their configured list order.
+- The first TrustScore disables Previous and the last TrustScore disables Next, preventing navigation beyond the list.
+- Kept the existing canonical Windows installer Actions workflow as the only active installer workflow; no duplicate workflow was created.
+- Bumped the root application and Electron package versions to `1.2.348`.
+
 ### Fixed — TrustScore Human Session Tool locking and Copy Settings visibility
 
 - Existing Phone Farm accounts now inherit the Human Session Tool template associated with their profile's TrustScore badge on first load, even when they were saved before device/slot TrustScore assignments existed.
