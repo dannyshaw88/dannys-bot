@@ -4481,7 +4481,7 @@ function CopySettingsDialog({
 export function AutomationSettingsPanel({
   phone, settings, setSettings: setSettingsExternal, setEnabledByUser, loading: loadingExternal, saveError, running, nextRunAt,
   slotIdx, slotUsername, slotUsernames, onCopied, showCopyDialog, setShowCopyDialog,
-  templateLockedFields,
+  templateLockedFields, trustScoreAssigned,
 }: {
   phone: UsbPhone | null;
   settings: AutomationSettingsData;
@@ -4499,8 +4499,10 @@ export function AutomationSettingsPanel({
   setShowCopyDialog?: (v: boolean) => void;
   /** Used by the TrustScore editor to lock slot-owned fields in templates. */
   templateLockedFields?: string[];
+  /** Explicit Account Slot assignment state; independent of effective settings. */
+  trustScoreAssigned?: boolean;
 }) {
-  const trustScoreActive = Boolean(settings.trustScoreId);
+  const trustScoreActive = trustScoreAssigned === true || Boolean(settings.trustScoreId);
   const TRUST_SCORE_FEATURE_FIELDS = new Set([
     "feedEnabled", "storiesEnabled", "viewExploreEnabled", "viewReelsEnabled",
     "checkDmEnabled", "followEnabled", "randomJitterEnabled", "makePostEnabled",
@@ -4525,6 +4527,7 @@ export function AutomationSettingsPanel({
     ),
     [templateLockedFields, trustScoreActive, settings.trustScoreControlledFields],
   );
+  const trustScoreSlotLocked = trustScoreActive && !templateLockedFields;
   const fieldLocked = useCallback(
     (...fields: string[]) => fields.some(field => lockedFields.has(field)),
     [lockedFields],
@@ -4545,9 +4548,22 @@ export function AutomationSettingsPanel({
         }
         next.trustScoreToolOverrides = overrides;
       }
+      // Account Slot panels must never be able to mutate an inherited
+      // TrustScore value, even if a newly added control forgot to use the
+      // fieldDisabled(...) helper.  The UI disabled state is the affordance;
+      // this allow-list is the actual mutation boundary.
+      if (trustScoreSlotLocked) {
+        const previousRecord = previous as unknown as Record<string, unknown>;
+        const nextRecord = next as unknown as Record<string, unknown>;
+        for (const field of Object.keys(previousRecord)) {
+          if (!TRUST_SCORE_SLOT_EDITABLE_FIELDS.has(field)) {
+            nextRecord[field] = previousRecord[field];
+          }
+        }
+      }
       return next;
     });
-  }, [setSettingsExternal, lockedFields, trustScoreActive]);
+  }, [setSettingsExternal, lockedFields, trustScoreActive, trustScoreSlotLocked, TRUST_SCORE_SLOT_EDITABLE_FIELDS]);
   // When a slot has an assigned TrustScore, the displayed values are inherited
   // and must be read-only. The exceptions below intentionally keep the master
   // switch, per-tool switches, and slot-owned source controls editable.
@@ -4556,10 +4572,10 @@ export function AutomationSettingsPanel({
   // master switch, individual tool switches, and physical-slot-owned sources.
   // The TrustScore editor passes templateLockedFields, so its normal template
   // values remain editable while excluded slot fields stay locked.
-  const loading = loadingExternal || (trustScoreActive && !templateLockedFields);
+  const loading = loadingExternal || trustScoreSlotLocked;
   const fieldDisabled = (...fields: string[]) =>
     loadingExternal || fields.some(field =>
-      trustScoreActive && !templateLockedFields
+      trustScoreSlotLocked
         ? !TRUST_SCORE_SLOT_EDITABLE_FIELDS.has(field)
         : fieldLocked(field),
     );
@@ -6908,6 +6924,32 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   const isLast = slotIdx === (slotCount ?? 1) - 1;
 
   const [showCopyDialog, setShowCopyDialog] = useState(false);
+  // Read the Account Slot assignment directly.  The effective automation
+  // payload is template-resolved and may be cached, so it must not be the
+  // authority for whether this editor is allowed to be changed.
+  const [trustScoreAssigned, setTrustScoreAssigned] = useState(
+    Boolean(automation.settings.trustScoreId),
+  );
+  useEffect(() => {
+    let active = true;
+    if (!phone?.serial) {
+      setTrustScoreAssigned(false);
+      return () => { active = false; };
+    }
+    fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/trust-score`, {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => {
+        if (!active) return;
+        setTrustScoreAssigned(Boolean(data?.configured && data?.scoreId));
+      })
+      .catch(() => {
+        if (active) setTrustScoreAssigned(Boolean(automation.settings.trustScoreId));
+      });
+    return () => { active = false; };
+  }, [phone?.serial, slotIdx, refreshKey, automation.settings.trustScoreId]);
 
   // Expose setEnabled so the parent can toggle THIS slot directly by calling
   // slotHandleRefs.current[i]?.setEnabled(v).  Because the ref is bound to
@@ -6953,7 +6995,17 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
         </Button>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <AutomationSettingsPanel phone={phone} {...automation} slotIdx={slotIdx} slotUsername={slotUsername} slotUsernames={slotUsernames} onCopied={onCopied} showCopyDialog={showCopyDialog} setShowCopyDialog={setShowCopyDialog} />
+        <AutomationSettingsPanel
+          phone={phone}
+          {...automation}
+          slotIdx={slotIdx}
+          slotUsername={slotUsername}
+          slotUsernames={slotUsernames}
+          onCopied={onCopied}
+          showCopyDialog={showCopyDialog}
+          setShowCopyDialog={setShowCopyDialog}
+          trustScoreAssigned={trustScoreAssigned || Boolean(automation.settings.trustScoreId)}
+        />
       </div>
     </div>
   );
