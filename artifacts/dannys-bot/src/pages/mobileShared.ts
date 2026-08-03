@@ -384,12 +384,25 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
   "makePostImageSettings",
   "makePostFixAiSlop",
   "makePostMakeUnique",
-  "makePostUseHikerApi",
   "makePostLocalFolderEnabled",
   "makePostLocalFolderPath",
   "makePostLocalFolderNoRepeat",
   "makePostLocalFolderRandom",
   "makePostLocalFolderDeleteAfterUpload",
+]);
+
+/** Fields editable on an assigned Phone Farm HST slot and therefore locked
+ * in the TrustScore template editor. */
+export const TRUST_SCORE_HST_SLOT_EDITABLE_FIELDS = new Set([
+  ...TRUST_SCORE_SLOT_OWNED_FIELDS,
+  "feedEnabled",
+  "storiesEnabled",
+  "viewExploreEnabled",
+  "viewReelsEnabled",
+  "checkDmEnabled",
+  "followEnabled",
+  "randomJitterEnabled",
+  "makePostEnabled",
 ]);
 
 /** Account-specific values that may be copied between Human Session Tool slots. */

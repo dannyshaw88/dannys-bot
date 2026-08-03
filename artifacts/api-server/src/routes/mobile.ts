@@ -1799,7 +1799,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "makePostImageSettings",
     "makePostFixAiSlop",
     "makePostMakeUnique",
-    "makePostUseHikerApi",
     "makePostLocalFolderEnabled",
     "makePostLocalFolderPath",
     "makePostLocalFolderNoRepeat",
@@ -1824,6 +1823,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "followEnabled",
     "randomJitterEnabled",
     "makePostEnabled",
+  ]);
+  const TRUST_SCORE_HST_SLOT_EDITABLE_FIELDS = new Set([
+    ...TRUST_SCORE_SLOT_OWNED_FIELDS,
+    ...TRUST_SCORE_TOOL_FIELDS,
   ]);
 
   const loadTrustScoreAssignment = async (serial: string, slotIdx: number) => {
@@ -2147,7 +2150,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const all = await storage.getGlobalSettings();
       const savedRaw = all[trustScoreAutomationKey(trustScoreId)];
       const saved = savedRaw ? JSON.parse(savedRaw) : {};
-      res.json({ ...trustScoreAutomationDefaults(), ...saved });
+      const settings = { ...trustScoreAutomationDefaults(), ...saved };
+      for (const field of TRUST_SCORE_HST_SLOT_EDITABLE_FIELDS) delete settings[field];
+      res.json(settings);
     } catch (e: any) {
       res.status(400).json({ error: e?.message ?? "Failed to load Trust Score settings" });
     }
@@ -2161,8 +2166,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // persistence boundary instead of allowing them to become part of the
       // template by accident.
       const body = { ...req.body };
-      for (const field of TRUST_SCORE_SLOT_OWNED_FIELDS) delete body[field];
+      for (const field of TRUST_SCORE_HST_SLOT_EDITABLE_FIELDS) delete body[field];
       const input = automationSchema.parse(body);
+      for (const field of TRUST_SCORE_HST_SLOT_EDITABLE_FIELDS) delete input[field];
       await storage.setGlobalSetting(
         trustScoreAutomationKey(trustScoreId),
         JSON.stringify(input),

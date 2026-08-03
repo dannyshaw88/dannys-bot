@@ -13,6 +13,7 @@
 - Human Session Tool Run every X–Y minutes is now locked to the assigned TrustScore; the interval is no longer available in Copy Settings.
 - Each individual Human Session Tool Follow Filter is now editable per assigned slot and independently available in Copy Settings.
 - Human Session Tool Copy Settings now permits only Follow Sources, Random Actions profile-picture directory, Random Actions Bio spin text, and Make a Post source/directory settings; all other rows are disabled regardless of tool state.
+- TrustScore template settings now allow HikerAPI configuration; it is inherited and locked for assigned Phone Farm slots, but it is not a slot-owned exception and must remain editable in Settings → TrustScores.
 
 # Changelog
 
