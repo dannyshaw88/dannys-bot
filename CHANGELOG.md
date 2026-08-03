@@ -10,6 +10,7 @@
 - Make a Post Fix AI Slop and Make it Unique controls are now clickable per assigned Human Session Tool slot, and all four post-image controls are available in Human Session Tool Copy Settings.
 - Human Session Tool Run every X–Y minutes is now locked to the assigned TrustScore; the interval is no longer available in Copy Settings.
 - Each individual Human Session Tool Follow Filter is now editable per assigned slot and independently available in Copy Settings.
+- Human Session Tool Copy Settings now permits only Follow Sources, Random Actions profile-picture directory, Random Actions Bio spin text, and Make a Post source/directory settings; all other rows are disabled regardless of tool state.
 
 # Changelog
 

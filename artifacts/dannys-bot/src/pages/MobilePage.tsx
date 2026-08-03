@@ -4457,7 +4457,10 @@ function CopySettingsDialog({
                 const copyableSubs = section.sub.filter(sub =>
                   sub.fields.every(field => COPYABLE_ACCOUNT_SPECIFIC_FIELDS.has(field)),
                 );
-                const sectionCopyable = copyableSubs.length > 0;
+                // A section header is actionable only when every setting in
+                // that section is permitted. Mixed sections must stay
+                // disabled so "All" cannot imply copying locked settings.
+                const sectionCopyable = copyableSubs.length === allSubs.length;
                 return (
                   <div key={section.key} className="rounded-md border border-border/50 overflow-hidden">
                     <label className={`flex items-center gap-2 px-2.5 py-1.5 bg-muted/40 select-none transition-colors ${
