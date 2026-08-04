@@ -8089,6 +8089,41 @@ export async function findInstagramProfileTab(serial: string): Promise<{ x: numb
     ":id/profile_tab", ":id/profile", ":id/tab_profile", ":id/nav_profile",
     ":id/bottom_tab_profile", ":id/avatar_tab");
   if (byId) return byId;
+  // ── Strategy 2b: unlabeled bottom-right profile avatar.
+  // Some Xiaomi/Instagram combinations expose the avatar as a plain ImageView
+  // with no content-desc/resource-id and mark only its parent navigation item
+  // clickable.  Do not guess a screen coordinate: use the live accessibility
+  // node bounds, require the node to be in the bottom-nav/right-edge region,
+  // and require avatar-sized bounds so feed media/action nodes cannot match.
+  {
+    const rightMin = Math.round(xmlW * 0.82);
+    const bottomMin = Math.round(xmlH * 0.86);
+    const avatarCandidates: { x: number; y: number; area: number }[] = [];
+    const avatarRe = /<node\s([^>]+?)\s*\/?>/g;
+    let am: RegExpExecArray | null;
+    while ((am = avatarRe.exec(xml)) !== null) {
+      const attrs = am[1];
+      const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (!bm) continue;
+      const x1 = Number(bm[1]), y1 = Number(bm[2]);
+      const x2 = Number(bm[3]), y2 = Number(bm[4]);
+      const w = x2 - x1, h = y2 - y1;
+      const cx = Math.round((x1 + x2) / 2);
+      const cy = Math.round((y1 + y2) / 2);
+      if (cx < rightMin || cy < bottomMin) continue;
+      if (w < 24 || h < 24 || w > 140 || h > 140) continue;
+      if (Math.max(w, h) / Math.max(1, Math.min(w, h)) > 1.8) continue;
+      const className = attrs.match(/class="([^"]*)"/i)?.[1] ?? "";
+      if (!/(ImageView|View|Layout|Button)/i.test(className)) continue;
+      avatarCandidates.push({ x: cx, y: cy, area: w * h });
+    }
+    if (avatarCandidates.length > 0) {
+      avatarCandidates.sort((a, b) => b.x - a.x || a.y - b.y || a.area - b.area);
+      const avatar = avatarCandidates[0];
+      onLog?.(`  ↳ Profile tab found via unlabeled bottom-right avatar node at (${avatar.x},${avatar.y})`);
+      return { x: avatar.x, y: avatar.y };
+    }
+  }
   // ── Strategy 3: positional fallback.
   // Collect clickable nodes in the bottom-nav band (y > 88 % of screen height),
   // deduplicate, sort left-to-right, return the RIGHTMOST — the Profile tab is

@@ -7,4 +7,4 @@ The profile-tab node can enter the accessibility tree before Instagram has finis
 
 **Why:** Cold-start and post-reconnect farm cycles expose a race between accessibility-tree availability and visible UI readiness.
 
-**How to apply:** In the live mobile account-switch path, use one short bounded settle wait after profile-tab detection and before the long-press. Do not solve this with a second gesture or an unbounded retry loop.
+**How to apply:** In the live mobile account-switch path, use one short bounded settle wait after profile-tab detection and before the long-press. If Instagram omits the profile label/resource ID, identify the live bottom-right avatar node from the accessibility dump using bottom-nav/right-edge and avatar-size bounds; do not guess screen coordinates. Do not solve this with a second gesture or an unbounded retry loop.
