@@ -1,3 +1,12 @@
+## [1.2.362] — 2026-08-04
+
+### Fixed — Windows installer workflow after Make It Unique removal
+
+- Removed the stale GitHub Actions assertion that still expected the deleted `makeUnique: postStoryMakeUnique` runtime wiring.
+- Added a replacement CI guard that fails if any removed Make It Unique settings or mobile runtime references are reintroduced.
+- Kept the Windows installer workflow’s existing web-build, artifact-upload, and Windows packaging stages unchanged.
+- Bumped the root application and Electron package versions to `1.2.362`.
+
 ## [1.2.361] — 2026-08-04
 
 ### Changed — safer repeated-media handling and mobile posting cleanup
