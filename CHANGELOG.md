@@ -1,3 +1,13 @@
+## [1.2.363] — 2026-08-04
+
+### Fixed — Dashboard activity overview vertical alignment
+
+- Vertically centered the one-line activity overview in each Dashboard activity-table detail cell.
+- Matched the overview’s alignment with the centered account name and other row content.
+- Kept the fix entirely within the table’s node/layout structure; no coordinate or pixel positioning was added.
+- Preserved the existing canonical Windows installer workflow, which runs from pushes to `main` and produces the `Aura-Farming-Windows-Installer` artifact.
+- Bumped the root application and Electron package versions to `1.2.363`.
+
 ## [1.2.362] — 2026-08-04
 
 ### Fixed — Windows installer workflow after Make It Unique removal
