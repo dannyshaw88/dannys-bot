@@ -8582,13 +8582,26 @@ export async function findInstagramSearchBar(
       ":id/search_bar_container");
     if (byId) return byId;
 
-    // 2. Any EditText in the top 30%
-    const etRe = /class="android\.widget\.EditText"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/gi;
-    let m: RegExpExecArray | null;
-    while ((m = etRe.exec(xml)) !== null) {
-      const centerY = (Number(m[2]) + Number(m[4])) / 2;
+    // 2. Scan complete node records rather than physical XML lines. Some
+    // Xiaomi/Instagram builds wrap attributes or put bounds before class/id,
+    // which makes attribute-order-dependent regexes miss the visible field.
+    const nodeRe = /<node\b[\s\S]*?(?:\/>|<\/node>)/gi;
+    let nodeMatch: RegExpExecArray | null;
+    while ((nodeMatch = nodeRe.exec(xml)) !== null) {
+      const node = nodeMatch[0];
+      const bounds = node.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+      if (!bounds) continue;
+      const centerY = (Number(bounds[2]) + Number(bounds[4])) / 2;
       if (centerY > topLimit) continue;
-      return { x: Math.round((Number(m[1]) + Number(m[3])) / 2), y: Math.round(centerY) };
+      const isEditText = /class="android\.widget\.EditText"/i.test(node);
+      const mentionsSearch = /(?:text|content-desc|hint|resource-id)="[^"]*search[^"]*"/i.test(node);
+      const interactive = /(?:clickable|focusable)="true"/i.test(node);
+      if (isEditText || (mentionsSearch && interactive)) {
+        return {
+          x: Math.round((Number(bounds[1]) + Number(bounds[3])) / 2),
+          y: Math.round(centerY),
+        };
+      }
     }
 
     // 3. Any node in the top 30% whose text or content-desc contains "Search"
@@ -8627,15 +8640,15 @@ export async function findInstagramSearchBar(
   {
     const xml4 = await _uiDump(adb, serial);
     if (xml4) {
-      for (const containerId of [
+    for (const containerId of [
         ":id/action_bar_search_hints_text_layout",
         ":id/explore_action_bar_container",
         ":id/explore_action_bar",
       ]) {
         if (!xml4.includes(containerId)) continue;
-        for (const line of xml4.split(/\r?\n/)) {
-          if (!line.includes(containerId)) continue;
-          const bm = line.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+        for (const node of xml4.match(/<node\b[\s\S]*?(?:\/>|<\/node>)/gi) ?? []) {
+          if (!node.includes(containerId)) continue;
+          const bm = node.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
           if (!bm) continue;
           const cx = Math.round((Number(bm[1]) + Number(bm[3])) / 2);
           const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
