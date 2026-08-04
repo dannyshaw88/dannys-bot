@@ -1,3 +1,13 @@
+## [1.2.375] — 2026-08-04
+
+### Improved — Bio Spin preview
+
+- Keep the randomized bio preview inside the Bio Spin editor instead of
+  opening a separate preview dialog.
+- Add an explicit “Spin again” action to generate another randomized version.
+- Add “Use this version” so the exact displayed randomized bio is applied to
+  the saved bio field.
+
 ## [1.2.374] — 2026-08-04
 
 ### Fixed — Spread Follows placement across shuffled tools

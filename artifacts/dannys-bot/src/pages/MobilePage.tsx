@@ -7036,40 +7036,43 @@ export function AutomationSettingsPanel({
               Up to 5 lines; each line becomes a line break in the Instagram bio. Supports spin syntax such as {"{hello|hi|hey}"}.
             </p>
           </div>
-          <div className="flex justify-end pt-1">
+          {spinPreview !== null && (
+            <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <Label className="text-xs font-medium">Randomized version</Label>
+                <span className="text-[10px] text-muted-foreground">This is what will be used</span>
+              </div>
+              <p className="min-h-[3.5rem] whitespace-pre-wrap break-words text-sm leading-relaxed">
+                {spinPreview}
+              </p>
+            </div>
+          )}
+          <div className="flex items-center justify-end gap-2 pt-1">
+            {spinPreview !== null && (
+              <button
+                type="button"
+                disabled={fieldDisabled("updateBioText") || !bioSpinDraft.trim()}
+                onClick={() => setSpinPreview(resolveSpinSyntax(bioSpinDraft))}
+                className="h-8 px-3 text-xs rounded border border-border bg-background hover:bg-accent transition-colors font-medium disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Spin again
+              </button>
+            )}
             <button
               type="button"
               disabled={fieldDisabled("updateBioText") || !bioSpinDraft.trim()}
-              onClick={() => setSpinPreview(resolveSpinSyntax(bioSpinDraft))}
+              onClick={() => {
+                if (spinPreview === null) {
+                  setSpinPreview(resolveSpinSyntax(bioSpinDraft));
+                } else {
+                  setBioSpinDraft(spinPreview);
+                  setSettings(s => ({ ...s, updateBioText: spinPreview }));
+                  setSpinPreview(null);
+                }
+              }}
               className="h-8 px-4 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Spin
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Spin syntax preview dialog */}
-      <Dialog open={spinPreview !== null} onOpenChange={open => { if (!open) setSpinPreview(null); }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Spin Preview</DialogTitle>
-          </DialogHeader>
-          <p className="whitespace-pre-wrap break-words py-2 text-sm">{spinPreview}</p>
-          <div className="flex justify-end gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => setSpinPreview(resolveSpinSyntax(bioSpinDraft))}
-              className="h-8 px-4 text-xs rounded border border-border bg-background hover:bg-accent transition-colors font-medium"
-            >
-              Roll Again
-            </button>
-            <button
-              type="button"
-              onClick={() => setSpinPreview(null)}
-              className="h-8 px-4 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium"
-            >
-              Close
+              {spinPreview === null ? "Spin" : "Use this version"}
             </button>
           </div>
         </DialogContent>
