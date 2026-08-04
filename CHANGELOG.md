@@ -1,3 +1,13 @@
+## [1.2.385] — 2026-08-04
+
+### Fixed — Males Only Spread Follow filtering
+
+- Applied the Males Only allowlist before Spread Follow selects candidates,
+  including candidates loaded from Surplus and HikerAPI re-scrapes.
+- Added decision logging for each candidate’s username, full name, and bio.
+- Males Only now fails closed when its HikerAPI profile check errors instead
+  of allowing the candidate to proceed.
+
 ## [1.2.384] — 2026-08-04
 
 ### Fixed — False location confirmation tap

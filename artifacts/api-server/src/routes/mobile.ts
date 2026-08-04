@@ -9466,6 +9466,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             }
 
           } catch (filterErr: any) {
+            if (filters.malesOnly) {
+              onLog?.(`Follow: Males Only profile check failed for @${username} (${filterErr?.message}) — skipping`);
+              if (params.writeSkippedUsers) storage.addSkippedUser(username, "males-only-check-failed").catch(() => {});
+              await android.pressBack(serial);
+              await sleepOrAbort(serial, 500);
+              continue;
+            }
             onLog?.(`Follow: profile-filter check failed for @${username} (${filterErr?.message}) — proceeding`);
           }
         }
@@ -10237,7 +10244,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               const _sfFilters = followFiltersEnabled
                 ? { skipVerified: followFilterVerifiedUsers, maxFollowers: followFilterMaxFollowers25k ? 25_000 : undefined,
                     skipPrivate: followFilterPrivateUsers, minFollowers: followFilterMinFollowers50 ? 50 : undefined,
-                    requireEnglish: followFilterEnglishSpeaking }
+                    requireEnglish: followFilterEnglishSpeaking,
+                    malesOnly: followFilterMalesOnly, maleNames: followFilterMaleNames }
                 : undefined;
 
               const _sfHiker = new HikerApiClient(_sfToken);
@@ -10330,6 +10338,34 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   if (_sfFilters.minFollowers !== undefined && meta.followerCount !== undefined && meta.followerCount <  _sfFilters.minFollowers) return false;
                   return true;
                 });
+              }
+              // Spread candidates are selected before runFollowUsersStep opens
+              // a profile. Apply Males Only here as well, otherwise a
+              // rejected candidate can consume a spread slot and be followed
+              // through the backup path.
+              if (_sfFilters?.malesOnly) {
+                const allowedNames = (_sfFilters.maleNames ?? "")
+                  .split(",")
+                  .map(name => name.trim().toLocaleLowerCase())
+                  .filter(Boolean);
+                const beforeMaleFilter = _sfCandidates.length;
+                const maleFiltered: string[] = [];
+                for (const u of _sfCandidates) {
+                  const profile = allowedNames.length
+                    ? await _sfHiker.getUserProfile(u).catch(() => null)
+                    : null;
+                  const fullName = profile?.fullName ?? "";
+                  const biography = profile?.biography ?? "";
+                  const haystack = `${u} ${fullName} ${biography}`.toLocaleLowerCase();
+                  const matched = allowedNames.some(name => haystack.includes(name));
+                  tLog(`  Follow Males Only: @${u} → username="${u}", name="${fullName}", bio="${biography.slice(0, 120)}" — ${matched ? "allowed" : "rejected"}`);
+                  if (matched) maleFiltered.push(u);
+                }
+                _sfCandidates = maleFiltered;
+                const rejected = beforeMaleFilter - _sfCandidates.length;
+                if (rejected > 0) {
+                  tLog(`  Follow Males Only: rejected ${rejected} spread candidate${rejected !== 1 ? "s" : ""}`);
+                }
               }
 
               const _sfPool = _sfCandidates.slice(0, _spreadTarget);
