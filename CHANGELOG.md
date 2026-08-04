@@ -1,5 +1,15 @@
 ## [1.2.364] — 2026-08-04
 
+### Changed — Trust Score ownership for Make a Post location
+
+- Moved **Add location** into Trust Score-controlled Make a Post settings.
+- The Human Session Tool now shows the Add location control as disabled for
+  Trust Score-assigned slots instead of allowing a slot-level override.
+- Removed Add location from the Human Session Tool's slot-to-slot Copy Settings
+  list so it is visibly unavailable there.
+- Kept Add location available in the Trust Score Copy Settings dialog, allowing
+  the setting to be copied from one Trust Score to other Trust Scores.
+
 ### Fixed
 
 #### Human Session Tool — More reliable Instagram account switching

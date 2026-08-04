@@ -402,7 +402,6 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
   "updateBioText",
   "makePostLocalFolderEnabled",
   "makePostLocalFolderPath",
-  "makePostAddLocation",
   "postStoryAddLink",
   "postStoryLinkUrl",
 ]);
@@ -428,7 +427,6 @@ export const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
   "updateProfilePicFolderPath",
   "updateBioText",
   "makePostLocalFolderPath",
-  "makePostAddLocation",
   "postStoryLinkUrl",
 ]);
 

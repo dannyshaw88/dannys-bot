@@ -1909,7 +1909,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "updateBioText",
     "makePostLocalFolderEnabled",
     "makePostLocalFolderPath",
-    "makePostAddLocation",
     "postStoryAddLink",
     "postStoryLinkUrl",
   ]);
@@ -1929,7 +1928,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "updateProfilePicFolderPath",
     "updateBioText",
     "makePostLocalFolderPath",
-    "makePostAddLocation",
     "postStoryLinkUrl",
   ]);
   const TRUST_SCORE_TOOL_FIELDS = new Set([
