@@ -4537,7 +4537,7 @@ function CopySettingsDialog({
 export function AutomationSettingsPanel({
   phone, settings, setSettings: setSettingsExternal, setEnabledByUser, loading: loadingExternal, saveError, running, nextRunAt,
   slotIdx, slotUsername, slotUsernames, onCopied, showCopyDialog, setShowCopyDialog,
-  templateLockedFields, trustScoreAssigned, trustScoreLabel, onOpenBrowserProfile,
+  templateLockedFields, trustScoreAssigned, trustScoreLabel, onOpenBrowserProfile, settingsScrollRef, sharedScrollTopRef, isActive,
 }: {
   phone: UsbPhone | null;
   settings: AutomationSettingsData;
@@ -4566,6 +4566,9 @@ export function AutomationSettingsPanel({
     icon: React.ComponentType<{ size?: number; color?: string; fill?: string; strokeWidth?: number }>;
   };
   onOpenBrowserProfile?: (username: string) => void;
+  settingsScrollRef?: React.MutableRefObject<HTMLDivElement | null>;
+  sharedScrollTopRef?: React.MutableRefObject<number>;
+  isActive?: boolean;
 }) {
   const trustScoreActive = trustScoreAssigned === true || Boolean(settings.trustScoreId);
   const isTrustScoreTemplateEditor = templateLockedFields !== undefined;
@@ -4793,7 +4796,13 @@ export function AutomationSettingsPanel({
   }
 
   return (
-    <div className="h-full overflow-y-auto p-6 space-y-6">
+    <div
+      ref={settingsScrollRef}
+      onScroll={e => {
+        if (sharedScrollTopRef) sharedScrollTopRef.current = e.currentTarget.scrollTop;
+      }}
+      className="h-full overflow-y-auto p-6 space-y-6"
+    >
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
           <Fingerprint className="w-4 h-4 shrink-0" style={{ color: "#1AD2F2" }} />
@@ -7371,13 +7380,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
           SLOT {slotIdx + 2}
         </Button>
       </div>
-       <div
-         ref={settingsScrollRef}
-         onScroll={e => {
-           if (sharedScrollTopRef) sharedScrollTopRef.current = e.currentTarget.scrollTop;
-         }}
-         className="flex-1 min-h-0 overflow-y-auto"
-       >
+       <div className="flex-1 min-h-0">
         <AutomationSettingsPanel
           phone={phone}
           {...automation}
@@ -7389,6 +7392,9 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
           setShowCopyDialog={setShowCopyDialog}
           trustScoreAssigned={trustScoreAssigned || Boolean(automation.settings.trustScoreId)}
           onOpenBrowserProfile={onOpenBrowserProfile}
+           settingsScrollRef={settingsScrollRef}
+           sharedScrollTopRef={sharedScrollTopRef}
+           isActive={isActive}
         />
       </div>
     </div>

@@ -1,3 +1,12 @@
+## [1.2.372] — 2026-08-04
+
+### Fixed — Human Session Tool inner scroll restoration
+
+- Attached scroll tracking to the actual nested Human Session Tool settings
+  panel, which owns the visible page scroll.
+- Restored that inner scroll position for every slot-selection path, including
+  clicking a slot's Human Session Tool button from the account list.
+
 ## [1.2.371] — 2026-08-04
 
 ### Fixed — Human Session Tool slot scroll persistence
