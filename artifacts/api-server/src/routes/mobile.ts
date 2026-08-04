@@ -10323,22 +10323,35 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   tLog(`  Spread Follows: keeping ${_sfBackupQueue.length} candidate(s) as backup pool`);
                 }
 
-                // Interleave: replace 'follow' with the first follow_spread slot at its
-                // original shuffle position, then inject one more follow_spread after each
-                // subsequent non-follow tool.  Any remaining slots are appended at the end.
+                // Interleave spread follows across the complete non-Follow
+                // sequence. The old implementation started inserting only
+                // after the original shuffled Follow position, so when Follow
+                // happened to be last every candidate stayed in one bulk
+                // block at the end of the cycle.
+                //
+                // Place candidates after evenly spaced non-Follow tools. This
+                // keeps the feature independent of where the placeholder
+                // Follow tool landed in the shuffle, while preserving the
+                // shuffled order of every other tool.
+                const _nonFollowSeq = _toolSeq.filter(_nt => _nt !== 'follow');
                 const _spreadSeq: string[] = [];
+                const _spreadCount = _sfPool.length;
                 let _sfi = 0;
-                let _followInserted = false;
-                for (const _nt of _toolSeq) {
-                  if (_nt === 'follow') {
-                    if (_sfi < _sfPool.length) _spreadSeq.push(`follow_spread:${_sfPool[_sfi++]}`);
-                    _followInserted = true;
-                  } else {
-                    _spreadSeq.push(_nt);
-                    if (_followInserted && _sfi < _sfPool.length) _spreadSeq.push(`follow_spread:${_sfPool[_sfi++]}`);
+                for (let _ni = 0; _ni < _nonFollowSeq.length; _ni++) {
+                  _spreadSeq.push(_nonFollowSeq[_ni]);
+                  const _afterCount = Math.min(
+                    _spreadCount,
+                    Math.floor(((_ni + 1) * _spreadCount) / _nonFollowSeq.length),
+                  );
+                  while (_sfi < _afterCount) {
+                    _spreadSeq.push(`follow_spread:${_sfPool[_sfi++]}`);
                   }
                 }
-                while (_sfi < _sfPool.length) _spreadSeq.push(`follow_spread:${_sfPool[_sfi++]}`);
+                // If there are more follow slots than non-Follow tools, keep
+                // the extras after the final tool rather than dropping them.
+                while (_sfi < _spreadCount) {
+                  _spreadSeq.push(`follow_spread:${_sfPool[_sfi++]}`);
+                }
 
                 _toolSeq.splice(0, _toolSeq.length, ..._spreadSeq);
                 tLog(`▶ Spread Follows active (${_sfPool.length} user(s)) → ${_spreadSeq.join(' → ')}`);

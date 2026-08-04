@@ -1,3 +1,14 @@
+## [1.2.374] — 2026-08-04
+
+### Fixed — Spread Follows placement across shuffled tools
+
+- Spread follow candidates across the complete active non-Follow tool
+  sequence, regardless of where Follow landed in the shuffle.
+- Fixed the case where Follow was shuffled last and all spread candidates were
+  appended together at the end of the cycle.
+- Preserve the shuffled order of the other tools while distributing follow
+  slots between them.
+
 ## [1.2.373] — 2026-08-04
 
 ### Fixed — Device-independent account-switcher hold
