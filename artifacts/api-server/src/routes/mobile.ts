@@ -7075,6 +7075,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await sleepOrAbort(serial, 600);
     }
 
+    // Location must only be handled on the final caption/share page. The
+    // earlier Share lookup may be stale after caption entry or an editor
+    // transition, so require a fresh live Share node immediately before
+    // opening the location picker. Never fall back to the older coordinate.
+    let finalShareBtn = await android.findShareFooterButton(serial).catch(() => null);
+    if (!finalShareBtn) {
+      onLog?.("Make a Post: final caption/share page not confirmed immediately before location — aborting safely");
+      await android.removeDeviceFile(serial, devicePath).catch(() => {});
+      return { posted: false };
+    }
+
     if (addLocation) {
       const addLocationBtn = await android.findButtonByLabel(serial, "Add location").catch(() => null);
       if (addLocationBtn) {
@@ -7095,7 +7106,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
 
     // Re-find Share (screen may have re-rendered after the caption/advanced steps).
-    const finalShareBtn = await android.findShareFooterButton(serial).catch(() => null) ?? shareBtn;
+    finalShareBtn = await android.findShareFooterButton(serial).catch(() => null);
+    if (!finalShareBtn) {
+      onLog?.("Make a Post: Share control not found after returning from location — aborting safely");
+      await android.removeDeviceFile(serial, devicePath).catch(() => {});
+      return { posted: false };
+    }
     onLog?.("Make a Post: tapping Share…");
     await android.tap(serial, finalShareBtn.x, finalShareBtn.y);
 
