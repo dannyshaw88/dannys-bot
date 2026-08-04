@@ -402,6 +402,8 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
   "followFilterMinFollowers50",
   "followFilterVerifiedUsers",
   "followFilterMaxFollowers25k",
+  "followFilterMalesOnly",
+  "followFilterMaleNames",
   "updateProfilePicFolderPath",
   "updateBioText",
   "makePostLocalFolderEnabled",

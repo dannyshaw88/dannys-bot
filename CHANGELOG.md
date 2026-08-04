@@ -1,3 +1,12 @@
+## [1.2.377] — 2026-08-04
+
+### Fixed — Trust Score Males Only propagation
+
+- Added the Males Only toggle and allowed-name list to the frontend and API
+  Trust Score ownership maps.
+- Trust Score Copy Settings now carries both Males Only fields to other
+  Trust Scores instead of filtering them out.
+
 ## [1.2.376] — 2026-08-04
 
 ### Fixed — Unlimited Males Only allowlist
