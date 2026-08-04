@@ -1,4 +1,18 @@
-## [1.2.364] — 2026-08-04
+## [1.2.366] — 2026-08-04
+
+### Fixed — Xiaomi Instagram account switching
+
+- Fixed account switching stopping before the long-press when Xiaomi/Instagram
+  exposed the bottom-right profile avatar without a content description or
+  resource ID.
+- Added an accessibility-tree fallback that identifies the live avatar node by
+  its bottom-navigation position and avatar-sized bounds.
+- The long-press still uses the node's actual accessibility bounds; no guessed
+  screen coordinate or pixel scan is used.
+- Added diagnostic logging when the unlabeled bottom-right avatar fallback is
+  selected.
+
+## [1.2.365] — 2026-08-04
 
 ### Changed — Trust Score ownership for Make a Post location
 
