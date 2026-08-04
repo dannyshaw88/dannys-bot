@@ -4651,6 +4651,7 @@ export function AutomationSettingsPanel({
   const [showSurplus, setShowSurplus] = useState(false);
   const [showSources, setShowSources] = useState(false);
   const [bioSpinEditorOpen, setBioSpinEditorOpen] = useState(false);
+  const [bioSpinDraft, setBioSpinDraft] = useState("");
   const [spinPreview, setSpinPreview] = useState<string | null>(null);
   const [newFollowSourceType, setNewFollowSourceType] = useState<'hashtag' | 'target_followers'>('hashtag');
   const [newFollowSourceValue, setNewFollowSourceValue] = useState('');
@@ -6389,7 +6390,10 @@ export function AutomationSettingsPanel({
                     disabled={loading} />
                   <button
                     type="button"
-                    onClick={() => setBioSpinEditorOpen(true)}
+                    onClick={() => {
+                      setBioSpinDraft(settings.updateBioText);
+                      setBioSpinEditorOpen(true);
+                    }}
                     disabled={fieldDisabled("updateBioText")}
                     className="h-7 px-3 text-xs rounded border border-border bg-background hover:border-foreground/30 hover:bg-accent transition-colors shrink-0 font-medium text-foreground text-center justify-center disabled:cursor-not-allowed disabled:opacity-50"
                     style={{ width: "76px" }}
@@ -6941,8 +6945,12 @@ export function AutomationSettingsPanel({
             <textarea
               autoFocus
               rows={5}
-              value={settings.updateBioText}
-              onChange={e => setSettings(s => ({ ...s, updateBioText: e.target.value }))}
+              value={bioSpinDraft}
+              onChange={e => {
+                const value = e.target.value;
+                setBioSpinDraft(value);
+                setSettings(s => ({ ...s, updateBioText: value }));
+              }}
               disabled={fieldDisabled("updateBioText")}
               placeholder="Enter bio text or spin syntax"
               className="min-h-[7.5rem] w-[calc(100%+15ch)] max-w-none resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm leading-relaxed outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
@@ -6954,8 +6962,8 @@ export function AutomationSettingsPanel({
           <div className="flex justify-end pt-1">
             <button
               type="button"
-              disabled={fieldDisabled("updateBioText") || !settings.updateBioText.trim()}
-              onClick={() => setSpinPreview(resolveSpinSyntax(settings.updateBioText))}
+              disabled={fieldDisabled("updateBioText") || !bioSpinDraft.trim()}
+              onClick={() => setSpinPreview(resolveSpinSyntax(bioSpinDraft))}
               className="h-8 px-4 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium disabled:cursor-not-allowed disabled:opacity-50"
             >
               Spin
@@ -6974,7 +6982,7 @@ export function AutomationSettingsPanel({
           <div className="flex justify-end gap-2 pt-1">
             <button
               type="button"
-              onClick={() => setSpinPreview(resolveSpinSyntax(settings.updateBioText))}
+              onClick={() => setSpinPreview(resolveSpinSyntax(bioSpinDraft))}
               className="h-8 px-4 text-xs rounded border border-border bg-background hover:bg-accent transition-colors font-medium"
             >
               Roll Again

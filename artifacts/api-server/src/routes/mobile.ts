@@ -7765,7 +7765,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const localFile = files[0].name;
     const localPath = path.join(folderPath, localFile);
 
-    // 2. Push the image to the device.
+    // 2. Prepare and push the image to the device. Profile-picture uploads
+    // always use the same privacy/alteration pipeline as Make a Post:
+    // Fix AI Slop plus the Small alteration preset. The source file remains
+    // untouched; only the temporary processed copy is sent to the phone.
+    let prepared: Awaited<ReturnType<typeof prepareMakePostImage>>;
+    try {
+      prepared = await prepareMakePostImage(localPath, localFile, {
+        doFixAiSlop: true,
+        alterationEnabled: true,
+        alterationLevel: "small",
+        onLog,
+      });
+    } catch (e: any) {
+      onLog?.(`Update Profile Pic: ✗ image preparation failed: ${e?.message}`);
+      return;
+    }
+
     // pushFileToDevice builds its own on-device path (equinox_<ts>_<name>) and
     // returns it — capture the actual path so removeDeviceFile targets the
     // correct file.  Previously the caller constructed a separate devicePath
@@ -7774,10 +7790,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // call a no-op (it tried to delete a file that never existed at that path).
     let actualDevicePath: string;
     try {
-      actualDevicePath = await android.pushFileToDevice(serial, localPath, localFile);
+      actualDevicePath = await android.pushFileToDevice(serial, prepared.pushFilePath, prepared.pushFileName);
       onLog?.(`Update Profile Pic: pushed ${localFile} to device`);
     } catch (e: any) {
-      onLog?.(`Update Profile Pic: ✗ push failed: ${e?.message}`); return;
+      onLog?.(`Update Profile Pic: ✗ push failed: ${e?.message}`);
+      await prepared.cleanup();
+      return;
     }
     await sleepOrAbort(serial, 1000);
 
@@ -7911,6 +7929,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         await android.removeDeviceFile(serial, actualDevicePath!);
         onLog?.(`Update Profile Pic: deleted ${localFile} from device`);
       } catch (e: any) { onLog?.(`Update Profile Pic: ⚠ could not delete device file: ${e?.message}`); }
+      await prepared.cleanup();
     }
 
     if (!uploadSucceeded) return;
