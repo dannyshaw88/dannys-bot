@@ -354,11 +354,15 @@ function PhoneFarmPhoneSection({
     };
   });
 
+  const getFarmSortValue = (slot: typeof slotsWithStats[number], key: string) =>
+    key === "posts" ? slot.postsDaily : Number(slot.daily[key] ?? 0);
+
   const sortedSlots = farmSortKey
     ? [...slotsWithStats].sort((a, b) => {
-        const va = farmSortKey === "posts" ? a.postsDaily : (a.daily[farmSortKey] ?? 0);
-        const vb = farmSortKey === "posts" ? b.postsDaily : (b.daily[farmSortKey] ?? 0);
-        return farmSortDir === "desc" ? vb - va : va - vb;
+        const va = getFarmSortValue(a, farmSortKey);
+        const vb = getFarmSortValue(b, farmSortKey);
+        if (va !== vb) return farmSortDir === "desc" ? vb - va : va - vb;
+        return a.username.localeCompare(b.username);
       })
     : slotsWithStats;
 
@@ -1358,6 +1362,11 @@ function PhoneFarmTab() {
                       <span className={`inline-flex items-center gap-1 ${s.color}`}>
                         {s.icon} {s.label}
                         {s.showEye && <Eye className="w-3 h-3 opacity-70" />}
+                        {isSorted && (
+                          <span className="text-[9px] text-foreground" aria-label={`${farmSortDir === "desc" ? "descending" : "ascending"} sort`}>
+                            {farmSortDir === "desc" ? "▼" : "▲"}
+                          </span>
+                        )}
                       </span>
                     </th>
                   );
