@@ -14,7 +14,6 @@ import * as proxyRelay from "../mobile/proxyRelay";
 import * as sessionRecorder from "../mobile/sessionRecorder";
 import { getDeviceLabel } from "./usb-phones";
 import { fixAiSlop } from "../instagram/fixAiSlop";
-import { makeUniqueImage } from "../instagram/makeUnique";
 import {
   alterJpegBuffer,
   type AlterationLevel,
@@ -343,7 +342,6 @@ type AutomationSettings = {
   makePostLocalFolderDeleteAfterUpload?: boolean;
   makePostUseChatGpt?: boolean;
   makePostFixAiSlop?: boolean;
-  makePostMakeUnique?: boolean;
   makePostCaptionText?: string;
   makePostPostToProfilePctMin?: number;
   makePostPostToProfilePctMax?: number;
@@ -374,7 +372,6 @@ type AutomationSettings = {
   postStoryAlterationLevel?: "small" | "medium" | "high";
   postStoryImageSettingsEnabled?: boolean;
   postStoryFixAiSlop?: boolean;
-  postStoryMakeUnique?: boolean;
   postStoryAddLink?: boolean;
   postStoryLinkUrl?: string;
   postStoryImageSettings?: {
@@ -1654,7 +1651,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostLocalFolderDeleteAfterUpload: z.boolean().default(false),
     makePostUseChatGpt: z.boolean().default(false),
     makePostFixAiSlop: z.boolean().default(false),
-    makePostMakeUnique: z.boolean().default(false),
     makePostPostToProfilePctMin: z.number().min(0).max(100).default(100),
     makePostPostToProfilePctMax: z.number().min(0).max(100).default(100),
     makePostPostToStoryPctMin: z.number().min(0).max(100).default(0),
@@ -1683,7 +1679,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     postStoryAlterationLevel: z.enum(["small", "medium", "high"]).default("small"),
     postStoryImageSettingsEnabled: z.boolean().default(true),
     postStoryFixAiSlop: z.boolean().default(false),
-    postStoryMakeUnique: z.boolean().default(false),
     postStoryAddLink: z.boolean().default(false),
     postStoryLinkUrl: z.string().default(""),
     postStoryImageSettings: z.object({
@@ -1795,7 +1790,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       makePostLocalFolderEnabled: true, makePostLocalFolderPath: "",
       makePostLocalFolderNoRepeat: false, makePostLocalFolderRandom: false,
       makePostLocalFolderDeleteAfterUpload: false,
-      makePostUseChatGpt: false, makePostFixAiSlop: false, makePostMakeUnique: false,
+      makePostUseChatGpt: false, makePostFixAiSlop: false,
       makePostCaptionText: "",
       makePostImageSettings: {
         contrast: { enabled: true, min: 5, max: 250 },
@@ -1810,7 +1805,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       postStoryLocalFolderNoRepeat: false, postStoryLocalFolderRandom: false,
       postStoryAlterationEnabled: true, postStoryAlterationLevel: "small",
       postStoryImageSettingsEnabled: true,
-      postStoryFixAiSlop: false, postStoryMakeUnique: false,
+      postStoryFixAiSlop: false,
       postStoryImageSettings: {
         contrast: { enabled: true, min: 5, max: 250 },
         brightness: { enabled: true, min: 5, max: 250 },
@@ -2124,7 +2119,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostLocalFolderEnabled: true, makePostLocalFolderPath: "",
         makePostLocalFolderNoRepeat: false, makePostLocalFolderRandom: false,
         makePostLocalFolderDeleteAfterUpload: false,
-        makePostUseChatGpt: false, makePostFixAiSlop: false, makePostMakeUnique: false,
+        makePostUseChatGpt: false, makePostFixAiSlop: false,
         makePostPostToProfilePctMin: 100, makePostPostToProfilePctMax: 100,
         makePostPostToStoryPctMin: 0, makePostPostToStoryPctMax: 0,
         makePostCaptionText: "",
@@ -2148,7 +2143,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           sharpen: { enabled: true, min: 1.0, max: 2.0 },
           pixelate: { enabled: true, min: 0.9, max: 2.1 },
         },
-        postStoryFixAiSlop: false, postStoryMakeUnique: false,
+        postStoryFixAiSlop: false,
         postStoryAddLink: false, postStoryLinkUrl: "",
         dismissDirection: "auto" as const,
       };
@@ -6440,7 +6435,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // schema or Zod strips it from the request body and doFixAiSlop is always
     // undefined (falsy) regardless of what the frontend sends.
     makePostFixAiSlop: z.boolean().default(false),
-    makePostMakeUnique: z.boolean().default(false),
     // Post destination: probability that a given Make a Post attempt goes to
     // the profile feed vs. to a Story.  Defaults keep existing behaviour
     // (profile=100%, story=0%).  If story is rolled first (random < storyPct),
@@ -6473,7 +6467,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       pixelate: { enabled: true, min: 0.9, max: 2.1 },
     }),
     postStoryFixAiSlop: z.boolean().default(false),
-    postStoryMakeUnique: z.boolean().default(false),
     postStoryAddLink: z.boolean().default(false),
     postStoryLinkUrl: z.string().default(""),
     // Which Instagram account slot is driving this cycle. When set the cycle
@@ -6666,7 +6659,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   type MakePostImageOptions = {
     doFixAiSlop?: boolean;
-    makeUnique?: boolean;
     alterationEnabled?: boolean;
     alterationLevel?: AlterationLevel;
     imageSettingsEnabled?: boolean;
@@ -6689,7 +6681,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     pushFileName: string;
     cleanup: () => Promise<void>;
   }> {
-    const { doFixAiSlop, makeUnique, alterationEnabled, alterationLevel, imageSettingsEnabled, imageSettings, onLog } = opts;
+    const { doFixAiSlop, alterationEnabled, alterationLevel, imageSettingsEnabled, imageSettings, onLog } = opts;
     const tempFiles: string[] = [];
     const tempDirs: string[] = [];
     const prefix = fileName.includes("/") ? "Make a Post" : "Make a Post";
@@ -6741,24 +6733,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         onLog?.(`${prefix}: ${level} image alteration ✓ — pushing processed copy`);
       } catch (e: any) {
         onLog?.(`${prefix}: image alteration error — ${e?.message ?? "unknown error"}, continuing with previous image`);
-      }
-    }
-
-    if (makeUnique) {
-      onLog?.(`${prefix}: making a unique image copy…`);
-      try {
-        const input = await fsPromises.readFile(pushFilePath);
-        const unique = await makeUniqueImage(input);
-        const tempDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "equinox-mobile-unique-"));
-        const uniquePath = path.join(tempDir, "unique.jpg");
-        await fsPromises.writeFile(uniquePath, unique);
-        tempDirs.push(tempDir);
-        tempFiles.push(uniquePath);
-        pushFilePath = uniquePath;
-        pushFileName = `${path.basename(fileName, path.extname(fileName))}.jpg`;
-        onLog?.(`${prefix}: unique image ✓ — pushing processed copy`);
-      } catch (e: any) {
-        onLog?.(`${prefix}: unique image error — ${e?.message ?? "unknown error"}, continuing with previous image`);
       }
     }
 
@@ -7185,7 +7159,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     localFolderPath: string; localFolderRandom: boolean; localFolderNoRepeat: boolean;
     deleteAfterUpload: boolean;
     doFixAiSlop?: boolean;
-    makeUnique?: boolean;
     alterationEnabled?: boolean;
     alterationLevel?: AlterationLevel;
     imageSettingsEnabled?: boolean;
@@ -7194,7 +7167,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   }): Promise<{ posted: boolean; fileName?: string }> {
     const {
       localFolderPath, localFolderRandom, localFolderNoRepeat, deleteAfterUpload,
-      doFixAiSlop, makeUnique, alterationEnabled, alterationLevel,
+      doFixAiSlop, alterationEnabled, alterationLevel,
       imageSettingsEnabled, imageSettings, onLog,
     } = opts;
 
@@ -7206,7 +7179,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     const prepared = await prepareMakePostImage(localFilePath, fileName, {
       doFixAiSlop,
-      makeUnique,
       alterationEnabled,
       alterationLevel,
       imageSettingsEnabled,
@@ -9850,7 +9822,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         postStoryEnabled, postStoryActivatePctMin, postStoryActivatePctMax,
         postStoryLocalFolderPath, postStoryLocalFolderNoRepeat, postStoryLocalFolderRandom,
         postStoryAlterationEnabled, postStoryAlterationLevel, postStoryImageSettingsEnabled,
-        postStoryImageSettings, postStoryFixAiSlop, postStoryMakeUnique,
+        postStoryImageSettings, postStoryFixAiSlop,
         slotUsername, slotIdx,
         shuffleToolOrder,
         dismissDirection,
@@ -10783,7 +10755,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   imageSettingsEnabled: postStoryImageSettingsEnabled,
                   imageSettings: postStoryImageSettings,
                   doFixAiSlop: postStoryFixAiSlop,
-                  makeUnique: postStoryMakeUnique,
                   onLog: (msg) => tLog(`  ${msg}`),
                 });
                 if (result.posted) {

@@ -3746,7 +3746,6 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             updateBioDisableAfterUsed: s.updateBioDisableAfterUsed,
             makePostUseChatGpt: s.makePostUseChatGpt,
             makePostFixAiSlop: s.makePostFixAiSlop,
-            makePostMakeUnique: s.makePostMakeUnique,
             makePostCaptionText: s.makePostCaptionText,
             makePostImageSettings: s.makePostImageSettings,
             postStoryEnabled: s.postStoryEnabled,
@@ -3760,7 +3759,6 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             postStoryImageSettingsEnabled: s.postStoryImageSettingsEnabled,
             postStoryImageSettings: s.postStoryImageSettings,
             postStoryFixAiSlop: s.postStoryFixAiSlop,
-            postStoryMakeUnique: s.postStoryMakeUnique,
             postStoryAddLink: s.postStoryAddLink,
             postStoryLinkUrl: s.postStoryLinkUrl,
             shuffleToolOrder: s.shuffleToolOrder,
@@ -6672,15 +6670,6 @@ export function AutomationSettingsPanel({
                       className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                     <label htmlFor={`make-a-post-fix-ai-slop-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Fix AI Slop</label>
                   </div>
-                  {/* Make it unique */}
-                  <div className="flex items-center gap-1.5">
-                    <input type="checkbox" id={`make-a-post-make-unique-${slotIdx ?? 0}`}
-                      checked={settings.makePostMakeUnique}
-                      onChange={e => setSettings(s => ({ ...s, makePostMakeUnique: e.target.checked }))}
-                      disabled={fieldDisabled("makePostMakeUnique")}
-                      className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                    <label htmlFor={`make-a-post-make-unique-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Make it unique</label>
-                  </div>
                 </div>
               </div>
             </div>
@@ -6905,19 +6894,6 @@ export function AutomationSettingsPanel({
                   </label>
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="checkbox"
-                    id={`post-a-story-make-unique-${slotIdx ?? 0}`}
-                    checked={settings.postStoryMakeUnique}
-                    onChange={e => setSettings(s => ({ ...s, postStoryMakeUnique: e.target.checked }))}
-                    disabled={fieldDisabled("postStoryMakeUnique")}
-                    className="w-3.5 h-3.5 accent-primary cursor-pointer"
-                  />
-                  <label htmlFor={`post-a-story-make-unique-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">
-                    Make it unique
-                  </label>
-                </div>
               </div>
             </div>
           )}

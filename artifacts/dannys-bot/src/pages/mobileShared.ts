@@ -220,7 +220,6 @@ export interface AutomationSettingsData {
   updateBioDisableAfterUsed: boolean;
   makePostUseChatGpt: boolean;
   makePostFixAiSlop: boolean;
-  makePostMakeUnique: boolean;
   makePostPostToProfilePctMin: number; makePostPostToProfilePctMax: number;
   makePostPostToStoryPctMin: number; makePostPostToStoryPctMax: number;
   makePostCaptionText: string;
@@ -235,7 +234,6 @@ export interface AutomationSettingsData {
   postStoryImageSettingsEnabled: boolean;
   postStoryImageSettings: ImageFilterSettings;
   postStoryFixAiSlop: boolean;
-  postStoryMakeUnique: boolean;
   postStoryAddLink: boolean;
   postStoryLinkUrl: string;
   dismissDirection: "auto" | "left" | "up";
@@ -346,7 +344,6 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   updateBioDisableAfterUsed: false,
   makePostUseChatGpt: false,
   makePostFixAiSlop: false,
-  makePostMakeUnique: false,
   makePostPostToProfilePctMin: 100, makePostPostToProfilePctMax: 100,
   makePostPostToStoryPctMin: 0, makePostPostToStoryPctMax: 0,
   makePostCaptionText: "",
@@ -373,7 +370,6 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
     pixelate: { enabled: true, min: 0.9, max: 2.1 },
   },
   postStoryFixAiSlop: false,
-  postStoryMakeUnique: false,
   postStoryAddLink: false,
   postStoryLinkUrl: "",
   dismissDirection: "auto",
@@ -547,7 +543,6 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'postDisableAt',     label: 'Disable when no more posts are found', fields: ['makePostDisableWhenExhausted'] },
     { key: 'postChatGptCaption',label: 'ChatGPT / caption settings',    fields: ['makePostUseChatGpt','makePostCaptionText'] },
     { key: 'postFixAiSlop',      label: 'Fix AI Slop',                   fields: ['makePostFixAiSlop'] },
-    { key: 'postMakeUnique',     label: 'Make it unique',                fields: ['makePostMakeUnique'] },
   ]},
   { key: 'postStory',      label: 'Post a Story', sub: [
     { key: 'storyPostEnabled',   label: 'Enabled',             fields: ['postStoryEnabled'] },
@@ -558,6 +553,5 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'storyPostAlteration', label: 'Image Alteration',    fields: ['postStoryAlterationEnabled','postStoryAlterationLevel'] },
     { key: 'storyPostImageSettings', label: 'Image Settings',   fields: ['postStoryImageSettingsEnabled','postStoryImageSettings'] },
     { key: 'storyPostFixAiSlop', label: 'Fix AI Slop',           fields: ['postStoryFixAiSlop'] },
-    { key: 'storyPostUnique',    label: 'Make it unique',      fields: ['postStoryMakeUnique'] },
   ]},
 ];

@@ -1,3 +1,16 @@
+## [1.2.361] — 2026-08-04
+
+### Changed — safer repeated-media handling and mobile posting cleanup
+
+- Removed the **Make it unique** feature from Make a Post and Post a Story.
+- Removed its controls from the Mobile Human Session Tool, shared settings, copy-settings mappings, HST payloads, API schemas, defaults, and runtime processing path.
+- Make a Post now uses the configured image alteration level, Image Settings, and Fix AI Slop options without applying the separate legacy uniquification pipeline.
+- Added the **Delete after use** option beside the local-folder media controls. When enabled, the selected source file is deleted from the computer only after Instagram confirms a successful upload; failed or aborted attempts keep the source file.
+- Renamed the local media controls to **Don't use same images**, **Pick randomly**, and **Stop if folders empty**.
+- Improved Follow search-bar detection for Xiaomi/Instagram accessibility trees by scanning complete UI nodes regardless of XML attribute order or line wrapping, while continuing to require a real bounded accessibility node instead of guessing coordinates.
+- Confirmed the canonical `.github/workflows/build-windows-installer.yml` remains the active Windows installer workflow; no duplicate workflow was created.
+- Bumped the root application and Electron package versions to `1.2.361`.
+
 ## [1.2.360] — 2026-08-03
 
 ### Added — clickable Followed Users profiles
