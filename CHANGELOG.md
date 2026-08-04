@@ -1,3 +1,13 @@
+## [1.2.379] — 2026-08-04
+
+### Improved — Debug log screenshot recording
+
+- Capture a screenshot for every recorded debug-log timestamp.
+- Serialize per-device screenshot work so ADB captures do not compete and
+  fall behind the automation flow.
+- Remove the session event limit.
+- Delete the previous device capture directory whenever a new recording starts.
+
 ## [1.2.378] — 2026-08-04
 
 ### Fixed — Persist Males Only settings

@@ -6480,6 +6480,37 @@ export async function captureDebugEvidence(serial: string, label: string): Promi
   }
 }
 
+/** Remove the prior per-device screenshot run before a new recording starts. */
+export function resetDebugCaptures(serial: string): void {
+  const root = path.join(process.cwd(), "debug-captures", serial.replace(/[^a-zA-Z0-9_.\-]+/g, "_"));
+  try { fs.rmSync(root, { recursive: true, force: true }); } catch (e: any) {
+    logger.warn?.(`[resetDebugCaptures] failed for ${serial}: ${e?.message ?? e}`);
+  }
+}
+
+/** Fast PNG-only capture used by the session recorder. It intentionally omits
+ * UIAutomator dumps so screenshots stay close to the corresponding log time. */
+export async function captureDebugScreenshot(serial: string, ts: number, label: string): Promise<string | null> {
+  try {
+    const tools = detectToolset();
+    const adb = requireTool(tools.adb, "adb");
+    const safeSerial = serial.replace(/[^a-zA-Z0-9_.\-]+/g, "_");
+    const safeLabel = label.replace(/[^a-zA-Z0-9_.\-]+/g, "_").slice(0, 80);
+    const dir = path.join(process.cwd(), "debug-captures", safeSerial, `${ts}_${safeLabel}`);
+    fs.mkdirSync(dir, { recursive: true });
+    const result = await execFileP(adb, ["-s", serial, "exec-out", "screencap", "-p"], {
+      encoding: "buffer", timeout: 3000, maxBuffer: 20 * 1024 * 1024,
+    } as any) as unknown as { stdout: Buffer };
+    if (!result.stdout || result.stdout.length < 100) return null;
+    const file = path.join(dir, "screen.png");
+    fs.writeFileSync(file, result.stdout);
+    return file;
+  } catch (e: any) {
+    logger.debug?.(`[captureDebugScreenshot] failed for "${label}": ${e?.message ?? e}`);
+    return null;
+  }
+}
+
 /**
  * Positional fallback for the blue "Next" control on Instagram's very first
  * New Post screen (the photo-select/Recents grid).

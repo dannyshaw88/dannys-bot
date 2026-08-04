@@ -11699,6 +11699,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.post("/api/mobile/devices/:serial/session-recorder/start", (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
+      android.resetDebugCaptures(serial);
+      const queues = new Map<string, Promise<void>>();
+      sessionRecorder.setScreenshotCapture((captureSerial, ts, label) => {
+        const previous = queues.get(captureSerial) ?? Promise.resolve();
+        const next = previous
+          .catch(() => {})
+          .then(async () => {
+            const file = await android.captureDebugScreenshot(captureSerial, ts, label);
+            if (file) sessionRecorder.addScreenshot(captureSerial, ts, file, label);
+          })
+          .finally(() => {
+            if (queues.get(captureSerial) === next) queues.delete(captureSerial);
+          });
+        queues.set(captureSerial, next);
+      });
       sessionRecorder.start(serial);
       logger.info({ serial }, "[session-recorder] recording started");
       res.json({ ok: true, recording: true });

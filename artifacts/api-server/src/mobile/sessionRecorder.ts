@@ -16,7 +16,7 @@
  * All functions are safe to call even when not recording (no-ops).
  */
 
-export type EventType = "tap" | "key" | "swipe" | "log" | "dump";
+export type EventType = "tap" | "key" | "swipe" | "log" | "dump" | "screenshot";
 
 export interface RecEvent {
   ts:      number;          // Date.now() at time of event
@@ -29,6 +29,7 @@ export interface KeyData    { code: number; label?: string }
 export interface SwipeData  { x1: number; y1: number; x2: number; y2: number; durationMs?: number }
 export interface LogData    { text: string }
 export interface DumpData   { xmlSnippet: string; fullXmlKb: number; summary?: string }
+export interface ScreenshotData { path: string; label: string }
 
 interface Session {
   serial:     string;
@@ -38,12 +39,19 @@ interface Session {
   active:     boolean;
 }
 
-const MAX_EVENTS   = 1000;
+// Keep the complete recording. Long sessions are intentionally not truncated:
+// the purpose of this tool is to correlate every timestamp with the screen.
 const MAX_XML_BYTES = 60_000; // truncate dumps stored in the session to ~60 KB
 
 const sessions = new Map<string, Session>();
 
 // ─── Control ─────────────────────────────────────────────────────────────────
+
+let screenshotCapture: ((serial: string, ts: number, label: string) => void) | null = null;
+
+export function setScreenshotCapture(capture: ((serial: string, ts: number, label: string) => void) | null): void {
+  screenshotCapture = capture;
+}
 
 export function start(serial: string): void {
   sessions.set(serial, {
@@ -76,7 +84,6 @@ export function status(serial: string): { recording: boolean; eventCount: number
 function push(serial: string, ev: RecEvent): void {
   const s = sessions.get(serial);
   if (!s || !s.active) return;
-  if (s.events.length >= MAX_EVENTS) s.events.shift(); // ring-buffer oldest-out
   s.events.push(ev);
 }
 
@@ -93,7 +100,14 @@ export function addSwipe(serial: string, x1: number, y1: number, x2: number, y2:
 }
 
 export function addLog(serial: string, text: string): void {
-  push(serial, { ts: Date.now(), type: "log", data: { text } });
+  const ts = Date.now();
+  push(serial, { ts, type: "log", data: { text } });
+  // Fire-and-forget: capture work never blocks the automation/log producer.
+  screenshotCapture?.(serial, ts, text);
+}
+
+export function addScreenshot(serial: string, ts: number, path: string, label: string): void {
+  push(serial, { ts, type: "screenshot", data: { path, label } });
 }
 
 export function addDump(serial: string, xml: string, summary?: string): void {
@@ -152,6 +166,7 @@ export function exportHtml(serial: string): string | null {
     swipe: "🔄",
     log:   "📝",
     dump:  "🔍",
+    screenshot: "📸",
   };
 
   const color: Record<EventType, string> = {
@@ -160,6 +175,7 @@ export function exportHtml(serial: string): string | null {
     swipe: "#f59e0b",
     log:   "#e5e7eb",
     dump:  "#c084fc",
+    screenshot: "#22d3ee",
   };
 
   let rows = "";
@@ -198,6 +214,9 @@ export function exportHtml(serial: string): string | null {
           <summary style="cursor:pointer;color:#c084fc;font-size:11px">Show XML</summary>
           <pre style="font-size:10px;overflow:auto;max-height:300px;background:#1e1e2e;padding:8px;border-radius:4px;color:#cdd6f4;margin-top:4px">${esc(d.xmlSnippet)}</pre>
         </details>`;
+    } else if (ev.type === "screenshot") {
+      const d = ev.data as ScreenshotData;
+      desc = `screenshot — ${esc(d.label)}<br><small style="color:#6b7280">${esc(d.path)}</small>`;
     }
 
     rows += `<tr style="${rowBg}">
