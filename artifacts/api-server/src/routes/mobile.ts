@@ -11628,6 +11628,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
+  // Account-switcher hold: resolve Instagram's live Profile tab on the
+  // currently selected device instead of trusting a mirror-screen coordinate.
+  app.post("/api/mobile/devices/:serial/input/profile-tab-longpress", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const profileTab = await android.findInstagramProfileTab(serial);
+      if (!profileTab) {
+        res.status(404).json({ error: "Instagram Profile tab was not found in the live accessibility tree" });
+        return;
+      }
+      await android.swipe(serial, profileTab.x, profileTab.y, profileTab.x, profileTab.y, 2000);
+      res.json({ ok: true, target: "profile-tab", node: profileTab });
+    } catch (e: any) {
+      res.status(400).json({ error: e?.message ?? "Profile-tab long-press failed" });
+    }
+  });
+
   // Manual double-tap (like) from the operator clicking the mirrored screen
   // twice — must go through the same single-adb-call `doubleTap` used by
   // the automated Check Feed loop. Sending this as two separate

@@ -1,3 +1,14 @@
+## [1.2.373] — 2026-08-04
+
+### Fixed — Device-independent account-switcher hold
+
+- Replaced the manual username-list long-press target with a live
+  accessibility-tree lookup of Instagram's Profile tab on the selected device.
+- Removed mirror-coordinate scaling from this account-switcher action, so
+  different device sizes and layouts resolve their own current target.
+- Added an explicit failure when the live Profile tab cannot be found instead
+  of sending a guessed hold to the phone.
+
 ## [1.2.372] — 2026-08-04
 
 ### Fixed — Human Session Tool inner scroll restoration

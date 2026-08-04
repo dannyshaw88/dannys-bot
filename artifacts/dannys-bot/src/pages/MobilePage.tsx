@@ -964,20 +964,19 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
           clearTimeout(pendingSingleTapRef.current.timer);
           pendingSingleTapRef.current = null;
         }
-        addLog(`[manual] Long-press → (${drag.startX}, ${drag.startY}) [held ${durationMs}ms]`);
+        addLog(`[manual] Account-switcher hold [held ${durationMs}ms] — resolving Profile tab from live accessibility tree`);
         try {
-          const phoneSize = phoneSizeRef.current;
-          const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/longpress`, {
+          const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/profile-tab-longpress`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ x: drag.startX, y: drag.startY, videoW: phoneSize?.w, videoH: phoneSize?.h }),
+            body: JSON.stringify({}),
           });
           if (!r.ok) {
             const body = await r.json().catch(() => null);
             addLog(`Long-press FAILED (${r.status}) — ${body?.error ?? "no error detail"}`);
           } else {
             const body = await r.json().catch(() => null);
-            if (body?.rescaled) addLog(`Rescale: video ${body.video[0]}×${body.video[1]} → device ${body.device[0]}×${body.device[1]}, (${body.from[0]},${body.from[1]}) → (${body.to[0]},${body.to[1]})`);
+            if (body?.node) addLog(`Long-press target resolved from live accessibility tree at (${body.node.x},${body.node.y})`);
           }
         } catch (err: any) {
           addLog(`Long-press FAILED — ${err?.message ?? "network error"}`);
