@@ -7092,13 +7092,31 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         onLog?.("Make a Post: tapping Add location…");
         await android.tap(serial, addLocationBtn.x, addLocationBtn.y);
         await sleepOrAbort(serial, 1000);
-        const firstLocation = await android.findButtonByLabel(serial, "Manchester, United Kingdom").catch(() => null);
-        if (firstLocation) {
-          onLog?.("Make a Post: selecting the first available location…");
-          await android.tap(serial, firstLocation.x, firstLocation.y);
-          await sleepOrAbort(serial, 800);
+
+        const locationSearch = await android.findLocationSearchField(serial).catch(() => null);
+        if (!locationSearch) {
+          onLog?.("Make a Post: location search field not found — continuing without location");
         } else {
-          onLog?.("Make a Post: first location row not found — continuing without location");
+          onLog?.("Make a Post: entering location search \"Manchester United Kingdom\"…");
+          await android.tap(serial, locationSearch.x, locationSearch.y);
+          // The picker can retain a previous query. Clear by moving to the end
+          // and sending enough deletes to cover any existing query, then type
+          // the exact requested search text.
+          await android.keyevent(serial, "123"); // KEYCODE_MOVE_END
+          for (let i = 0; i < 80; i++) {
+            await android.keyevent(serial, "67"); // KEYCODE_DEL
+          }
+          await android.inputText(serial, "Manchester United Kingdom");
+          await sleepOrAbort(serial, 1200);
+
+          const matchingLocation = await android.findButtonByLabel(serial, "Manchester, United Kingdom").catch(() => null);
+          if (matchingLocation) {
+            onLog?.("Make a Post: selecting location \"Manchester, United Kingdom\"…");
+            await android.tap(serial, matchingLocation.x, matchingLocation.y);
+            await sleepOrAbort(serial, 800);
+          } else {
+            onLog?.("Make a Post: requested Manchester location result not found — continuing without location");
+          }
         }
       } else {
         onLog?.("Make a Post: Add location control not found — continuing without location");

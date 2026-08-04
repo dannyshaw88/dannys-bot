@@ -5101,6 +5101,19 @@ export async function findButtonByLabel(serial: string, label: string): Promise<
 }
 
 /**
+ * Locate Instagram's location-picker search field. This is deliberately
+ * resource-id based: the field's visible hint/text varies by build, while
+ * row_search_edit_text is present in the live location-picker dump.
+ */
+export async function findLocationSearchField(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+  return _findByResId(xml, ":id/row_search_edit_text");
+}
+
+/**
  * Finds the DM-share Send button on the share sheet after a recipient has been
  * selected.  Tries resource-ids first (direct_send_button_multi_select and
  * send_button are the two known ids) before falling back to the label "Send".

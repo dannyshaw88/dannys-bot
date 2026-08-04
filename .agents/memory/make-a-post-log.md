@@ -47,6 +47,12 @@ Additionally: the mobile API client session may be expired by the time the post 
 
 ## Chronological entries (newest first)
 
+### 2026-08-04 — Location picker must search explicitly instead of assuming the first result
+- Device evidence showed the Add location picker can open before the desired city is the top result. The picker exposes an EditText with resource-id `row_search_edit_text`; the desired query is `Manchester United Kingdom`.
+- The flow now focuses that live field, clears any retained query, enters `Manchester United Kingdom`, waits for results, and selects the live result whose content description is `Manchester, United Kingdom`. It no longer treats an arbitrary first row as Manchester.
+- **Lesson:** “first location row” is not a valid semantic selector. Search text must be entered first, then select the exact live result label.
+- Status: code-level fix applied; physical-device confirmation is still required.
+
 ### 2026-08-02 — Mobile cycle now dwells after confirmed uploads and reports uploaded posts
 - After each confirmed mobile profile or Story upload, the automation cycle now waits an additional 5 seconds before continuing to the next tool or Instagram cleanup.
 - The cycle tracks successful uploads separately from attempted posts and includes the count in the API response, Phone Farm cycle log, and Dashboard completion activity.
