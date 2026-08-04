@@ -1,3 +1,12 @@
+## [1.2.381] — 2026-08-04
+
+### Fixed — Trust Score Follow settings and log colors
+
+- Trust Score Males Only settings now inherit into every assigned Human
+  Session Tool slot instead of being treated as physical slot-owned fields.
+- Follow-related debugging lines, including Spread Follow, Inject Browsing,
+  success, and failure messages, consistently render blue.
+
 ## [1.2.380] — 2026-08-04
 
 ### Fixed — Follow recovery leaving Instagram

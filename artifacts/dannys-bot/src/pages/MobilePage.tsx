@@ -9053,10 +9053,15 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
               // Colour the message based on its tool / prefix.
               // Tool-specific colours take priority over general prefix colours.
               // System / untagged messages are white. Tool messages keep their tool colour.
-              let msgClass = 'text-white';
-              if      (/\bView Feed\b|▶ View Feed/.test(msg))      msgClass = 'text-orange-400';
-              else if (/▶ Follow Users|▶ Follow done|▶ Spread Follow|Spread Follow →|^Inject Browsing/.test(msg))
-                                                                    msgClass = 'text-blue-400';
+               let msgClass = 'text-white';
+               // Follow owns one color, including Spread Follow, inject
+               // browsing, success, navigation, and failure lines. Keep this
+               // ahead of generic ERROR/success rules so a Follow failure
+               // cannot turn red or white and lose its tool identity.
+               if      (currentTool === 'follow' ||
+                        /\bFollow\b|\bfollowing\b|\bSpread Follow\b|\bInject Browsing\b/i.test(msg))
+                                                                     msgClass = 'text-blue-400';
+               else if (/\bView Feed\b|▶ View Feed/.test(msg))      msgClass = 'text-orange-400';
               else if (/\bView Explore\b|▶ View Explore|[Ee]xplore/.test(msg))
                                                                     msgClass = 'text-green-400';
               else if (/[Rr]eel/.test(msg))                          msgClass = 'text-rose-500';
