@@ -1907,8 +1907,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "followFilterMinFollowers50",
     "followFilterVerifiedUsers",
     "followFilterMaxFollowers25k",
-    "followFilterMalesOnly",
-    "followFilterMaleNames",
     "updateProfilePicFolderPath",
     "updateBioText",
     "makePostLocalFolderEnabled",

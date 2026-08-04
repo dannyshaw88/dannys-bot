@@ -6180,14 +6180,16 @@ export function AutomationSettingsPanel({
                 <label htmlFor={`filter-males-only-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Males Only</label>
                 <button
                   type="button"
-                  className="text-xs underline text-primary disabled:text-muted-foreground disabled:no-underline"
+                  title="Edit allowed names"
+                  aria-label="Edit allowed names"
+                  className="inline-flex items-center justify-center rounded p-1 text-primary hover:bg-muted disabled:cursor-not-allowed disabled:text-muted-foreground"
                   disabled={fieldDisabled("followFilterMaleNames")}
                   onClick={() => {
                     setMaleNamesDraft(settings.followFilterMaleNames);
                     setMaleNamesEditorOpen(true);
                   }}
                 >
-                  Set names
+                  <ClipboardList className="h-4 w-4" />
                 </button>
               </div>
               <Dialog open={maleNamesEditorOpen} onOpenChange={setMaleNamesEditorOpen}>
