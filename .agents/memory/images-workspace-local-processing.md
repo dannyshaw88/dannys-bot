@@ -8,3 +8,7 @@ The Images workspace must reuse the Make a Post Fix AI Slop and Image Alteration
 **Why:** This preserves the existing processing behavior while keeping the new workflow local and reversible for manual Instagram posting outside the application.
 
 **How to apply:** Do not add a second image-alteration implementation, a Make it unique control, or an automatic Instagram upload/post step to this workspace.
+
+**Filter toggle rule:** When a custom image filter is disabled, the shared alteration pipeline must skip that operation entirely; disabled Pixelate must not fall back to a minimum blur.
+
+**Why:** Fix Images and Make a Post share the same server-side alteration function, so a fallback operation creates the same unintended behavior in both tools.

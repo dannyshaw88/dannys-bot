@@ -70,6 +70,15 @@ jobs:
             exit 1
           fi
           echo "Browser persistence and AI Images removal verified"
+      - name: Verify shared image-processing filter behavior
+        shell: bash
+        run: |
+          grep -F ': { min: 0, max: 0 },' artifacts/api-server/src/src/instagram/imageAlteration.ts
+          grep -F 'if (blurSigma > 0)' artifacts/api-server/src/src/instagram/imageAlteration.ts
+          grep -F 'fetch("/api/images/process"' artifacts/dannys-bot/src/pages/ImagesPage.tsx
+          grep -F 'alterationLevel={settings.makePostAlterationLevel}' artifacts/dannys-bot/src/pages/MobilePage.tsx
+          grep -F 'settings={settings.makePostImageSettings}' artifacts/dannys-bot/src/pages/MobilePage.tsx
+          echo "Shared Fix Images and Make a Post image processing verified"
       - name: Verify standalone Post a Story tool
         shell: bash
         run: |
