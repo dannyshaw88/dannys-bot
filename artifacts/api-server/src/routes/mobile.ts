@@ -7132,7 +7132,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // confirmation after the location result is selected. It is
             // conditional, so never guess a coordinate or tap an underlying
             // control: only tap a live accessibility node labelled "Add".
-            const mapPreviewAdd = await android.findButtonByLabel(serial, "Add").catch(() => null);
+            const mapPreviewAdd = await android.findLocationMapPreviewAdd(serial).catch(() => null);
             if (mapPreviewAdd) {
               onLog?.("Make a Post: map preview confirmation shown — tapping Add…");
               await android.tap(serial, mapPreviewAdd.x, mapPreviewAdd.y);

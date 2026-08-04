@@ -47,6 +47,16 @@ Additionally: the mobile API client session may be expired by the time the post 
 
 ## Chronological entries (newest first)
 
+### 2026-08-04 — Broad Add lookup tapped Add audio on final post screen
+- The optional Map preview confirmation was checked with a substring matcher
+  for `Add`. On a run where the popup was absent, that matched the final
+  post-screen `Add audio` row and moved the UI away from the final Share state.
+- The check now requires `Map preview` in the live accessibility tree and an
+  exact clickable `Add` node.
+- **Lesson:** never use a partial label lookup for generic controls when the
+  same word appears in post-editor rows.
+- Status: code-level fix applied; physical-device confirmation is still required.
+
 ### 2026-08-04 — Location selection can show an optional Map preview confirmation
 - Device evidence showed that selecting Manchester sometimes opens a Map
   preview sheet with a blue Add button, while other runs proceed without it.

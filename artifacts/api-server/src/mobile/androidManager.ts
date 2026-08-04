@@ -5114,6 +5114,31 @@ export async function findLocationSearchField(serial: string): Promise<{ x: numb
 }
 
 /**
+ * Locate the optional Add button in Instagram's location Map preview sheet.
+ * This must not use findButtonByLabel("Add"): that lookup is intentionally
+ * substring-based and can match the final post screen's "Add audio" row.
+ */
+export async function findLocationMapPreviewAdd(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml || !/Map preview/i.test(xml)) return null;
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = nodeRe.exec(xml)) !== null) {
+    const attrs = match[1];
+    if (!/clickable="true"/i.test(attrs)) continue;
+    const labelMatch =
+      attrs.match(/text="Add"[^>]*bounds="([^"]+)"/i) ??
+      attrs.match(/content-desc="Add"[^>]*bounds="([^"]+)"/i);
+    if (!labelMatch) continue;
+    const center = _parseCenter(labelMatch[1]);
+    if (center) return center;
+  }
+  return null;
+}
+
+/**
  * Finds the DM-share Send button on the share sheet after a recipient has been
  * selected.  Tries resource-ids first (direct_send_button_multi_select and
  * send_button are the two known ids) before falling back to the label "Send".

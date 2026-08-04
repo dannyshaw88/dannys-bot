@@ -1,3 +1,13 @@
+## [1.2.384] — 2026-08-04
+
+### Fixed — False location confirmation tap
+
+- Replaced the broad partial `"Add"` lookup with a dedicated Map preview
+  detector.
+- The optional confirmation is now tapped only when the live accessibility
+  tree contains `Map preview` and an exact clickable `Add` node.
+- Prevents the final post screen’s `Add audio` row from being tapped.
+
 ## [1.2.383] — 2026-08-04
 
 ### Fixed — Conditional location map confirmation
