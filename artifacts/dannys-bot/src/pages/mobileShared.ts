@@ -187,6 +187,8 @@ export interface AutomationSettingsData {
   followFilterMinFollowers50: boolean;
   followFilterVerifiedUsers: boolean;
   followFilterMaxFollowers25k: boolean;
+  followFilterMalesOnly: boolean;
+  followFilterMaleNames: string;
   randomJitterEnabled: boolean;
   checkNotificationsPctMin: number; checkNotificationsPctMax: number;
   checkNotificationsScrollsMin: number; checkNotificationsScrollsMax: number;
@@ -313,6 +315,8 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   followFilterMinFollowers50: false,
   followFilterVerifiedUsers: false,
   followFilterMaxFollowers25k: false,
+  followFilterMalesOnly: false,
+  followFilterMaleNames: "",
   randomJitterEnabled: false,
   checkNotificationsPctMin: 0, checkNotificationsPctMax: 0,
   checkNotificationsScrollsMin: 2, checkNotificationsScrollsMax: 5,
@@ -398,6 +402,8 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
   "followFilterMinFollowers50",
   "followFilterVerifiedUsers",
   "followFilterMaxFollowers25k",
+  "followFilterMalesOnly",
+  "followFilterMaleNames",
   "updateProfilePicFolderPath",
   "updateBioText",
   "makePostLocalFolderEnabled",
@@ -418,6 +424,8 @@ export const TRUST_SCORE_TEMPLATE_LOCKED_FIELDS = new Set(
     "followFilterMinFollowers50",
     "followFilterVerifiedUsers",
     "followFilterMaxFollowers25k",
+    "followFilterMalesOnly",
+    "followFilterMaleNames",
   ].includes(field)),
 );
 
@@ -505,6 +513,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'filterMin50',       label: '50+ Followers min',             fields: ['followFilterMinFollowers50'] },
     { key: 'filterVerified',    label: 'Skip Verified users',           fields: ['followFilterVerifiedUsers'] },
     { key: 'filterMax25k',      label: 'Skip 25K+ Followers',           fields: ['followFilterMaxFollowers25k'] },
+    { key: 'filterMalesOnly',   label: 'Males Only',                    fields: ['followFilterMalesOnly','followFilterMaleNames'] },
   ]},
   { key: 'injectBrowsing',label: 'Inject Browsing', sub: [
     { key: 'injectEnabled',     label: 'Enabled',                       fields: ['injectBrowsingEnabled'] },

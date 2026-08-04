@@ -1,3 +1,18 @@
+## [1.2.369] — 2026-08-04
+
+### Added — Trust Score Males Only Follow filter
+
+- Added a Trust Score-controlled **Males Only** filter under Follow Filters.
+- Added a five-row, 100-character comma-separated allowlist editor, such as
+  `daniel,james,steven`.
+- A visited profile passes when an allowed name appears in its Instagram
+  username, full name, or biography; matching is case-insensitive and supports
+  substrings such as `daniel9543985`.
+- Connected the filter to the existing HikerAPI profile lookup for both normal
+  and spread Follow execution.
+- Locked the setting in assigned Human Session Tool slots and excluded it from
+  slot-to-slot HST copying while keeping it available for Trust Score copying.
+
 ## [1.2.368] — 2026-08-04
 
 ### Fixed — Trust Score Copy Settings visibility

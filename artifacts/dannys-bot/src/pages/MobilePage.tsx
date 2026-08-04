@@ -3700,6 +3700,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             followFilterMinFollowers50: s.followFilterMinFollowers50,
             followFilterVerifiedUsers: s.followFilterVerifiedUsers,
             followFilterMaxFollowers25k: s.followFilterMaxFollowers25k,
+            followFilterMalesOnly: s.followFilterMalesOnly,
+            followFilterMaleNames: s.followFilterMaleNames,
             feedActivatePctMin: s.feedActivatePctMin,
             feedActivatePctMax: s.feedActivatePctMax,
             viewStoriesActivatePctMin: s.viewStoriesActivatePctMin,
@@ -4653,6 +4655,8 @@ export function AutomationSettingsPanel({
   const [showSources, setShowSources] = useState(false);
   const [bioSpinEditorOpen, setBioSpinEditorOpen] = useState(false);
   const [bioSpinDraft, setBioSpinDraft] = useState("");
+  const [maleNamesEditorOpen, setMaleNamesEditorOpen] = useState(false);
+  const [maleNamesDraft, setMaleNamesDraft] = useState("");
   const [spinPreview, setSpinPreview] = useState<string | null>(null);
   const [newFollowSourceType, setNewFollowSourceType] = useState<'hashtag' | 'target_followers'>('hashtag');
   const [newFollowSourceValue, setNewFollowSourceValue] = useState('');
@@ -6164,6 +6168,60 @@ export function AutomationSettingsPanel({
                 />
                 <label htmlFor={`filter-max-followers-25k-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">-25K Followers</label>
               </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id={`filter-males-only-${slotIdx ?? 0}`}
+                  checked={settings.followFilterMalesOnly}
+                  onChange={e => setSettings(s => ({ ...s, followFilterMalesOnly: e.target.checked }))}
+                  disabled={fieldDisabled("followFilterMalesOnly")}
+                  className="w-4 h-4 accent-primary cursor-pointer"
+                />
+                <label htmlFor={`filter-males-only-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Males Only</label>
+                <button
+                  type="button"
+                  className="text-xs underline text-primary disabled:text-muted-foreground disabled:no-underline"
+                  disabled={fieldDisabled("followFilterMaleNames")}
+                  onClick={() => {
+                    setMaleNamesDraft(settings.followFilterMaleNames);
+                    setMaleNamesEditorOpen(true);
+                  }}
+                >
+                  Set names
+                </button>
+              </div>
+              <Dialog open={maleNamesEditorOpen} onOpenChange={setMaleNamesEditorOpen}>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Allowed male names</DialogTitle>
+                  </DialogHeader>
+                  <p className="text-xs text-muted-foreground">
+                    Enter comma-separated names. A profile passes when a name appears anywhere in its username, name, or bio.
+                  </p>
+                  <textarea
+                    autoFocus
+                    rows={5}
+                    maxLength={100}
+                    value={maleNamesDraft}
+                    onChange={e => setMaleNamesDraft(e.target.value)}
+                    className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="daniel,james,steven"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button type="button" className="rounded-md border px-3 py-2 text-sm" onClick={() => setMaleNamesEditorOpen(false)}>Cancel</button>
+                    <button
+                      type="button"
+                      className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground"
+                      onClick={() => {
+                        setSettings(s => ({ ...s, followFilterMaleNames: maleNamesDraft.slice(0, 100) }));
+                        setMaleNamesEditorOpen(false);
+                      }}
+                    >
+                      Save
+                    </button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
            )}
          </div>}

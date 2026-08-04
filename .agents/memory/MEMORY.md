@@ -83,3 +83,4 @@
 - [TrustScore duration navigation save](trustscore-duration-navigation-save.md) — debounced duration inputs must flush pending writes when the TrustScore view unmounts
 - [Windows installer CI assertions](windows-installer-ci-assertions.md) — keep text-based workflow checks aligned with the current UI, especially after copy changes
 - [Uploaded attachment auto-commit](uploaded-attachment-auto-commit.md) — an uploaded asset may be committed automatically during a later push even when it was not manually staged
+- [Males Only allowlist filter](males-only-allowlist-filter.md) — explicit comma-separated names match HikerAPI username, full name, or bio; never infer gender

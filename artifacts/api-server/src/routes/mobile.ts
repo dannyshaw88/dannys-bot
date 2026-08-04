@@ -246,6 +246,8 @@ type AutomationSettings = {
   followFilterMinFollowers50?: boolean;
   followFilterVerifiedUsers?: boolean;
   followFilterMaxFollowers25k?: boolean;
+  followFilterMalesOnly?: boolean;
+  followFilterMaleNames?: string;
   // Follow Users — HikerAPI-driven follow flow (persisted here too; this
   // schema previously only covered the feed/stories fields, so these were
   // silently stripped by automationSchema.parse() on every autosave and
@@ -1905,6 +1907,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "followFilterMinFollowers50",
     "followFilterVerifiedUsers",
     "followFilterMaxFollowers25k",
+    "followFilterMalesOnly",
+    "followFilterMaleNames",
     "updateProfilePicFolderPath",
     "updateBioText",
     "makePostLocalFolderEnabled",
@@ -1921,6 +1925,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       "followFilterMinFollowers50",
       "followFilterVerifiedUsers",
       "followFilterMaxFollowers25k",
+    "followFilterMalesOnly",
+    "followFilterMaleNames",
     ].includes(field)),
   );
   const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
@@ -2092,6 +2098,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         followFilterMinFollowers50: false,
         followFilterVerifiedUsers: false,
         followFilterMaxFollowers25k: false,
+    followFilterMalesOnly: false,
+    followFilterMaleNames: "",
         randomJitterEnabled: false,
         checkNotificationsPctMin: 0, checkNotificationsPctMax: 0,
         checkNotificationsScrollsMin: 2, checkNotificationsScrollsMax: 5,
@@ -6353,6 +6361,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     followFiltersEnabled: z.boolean().default(false),
     followFilterVerifiedUsers: z.boolean().default(false),
     followFilterMaxFollowers25k: z.boolean().default(false),
+    followFilterMalesOnly: z.boolean().default(false),
+    followFilterMaleNames: z.string().max(100).default(""),
     followFilterPrivateUsers: z.boolean().default(false),
     followFilterEnglishSpeaking: z.boolean().default(false),
     followFilterMinFollowers50: z.boolean().default(false),
@@ -8869,7 +8879,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       skipSkippedUsernames?: Set<string>;
       /** Profile-quality gates to apply after navigating to the target's
        *  profile but before the Follow tap. */
-      filters?: { skipVerified?: boolean; maxFollowers?: number; skipPrivate?: boolean; minFollowers?: number; requireEnglish?: boolean };
+      filters?: { skipVerified?: boolean; maxFollowers?: number; skipPrivate?: boolean; minFollowers?: number; requireEnglish?: boolean; malesOnly?: boolean; maleNames?: string };
       /** Jarvee-style "abort after X scrapes" limit. 0 = unlimited.
        *  Counts the initial HikerAPI fetch as scrape #1; re-scrapes count
        *  from #2 onward.  When the total reaches this number the session
@@ -9274,10 +9284,43 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // Verified badge, Private account, Follower count (min & max), English
         // Speaking. Extra 1 s settle lets the profile header fully render
         // (badge + follower count) before the dump fires.
-        if (filters && (filters.skipVerified || filters.skipPrivate || filters.maxFollowers !== undefined || filters.minFollowers !== undefined || filters.requireEnglish)) {
+        if (filters && (filters.skipVerified || filters.skipPrivate || filters.maxFollowers !== undefined || filters.minFollowers !== undefined || filters.requireEnglish || filters.malesOnly)) {
           try {
             await sleepOrAbort(serial, 1000);
             const profileXml = await android.dumpUi(serial).catch(() => "");
+
+            // Males Only is intentionally an explicit allowlist, never gender
+            // inference. HikerAPI supplies the visited profile's username,
+            // full name, and biography; any configured token matching any of
+            // those fields passes, otherwise the candidate is skipped.
+            if (filters.malesOnly) {
+              const allowedNames = (filters.maleNames ?? "")
+                .split(",")
+                .map(name => name.trim().toLocaleLowerCase())
+                .filter(Boolean);
+              let matchesAllowedName = false;
+              if (allowedNames.length) {
+                if (!hiker) {
+                  const globalSettings = await storage.getGlobalSettings();
+                  const token = String(globalSettings?.hikerApiToken ?? "");
+                  if (token) hiker = new HikerApiClient(token);
+                }
+                const profile = await hiker?.getUserProfile(username).catch(() => null);
+                const haystack = [
+                  username,
+                  profile?.fullName ?? "",
+                  profile?.biography ?? "",
+                ].join(" ").toLocaleLowerCase();
+                matchesAllowedName = allowedNames.some(name => haystack.includes(name));
+              }
+              if (!matchesAllowedName) {
+                onLog?.(`Follow: @${username} has no allowed Males Only name in username, name, or bio — skipping`);
+                if (params.writeSkippedUsers) storage.addSkippedUser(username, "males-only-name").catch(() => {});
+                await android.pressBack(serial);
+                await sleepOrAbort(serial, 500);
+                continue;
+              }
+            }
 
             // ── Verified badge ──────────────────────────────────────────────
             if (filters.skipVerified) {
@@ -9859,6 +9902,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         followEnabled, followUsersMin, followUsersMax, followSpreadFollows, followSources,
         followFiltersEnabled, followFilterVerifiedUsers, followFilterMaxFollowers25k,
         followFilterPrivateUsers, followFilterEnglishSpeaking, followFilterMinFollowers50,
+        followFilterMalesOnly, followFilterMaleNames,
         injectBrowsingEnabled,
         injectBrowsingActivatePctMin, injectBrowsingActivatePctMax,
         injectBrowsingBeforeFollowPctMin, injectBrowsingBeforeFollowPctMax,
@@ -10579,7 +10623,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             const _ssFilters = followFiltersEnabled
               ? { skipVerified: followFilterVerifiedUsers, maxFollowers: followFilterMaxFollowers25k ? 25_000 : undefined,
                   skipPrivate: followFilterPrivateUsers, minFollowers: followFilterMinFollowers50 ? 50 : undefined,
-                  requireEnglish: followFilterEnglishSpeaking }
+                  requireEnglish: followFilterEnglishSpeaking,
+                  malesOnly: followFilterMalesOnly, maleNames: followFilterMaleNames }
               : undefined;
 
             // Helper — calls runFollowUsersStep for exactly one candidate.
@@ -10725,13 +10770,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   abandonFollowPctMin: injectBrowsingAbandonFollowPctMin, abandonFollowPctMax: injectBrowsingAbandonFollowPctMax,
                   tapHighlightsPctMin: injectBrowsingTapHighlightsPctMin, tapHighlightsPctMax: injectBrowsingTapHighlightsPctMax,
                 } : undefined,
-                filters: followFiltersEnabled
+        filters: followFiltersEnabled
                   ? {
                       skipVerified:  followFilterVerifiedUsers,
                       maxFollowers:  followFilterMaxFollowers25k ? 25_000 : undefined,
                       skipPrivate:   followFilterPrivateUsers,
                       minFollowers:  followFilterMinFollowers50 ? 50 : undefined,
                       requireEnglish: followFilterEnglishSpeaking,
+                      malesOnly: followFilterMalesOnly,
+                      maleNames: followFilterMaleNames,
                     }
                   : undefined,
                 writeSkippedUsers: globalSkipSkipped,
