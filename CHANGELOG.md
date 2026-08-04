@@ -1,3 +1,13 @@
+## [1.2.386] — 2026-08-04
+
+### Fixed — Private profile filtering
+
+- Detects Instagram’s live private-profile notice text and accessibility IDs,
+  including `This account is private` and the follow-to-see-photos subtitle.
+- Matching is case-insensitive and no longer depends on the old
+  `private_profile` resource.
+- An empty profile dump now fails closed when Private Users filtering is on.
+
 ## [1.2.385] — 2026-08-04
 
 ### Fixed — Males Only Spread Follow filtering

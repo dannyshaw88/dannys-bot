@@ -9356,10 +9356,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
             // ── Private account ─────────────────────────────────────────────
             if (filters.skipPrivate) {
+              // Instagram's private-profile UI is exposed as a notice block,
+              // not consistently as a `private_profile` resource.  Current
+              // builds expose:
+              //   row_profile_header_empty_profile_notice_title
+              //   text="This account is private"
+              // and a subtitle telling the user to follow to see photos.
+              // Match the live accessibility dump case-insensitively because
+              // Android/Instagram builds vary the capitalization.
+              const normalizedPrivateXml = profileXml
+                .replace(/&amp;/g, "&")
+                .replace(/\s+/g, " ");
               const isPrivate =
-                /content-desc="[^"]*[Pp]rivate\s+[Aa]ccount[^"]*"/.test(profileXml) ||
-                profileXml.includes(":id/private_profile") ||
-                profileXml.includes("This Account is Private");
+                /(?:text|content-desc)="[^"]*this\s+account\s+is\s+private[^"]*"/i.test(normalizedPrivateXml) ||
+                /(?:text|content-desc)="[^"]*follow\s+this\s+profile\s+to\s+see\s+their\s+photos\s+and\s+videos[^"]*"/i.test(normalizedPrivateXml) ||
+                normalizedPrivateXml.includes("row_profile_header_empty_profile_notice_title") ||
+                normalizedPrivateXml.includes("row_profile_header_empty_profile_notice_subtitle") ||
+                /private_profile/i.test(normalizedPrivateXml);
               if (isPrivate) {
                 onLog?.(`Follow: @${username} is private — skipping (Private Users filter)`);
                 if (params.writeSkippedUsers) storage.addSkippedUser(username, "private-account").catch(() => {});
@@ -9466,6 +9479,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             }
 
           } catch (filterErr: any) {
+            if (filters.skipPrivate) {
+              onLog?.(`Follow: private-account check failed for @${username} — skipping`);
+              if (params.writeSkippedUsers) storage.addSkippedUser(username, "private-check-failed").catch(() => {});
+              await android.pressBack(serial);
+              await sleepOrAbort(serial, 500);
+              continue;
+            }
             if (filters.malesOnly) {
               onLog?.(`Follow: Males Only profile check failed for @${username} (${filterErr?.message}) — skipping`);
               if (params.writeSkippedUsers) storage.addSkippedUser(username, "males-only-check-failed").catch(() => {});
