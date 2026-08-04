@@ -1,5 +1,12 @@
 ## [1.2.366] — 2026-08-04
 
+### Fixed — Trust Score Make a Post media options
+
+- Added **Delete after use** to the Make a Post → My Computer options copied
+  between TrustScores.
+- Kept the setting template-controlled rather than exposing it as a
+  slot-level Human Session Tool override.
+
 ### Fixed — Xiaomi Instagram account switching
 
 - Fixed account switching stopping before the long-press when Xiaomi/Instagram
