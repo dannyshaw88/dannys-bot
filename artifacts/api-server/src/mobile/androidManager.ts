@@ -6597,13 +6597,13 @@ export async function findHomeTab(serial: string): Promise<{ x: number; y: numbe
   // 2. Known resource-ids.
   const byId = _findByResId(xml, ":id/feed_tab", ":id/home_tab");
   if (byId) return byId;
-  // 3. Positional fallback — collect clickable nodes in the bottom-nav band
-  //    (y > 88 % of screen height), sort left-to-right, return index 0
-  //    (the leftmost = Home tab). Mirrors the same approach used in
-  //    findReelsTab so it survives Reels-viewer full-screen layouts where
-  //    the a11y tree omits content-desc / resource-id for nav items.
-  const { h: xmlH } = _getScreenSize(xml);
-  const botMin = Math.round(xmlH * 0.88);
+  // 3. Positional fallback — use the same validated bottom-nav-row detector
+  //    as Search. The old implementation treated any leftmost clickable node
+  //    below 88% as Home. On the search-results screen that can miss the nav
+  //    row (or select an unrelated node), causing the caller to issue a blind
+  //    second Back and exit Instagram.
+  const { w: xmlW, h: xmlH } = _getScreenSizeFromXml(xml) ?? getScreenSize(serial);
+  const botMin = Math.round(xmlH * 0.84);
   const raw: { x: number; y: number }[] = [];
   const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
   let nm: RegExpExecArray | null;
@@ -6619,7 +6619,8 @@ export async function findHomeTab(serial: string): Promise<{ x: number; y: numbe
   const deduped = raw.filter((n, i, arr) =>
     arr.findIndex(o => Math.abs(o.x - n.x) < 40 && Math.abs(o.y - n.y) < 40) === i,
   );
-  if (deduped.length === 0) return null;
+  const spanW = deduped.length > 1 ? deduped[deduped.length - 1].x - deduped[0].x : 0;
+  if (deduped.length < 4 || spanW < xmlW * 0.55) return null;
   deduped.sort((a, b) => a.x - b.x);
   return deduped[0]; // leftmost = Home
 }

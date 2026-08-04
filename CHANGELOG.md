@@ -1,3 +1,13 @@
+## [1.2.380] — 2026-08-04
+
+### Fixed — Follow recovery leaving Instagram
+
+- Strengthened Home-tab detection using the validated full bottom-navigation
+  row and device dimensions when UIAutomator omits root bounds.
+- Retry Home detection after the profile Back transition settles.
+- Removed the blind second `pressBack` fallback that could exit Instagram to
+  the Android launcher when Home detection briefly returned null.
+
 ## [1.2.379] — 2026-08-04
 
 ### Improved — Debug log screenshot recording

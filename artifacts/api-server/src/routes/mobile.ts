@@ -9568,15 +9568,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // The next iteration starts from the home feed and taps Search normally.
         await android.pressBack(serial);               // profile → search results
         await sleepOrAbort(serial, 500);
-        const _followHomeTab = await android.findHomeTab(serial).catch(() => null);
+        let _followHomeTab = await android.findHomeTab(serial).catch(() => null);
+        // UIAutomator can briefly return the pre-navigation tree. Retry the
+        // detector instead of pressing Back again; a blind second Back exits
+        // Instagram to the Android launcher when the first Back already
+        // returned to the search/results screen.
+        if (!_followHomeTab) {
+          await sleepOrAbort(serial, 500);
+          _followHomeTab = await android.findHomeTab(serial).catch(() => null);
+        }
         if (_followHomeTab) {
           await android.tap(serial, _followHomeTab.x, _followHomeTab.y);
         } else {
-          // Fallback: home tab not found from search results (unusual) — press
-          // Back once more to reach Explore, accepting the nav-bar gap for this
-          // iteration rather than leaving the phone stranded mid-flow.
-          onLog?.(`Follow: home tab not found after back — falling back to second pressBack`);
-          await android.pressBack(serial);
+          // Never press Back blindly here: if the first Back already returned
+          // to search/results, a second Back exits Instagram. Leave the
+          // current screen intact and let the next iteration's validated
+          // Search/Home navigation decide how to recover.
+          onLog?.(`Follow: Home tab not found after back — not pressing Back again (avoiding Instagram exit)`);
         }
         await sleepOrAbort(serial, 800);
         // Dismiss any popup that appeared after pressing back (e.g. IG Plus
