@@ -1579,6 +1579,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     followFilterMinFollowers50: z.boolean().default(false),
     followFilterVerifiedUsers: z.boolean().default(false),
     followFilterMaxFollowers25k: z.boolean().default(false),
+    followFilterMalesOnly: z.boolean().default(false),
+    followFilterMaleNames: z.string().default(""),
     // ── Random Jitter fields — were missing from this persistence schema,
     //    causing zod to silently strip them on every POST so they never reached
     //    disk and reset to defaults on every restart.

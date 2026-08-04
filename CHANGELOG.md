@@ -1,3 +1,12 @@
+## [1.2.378] — 2026-08-04
+
+### Fixed — Persist Males Only settings
+
+- Added the Males Only toggle and allowed-name list to the mobile
+  save/load schema.
+- Both values now survive autosave, navigation, reload, and restart instead
+  of being silently stripped by Zod.
+
 ## [1.2.377] — 2026-08-04
 
 ### Fixed — Trust Score Males Only propagation
