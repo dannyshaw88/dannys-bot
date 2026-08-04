@@ -7103,8 +7103,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // row_search_edit_text field is actually attached. On slower devices
         // the old 1s wait caused us to miss the field and continue toward
         // Share while the picker was still loading.
-        onLog?.("Make a Post: waiting 10s for location picker/search box to load…");
-        await sleepOrAbort(serial, 10000);
+        onLog?.("Make a Post: waiting 12s for location picker/search box to load…");
+        await sleepOrAbort(serial, 12000);
 
         const locationSearch = await android.findLocationSearchField(serial).catch(() => null);
         if (!locationSearch) {
@@ -7127,6 +7127,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             onLog?.("Make a Post: selecting location \"Manchester, United Kingdom\"…");
             await android.tap(serial, matchingLocation.x, matchingLocation.y);
             await sleepOrAbort(serial, 800);
+
+            // Some Instagram accounts/builds show a secondary "Map preview"
+            // confirmation after the location result is selected. It is
+            // conditional, so never guess a coordinate or tap an underlying
+            // control: only tap a live accessibility node labelled "Add".
+            const mapPreviewAdd = await android.findButtonByLabel(serial, "Add").catch(() => null);
+            if (mapPreviewAdd) {
+              onLog?.("Make a Post: map preview confirmation shown — tapping Add…");
+              await android.tap(serial, mapPreviewAdd.x, mapPreviewAdd.y);
+              await sleepOrAbort(serial, 800);
+            } else {
+              onLog?.("Make a Post: no map preview confirmation shown — continuing");
+            }
           } else {
             onLog?.("Make a Post: requested Manchester location result not found — continuing without location");
           }

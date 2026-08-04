@@ -47,6 +47,17 @@ Additionally: the mobile API client session may be expired by the time the post 
 
 ## Chronological entries (newest first)
 
+### 2026-08-04 — Location selection can show an optional Map preview confirmation
+- Device evidence showed that selecting Manchester sometimes opens a Map
+  preview sheet with a blue Add button, while other runs proceed without it.
+- The flow now searches for a live accessibility node labelled Add after
+  selecting the location and taps it only when present; it does not use a
+  guessed coordinate.
+- The initial location-picker dwell is 12 seconds.
+- **Lesson:** location selection has a conditional second confirmation state;
+  always detect the live Add node before proceeding to Share.
+- Status: code-level fix applied; physical-device confirmation is still required.
+
 ### 2026-08-04 — Add location picker needs a longer initial load dwell
 - Device evidence showed the picker shell and keyboard were visible, but the
   search field had not reliably attached when the automation checked after the

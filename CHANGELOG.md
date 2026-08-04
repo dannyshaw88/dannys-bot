@@ -1,3 +1,12 @@
+## [1.2.383] — 2026-08-04
+
+### Fixed — Conditional location map confirmation
+
+- Increased the Add location picker loading dwell from 10 to 12 seconds.
+- After selecting the requested location, detect the optional Map preview
+  confirmation through the live accessibility tree and tap its Add button only
+  when that popup is actually present.
+
 ## [1.2.382] — 2026-08-04
 
 ### Fixed — Make a Post location picker loading time
