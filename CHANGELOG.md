@@ -1,3 +1,11 @@
+## [1.2.382] — 2026-08-04
+
+### Fixed — Make a Post location picker loading time
+
+- Added a 10-second dwell after tapping Add location so Instagram has time to
+  attach and render the location search field before automation continues.
+- Added an explicit debug-log marker for this wait.
+
 ## [1.2.381] — 2026-08-04
 
 ### Fixed — Trust Score Follow settings and log colors

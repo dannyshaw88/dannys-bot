@@ -7099,7 +7099,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (addLocationBtn) {
         onLog?.("Make a Post: tapping Add location…");
         await android.tap(serial, addLocationBtn.x, addLocationBtn.y);
-        await sleepOrAbort(serial, 1000);
+        // Instagram's location picker can render its shell before the
+        // row_search_edit_text field is actually attached. On slower devices
+        // the old 1s wait caused us to miss the field and continue toward
+        // Share while the picker was still loading.
+        onLog?.("Make a Post: waiting 10s for location picker/search box to load…");
+        await sleepOrAbort(serial, 10000);
 
         const locationSearch = await android.findLocationSearchField(serial).catch(() => null);
         if (!locationSearch) {

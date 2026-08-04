@@ -47,6 +47,17 @@ Additionally: the mobile API client session may be expired by the time the post 
 
 ## Chronological entries (newest first)
 
+### 2026-08-04 — Add location picker needs a longer initial load dwell
+- Device evidence showed the picker shell and keyboard were visible, but the
+  search field had not reliably attached when the automation checked after the
+  Add location tap. The previous 1-second wait was too short on the affected
+  device, so the flow continued without a location and later failed upload.
+- The flow now waits 10 seconds after tapping Add location before looking up
+  `row_search_edit_text`, with an explicit log marker for the wait.
+- **Lesson:** the location picker’s visible shell is not proof that its search
+  EditText is ready; allow the picker to settle before accessibility lookup.
+- Status: code-level fix applied; physical-device confirmation is still required.
+
 ### 2026-08-04 — Location picker must search explicitly instead of assuming the first result
 - Device evidence showed the Add location picker can open before the desired city is the top result. The picker exposes an EditText with resource-id `row_search_edit_text`; the desired query is `Manchester United Kingdom`.
 - The flow now focuses that live field, clears any retained query, enters `Manchester United Kingdom`, waits for results, and selects the live result whose content description is `Manchester, United Kingdom`. It no longer treats an arbitrary first row as Manchester.
