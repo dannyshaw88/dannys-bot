@@ -7278,8 +7278,10 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   onAutomationState?: (slotIdx: number, state: SlotAutomationState) => void;
   collisionConfig?: CollisionPreventerConfig;
   onOpenBrowserProfile?: (username: string) => void;
+  isActive?: boolean;
+  sharedScrollTopRef?: React.MutableRefObject<number>;
 }>(function SlotHumanSessionView(
-  { phone, slotIdx, slotUsername, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, onCopied, onAutomationState, collisionConfig, onOpenBrowserProfile },
+  { phone, slotIdx, slotUsername, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, onCopied, onAutomationState, collisionConfig, onOpenBrowserProfile, isActive = false, sharedScrollTopRef },
   ref,
 ) {
   const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, collisionConfig);
@@ -7287,6 +7289,18 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   const isLast = slotIdx === (slotCount ?? 1) - 1;
 
   const [showCopyDialog, setShowCopyDialog] = useState(false);
+  const settingsScrollRef = useRef<HTMLDivElement>(null);
+  const preserveScrollAndNavigate = useCallback((navigate?: () => void) => {
+    if (settingsScrollRef.current && sharedScrollTopRef) {
+      sharedScrollTopRef.current = settingsScrollRef.current.scrollTop;
+    }
+    navigate?.();
+  }, [sharedScrollTopRef]);
+  useEffect(() => {
+    if (isActive && settingsScrollRef.current && sharedScrollTopRef) {
+      settingsScrollRef.current.scrollTop = sharedScrollTopRef.current;
+    }
+  }, [isActive, sharedScrollTopRef]);
   // Read the Account Slot assignment directly.  The effective automation
   // payload is template-resolved and may be cached, so it must not be the
   // authority for whether this editor is allowed to be changed.
@@ -7348,16 +7362,22 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
             Copy Settings
           </Button>
         )}
-        <Button variant="outline" size="sm" onClick={onPrevSlot} disabled={isFirst} className="gap-1 h-7 px-2">
+         <Button variant="outline" size="sm" onClick={() => preserveScrollAndNavigate(onPrevSlot)} disabled={isFirst} className="gap-1 h-7 px-2">
           <ChevronLeft className="w-3.5 h-3.5" />
           SLOT {slotIdx}
         </Button>
-        <Button variant="outline" size="sm" onClick={onNextSlot} disabled={isLast} className="gap-1 h-7 px-2 flex-row-reverse">
+         <Button variant="outline" size="sm" onClick={() => preserveScrollAndNavigate(onNextSlot)} disabled={isLast} className="gap-1 h-7 px-2 flex-row-reverse">
           <ChevronLeft className="w-3.5 h-3.5 rotate-180" />
           SLOT {slotIdx + 2}
         </Button>
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto">
+       <div
+         ref={settingsScrollRef}
+         onScroll={e => {
+           if (sharedScrollTopRef) sharedScrollTopRef.current = e.currentTarget.scrollTop;
+         }}
+         className="flex-1 min-h-0 overflow-y-auto"
+       >
         <AutomationSettingsPanel
           phone={phone}
           {...automation}
@@ -7487,6 +7507,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   // The mirror toggle calls slotHandleRefs.current[i]?.setEnabled(v) directly,
   // hitting exactly that slot's setEnabledByUser with no indirection.
   const slotHandleRefs = useRef<Record<number, SlotHumanSessionHandle | null>>({});
+  const sharedHstScrollTopRef = useRef(0);
   const [slots, setSlots] = useState<AccountSlot[]>(
     Array.from({ length: ACCT_SLOT_COUNT }, emptySlot)
   );
@@ -7699,6 +7720,8 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
             onCopied={handleCopied}
             onAutomationState={handleSlotAutomationState}
             onOpenBrowserProfile={onOpenBrowserProfile}
+            isActive={openSlotTool === i}
+            sharedScrollTopRef={sharedHstScrollTopRef}
           />
         </div>
       ))}

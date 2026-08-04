@@ -1,3 +1,12 @@
+## [1.2.371] — 2026-08-04
+
+### Fixed — Human Session Tool slot scroll persistence
+
+- Preserve the Human Session Tool settings scroll position while switching
+  between account slots, including switches made from the slot list.
+- Track the active settings pane's live scroll offset and restore it when the
+  next slot becomes visible.
+
 ## [1.2.370] — 2026-08-04
 
 ### Fixed — Trust Score Males Only HST locking and editor affordance
