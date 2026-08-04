@@ -6521,7 +6521,7 @@ export function AutomationSettingsPanel({
                           onChange={e => setSettings(s => ({ ...s, makePostLocalFolderNoRepeat: e.target.checked }))}
                           disabled={fieldDisabled("makePostLocalFolderNoRepeat")}
                           className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                        <label htmlFor={`make-a-post-local-no-repeat-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Do not repost the same image</label>
+                        <label htmlFor={`make-a-post-local-no-repeat-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Don't use same images</label>
                       </div>
                       <div className="flex items-center gap-2">
                         <input type="checkbox" id={`make-a-post-local-random-${slotIdx ?? 0}`}
@@ -6529,7 +6529,7 @@ export function AutomationSettingsPanel({
                           onChange={e => setSettings(s => ({ ...s, makePostLocalFolderRandom: e.target.checked }))}
                           disabled={fieldDisabled("makePostLocalFolderRandom")}
                           className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                        <label htmlFor={`make-a-post-local-random-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Pick at random</label>
+                        <label htmlFor={`make-a-post-local-random-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Pick randomly</label>
                       </div>
                       <div className="flex items-center gap-2">
                         <input type="checkbox" id={`make-a-post-disable-exhausted-${slotIdx ?? 0}`}
@@ -6537,7 +6537,15 @@ export function AutomationSettingsPanel({
                           onChange={e => setSettings(s => ({ ...s, makePostDisableWhenExhausted: e.target.checked }))}
                           disabled={loading}
                           className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                        <label htmlFor={`make-a-post-disable-exhausted-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Disable when no more posts are found</label>
+                        <label htmlFor={`make-a-post-disable-exhausted-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Stop if folders empty</label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" id={`make-a-post-local-delete-after-use-${slotIdx ?? 0}`}
+                          checked={settings.makePostLocalFolderDeleteAfterUpload}
+                          onChange={e => setSettings(s => ({ ...s, makePostLocalFolderDeleteAfterUpload: e.target.checked }))}
+                          disabled={fieldDisabled("makePostLocalFolderDeleteAfterUpload")}
+                          className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                        <label htmlFor={`make-a-post-local-delete-after-use-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Delete after use</label>
                       </div>
                     </div>
 
@@ -6777,7 +6785,7 @@ export function AutomationSettingsPanel({
                       className="w-3.5 h-3.5 accent-primary cursor-pointer"
                     />
                     <label htmlFor={`post-a-story-local-no-repeat-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">
-                      Do not post
+                      Don't use same images
                     </label>
                   </div>
 
@@ -6791,7 +6799,7 @@ export function AutomationSettingsPanel({
                       className="w-3.5 h-3.5 accent-primary cursor-pointer"
                     />
                     <label htmlFor={`post-a-story-local-random-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">
-                      Pick at random
+                      Pick randomly
                     </label>
                   </div>
                 </div>
