@@ -1,3 +1,12 @@
+## [1.2.368] — 2026-08-04
+
+### Fixed — Trust Score Copy Settings visibility
+
+- Split **Delete after use** into its own selectable Trust Score Copy Settings
+  row under Make a Post.
+- Kept **My Computer options** limited to the no-repeat and random-selection
+  settings, so Delete after use is visible and can be copied independently.
+
 ## [1.2.367] — 2026-08-04
 
 ### Fixed — Trust Score Make a Post media options
