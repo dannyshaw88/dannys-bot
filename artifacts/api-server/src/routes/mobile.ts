@@ -340,6 +340,7 @@ type AutomationSettings = {
   makePostLocalFolderNoRepeat?: boolean;
   makePostLocalFolderRandom?: boolean;
   makePostLocalFolderDeleteAfterUpload?: boolean;
+  makePostAddLocation?: boolean;
   makePostUseChatGpt?: boolean;
   makePostFixAiSlop?: boolean;
   makePostCaptionText?: string;
@@ -1649,6 +1650,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostLocalFolderNoRepeat: z.boolean().default(false),
     makePostLocalFolderRandom: z.boolean().default(false),
     makePostLocalFolderDeleteAfterUpload: z.boolean().default(false),
+    makePostAddLocation: z.boolean().default(false),
     makePostUseChatGpt: z.boolean().default(false),
     makePostFixAiSlop: z.boolean().default(false),
     makePostPostToProfilePctMin: z.number().min(0).max(100).default(100),
@@ -1907,6 +1909,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "updateBioText",
     "makePostLocalFolderEnabled",
     "makePostLocalFolderPath",
+    "makePostAddLocation",
     "postStoryAddLink",
     "postStoryLinkUrl",
   ]);
@@ -1926,6 +1929,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "updateProfilePicFolderPath",
     "updateBioText",
     "makePostLocalFolderPath",
+    "makePostAddLocation",
     "postStoryLinkUrl",
   ]);
   const TRUST_SCORE_TOOL_FIELDS = new Set([
@@ -6809,6 +6813,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   async function runMakePostStep(serial: string, opts: {
     localFolderPath: string; localFolderRandom: boolean; localFolderNoRepeat: boolean;
     deleteAfterUpload: boolean; captionText: string;
+    addLocation?: boolean;
     accountUsername?: string; slotIdx?: number;
     doFixAiSlop?: boolean;
     alterationEnabled?: boolean;
@@ -6820,7 +6825,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const {
       localFolderPath, localFolderRandom, localFolderNoRepeat, deleteAfterUpload,
       captionText, doFixAiSlop, alterationEnabled, alterationLevel,
-      imageSettingsEnabled, imageSettings, onLog,
+      imageSettingsEnabled, imageSettings, addLocation, onLog,
     } = opts;
 
     const fileName = await pickLocalFolderImage(serial, {
@@ -7070,6 +7075,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (preTapPopup) {
       onLog?.(`Make a Post: dismissed caption-screen popup ("${preTapPopup}") before Share tap`);
       await sleepOrAbort(serial, 600);
+    }
+
+    if (addLocation) {
+      const addLocationBtn = await android.findButtonByLabel(serial, "Add location").catch(() => null);
+      if (addLocationBtn) {
+        onLog?.("Make a Post: tapping Add location…");
+        await android.tap(serial, addLocationBtn.x, addLocationBtn.y);
+        await sleepOrAbort(serial, 1000);
+        const firstLocation = await android.findButtonByLabel(serial, "Manchester, United Kingdom").catch(() => null);
+        if (firstLocation) {
+          onLog?.("Make a Post: selecting the first available location…");
+          await android.tap(serial, firstLocation.x, firstLocation.y);
+          await sleepOrAbort(serial, 800);
+        } else {
+          onLog?.("Make a Post: first location row not found — continuing without location");
+        }
+      } else {
+        onLog?.("Make a Post: Add location control not found — continuing without location");
+      }
     }
 
     // Re-find Share (screen may have re-rendered after the caption/advanced steps).
@@ -9835,7 +9859,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostEnabled, makePostActivatePctMin, makePostActivatePctMax,
         makePostPerSessionMin, makePostPerSessionMax,
         makePostLocalFolderEnabled, makePostLocalFolderPath,
-        makePostLocalFolderNoRepeat, makePostLocalFolderRandom,
+        makePostLocalFolderNoRepeat, makePostLocalFolderRandom, makePostAddLocation,
         makePostAlterationEnabled, makePostAlterationLevel, makePostImageSettingsEnabled,
         makePostImageSettings, makePostFixAiSlop, makePostCaptionText,
         postStoryEnabled, postStoryActivatePctMin, postStoryActivatePctMax,
@@ -10730,6 +10754,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     imageSettingsEnabled: makePostImageSettingsEnabled,
                     imageSettings: makePostImageSettings,
                     doFixAiSlop: makePostFixAiSlop,
+                    addLocation: makePostAddLocation,
                     captionText: makePostCaptionText,
                     onLog: (msg) => tLog(`  ${msg}`),
                   });

@@ -3736,6 +3736,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             makePostLocalFolderPath: s.makePostLocalFolderPath,
             makePostLocalFolderNoRepeat: s.makePostLocalFolderNoRepeat,
             makePostLocalFolderRandom: s.makePostLocalFolderRandom,
+            makePostAddLocation: s.makePostAddLocation,
             updateProfilePicActivatePctMin: s.updateProfilePicActivatePctMin,
             updateProfilePicActivatePctMax: s.updateProfilePicActivatePctMax,
             updateProfilePicFolderPath: s.updateProfilePicFolderPath,
@@ -6548,6 +6549,14 @@ export function AutomationSettingsPanel({
                           disabled={fieldDisabled("makePostLocalFolderDeleteAfterUpload")}
                           className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                         <label htmlFor={`make-a-post-local-delete-after-use-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Delete after use</label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" id={`make-a-post-add-location-${slotIdx ?? 0}`}
+                          checked={settings.makePostAddLocation}
+                          onChange={e => setSettings(s => ({ ...s, makePostAddLocation: e.target.checked }))}
+                          disabled={fieldDisabled("makePostAddLocation")}
+                          className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                        <label htmlFor={`make-a-post-add-location-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Add location</label>
                       </div>
                     </div>
 

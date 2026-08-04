@@ -287,6 +287,7 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
         makePostLocalFolderPath: s.makePostLocalFolderPath,
         makePostLocalFolderNoRepeat: s.makePostLocalFolderNoRepeat,
         makePostLocalFolderRandom: s.makePostLocalFolderRandom,
+        makePostAddLocation: s.makePostAddLocation,
         updateProfilePicActivatePctMin: s.updateProfilePicActivatePctMin,
         updateProfilePicActivatePctMax: s.updateProfilePicActivatePctMax,
         updateProfilePicFolderPath: s.updateProfilePicFolderPath,

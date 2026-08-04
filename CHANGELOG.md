@@ -1,3 +1,34 @@
+## [1.2.364] — 2026-08-04
+
+### Fixed
+
+#### Human Session Tool — More reliable Instagram account switching
+
+- Fixed an intermittent failure where the Human Session Tool could report that
+  the Instagram Profile tab was missing and abort the entire cycle, even though
+  Instagram had opened successfully.
+- The failure was caused by the profile-tab poll performing multiple nested
+  UIAutomator dumps on each pass. On cold or busy devices, one accessibility
+  dump can take 18–20 seconds, so the previous “1.5 second” retry timing was
+  misleading and varied with transient ADB/UI load.
+- Each profile-tab poll now performs only one accessibility-tree lookup, avoiding
+  nested popup-dismiss scans that could compound the delay.
+- The bounded wait window was extended from five to eight accessibility polls to
+  allow Instagram’s bottom navigation to finish rendering after a cold start or
+  network recycle.
+- The switcher remains accessibility-driven through live node/resource lookup;
+  no pixel scanning or hardcoded screen coordinates were introduced.
+
+#### Human Session Tool — Make a Post location setting
+
+- Added an `Add location` checkbox to Make a Post.
+- When enabled, the upload flow taps Instagram’s live `Add location` node,
+  selects the first available location row, returns to the New post screen, and
+  continues with the normal Share action.
+- Added persistence, Trust Score slot ownership, Copy Settings support, and
+  automation-cycle wiring for the new setting.
+- Post a Story remains unchanged.
+
 ## [1.2.363] — 2026-08-04
 
 ### Fixed — Dashboard activity overview vertical alignment

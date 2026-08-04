@@ -212,6 +212,7 @@ export interface AutomationSettingsData {
   makePostLocalFolderNoRepeat: boolean;
   makePostLocalFolderRandom: boolean;
   makePostLocalFolderDeleteAfterUpload: boolean;
+  makePostAddLocation: boolean;
   updateProfilePicActivatePctMin: number; updateProfilePicActivatePctMax: number;
   updateProfilePicFolderPath: string;
   updateProfilePicDisableAfterUsed: boolean;
@@ -336,6 +337,7 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   makePostLocalFolderNoRepeat: false,
   makePostLocalFolderRandom: false,
   makePostLocalFolderDeleteAfterUpload: false,
+  makePostAddLocation: false,
   updateProfilePicActivatePctMin: 0, updateProfilePicActivatePctMax: 0,
   updateProfilePicFolderPath: "",
   updateProfilePicDisableAfterUsed: false,
@@ -400,6 +402,7 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
   "updateBioText",
   "makePostLocalFolderEnabled",
   "makePostLocalFolderPath",
+  "makePostAddLocation",
   "postStoryAddLink",
   "postStoryLinkUrl",
 ]);
@@ -425,6 +428,7 @@ export const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
   "updateProfilePicFolderPath",
   "updateBioText",
   "makePostLocalFolderPath",
+  "makePostAddLocation",
   "postStoryLinkUrl",
 ]);
 
@@ -540,6 +544,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'postImgSettings',   label: 'Image Settings',                fields: ['makePostImageSettingsEnabled','makePostImageSettings'] },
     { key: 'postLocalFolder',   label: 'My Computer directory',          fields: ['makePostLocalFolderPath'] },
     { key: 'postLocalOpts',     label: 'My Computer options',            fields: ['makePostLocalFolderNoRepeat','makePostLocalFolderRandom'] },
+    { key: 'postAddLocation',   label: 'Add location',                   fields: ['makePostAddLocation'] },
     { key: 'postDisableAt',     label: 'Disable when no more posts are found', fields: ['makePostDisableWhenExhausted'] },
     { key: 'postChatGptCaption',label: 'ChatGPT / caption settings',    fields: ['makePostUseChatGpt','makePostCaptionText'] },
     { key: 'postFixAiSlop',      label: 'Fix AI Slop',                   fields: ['makePostFixAiSlop'] },
