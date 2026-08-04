@@ -1,3 +1,11 @@
+## [1.2.376] — 2026-08-04
+
+### Fixed — Unlimited Males Only allowlist
+
+- Removed the character limit from the Males Only allowed-names editor.
+- Preserve the complete comma-separated allowlist when saving.
+- Keep the dialog width constrained independently from the text length.
+
 ## [1.2.375] — 2026-08-04
 
 ### Improved — Bio Spin preview

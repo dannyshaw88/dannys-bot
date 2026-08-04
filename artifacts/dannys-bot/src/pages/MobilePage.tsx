@@ -6211,7 +6211,6 @@ export function AutomationSettingsPanel({
                   <textarea
                     autoFocus
                     rows={5}
-                    maxLength={100}
                     value={maleNamesDraft}
                     onChange={e => setMaleNamesDraft(e.target.value)}
                     className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
@@ -6223,7 +6222,7 @@ export function AutomationSettingsPanel({
                       type="button"
                       className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground"
                       onClick={() => {
-                        setSettings(s => ({ ...s, followFilterMaleNames: maleNamesDraft.slice(0, 100) }));
+                        setSettings(s => ({ ...s, followFilterMaleNames: maleNamesDraft }));
                         setMaleNamesEditorOpen(false);
                       }}
                     >
