@@ -156,7 +156,7 @@ export function LiveActivityTicker() {
     <div className="border-b border-border/50 bg-muted/30 px-6 py-1.5 w-full overflow-hidden shrink-0">
       <div className="mx-auto flex w-fit max-w-full items-center justify-center gap-2">
         <Activity className={`w-3 h-3 shrink-0 ${isError ? "text-red-500" : "text-primary"}`} />
-        <span className={`min-w-0 truncate text-center text-xs ${isError ? "text-red-500" : "text-muted-foreground"}`}>
+        <span className={`inline-flex min-w-0 max-w-full items-center justify-center gap-1.5 truncate text-center text-xs leading-none ${isError ? "text-red-500" : "text-muted-foreground"}`}>
           {label ?? "Aura Farming booted up waiting for activity"}
         </span>
       </div>
