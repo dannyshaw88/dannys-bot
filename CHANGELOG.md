@@ -1,3 +1,13 @@
+## [1.2.370] — 2026-08-04
+
+### Fixed — Trust Score Males Only HST locking and editor affordance
+
+- Removed the Males Only filter and allowed-name list from Human Session Tool
+  slot-owned settings so assigned slots cannot edit or override them.
+- Kept both fields editable and copyable in Trust Score settings.
+- Replaced the HST-facing **Set names** text action with a notepad/list icon
+  that is disabled whenever the setting is locked.
+
 ## [1.2.369] — 2026-08-04
 
 ### Added — Trust Score Males Only Follow filter
