@@ -1,4 +1,5 @@
 - [Mobile metrics account selector](mobile-metrics-account-selector.md) — include slot usernames and non-template profiles independently so device gaps never hide account metrics
+- [Human Session Tool scroll owner](hst-scroll-owner.md) — preserve scroll on the nested AutomationSettingsPanel, not its outer slot wrapper
 - [Device profile system — dismiss direction](device-profile-system.md) — DEVICE_PROFILES lookup table + dismissDirection field wired through all 3 schema layers + UI dropdown
 - [switchToInstagramAccount already-active fix](account-switcher-already-active.md) — active account lacks text/content-desc in switcher XML; use xml.includes() fallback + post-tap dump to dismiss cleanly
 - [Edit tool regex/template-literal corruption](edit-tool-regex-corruption.md) — Edit tool can corrupt template literals containing regex with backslashes; use xml.includes() instead of new RegExp() in such cases
