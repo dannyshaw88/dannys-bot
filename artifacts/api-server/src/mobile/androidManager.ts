@@ -7459,6 +7459,30 @@ export async function switchToInstagramAccount(
       );
     }
 
+    // The switcher is populated, but the requested account may be below the
+    // current viewport. Scroll the live accessibility container once. The
+    // gesture is derived from that node's bounds; never from device dimensions.
+    if (!coords) {
+      const scrollBounds = _findScrollableBounds(xml);
+      if (scrollBounds) {
+        onLog?.(`  ↳ @${clean} is below the visible account rows — scrolling the live switcher list once…`);
+        const midX = Math.floor((scrollBounds.x1 + scrollBounds.x2) / 2);
+        const fromY = Math.floor(scrollBounds.y2 - (scrollBounds.y2 - scrollBounds.y1) * 0.25);
+        const toY = Math.floor(scrollBounds.y1 + (scrollBounds.y2 - scrollBounds.y1) * 0.25);
+        await runAdb(adbPath, [
+          "-s", serial, "shell", "input", "swipe",
+          String(midX), String(fromY), String(midX), String(toY), "300",
+        ], 4000).catch(() => {});
+        await _sleep(400);
+        xml = await _uiDump(adbPath, serial).catch(() => "");
+        coords = _findVisibleAccountRow(
+          xml,
+          switcherScreenHeight,
+          new RegExp(`(?:^|,\\s*)@?${esc}(?:,|$)`, "i"),
+        );
+      }
+    }
+
     if (!coords) {
       onLog?.(`  ⚠ "@${clean}" not found in switcher — is the account logged in on this device?`);
       // Dismiss the switcher so the cycle can continue with whatever account is active.
@@ -7630,6 +7654,21 @@ function _findVisibleAccountRow(
         return { x: Math.floor((x1 + x2) / 2), y: Math.floor((y1 + y2) / 2) };
       }
     }
+  }
+  return null;
+}
+
+function _findScrollableBounds(xml: string): { x1: number; y1: number; x2: number; y2: number } | null {
+  const nodeRe = /<node\b([^>]*\bscrollable="true"[^>]*)>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = nodeRe.exec(xml)) !== null) {
+    const bounds = match[1].match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+    if (!bounds) continue;
+    const x1 = Number(bounds[1]);
+    const y1 = Number(bounds[2]);
+    const x2 = Number(bounds[3]);
+    const y2 = Number(bounds[4]);
+    if (x2 > x1 && y2 - y1 >= 300) return { x1, y1, x2, y2 };
   }
   return null;
 }
