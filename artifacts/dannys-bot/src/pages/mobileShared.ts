@@ -246,6 +246,7 @@ export interface AutomationSettingsData {
   trustScoreControlledFields?: string[];
   /** Tool switches intentionally disabled for this slot while inherited. */
   trustScoreDisabledTools?: string[];
+  trustScoreTemplateDisabledTools?: string[];
   trustScoreToolOverrides?: Record<string, boolean>;
 }
 

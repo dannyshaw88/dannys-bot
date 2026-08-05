@@ -4596,6 +4596,10 @@ export function AutomationSettingsPanel({
     ),
     [templateLockedFields, trustScoreActive, settings.trustScoreControlledFields],
   );
+  const templateDisabledTools = useMemo(
+    () => new Set(settings.trustScoreTemplateDisabledTools ?? []),
+    [settings.trustScoreTemplateDisabledTools],
+  );
   const trustScoreSlotLocked = trustScoreActive && !templateLockedFields;
   const fieldLocked = useCallback(
     (...fields: string[]) => fields.some(field => lockedFields.has(field)),
@@ -4611,6 +4615,7 @@ export function AutomationSettingsPanel({
       if (trustScoreActive) {
         const overrides = { ...(previous.trustScoreToolOverrides ?? {}) };
         for (const field of TRUST_SCORE_FEATURE_FIELDS) {
+          if (templateDisabledTools.has(field)) continue;
           if ((proposed as unknown as Record<string, unknown>)[field] !== (previous as unknown as Record<string, unknown>)[field]) {
             overrides[field] = Boolean((proposed as unknown as Record<string, unknown>)[field]);
           }
@@ -4632,7 +4637,7 @@ export function AutomationSettingsPanel({
       }
       return next;
     });
-  }, [setSettingsExternal, lockedFields, trustScoreActive, trustScoreSlotLocked, TRUST_SCORE_SLOT_EDITABLE_FIELDS]);
+  }, [setSettingsExternal, lockedFields, trustScoreActive, trustScoreSlotLocked, TRUST_SCORE_SLOT_EDITABLE_FIELDS, templateDisabledTools]);
   // When a slot has an assigned TrustScore, the displayed values are inherited
   // and must be read-only. The exceptions below intentionally keep the master
   // switch, per-tool switches, and slot-owned source controls editable.
@@ -4645,7 +4650,7 @@ export function AutomationSettingsPanel({
   const fieldDisabled = (...fields: string[]) =>
     loadingExternal || fields.some(field =>
       trustScoreSlotLocked
-        ? !TRUST_SCORE_SLOT_EDITABLE_FIELDS.has(field)
+        ? !TRUST_SCORE_SLOT_EDITABLE_FIELDS.has(field) || templateDisabledTools.has(field)
         : fieldLocked(field),
     );
   // Follow Users UI local state — hooks must come before any conditional return.
@@ -9105,13 +9110,11 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
 
                return (
                   <div key={key} className="flex min-w-0 py-[1px]">
-                   {groupControl && (
-                     <span className="w-4 shrink-0 inline-flex items-center justify-center">
-                       {groupControl}
-                     </span>
-                   )}
                   <span className="text-white whitespace-nowrap shrink-0 select-none w-[5rem]">[{ts}]</span>
-                  <span className="shrink-0 whitespace-nowrap text-white w-[5rem]">{dur ? `[${dur}]` : ''}</span>
+                   <span className="w-4 shrink-0 inline-flex items-center justify-center">
+                     {groupControl}
+                   </span>
+                   <span className="shrink-0 whitespace-nowrap text-white w-[5rem]">{dur ? `[${dur}]` : ''}</span>
                   <span className={`flex-1 min-w-0 break-words ${msgClass}`}>{msg}</span>
                 </div>
               );

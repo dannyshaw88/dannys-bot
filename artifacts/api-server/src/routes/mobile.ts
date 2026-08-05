@@ -2039,14 +2039,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       ? base.trustScoreToolOverrides as Record<string, boolean>
       : {};
     const effective = { ...base };
+    const templateDisabledTools = [...TRUST_SCORE_TOOL_FIELDS].filter(
+      field => template[field] === false,
+    );
     for (const [field, value] of Object.entries(template)) {
       if (TRUST_SCORE_SLOT_OWNED_FIELDS.has(field)) continue;
+      if (TRUST_SCORE_TOOL_FIELDS.has(field) && templateDisabledTools.includes(field)) {
+        effective[field] = false;
+        continue;
+      }
       if (Object.prototype.hasOwnProperty.call(toolOverrides, field)) continue;
       if (TRUST_SCORE_TOOL_FIELDS.has(field) && disabledTools.includes(field)) continue;
       effective[field] = value;
     }
     for (const field of TRUST_SCORE_TOOL_FIELDS) {
-      if (Object.prototype.hasOwnProperty.call(toolOverrides, field)) {
+      if (templateDisabledTools.includes(field)) {
+        effective[field] = false;
+      } else if (Object.prototype.hasOwnProperty.call(toolOverrides, field)) {
         effective[field] = Boolean(toolOverrides[field]);
       } else if (disabledTools.includes(field)) {
         effective[field] = false;
@@ -2054,6 +2063,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     effective.trustScoreId = scoreId;
     effective.trustScoreDisabledTools = disabledTools;
+    effective.trustScoreTemplateDisabledTools = templateDisabledTools;
     effective.trustScoreToolOverrides = toolOverrides;
     return { settings: effective, scoreId, configured };
   };
@@ -2235,6 +2245,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         trustScoreControlledFields: resolved.scoreId
           ? Object.keys(resolved.settings).filter(field => !TRUST_SCORE_SLOT_OWNED_FIELDS.has(field))
           : [],
+        trustScoreTemplateDisabledTools: resolved.settings.trustScoreTemplateDisabledTools ?? [],
       });
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to load slot automation settings" }); }
   });
