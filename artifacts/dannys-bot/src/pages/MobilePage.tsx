@@ -8386,8 +8386,8 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
             className="text-sm bg-background border border-border rounded px-3 py-1.5 text-foreground disabled:opacity-50"
           >
             <option value="auto">Auto — detect by model</option>
-            <option value="left">Swipe left (Redmi 12 / MIUI floating windows)</option>
-            <option value="up">Swipe up (Redmi A5 / stock Android recents)</option>
+            <option value="left">Swipe left</option>
+            <option value="up">Swipe up</option>
           </select>
           {dismissSaving && <span className="text-xs text-muted-foreground animate-pulse">Saving…</span>}
         </div>
