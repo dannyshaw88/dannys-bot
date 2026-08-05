@@ -428,9 +428,10 @@ const FOLDER_PATHS_DIR: string = process.env.EQUINOX_DATA_DIR
   : path.join(path.dirname(path.resolve(process.argv[1] ?? ".")), "..", "mobile-folder-paths");
 try { fs.mkdirSync(FOLDER_PATHS_DIR, { recursive: true }); } catch { /* already exists */ }
 
-// Debug screenshots — one folder per public device model, max 50 PNG files,
-// cleared when a new account's Human Session cycle starts. Named by Unix
-// timestamp so they sort chronologically and can be played back like a movie.
+// Debug screenshots — one folder per public device model, cleared when a new
+// account's Human Session cycle starts. Every timestamped cycle-log line gets
+// its own screenshot, named by Unix timestamp so the frames sort chronologically
+// and can be played back like a movie.
 const SCREENSHOTS_DIR: string = process.env.EQUINOX_DATA_DIR
   ? path.join(process.env.EQUINOX_DATA_DIR, "debug-screenshots")
   : path.join(path.dirname(path.resolve(process.argv[1] ?? ".")), "..", "debug-screenshots");
@@ -440,6 +441,9 @@ const SCREENSHOTS_DIR: string = process.env.EQUINOX_DATA_DIR
 // is already in the buffer when the composite is built.
 const debugLogBuffer = new Map<string, string[]>();
 const DEBUG_LOG_BUFFER_SIZE = 40;
+// ADB screencap calls must be serialized per device. Without this queue, rapid
+// log lines start overlapping child processes and some frames never get saved.
+const debugScreenshotQueues = new Map<string, Promise<void>>();
 
 function pushDebugLogLine(serial: string, line: string): void {
   let buf = debugLogBuffer.get(serial);
@@ -495,13 +499,6 @@ async function captureDebugScreenshot(serial: string, label: string): Promise<vo
       await fsPromises.rm(legacySerialDir, { recursive: true, force: true }).catch(() => {});
     }
     await fsPromises.mkdir(dir, { recursive: true });
-    // Enforce 50-file cap: delete oldest before writing the new one.
-    const existing = (await fsPromises.readdir(dir))
-      .filter(f => f.endsWith(".png"))
-      .sort(); // timestamp prefix → chronological order
-    for (let i = 0; i <= existing.length - 50; i++) {
-      await fsPromises.unlink(path.join(dir, existing[i])).catch(() => {});
-    }
     const ts = Date.now();
     const safeName = label.replace(/[^a-zA-Z0-9\s_\-]/g, "").replace(/\s+/g, "_").slice(0, 60);
     const filename = `${ts}_${safeName}.png`;
@@ -577,6 +574,20 @@ async function captureDebugScreenshot(serial: string, label: string): Promise<vo
   } catch {
     // Never let a screenshot failure affect the automation cycle.
   }
+}
+
+function queueDebugScreenshot(serial: string, label: string): void {
+  const previous = debugScreenshotQueues.get(serial) ?? Promise.resolve();
+  const next = previous
+    .catch(() => {})
+    .then(() => captureDebugScreenshot(serial, label))
+    .catch(() => {})
+    .finally(() => {
+      if (debugScreenshotQueues.get(serial) === next) {
+        debugScreenshotQueues.delete(serial);
+      }
+    });
+  debugScreenshotQueues.set(serial, next);
 }
 
 function _folderPathFile(serial: string, slotIdx: number): string {
@@ -9909,12 +9920,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Push into the rolling buffer BEFORE capturing so the composite always
       // includes the current line in the log panel on the right.
       pushDebugLogLine(serial, fullLine);
-      // Only action-stamp lines represent a real state-changing automation
-      // action. Status/detail lines can arrive several times per second and
-      // must update the log without creating another disk screenshot.
-      if (/^▶\s/.test(msg.trim())) {
-        captureDebugScreenshot(serial, msg).catch(() => {});
-      }
+      // Every timestamped log line is a frame boundary. The capture is queued
+      // so no detail/status line is silently dropped when several arrive close
+      // together.
+      queueDebugScreenshot(serial, fullLine);
     };
     try {
       const parsedCycle = automationCycleSchema.parse(req.body);
