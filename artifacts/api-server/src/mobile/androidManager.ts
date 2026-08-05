@@ -7456,11 +7456,7 @@ export async function switchToInstagramAccount(
     const swipeCx  = Math.round(sw * 0.5);
     const swipeFrom = Math.round(sh * 0.65);
     const swipeTo   = Math.round(sh * 0.35);
-    // The sheet is dynamically sized and can expose only 6–8 rows at a time.
-    // Two swipes are not enough for devices with the larger account list; the
-    // old limit caused valid accounts lower in the switcher to be reported as
-    // missing even though the sheet was still open.
-    const SCROLL_ATTEMPTS = 6;
+    const SCROLL_ATTEMPTS = 2;
     for (let s = 0; s < SCROLL_ATTEMPTS && !coords; s++) {
       onLog?.(`  ↳ @${clean} not visible yet — scrolling switcher list (attempt ${s + 1}/${SCROLL_ATTEMPTS})…`);
       await runAdb(adbPath, [
