@@ -7012,7 +7012,7 @@ export function AutomationSettingsPanel({
 
       {/* Bio Spin editor — keep the spin text out of the normal Random Actions row. */}
       <Dialog open={bioSpinEditorOpen} onOpenChange={setBioSpinEditorOpen}>
-        <DialogContent className="max-w-[calc(28rem+15ch)]">
+          <DialogContent className="w-[calc(100%-2rem)] max-w-[28rem] overflow-hidden">
           <DialogHeader>
             <DialogTitle>Bio Spin</DialogTitle>
           </DialogHeader>
@@ -7029,7 +7029,7 @@ export function AutomationSettingsPanel({
               }}
               disabled={fieldDisabled("updateBioText")}
               placeholder="Enter bio text or spin syntax"
-              className="min-h-[7.5rem] w-[calc(100%+15ch)] max-w-none resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm leading-relaxed outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              className="box-border min-h-[7.5rem] w-full max-w-full resize-y overflow-x-hidden overflow-y-auto whitespace-pre-wrap break-words rounded-md border border-input bg-transparent px-3 py-2 text-sm leading-relaxed outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             />
             <p className="text-[10px] text-muted-foreground/70">
               Up to 5 lines; each line becomes a line break in the Instagram bio. Supports spin syntax such as {"{hello|hi|hey}"}.
