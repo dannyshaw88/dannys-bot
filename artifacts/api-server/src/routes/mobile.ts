@@ -9626,33 +9626,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // Navigate back to the home feed after each user so the next
         // runFollowUsersStep call finds the bottom nav accessible.
         //
-        // Root cause of the "second follow always fails" bug:
-        //   pressBack #1: profile → search results  (nav bar IS in a11y tree here)
-        //   pressBack #2: search results → Explore  (nav bar moves to a SEPARATE
-        //     UIAutomator window on Explore; findInstagramSearchTab can't see it)
-        //
-        // Fix: after pressBack #1 (back to search results) tap the Home tab
-        // directly — the nav bar is still in the main a11y window at that point.
-        // The next iteration starts from the home feed and taps Search normally.
+        // Follow navigation is two levels deep:
+        //   pressBack #1: profile → search results (Home is not present here)
+        //   pressBack #2: search results → Explore (Home becomes available)
+        // Always complete both transitions before starting Stories or the next
+        // follow. A missing Home node after the first Back is expected and is
+        // not a reason to stop recovery.
         await android.pressBack(serial);               // profile → search results
         await sleepOrAbort(serial, 500);
         let _followHomeTab = await android.findHomeTab(serial).catch(() => null);
-        // UIAutomator can briefly return the pre-navigation tree. Retry the
-        // detector instead of pressing Back again; a blind second Back exits
-        // Instagram to the Android launcher when the first Back already
-        // returned to the search/results screen.
         if (!_followHomeTab) {
+          onLog?.(`Follow: Home tab absent on search results — pressing Back again to return to Explore`);
+          await android.pressBack(serial);
           await sleepOrAbort(serial, 500);
           _followHomeTab = await android.findHomeTab(serial).catch(() => null);
         }
         if (_followHomeTab) {
           await android.tap(serial, _followHomeTab.x, _followHomeTab.y);
         } else {
-          // Never press Back blindly here: if the first Back already returned
-          // to search/results, a second Back exits Instagram. Leave the
-          // current screen intact and let the next iteration's validated
-          // Search/Home navigation decide how to recover.
-          onLog?.(`Follow: Home tab not found after back — not pressing Back again (avoiding Instagram exit)`);
+          onLog?.(`Follow: Home tab still not found after two Back presses — skipping Home tap`);
         }
         await sleepOrAbort(serial, 800);
         // Dismiss any popup that appeared after pressing back (e.g. IG Plus
