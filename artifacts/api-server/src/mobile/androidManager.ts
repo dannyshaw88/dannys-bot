@@ -7415,6 +7415,8 @@ export async function switchToInstagramAccount(
   //    contains the username — zero extra wait in the normal (warm) case.
   let xml = "";
   let coords: { x: number; y: number } | null = null;
+  const escapedUsername = clean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const usernameRowPattern = new RegExp(`(?:^|,\\s*)@?${escapedUsername}(?:,|$)`, "i");
   const switcherScreenHeight = getScreenSize(serial).h;
   const SWITCHER_POLL_MS  = 1500;
   const SWITCHER_MAX_POLL = 2;
@@ -7451,11 +7453,10 @@ export async function switchToInstagramAccount(
     }
 
     if (!coords) {
-      const esc = clean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       coords = _findVisibleAccountRow(
         xml,
         switcherScreenHeight,
-        new RegExp(`(?:^|,\\s*)@?${esc}(?:,|$)`, "i"),
+        usernameRowPattern,
       );
     }
 
@@ -7478,7 +7479,7 @@ export async function switchToInstagramAccount(
         coords = _findVisibleAccountRow(
           xml,
           switcherScreenHeight,
-          new RegExp(`(?:^|,\\s*)@?${esc}(?:,|$)`, "i"),
+          usernameRowPattern,
         );
       }
     }
