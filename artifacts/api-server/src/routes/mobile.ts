@@ -68,6 +68,18 @@ function findMalesOnlyMatch(
   return null;
 }
 
+function findLiveMalesOnlyMatch(
+  username: string,
+  profileXml: string,
+  allowedNames: string[],
+): MalesOnlyMatch | null {
+  const liveValues = [...profileXml.matchAll(/(?:text|content-desc)="([^"]*)"/g)]
+    .map(match => match[1])
+    .filter(Boolean)
+    .join(" ");
+  return findMalesOnlyMatch(username, liveValues, liveValues, allowedNames);
+}
+
 const execFileP = promisify(execFile);
 
 // ── Battery charging-control scheduler ────────────────────────────────────
@@ -9374,9 +9386,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             const profileXml = await android.dumpUi(serial).catch(() => "");
 
             // Males Only is intentionally an explicit allowlist, never gender
-            // inference. HikerAPI supplies the visited profile's username,
-            // full name, and biography; any configured token matching any of
-            // those fields passes, otherwise the candidate is skipped.
+            // inference. The live Instagram accessibility tree is authoritative;
+            // HikerAPI candidate metadata is never used for this decision.
             if (filters.malesOnly) {
               const allowedNames = (filters.maleNames ?? "")
                 .split(",")
@@ -9384,21 +9395,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 .filter(Boolean);
               let matchesAllowedName = false;
               if (allowedNames.length) {
-                if (!hiker) {
-                  const globalSettings = await storage.getGlobalSettings();
-                  const token = String(globalSettings?.hikerApiToken ?? "");
-                  if (token) hiker = new HikerApiClient(token);
-                }
-                const profile = await hiker?.getUserProfile(username).catch(() => null);
-                const matchedEntry = findMalesOnlyMatch(
-                  username,
-                  profile?.fullName ?? "",
-                  profile?.biography ?? "",
-                  allowedNames,
-                );
+                const matchedEntry = findLiveMalesOnlyMatch(username, profileXml, allowedNames);
                 matchesAllowedName = Boolean(matchedEntry);
                 if (matchedEntry) {
-                  onLog?.(`Follow: Males Only allowed @${username} — matched "${matchedEntry.name}" in ${matchedEntry.field}`);
+                  onLog?.(`Follow: Males Only allowed @${username} — matched "${matchedEntry.name}" in live profile ${matchedEntry.field}`);
                 }
               }
               if (!matchesAllowedName) {
@@ -10421,34 +10421,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   return true;
                 });
               }
-              // Spread candidates are selected before runFollowUsersStep opens
-              // a profile. Apply Males Only here as well, otherwise a
-              // rejected candidate can consume a spread slot and be followed
-              // through the backup path.
-              if (_sfFilters?.malesOnly) {
-                const allowedNames = (_sfFilters.maleNames ?? "")
-                  .split(",")
-                  .map(name => name.trim().toLocaleLowerCase())
-                  .filter(Boolean);
-                const beforeMaleFilter = _sfCandidates.length;
-                const maleFiltered: string[] = [];
-                for (const u of _sfCandidates) {
-                  const profile = allowedNames.length
-                    ? await _sfHiker.getUserProfile(u).catch(() => null)
-                    : null;
-                  const fullName = profile?.fullName ?? "";
-                  const biography = profile?.biography ?? "";
-                  const matchedEntry = findMalesOnlyMatch(u, fullName, biography, allowedNames);
-                  const matched = Boolean(matchedEntry);
-                  tLog(`  Follow Males Only: @${u} → username="${u}", name="${fullName}", bio="${biography.slice(0, 120)}" — ${matched ? `allowed; matched "${matchedEntry!.name}" in ${matchedEntry!.field}` : "rejected"}`);
-                  if (matched) maleFiltered.push(u);
-                }
-                _sfCandidates = maleFiltered;
-                const rejected = beforeMaleFilter - _sfCandidates.length;
-                if (rejected > 0) {
-                  tLog(`  Follow Males Only: rejected ${rejected} spread candidate${rejected !== 1 ? "s" : ""}`);
-                }
-              }
+              // Males Only is deliberately deferred to runFollowUsersStep.
+              // Candidates must be opened in Instagram and checked against the
+              // live accessibility tree before any Follow tap.
 
               const _sfPool = _sfCandidates.slice(0, _spreadTarget);
               const _nonFollowTools = _toolSeq.filter(t => t !== 'follow');
