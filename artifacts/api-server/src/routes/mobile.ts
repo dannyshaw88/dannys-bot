@@ -30,6 +30,44 @@ import { storage } from "../storage";
 import { logger } from "../lib/logger";
 import { HikerApiClient } from "../instagram/hikerApiClient";
 
+type MalesOnlyMatch = { name: string; field: "account name" | "username" | "bio" };
+
+/**
+ * Males Only is an explicit configured-name allowlist, not gender inference.
+ * Keep the three Instagram profile fields separate: `full_name` is the
+ * account/display name, `username` is the handle, and `biography` is the bio.
+ * Names use case-insensitive substring matching in all three fields; bios use
+ * a bounded token match so a name embedded in an unrelated word is rejected.
+ */
+function findMalesOnlyMatch(
+  username: string,
+  accountName: string,
+  bio: string,
+  allowedNames: string[],
+): MalesOnlyMatch | null {
+  const normalizedFields: Array<[MalesOnlyMatch["field"], string]> = [
+    ["account name", accountName],
+    ["username", username],
+    ["bio", bio],
+  ];
+  const bioHasExactToken = (value: string, name: string) => {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?:$|[^\\p{L}\\p{N}])`, "iu").test(value);
+  };
+  // Prefer the account-name field when the same configured token appears in
+  // more than one field, so the Debugging Log reflects the actual display
+  // name that caused the allow decision.
+  for (const field of normalizedFields) {
+    for (const name of allowedNames) {
+      const matches = field[0] === "bio"
+        ? bioHasExactToken(field[1], name)
+        : field[1].toLocaleLowerCase().includes(name);
+      if (matches) return { name, field: field[0] };
+    }
+  }
+  return null;
+}
+
 const execFileP = promisify(execFile);
 
 // ── Battery charging-control scheduler ────────────────────────────────────
@@ -9333,24 +9371,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   if (token) hiker = new HikerApiClient(token);
                 }
                 const profile = await hiker?.getUserProfile(username).catch(() => null);
-                const profileFields = [
-                  ["username", username],
-                  ["full name", profile?.fullName ?? ""],
-                  ["bio", profile?.biography ?? ""],
-                ] as const;
-                const bioHasExactToken = (bio: string, name: string) => {
-                  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-                  return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?:$|[^\\p{L}\\p{N}])`, "iu").test(bio);
-                };
-                const matchedEntry = allowedNames
-                  .flatMap(name => profileFields
-                    .filter(([field, value]) =>
-                      field === "bio"
-                        ? bioHasExactToken(value, name)
-                        : value.toLocaleLowerCase().includes(name),
-                    )
-                    .map(([field]) => ({ name, field })))
-                  [0];
+                const matchedEntry = findMalesOnlyMatch(
+                  username,
+                  profile?.fullName ?? "",
+                  profile?.biography ?? "",
+                  allowedNames,
+                );
                 matchesAllowedName = Boolean(matchedEntry);
                 if (matchedEntry) {
                   onLog?.(`Follow: Males Only allowed @${username} — matched "${matchedEntry.name}" in ${matchedEntry.field}`);
@@ -10393,24 +10419,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     : null;
                   const fullName = profile?.fullName ?? "";
                   const biography = profile?.biography ?? "";
-                  const profileFields = [
-                    ["username", u],
-                    ["full name", fullName],
-                    ["bio", biography],
-                  ] as const;
-                  const bioHasExactToken = (bio: string, name: string) => {
-                    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-                    return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?:$|[^\\p{L}\\p{N}])`, "iu").test(bio);
-                  };
-                  const matchedEntry = allowedNames
-                    .flatMap(name => profileFields
-                      .filter(([field, value]) =>
-                        field === "bio"
-                          ? bioHasExactToken(value, name)
-                          : value.toLocaleLowerCase().includes(name),
-                      )
-                      .map(([field]) => ({ name, field })))
-                    [0];
+                  const matchedEntry = findMalesOnlyMatch(u, fullName, biography, allowedNames);
                   const matched = Boolean(matchedEntry);
                   tLog(`  Follow Males Only: @${u} → username="${u}", name="${fullName}", bio="${biography.slice(0, 120)}" — ${matched ? `allowed; matched "${matchedEntry!.name}" in ${matchedEntry!.field}` : "rejected"}`);
                   if (matched) maleFiltered.push(u);
