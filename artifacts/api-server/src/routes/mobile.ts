@@ -4637,6 +4637,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     for (let s = 0; s < totalStories; s++) {
       if (isCycleAborted(serial)) break;
+      const storyTimingStartedAt = Date.now();
+      let storyTimingAfterChecks = storyTimingStartedAt;
+      let storyTimingAfterWatch = storyTimingStartedAt;
+      let storyTimingAfterActions = storyTimingStartedAt;
 
       // Mid-story interstitial guard — runs at the start of every slide.
       // The "Interacting with content shared from Facebook" dialog (and
@@ -4659,6 +4663,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const willShare       = shareChance       > 0 && Math.random() < shareChance;
       const willComment     = commentChance     > 0 && Math.random() < commentChance;
       const willClickAuthor = clickAuthorChance > 0 && Math.random() < clickAuthorChance;
+      storyTimingAfterChecks = Date.now();
 
       // Watch this story for a random percentage of its ~6s duration — but
       // ONLY when no action is scheduled on this slide. When a like and/or
@@ -4678,6 +4683,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const watchMs = Math.max(1500, Math.round((watchPct / 100) * 6000));
         await sleepOrAbort(serial, watchMs);
       }
+      storyTimingAfterWatch = Date.now();
 
       if (willLike) {
         // Tap the story Like button via the accessibility tree.
@@ -5073,6 +5079,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           await android.pressBack(serial).catch(() => {}); // safety return to story
         }
       }
+      storyTimingAfterActions = Date.now();
 
       // Don't tap "advance to next slide" if we've already left the story
       // viewer — that tap would land on the feed and register as a like/
@@ -5085,6 +5092,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
 
       storiesWatched++;
+      onLog?.(
+        `View Stories ${s + 1}/${totalStories} timing — ` +
+        `pre-watch/checks=${((storyTimingAfterChecks - storyTimingStartedAt) / 1000).toFixed(1)}s, ` +
+        `watch-wait=${((storyTimingAfterWatch - storyTimingAfterChecks) / 1000).toFixed(1)}s, ` +
+        `actions/author=${((storyTimingAfterActions - storyTimingAfterWatch) / 1000).toFixed(1)}s, ` +
+        `total=${((storyTimingAfterActions - storyTimingStartedAt) / 1000).toFixed(1)}s`,
+      );
 
       // Advance to the next story by tapping the far-right edge (~97%) of the
       // screen at ~45% height — but ONLY when there are more slides left to
@@ -5884,6 +5898,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     for (let i = 0; i < totalReels; i++) {
       if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+      const reelTimingStartedAt = Date.now();
+      let reelTimingAfterWatch = reelTimingStartedAt;
+      let reelTimingAfterActions = reelTimingStartedAt;
       onLog?.(`Reel ${i + 1}/${totalReels}`);
 
       // Watch a configurable % of the reel before acting. Keeps the reel
@@ -5894,6 +5911,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const watchMs  = Math.max(1500, Math.round((watchPct / 100) * 30000));
       onLog?.(`Reel ${i + 1}/${totalReels}: watching ${watchPct.toFixed(0)}% (~${(watchMs / 1000).toFixed(1)}s)`);
       await sleepOrAbort(serial, watchMs);
+      reelTimingAfterWatch = Date.now();
 
       // Roll like/share decisions fresh per reel so each reel is independent.
       const wantLike      = likePercentMax > 0 && Math.random() * 100 < rollRange(likePercentMin, likePercentMax);
@@ -6281,8 +6299,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           onLog?.(`Reel ${i + 1}/${totalReels}: click-author error — ${e?.message}`);
         }
       }
+      reelTimingAfterActions = Date.now();
 
       reelsViewed++;
+      onLog?.(
+        `Reel ${i + 1}/${totalReels} timing — ` +
+        `watch-wait=${((reelTimingAfterWatch - reelTimingStartedAt) / 1000).toFixed(1)}s, ` +
+        `actions/author=${((reelTimingAfterActions - reelTimingAfterWatch) / 1000).toFixed(1)}s, ` +
+        `total=${((reelTimingAfterActions - reelTimingStartedAt) / 1000).toFixed(1)}s`,
+      );
 
       if (i < totalReels - 1) {
         await swipeToNextReel(`Reel ${i + 1}/${totalReels}`);
