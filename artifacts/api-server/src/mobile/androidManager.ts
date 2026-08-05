@@ -8579,17 +8579,9 @@ export async function findRandomNotificationItem(serial: string): Promise<{ x: n
  * Find the Instagram Search tab (magnifying-glass icon) in the bottom nav.
  * Returns the tap coordinates or null if not found.
  *
- * DIAGNOSTIC-ONLY CHANGE (no detection logic touched): when both the
- * resource-id and label lookups miss, this now dumps every clickable node in
- * the bottom-nav row (bottom 12% of screen) via onLog — class, resource-id,
- * content-desc, text, bounds — before returning null. Per the project's
- * evidence-first debugging rule (see replit.md), we do not guess a fix
- * without a real device dump from the exact failing moment. Reported live
- * (15 Jul 2026): "Search tab not found" on a Follow-only cycle despite no
- * change to this function — next failing run's log will show what's
- * actually in that row now so the real cause (renamed resource-id, a11y
- * label change, or an IG app update that moved/removed the tab) can be
- * confirmed instead of assumed.
+ * This detector must never infer Search from horizontal position. Reels and
+ * Search are adjacent on some Instagram layouts, so selecting an index from
+ * the bottom-nav row can send Follow into Reels.
  */
 /**
  * Detects whether Instagram (or any foreground app) is running inside a MIUI
@@ -8642,47 +8634,11 @@ export async function findInstagramSearchTab(
   const byLabel = _findElem(xml, "Search", "Explore");
   if (byLabel) return byLabel;
 
-  // Some Instagram builds expose the bottom navigation only as unlabeled
-  // clickable nodes. Resolve Search from that live accessibility row:
-  // collapse parent/child duplicates, require a full-width row with at least
-  // four tabs, then select the second tab (Home, Search, ...). Never infer a
-  // point from screen dimensions.
-  // The XML root omits bounds on some MIUI builds. Use the device-reported
-  // size for thresholds in that case; the returned point still comes only
-  // from an accessibility node's own bounds.
-  const xmlSize = _getScreenSizeFromXml(xml) ?? getScreenSize(serial);
-  const { w: xmlW, h: xmlH } = xmlSize;
-  const botMin = Math.round(xmlH * 0.84);
-  const raw: { x: number; y: number }[] = [];
-  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
-  let m: RegExpExecArray | null;
-  while ((m = nodeRe.exec(xml)) !== null) {
-    const attrs = m[1];
-    if (!attrs.includes('clickable="true"')) continue;
-    const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-    if (!bm) continue;
-    const cx = Math.round((Number(bm[1]) + Number(bm[3])) / 2);
-    const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
-    if (cy < botMin) continue;
-    raw.push({ x: cx, y: cy });
-  }
-  const tabs = raw
-    .filter((node, index, all) =>
-      all.findIndex(other => Math.abs(other.x - node.x) < 40 && Math.abs(other.y - node.y) < 40) === index,
-    )
-    .sort((a, b) => a.x - b.x);
-  const spanW = tabs.length > 1 ? tabs[tabs.length - 1].x - tabs[0].x : 0;
-  if (tabs.length >= 4 && spanW >= xmlW * 0.55) {
-    const searchTab = tabs[1];
-    onLog?.(
-      `Follow: Search tab found from accessibility bottom-nav row at ` +
-      `(${searchTab.x}, ${searchTab.y}) — ${tabs.length} validated tab nodes`,
-    );
-    return searchTab;
-  }
+  // Unlabeled bottom-nav nodes are intentionally not enough. Their horizontal
+  // order is not stable: on the failing layout the second node is Reels, not
+  // Search. Wait for a semantic Search node/resource-id instead of guessing.
   onLog?.(
-    `Follow: Search tab node not found — refusing coordinate fallback ` +
-    `(bottom-nav candidates=${tabs.length}, span=${spanW}px, dump=${xmlW}×${xmlH})`,
+    "Follow: Search tab semantic node not found — refusing positional/pixel fallback",
   );
   return null;
 }
