@@ -7076,15 +7076,10 @@ export function AutomationSettingsPanel({
             {spinPreview !== null && (
               <button
                 type="button"
-                disabled={fieldDisabled("updateBioText")}
-                onClick={() => {
-                  setBioSpinDraft(spinPreview);
-                  setSettings(s => ({ ...s, updateBioText: spinPreview }));
-                  setSpinPreview(null);
-                }}
-                className="h-8 px-4 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => navigator.clipboard.writeText(spinPreview).catch(() => {})}
+                className="h-8 px-4 text-xs rounded border border-border bg-background hover:bg-accent transition-colors font-medium"
               >
-                Use this version
+                Copy
               </button>
             )}
           </div>
