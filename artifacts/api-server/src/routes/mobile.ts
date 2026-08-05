@@ -5084,7 +5084,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Don't tap "advance to next slide" if we've already left the story
       // viewer — that tap would land on the feed and register as a like/
       // navigation there instead of harmlessly advancing a story slide.
-      if (!(await stillInStoryViewer())) {
+      // Normal slide completion only needs a positive fast confirmation. If
+      // the fast scan is inconclusive, fail closed and stop rather than paying
+      // a 3–5s UIAutomator dump on every ordinary slide. The slow fallback is
+      // still used for risky action paths and final recovery below.
+      if (!(await stillInStoryViewer(true))) {
         onLog?.(`View Stories ${s + 1}: story viewer already closed — stopping story loop`);
         logger.info({ serial, story: s + 1 }, "[view-stories] story viewer gone at end of slide — stopping loop");
         storiesWatched++;
@@ -6244,7 +6248,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         try {
           if (isCycleAborted(serial)) throw new Error("cycle-aborted");
           onLog?.(`${_vrCaPfx}: clicking author profile…`);
-          const _vrCaXml = await android.dumpUi(serial).catch(() => "");
+          // Author visiting is optional. Do not let a slow UIAutomator dump
+          // stall the whole Reels run when the author node is unavailable.
+          const _vrCaXml = await Promise.race([
+            android.dumpUi(serial).catch(() => ""),
+            new Promise<string>(resolve => setTimeout(() => resolve(""), 2500)),
+          ]);
           // Skip author click if Instagram labels this as a sponsored post.
           // Quoted attribute matching prevents false positives on words like
           // "Add", "Adidas", etc. whose text values differ from the bare "Ad".
