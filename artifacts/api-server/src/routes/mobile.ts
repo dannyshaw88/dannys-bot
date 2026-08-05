@@ -9322,12 +9322,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   if (token) hiker = new HikerApiClient(token);
                 }
                 const profile = await hiker?.getUserProfile(username).catch(() => null);
-                const haystack = [
-                  username,
-                  profile?.fullName ?? "",
-                  profile?.biography ?? "",
-                ].join(" ").toLocaleLowerCase();
-                matchesAllowedName = allowedNames.some(name => haystack.includes(name));
+                const profileFields = [
+                  ["username", username],
+                  ["full name", profile?.fullName ?? ""],
+                  ["bio", profile?.biography ?? ""],
+                ] as const;
+                const matchedEntry = allowedNames
+                  .flatMap(name => profileFields
+                    .filter(([, value]) => value.toLocaleLowerCase().includes(name))
+                    .map(([field]) => ({ name, field })))
+                  [0];
+                matchesAllowedName = Boolean(matchedEntry);
+                if (matchedEntry) {
+                  onLog?.(`Follow: Males Only allowed @${username} — matched "${matchedEntry.name}" in ${matchedEntry.field}`);
+                }
               }
               if (!matchesAllowedName) {
                 onLog?.(`Follow: @${username} has no allowed Males Only name in username, name, or bio — skipping`);
@@ -10376,9 +10384,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     : null;
                   const fullName = profile?.fullName ?? "";
                   const biography = profile?.biography ?? "";
-                  const haystack = `${u} ${fullName} ${biography}`.toLocaleLowerCase();
-                  const matched = allowedNames.some(name => haystack.includes(name));
-                  tLog(`  Follow Males Only: @${u} → username="${u}", name="${fullName}", bio="${biography.slice(0, 120)}" — ${matched ? "allowed" : "rejected"}`);
+                  const profileFields = [
+                    ["username", u],
+                    ["full name", fullName],
+                    ["bio", biography],
+                  ] as const;
+                  const matchedEntry = allowedNames
+                    .flatMap(name => profileFields
+                      .filter(([, value]) => value.toLocaleLowerCase().includes(name))
+                      .map(([field]) => ({ name, field })))
+                    [0];
+                  const matched = Boolean(matchedEntry);
+                  tLog(`  Follow Males Only: @${u} → username="${u}", name="${fullName}", bio="${biography.slice(0, 120)}" — ${matched ? `allowed; matched "${matchedEntry!.name}" in ${matchedEntry!.field}` : "rejected"}`);
                   if (matched) maleFiltered.push(u);
                 }
                 _sfCandidates = maleFiltered;

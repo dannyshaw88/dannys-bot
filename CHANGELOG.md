@@ -1,3 +1,12 @@
+## [1.2.387] — 2026-08-05
+
+### Added — Males Only match diagnostics
+
+- Follow logs now include the exact allowlist token and field that allowed a
+  candidate: username, full name, or bio.
+- Spread Follow logs include the same match details before selecting spread
+  candidates.
+
 ## [1.2.386] — 2026-08-04
 
 ### Fixed — Private profile filtering
