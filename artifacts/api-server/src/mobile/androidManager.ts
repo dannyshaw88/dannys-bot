@@ -7415,11 +7415,12 @@ export async function switchToInstagramAccount(
   //    contains the username — zero extra wait in the normal (warm) case.
   let xml = "";
   let coords: { x: number; y: number } | null = null;
+  const switcherScreenHeight = getScreenSize(serial).h;
   const SWITCHER_POLL_MS  = 1500;
   const SWITCHER_MAX_POLL = 2;
   for (let p = 0; p < SWITCHER_MAX_POLL; p++) {
     xml = await _uiDump(adbPath, serial).catch(() => "");
-    coords = _findElem(xml, clean, `@${clean}`);
+    coords = _findVisibleAccountRow(xml, switcherScreenHeight, clean, `@${clean}`);
     if (coords) break; // found — proceed to tap
     // Also break early if the username appears anywhere in the XML —
     // that means we're already on this account (active-account path below).
@@ -7437,7 +7438,11 @@ export async function switchToInstagramAccount(
     // misses it even though the username still appears somewhere in the XML.
     // Check if the username appears ANYWHERE in the dump (any attribute).
     // Using simple includes() avoids regex escaping edge-cases entirely.
-    const activeInXml = xml.includes(`"@${clean}"`) || xml.includes(`"${clean}"`);
+    const targetHasAccountNode =
+      new RegExp(`(?:content-desc|text)="(?:@)?${clean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"[^>]*bounds="`, "i").test(xml);
+    const activeInXml =
+      (xml.includes(`"@${clean}"`) || xml.includes(`"${clean}"`)) &&
+      !targetHasAccountNode;
     if (activeInXml) {
       onLog?.(`  ↳ @${clean} is the currently active account — dismissing switcher`);
       await runAdb(adbPath, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], 4000).catch(() => {});
@@ -7445,26 +7450,27 @@ export async function switchToInstagramAccount(
     }
 
     // Devices now log in ~10 accounts but the switcher sheet only shows the
-    // first 7-8 without scrolling. If the target is near the bottom edge,
-    // two short swipes are not enough. Use a bounded sequence of longer,
-    // sheet-centred upward swipes and re-dump after each one.
+    // first 7-8 without scrolling. If the target wasn't in the initial dump,
+    // do up to 2 quick upward swipes and re-check after each one.
     const { w: sw, h: sh } = getScreenSize(serial);
     const swipeCx  = Math.round(sw * 0.5);
-    const swipeFrom = Math.round(sh * 0.78); // inside lower sheet content
-    const swipeTo   = Math.round(sh * 0.30); // long upward drag
-    const SCROLL_ATTEMPTS = 6;
+    const swipeFrom = Math.round(sh * 0.65);
+    const swipeTo   = Math.round(sh * 0.35);
+    const SCROLL_ATTEMPTS = 2;
     for (let s = 0; s < SCROLL_ATTEMPTS && !coords; s++) {
       onLog?.(`  ↳ @${clean} not visible yet — scrolling switcher list (attempt ${s + 1}/${SCROLL_ATTEMPTS})…`);
       await runAdb(adbPath, [
         "-s", serial, "shell", "input", "swipe",
         String(swipeCx), String(swipeFrom),
         String(swipeCx), String(swipeTo),
-        "550",
+        "300",
       ], 4000).catch(() => {});
-      await _sleep(700); // let the sheet settle before the live dump
+      await _sleep(400);
       xml = await _uiDump(adbPath, serial).catch(() => "");
-      coords = _findElem(xml, clean, `@${clean}`);
-      if (!coords && (xml.includes(`"@${clean}"`) || xml.includes(`"${clean}"`))) {
+      coords = _findVisibleAccountRow(xml, switcherScreenHeight, clean, `@${clean}`);
+      const targetHasAccountNodeAfterScroll =
+        new RegExp(`(?:content-desc|text)="(?:@)?${clean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"[^>]*bounds="`, "i").test(xml);
+      if (!coords && (xml.includes(`"@${clean}"`) || xml.includes(`"${clean}"`)) && !targetHasAccountNodeAfterScroll) {
         // Already the active account — visible somewhere in the tree but no tappable row.
         onLog?.(`  ↳ @${clean} is the currently active account — dismissing switcher`);
         await runAdb(adbPath, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], 4000).catch(() => {});
@@ -7598,6 +7604,45 @@ function _findElem(xml: string, ...candidates: string[]): { x: number; y: number
       const re2 = new RegExp(`${attr}="[^"]*${esc}[^"]*"[^>]*bounds="([^"]+)"`, "i");
       const m2 = xml.match(re2);
       if (m2) { const c2 = _parseCenter(m2[1]); if (c2) return c2; }
+    }
+  }
+  return null;
+}
+
+/**
+ * Account-switcher rows can remain in the accessibility tree after they have
+ * been clipped by the bottom edge of the sheet. Their calculated centre then
+ * lands on the Android navigation bar, so a normal text match falsely looks
+ * tappable. Require the live account-row container to have a usable height and
+ * stay above the navigation-bar region.
+ */
+function _findVisibleAccountRow(
+  xml: string,
+  screenHeight: number,
+  ...candidates: string[]
+): { x: number; y: number } | null {
+  // The physical device height can exceed the accessibility window height
+  // because Android reserves navigation/system-bar space. Prefer the live
+  // hierarchy boundary when deciding whether a row is clipped.
+  const rootBounds = xml.match(/<hierarchy[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+  const accessibilityBottom = rootBounds ? Number(rootBounds[4]) : screenHeight;
+  for (const candidate of candidates) {
+    const esc = candidate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    for (const attr of ["content-desc", "text"]) {
+      const re = new RegExp(
+        `${attr}="${esc}"[^>]*bounds="\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]"`,
+        "i",
+      );
+      const m = xml.match(re);
+      if (!m) continue;
+      const x1 = Number(m[1]);
+      const y1 = Number(m[2]);
+      const x2 = Number(m[3]);
+      const y2 = Number(m[4]);
+      // A real row is ~180 px high in the supplied dump. Keep margin for
+      // device scaling, but reject clipped slivers such as the 19 px node.
+      if (y2 - y1 < 100 || y2 > accessibilityBottom - 19) continue;
+      return { x: Math.floor((x1 + x2) / 2), y: Math.floor((y1 + y2) / 2) };
     }
   }
   return null;
