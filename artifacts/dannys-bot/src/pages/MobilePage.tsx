@@ -7012,7 +7012,7 @@ export function AutomationSettingsPanel({
 
       {/* Bio Spin editor — keep the spin text out of the normal Random Actions row. */}
       <Dialog open={bioSpinEditorOpen} onOpenChange={setBioSpinEditorOpen}>
-          <DialogContent className="w-[calc(100%-2rem)] max-w-[28rem] overflow-hidden">
+          <DialogContent className="w-[calc(100%-2rem)] max-w-[35rem] overflow-hidden">
           <DialogHeader>
             <DialogTitle>Bio Spin</DialogTitle>
           </DialogHeader>
@@ -7047,19 +7047,6 @@ export function AutomationSettingsPanel({
             </div>
           )}
           <div className="flex items-center justify-end gap-2 pt-1">
-            {spinPreview !== null && (
-              <button
-                type="button"
-                disabled={fieldDisabled("updateBioText") || !bioSpinDraft.trim()}
-                onClick={() => {
-                  // Spin is preview-only: never replace the source text.
-                  setSpinPreview(resolveSpinSyntax(bioSpinDraft));
-                }}
-                className="h-8 px-3 text-xs rounded border border-border bg-background hover:bg-accent transition-colors font-medium disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Spin again
-              </button>
-            )}
             <button
               type="button"
               disabled={fieldDisabled("updateBioText") || !bioSpinDraft.trim()}
