@@ -406,6 +406,9 @@ function TrustScoreAutomationEditor({
           if (!response.ok || !data?.ok) throw new Error(data?.error ?? `Server error (${response.status})`);
           lastSavedRef.current = serialized;
           setSaveError(null);
+          window.dispatchEvent(new CustomEvent("mobile_trustscore_template_changed", {
+            detail: { trustScoreId },
+          }));
         })
         .catch(error => setSaveError(error?.message ?? "Couldn't save settings"));
     }, 500);

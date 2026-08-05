@@ -7514,6 +7514,21 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   const [slots, setSlots] = useState<AccountSlot[]>(
     Array.from({ length: ACCT_SLOT_COUNT }, emptySlot)
   );
+  // A Trust Score template can be edited while this Phone Farm panel remains
+  // mounted. Refresh every slot's effective settings after the save; the API
+  // decides which slots are assigned to that template, and unassigned slots
+  // simply receive the same baseline they already had.
+  useEffect(() => {
+    const onTemplateChanged = () => {
+      setSlotRefreshKeys(prev => {
+        const next = { ...prev };
+        for (let idx = 0; idx < slots.length; idx++) next[idx] = (next[idx] ?? 0) + 1;
+        return next;
+      });
+    };
+    window.addEventListener("mobile_trustscore_template_changed", onTemplateChanged);
+    return () => window.removeEventListener("mobile_trustscore_template_changed", onTemplateChanged);
+  }, [slots.length]);
   const [loading, setLoading] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
