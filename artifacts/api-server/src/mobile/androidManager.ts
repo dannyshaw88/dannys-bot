@@ -7445,23 +7445,23 @@ export async function switchToInstagramAccount(
     }
 
     // Devices now log in ~10 accounts but the switcher sheet only shows the
-    // first 7-8 without scrolling.  If the target wasn't in the initial dump,
-    // do up to 2 quick upward swipes (drag up = sheet scrolls down, revealing
-    // accounts lower in the list) and re-check after each one.
+    // first 7-8 without scrolling. If the target is near the bottom edge,
+    // two short swipes are not enough. Use a bounded sequence of longer,
+    // sheet-centred upward swipes and re-dump after each one.
     const { w: sw, h: sh } = getScreenSize(serial);
     const swipeCx  = Math.round(sw * 0.5);
-    const swipeFrom = Math.round(sh * 0.65); // start y (lower on screen)
-    const swipeTo   = Math.round(sh * 0.35); // end y   (higher on screen)
-    const SCROLL_ATTEMPTS = 2;
+    const swipeFrom = Math.round(sh * 0.78); // inside lower sheet content
+    const swipeTo   = Math.round(sh * 0.30); // long upward drag
+    const SCROLL_ATTEMPTS = 6;
     for (let s = 0; s < SCROLL_ATTEMPTS && !coords; s++) {
       onLog?.(`  ↳ @${clean} not visible yet — scrolling switcher list (attempt ${s + 1}/${SCROLL_ATTEMPTS})…`);
       await runAdb(adbPath, [
         "-s", serial, "shell", "input", "swipe",
         String(swipeCx), String(swipeFrom),
         String(swipeCx), String(swipeTo),
-        "300",
+        "550",
       ], 4000).catch(() => {});
-      await _sleep(400); // let the list settle
+      await _sleep(700); // let the sheet settle before the live dump
       xml = await _uiDump(adbPath, serial).catch(() => "");
       coords = _findElem(xml, clean, `@${clean}`);
       if (!coords && (xml.includes(`"@${clean}"`) || xml.includes(`"${clean}"`))) {
