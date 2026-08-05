@@ -6883,6 +6883,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       imageSettingsEnabled, imageSettings, addLocation, onLog,
     } = opts;
 
+    // Make a Post always starts from Instagram's normal Home feed.  This
+    // tool can follow Feed, Stories, Reels, Explore, or Follow in the same
+    // shuffled cycle, so relying on the previous tool's exit screen can leave
+    // the compose lookup on the wrong Instagram surface.  Use the live
+    // accessibility Home node; never invent a bottom-left coordinate here.
+    onLog?.("Make a Post: locating Instagram Home button…");
+    const homeTab = await android.findHomeTab(serial).catch(() => null);
+    if (!homeTab) {
+      onLog?.("Make a Post: Instagram Home button not found — aborting before upload");
+      return { posted: false };
+    }
+    onLog?.("Make a Post: tapping Instagram Home button…");
+    await android.tap(serial, homeTab.x, homeTab.y);
+    await sleepOrAbort(serial, 1500);
+
     const fileName = await pickLocalFolderImage(serial, {
       folderPath: localFolderPath, random: localFolderRandom, noRepeat: localFolderNoRepeat, onLog,
     });
