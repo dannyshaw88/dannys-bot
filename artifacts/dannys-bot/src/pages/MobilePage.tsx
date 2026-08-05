@@ -9033,7 +9033,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                if (previous && previous.length > 0 && timestampOf(previous[0]) === timestampOf(line)) previous.push(line);
                else groups.push([line]);
              }
-             const renderLine = (l: string, i: number, key: string) => {
+              const renderLine = (l: string, i: number, key: string, groupControl?: React.ReactNode) => {
               // Parse:  [HH:MM:SS AM/PM]  [Xm Ys / Xs]  message
               //         [HH:MM:SS AM/PM]               message   (no duration)
               const m   = l.match(/^\[([^\]]+)\]\s*(?:\[(\d+m \d+(?:\.\d+)?s|\d+(?:\.\d+)?s)\]\s*)?([\s\S]*)$/);
@@ -9089,7 +9089,12 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
               else if (currentTool === 'randomactions') msgClass = 'text-purple-400';
 
                return (
-                 <div key={key} className="flex min-w-0 py-[1px]">
+                  <div key={key} className="flex min-w-0 py-[1px]">
+                   {groupControl && (
+                     <span className="w-4 shrink-0 inline-flex items-center justify-center">
+                       {groupControl}
+                     </span>
+                   )}
                   <span className="text-white whitespace-nowrap shrink-0 select-none w-[5rem]">[{ts}]</span>
                   <span className="shrink-0 whitespace-nowrap text-white w-[5rem]">{dur ? `[${dur}]` : ''}</span>
                   <span className={`flex-1 min-w-0 break-words ${msgClass}`}>{msg}</span>
@@ -9103,29 +9108,45 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                if (!collapsible || expanded) {
                  return (
                    <React.Fragment key={groupKey}>
-                     {collapsible && (
-                       <button type="button" onClick={() => setExpandedLogGroups(prev => {
-                         const next = new Set(prev);
-                         next.delete(groupKey);
-                         return next;
-                       })} className="flex items-center gap-1 w-full text-left text-white/60 hover:text-white py-1">
-                         <ChevronDown className="h-3 w-3" /> {group.length} log rows at {timestampOf(group[0])} (collapse)
-                       </button>
-                     )}
-                     {group.map((line, index) => renderLine(line, index, `${groupKey}:${index}`))}
+                      {group.map((line, index) => renderLine(
+                        line,
+                        index,
+                        `${groupKey}:${index}`,
+                        index === 0 && collapsible ? (
+                          <button
+                            type="button"
+                            aria-label={`Collapse ${group.length} log rows at ${timestampOf(group[0])}`}
+                            title="Collapse same-timestamp log rows"
+                            onClick={() => setExpandedLogGroups(prev => {
+                              const next = new Set(prev);
+                              next.delete(groupKey);
+                              return next;
+                            })}
+                            className="inline-flex text-white/60 hover:text-white"
+                          >
+                            <ChevronDown className="h-3 w-3" />
+                          </button>
+                        ) : undefined
+                      ))}
                    </React.Fragment>
                  );
                }
-               // Process the hidden rows as well so tool colouring remains
-               // correct for all subsequent timestamps.
-               const summary = group.map((line, index) => renderLine(line, index, `${groupKey}:hidden:${index}`));
                return (
                  <React.Fragment key={groupKey}>
-                   <button type="button" onClick={() => setExpandedLogGroups(prev => new Set(prev).add(groupKey))}
-                     className="flex items-center gap-1 w-full text-left text-white/70 hover:text-white py-1">
-                     <ChevronRight className="h-3 w-3" /> {group.length} log rows at {timestampOf(group[0])} — click to expand
-                   </button>
-                   {summary.length > 0 && <span className="hidden">{summary}</span>}
+                    {renderLine(
+                      group[0],
+                      0,
+                      `${groupKey}:first`,
+                      <button
+                        type="button"
+                        aria-label={`Expand ${group.length} log rows at ${timestampOf(group[0])}`}
+                        title={`Expand ${group.length} same-timestamp log rows`}
+                        onClick={() => setExpandedLogGroups(prev => new Set(prev).add(groupKey))}
+                        className="inline-flex text-white/60 hover:text-white"
+                      >
+                        <ChevronRight className="h-3 w-3" />
+                      </button>
+                    )}
                  </React.Fragment>
                );
              });
