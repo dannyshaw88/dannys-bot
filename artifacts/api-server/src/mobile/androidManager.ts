@@ -7432,10 +7432,11 @@ export async function switchToInstagramAccount(
   }
 
   if (!coords) {
-    // Primary search (exact text/content-desc) found nothing.  The currently-
-    // active account is often rendered differently in the switcher — it may
-    // lack a text/content-desc label and show only an avatar — so _findElem
-    // misses it even though the username still appears somewhere in the XML.
+    // Primary exact search found nothing. Instagram's switcher often puts
+    // relationship metadata after the username in the tappable row's
+    // content-desc (for example: "user, 5 follows and 2 more"). Match the
+    // username as the first bounded token of a live row instead of requiring
+    // the whole description to equal the username.
     // Check if the username appears ANYWHERE in the dump (any attribute).
     // Using simple includes() avoids regex escaping edge-cases entirely.
     const targetHasAccountNode =
@@ -7449,33 +7450,13 @@ export async function switchToInstagramAccount(
       return true;
     }
 
-    // Devices now log in ~10 accounts but the switcher sheet only shows the
-    // first 7-8 without scrolling. If the target wasn't in the initial dump,
-    // do up to 2 quick upward swipes and re-check after each one.
-    const { w: sw, h: sh } = getScreenSize(serial);
-    const swipeCx  = Math.round(sw * 0.5);
-    const swipeFrom = Math.round(sh * 0.65);
-    const swipeTo   = Math.round(sh * 0.35);
-    const SCROLL_ATTEMPTS = 2;
-    for (let s = 0; s < SCROLL_ATTEMPTS && !coords; s++) {
-      onLog?.(`  ↳ @${clean} not visible yet — scrolling switcher list (attempt ${s + 1}/${SCROLL_ATTEMPTS})…`);
-      await runAdb(adbPath, [
-        "-s", serial, "shell", "input", "swipe",
-        String(swipeCx), String(swipeFrom),
-        String(swipeCx), String(swipeTo),
-        "300",
-      ], 4000).catch(() => {});
-      await _sleep(400);
-      xml = await _uiDump(adbPath, serial).catch(() => "");
-      coords = _findVisibleAccountRow(xml, switcherScreenHeight, clean, `@${clean}`);
-      const targetHasAccountNodeAfterScroll =
-        new RegExp(`(?:content-desc|text)="(?:@)?${clean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"[^>]*bounds="`, "i").test(xml);
-      if (!coords && (xml.includes(`"@${clean}"`) || xml.includes(`"${clean}"`)) && !targetHasAccountNodeAfterScroll) {
-        // Already the active account — visible somewhere in the tree but no tappable row.
-        onLog?.(`  ↳ @${clean} is the currently active account — dismissing switcher`);
-        await runAdb(adbPath, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], 4000).catch(() => {});
-        return true;
-      }
+    if (!coords) {
+      const esc = clean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      coords = _findVisibleAccountRow(
+        xml,
+        switcherScreenHeight,
+        new RegExp(`(?:^|,\\s*)@?${esc}(?:,|$)`, "i"),
+      );
     }
 
     if (!coords) {
@@ -7619,7 +7600,7 @@ function _findElem(xml: string, ...candidates: string[]): { x: number; y: number
 function _findVisibleAccountRow(
   xml: string,
   screenHeight: number,
-  ...candidates: string[]
+  ...candidates: Array<string | RegExp>
 ): { x: number; y: number } | null {
   // The physical device height can exceed the accessibility window height
   // because Android reserves navigation/system-bar space. Prefer the live
@@ -7627,22 +7608,27 @@ function _findVisibleAccountRow(
   const rootBounds = xml.match(/<hierarchy[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
   const accessibilityBottom = rootBounds ? Number(rootBounds[4]) : screenHeight;
   for (const candidate of candidates) {
-    const esc = candidate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     for (const attr of ["content-desc", "text"]) {
-      const re = new RegExp(
-        `${attr}="${esc}"[^>]*bounds="\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]"`,
-        "i",
+      const nodeRe = new RegExp(
+        `${attr}="([^"]*)"[^>]*bounds="\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]"`,
+        "gi",
       );
-      const m = xml.match(re);
-      if (!m) continue;
-      const x1 = Number(m[1]);
-      const y1 = Number(m[2]);
-      const x2 = Number(m[3]);
-      const y2 = Number(m[4]);
-      // A real row is ~180 px high in the supplied dump. Keep margin for
-      // device scaling, but reject clipped slivers such as the 19 px node.
-      if (y2 - y1 < 100 || y2 > accessibilityBottom - 19) continue;
-      return { x: Math.floor((x1 + x2) / 2), y: Math.floor((y1 + y2) / 2) };
+      let m: RegExpExecArray | null;
+      while ((m = nodeRe.exec(xml)) !== null) {
+        const label = m[1];
+        const matches = typeof candidate === "string"
+          ? label.toLowerCase() === candidate.toLowerCase()
+          : (candidate.lastIndex = 0, candidate.test(label));
+        if (!matches) continue;
+        const x1 = Number(m[2]);
+        const y1 = Number(m[3]);
+        const x2 = Number(m[4]);
+        const y2 = Number(m[5]);
+        // A real row is ~180 px high in the supplied dump. Keep margin for
+        // device scaling, but reject clipped slivers such as the 19 px node.
+        if (y2 - y1 < 100 || y2 > accessibilityBottom - 19) continue;
+        return { x: Math.floor((x1 + x2) / 2), y: Math.floor((y1 + y2) / 2) };
+      }
     }
   }
   return null;
