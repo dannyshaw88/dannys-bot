@@ -7051,7 +7051,10 @@ export function AutomationSettingsPanel({
               <button
                 type="button"
                 disabled={fieldDisabled("updateBioText") || !bioSpinDraft.trim()}
-                onClick={() => setSpinPreview(resolveSpinSyntax(bioSpinDraft))}
+                onClick={() => {
+                  // Spin is preview-only: never replace the source text.
+                  setSpinPreview(resolveSpinSyntax(bioSpinDraft));
+                }}
                 className="h-8 px-3 text-xs rounded border border-border bg-background hover:bg-accent transition-colors font-medium disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Spin again
@@ -7061,18 +7064,29 @@ export function AutomationSettingsPanel({
               type="button"
               disabled={fieldDisabled("updateBioText") || !bioSpinDraft.trim()}
               onClick={() => {
-                if (spinPreview === null) {
-                  setSpinPreview(resolveSpinSyntax(bioSpinDraft));
-                } else {
-                  setBioSpinDraft(spinPreview);
-                  setSettings(s => ({ ...s, updateBioText: spinPreview }));
-                  setSpinPreview(null);
-                }
+                // Spin is always preview-only. The original text remains in
+                // the textarea until the user explicitly chooses Use this
+                // version.
+                setSpinPreview(resolveSpinSyntax(bioSpinDraft));
               }}
               className="h-8 px-4 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {spinPreview === null ? "Spin" : "Use this version"}
+              Spin
             </button>
+            {spinPreview !== null && (
+              <button
+                type="button"
+                disabled={fieldDisabled("updateBioText")}
+                onClick={() => {
+                  setBioSpinDraft(spinPreview);
+                  setSettings(s => ({ ...s, updateBioText: spinPreview }));
+                  setSpinPreview(null);
+                }}
+                className="h-8 px-4 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Use this version
+              </button>
+            )}
           </div>
         </DialogContent>
       </Dialog>
