@@ -3353,6 +3353,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     for (let i = 0; i < count; i++) {
       if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+      const feedTimingStartedAt = Date.now();
+      let feedTimingAfterScroll = feedTimingStartedAt;
+      let feedTimingAfterMainActions = feedTimingStartedAt;
+      let feedTimingAfterSecondaryActions = feedTimingStartedAt;
       // There is no previous content on the first scroll, so a backward
       // personality would have nothing meaningful to revisit. Keep the
       // session personality distribution for later scrolls.
@@ -3395,6 +3399,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           }
         }
       }
+      feedTimingAfterScroll = Date.now();
 
       // Roll all three action chances up front (independent draws, same
       // statistics as before) but DON'T act on any of them yet — first we
@@ -3893,6 +3898,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       } else {
         onLog?.(`View Feed ${i + 1}/${count}: no actions rolled this scroll`);
       }
+      feedTimingAfterMainActions = Date.now();
 
       // ── Tap Audio (music/song page) — independent of action bar ──────
       // On posts that carry an audio affordance (rotating disc icon at the
@@ -4266,10 +4272,31 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           onLog?.(`View Feed ${i + 1}/${count}: suggestions error — ${e?.message}`);
         }
       }
+      feedTimingAfterSecondaryActions = Date.now();
 
       if (i < count - 1) {
+        const feedTimingBeforeConfiguredDelay = Date.now();
         const delaySec = delayLoSec + Math.random() * (delayHiSec - delayLoSec);
         await sleepOrAbort(serial, Math.round(delaySec * 1000));
+        const feedTimingEndedAt = Date.now();
+        onLog?.(
+          `View Feed ${i + 1}/${count} timing — ` +
+          `scroll+safety=${((feedTimingAfterScroll - feedTimingStartedAt) / 1000).toFixed(1)}s, ` +
+          `main-actions=${((feedTimingAfterMainActions - feedTimingAfterScroll) / 1000).toFixed(1)}s, ` +
+          `secondary-actions=${((feedTimingAfterSecondaryActions - feedTimingAfterMainActions) / 1000).toFixed(1)}s, ` +
+          `configured-delay=${((feedTimingEndedAt - feedTimingBeforeConfiguredDelay) / 1000).toFixed(1)}s, ` +
+          `total=${((feedTimingEndedAt - feedTimingStartedAt) / 1000).toFixed(1)}s`,
+        );
+      } else {
+        const feedTimingEndedAt = Date.now();
+        onLog?.(
+          `View Feed ${i + 1}/${count} timing — ` +
+          `scroll+safety=${((feedTimingAfterScroll - feedTimingStartedAt) / 1000).toFixed(1)}s, ` +
+          `main-actions=${((feedTimingAfterMainActions - feedTimingAfterScroll) / 1000).toFixed(1)}s, ` +
+          `secondary-actions=${((feedTimingAfterSecondaryActions - feedTimingAfterMainActions) / 1000).toFixed(1)}s, ` +
+          `configured-delay=0.0s, ` +
+          `total=${((feedTimingEndedAt - feedTimingStartedAt) / 1000).toFixed(1)}s`,
+        );
       }
     }
     if (strayNavRecoveries > 0) {
