@@ -19,7 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import {
   Smartphone, RefreshCw, CheckCircle2, AlertTriangle,
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
-  ChevronLeft, Home, Power, Trash2,
+  ChevronLeft, ChevronRight, ChevronDown, Home, Power, Trash2,
   FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim,
   Palette, Plus, X, RotateCcw, Sun, Keyboard,
   Users, Globe, BarChart2, ClipboardList, Bug, ImagePlus, Tablet,
@@ -8834,6 +8834,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
   const [copiedCapture,  setCopiedCapture]  = React.useState(false);
   const [lastCapture,    setLastCapture]    = React.useState<string[] | null>(null);
   const [checkingInfo,   setCheckingInfo]   = React.useState(false);
+  const [expandedLogGroups, setExpandedLogGroups] = React.useState<Set<string>>(() => new Set());
 
   // Only auto-scroll when the user is already at (or near) the bottom.
   useEffect(() => {
@@ -9025,7 +9026,14 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
           ? <p className="text-white/30">No activity yet — taps, swipes, keys, and automation cycles will show up here.</p>
           : (() => {
             let currentTool: string | null = null;
-            return lines.map((l, i) => {
+             const timestampOf = (line: string) => line.match(/^\[([^\]]+)\]/)?.[1] ?? "";
+             const groups: string[][] = [];
+             for (const line of lines) {
+               const previous = groups[groups.length - 1];
+               if (previous && previous.length > 0 && timestampOf(previous[0]) === timestampOf(line)) previous.push(line);
+               else groups.push([line]);
+             }
+             const renderLine = (l: string, i: number, key: string) => {
               // Parse:  [HH:MM:SS AM/PM]  [Xm Ys / Xs]  message
               //         [HH:MM:SS AM/PM]               message   (no duration)
               const m   = l.match(/^\[([^\]]+)\]\s*(?:\[(\d+m \d+(?:\.\d+)?s|\d+(?:\.\d+)?s)\]\s*)?([\s\S]*)$/);
@@ -9080,14 +9088,47 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
               else if (currentTool === 'follow')        msgClass = 'text-blue-400';
               else if (currentTool === 'randomactions') msgClass = 'text-purple-400';
 
-              return (
-                <div key={i} className="flex min-w-0 py-[1px]">
+               return (
+                 <div key={key} className="flex min-w-0 py-[1px]">
                   <span className="text-white whitespace-nowrap shrink-0 select-none w-[5rem]">[{ts}]</span>
                   <span className="shrink-0 whitespace-nowrap text-white w-[5rem]">{dur ? `[${dur}]` : ''}</span>
                   <span className={`flex-1 min-w-0 break-words ${msgClass}`}>{msg}</span>
                 </div>
               );
-            });
+             };
+             return groups.map((group, groupIndex) => {
+               const collapsible = group.length > 5;
+               const groupKey = `${groupIndex}:${timestampOf(group[0])}`;
+               const expanded = expandedLogGroups.has(groupKey);
+               if (!collapsible || expanded) {
+                 return (
+                   <React.Fragment key={groupKey}>
+                     {collapsible && (
+                       <button type="button" onClick={() => setExpandedLogGroups(prev => {
+                         const next = new Set(prev);
+                         next.delete(groupKey);
+                         return next;
+                       })} className="flex items-center gap-1 w-full text-left text-white/60 hover:text-white py-1">
+                         <ChevronDown className="h-3 w-3" /> {group.length} log rows at {timestampOf(group[0])} (collapse)
+                       </button>
+                     )}
+                     {group.map((line, index) => renderLine(line, index, `${groupKey}:${index}`))}
+                   </React.Fragment>
+                 );
+               }
+               // Process the hidden rows as well so tool colouring remains
+               // correct for all subsequent timestamps.
+               const summary = group.map((line, index) => renderLine(line, index, `${groupKey}:hidden:${index}`));
+               return (
+                 <React.Fragment key={groupKey}>
+                   <button type="button" onClick={() => setExpandedLogGroups(prev => new Set(prev).add(groupKey))}
+                     className="flex items-center gap-1 w-full text-left text-white/70 hover:text-white py-1">
+                     <ChevronRight className="h-3 w-3" /> {group.length} log rows at {timestampOf(group[0])} — click to expand
+                   </button>
+                   {summary.length > 0 && <span className="hidden">{summary}</span>}
+                 </React.Fragment>
+               );
+             });
           })()
         }
         <div ref={bottomRef} />
