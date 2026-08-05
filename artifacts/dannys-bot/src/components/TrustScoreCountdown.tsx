@@ -14,6 +14,34 @@ type TimerResponse = {
   expiresAt?: number | null;
 };
 
+type TimerCheckpoint = { scoreId: string; remainingMs: number };
+
+function checkpointKey(serial: string, slotIdx: number): string {
+  return `mobile_ts_timer_${serial}_${slotIdx}`;
+}
+
+function readCheckpoint(serial: string, slotIdx: number, scoreId: string): number | null {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(checkpointKey(serial, slotIdx)) ?? "null") as Partial<TimerCheckpoint> | null;
+    return parsed?.scoreId === scoreId && typeof parsed.remainingMs === "number" && parsed.remainingMs > 0
+      ? parsed.remainingMs
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCheckpoint(serial: string, slotIdx: number, scoreId: string, remainingMs: number): void {
+  try {
+    localStorage.setItem(
+      checkpointKey(serial, slotIdx),
+      JSON.stringify({ scoreId, remainingMs: Math.max(0, Math.round(remainingMs)) }),
+    );
+  } catch {
+    // The server remains authoritative when browser storage is unavailable.
+  }
+}
+
 function formatRemaining(ms: number): string {
   const totalMinutes = Math.max(0, Math.ceil(ms / 60_000));
   const hours = Math.floor(totalMinutes / 60);
@@ -73,16 +101,30 @@ export function TrustScoreCountdown({
       );
       if (!response.ok) throw new Error("Timer request failed");
       const data = await response.json() as TimerResponse;
-      if (data.scoreId !== liveScoreId || data.paused || !data.running || !data.remainingMs) {
+      if (data.scoreId !== liveScoreId || data.paused) {
         setRemainingMs(null);
         setExpiresAt(null);
         return;
       }
-      setRemainingMs(data.remainingMs);
+      // A device can disappear from the Accounts list and later reappear.
+      // Preserve the last displayed value across that unmount/remount instead
+      // of allowing the server's wall-clock expiry to consume the timer while
+      // the phone is disconnected.
+      const checkpoint = readCheckpoint(serial, slotIdx, liveScoreId);
+      const serverRemaining = typeof data.remainingMs === "number" ? data.remainingMs : 0;
+      const effectiveRemaining = Math.max(serverRemaining, checkpoint ?? 0);
+      if (!effectiveRemaining) {
+        setRemainingMs(null);
+        setExpiresAt(null);
+        return;
+      }
+      setRemainingMs(effectiveRemaining);
       setExpiresAt(
-        typeof data.expiresAt === "number" && Number.isFinite(data.expiresAt)
+        checkpoint && checkpoint > serverRemaining
+          ? Date.now() + effectiveRemaining
+          : typeof data.expiresAt === "number" && Number.isFinite(data.expiresAt)
           ? data.expiresAt
-          : Date.now() + data.remainingMs,
+          : Date.now() + effectiveRemaining,
       );
     } catch {
       // A transient request failure should not make a persisted timer vanish.
@@ -146,6 +188,11 @@ export function TrustScoreCountdown({
     }, 1000);
     return () => window.clearInterval(interval);
   }, [advance, expiresAt, remainingMs]);
+
+  useEffect(() => {
+    if (remainingMs === null || !scoreId) return;
+    writeCheckpoint(serial, slotIdx, scoreId, remainingMs);
+  }, [remainingMs, scoreId, serial, slotIdx]);
 
   if (remainingMs === null || !scoreId || !nextScore) return null;
 
