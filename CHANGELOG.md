@@ -1,3 +1,11 @@
+## [1.2.388] — 2026-08-05
+
+### Fixed — Exact Males Only bio matching
+
+- Username and full-name matching remain substring-based.
+- Bio matching now requires an exact token bounded by non-letter/non-number
+  characters, preventing names from matching inside ordinary words.
+
 ## [1.2.387] — 2026-08-05
 
 ### Added — Males Only match diagnostics

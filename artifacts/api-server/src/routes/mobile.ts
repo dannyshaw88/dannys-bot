@@ -9327,9 +9327,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   ["full name", profile?.fullName ?? ""],
                   ["bio", profile?.biography ?? ""],
                 ] as const;
+                const bioHasExactToken = (bio: string, name: string) => {
+                  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+                  return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?:$|[^\\p{L}\\p{N}])`, "iu").test(bio);
+                };
                 const matchedEntry = allowedNames
                   .flatMap(name => profileFields
-                    .filter(([, value]) => value.toLocaleLowerCase().includes(name))
+                    .filter(([field, value]) =>
+                      field === "bio"
+                        ? bioHasExactToken(value, name)
+                        : value.toLocaleLowerCase().includes(name),
+                    )
                     .map(([field]) => ({ name, field })))
                   [0];
                 matchesAllowedName = Boolean(matchedEntry);
@@ -10389,9 +10397,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     ["full name", fullName],
                     ["bio", biography],
                   ] as const;
+                  const bioHasExactToken = (bio: string, name: string) => {
+                    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+                    return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?:$|[^\\p{L}\\p{N}])`, "iu").test(bio);
+                  };
                   const matchedEntry = allowedNames
                     .flatMap(name => profileFields
-                      .filter(([, value]) => value.toLocaleLowerCase().includes(name))
+                      .filter(([field, value]) =>
+                        field === "bio"
+                          ? bioHasExactToken(value, name)
+                          : value.toLocaleLowerCase().includes(name),
+                      )
                       .map(([field]) => ({ name, field })))
                     [0];
                   const matched = Boolean(matchedEntry);
