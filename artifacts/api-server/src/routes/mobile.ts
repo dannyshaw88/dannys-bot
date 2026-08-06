@@ -3087,6 +3087,44 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     };
   }
 
+  /**
+   * Executes a content-scroll using the hardware-specific gesture profile.
+   * The profile is keyed by serial, so one phone can never inherit another
+   * phone's swipe geometry. If a device has no profile yet, callers retain
+   * their existing generated coordinates and duration.
+   */
+  async function deviceProfileSwipe(
+    serial: string,
+    fallback: { x1: number; y1: number; x2: number; y2: number; durationMs: number },
+    source: string,
+  ): Promise<{ x1: number; y1: number; x2: number; y2: number; durationMs: number; profile: boolean }> {
+    let configured: DevicePrefs["swipeGesture"] | undefined;
+    try { configured = loadInstanceConfigs()[serial]?.devicePrefs?.swipeGesture; } catch { configured = undefined; }
+    const size = getScreenSize(serial);
+    const clamp = (value: number, max: number) => Math.max(0, Math.min(max - 1, Math.round(value)));
+    if (!configured) {
+      await android.swipe(serial, fallback.x1, fallback.y1, fallback.x2, fallback.y2, fallback.durationMs);
+      return { ...fallback, profile: false };
+    }
+    const jitterX = Number.isFinite(configured.jitterX) ? configured.jitterX : 0;
+    const jitterY = Number.isFinite(configured.jitterY) ? configured.jitterY : 0;
+    const dx = Math.round((Math.random() * 2 - 1) * jitterX);
+    const dy = Math.round((Math.random() * 2 - 1) * jitterY);
+    const minDuration = Math.min(configured.durationMinMs ?? fallback.durationMs, configured.durationMaxMs ?? fallback.durationMs);
+    const maxDuration = Math.max(configured.durationMinMs ?? fallback.durationMs, configured.durationMaxMs ?? fallback.durationMs);
+    const durationMs = Math.max(1, Math.round(minDuration + Math.random() * (maxDuration - minDuration)));
+    const path = {
+      x1: clamp(configured.x1 + dx, size.w),
+      y1: clamp(configured.y1 + dy, size.h),
+      x2: clamp(configured.x2 + dx, size.w),
+      y2: clamp(configured.y2 + dy, size.h),
+      durationMs,
+    };
+    logger.info({ serial, source, from: [path.x1, path.y1], to: [path.x2, path.y2], durationMs, profile: true }, "[mobile-input] device-profile swipe");
+    await android.swipe(serial, path.x1, path.y1, path.x2, path.y2, path.durationMs);
+    return { ...path, profile: true };
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // TOOL: VIEW FEED
   // Functions: runCheckFeedLoop()
@@ -3448,7 +3486,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const sv = rollScrollVelocity(h, feedScrollWeights, /*allowBack=*/i > 0, /*safeStartFrac=*/0.88);
       onLog?.(`View Feed ${i + 1}/${count} [${sv.mode}]`);
       logger.info({ serial, target: "feed-scroll", mode: sv.mode, from: [x, sv.fromY], to: [x, sv.toY], durationMs: sv.duration }, "[check-feed] swipe");
-      await android.swipe(serial, x, sv.fromY, x, sv.toY, sv.duration);
+      await deviceProfileSwipe(serial, { x1: x, y1: sv.fromY, x2: x, y2: sv.toY, durationMs: sv.duration }, "feed-scroll");
       await sleepOrAbort(serial, 180);
       await verifyStillInInstagram();
 
@@ -4082,7 +4120,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 const _atSY2 = Math.round(_atH * 0.30);
                 const _atSX  = Math.round(_atW / 2);
                 const _atDur = 300 + Math.round(Math.random() * 400);
-                await android.swipe(serial, _atSX, _atSY1, _atSX, _atSY2, _atDur);
+                await deviceProfileSwipe(serial, { x1: _atSX, y1: _atSY1, x2: _atSX, y2: _atSY2, durationMs: _atDur }, "feed-audio-profile-scroll");
                 await sleepOrAbort(serial, 280);
                 if (!_atDidTap && Math.random() < _atTapChance) {
                   // Tap a random clickable item in the content area.
@@ -4192,7 +4230,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 const _chSY2 = Math.round(_chH * 0.30);
                 const _chSX  = Math.round(_chW / 2);
                 const _chDur = 300 + Math.round(Math.random() * 400);
-                await android.swipe(serial, _chSX, _chSY1, _chSX, _chSY2, _chDur);
+                await deviceProfileSwipe(serial, { x1: _chSX, y1: _chSY1, x2: _chSX, y2: _chSY2, durationMs: _chDur }, "feed-hashtag-profile-scroll");
                 await sleepOrAbort(serial, 280);
                 if (!_chDidTapPost && Math.random() < _chTapChance) {
                   // Tap a random grid post using the grid_card_layout_container nodes.
@@ -4288,7 +4326,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 const _caSY1 = Math.round(_caH * 0.75);
                 const _caSY2 = Math.round(_caH * 0.30);
                 const _caDur = 350 + Math.round(Math.random() * 350);
-                await android.swipe(serial, Math.round(_caW / 2), _caSY1, Math.round(_caW / 2), _caSY2, _caDur);
+                await deviceProfileSwipe(serial, { x1: Math.round(_caW / 2), y1: _caSY1, x2: Math.round(_caW / 2), y2: _caSY2, durationMs: _caDur }, "feed-author-profile-scroll");
                 const _caRenderWaitMs = 2500 + Math.round(Math.random() * 7500);
                 await sleepOrAbort(serial, _caRenderWaitMs);
               }
@@ -5855,7 +5893,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     const _aeSY1 = Math.round(_aeH * 0.75);
                     const _aeSY2 = Math.round(_aeH * 0.30);
                     const _aeDur = 350 + Math.round(Math.random() * 350);
-                    await android.swipe(serial, Math.round(_aeW / 2), _aeSY1, Math.round(_aeW / 2), _aeSY2, _aeDur);
+                    await deviceProfileSwipe(serial, { x1: Math.round(_aeW / 2), y1: _aeSY1, x2: Math.round(_aeW / 2), y2: _aeSY2, durationMs: _aeDur }, "explore-author-scroll");
                     const _aeRenderWaitMs = 2500 + Math.round(Math.random() * 7500);
                     await sleepOrAbort(serial, _aeRenderWaitMs);
                   }
@@ -5895,7 +5933,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const esv = rollScrollVelocity(h, exploreScrollWeights, /*allowBack=*/i > 0, /*safeStartFrac=*/0.80);
         onLog?.(`View Explore ${i + 1}/${scrollCount}: next swipe [${esv.mode}]`);
         logger.info({ serial, source: "explore-scroll", mode: esv.mode, from: [x, esv.fromY], to: [x, esv.toY], durationMs: esv.duration }, "[mobile-input] swipe");
-        await android.swipe(serial, x, esv.fromY, x, esv.toY, esv.duration);
+        await deviceProfileSwipe(serial, { x1: x, y1: esv.fromY, x2: x, y2: esv.toY, durationMs: esv.duration }, "explore-scroll");
         await sleepOrAbort(serial, 800);
       }
     }
@@ -5982,7 +6020,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const rsv = rollScrollVelocity(h, reelsScrollWeights, /*allowBack=*/false, /*safeStartFrac=*/0.80);
       onLog?.(`${reelLabel}: advance swipe [${rsv.mode}]`);
       logger.info({ serial, source: "reels-advance", mode: rsv.mode, from: [rx, rsv.fromY], to: [rx, rsv.toY], durationMs: rsv.duration }, "[mobile-input] swipe");
-      await android.swipe(serial, rx, rsv.fromY, rx, rsv.toY, rsv.duration);
+      await deviceProfileSwipe(serial, { x1: rx, y1: rsv.fromY, x2: rx, y2: rsv.toY, durationMs: rsv.duration }, "reels-advance");
     };
 
     for (let i = 0; i < totalReels; i++) {
@@ -6378,7 +6416,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               if (isCycleAborted(serial)) throw new Error("cycle-aborted");
               const _cfY = Math.round(h * 0.75);
               const _ctY = Math.round(h * 0.30);
-              await android.swipe(serial, _cx, _cfY, _cx, _ctY, 400 + Math.round(Math.random() * 200));
+              await deviceProfileSwipe(serial, { x1: _cx, y1: _cfY, x2: _cx, y2: _ctY, durationMs: 400 + Math.round(Math.random() * 200) }, "reels-author-profile-scroll");
               const _dwell = 2500 + Math.round(Math.random() * 7500);
               onLog?.(`${_vrCaPfx}: author scroll ${_s + 1}/${_vrCaScrolls} — dwell ${(_dwell / 1000).toFixed(1)}s`);
               await sleepOrAbort(serial, _dwell);
@@ -8747,7 +8785,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     for (let i = 0; i < rows; i++) {
       if (isCycleAborted(serial)) throw new Error("cycle-aborted");
       logger.info({ serial, source: "inject-profile-grid-scroll-down", from: [x, y1], to: [x, y2] }, "[mobile-input] swipe");
-      await android.swipe(serial, x, y1, x, y2, 500 + Math.round(Math.random() * 200));
+      await deviceProfileSwipe(serial, { x1: x, y1: y1, x2: x, y2: y2, durationMs: 500 + Math.round(Math.random() * 200) }, "inject-profile-grid-scroll-down");
       // Wait 4–10 seconds so images fully render before the next scroll.
       const renderWait = 4000 + Math.round(Math.random() * 6000);
       onLog?.(`Inject Browsing: waiting ${(renderWait / 1000).toFixed(1)}s for media to render…`);
@@ -8764,7 +8802,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         onLog?.(`Inject Browsing: scrolling back to top for highlights — ${rows} row(s)`);
         for (let _hsi = 0; _hsi < rows; _hsi++) {
           logger.info({ serial, source: "inject-profile-grid-scroll-back-for-highlights", from: [Math.round(w / 2), Math.round(h * 0.35)], to: [Math.round(w / 2), Math.round(h * 0.80)], durationMs: 400 }, "[mobile-input] swipe");
-          await android.swipe(serial, Math.round(w / 2), Math.round(h * 0.35), Math.round(w / 2), Math.round(h * 0.80), 400);
+          await deviceProfileSwipe(serial, { x1: Math.round(w / 2), y1: Math.round(h * 0.35), x2: Math.round(w / 2), y2: Math.round(h * 0.80), durationMs: 400 }, "inject-profile-grid-scroll-back");
           await sleepOrAbort(serial, 350);
         }
         await sleepOrAbort(serial, 500);
@@ -8827,7 +8865,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // on the base profile grid (no viewer open) exits the profile entirely.
       onLog?.("Inject Browsing: no post opened here — scrolling up and retrying via a11y");
       logger.info({ serial }, "[inject-browsing] findFeedActionIcons=null, isInPostViewer=false — still on profile grid; scrolling up and re-scanning a11y tree for image_button nodes");
-      await android.swipe(serial, x, y2, x, y1, 500);
+      await deviceProfileSwipe(serial, { x1: x, y1: y2, x2: x, y2: y1, durationMs: 500 }, "inject-profile-grid-retry-scroll");
       await sleepOrAbort(serial, 800);
       const retryPosts = await android.findProfileGridPosts(serial, onLog).catch(() => [] as { x: number; y: number; cd: string }[]);
       if (retryPosts.length === 0) {
@@ -9764,7 +9802,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // as long as we don't scroll MORE rows than we scrolled down.
             for (let _si = 0; _si < didScroll; _si++) {
               logger.info({ serial, source: "inject-follow-profile-grid-scroll-back", from: [Math.round(bw / 2), Math.round(bh * 0.35)], to: [Math.round(bw / 2), Math.round(bh * 0.80)], durationMs: 400 }, "[mobile-input] swipe");
-              await android.swipe(serial, Math.round(bw / 2), Math.round(bh * 0.35), Math.round(bw / 2), Math.round(bh * 0.80), 400);
+              await deviceProfileSwipe(serial, { x1: Math.round(bw / 2), y1: Math.round(bh * 0.35), x2: Math.round(bw / 2), y2: Math.round(bh * 0.80), durationMs: 400 }, "inject-follow-profile-grid-scroll-back");
               await sleepOrAbort(serial, 350);
             }
             await sleepOrAbort(serial, 500);
