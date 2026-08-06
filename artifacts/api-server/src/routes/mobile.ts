@@ -8432,9 +8432,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
     }
 
-    // 4. Put the complete bio in the Android clipboard from the backend and
-    //    paste it through the focused Bio field. This avoids adb input text's
-    //    KeyCharacterMap path, which can crash on non-ASCII characters.
+    // 4. Replace the focused Bio field using the ADB shell text-input path.
     {
       const tools = android.detectToolset();
       const adb = tools.adb.path ?? "";
@@ -8443,10 +8441,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           "KEYCODE_CTRL_LEFT", "KEYCODE_A"], { encoding: "utf8", timeout: 2000 });
         await sleepOrAbort(serial, 400);
       }
-      await android.setClipboard(serial, bioText);
-      await sleepOrAbort(serial, 250);
-      await android.keyevent(serial, "KEYCODE_PASTE");
-      onLog?.(`Update Bio: pasted bio text from backend clipboard (${bioText.length} chars)`);
+      await android.inputText(serial, bioText);
+      onLog?.(`Update Bio: entered bio text via adb input (${bioText.length} chars)`);
     }
     await sleepOrAbort(serial, 800 + Math.round(Math.random() * 200));
 
@@ -9592,11 +9588,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // the × clear button by resource-id, or falls back to backspace-over-
         // text using the EditText node's text attribute (no coordinates used).
         await android.clearInstagramSearchBar(serial, (msg) => onLog?.(`  ${msg}`));
-        // Use the backend clipboard and native paste rather than adb shell
-        // input text, keeping username entry on the same path as Update Bio.
-        await android.setClipboard(serial, `@${username}`);
-        await sleepOrAbort(serial, 250);
-        await android.keyevent(serial, "KEYCODE_PASTE");
+        // Use the ADB shell text-input path for the target username.
+        await android.inputText(serial, `@${username}`);
         // Small settle before handing off to findAndTapUserInSearch, which
         // now polls the dump internally (up to 4 attempts × 1.5 s) so the
         // results have time to load from Instagram's network.
@@ -11869,16 +11862,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
-  // Manual mirror paste must use Android's clipboard service followed by the
-  // native paste key event. `adb shell input text` is not a reliable paste
-  // operation for Instagram fields: it can lose line breaks and punctuation
-  // even when the same text is available in the desktop clipboard.
+  // Manual mirror paste intentionally uses the ADB shell text-input path.
+  // Some Android builds reject or silently ignore `cmd clipboard set` from
+  // the host, while `adb shell input text` is the path that works reliably
+  // with the connected phone.
   app.post("/api/mobile/devices/:serial/input/clipboard-paste", async (req: Request, res: Response) => {
     try {
       const input = inputTextSchema.parse(req.body);
       const serial = p(req, "serial");
-      await android.setClipboard(serial, input.text);
-      await android.keyevent(serial, "KEYCODE_PASTE");
+      await android.inputText(serial, input.text);
       res.json({ ok: true });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });

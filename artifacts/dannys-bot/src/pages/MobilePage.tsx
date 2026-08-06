@@ -1125,11 +1125,8 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
           ? await electronClipboard().catch(() => "")
           : await navigator.clipboard.readText().catch(() => "");
         if (text) {
-          // Keep manual mirror paste on the same path as Update Bio and
-          // Follow: write the complete value to Android's clipboard, then
-          // fire KEYCODE_PASTE. `adb input text` is not equivalent here — it
-          // drops or mangles characters such as line breaks, @, and emoji in
-          // some Instagram editors.
+          // Mirror Paste uses the ADB shell text-input path. The backend
+          // translates this desktop clipboard value into adb input text.
           const r = await fetch(`${base}/input/clipboard-paste`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
