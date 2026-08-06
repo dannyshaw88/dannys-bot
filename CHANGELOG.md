@@ -1,3 +1,9 @@
+## [1.2.396] — 2026-08-06
+
+### Fixed — View Feed live-node action validation
+
+- Restore fresh accessibility-node validation before each Like, repost, DM share, and Save action so stale coordinates cannot be reused after the feed changes.
+
 ## [1.2.395] — 2026-08-06
 
 ### Fixed — Inject Browsing Debugging Log grouping
