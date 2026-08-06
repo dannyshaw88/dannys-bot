@@ -1,3 +1,9 @@
+## [1.2.391] — 2026-08-06
+
+### Fixed — Bio Spin line breaks
+
+- Bio Spin now preserves line breaks and blank lines when entering multi-line Instagram bios.
+
 ## [1.2.390] — 2026-08-06
 
 ### Fixed — Non-blocking Windows ADB input
