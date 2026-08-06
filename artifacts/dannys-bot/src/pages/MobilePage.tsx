@@ -964,7 +964,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
           clearTimeout(pendingSingleTapRef.current.timer);
           pendingSingleTapRef.current = null;
         }
-        addLog(`[manual] Account-switcher hold [held ${durationMs}ms] — resolving Profile tab from live accessibility tree`);
+        addLog(`[manual] Account-switcher hold recognized [held ${durationMs}ms] — resolving Profile tab before dispatch`);
         try {
           const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/profile-tab-longpress`, {
             method: "POST",
@@ -976,7 +976,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
             addLog(`Long-press FAILED (${r.status}) — ${body?.error ?? "no error detail"}`);
           } else {
             const body = await r.json().catch(() => null);
-            if (body?.node) addLog(`Long-press target resolved from live accessibility tree at (${body.node.x},${body.node.y})`);
+            if (body?.node) addLog(`Long-press dispatched to resolved Profile tab at (${body.node.x},${body.node.y})`);
           }
         } catch (err: any) {
           addLog(`Long-press FAILED — ${err?.message ?? "network error"}`);

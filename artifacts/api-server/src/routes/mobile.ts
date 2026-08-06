@@ -11848,13 +11848,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.post("/api/mobile/devices/:serial/input/profile-tab-longpress", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
+      logger.info({ serial }, "[manual-account-switch] resolving profile tab before long-press");
       const profileTab = await android.findInstagramProfileTab(serial);
       if (!profileTab) {
+        logger.warn({ serial }, "[manual-account-switch] profile tab unavailable; long-press not dispatched");
         res.status(404).json({ error: "Instagram Profile tab was not found in the live accessibility tree" });
         return;
       }
+      logger.info({ serial, profileTab }, "[manual-account-switch] profile target resolved; dispatching long-press");
       await android.swipe(serial, profileTab.x, profileTab.y, profileTab.x, profileTab.y, 2000);
-      res.json({ ok: true, target: "profile-tab", node: profileTab });
+      logger.info({ serial, profileTab }, "[manual-account-switch] long-press dispatched");
+      res.json({ ok: true, dispatched: true, target: "profile-tab", node: profileTab });
     } catch (e: any) {
       res.status(400).json({ error: e?.message ?? "Profile-tab long-press failed" });
     }
