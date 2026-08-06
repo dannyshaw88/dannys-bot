@@ -2512,14 +2512,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const allowed = z.object({
         dismissDirection: z.enum(["auto", "left", "up"]).optional(),
         swipeGesture: z.object({
-          x1: z.number().finite().int().nonnegative(),
-          y1: z.number().finite().int().nonnegative(),
-          x2: z.number().finite().int().nonnegative(),
-          y2: z.number().finite().int().nonnegative(),
-          durationMinMs: z.number().finite().int().min(100).max(3000),
-          durationMaxMs: z.number().finite().int().min(100).max(3000),
-          jitterX: z.number().finite().int().min(0).max(500),
-          jitterY: z.number().finite().int().min(0).max(500),
+          x1: z.number().finite(),
+          y1: z.number().finite(),
+          x2: z.number().finite(),
+          y2: z.number().finite(),
+          durationMinMs: z.number().finite(),
+          durationMaxMs: z.number().finite(),
+          jitterX: z.number().finite(),
+          jitterY: z.number().finite(),
         }).optional(),
       }).parse(req.body);
       const cfg = loadInstanceConfigs();

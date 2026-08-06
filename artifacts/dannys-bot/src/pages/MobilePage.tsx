@@ -8111,6 +8111,10 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const [swipeProgress, setSwipeProgress] = React.useState<number | null>(null);
   const [swipeTestPath, setSwipeTestPath] = React.useState<SwipeGesture | null>(null);
   const [swipeOpen, setSwipeOpen] = React.useState(false);
+  const swipeCanvasRef = React.useRef<SVGSVGElement | null>(null);
+  const swipeDragRef = React.useRef<{ kind: "start" | "end" | "line"; dx: number; dy: number; base: SwipeGesture } | null>(null);
+  const swipeGestureRef = React.useRef(swipeGesture);
+  React.useEffect(() => { swipeGestureRef.current = swipeGesture; }, [swipeGesture]);
 
   React.useEffect(() => {
     if (!serial) return;
@@ -8139,6 +8143,56 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
         body: JSON.stringify({ swipeGesture: next }),
       });
     } finally { setSwipeSaving(false); }
+  };
+
+  const updateSwipeFromPointer = (event: React.PointerEvent<SVGSVGElement>) => {
+    const drag = swipeDragRef.current;
+    const svg = swipeCanvasRef.current;
+    if (!drag || !svg) return;
+    const rect = svg.getBoundingClientRect();
+    const point = {
+      x: ((event.clientX - rect.left) / rect.width) * swipeResolution.w,
+      y: ((event.clientY - rect.top) / rect.height) * swipeResolution.h,
+    };
+    const clamp = (value: number, max: number) => Math.max(0, Math.min(max, Math.round(value)));
+    const x = clamp(point.x - drag.dx, swipeResolution.w - 1);
+    const y = clamp(point.y - drag.dy, swipeResolution.h - 1);
+    const base = drag.base;
+    if (drag.kind === "start") setSwipeGesture({ ...base, x1: x, y1: y });
+    else if (drag.kind === "end") setSwipeGesture({ ...base, x2: x, y2: y });
+    else {
+      const deltaX = x - (base.x1 + drag.dx);
+      const deltaY = y - (base.y1 + drag.dy);
+      setSwipeGesture({
+        ...base,
+        x1: Math.max(0, Math.min(swipeResolution.w - 1, Math.round(base.x1 + deltaX))),
+        y1: Math.max(0, Math.min(swipeResolution.h - 1, Math.round(base.y1 + deltaY))),
+        x2: Math.max(0, Math.min(swipeResolution.w - 1, Math.round(base.x2 + deltaX))),
+        y2: Math.max(0, Math.min(swipeResolution.h - 1, Math.round(base.y2 + deltaY))),
+      });
+    }
+  };
+
+  const startSwipeDrag = (kind: "start" | "end" | "line", event: React.PointerEvent<SVGElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const svg = swipeCanvasRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const point = {
+      x: ((event.clientX - rect.left) / rect.width) * swipeResolution.w,
+      y: ((event.clientY - rect.top) / rect.height) * swipeResolution.h,
+    };
+    const base = swipeGesture;
+    const anchor = kind === "start" ? { x: base.x1, y: base.y1 } : kind === "end" ? { x: base.x2, y: base.y2 } : { x: base.x1, y: base.y1 };
+    swipeDragRef.current = { kind, dx: point.x - anchor.x, dy: point.y - anchor.y, base };
+    svg.setPointerCapture(event.pointerId);
+  };
+
+  const finishSwipeDrag = () => {
+    const drag = swipeDragRef.current;
+    swipeDragRef.current = null;
+    if (drag) saveSwipeGesture(swipeGestureRef.current);
   };
 
   const testSwipeGesture = async () => {
@@ -8469,37 +8523,48 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
               </div>
               <button className="text-muted-foreground hover:text-foreground" onClick={() => setSwipeOpen(false)}>✕</button>
             </div>
-            <div className="flex justify-center">
-              <div className="relative border-2 border-border bg-muted/30 rounded-lg overflow-hidden" style={{ width: 260, height: Math.min(520, 260 * swipeResolution.h / swipeResolution.w) }}>
-                <svg viewBox={`0 0 ${swipeResolution.w} ${swipeResolution.h}`} className="absolute inset-0 h-full w-full">
-                  <line x1={(swipeTestPath ?? swipeGesture).x1} y1={(swipeTestPath ?? swipeGesture).y1} x2={(swipeTestPath ?? swipeGesture).x2} y2={(swipeTestPath ?? swipeGesture).y2} stroke="currentColor" strokeWidth={Math.max(8, swipeResolution.w / 90)} strokeLinecap="round" opacity={swipeProgress === null ? 0.7 : 0.25} />
-                  <circle cx={(swipeTestPath ?? swipeGesture).x1} cy={(swipeTestPath ?? swipeGesture).y1} r={swipeResolution.w / 45} fill="hsl(var(--primary))" />
-                  <circle cx={(swipeTestPath ?? swipeGesture).x2} cy={(swipeTestPath ?? swipeGesture).y2} r={swipeResolution.w / 45} fill="hsl(var(--destructive))" />
-                  {swipeProgress !== null && (
-                    <circle
-                      cx={(swipeTestPath ?? swipeGesture).x1 + ((swipeTestPath ?? swipeGesture).x2 - (swipeTestPath ?? swipeGesture).x1) * swipeProgress}
-                      cy={(swipeTestPath ?? swipeGesture).y1 + ((swipeTestPath ?? swipeGesture).y2 - (swipeTestPath ?? swipeGesture).y1) * swipeProgress}
-                      r={swipeResolution.w / 32}
-                      fill="hsl(var(--primary))"
-                      stroke="white"
-                      strokeWidth={Math.max(4, swipeResolution.w / 180)}
-                    />
-                  )}
-                </svg>
+            <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_280px] gap-5 items-start">
+              <div className="order-2 md:order-1 space-y-4">
+                <p className="text-xs text-muted-foreground">Drag either endpoint or the line to set the swipe coordinates automatically.</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {(["x1", "y1", "x2", "y2", "durationMinMs", "durationMaxMs", "jitterX", "jitterY"] as const).map(key => (
+                    <label key={key} className="text-xs text-muted-foreground">{key}
+                      <input type="number"
+                        value={swipeGesture[key]} onChange={e => saveSwipeGesture({ ...swipeGesture, [key]: Number(e.target.value) })}
+                        className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
+                    </label>
+                  ))}
+                </div>
+                <div className="flex justify-start gap-2">
+                  <Button type="button" variant="outline" onClick={() => setSwipeOpen(false)}>Done</Button>
+                  <Button type="button" onClick={testSwipeGesture} disabled={swipeTesting || swipeSaving}>{swipeTesting ? "Testing…" : "Test swipe"}</Button>
+                </div>
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              {(["x1", "y1", "x2", "y2", "durationMinMs", "durationMaxMs", "jitterX", "jitterY"] as const).map(key => (
-                <label key={key} className="text-xs text-muted-foreground">{key}
-                  <input type="number" min={key.startsWith("duration") ? 100 : 0} max={key.startsWith("duration") ? 3000 : 500}
-                    value={swipeGesture[key]} onChange={e => saveSwipeGesture({ ...swipeGesture, [key]: Number(e.target.value) })}
-                    className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
-                </label>
-              ))}
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setSwipeOpen(false)}>Done</Button>
-              <Button type="button" onClick={testSwipeGesture} disabled={swipeTesting || swipeSaving}>{swipeTesting ? "Testing…" : "Test swipe"}</Button>
+              <div className="order-1 md:order-2 flex justify-center">
+                <div className="relative border-2 border-border bg-muted/30 rounded-lg overflow-hidden" style={{ width: 260, height: Math.min(520, 260 * swipeResolution.h / swipeResolution.w) }}>
+                  <svg ref={swipeCanvasRef} viewBox={`0 0 ${swipeResolution.w} ${swipeResolution.h}`} className="absolute inset-0 h-full w-full touch-none"
+                    onPointerMove={updateSwipeFromPointer} onPointerUp={finishSwipeDrag} onPointerCancel={finishSwipeDrag}>
+                    <line x1={swipeGesture.x1} y1={swipeGesture.y1} x2={swipeGesture.x2} y2={swipeGesture.y2}
+                      stroke="currentColor" strokeWidth={Math.max(8, swipeResolution.w / 90)} strokeLinecap="round"
+                      opacity={swipeProgress === null ? 0.7 : 0.25} className="cursor-move"
+                      onPointerDown={e => startSwipeDrag("line", e)} />
+                    <circle cx={swipeGesture.x1} cy={swipeGesture.y1} r={swipeResolution.w / 45} fill="hsl(var(--primary))"
+                      className="cursor-grab" onPointerDown={e => startSwipeDrag("start", e)} />
+                    <circle cx={swipeGesture.x2} cy={swipeGesture.y2} r={swipeResolution.w / 45} fill="hsl(var(--destructive))"
+                      className="cursor-grab" onPointerDown={e => startSwipeDrag("end", e)} />
+                    {swipeProgress !== null && (
+                      <circle
+                        cx={(swipeTestPath ?? swipeGesture).x1 + ((swipeTestPath ?? swipeGesture).x2 - (swipeTestPath ?? swipeGesture).x1) * swipeProgress}
+                        cy={(swipeTestPath ?? swipeGesture).y1 + ((swipeTestPath ?? swipeGesture).y2 - (swipeTestPath ?? swipeGesture).y1) * swipeProgress}
+                        r={swipeResolution.w / 32}
+                        fill="hsl(var(--primary))"
+                        stroke="white"
+                        strokeWidth={Math.max(4, swipeResolution.w / 180)}
+                      />
+                    )}
+                  </svg>
+                </div>
+              </div>
             </div>
           </div>
         </div>
