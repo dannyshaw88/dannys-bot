@@ -1,3 +1,10 @@
+## [1.2.399] — 2026-08-06
+
+### Fixed — Update Bio navigation and Reels debugging-log grouping
+
+- Press a second guarded Back after saving a bio so shuffled tools start outside the surrounding Edit Profile/Settings surface.
+- Display Reels debugging-log rows in red and collapse consecutive Reels activity behind the chevron while preserving full Copy/Export content.
+
 ## [1.2.398] — 2026-08-06
 
 ### Added — Directional swipe start jitter

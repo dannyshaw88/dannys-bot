@@ -9261,12 +9261,16 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                /\bInject Browsing:\s+(?:waiting for media to render|media .*?render|no .*?media)/i.test(line);
              const isStoryTrayBurstLine = (line: string) =>
                /\bStory tray:\s+/i.test(line);
+             const isReelsBurstLine = (line: string) =>
+               /\b(?:Reel|View Reels):\s+/i.test(line) ||
+               /▶\s*View Reels\b/i.test(line);
              const groups: string[][] = [];
              for (const line of lines) {
                const previous = groups[groups.length - 1];
                 const previousIsDump = previous?.some(isAccessibilityDumpLine) ?? false;
                 const previousIsInjectBurst = previous?.some(isInjectBrowsingBurstLine) ?? false;
                 const previousIsStoryTray = previous?.some(isStoryTrayBurstLine) ?? false;
+                const previousIsReelsBurst = previous?.some(isReelsBurstLine) ?? false;
                 if (
                   previous &&
                   previous.length > 0 &&
@@ -9274,7 +9278,8 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                     timestampOf(previous[0]) === timestampOf(line) ||
                     (previousIsDump && isAccessibilityDumpLine(line)) ||
                     (previousIsInjectBurst && isInjectBrowsingBurstLine(line)) ||
-                    (previousIsStoryTray && isStoryTrayBurstLine(line))
+                    (previousIsStoryTray && isStoryTrayBurstLine(line)) ||
+                    (previousIsReelsBurst && isReelsBurstLine(line))
                   )
                 ) previous.push(line);
                else groups.push([line]);
