@@ -1,3 +1,9 @@
+## [1.2.395] — 2026-08-06
+
+### Fixed — Inject Browsing Debugging Log grouping
+
+- Consecutive Inject Browsing media-render wait rows now collapse behind the Debugging Log max-three-row chevron rule.
+
 ## [1.2.394] — 2026-08-06
 
 ### Fixed — Males Only matching and mobile log performance
