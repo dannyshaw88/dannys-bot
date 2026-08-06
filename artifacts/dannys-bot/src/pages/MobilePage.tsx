@@ -1800,7 +1800,7 @@ function KeyboardMappingSimulator({ onBack, embedded = false }: { onBack?: () =>
   };
 
   return (
-    <div className={`${embedded ? "h-full w-full space-y-1 p-1" : "space-y-3"}`}>
+    <div className={`${embedded ? "flex h-full w-full flex-col p-1" : "space-y-3"}`}>
       {!embedded && <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold text-cyan-200">Local keyboard mapping simulator</p>
@@ -1811,15 +1811,15 @@ function KeyboardMappingSimulator({ onBack, embedded = false }: { onBack?: () =>
       {!embedded && <div className="rounded border border-cyan-800/60 bg-cyan-950/30 p-2 text-[11px] text-cyan-100">
         Tap <b>{expected || "any key"}</b>. Layer: <b>{layer}</b>. Output: <code>{output || "∅"}</code>
       </div>}
-      <div className="rounded-lg border border-slate-700 bg-slate-900/95 p-1 space-y-1">
-        <div className="mb-1 flex h-6 items-center gap-1 rounded bg-slate-800/80 px-2 text-[9px] text-slate-400">
+      <div className={`rounded-lg border border-slate-700 bg-slate-900/95 p-1 ${embedded ? "flex min-h-0 flex-1 flex-col justify-end gap-1" : "space-y-1"}`}>
+        <div className="flex h-6 shrink-0 items-center gap-1 rounded bg-slate-800/80 px-2 text-[9px] text-slate-400">
           <span className="text-base text-slate-300">⌘</span><span className="flex-1 text-center">suggestion</span><span>🎙</span>
         </div>
         {rows[layer].map((row, ri) => (
-          <div key={ri} className={`flex gap-1 ${ri === 1 ? "px-3" : ri === 2 ? "px-1" : ri === 3 ? "px-0" : ""}`}>
+          <div key={ri} className={`flex min-h-0 flex-1 gap-1 ${ri === 1 ? "px-3" : ri === 2 ? "px-1" : ri === 3 ? "px-0" : ""}`}>
             {row.map(({ key, top }, ci) => (
               <button key={`${ri}-${key}`} type="button" onClick={() => tap(key, ri, ci)}
-                className={`relative h-9 min-w-0 flex-1 rounded-md border border-slate-500/80 bg-slate-700 px-1 text-[12px] font-medium text-slate-100 shadow-[0_2px_0_rgba(0,0,0,.35)] hover:bg-cyan-800 ${key === "space" ? "flex-[3]" : ""} ${["shift","backspace","?123","ABC","enter"].includes(key) ? "bg-slate-600 text-slate-200" : ""} ${key === "emoji" ? "text-base" : ""} ${key === expected ? "ring-2 ring-cyan-400" : ""}`}>
+                className={`relative min-h-0 min-w-0 flex-1 rounded-md border border-slate-500/80 bg-slate-700 px-1 text-[12px] font-medium text-slate-100 shadow-[0_2px_0_rgba(0,0,0,.35)] hover:bg-cyan-800 ${key === "space" ? "flex-[3]" : ""} ${["shift","backspace","?123","ABC","enter"].includes(key) ? "bg-slate-600 text-slate-200" : ""} ${key === "emoji" ? "text-base" : ""} ${key === expected ? "ring-2 ring-cyan-400" : ""}`}>
                 {top && <span className="absolute left-1/2 top-0 -translate-x-1/2 text-[7px] text-slate-400">{top}</span>}
                 {display(key === "emoji" ? "☺" : key)}
               </button>
