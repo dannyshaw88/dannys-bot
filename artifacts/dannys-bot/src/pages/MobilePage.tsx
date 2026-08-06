@@ -9054,16 +9054,20 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
              // same-timestamp max-three-row rule.
              const isAccessibilityDumpLine = (line: string) =>
                /(?:\b(?:rid|resource-id|content-desc|bounds|class)=["'])|(?:android\.(?:widget|view)\.)/.test(line);
+             const isInjectBrowsingBurstLine = (line: string) =>
+               /\bInject Browsing:\s+(?:waiting for media to render|media .*?render|no .*?media)/i.test(line);
              const groups: string[][] = [];
              for (const line of lines) {
                const previous = groups[groups.length - 1];
                 const previousIsDump = previous?.some(isAccessibilityDumpLine) ?? false;
+                const previousIsInjectBurst = previous?.some(isInjectBrowsingBurstLine) ?? false;
                 if (
                   previous &&
                   previous.length > 0 &&
                   (
                     timestampOf(previous[0]) === timestampOf(line) ||
-                    (previousIsDump && isAccessibilityDumpLine(line))
+                    (previousIsDump && isAccessibilityDumpLine(line)) ||
+                    (previousIsInjectBurst && isInjectBrowsingBurstLine(line))
                   )
                 ) previous.push(line);
                else groups.push([line]);
