@@ -8535,7 +8535,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
                     </label>
                   ))}
                 </div>
-                <div className="flex justify-start gap-2">
+                <div className="flex justify-center gap-2">
                   <Button type="button" variant="outline" onClick={() => setSwipeOpen(false)}>Done</Button>
                   <Button type="button" onClick={testSwipeGesture} disabled={swipeTesting || swipeSaving}>{swipeTesting ? "Testing…" : "Test swipe"}</Button>
                 </div>
