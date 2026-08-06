@@ -1,3 +1,11 @@
+## [1.2.397] — 2026-08-06
+
+### Fixed — Device-specific swipe personality behavior
+
+- Use each device's configured swipe coordinates and jitter for View Feed, Explore, and Reels scrolling.
+- Preserve skim, normal, and interested personalities through duration bands.
+- Reverse the configured swipe endpoints for back-scroll personalities.
+
 ## [1.2.396] — 2026-08-06
 
 ### Fixed — View Feed live-node action validation
