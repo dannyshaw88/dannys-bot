@@ -9119,8 +9119,12 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                 </div>
               );
              };
-             return groups.map((group, groupIndex) => {
-               const collapsible = group.length > 5;
+              return groups.map((group, groupIndex) => {
+                // Keep the first three same-timestamp rows visible. Any
+                // additional rows collapse behind a chevron, matching the
+                // Debugging Log rule for long XML/accessibility dumps.
+                const visibleRowCount = 3;
+                const collapsible = group.length > visibleRowCount;
                const groupKey = `${groupIndex}:${timestampOf(group[0])}`;
                const expanded = expandedLogGroups.has(groupKey);
                if (!collapsible || expanded) {
@@ -9130,7 +9134,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                         line,
                         index,
                         `${groupKey}:${index}`,
-                        index === 0 && collapsible ? (
+                         index === visibleRowCount - 1 && collapsible ? (
                           <button
                             type="button"
                             aria-label={`Collapse ${group.length} log rows at ${timestampOf(group[0])}`}
@@ -9149,24 +9153,26 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                    </React.Fragment>
                  );
                }
-               return (
-                 <React.Fragment key={groupKey}>
-                    {renderLine(
-                      group[0],
-                      0,
-                      `${groupKey}:first`,
-                      <button
-                        type="button"
-                        aria-label={`Expand ${group.length} log rows at ${timestampOf(group[0])}`}
-                        title={`Expand ${group.length} same-timestamp log rows`}
-                        onClick={() => setExpandedLogGroups(prev => new Set(prev).add(groupKey))}
-                        className="inline-flex text-white/60 hover:text-white"
-                      >
-                        <ChevronRight className="h-3 w-3" />
-                      </button>
-                    )}
-                 </React.Fragment>
-               );
+                return (
+                  <React.Fragment key={groupKey}>
+                    {group.slice(0, visibleRowCount).map((line, index) => renderLine(
+                      line,
+                      index,
+                      `${groupKey}:visible:${index}`,
+                      index === visibleRowCount - 1 ? (
+                        <button
+                          type="button"
+                          aria-label={`Expand ${group.length} log rows at ${timestampOf(group[0])}`}
+                          title={`Expand ${group.length} same-timestamp log rows`}
+                          onClick={() => setExpandedLogGroups(prev => new Set(prev).add(groupKey))}
+                          className="inline-flex text-white/60 hover:text-white"
+                        >
+                          <ChevronRight className="h-3 w-3" />
+                        </button>
+                      ) : undefined
+                    ))}
+                  </React.Fragment>
+                );
              });
           })()
         }
