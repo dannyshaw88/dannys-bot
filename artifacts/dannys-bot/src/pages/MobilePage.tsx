@@ -4614,9 +4614,7 @@ export function AutomationSettingsPanel({
     () => new Set([
       "enabled",
       ...TRUST_SCORE_FEATURE_FIELDS,
-      ...[...TRUST_SCORE_SLOT_OWNED_FIELDS].filter(field =>
-        !field.startsWith("updateBio") && !field.startsWith("updateProfilePic"),
-      ),
+      ...TRUST_SCORE_SLOT_OWNED_FIELDS,
     ]),
     [],
   );
@@ -6433,12 +6431,12 @@ export function AutomationSettingsPanel({
                   <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.updateProfilePicActivatePctMin}
                     onChange={e => setSettings(s => ({ ...s, updateProfilePicActivatePctMin: clamp4(Number(e.target.value)) }))}
-                    disabled={loading} />
+                    disabled={fieldDisabled("updateProfilePicActivatePctMin")} />
                   <span className="text-muted-foreground text-sm">to</span>
                   <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.updateProfilePicActivatePctMax}
                     onChange={e => setSettings(s => ({ ...s, updateProfilePicActivatePctMax: clamp4(Number(e.target.value)) }))}
-                    disabled={loading} />
+                    disabled={fieldDisabled("updateProfilePicActivatePctMax")} />
                   <button
                     type="button"
                     disabled={fieldDisabled("updateProfilePicFolderPath")}
@@ -6474,7 +6472,7 @@ export function AutomationSettingsPanel({
                       id={`update-profile-pic-disable-after-used-${slotIdx ?? 0}`}
                       checked={settings.updateProfilePicDisableAfterUsed}
                       onChange={e => setSettings(s => ({ ...s, updateProfilePicDisableAfterUsed: e.target.checked }))}
-                      disabled={loading}
+                       disabled={fieldDisabled("updateProfilePicDisableAfterUsed")}
                       className="w-4 h-4 accent-primary cursor-pointer"
                     />
                     <label htmlFor={`update-profile-pic-disable-after-used-${slotIdx ?? 0}`} className="text-xs text-foreground cursor-pointer select-none">Disable After Used</label>
@@ -6488,12 +6486,12 @@ export function AutomationSettingsPanel({
                   <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.updateBioActivatePctMin}
                     onChange={e => setSettings(s => ({ ...s, updateBioActivatePctMin: clamp4(Number(e.target.value)) }))}
-                    disabled={loading} />
+                     disabled={fieldDisabled("updateBioActivatePctMin")} />
                   <span className="text-muted-foreground text-sm">to</span>
                   <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.updateBioActivatePctMax}
                     onChange={e => setSettings(s => ({ ...s, updateBioActivatePctMax: clamp4(Number(e.target.value)) }))}
-                    disabled={loading} />
+                     disabled={fieldDisabled("updateBioActivatePctMax")} />
                   <button
                     type="button"
                     onClick={() => {
@@ -6512,7 +6510,7 @@ export function AutomationSettingsPanel({
                       id={`update-bio-disable-after-used-${slotIdx ?? 0}`}
                       checked={settings.updateBioDisableAfterUsed}
                       onChange={e => setSettings(s => ({ ...s, updateBioDisableAfterUsed: e.target.checked }))}
-                      disabled={loading}
+                       disabled={fieldDisabled("updateBioDisableAfterUsed")}
                       className="w-4 h-4 accent-primary cursor-pointer"
                     />
                     <label htmlFor={`update-bio-disable-after-used-${slotIdx ?? 0}`} className="text-xs text-foreground cursor-pointer select-none">Disable After Used</label>
