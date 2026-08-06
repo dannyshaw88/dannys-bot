@@ -8103,8 +8103,8 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   // App close gesture (dismiss direction)
   const [dismissDir,    setDismissDir]    = React.useState<"auto" | "left" | "up">("auto");
   const [dismissSaving, setDismissSaving] = React.useState(false);
-  type SwipeGesture = { x1: number; y1: number; x2: number; y2: number; durationMs: number };
-  const [swipeGesture, setSwipeGesture] = React.useState<SwipeGesture>({ x1: 540, y1: 2100, x2: 540, y2: 500, durationMs: 500 });
+  type SwipeGesture = { x1: number; y1: number; x2: number; y2: number; durationMs: number; jitterX: number; jitterY: number };
+  const [swipeGesture, setSwipeGesture] = React.useState<SwipeGesture>({ x1: 540, y1: 2100, x2: 540, y2: 500, durationMs: 500, jitterX: 0, jitterY: 0 });
   const [swipeResolution, setSwipeResolution] = React.useState({ w: 1080, h: 2400 });
   const [swipeSaving, setSwipeSaving] = React.useState(false);
   const [swipeTesting, setSwipeTesting] = React.useState(false);
@@ -8118,7 +8118,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
       .then(r => r.json())
       .then(d => {
         setDismissDir(d.dismissDirection ?? "auto");
-        if (d.swipeGesture) setSwipeGesture(d.swipeGesture);
+        if (d.swipeGesture) setSwipeGesture({ jitterX: 0, jitterY: 0, ...d.swipeGesture });
       })
       .catch(() => {});
     fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-spec`)
@@ -8143,10 +8143,9 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     if (!serial || swipeTesting) return;
     setSwipeTesting(true);
     setSwipeProgress(0);
-    const maxJitter = Math.max(2, Math.round(Math.min(swipeResolution.w, swipeResolution.h) * 0.012));
     const jitter = {
-      x: Math.round((Math.random() * 2 - 1) * maxJitter),
-      y: Math.round((Math.random() * 2 - 1) * maxJitter),
+      x: Math.round((Math.random() * 2 - 1) * swipeGesture.jitterX),
+      y: Math.round((Math.random() * 2 - 1) * swipeGesture.jitterY),
     };
     const testPath = {
       x1: Math.max(0, Math.min(swipeResolution.w - 1, swipeGesture.x1 + jitter.x)),
@@ -8485,9 +8484,9 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              {(["x1", "y1", "x2", "y2", "durationMs"] as const).map(key => (
+              {(["x1", "y1", "x2", "y2", "durationMs", "jitterX", "jitterY"] as const).map(key => (
                 <label key={key} className="text-xs text-muted-foreground">{key}
-                  <input type="number" min={key === "durationMs" ? 100 : 0} max={key === "durationMs" ? 3000 : undefined}
+                  <input type="number" min={key === "durationMs" ? 100 : 0} max={key === "durationMs" ? 3000 : 500}
                     value={swipeGesture[key]} onChange={e => saveSwipeGesture({ ...swipeGesture, [key]: Number(e.target.value) })}
                     className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
                 </label>
