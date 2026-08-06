@@ -10427,7 +10427,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           steps.push(`account-switch(skipped — already @${slotUsername})`);
         } else {
           tLog(`▶ Switching to Instagram account: @${slotUsername}…`);
-          const switched = await android.switchToInstagramAccount(serial, slotUsername, tLog, switchPreloadXml);
+          const switched = await android.switchToInstagramAccount(
+            serial,
+            slotUsername,
+            tLog,
+            switchPreloadXml,
+            loadInstanceConfigs()[serial]?.devicePrefs?.swipeGesture,
+          );
           if (switched) {
             steps.push(`account-switch(@${slotUsername})`);
             automationLastActiveUsername.set(serial, slotUsername);

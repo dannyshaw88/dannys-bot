@@ -7305,6 +7305,12 @@ export async function switchToInstagramAccount(
   username: string,
   onLog?: (msg: string) => void,
   preloadedXml?: string, // XML from a dump taken moments earlier; skips two redundant dumps
+  swipeGesture?: {
+    x1: number; y1: number; x2: number; y2: number;
+    durationMinMs: number; durationMaxMs: number;
+    jitterX: number; jitterY: number;
+    startJitterMinY?: number; startJitterMaxY?: number;
+  },
 ): Promise<boolean> {
   if (!username.trim()) return false;
   const adbPath = findAdbPath();
@@ -7477,12 +7483,39 @@ export async function switchToInstagramAccount(
       const scrollBounds = _findScrollableBounds(xml);
       if (scrollBounds) {
         onLog?.(`  ↳ @${clean} is below the visible account rows — scrolling the live switcher list once…`);
-        const midX = Math.floor((scrollBounds.x1 + scrollBounds.x2) / 2);
-        const fromY = Math.floor(scrollBounds.y2 - (scrollBounds.y2 - scrollBounds.y1) * 0.25);
-        const toY = Math.floor(scrollBounds.y1 + (scrollBounds.y2 - scrollBounds.y1) * 0.25);
+        const screen = getScreenSize(serial);
+        const sheetW = Math.max(1, scrollBounds.x2 - scrollBounds.x1);
+        const sheetH = Math.max(1, scrollBounds.y2 - scrollBounds.y1);
+        const clamp = (value: number, min: number, max: number) =>
+          Math.max(min, Math.min(max, Math.round(value)));
+        const profile = swipeGesture;
+        const normX = (value: number) => Math.max(0, Math.min(1, value / Math.max(1, screen.w - 1)));
+        const normY = (value: number) => Math.max(0, Math.min(1, value / Math.max(1, screen.h - 1)));
+        const profileX1 = profile ? scrollBounds.x1 + normX(profile.x1) * sheetW : scrollBounds.x1 + sheetW / 2;
+        const profileY1 = profile ? scrollBounds.y1 + normY(profile.y1) * sheetH : scrollBounds.y2 - sheetH * 0.25;
+        const profileX2 = profile ? scrollBounds.x1 + normX(profile.x2) * sheetW : scrollBounds.x1 + sheetW / 2;
+        const profileY2 = profile ? scrollBounds.y1 + normY(profile.y2) * sheetH : scrollBounds.y1 + sheetH * 0.25;
+        const jitterX = profile ? Math.max(0, profile.jitterX || 0) * sheetW / Math.max(1, screen.w) : 0;
+        const jitterEndY = profile ? Math.max(0, profile.jitterY || 0) * sheetH / Math.max(1, screen.h) : 0;
+        const startMinY = profile ? Math.max(0, Math.min(profile.startJitterMinY || 0, profile.startJitterMaxY || 0)) * sheetH / Math.max(1, screen.h) : 0;
+        const startMaxY = profile ? Math.max(startMinY, profile.startJitterMaxY || startMinY) * sheetH / Math.max(1, screen.h) : 0;
+        const startOffset = startMinY + Math.random() * Math.max(0, startMaxY - startMinY);
+        const x1 = clamp(profileX1 + (Math.random() * 2 - 1) * jitterX, scrollBounds.x1, scrollBounds.x2);
+        const y1 = clamp(profileY1 + startOffset, scrollBounds.y1, scrollBounds.y2);
+        const x2 = clamp(profileX2 + (Math.random() * 2 - 1) * jitterX, scrollBounds.x1, scrollBounds.x2);
+        const y2 = clamp(profileY2 + (Math.random() * 2 - 1) * jitterEndY, scrollBounds.y1, scrollBounds.y2);
+        // Account-switcher scrolling is always forward/down the list. Never
+        // reverse it based on a feed personality.
+        const fromY = Math.max(y1, y2);
+        const toY = Math.min(y1, y2);
+        const midX = clamp((x1 + x2) / 2, scrollBounds.x1, scrollBounds.x2);
+        const durationMin = profile ? Math.min(profile.durationMinMs, profile.durationMaxMs) : 300;
+        const durationMax = profile ? Math.max(profile.durationMinMs, profile.durationMaxMs) : 300;
+        const duration = Math.max(1, Math.round(durationMin + Math.random() * (durationMax - durationMin)));
+        onLog?.(`  ↳ Account-list swipe mapped to sheet bounds: (${midX}, ${fromY}) → (${midX}, ${toY}) over ${duration}ms`);
         await runAdb(adbPath, [
           "-s", serial, "shell", "input", "swipe",
-          String(midX), String(fromY), String(midX), String(toY), "300",
+          String(midX), String(fromY), String(midX), String(toY), String(duration),
         ], 4000).catch(() => {});
         await _sleep(400);
         xml = await _uiDump(adbPath, serial).catch(() => "");
