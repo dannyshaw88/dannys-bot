@@ -1,3 +1,10 @@
+## [1.2.393] — 2026-08-06
+
+### Fixed — Males Only username word boundaries
+
+- Username matching now requires dot/underscore boundaries and permits up to four trailing digits.
+- Account-name substring matching and exact-token bio matching are unchanged.
+
 ## [1.2.392] — 2026-08-06
 
 ### Fixed — Males Only live profile-field matching
