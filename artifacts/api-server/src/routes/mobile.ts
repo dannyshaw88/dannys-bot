@@ -36,10 +36,10 @@ type MalesOnlyMatch = { name: string; field: "account name" | "username" | "bio"
  * Males Only is an explicit configured-name allowlist, not gender inference.
  * Keep the three Instagram profile fields separate: `full_name` is the
  * account/display name, `username` is the handle, and `biography` is the bio.
- * Account/display names use case-insensitive substring matching. Usernames
- * require a configured token at a dot/underscore boundary (or username
- * boundary), with an optional numeric suffix of up to four digits. Bios use
- * a bounded token match so a name embedded in an unrelated word is rejected.
+ * Account/display names and usernames require a configured token at a
+ * dot/underscore boundary (or field boundary), with an optional numeric
+ * suffix of up to four digits. Bios use a bounded token match so a name
+ * embedded in an unrelated word is rejected.
  */
 function findMalesOnlyMatch(
   username: string,
@@ -71,9 +71,7 @@ function findMalesOnlyMatch(
     for (const name of allowedNames) {
       const matches = field[0] === "bio"
         ? bioHasExactToken(field[1], name)
-        : field[0] === "username"
-          ? usernameHasMatchedWord(field[1], name)
-          : field[1].toLocaleLowerCase().includes(name);
+        : usernameHasMatchedWord(field[1], name);
       if (matches) return { name, field: field[0] };
     }
   }
