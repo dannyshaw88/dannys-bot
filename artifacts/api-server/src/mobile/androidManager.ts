@@ -2643,11 +2643,13 @@ export async function inputText(serial: string, text: string): Promise<void> {
 export async function setClipboard(serial: string, text: string): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  const escaped = text.replace(/(["\\$`])/g, "\\$1").replace(/\r?\n/g, "\\n");
   try {
     const { stdout, stderr } = await execFileP(
       adb,
-      ["-s", serial, "shell", "cmd", "clipboard", "set", escaped],
+      // execFile passes each argv entry directly to adb. Do not shell-escape
+      // this value: escaping here makes cmd clipboard receive literal
+      // backslashes (and corrupts quotes, dollars, and line breaks).
+      ["-s", serial, "shell", "cmd", "clipboard", "set", text],
       { encoding: "utf8", timeout: 5000 } as any,
     );
     const out = `${stdout ?? ""}${stderr ?? ""}`.trim();
