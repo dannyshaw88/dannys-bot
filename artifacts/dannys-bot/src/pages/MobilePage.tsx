@@ -1894,8 +1894,11 @@ function CalibrationDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={v => { if (!capturing && !editCapturing) onOpenChange(v); }}>
-      <DialogContent className="max-w-md border-slate-700 bg-slate-950 text-slate-100">
+    <Dialog open={open} modal={false} onOpenChange={v => { if (!capturing && !editCapturing) onOpenChange(v); }}>
+      <DialogContent
+        hideOverlay
+        className="fixed right-4 top-4 left-auto max-h-[calc(100vh-2rem)] max-w-md translate-x-0 translate-y-0 overflow-y-auto border-slate-700 bg-slate-950 text-slate-100"
+      >
         <DialogHeader>
           <DialogTitle className="text-sm">
             {mode === "editMap" ? "Edit Calibration Map" : "Keyboard Calibration"}
@@ -2071,7 +2074,7 @@ function CalibrationDialog({
 
             {/* Current key display */}
             <div className="flex flex-col items-center gap-2 py-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-300">Tap this key on your phone</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-300">Tap this key in the live phone mirror</p>
               <div className="flex min-h-16 min-w-16 max-w-full items-center justify-center rounded-xl border-2 border-slate-500 bg-slate-800 px-3 shadow-lg">
                 <span className="text-center text-2xl font-bold leading-tight text-white">{currentKey!.display}</span>
               </div>
@@ -2092,7 +2095,7 @@ function CalibrationDialog({
               <Button variant="outline" className="border-slate-600 text-slate-200 hover:bg-slate-800" onClick={skipKey} disabled={capturing}>Skip</Button>
             </div>
             <p className="text-center text-[9px] text-slate-400">
-              Click "Capture tap", then immediately tap the key on the phone screen
+              Click "Capture tap", then tap the matching key on this device's live mirror
             </p>
           </div>
         )}
