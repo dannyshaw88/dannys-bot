@@ -1,3 +1,10 @@
+## [1.2.401] — 2026-08-06
+
+### Added — Per-device mirror keyboard calibration
+
+- Keep keyboard calibration open beside the live phone mirror instead of blocking mirror interaction.
+- Capture real Android keyboard taps from each device's mirror and save their native coordinates per device.
+
 ## [1.2.400] — 2026-08-06
 
 ### Fixed — Clipboard text entry
