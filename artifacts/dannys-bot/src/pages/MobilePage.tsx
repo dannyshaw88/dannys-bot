@@ -8532,7 +8532,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
                     <label key={key} className="text-center text-xs text-muted-foreground">{key}
                       <input type="number"
                         value={swipeGesture[key]} onChange={e => saveSwipeGesture({ ...swipeGesture, [key]: Number(e.target.value) })}
-                        className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
+                        className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-center text-sm text-foreground" />
                     </label>
                   ))}
                 </div>
