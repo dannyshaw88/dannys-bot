@@ -36,7 +36,9 @@ type MalesOnlyMatch = { name: string; field: "account name" | "username" | "bio"
  * Males Only is an explicit configured-name allowlist, not gender inference.
  * Keep the three Instagram profile fields separate: `full_name` is the
  * account/display name, `username` is the handle, and `biography` is the bio.
- * Names use case-insensitive substring matching in all three fields; bios use
+ * Account/display names use case-insensitive substring matching. Usernames
+ * require a configured token at a dot/underscore boundary (or username
+ * boundary), with an optional numeric suffix of up to four digits. Bios use
  * a bounded token match so a name embedded in an unrelated word is rejected.
  */
 function findMalesOnlyMatch(
@@ -54,6 +56,14 @@ function findMalesOnlyMatch(
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?:$|[^\\p{L}\\p{N}])`, "iu").test(value);
   };
+  const usernameHasMatchedWord = (value: string, name: string) => {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // A username token must start at the beginning or after "."/"_".
+    // It may end at the username boundary, before "."/"_", or with 1–4
+    // digits immediately after the token (e.g. ron1989). Five digits must
+    // not pass by consuming only the first four.
+    return new RegExp(`(?:^|[._])${escaped}(?:\\d{1,4}(?=$|[._])|(?=$|[._]))`, "iu").test(value);
+  };
   // Prefer the account-name field when the same configured token appears in
   // more than one field, so the Debugging Log reflects the actual display
   // name that caused the allow decision.
@@ -61,7 +71,9 @@ function findMalesOnlyMatch(
     for (const name of allowedNames) {
       const matches = field[0] === "bio"
         ? bioHasExactToken(field[1], name)
-        : field[1].toLocaleLowerCase().includes(name);
+        : field[0] === "username"
+          ? usernameHasMatchedWord(field[1], name)
+          : field[1].toLocaleLowerCase().includes(name);
       if (matches) return { name, field: field[0] };
     }
   }
