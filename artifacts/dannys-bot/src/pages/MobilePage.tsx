@@ -8103,14 +8103,47 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   // App close gesture (dismiss direction)
   const [dismissDir,    setDismissDir]    = React.useState<"auto" | "left" | "up">("auto");
   const [dismissSaving, setDismissSaving] = React.useState(false);
+  type SwipeGesture = { x1: number; y1: number; x2: number; y2: number; durationMs: number };
+  const [swipeGesture, setSwipeGesture] = React.useState<SwipeGesture>({ x1: 540, y1: 2100, x2: 540, y2: 500, durationMs: 500 });
+  const [swipeResolution, setSwipeResolution] = React.useState({ w: 1080, h: 2400 });
+  const [swipeSaving, setSwipeSaving] = React.useState(false);
+  const [swipeTesting, setSwipeTesting] = React.useState(false);
+  const [swipeOpen, setSwipeOpen] = React.useState(false);
 
   React.useEffect(() => {
     if (!serial) return;
     fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-prefs`)
       .then(r => r.json())
-      .then(d => { setDismissDir(d.dismissDirection ?? "auto"); })
+      .then(d => {
+        setDismissDir(d.dismissDirection ?? "auto");
+        if (d.swipeGesture) setSwipeGesture(d.swipeGesture);
+      })
+      .catch(() => {});
+    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-spec`)
+      .then(r => r.json())
+      .then(d => { if (d.resolution?.w && d.resolution?.h) setSwipeResolution(d.resolution); })
       .catch(() => {});
   }, [serial]);
+
+  const saveSwipeGesture = async (next: SwipeGesture) => {
+    if (!serial) return;
+    setSwipeGesture(next);
+    setSwipeSaving(true);
+    try {
+      await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-prefs`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ swipeGesture: next }),
+      });
+    } finally { setSwipeSaving(false); }
+  };
+
+  const testSwipeGesture = async () => {
+    if (!serial || swipeTesting) return;
+    setSwipeTesting(true);
+    try {
+      await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/test-swipe-gesture`, { method: "POST" });
+    } finally { setSwipeTesting(false); }
+  };
 
   const saveDismissDir = async (val: "auto" | "left" | "up") => {
     if (!serial) return;
@@ -8370,6 +8403,56 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
           <span className="text-[10px] text-muted-foreground">{brightLabel}</span>
         </div>
       </div>
+
+      {/* ── Swipe Gesture ────────────────────────────────────────────── */}
+      <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Swipe Gesture</p>
+            <p className="text-xs text-muted-foreground">Per-device swipe path. Resolution: {swipeResolution.w} × {swipeResolution.h}</p>
+          </div>
+          <Button type="button" size="sm" variant="outline" onClick={() => setSwipeOpen(true)} disabled={!serial}>Configure</Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Configure and test the swipe inside a resolution-matched preview. Tests use the saved path on the connected device.
+        </p>
+      </div>
+
+      {swipeOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setSwipeOpen(false)}>
+          <div className="w-full max-w-lg rounded-xl border border-border bg-card p-5 space-y-4 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-base font-semibold text-foreground">Swipe Gesture Preview</p>
+                <p className="text-xs text-muted-foreground">{swipeResolution.w} × {swipeResolution.h} logical resolution</p>
+              </div>
+              <button className="text-muted-foreground hover:text-foreground" onClick={() => setSwipeOpen(false)}>✕</button>
+            </div>
+            <div className="flex justify-center">
+              <div className="relative border-2 border-border bg-muted/30 rounded-lg overflow-hidden" style={{ width: 260, height: Math.min(520, 260 * swipeResolution.h / swipeResolution.w) }}>
+                <svg viewBox={`0 0 ${swipeResolution.w} ${swipeResolution.h}`} className="absolute inset-0 h-full w-full">
+                  <line x1={swipeGesture.x1} y1={swipeGesture.y1} x2={swipeGesture.x2} y2={swipeGesture.y2} stroke="currentColor" strokeWidth={Math.max(8, swipeResolution.w / 90)} strokeLinecap="round" />
+                  <circle cx={swipeGesture.x1} cy={swipeGesture.y1} r={swipeResolution.w / 45} fill="hsl(var(--primary))" />
+                  <circle cx={swipeGesture.x2} cy={swipeGesture.y2} r={swipeResolution.w / 45} fill="hsl(var(--destructive))" />
+                </svg>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {(["x1", "y1", "x2", "y2", "durationMs"] as const).map(key => (
+                <label key={key} className="text-xs text-muted-foreground">{key}
+                  <input type="number" min={key === "durationMs" ? 100 : 0} max={key === "durationMs" ? 3000 : undefined}
+                    value={swipeGesture[key]} onChange={e => saveSwipeGesture({ ...swipeGesture, [key]: Number(e.target.value) })}
+                    className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
+                </label>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setSwipeOpen(false)}>Done</Button>
+              <Button type="button" onClick={testSwipeGesture} disabled={swipeTesting || swipeSaving}>{swipeTesting ? "Testing…" : "Test swipe"}</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── App Close Gesture ───────────────────────────────────────── */}
       <div className="bg-card border border-border rounded-xl p-5 space-y-3">
