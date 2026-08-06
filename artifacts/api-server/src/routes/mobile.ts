@@ -487,7 +487,7 @@ type DeviceAccount = { slots: DeviceSlot[] };
 type DeviceSettings = { googlePlayEmail?: string; googlePlayPassword?: string; selectedSimSlot?: number };
 type DevicePrefs = {
   dismissDirection?: "auto" | "left" | "up";
-  swipeGesture?: { x1: number; y1: number; x2: number; y2: number; durationMinMs: number; durationMaxMs: number; jitterX: number; jitterY: number };
+  swipeGesture?: { x1: number; y1: number; x2: number; y2: number; durationMinMs: number; durationMaxMs: number; jitterX: number; jitterY: number; startJitterMinY?: number; startJitterMaxY?: number };
 };
 type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings; account?: DeviceAccount; slotAutomation?: Record<string, AutomationSettings>; deviceSettings?: DeviceSettings; devicePrefs?: DevicePrefs };
 type InstanceConfigMap = Record<string, InstanceConfig>;
@@ -2520,6 +2520,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           durationMaxMs: z.number().finite(),
           jitterX: z.number().finite(),
           jitterY: z.number().finite(),
+          startJitterMinY: z.number().finite().optional(),
+          startJitterMaxY: z.number().finite().optional(),
         }).optional(),
       }).parse(req.body);
       const cfg = loadInstanceConfigs();
@@ -2537,6 +2539,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (!gesture) { res.status(400).json({ error: "No swipe gesture is configured for this device" }); return; }
       const jitterX = gesture.jitterX ?? 0;
       const jitterY = gesture.jitterY ?? 0;
+    const startJitterMinY = Math.max(0, Math.min(gesture.startJitterMinY ?? 0, gesture.startJitterMaxY ?? 0));
+    const startJitterMaxY = Math.max(startJitterMinY, gesture.startJitterMaxY ?? startJitterMinY);
       const size = android.getScreenSize(serial);
       const clamp = (v: number, max: number) => Math.max(0, Math.min(max - 1, Math.round(v)));
       // Keep the device's calibrated path, but avoid replaying the exact same
@@ -2547,7 +2551,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }).parse(req.body ?? {});
       const path = incoming.path
         ? { x1: clamp(incoming.path.x1, size.w), y1: clamp(incoming.path.y1, size.h), x2: clamp(incoming.path.x2, size.w), y2: clamp(incoming.path.y2, size.h) }
-        : { x1: clamp(gesture.x1 + Math.round((Math.random() * 2 - 1) * jitterX), size.w), y1: clamp(gesture.y1 + Math.round((Math.random() * 2 - 1) * jitterY), size.h), x2: clamp(gesture.x2 + Math.round((Math.random() * 2 - 1) * jitterX), size.w), y2: clamp(gesture.y2 + Math.round((Math.random() * 2 - 1) * jitterY), size.h) };
+        : { x1: clamp(gesture.x1 + Math.round((Math.random() * 2 - 1) * jitterX), size.w), y1: clamp(gesture.y1 + Math.round(startJitterMinY + Math.random() * (startJitterMaxY - startJitterMinY) + Math.random() * 2 - 1), size.h), x2: clamp(gesture.x2 + Math.round((Math.random() * 2 - 1) * jitterX), size.w), y2: clamp(gesture.y2 + Math.round((Math.random() * 2 - 1) * jitterY), size.h) };
       const durationMinMs = Math.min(gesture.durationMinMs ?? 500, gesture.durationMaxMs ?? 500);
       const durationMaxMs = Math.max(gesture.durationMinMs ?? 500, gesture.durationMaxMs ?? 500);
       const durationMs = durationMinMs + Math.round(Math.random() * (durationMaxMs - durationMinMs));
@@ -3110,7 +3114,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const jitterX = Number.isFinite(configured.jitterX) ? configured.jitterX : 0;
     const jitterY = Number.isFinite(configured.jitterY) ? configured.jitterY : 0;
     const dx = Math.round((Math.random() * 2 - 1) * jitterX);
-    const dy = Math.round((Math.random() * 2 - 1) * jitterY);
+    const startJitterMinY = Math.max(0, Math.min(configured.startJitterMinY ?? 0, configured.startJitterMaxY ?? 0));
+    const startJitterMaxY = Math.max(startJitterMinY, configured.startJitterMaxY ?? startJitterMinY);
+    const startDy = Math.round(startJitterMinY + Math.random() * (startJitterMaxY - startJitterMinY));
+    const endDy = Math.round((Math.random() * 2 - 1) * jitterY);
     const minDuration = Math.min(configured.durationMinMs ?? fallback.durationMs, configured.durationMaxMs ?? fallback.durationMs);
     const maxDuration = Math.max(configured.durationMinMs ?? fallback.durationMs, configured.durationMaxMs ?? fallback.durationMs);
     // The saved profile owns the physical gesture. Personality only changes
@@ -3129,9 +3136,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const reversed = personality === "back";
     const path = {
       x1: clamp((reversed ? configured.x2 : configured.x1) + dx, size.w),
-      y1: clamp((reversed ? configured.y2 : configured.y1) + dy, size.h),
+      y1: clamp((reversed ? configured.y2 : configured.y1) + (reversed ? endDy : startDy), size.h),
       x2: clamp((reversed ? configured.x1 : configured.x2) + dx, size.w),
-      y2: clamp((reversed ? configured.y1 : configured.y2) + dy, size.h),
+      y2: clamp((reversed ? configured.y1 : configured.y2) + (reversed ? startDy : endDy), size.h),
       durationMs,
     };
     logger.info({ serial, source, personality, reversed, from: [path.x1, path.y1], to: [path.x2, path.y2], durationMs, profile: true }, "[mobile-input] device-profile swipe");
