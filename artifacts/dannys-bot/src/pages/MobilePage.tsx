@@ -4614,7 +4614,9 @@ export function AutomationSettingsPanel({
     () => new Set([
       "enabled",
       ...TRUST_SCORE_FEATURE_FIELDS,
-      ...TRUST_SCORE_SLOT_OWNED_FIELDS,
+      ...[...TRUST_SCORE_SLOT_OWNED_FIELDS].filter(field =>
+        !field.startsWith("updateBio") && !field.startsWith("updateProfilePic"),
+      ),
     ]),
     [],
   );

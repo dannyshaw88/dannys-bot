@@ -1,5 +1,18 @@
 ## [1.2.405] — 2026-08-06
 
+### Changed — Update Bio and Update Avatar ownership
+
+- Update Bio and Update Avatar activation values and one-time-use settings are
+  now owned by each Human Session Tool account slot.
+- These settings remain editable in the Human Session Tool Random Actions area
+  and can be copied to other account slots through Copy Settings.
+- TrustScore-assigned Human Session Tool slots now keep these settings locked,
+  so they cannot be edited from TrustScore settings.
+- Update Bio and Update Avatar settings are excluded from TrustScore-to-TrustScore
+  Copy Settings, preventing activation values from being copied between tiers.
+
+## [1.2.405] — 2026-08-06
+
 ### Fixed — Deleted Mobile account slots no longer leak state
 
 - Deleting an account slot now immediately removes its saved slot automation
