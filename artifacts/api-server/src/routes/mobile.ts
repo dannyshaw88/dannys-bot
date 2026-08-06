@@ -8475,8 +8475,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     await sleepOrAbort(serial, 1500 + Math.round(Math.random() * 300));
 
-    // 6. Navigate back to the main feed.
+    // 6. Leave the bio/profile editor and then the surrounding settings
+    // surface. Instagram can return to Edit Profile after saving the bio,
+    // leaving one additional navigation level open before the next shuffled
+    // tool starts. Without the second Back, the next tool's tab tap can land
+    // on the wrong settings control.
     await android.pressBack(serial);
+    await sleepOrAbort(serial, 700);
+    onLog?.("Update Bio: pressed Back (left profile editor)");
+    await android.pressBack(serial);
+    await sleepOrAbort(serial, 800);
+    onLog?.("Update Bio: pressed Back (left surrounding settings)");
     onLog?.("Update Bio: ✓ done");
   }
 
