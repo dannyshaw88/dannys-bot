@@ -888,12 +888,15 @@ const MOUSE_HOVER_BLOCKER_JS = `(function(){
 // Instagram's JS never sees a mouse pointer during the automated signup flow.
 // CDP synthesizeTapGesture fires touchstart/touchend (NOT mouse events) so the
 // automation is unaffected. Physical mouse clicks from the user are blocked.
-// Blocks all mouse-EXCLUSIVE events during ghost signup.
-// DO NOT include 'click', 'pointerdown', 'pointerup' here — CDP synthesizeTapGesture
+// Blocks mouse-exclusive events during ghost signup while preserving the
+// browser's native right-click menu for manual text entry.
+// DO NOT include 'click', 'pointerdown', 'pointerup', or 'contextmenu' here —
+// CDP synthesizeTapGesture
 // fires touch events that result in a 'click' at the end (touchstart→touchend→click).
 // Blocking 'click' kills that final event and React button handlers never fire.
-// 'mousedown' / 'mouseup' are sufficient to defeat Instagram's mouse-detection:
-// those events only fire for real mouse buttons and are never part of a touch sequence.
+// 'mousedown' / 'mouseup' are sufficient to defeat Instagram's mouse-detection
+// for the left/middle buttons; allowing button 2 keeps native context menus and
+// clipboard paste available in editable Instagram fields.
 //
 // Also injects a 'not-allowed' cursor style so the user sees a red stop icon when
 // hovering over the Ghost Browser — a visual indicator that the window is in
@@ -901,8 +904,14 @@ const MOUSE_HOVER_BLOCKER_JS = `(function(){
 const GHOST_MOUSE_BLOCKER_JS = `(function(){
   var BLOCK=['mousemove','mouseover','mouseout','mouseenter','mouseleave',
              'pointermove','pointerover','pointerout','pointerenter','pointerleave',
-             'mousedown','mouseup','dblclick','contextmenu','auxclick'];
-  function block(e){ e.stopImmediatePropagation(); }
+             'mousedown','mouseup','dblclick'];
+  function block(e){
+    // A user right-click must reach Chromium/Electron so the native Cut/Copy/
+    // Paste menu can open. Automated taps use touch events and do not need
+    // these mouse events to be blocked.
+    if ((e.type === 'mousedown' || e.type === 'mouseup') && e.button === 2) return;
+    e.stopImmediatePropagation();
+  }
   BLOCK.forEach(function(t){
     window.addEventListener(t, block, true);
     document.addEventListener(t, block, true);
