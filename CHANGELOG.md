@@ -1,3 +1,10 @@
+## [1.2.398] — 2026-08-06
+
+### Added — Directional swipe start jitter
+
+- Add per-device minimum and maximum Y offsets so forward swipes can begin at a randomized point below the configured blue start reference.
+- Preserve existing endpoint jitter, personality duration bands, and reversed back-scroll behavior.
+
 ## [1.2.397] — 2026-08-06
 
 ### Fixed — Device-specific swipe personality behavior
