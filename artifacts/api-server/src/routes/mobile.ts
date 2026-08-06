@@ -4383,9 +4383,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     //     before "Suggested" tiles, so slot 1 is the least likely to be a
     //     suggested-account chip that would dismiss rather than open.
     //   • If slot 1 fails, try up to 2 more randomly-ordered slots.
-    //   • X is biased 12 px left of centre to land away from the bottom-right
-    //     follow badge that Instagram overlays on "Suggested" tiles.
-    //   • Y is the exact centre from the dump — no upward/downward nudge.
+    //   • X and Y use the exact centre from the live accessibility node.
+    //     Do not offset the tap toward a guessed "safe" area: that can land
+    //     on an adjacent control or the bottom navigation.
 
     // Parse a UIAutomator XML dump and extract story-tray bubble nodes.
     // Returns every node whose content-desc or resource-id indicates a story
@@ -4506,9 +4506,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const bubble = ordered[attempt];
-      // Bias X slightly left (12 px) to land away from the bottom-right
-      // follow badge on "Suggested" tiles. Y is untouched.
-      const tapX = bubble.cx - 12;
+      // Tap the exact centre of the node identified in the live dump. Never
+      // apply a guessed offset after resolving a node.
+      const tapX = bubble.cx;
       const tapY = bubble.cy;
 
       onLog?.(`Story tray: tapping "${bubble.desc}" at (${tapX},${tapY}) — attempt ${attempt + 1}/${maxAttempts}`);
