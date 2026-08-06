@@ -5178,22 +5178,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           if (!_saStillIn) {
             onLog?.(`View Stories ${s + 1}: click-author — story viewer already closed, skipping`);
           } else {
-            // Dump the story viewer to locate the author header button.
-            // Primary target: reel_viewer_text_container (the username/time label
-            // that sits top-left and is always clickable).
-            // Fallback: reel_viewer_profile_picture (the avatar circle).
-            // Both are confirmed present in the UIAutomator dump at the top of
-            // the story viewer header strip.
+            // Dump the story viewer to locate the author's avatar ring.
+            // Do not tap reel_viewer_text_container: on current Instagram
+            // builds it spans both the username header and the attribution/
+            // song row, so its center can land on "Original audio" instead of
+            // opening the author profile. The dedicated avatar node is the
+            // unambiguous author target.
             const _saXml = await android.dumpUi(serial).catch(() => "");
             const _saNodeMatch =
-              _saXml.match(/resource-id="[^"]*reel_viewer_text_container"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ??
-              _saXml.match(/resource-id="[^"]*reel_viewer_profile_picture"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+              _saXml.match(/resource-id="[^"]*reel_viewer_profile_picture"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ??
+              _saXml.match(/resource-id="[^"]*profile_picture_container"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
             if (!_saNodeMatch) {
-              onLog?.(`View Stories ${s + 1}: click-author — author header not found in dump, skipping`);
+              onLog?.(`View Stories ${s + 1}: click-author — author avatar ring not found in dump, skipping`);
             } else {
               const _saX = Math.round((+_saNodeMatch[1] + +_saNodeMatch[3]) / 2);
               const _saY = Math.round((+_saNodeMatch[2] + +_saNodeMatch[4]) / 2);
-              onLog?.(`View Stories ${s + 1}: click-author — tapping author header at (${_saX},${_saY})…`);
+              onLog?.(`View Stories ${s + 1}: click-author — tapping author avatar ring at (${_saX},${_saY})…`);
               await android.tap(serial, _saX, _saY);
               await sleepOrAbort(serial, 1800); // profile page animates in
               // Scroll the profile 1–10 times; 2.5–8 s dwell after each scroll.
