@@ -3505,11 +3505,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             onLog?.(`View Feed ${i + 1}/${count}: action bar found — ${iconSummary}`);
 
             if (wantLike) {
-              // Reuse the single settled action-bar scan above. All action
-              // coordinates belong to the same confirmed post row; rescanning
-              // before each action added several full UIAutomator round trips.
-              const likeScan = icons;
-              if (likeScan.alreadyLiked) {
+              // The screen can change between independent actions. Reconfirm
+              // the live node immediately before tapping so a coordinate from
+              // an earlier row cannot land on navigation or another control.
+              const likeScan = await scanViewFeedA11y().catch(() => null);
+              if (!likeScan) {
+                likeFailures++;
+                onLog?.(`View Feed ${i + 1}/${count}: like skipped — current Like node was not confirmed`);
+              } else if (likeScan.alreadyLiked) {
                 onLog?.(`View Feed ${i + 1}/${count}: already liked — skipping like`);
               } else {
                 // ~93 % of likes use a double-tap on the post image — the
@@ -3600,7 +3603,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             if (wantShareFeed) {
               if (isCycleAborted(serial)) throw new Error("cycle-aborted");
               await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
-              const shareFeedNode = icons.shareFeed;
+              const shareFeedScan = await scanViewFeedA11y().catch(() => null);
+              const shareFeedNode = shareFeedScan?.shareFeed ?? null;
               if (!shareFeedNode) {
                 logger.info({ serial }, "[check-feed] skipped share-to-feed — current repost node not confirmed");
                 onLog?.(`View Feed ${i + 1}/${count}: skipped repost — current share-to-feed node not confirmed`);
@@ -3691,7 +3695,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               try {
                 if (isCycleAborted(serial)) throw new Error("cycle-aborted");
                 await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
-                const dmNode = icons.shareDm;
+                const dmScan = await scanViewFeedA11y().catch(() => null);
+                const dmNode = dmScan?.shareDm ?? null;
                 if (!dmNode) {
                   onLog?.(`${_cfPfx}: share aborted — current paper-plane node not confirmed`);
                   await verifyStillInInstagram();
@@ -3799,11 +3804,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             if (wantSave) {
               if (isCycleAborted(serial)) throw new Error("cycle-aborted");
               await sleepOrAbort(serial, 200 + Math.round(Math.random() * 200));
-              const _saveBtn = icons.save;
-              if (!_saveBtn) {
+              const saveScan = await scanViewFeedA11y().catch(() => null);
+              const _saveBtn = saveScan?.save ?? null;
+              if (!saveScan || !_saveBtn) {
                 logger.info({ serial }, "[check-feed] save button not found on this post — skipping save");
                 onLog?.(`View Feed ${i + 1}/${count}: save skipped — ribbon icon not found on this post`);
-              } else if (/remove from saved/i.test(icons.saveLabel)) {
+              } else if (/remove from saved/i.test(saveScan.saveLabel)) {
                 onLog?.(`View Feed ${i + 1}/${count}: already saved — skipping save`);
               } else {
                 try {
