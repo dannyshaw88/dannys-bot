@@ -2661,6 +2661,21 @@ export async function setClipboard(serial: string, text: string): Promise<void> 
   }
 }
 
+/** Paste text one character at a time with a randomized human-scale delay. */
+export async function pasteTextWithCharacterDelay(
+  serial: string,
+  text: string,
+  delayMinMs = 100,
+  delayMaxMs = 1500,
+): Promise<void> {
+  for (const character of [...text]) {
+    await setClipboard(serial, character);
+    await keyevent(serial, "KEYCODE_PASTE");
+    const delay = delayMinMs + Math.floor(Math.random() * (delayMaxMs - delayMinMs + 1));
+    await new Promise(resolve => setTimeout(resolve, delay));
+  }
+}
+
 export async function tap(serial: string, x: number, y: number, source?: "manual" | "bot"): Promise<void> {
   recorder.addTap(serial, x, y, undefined, source ?? "bot");
   await runInputShell(serial, ["tap", String(x), String(y)], "tap");

@@ -8399,10 +8399,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           "KEYCODE_CTRL_LEFT", "KEYCODE_A"], { encoding: "utf8", timeout: 2000 });
         await sleepOrAbort(serial, 400);
       }
-      await android.setClipboard(serial, bioText);
-      await sleepOrAbort(serial, 250);
-      await android.keyevent(serial, "KEYCODE_PASTE");
-      onLog?.(`Update Bio: pasted bio text from backend clipboard (${bioText.length} chars)`);
+      await android.pasteTextWithCharacterDelay(serial, bioText);
+      onLog?.(`Update Bio: pasted bio text character-by-character (${bioText.length} chars)`);
     }
     await sleepOrAbort(serial, 800 + Math.round(Math.random() * 200));
 
@@ -9550,9 +9548,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         await android.clearInstagramSearchBar(serial, (msg) => onLog?.(`  ${msg}`));
         // Use the backend clipboard and native paste rather than adb shell
         // input text, keeping username entry on the same path as Update Bio.
-        await android.setClipboard(serial, `@${username}`);
-        await sleepOrAbort(serial, 250);
-        await android.keyevent(serial, "KEYCODE_PASTE");
+        await android.pasteTextWithCharacterDelay(serial, `@${username}`);
         // Small settle before handing off to findAndTapUserInSearch, which
         // now polls the dump internally (up to 4 attempts × 1.5 s) so the
         // results have time to load from Instagram's network.
