@@ -2639,6 +2639,28 @@ export async function inputText(serial: string, text: string): Promise<void> {
   await runInputShell(serial, ["text", escaped], "text");
 }
 
+/** Set the Android device clipboard from the backend for a subsequent paste. */
+export async function setClipboard(serial: string, text: string): Promise<void> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const escaped = text.replace(/(["\\$`])/g, "\\$1").replace(/\r?\n/g, "\\n");
+  try {
+    const { stdout, stderr } = await execFileP(
+      adb,
+      ["-s", serial, "shell", "cmd", "clipboard", "set", escaped],
+      { encoding: "utf8", timeout: 5000 } as any,
+    );
+    const out = `${stdout ?? ""}${stderr ?? ""}`.trim();
+    if (/error|exception|unknown command|not found|permission denied/i.test(out)) {
+      throw new Error(out);
+    }
+  } catch (e: any) {
+    const out = `${e.stderr ?? ""}${e.stdout ?? ""}`.trim();
+    const detail = out || e.message || "unknown error";
+    throw new Error(`adb clipboard set failed: ${detail}`);
+  }
+}
+
 export async function tap(serial: string, x: number, y: number, source?: "manual" | "bot"): Promise<void> {
   recorder.addTap(serial, x, y, undefined, source ?? "bot");
   await runInputShell(serial, ["tap", String(x), String(y)], "tap");

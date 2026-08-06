@@ -8388,56 +8388,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
     }
 
-    // 4. Inject the bio text using the same "direct adb paste" approach as the
-    //    Follow tool's search bar (android.inputText → adb shell input text).
-    //
-    //    Root cause of previous crashes: InputShellCommand.sendText calls
-    //    KeyCharacterMap.getEvents(chars) on-device. For printable ASCII this
-    //    always returns a valid array. For emoji or non-ASCII Unicode it returns
-    //    null, and the next line (events.length) throws a NullPointerException.
-    //    Follow only types @usernames (pure ASCII) so it never hits this.
-    //
-    //    Fix: split the resolved bio text into printable-ASCII runs and skip any
-    //    non-ASCII characters (emoji, symbols, accented chars) that would crash
-    //    sendText. Each ASCII segment is injected with inputText, which appends
-    //    at the current cursor position — multiple calls build the full string.
+    // 4. Put the complete bio in the Android clipboard from the backend and
+    //    paste it through the focused Bio field. This avoids adb input text's
+    //    KeyCharacterMap path, which can crash on non-ASCII characters.
     {
       const tools = android.detectToolset();
       const adb = tools.adb.path ?? "";
       if (adb) {
-        // Select all existing content so the first injected segment replaces it.
         spawnSync(adb, ["-s", serial, "shell", "input", "keycombination",
           "KEYCODE_CTRL_LEFT", "KEYCODE_A"], { encoding: "utf8", timeout: 2000 });
         await sleepOrAbort(serial, 400);
       }
-
-      // Android's `input text` does not interpret newline characters as
-      // line breaks (and the old non-ASCII filter discarded them entirely).
-      // Inject each line separately and send ENTER between lines so the
-      // Instagram bio keeps its intended multi-line layout, including blank
-      // lines.
-      const lines = bioText.replace(/\r\n?/g, "\n").split("\n");
-      let droppedChars = 0;
-      for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-        const line = lines[lineIdx];
-        // Split the line into printable-ASCII runs. Non-ASCII characters are
-        // still skipped because Android InputShellCommand can crash on them.
-        const segments = line.match(/[\x20-\x7E]+|[^\x20-\x7E]+/g) ?? [];
-        for (const seg of segments) {
-          if (/^[\x20-\x7E]+$/.test(seg)) {
-            await android.inputText(serial, seg);
-          } else {
-            droppedChars += [...seg].length;
-          }
-        }
-        if (lineIdx < lines.length - 1) {
-          await android.keyevent(serial, 66); // KEYCODE_ENTER
-        }
-      }
-      if (droppedChars > 0) {
-        onLog?.(`Update Bio: ⚠ ${droppedChars} non-ASCII character(s) skipped (emoji/Unicode crash adb input text on this device)`);
-      }
-      onLog?.(`Update Bio: injected bio text (${bioText.length} chars)`);
+      await android.setClipboard(serial, bioText);
+      await sleepOrAbort(serial, 250);
+      await android.keyevent(serial, "KEYCODE_PASTE");
+      onLog?.(`Update Bio: pasted bio text from backend clipboard (${bioText.length} chars)`);
     }
     await sleepOrAbort(serial, 800 + Math.round(Math.random() * 200));
 
