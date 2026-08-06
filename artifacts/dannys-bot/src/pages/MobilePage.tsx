@@ -1752,7 +1752,7 @@ const CALIB_KEYS: CalibKey[] = CALIB_GROUPS.flatMap((g, gi) =>
   g.keys.map(k => ({ ...k, groupIdx: gi, groupName: g.name, instructions: g.instructions }))
 );
 
-function KeyboardMappingSimulator({ onBack }: { onBack: () => void }) {
+function KeyboardMappingSimulator({ onBack, embedded = false }: { onBack?: () => void; embedded?: boolean }) {
   const [layer, setLayer] = useState<"ABC" | "?123" | "=\\<">("ABC");
   const [expected, setExpected] = useState("q");
   const [events, setEvents] = useState<string[]>([]);
@@ -1800,18 +1800,18 @@ function KeyboardMappingSimulator({ onBack }: { onBack: () => void }) {
   };
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
+    <div className={`${embedded ? "h-full w-full space-y-1 p-1" : "space-y-3"}`}>
+      {!embedded && <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold text-cyan-200">Local keyboard mapping simulator</p>
           <p className="text-[11px] text-slate-400">No phone, ADB, clipboard, or build required.</p>
         </div>
         <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-slate-300" onClick={onBack}>← Back</Button>
-      </div>
-      <div className="rounded border border-cyan-800/60 bg-cyan-950/30 p-2 text-[11px] text-cyan-100">
+      </div>}
+      {!embedded && <div className="rounded border border-cyan-800/60 bg-cyan-950/30 p-2 text-[11px] text-cyan-100">
         Tap <b>{expected || "any key"}</b>. Layer: <b>{layer}</b>. Output: <code>{output || "∅"}</code>
-      </div>
-      <div className="rounded-lg border border-slate-700 bg-slate-900 p-2 space-y-1">
+      </div>}
+      <div className="rounded-lg border border-slate-700 bg-slate-900/95 p-1 space-y-1">
         <div className="mb-1 flex h-6 items-center gap-1 rounded bg-slate-800/80 px-2 text-[9px] text-slate-400">
           <span className="text-base text-slate-300">⌘</span><span className="flex-1 text-center">suggestion</span><span>🎙</span>
         </div>
@@ -1827,14 +1827,14 @@ function KeyboardMappingSimulator({ onBack }: { onBack: () => void }) {
           </div>
         ))}
       </div>
-      <div className="flex gap-2">
+      {!embedded && <div className="flex gap-2">
         <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setExpected("q"); setOutput(""); setEvents([]); setLayer("ABC"); }}>Reset</Button>
         <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setExpected("q")}>Test q</Button>
         <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setExpected("1")}>Test 1</Button>
-      </div>
-      <div className="max-h-28 overflow-auto rounded border border-slate-800 bg-black/30 p-2 font-mono text-[10px]">
+      </div>}
+      {!embedded && <div className="max-h-28 overflow-auto rounded border border-slate-800 bg-black/30 p-2 font-mono text-[10px]">
         {events.length ? events.map((event, i) => <div key={i} className={event.startsWith("PASS") ? "text-green-400" : "text-amber-400"}>{event}</div>) : <span className="text-slate-500">Tap history appears here.</span>}
-      </div>
+      </div>}
     </div>
   );
 }
@@ -2742,6 +2742,12 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
             <p className="text-[10px] text-white/40 leading-relaxed">Press Power to view this phone's screen</p>
           </div>
         )}
+        {/* Local Android keyboard overlay: stays mounted over the fake phone
+            even when the mirror stream is off, so keyboard geometry can be
+            tested without a physical device or ADB connection. */}
+        <div className="absolute inset-x-0 bottom-0 z-20 h-[48%] bg-[#eef2f7] text-slate-900 shadow-2xl">
+          <KeyboardMappingSimulator embedded />
+        </div>
       </div>
 
       {/* ── Element Inspector Panel ─────────────────────────────────────────────
