@@ -1,3 +1,25 @@
+## [1.2.405] — 2026-08-06
+
+### Fixed — Mobile Instagram right-click paste
+
+- Keep right-clicks on the phone mirror out of the normal tap/drag pipeline so
+  they cannot move Instagram away from the focused Bio field.
+- Make the Mobile mirror Paste action write the desktop clipboard to Android's
+  clipboard service and send native `KEYCODE_PASTE`, matching Update Bio and
+  Follow username entry.
+- Preserve multiline bios, punctuation, and other characters that
+  `adb shell input text` can lose in Instagram editors.
+
+### Build — Windows installer delivery
+
+- Kept `.github/workflows/build-windows-installer.yml` as the single active
+  Windows installer workflow.
+- Confirmed pushes to `main` and manual workflow dispatch both run the API and
+  frontend builds, package the Electron app on Windows, and upload the full
+  `Aura-Farming-Windows-Installer` artifact.
+- Preserved the workflow's version/changelog checks and its protection against
+  duplicate installer workflows.
+
 ## [1.2.404] — 2026-08-06
 
 ### Fixed — Ghost Browser Instagram right-click paste

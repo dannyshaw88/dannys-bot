@@ -794,6 +794,12 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   }, []);
 
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    // A desktop right-click is only the mirror's clipboard/context-menu
+    // gesture. Do not start a phone drag for it: otherwise the later
+    // pointerup is also interpreted as a normal tap, which can move
+    // Instagram away from the editable field before Paste is chosen.
+    if (e.button !== 0) return;
+
     if (status !== "live" || !phoneSizeRef.current) {
       // Asleep / not-yet-live: pressing wakes the phone instead of tapping
       // a coordinate we can't map yet.
@@ -1115,10 +1121,29 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         await fetch(`${base}/input/key`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: "KEYCODE_COPY" }) });
       } else if (action === "paste") {
         const text = await navigator.clipboard.readText().catch(() => "");
-        if (text) await fetch(`${base}/input/text`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+        if (text) {
+          // Keep manual mirror paste on the same path as Update Bio and
+          // Follow: write the complete value to Android's clipboard, then
+          // fire KEYCODE_PASTE. `adb input text` is not equivalent here — it
+          // drops or mangles characters such as line breaks, @, and emoji in
+          // some Instagram editors.
+          const r = await fetch(`${base}/input/clipboard-paste`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text }),
+          });
+          if (!r.ok) {
+            const body = await r.json().catch(() => null);
+            addLog(`Paste FAILED (${r.status}) — ${body?.error ?? "no error detail"}`);
+          }
+        } else {
+          addLog("Paste skipped — desktop clipboard is empty or unavailable");
+        }
       }
-    } catch { /* silently ignore */ }
-  }, [serial]);
+    } catch (err: any) {
+      addLog(`Clipboard action FAILED — ${err?.message ?? "network error"}`);
+    }
+  }, [serial, addLog]);
 
   return (
     <div className="absolute inset-0 bg-black">

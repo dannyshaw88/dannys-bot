@@ -11825,6 +11825,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
+  // Manual mirror paste must use Android's clipboard service followed by the
+  // native paste key event. `adb shell input text` is not a reliable paste
+  // operation for Instagram fields: it can lose line breaks and punctuation
+  // even when the same text is available in the desktop clipboard.
+  app.post("/api/mobile/devices/:serial/input/clipboard-paste", async (req: Request, res: Response) => {
+    try {
+      const input = inputTextSchema.parse(req.body);
+      const serial = p(req, "serial");
+      await android.setClipboard(serial, input.text);
+      await android.keyevent(serial, "KEYCODE_PASTE");
+      res.json({ ok: true });
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
+
   // videoW/videoH are optional: the client's decoded video frame size at the
   // moment it computed x/y. screenrecord may stream at a downscaled size
   // relative to the device's real screen (see comment in the video WS route
