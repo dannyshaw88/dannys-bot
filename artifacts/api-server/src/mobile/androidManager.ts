@@ -7780,6 +7780,22 @@ function _findByResId(xml: string, ...ids: string[]): { x: number; y: number } |
   return null;
 }
 
+/** Attribute-order-independent resource-id lookup for live UIAutomator nodes. */
+function _findLiveNodeByResId(xml: string, ...ids: string[]): { x: number; y: number } | null {
+  const wanted = ids.map(id => id.replace(/^:id\//, "").toLowerCase());
+  for (const node of xml.match(/<node\b[^>]*>/gi) ?? []) {
+    const resourceId = node.match(/\bresource-id="([^"]*)"/i)?.[1]?.toLowerCase() ?? "";
+    if (!resourceId || !wanted.some(id => resourceId.includes(id))) continue;
+    const bounds = node.match(/\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+    if (!bounds) continue;
+    return {
+      x: Math.round((Number(bounds[1]) + Number(bounds[3])) / 2),
+      y: Math.round((Number(bounds[2]) + Number(bounds[4])) / 2),
+    };
+  }
+  return null;
+}
+
 /**
  * Same lookup as _findByResId but returns the raw bounding box instead of
  * just the centre point — used when a caller needs to search WITHIN a
@@ -8720,7 +8736,7 @@ export async function findInstagramSearchTab(
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial);
   if (!xml) return null;
-  const byId = _findByResId(xml, ":id/search", ":id/tab_search", ":id/nav_search", ":id/bottom_tab_search");
+  const byId = _findLiveNodeByResId(xml, ":id/search", ":id/tab_search", ":id/nav_search", ":id/bottom_tab_search");
   if (byId) return byId;
   const byLabel = _findElem(xml, "Search", "Explore");
   if (byLabel) return byLabel;
@@ -8769,17 +8785,18 @@ export async function findInstagramSearchBar(
     // search bar while still safely below any Explore-grid content.
     const topLimit = Math.round(screenH * 0.30);
 
-    // 1. Known resource IDs — most reliable; trust them regardless of y-pos
-    const byId = _findByResId(xml,
-      ":id/action_bar_search_edit_text", ":id/search_bar_input",
-      ":id/search_bar", ":id/search_input", ":id/search_field",
-      ":id/search_bar_container");
-    if (byId) return byId;
-
-    // 2. Scan complete node records rather than physical XML lines. Some
-    // Xiaomi/Instagram builds wrap attributes or put bounds before class/id,
-    // which makes attribute-order-dependent regexes miss the visible field.
-    const nodeRe = /<node\b[\s\S]*?(?:\/>|<\/node>)/gi;
+    // Scan complete node records and parse attributes independently. Android
+    // UIAutomator is free to emit attributes in either order; never depend on
+    // resource-id appearing before bounds in the XML.
+    const nodeRe = /<node\b[^>]*>/gi;
+    const searchIds = [
+      "action_bar_search_edit_text", "search_bar_input", "search_bar",
+      "search_input", "search_field", "search_bar_container",
+      "action_bar_search_hints_text_layout", "explore_action_bar_container",
+      "explore_action_bar",
+    ];
+    type SearchCandidate = { x: number; y: number; score: number; id: string; label: string };
+    const candidates: SearchCandidate[] = [];
     let nodeMatch: RegExpExecArray | null;
     while ((nodeMatch = nodeRe.exec(xml)) !== null) {
       const node = nodeMatch[0];
@@ -8787,18 +8804,40 @@ export async function findInstagramSearchBar(
       if (!bounds) continue;
       const centerY = (Number(bounds[2]) + Number(bounds[4])) / 2;
       if (centerY > topLimit) continue;
+      const resourceId = node.match(/\bresource-id="([^"]*)"/i)?.[1] ?? "";
+      const text = node.match(/\btext="([^"]*)"/i)?.[1] ?? "";
+      const contentDesc = node.match(/\bcontent-desc="([^"]*)"/i)?.[1] ?? "";
+      const hint = node.match(/\bhint="([^"]*)"/i)?.[1] ?? "";
+      const label = `${text} ${contentDesc} ${hint}`.trim();
       const isEditText = /class="android\.widget\.EditText"/i.test(node);
-      const mentionsSearch = /(?:text|content-desc|hint|resource-id)="[^"]*search[^"]*"/i.test(node);
+      const mentionsSearch = /search/i.test(`${resourceId} ${label}`);
       const interactive = /(?:clickable|focusable)="true"/i.test(node);
-      if (isEditText || (mentionsSearch && interactive)) {
-        return {
-          x: Math.round((Number(bounds[1]) + Number(bounds[3])) / 2),
-          y: Math.round(centerY),
-        };
-      }
+      if (!interactive && !isEditText) continue;
+      const matchedId = searchIds.find(id => resourceId.toLowerCase().includes(id));
+      // A generic EditText is not enough: Instagram can expose keyboard,
+      // hidden form, or login fields in the same top region.
+      if (!matchedId && !mentionsSearch) continue;
+      const score =
+        (matchedId ? 100 : 0) +
+        (isEditText ? 35 : 0) +
+        (interactive ? 15 : 0) +
+        (label ? 5 : 0);
+      candidates.push({
+        x: Math.round((Number(bounds[1]) + Number(bounds[3])) / 2),
+        y: Math.round(centerY),
+        score,
+        id: resourceId || "(no resource-id)",
+        label: label || "(no label)",
+      });
+    }
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => b.score - a.score || a.y - b.y);
+      const best = candidates[0];
+      onLog?.(`Follow: search bar node "${best.id}" "${best.label}" at (${best.x}, ${best.y})`);
+      return { x: best.x, y: best.y };
     }
 
-    // 3. Any node in the top 30% whose text or content-desc contains "Search"
+    // 2. Any node in the top 30% whose text or content-desc contains "Search"
     //    (case-insensitive) and is clickable or focusable.
     //
     //    Previous approach used two regex patterns that required a specific
@@ -8827,7 +8866,7 @@ export async function findInstagramSearchBar(
     // attempt loop continues — wait and re-dump
   }
 
-  // Method 4 — container nodes (action_bar_search_hints_text_layout /
+    // Method 3 — container nodes (action_bar_search_hints_text_layout /
   // explore_action_bar_container / explore_action_bar) are present in the
   // accessibility tree even when the inner EditText is transitioning or
   // temporarily detached.  Do one final dump and check for them.

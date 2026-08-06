@@ -1,3 +1,11 @@
+## [1.2.402] — 2026-08-06
+
+### Fixed — Instagram Search node detection
+
+- Make Search-tab and Search-bar lookups independent of UIAutomator attribute order.
+- Prefer the live Instagram search node and reject unrelated top-screen text fields.
+- Log the selected search node and bounds-derived tap location for diagnosis.
+
 ## [1.2.401] — 2026-08-06
 
 ### Added — Per-device mirror keyboard calibration
