@@ -1758,10 +1758,25 @@ function KeyboardMappingSimulator({ onBack }: { onBack: () => void }) {
   const [events, setEvents] = useState<string[]>([]);
   const [output, setOutput] = useState("");
 
-  const rows: Record<typeof layer, string[][]> = {
-    ABC: [["q","w","e","r","t","y","u","i","o","p"], ["a","s","d","f","g","h","j","k","l"], ["shift","z","x","c","v","b","n","m","backspace"], ["?123",",","space",".","enter"]],
-    "?123": [["1","2","3","4","5","6","7","8","9","0"], ["@","#","$","_","&","-","+","(",")"], ["/","*","\"","'",";",":","!","?","%","="], ["ABC",",","space",".","enter","moreSymbols"]],
-    "=\\<": [["~","`","|","•","√","π","÷","×","¶"], ["^","°","®","©","™","✓","[","]","{"], ["}","<",">","€","£","¥","₩","·"], ["?123",",","space",".","enter"]],
+  const rows: Record<typeof layer, Array<Array<{ key: string; top?: string }>>> = {
+    ABC: [
+      [["q","1"],["w","2"],["e","3"],["r","4"],["t","5"],["y","6"],["u","7"],["i","8"],["o","9"],["p","0"]].map(([key, top]) => ({ key, top })),
+      [["a","@"],["s","#"],["d","$"],["f","-"],["g","&"],["h","-"],["j","+"],["k","("],["l",")"]].map(([key, top]) => ({ key, top })),
+      [{ key: "shift" }, ...["z","x","c","v","b","n","m"].map(key => ({ key })), { key: "backspace" }],
+      [{ key: "?123" }, { key: "," }, { key: "emoji", top: "☺" }, { key: "space" }, { key: "." }, { key: "enter", top: "⌕" }],
+    ],
+    "?123": [
+      ["1","2","3","4","5","6","7","8","9","0"].map(key => ({ key })),
+      ["@","#","$","_","&","-","+","(",")"].map(key => ({ key })),
+      ["/","*","\"","'",";",":","!","?","%","="].map(key => ({ key })),
+      [{ key: "ABC" }, { key: "," }, { key: "emoji", top: "☺" }, { key: "space" }, { key: "." }, { key: "enter", top: "⌕" }, { key: "moreSymbols" }],
+    ],
+    "=\\<": [
+      ["~","`","|","•","√","π","÷","×","¶"].map(key => ({ key })),
+      ["^","°","®","©","™","✓","[","]","{"].map(key => ({ key })),
+      ["}","<",">","€","£","¥","₩","·"].map(key => ({ key })),
+      [{ key: "?123" }, { key: "," }, { key: "emoji", top: "☺" }, { key: "space" }, { key: "." }, { key: "enter", top: "⌕" }],
+    ],
   };
   const display = (key: string) =>
     key === "space" ? "Space" : key === "backspace" ? "⌫" : key === "enter" ? "↵" :
@@ -1775,6 +1790,7 @@ function KeyboardMappingSimulator({ onBack }: { onBack: () => void }) {
     else if (key === "ABC") nextLayer = "ABC";
     else if (key === "shift") nextLayer = "ABC";
     else if (key === "space") setOutput(v => `${v} `);
+    else if (key === "emoji") setOutput(v => `${v}🙂`);
     else if (key === "backspace") setOutput(v => v.slice(0, -1));
     else if (!["enter"].includes(key)) setOutput(v => `${v}${key}`);
     setLayer(nextLayer);
@@ -1796,12 +1812,16 @@ function KeyboardMappingSimulator({ onBack }: { onBack: () => void }) {
         Tap <b>{expected || "any key"}</b>. Layer: <b>{layer}</b>. Output: <code>{output || "∅"}</code>
       </div>
       <div className="rounded-lg border border-slate-700 bg-slate-900 p-2 space-y-1">
+        <div className="mb-1 flex h-6 items-center gap-1 rounded bg-slate-800/80 px-2 text-[9px] text-slate-400">
+          <span className="text-base text-slate-300">⌘</span><span className="flex-1 text-center">suggestion</span><span>🎙</span>
+        </div>
         {rows[layer].map((row, ri) => (
-          <div key={ri} className="flex gap-1">
-            {row.map((key, ci) => (
+          <div key={ri} className={`flex gap-1 ${ri === 1 ? "px-3" : ri === 2 ? "px-1" : ri === 3 ? "px-0" : ""}`}>
+            {row.map(({ key, top }, ci) => (
               <button key={`${ri}-${key}`} type="button" onClick={() => tap(key, ri, ci)}
-                className={`h-8 min-w-0 flex-1 rounded border border-slate-600 bg-slate-800 px-1 text-[10px] text-slate-100 hover:bg-cyan-800 ${key === expected ? "ring-2 ring-cyan-400" : ""}`}>
-                {display(key)}
+                className={`relative h-9 min-w-0 flex-1 rounded-md border border-slate-500/80 bg-slate-700 px-1 text-[12px] font-medium text-slate-100 shadow-[0_2px_0_rgba(0,0,0,.35)] hover:bg-cyan-800 ${key === "space" ? "flex-[3]" : ""} ${["shift","backspace","?123","ABC","enter"].includes(key) ? "bg-slate-600 text-slate-200" : ""} ${key === "emoji" ? "text-base" : ""} ${key === expected ? "ring-2 ring-cyan-400" : ""}`}>
+                {top && <span className="absolute left-1/2 top-0 -translate-x-1/2 text-[7px] text-slate-400">{top}</span>}
+                {display(key === "emoji" ? "☺" : key)}
               </button>
             ))}
           </div>
