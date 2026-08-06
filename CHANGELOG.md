@@ -1,3 +1,12 @@
+## [1.2.403] — 2026-08-06
+
+### Build — Complete GitHub Windows installer push
+
+- Included the uploaded Search-tab reference image in the repository so the latest investigation assets are preserved with the code.
+- Verified that `.github/workflows/build-windows-installer.yml` is the single canonical GitHub Actions workflow for Windows installer builds.
+- Confirmed that every push to `main` runs the web/API build, packages the Electron application on `windows-latest`, and uploads the `Aura-Farming-Windows-Installer` artifact.
+- Kept the older Windows workflow files as inert compatibility stubs to avoid duplicate installer builds.
+
 ## [1.2.402] — 2026-08-06
 
 ### Fixed — Instagram Search node detection
