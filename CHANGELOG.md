@@ -1,3 +1,15 @@
+## [1.2.406] — 2026-08-06
+
+### Changed — GitHub Actions workflow cleanup
+
+- Removed the four obsolete Windows installer workflow definitions that were
+  still appearing as separate entries in the repository Actions sidebar.
+- Kept `Windows Installer Download` as the single canonical Windows installer
+  workflow.
+- The canonical workflow remains manually triggerable with `workflow_dispatch`,
+  runs for pushes to `main`, builds the Windows installer, and uploads the
+  `Aura-Farming-Windows-Installer` artifact.
+
 ## [1.2.405] — 2026-08-06
 
 ### Changed — Update Bio and Update Avatar ownership
