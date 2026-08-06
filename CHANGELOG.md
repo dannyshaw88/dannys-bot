@@ -1,5 +1,21 @@
 ## [1.2.405] — 2026-08-06
 
+### Build — Dedicated Windows installer download workflow
+
+- Added `.github/workflows/windows-installer-download.yml`, a separately named
+  GitHub Actions workflow: **Windows Installer Download**.
+- The workflow runs on pushes to `main` and can also be started manually with
+  **Run workflow**.
+- It builds the API server, frontend, Electron bundle, and Windows installer
+  on `windows-latest`.
+- It verifies that an `.exe` was actually produced before uploading it.
+- It uploads the installer as the clearly named
+  `Aura-Farming-Windows-Installer` artifact for download from the completed run.
+- This is in addition to the existing canonical installer workflow and does not
+  reactivate the deprecated duplicate workflow files.
+
+## [1.2.405] — 2026-08-06
+
 ### Build — Windows installer workflow visibility
 
 - Confirmed `.github/workflows/build-windows-installer.yml` is the active workflow on `main`.
