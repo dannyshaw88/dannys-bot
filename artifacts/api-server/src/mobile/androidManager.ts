@@ -2639,6 +2639,23 @@ export async function inputText(serial: string, text: string): Promise<void> {
   await runInputShell(serial, ["text", escaped], "text");
 }
 
+/**
+ * Type text through separate ADB shell input commands with a humanized pause
+ * between characters. This is intentionally opt-in: bulk inputText() remains
+ * available for flows where per-character pacing is not required.
+ */
+export async function inputTextHumanized(serial: string, text: string): Promise<void> {
+  const chars = Array.from(text);
+  for (let i = 0; i < chars.length; i++) {
+    await runInputShell(serial, ["text", escapeForAdbInput(chars[i])], "text");
+    if (i < chars.length - 1) {
+      await new Promise<void>(resolve =>
+        setTimeout(resolve, 150 + Math.floor(Math.random() * 1351)),
+      );
+    }
+  }
+}
+
 /** Set the Android device clipboard from the backend for a subsequent paste. */
 export async function setClipboard(serial: string, text: string): Promise<void> {
   const tools = detectToolset();

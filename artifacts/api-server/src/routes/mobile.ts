@@ -8457,7 +8457,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           "KEYCODE_CTRL_LEFT", "KEYCODE_A"], { encoding: "utf8", timeout: 2000 });
         await sleepOrAbort(serial, 400);
       }
-      await android.inputText(serial, bioText);
+      await android.inputTextHumanized(serial, bioText);
       onLog?.(`Update Bio: entered bio text via adb input (${bioText.length} chars)`);
     }
     await sleepOrAbort(serial, 800 + Math.round(Math.random() * 200));
@@ -9605,7 +9605,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // text using the EditText node's text attribute (no coordinates used).
         await android.clearInstagramSearchBar(serial, (msg) => onLog?.(`  ${msg}`));
         // Use the ADB shell text-input path for the target username.
-        await android.inputText(serial, `@${username}`);
+        await android.inputTextHumanized(serial, `@${username}`);
         // Small settle before handing off to findAndTapUserInSearch, which
         // now polls the dump internally (up to 4 attempts × 1.5 s) so the
         // results have time to load from Instagram's network.
@@ -11886,7 +11886,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       const input = inputTextSchema.parse(req.body);
       const serial = p(req, "serial");
-      await android.inputText(serial, input.text);
+      await android.inputTextHumanized(serial, input.text);
       res.json({ ok: true });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });

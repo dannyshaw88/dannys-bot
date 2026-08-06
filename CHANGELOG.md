@@ -1,3 +1,12 @@
+## [1.2.409] — 2026-08-06
+
+### Changed — Humanized ADB text input
+
+- Added randomized 150–1500 ms delays between characters for the three
+  designated ADB shell paste locations: Mirror Paste, Follow username entry,
+  and Human Session Tool Update Bio.
+- Kept Make a Post caption and location input on the existing bulk-input path.
+
 ## [1.2.408] — 2026-08-06
 
 ### Changed — Reels repost confirmation handling
