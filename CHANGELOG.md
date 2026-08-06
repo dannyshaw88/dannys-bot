@@ -1,5 +1,15 @@
 ## [1.2.408] — 2026-08-06
 
+### Changed — Reels repost confirmation handling
+
+- The Human Session Tool Reels flow now checks for Instagram’s Close dialog
+  only after Share to Feed is tapped.
+- The Close button is resolved from the live accessibility tree before it is
+  tapped.
+- Reels that are only viewed no longer incur an unnecessary dialog scan.
+
+## [1.2.408] — 2026-08-06
+
 ### Changed — Make a Post location setting ownership
 
 - Make a Post → Add location is now an account-slot setting owned by the
