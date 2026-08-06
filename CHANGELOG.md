@@ -1,3 +1,11 @@
+## [1.2.394] — 2026-08-06
+
+### Fixed — Males Only matching and mobile log performance
+
+- Apply bounded token matching with optional 1–4 digit suffixes to account/display names as well as usernames; bio matching remains unchanged.
+- Reuse the confirmed View Feed action-bar scan across actions to avoid redundant UIAutomator scans.
+- Collapse consecutive accessibility/XML dump rows behind the Debugging Log max-three-row chevron rule while preserving full Copy/Export content.
+
 ## [1.2.393] — 2026-08-06
 
 ### Fixed — Males Only username word boundaries
