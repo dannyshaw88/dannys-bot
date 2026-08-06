@@ -8515,7 +8515,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
 
       {swipeOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setSwipeOpen(false)}>
-          <div className="w-full max-w-lg rounded-xl border border-border bg-card p-5 space-y-4 shadow-xl" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-[590px] rounded-xl border border-border bg-card p-5 space-y-4 shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-base font-semibold text-foreground">Swipe Gesture Preview</p>
