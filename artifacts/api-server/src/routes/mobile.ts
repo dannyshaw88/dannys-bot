@@ -2534,9 +2534,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (!gesture) { res.status(400).json({ error: "No swipe gesture is configured for this device" }); return; }
       const size = android.getScreenSize(serial);
       const clamp = (v: number, max: number) => Math.max(0, Math.min(max - 1, Math.round(v)));
-      await android.swipe(serial, clamp(gesture.x1, size.w), clamp(gesture.y1, size.h),
-        clamp(gesture.x2, size.w), clamp(gesture.y2, size.h), gesture.durationMs);
-      res.json({ ok: true, resolution: size });
+      // Keep the device's calibrated path, but avoid replaying the exact same
+      // landing coordinates on every test. The caller supplies the previewed
+      // jittered path so the phone and preview execute the same gesture.
+      const maxJitter = Math.max(2, Math.round(Math.min(size.w, size.h) * 0.012));
+      const incoming = z.object({
+        path: z.object({ x1: z.number(), y1: z.number(), x2: z.number(), y2: z.number() }).optional(),
+      }).parse(req.body ?? {});
+      const path = incoming.path
+        ? { x1: clamp(incoming.path.x1, size.w), y1: clamp(incoming.path.y1, size.h), x2: clamp(incoming.path.x2, size.w), y2: clamp(incoming.path.y2, size.h) }
+        : { x1: clamp(gesture.x1 + Math.round((Math.random() * 2 - 1) * maxJitter), size.w), y1: clamp(gesture.y1 + Math.round((Math.random() * 2 - 1) * maxJitter), size.h), x2: clamp(gesture.x2 + Math.round((Math.random() * 2 - 1) * maxJitter), size.w), y2: clamp(gesture.y2 + Math.round((Math.random() * 2 - 1) * maxJitter), size.h) };
+      await android.swipe(serial, path.x1, path.y1, path.x2, path.y2, gesture.durationMs);
+      res.json({ ok: true, resolution: size, path });
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Swipe test failed" }); }
   });
 

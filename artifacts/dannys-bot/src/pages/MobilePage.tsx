@@ -8109,6 +8109,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const [swipeSaving, setSwipeSaving] = React.useState(false);
   const [swipeTesting, setSwipeTesting] = React.useState(false);
   const [swipeProgress, setSwipeProgress] = React.useState<number | null>(null);
+  const [swipeTestPath, setSwipeTestPath] = React.useState<SwipeGesture | null>(null);
   const [swipeOpen, setSwipeOpen] = React.useState(false);
 
   React.useEffect(() => {
@@ -8142,6 +8143,18 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     if (!serial || swipeTesting) return;
     setSwipeTesting(true);
     setSwipeProgress(0);
+    const maxJitter = Math.max(2, Math.round(Math.min(swipeResolution.w, swipeResolution.h) * 0.012));
+    const jitter = {
+      x: Math.round((Math.random() * 2 - 1) * maxJitter),
+      y: Math.round((Math.random() * 2 - 1) * maxJitter),
+    };
+    const testPath = {
+      x1: Math.max(0, Math.min(swipeResolution.w - 1, swipeGesture.x1 + jitter.x)),
+      y1: Math.max(0, Math.min(swipeResolution.h - 1, swipeGesture.y1 + jitter.y)),
+      x2: Math.max(0, Math.min(swipeResolution.w - 1, swipeGesture.x2 + jitter.x)),
+      y2: Math.max(0, Math.min(swipeResolution.h - 1, swipeGesture.y2 + jitter.y)),
+    };
+    setSwipeTestPath({ ...testPath, durationMs: swipeGesture.durationMs });
     const startedAt = performance.now();
     const duration = Math.max(100, swipeGesture.durationMs);
     let frame = 0;
@@ -8152,11 +8165,19 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     };
     frame = requestAnimationFrame(animate);
     try {
-      await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/test-swipe-gesture`, { method: "POST" });
+      // Send the same jittered path used by the preview. The API accepts the
+      // saved profile and applies its own safety clamp; the preview remains
+      // an exact visual representation of this test execution.
+      await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/test-swipe-gesture`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: testPath }),
+      });
       await new Promise<void>(resolve => setTimeout(resolve, duration));
     } finally {
       cancelAnimationFrame(frame);
       setSwipeProgress(null);
+      setSwipeTestPath(null);
       setSwipeTesting(false);
     }
   };
@@ -8447,13 +8468,13 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
             <div className="flex justify-center">
               <div className="relative border-2 border-border bg-muted/30 rounded-lg overflow-hidden" style={{ width: 260, height: Math.min(520, 260 * swipeResolution.h / swipeResolution.w) }}>
                 <svg viewBox={`0 0 ${swipeResolution.w} ${swipeResolution.h}`} className="absolute inset-0 h-full w-full">
-                  <line x1={swipeGesture.x1} y1={swipeGesture.y1} x2={swipeGesture.x2} y2={swipeGesture.y2} stroke="currentColor" strokeWidth={Math.max(8, swipeResolution.w / 90)} strokeLinecap="round" opacity={swipeProgress === null ? 0.7 : 0.25} />
-                  <circle cx={swipeGesture.x1} cy={swipeGesture.y1} r={swipeResolution.w / 45} fill="hsl(var(--primary))" />
-                  <circle cx={swipeGesture.x2} cy={swipeGesture.y2} r={swipeResolution.w / 45} fill="hsl(var(--destructive))" />
+                  <line x1={(swipeTestPath ?? swipeGesture).x1} y1={(swipeTestPath ?? swipeGesture).y1} x2={(swipeTestPath ?? swipeGesture).x2} y2={(swipeTestPath ?? swipeGesture).y2} stroke="currentColor" strokeWidth={Math.max(8, swipeResolution.w / 90)} strokeLinecap="round" opacity={swipeProgress === null ? 0.7 : 0.25} />
+                  <circle cx={(swipeTestPath ?? swipeGesture).x1} cy={(swipeTestPath ?? swipeGesture).y1} r={swipeResolution.w / 45} fill="hsl(var(--primary))" />
+                  <circle cx={(swipeTestPath ?? swipeGesture).x2} cy={(swipeTestPath ?? swipeGesture).y2} r={swipeResolution.w / 45} fill="hsl(var(--destructive))" />
                   {swipeProgress !== null && (
                     <circle
-                      cx={swipeGesture.x1 + (swipeGesture.x2 - swipeGesture.x1) * swipeProgress}
-                      cy={swipeGesture.y1 + (swipeGesture.y2 - swipeGesture.y1) * swipeProgress}
+                      cx={(swipeTestPath ?? swipeGesture).x1 + ((swipeTestPath ?? swipeGesture).x2 - (swipeTestPath ?? swipeGesture).x1) * swipeProgress}
+                      cy={(swipeTestPath ?? swipeGesture).y1 + ((swipeTestPath ?? swipeGesture).y2 - (swipeTestPath ?? swipeGesture).y1) * swipeProgress}
                       r={swipeResolution.w / 32}
                       fill="hsl(var(--primary))"
                       stroke="white"
