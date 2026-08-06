@@ -1,5 +1,14 @@
 ## [1.2.405] — 2026-08-06
 
+### Build — Windows installer workflow visibility
+
+- Confirmed `.github/workflows/build-windows-installer.yml` is the active workflow on `main`.
+- Renamed the active GitHub Actions workflow to **Windows Installer** so it is clearly visible in the Actions list.
+- Preserved automatic runs for pushes to `main`, version tags, and manual `workflow_dispatch`.
+- Kept the deprecated duplicate workflow files inert so only one installer build runs.
+
+## [1.2.405] — 2026-08-06
+
 ### Fixed — Mobile Instagram right-click paste
 
 - Keep right-clicks on the phone mirror out of the normal tap/drag pipeline so
