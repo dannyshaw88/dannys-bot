@@ -6272,6 +6272,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               sharesFeed++;
               onLog?.(`Reel ${i + 1}/${totalReels}: shared to feed at (${icons.shareFeed.x},${icons.shareFeed.y})`);
               await sleepOrAbort(serial, 400);
+              // Instagram can show a "You reposted …'s reel" dialog after
+              // Share to Feed. Check only after this repost action; do not
+              // spend a dump/check on every viewed reel.
+              const _vrRepostXml = await android.dumpUi(serial).catch(() => "");
+              if (_vrRepostXml.includes('content-desc="Close"') || _vrRepostXml.includes('text="Close"')) {
+                const _vrRepostClose = await android.findButtonByLabel(serial, "Close").catch(() => null);
+                if (_vrRepostClose) {
+                  await android.tap(serial, _vrRepostClose.x, _vrRepostClose.y);
+                  onLog?.(`View Reels ${i + 1}/${totalReels}: dismissed repost confirmation dialog (Close)`);
+                  await sleepOrAbort(serial, 250);
+                } else {
+                  onLog?.(`View Reels ${i + 1}/${totalReels}: repost dialog detected but Close button was not resolved`);
+                }
+              }
             }
           }
           if (wantSave) {
@@ -6428,25 +6442,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           }
         }
         } // end !isReelAd
-      }
-
-      // ── View Reels — dismiss detected confirmation dialogs ───────────────
-      // Instagram can show a modal such as "You reposted …'s reel" after a
-      // Reels share/repost action. Keep this recovery isolated to View Reels:
-      // confirm the live accessibility tree contains a Close control, resolve
-      // that same live node, and never tap a guessed coordinate.
-      {
-        const _vrCloseXml = await android.dumpUi(serial).catch(() => "");
-        if (_vrCloseXml.includes('content-desc="Close"') || _vrCloseXml.includes('text="Close"')) {
-          const _vrClose = await android.findButtonByLabel(serial, "Close").catch(() => null);
-          if (_vrClose) {
-            await android.tap(serial, _vrClose.x, _vrClose.y);
-            onLog?.(`View Reels ${i + 1}/${totalReels}: dismissed detected dialog (Close)`);
-            await sleepOrAbort(serial, 250);
-          } else {
-            onLog?.(`View Reels ${i + 1}/${totalReels}: Close dialog detected but live Close button was not resolved`);
-          }
-        }
       }
 
       // ── Click Author — navigate to creator profile, scroll, then Back ──────
