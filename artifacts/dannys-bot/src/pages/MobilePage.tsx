@@ -7697,6 +7697,11 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   };
 
   const removeSlot = (i: number) => {
+    const serial = phone?.serial;
+    if (serial) {
+      fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/slots/${i}`, { method: "DELETE" }).catch(() => {});
+      localStorage.removeItem(slotTrustScoreKey(serial, i));
+    }
     setSlots(s => s.filter((_, idx) => idx !== i));
     setShowPassword(s => s.filter((_, idx) => idx !== i));
     setShowEmailPassword(s => s.filter((_, idx) => idx !== i));

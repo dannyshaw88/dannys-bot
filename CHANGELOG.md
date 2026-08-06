@@ -1,5 +1,19 @@
 ## [1.2.405] — 2026-08-06
 
+### Fixed — Deleted Mobile account slots no longer leak state
+
+- Deleting an account slot now immediately removes its saved slot automation
+  settings instead of leaving them attached to the reusable slot index.
+- Deleted slots also clear their TrustScore assignment and TrustScore timer from
+  the server database.
+- The browser-local TrustScore badge state is cleared at the same time.
+- Adding a replacement account before restarting the app now starts with the
+  normal defaults and no TrustScore badge or inherited settings from the
+  deleted account.
+- Existing slots and their settings are not changed.
+
+## [1.2.405] — 2026-08-06
+
 ### Fixed — Mobile mirror Paste reads the Windows clipboard
 
 - Fixed the Mobile mirror Paste action reporting that the desktop clipboard was

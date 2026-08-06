@@ -2828,6 +2828,38 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to save the account" }); }
   });
 
+  // Deleting an account slot must also delete every slot-owned setting. Slot
+  // indexes are reused by the UI, so leaving these keys behind makes a newly
+  // added account inherit the previous account's TrustScore/settings.
+  app.delete("/api/mobile/devices/:serial/slots/:slotIdx", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const slotIdx = Number.parseInt(String(req.params.slotIdx), 10);
+      if (!Number.isInteger(slotIdx) || slotIdx < 0) {
+        res.status(400).json({ error: "Invalid slot index" });
+        return;
+      }
+      const all = await storage.getGlobalSettings();
+      const prefixes = [
+        `mobile_trust_score_${serial}_${slotIdx}`,
+        `mobile_trust_score_timer_${serial}_${slotIdx}`,
+      ];
+      for (const key of Object.keys(all)) {
+        if (key === prefixes[0] || key === prefixes[1]) {
+          await storage.deleteGlobalSetting(key);
+        }
+      }
+      const cfg = loadInstanceConfigs();
+      const slotAutomation = { ...(cfg[serial]?.slotAutomation ?? {}) };
+      delete slotAutomation[String(slotIdx)];
+      cfg[serial] = { ...cfg[serial], slotAutomation };
+      saveInstanceConfigs(cfg);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message ?? "Failed to clear deleted slot" });
+    }
+  });
+
   // ── Device settings (Google Play credentials + SIM selection) ──────────────
   app.get("/api/mobile/devices/:serial/device-settings", (req: Request, res: Response) => {
     const cfg = loadInstanceConfigs();

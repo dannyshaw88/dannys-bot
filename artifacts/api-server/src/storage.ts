@@ -112,6 +112,7 @@ export interface IStorage {
   // Global Settings
   getGlobalSettings(): Promise<Record<string, string>>;
   setGlobalSetting(key: string, value: string): Promise<void>;
+  deleteGlobalSetting(key: string): Promise<void>;
 
   // Skipped Users (global)
   isGloballySkipped(username: string): Promise<boolean>;
@@ -899,6 +900,10 @@ export class DatabaseStorage implements IStorage {
   async setGlobalSetting(key: string, value: string): Promise<void> {
     await db.insert(globalSettings).values({ key, value })
       .onConflictDoUpdate({ target: globalSettings.key, set: { value } });
+  }
+
+  async deleteGlobalSetting(key: string): Promise<void> {
+    await db.delete(globalSettings).where(eq(globalSettings.key, key));
   }
 
   getLicenseByUsername(username: string): { id: number; username: string; password_hash: string; tier: string; account_limit: number; active: number; is_admin: number; expires_at: string | null } | undefined {
