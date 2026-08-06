@@ -8517,18 +8517,19 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setSwipeOpen(false)}>
           <div className="w-full max-w-[590px] rounded-xl border border-border bg-card p-5 space-y-4 shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-base font-semibold text-foreground">Swipe Gesture Preview</p>
-                <p className="text-xs text-muted-foreground">{swipeResolution.w} × {swipeResolution.h} logical resolution</p>
-              </div>
+              <div />
               <button className="text-muted-foreground hover:text-foreground" onClick={() => setSwipeOpen(false)}>✕</button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_280px] gap-5 items-start">
               <div className="order-2 md:order-1 space-y-4">
-                <p className="text-xs text-muted-foreground">Drag either endpoint or the line to set the swipe coordinates automatically.</p>
+                <div className="text-center space-y-1">
+                  <p className="text-base font-semibold text-foreground">Swipe Gesture Preview</p>
+                  <p className="text-xs text-muted-foreground">{swipeResolution.w} × {swipeResolution.h} logical resolution</p>
+                  <p className="pt-2 text-xs text-muted-foreground">Drag either endpoint or the line to set the swipe coordinates automatically.</p>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   {(["x1", "y1", "x2", "y2", "durationMinMs", "durationMaxMs", "jitterX", "jitterY"] as const).map(key => (
-                    <label key={key} className="text-xs text-muted-foreground">{key}
+                    <label key={key} className="text-center text-xs text-muted-foreground">{key}
                       <input type="number"
                         value={swipeGesture[key]} onChange={e => saveSwipeGesture({ ...swipeGesture, [key]: Number(e.target.value) })}
                         className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
