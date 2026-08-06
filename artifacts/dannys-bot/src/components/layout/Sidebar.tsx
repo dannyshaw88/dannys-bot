@@ -124,13 +124,8 @@ export function Sidebar() {
     { name: "Dashboard",       shortLabel: "DASHBOARD",      path: "/dashboard",    icon: FilledDashboardIcon   },
     { name: "Phone Farm",      shortLabel: "PHONE FARM",     path: "/mobile",       icon: FilledFarmIcon        },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon },
+    { name: "Settings",        shortLabel: "SETTINGS",       path: "/settings",     icon: FilledSettingsIcon  },
   ];
-  const settingsItem = {
-    name: "Settings",
-    shortLabel: "SETTINGS",
-    path: "/settings",
-    icon: FilledSettingsIcon,
-  };
 
   return (
     <div className="w-[133px] bg-card border-r border-border h-screen flex flex-col fixed left-0 top-0">
@@ -188,33 +183,6 @@ export function Sidebar() {
           })}
         </div>
 
-        <div className="mt-auto">
-          {(() => {
-            const item = settingsItem;
-            const isActive = location.startsWith(item.path);
-            const Icon = item.icon;
-
-            return (
-              <button
-                onClick={() => setLocation(item.path)}
-                className={cn(
-                  "flex flex-col items-center justify-center w-full py-[23.5px] gap-1 transition-all duration-200 rounded-none",
-                  isActive
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                )}
-              >
-                <Icon
-                  className={cn("w-[32px] h-[32px] shrink-0 transition-colors", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")}
-                  style={{ color: BRAND }}
-                />
-                <span className="text-[9px] font-bold tracking-wide leading-tight text-center text-foreground [hyphens:none]">
-                  {item.shortLabel}
-                </span>
-              </button>
-            );
-          })()}
-        </div>
       </nav>
 
       {slot && (

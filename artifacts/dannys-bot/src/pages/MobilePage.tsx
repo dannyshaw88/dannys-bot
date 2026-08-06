@@ -9342,7 +9342,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
               else if (currentTool === 'follow')        msgClass = 'text-blue-400';
               else if (currentTool === 'randomactions') msgClass = 'text-purple-400';
 
-               return (
+                return (
                   <div key={key} className="flex min-w-0 py-[1px]">
                   <span className="text-white whitespace-nowrap shrink-0 select-none w-[5rem]">[{ts}]</span>
                    <span className="w-4 shrink-0 inline-flex items-center justify-center">
@@ -9354,10 +9354,12 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
               );
              };
               return groups.map((group, groupIndex) => {
-                // Keep the first three same-timestamp rows visible. Any
-                // additional rows collapse behind a chevron, matching the
-                // Debugging Log rule for long XML/accessibility dumps.
-                const visibleRowCount = 3;
+                // Keep ordinary same-timestamp groups compact, but show only
+                // the summary/header for Reels bursts. Reels often immediately
+                // emit a very large accessibility/XML dump; showing three
+                // rows still exposed that clutter before the chevron.
+                const isReelsGroup = group.some(isReelsBurstLine);
+                const visibleRowCount = isReelsGroup ? 1 : 3;
                 const collapsible = group.length > visibleRowCount;
                const groupKey = `${groupIndex}:${timestampOf(group[0])}`;
                const expanded = expandedLogGroups.has(groupKey);
@@ -9387,8 +9389,20 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                    </React.Fragment>
                  );
                }
+                const collapsedContent = group.join("\n");
                 return (
                   <React.Fragment key={groupKey}>
+                    {/* Keep the complete group available to accessibility tools
+                        and DOM-based readers while only the first rows are
+                        painted. Copy/Export already use the source `lines`
+                        array, so collapsing is presentation-only. */}
+                    <pre
+                      className="sr-only"
+                      aria-label={`Collapsed log group containing ${group.length} rows`}
+                      data-log-group-content={collapsedContent}
+                    >
+                      {collapsedContent}
+                    </pre>
                     {group.slice(0, visibleRowCount).map((line, index) => renderLine(
                       line,
                       index,
@@ -9397,7 +9411,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                         <button
                           type="button"
                           aria-label={`Expand ${group.length} log rows at ${timestampOf(group[0])}`}
-                          title={`Expand ${group.length} same-timestamp log rows`}
+                            title={`Expand ${group.length} log rows — full content remains available to Copy and Export`}
                           onClick={() => setExpandedLogGroups(prev => new Set(prev).add(groupKey))}
                           className="inline-flex text-white/60 hover:text-white"
                         >
