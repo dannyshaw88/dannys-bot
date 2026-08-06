@@ -1,5 +1,16 @@
 ## [1.2.406] — 2026-08-06
 
+## [1.2.407] — 2026-08-06
+
+### Changed — Use ADB text input for all mobile paste actions
+
+- Mirror Paste now uses the ADB shell text-input path.
+- Follow target usernames now use the same ADB text-input path.
+- Random Actions → Update Bio now uses ADB text input instead of Android
+  clipboard paste.
+- This removes the Android clipboard dependency from all three mobile paste
+  flows.
+
 ### Fixed — Restored the documented Windows installer workflow
 
 - Restored the canonical `Windows Installer` workflow required by the project
