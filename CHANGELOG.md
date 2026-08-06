@@ -1,3 +1,10 @@
+## [1.2.390] — 2026-08-06
+
+### Fixed — Non-blocking Windows ADB input
+
+- ADB taps, swipes, key events, and text input no longer block the API process through synchronous calls.
+- ADB timeout and device-side input errors remain reported to the automation cycle.
+
 ## [1.2.389] — 2026-08-06
 
 ### Fixed — Mobile device-slot account attribution
