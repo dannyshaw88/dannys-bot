@@ -9548,7 +9548,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // the × clear button by resource-id, or falls back to backspace-over-
         // text using the EditText node's text attribute (no coordinates used).
         await android.clearInstagramSearchBar(serial, (msg) => onLog?.(`  ${msg}`));
-        await android.inputText(serial, `@${username}`);
+        // Use the backend clipboard and native paste rather than adb shell
+        // input text, keeping username entry on the same path as Update Bio.
+        await android.setClipboard(serial, `@${username}`);
+        await sleepOrAbort(serial, 250);
+        await android.keyevent(serial, "KEYCODE_PASTE");
         // Small settle before handing off to findAndTapUserInSearch, which
         // now polls the dump internally (up to 4 attempts × 1.5 s) so the
         // results have time to load from Instagram's network.
