@@ -3097,6 +3097,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     serial: string,
     fallback: { x1: number; y1: number; x2: number; y2: number; durationMs: number },
     source: string,
+    personality?: "skim" | "normal" | "interested" | "back",
   ): Promise<{ x1: number; y1: number; x2: number; y2: number; durationMs: number; profile: boolean }> {
     let configured: DevicePrefs["swipeGesture"] | undefined;
     try { configured = loadInstanceConfigs()[serial]?.devicePrefs?.swipeGesture; } catch { configured = undefined; }
@@ -3112,15 +3113,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const dy = Math.round((Math.random() * 2 - 1) * jitterY);
     const minDuration = Math.min(configured.durationMinMs ?? fallback.durationMs, configured.durationMaxMs ?? fallback.durationMs);
     const maxDuration = Math.max(configured.durationMinMs ?? fallback.durationMs, configured.durationMaxMs ?? fallback.durationMs);
-    const durationMs = Math.max(1, Math.round(minDuration + Math.random() * (maxDuration - minDuration)));
+    // The saved profile owns the physical gesture. Personality only changes
+    // how quickly it is performed, so calibrated coordinates remain stable.
+    const span = maxDuration - minDuration;
+    const durationBand: Record<"skim" | "normal" | "interested" | "back", [number, number]> = {
+      skim: [0, 0.35],
+      normal: [0.25, 0.75],
+      interested: [0.65, 1],
+      back: [0.25, 0.75],
+    };
+    const [bandStart, bandEnd] = personality ? durationBand[personality] : [0, 1];
+    const durationMs = Math.max(1, Math.round(
+      minDuration + span * (bandStart + Math.random() * (bandEnd - bandStart)),
+    ));
+    const reversed = personality === "back";
     const path = {
-      x1: clamp(configured.x1 + dx, size.w),
-      y1: clamp(configured.y1 + dy, size.h),
-      x2: clamp(configured.x2 + dx, size.w),
-      y2: clamp(configured.y2 + dy, size.h),
+      x1: clamp((reversed ? configured.x2 : configured.x1) + dx, size.w),
+      y1: clamp((reversed ? configured.y2 : configured.y1) + dy, size.h),
+      x2: clamp((reversed ? configured.x1 : configured.x2) + dx, size.w),
+      y2: clamp((reversed ? configured.y1 : configured.y2) + dy, size.h),
       durationMs,
     };
-    logger.info({ serial, source, from: [path.x1, path.y1], to: [path.x2, path.y2], durationMs, profile: true }, "[mobile-input] device-profile swipe");
+    logger.info({ serial, source, personality, reversed, from: [path.x1, path.y1], to: [path.x2, path.y2], durationMs, profile: true }, "[mobile-input] device-profile swipe");
     await android.swipe(serial, path.x1, path.y1, path.x2, path.y2, path.durationMs);
     return { ...path, profile: true };
   }
@@ -3486,7 +3500,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const sv = rollScrollVelocity(h, feedScrollWeights, /*allowBack=*/i > 0, /*safeStartFrac=*/0.88);
       onLog?.(`View Feed ${i + 1}/${count} [${sv.mode}]`);
       logger.info({ serial, target: "feed-scroll", mode: sv.mode, from: [x, sv.fromY], to: [x, sv.toY], durationMs: sv.duration }, "[check-feed] swipe");
-      await deviceProfileSwipe(serial, { x1: x, y1: sv.fromY, x2: x, y2: sv.toY, durationMs: sv.duration }, "feed-scroll");
+      await deviceProfileSwipe(serial, { x1: x, y1: sv.fromY, x2: x, y2: sv.toY, durationMs: sv.duration }, "feed-scroll", sv.mode as "skim" | "normal" | "interested" | "back");
       await sleepOrAbort(serial, 180);
       await verifyStillInInstagram();
 
@@ -5933,7 +5947,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const esv = rollScrollVelocity(h, exploreScrollWeights, /*allowBack=*/i > 0, /*safeStartFrac=*/0.80);
         onLog?.(`View Explore ${i + 1}/${scrollCount}: next swipe [${esv.mode}]`);
         logger.info({ serial, source: "explore-scroll", mode: esv.mode, from: [x, esv.fromY], to: [x, esv.toY], durationMs: esv.duration }, "[mobile-input] swipe");
-        await deviceProfileSwipe(serial, { x1: x, y1: esv.fromY, x2: x, y2: esv.toY, durationMs: esv.duration }, "explore-scroll");
+        await deviceProfileSwipe(serial, { x1: x, y1: esv.fromY, x2: x, y2: esv.toY, durationMs: esv.duration }, "explore-scroll", esv.mode as "skim" | "normal" | "interested" | "back");
         await sleepOrAbort(serial, 800);
       }
     }
@@ -6020,7 +6034,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const rsv = rollScrollVelocity(h, reelsScrollWeights, /*allowBack=*/false, /*safeStartFrac=*/0.80);
       onLog?.(`${reelLabel}: advance swipe [${rsv.mode}]`);
       logger.info({ serial, source: "reels-advance", mode: rsv.mode, from: [rx, rsv.fromY], to: [rx, rsv.toY], durationMs: rsv.duration }, "[mobile-input] swipe");
-      await deviceProfileSwipe(serial, { x1: rx, y1: rsv.fromY, x2: rx, y2: rsv.toY, durationMs: rsv.duration }, "reels-advance");
+      await deviceProfileSwipe(serial, { x1: rx, y1: rsv.fromY, x2: rx, y2: rsv.toY, durationMs: rsv.duration }, "reels-advance", rsv.mode as "skim" | "normal" | "interested" | "back");
     };
 
     for (let i = 0; i < totalReels; i++) {
