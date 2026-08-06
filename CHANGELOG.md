@@ -1,3 +1,10 @@
+## [1.2.389] — 2026-08-06
+
+### Fixed — Mobile device-slot account attribution
+
+- Cycle activity now resolves the account from the saved device and slot assignment.
+- Dashboard activity and Statistics no longer fall back to “Aura Farming” when a background runner sends an empty account name.
+
 ## [1.2.388] — 2026-08-05
 
 ### Fixed — Exact Males Only bio matching
