@@ -1,3 +1,28 @@
+## [1.2.404] — 2026-08-06
+
+### Fixed — Ghost Browser Instagram right-click paste
+
+- Restored the native Chromium/Electron context menu inside the Ghost Browser
+  while preserving the automation input protections used by the signup flow.
+- Allowed real right-click mouse events to reach editable Instagram fields so
+  users can right-click and choose Paste when entering Bio Spin text or other
+  manually entered values.
+- Kept automated touch-based taps working without exposing ordinary left-click
+  and hover events to Instagram's page scripts.
+- Verified the frontend production bundle and Electron bundle both build
+  successfully.
+
+### Build — Windows installer workflow
+
+- Confirmed `.github/workflows/build-windows-installer.yml` remains the single
+  canonical installer workflow.
+- The workflow runs on pushes to `main`, validates that the root and Electron
+  versions match the changelog, builds the API and frontend bundles, packages
+  the Windows Electron installer, and uploads
+  `Aura-Farming-Windows-Installer` to the Actions run.
+- Kept deprecated duplicate workflow files inert so a push cannot start
+  competing installer builds.
+
 ## [1.2.403] — 2026-08-06
 
 ### Build — Complete GitHub Windows installer push
