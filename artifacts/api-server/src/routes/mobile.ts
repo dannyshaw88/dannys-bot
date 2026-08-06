@@ -8267,16 +8267,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         await sleepOrAbort(serial, 400);
       }
 
-      // Split into printable-ASCII runs vs non-ASCII runs.
-      const segments = bioText.match(/[\x20-\x7E]+|[^\x20-\x7E]+/g) ?? [];
+      // Android's `input text` does not interpret newline characters as
+      // line breaks (and the old non-ASCII filter discarded them entirely).
+      // Inject each line separately and send ENTER between lines so the
+      // Instagram bio keeps its intended multi-line layout, including blank
+      // lines.
+      const lines = bioText.replace(/\r\n?/g, "\n").split("\n");
       let droppedChars = 0;
-      for (const seg of segments) {
-        if (/^[\x20-\x7E]+$/.test(seg)) {
-          // Printable ASCII — safe to inject, same path as Follow search bar.
-          await android.inputText(serial, seg);
-        } else {
-          // Non-ASCII (emoji, Unicode symbols, etc.) — skip to avoid NPE.
-          droppedChars += [...seg].length;
+      for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+        const line = lines[lineIdx];
+        // Split the line into printable-ASCII runs. Non-ASCII characters are
+        // still skipped because Android InputShellCommand can crash on them.
+        const segments = line.match(/[\x20-\x7E]+|[^\x20-\x7E]+/g) ?? [];
+        for (const seg of segments) {
+          if (/^[\x20-\x7E]+$/.test(seg)) {
+            await android.inputText(serial, seg);
+          } else {
+            droppedChars += [...seg].length;
+          }
+        }
+        if (lineIdx < lines.length - 1) {
+          await android.keyevent(serial, 66); // KEYCODE_ENTER
         }
       }
       if (droppedChars > 0) {
