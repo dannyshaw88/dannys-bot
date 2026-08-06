@@ -1,3 +1,10 @@
+## [1.2.400] — 2026-08-06
+
+### Fixed — Clipboard text entry
+
+- Keep Update Bio and Follow username entry as one backend clipboard write followed by one native paste.
+- Remove the unsupported character-by-character clipboard loop.
+
 ## [1.2.399] — 2026-08-06
 
 ### Fixed — Update Bio navigation and Reels debugging-log grouping
