@@ -487,7 +487,7 @@ type DeviceAccount = { slots: DeviceSlot[] };
 type DeviceSettings = { googlePlayEmail?: string; googlePlayPassword?: string; selectedSimSlot?: number };
 type DevicePrefs = {
   dismissDirection?: "auto" | "left" | "up";
-  swipeGesture?: { x1: number; y1: number; x2: number; y2: number; durationMs: number; jitterX: number; jitterY: number };
+  swipeGesture?: { x1: number; y1: number; x2: number; y2: number; durationMinMs: number; durationMaxMs: number; jitterX: number; jitterY: number };
 };
 type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings; account?: DeviceAccount; slotAutomation?: Record<string, AutomationSettings>; deviceSettings?: DeviceSettings; devicePrefs?: DevicePrefs };
 type InstanceConfigMap = Record<string, InstanceConfig>;
@@ -2516,7 +2516,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           y1: z.number().finite().int().nonnegative(),
           x2: z.number().finite().int().nonnegative(),
           y2: z.number().finite().int().nonnegative(),
-          durationMs: z.number().finite().int().min(100).max(3000),
+          durationMinMs: z.number().finite().int().min(100).max(3000),
+          durationMaxMs: z.number().finite().int().min(100).max(3000),
           jitterX: z.number().finite().int().min(0).max(500),
           jitterY: z.number().finite().int().min(0).max(500),
         }).optional(),
@@ -2547,8 +2548,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const path = incoming.path
         ? { x1: clamp(incoming.path.x1, size.w), y1: clamp(incoming.path.y1, size.h), x2: clamp(incoming.path.x2, size.w), y2: clamp(incoming.path.y2, size.h) }
         : { x1: clamp(gesture.x1 + Math.round((Math.random() * 2 - 1) * jitterX), size.w), y1: clamp(gesture.y1 + Math.round((Math.random() * 2 - 1) * jitterY), size.h), x2: clamp(gesture.x2 + Math.round((Math.random() * 2 - 1) * jitterX), size.w), y2: clamp(gesture.y2 + Math.round((Math.random() * 2 - 1) * jitterY), size.h) };
-      await android.swipe(serial, path.x1, path.y1, path.x2, path.y2, gesture.durationMs);
-      res.json({ ok: true, resolution: size, path });
+      const durationMinMs = Math.min(gesture.durationMinMs ?? 500, gesture.durationMaxMs ?? 500);
+      const durationMaxMs = Math.max(gesture.durationMinMs ?? 500, gesture.durationMaxMs ?? 500);
+      const durationMs = durationMinMs + Math.round(Math.random() * (durationMaxMs - durationMinMs));
+      await android.swipe(serial, path.x1, path.y1, path.x2, path.y2, durationMs);
+      res.json({ ok: true, resolution: size, path, durationMs });
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Swipe test failed" }); }
   });
 
