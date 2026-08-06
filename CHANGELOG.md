@@ -1,3 +1,14 @@
+## [1.2.408] — 2026-08-06
+
+### Changed — Make a Post location setting ownership
+
+- Make a Post → Add location is now an account-slot setting owned by the
+  Human Session Tool.
+- It remains editable in the Human Session Tool and can be copied to other
+  account slots through Human Session Tool Copy Settings.
+- It is locked out of TrustScore editing and excluded from TrustScore-to-
+  TrustScore Copy Settings.
+
 ## [1.2.406] — 2026-08-06
 
 ## [1.2.407] — 2026-08-06
