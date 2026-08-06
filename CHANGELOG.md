@@ -1,5 +1,14 @@
 ## [1.2.406] — 2026-08-06
 
+### Fixed — Restored the documented Windows installer workflow
+
+- Restored the canonical `Windows Installer` workflow required by the project
+  instructions.
+- Restored the deprecated workflow files as inert `workflow_call` stubs so
+  GitHub’s workflow configuration matches the documented repository layout.
+- The canonical workflow can be started manually or by pushing to `main`, builds
+  the Windows installer, and uploads `Aura-Farming-Windows-Installer`.
+
 ### Changed — GitHub Actions workflow cleanup
 
 - Removed the four obsolete Windows installer workflow definitions that were
