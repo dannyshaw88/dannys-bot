@@ -1120,7 +1120,10 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       } else if (action === "copy") {
         await fetch(`${base}/input/key`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: "KEYCODE_COPY" }) });
       } else if (action === "paste") {
-        const text = await navigator.clipboard.readText().catch(() => "");
+        const electronClipboard = (window as any).electronAPI?.readClipboardText;
+        const text = electronClipboard
+          ? await electronClipboard().catch(() => "")
+          : await navigator.clipboard.readText().catch(() => "");
         if (text) {
           // Keep manual mirror paste on the same path as Update Bio and
           // Follow: write the complete value to Android's clipboard, then

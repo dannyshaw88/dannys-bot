@@ -40,4 +40,5 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("save-processed-images", files),
   openWallpaperFileDialog: () => ipcRenderer.invoke("open-wallpaper-file-dialog"),
   countFolderFiles: (folderPath: string) => ipcRenderer.invoke("count-folder-files", folderPath),
+  readClipboardText: () => ipcRenderer.invoke("clipboard-read-text"),
 });

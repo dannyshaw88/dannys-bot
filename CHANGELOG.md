@@ -1,5 +1,17 @@
 ## [1.2.405] — 2026-08-06
 
+### Fixed — Mobile mirror Paste reads the Windows clipboard
+
+- Fixed the Mobile mirror Paste action reporting that the desktop clipboard was
+  empty or unavailable in the Windows Electron app even when the same content
+  could be pasted into Notepad.
+- Added a native Electron clipboard-read bridge and made the mirror Paste
+  action use it before the browser clipboard API.
+- Kept the Android clipboard-service write and native `KEYCODE_PASTE` path
+  unchanged after the desktop text is successfully read.
+
+## [1.2.405] — 2026-08-06
+
 ### Build — Dedicated Windows installer download workflow
 
 - Added `.github/workflows/windows-installer-download.yml`, a separately named

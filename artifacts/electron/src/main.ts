@@ -1336,6 +1336,9 @@ async function createWindow() {
       return { count: 0 };
     }
   });
+  ipcMain.handle("clipboard-read-text", () => {
+    return require("electron").clipboard.readText();
+  });
 
   // Step 1 of the two-phase EQX export flow: ask where to save BEFORE fetching data.
   ipcMain.handle("pick-eqx-folder", async () => {
