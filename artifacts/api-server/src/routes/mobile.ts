@@ -10121,6 +10121,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         dismissDirection,
       } = effectiveSettings;
 
+      // The account assignment is owned by the device's slot configuration.
+      // Do not let a stale background-runner payload erase the identity used
+      // for Dashboard activity and username-keyed mobile statistics.
+      const assignedSlotUsername =
+        loadInstanceConfigs()[serial]?.account?.slots?.[slotIdx]?.username?.trim() ?? "";
+      const resolvedSlotUsername = assignedSlotUsername || slotUsername?.trim() || "";
+
       // ── Global followed / skipped settings ─────────────────────────────────
       // Read the shared global settings store (Settings → Scraping).  These
       // are the same flags the browser-bot engine reads — wiring them here
@@ -10135,13 +10142,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Map slotUsername → profile row so cycle start/complete events appear
       // in the main Dashboard activity feed alongside EB account actions.
       let mobileProfileId: number | null = null;
-      if (slotUsername) {
+      if (resolvedSlotUsername) {
         const allProfiles = await storage.getProfiles();
-        const match = allProfiles.find(p => p.username === slotUsername || p.accountLabel === slotUsername);
+        const normalized = resolvedSlotUsername.toLowerCase();
+        const match = allProfiles.find(p =>
+          p.username.trim().toLowerCase() === normalized ||
+          p.accountLabel?.trim().toLowerCase() === normalized
+        );
         if (match) mobileProfileId = match.id;
       }
       // Capture for catch-block COMPLETE log (in scope there).
-      _slotUsername = slotUsername || "";
+      _slotUsername = resolvedSlotUsername;
       _mobileProfileId = mobileProfileId;
       // Log cycle start to Dashboard.
       // profileId 0 is the system sentinel (same as "Aura Farming started")
@@ -10152,7 +10163,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         profileId: mobileProfileId ?? 0,
         toolId: 0,
         action: "tool_start",
-        targetUsername: slotUsername || "",
+        targetUsername: resolvedSlotUsername,
         detail: "Cycle Started, Farming Aura",
         result: "ok",
         sourceValue: `${serial}:${slotIdx}`,
