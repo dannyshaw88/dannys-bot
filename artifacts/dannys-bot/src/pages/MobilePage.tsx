@@ -1752,6 +1752,73 @@ const CALIB_KEYS: CalibKey[] = CALIB_GROUPS.flatMap((g, gi) =>
   g.keys.map(k => ({ ...k, groupIdx: gi, groupName: g.name, instructions: g.instructions }))
 );
 
+function KeyboardMappingSimulator({ onBack }: { onBack: () => void }) {
+  const [layer, setLayer] = useState<"ABC" | "?123" | "=\\<">("ABC");
+  const [expected, setExpected] = useState("q");
+  const [events, setEvents] = useState<string[]>([]);
+  const [output, setOutput] = useState("");
+
+  const rows: Record<typeof layer, string[][]> = {
+    ABC: [["q","w","e","r","t","y","u","i","o","p"], ["a","s","d","f","g","h","j","k","l"], ["shift","z","x","c","v","b","n","m","backspace"], ["?123",",","space",".","enter"]],
+    "?123": [["1","2","3","4","5","6","7","8","9","0"], ["@","#","$","_","&","-","+","(",")"], ["/","*","\"","'",";",":","!","?","%","="], ["ABC",",","space",".","enter","moreSymbols"]],
+    "=\\<": [["~","`","|","•","√","π","÷","×","¶"], ["^","°","®","©","™","✓","[","]","{"], ["}","<",">","€","£","¥","₩","·"], ["?123",",","space",".","enter"]],
+  };
+  const display = (key: string) =>
+    key === "space" ? "Space" : key === "backspace" ? "⌫" : key === "enter" ? "↵" :
+    key === "shift" ? "⇧" : key === "moreSymbols" ? "=\\<" : key;
+
+  const tap = (key: string, row: number, col: number) => {
+    const token = `${layer} ${key} @ r${row + 1}c${col + 1}`;
+    let nextLayer = layer;
+    if (key === "?123") nextLayer = "?123";
+    else if (key === "moreSymbols") nextLayer = "=\\<";
+    else if (key === "ABC") nextLayer = "ABC";
+    else if (key === "shift") nextLayer = "ABC";
+    else if (key === "space") setOutput(v => `${v} `);
+    else if (key === "backspace") setOutput(v => v.slice(0, -1));
+    else if (!["enter"].includes(key)) setOutput(v => `${v}${key}`);
+    setLayer(nextLayer);
+    const result = key === expected ? "PASS" : "MISS";
+    setEvents(v => [`${result}  ${token}`, ...v].slice(0, 30));
+    setExpected("");
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-cyan-200">Local keyboard mapping simulator</p>
+          <p className="text-[11px] text-slate-400">No phone, ADB, clipboard, or build required.</p>
+        </div>
+        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-slate-300" onClick={onBack}>← Back</Button>
+      </div>
+      <div className="rounded border border-cyan-800/60 bg-cyan-950/30 p-2 text-[11px] text-cyan-100">
+        Tap <b>{expected || "any key"}</b>. Layer: <b>{layer}</b>. Output: <code>{output || "∅"}</code>
+      </div>
+      <div className="rounded-lg border border-slate-700 bg-slate-900 p-2 space-y-1">
+        {rows[layer].map((row, ri) => (
+          <div key={ri} className="flex gap-1">
+            {row.map((key, ci) => (
+              <button key={`${ri}-${key}`} type="button" onClick={() => tap(key, ri, ci)}
+                className={`h-8 min-w-0 flex-1 rounded border border-slate-600 bg-slate-800 px-1 text-[10px] text-slate-100 hover:bg-cyan-800 ${key === expected ? "ring-2 ring-cyan-400" : ""}`}>
+                {display(key)}
+              </button>
+            ))}
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setExpected("q"); setOutput(""); setEvents([]); setLayer("ABC"); }}>Reset</Button>
+        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setExpected("q")}>Test q</Button>
+        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setExpected("1")}>Test 1</Button>
+      </div>
+      <div className="max-h-28 overflow-auto rounded border border-slate-800 bg-black/30 p-2 font-mono text-[10px]">
+        {events.length ? events.map((event, i) => <div key={i} className={event.startsWith("PASS") ? "text-green-400" : "text-amber-400"}>{event}</div>) : <span className="text-slate-500">Tap history appears here.</span>}
+      </div>
+    </div>
+  );
+}
+
 function CalibrationDialog({
   serial,
   open,
@@ -1771,7 +1838,7 @@ function CalibrationDialog({
   const [lastResult, setLastResult] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   // "intro" → start screen | "wizard" → full step-through | "editMap" → view/fix individual keys
-  const [mode, setMode] = useState<"intro" | "wizard" | "editMap">("intro");
+  const [mode, setMode] = useState<"intro" | "wizard" | "editMap" | "simulator">("intro");
   // editMap: which key is currently being re-captured (null = none active)
   const [editTarget, setEditTarget] = useState<CalibKey | null>(null);
   const [editResult, setEditResult] = useState<string | null>(null);
@@ -1903,7 +1970,9 @@ function CalibrationDialog({
         </DialogHeader>
 
         {/* ── Edit Map view ── */}
-        {mode === "editMap" ? (
+        {mode === "simulator" ? (
+          <KeyboardMappingSimulator onBack={() => setMode("intro")} />
+        ) : mode === "editMap" ? (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <p className="text-xs text-slate-400">
@@ -2015,6 +2084,9 @@ function CalibrationDialog({
             <div className="flex gap-2">
               <Button className="flex-1" onClick={() => setMode("wizard")}>
                 {existingCount > 0 ? "Re-run full calibration" : "Keyboard is open — Start"}
+              </Button>
+              <Button variant="outline" className="border-cyan-700 text-cyan-300 hover:bg-cyan-950/50" onClick={() => setMode("simulator")}>
+                Local simulator
               </Button>
               <Button variant="outline" className="border-slate-600 text-slate-200 hover:bg-slate-800" onClick={() => onOpenChange(false)}>
                 Cancel
