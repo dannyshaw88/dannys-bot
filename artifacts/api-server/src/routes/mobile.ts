@@ -73,11 +73,44 @@ function findLiveMalesOnlyMatch(
   profileXml: string,
   allowedNames: string[],
 ): MalesOnlyMatch | null {
-  const liveValues = [...profileXml.matchAll(/(?:text|content-desc)="([^"]*)"/g)]
-    .map(match => match[1])
-    .filter(Boolean)
-    .join(" ");
-  return findMalesOnlyMatch(username, liveValues, liveValues, allowedNames);
+  // Do not flatten the whole accessibility dump. It contains navigation
+  // labels, buttons, suggested-user cards, and hidden containers; searching
+  // that string made an unrelated "ash" label look like profile biography.
+  const nodes = [...profileXml.matchAll(/<node\s([^>]+?)\/?>/g)]
+    .map(match => {
+      const attrs = match[1];
+      const read = (name: string) => attrs.match(new RegExp(`${name}="([^"]*)"`))?.[1] ?? "";
+      const bounds = read("bounds").match(/\[(\d+),(\d+)\]\[(\d+),(\d+)\]/);
+      return {
+        text: read("text").trim(),
+        desc: read("content-desc").trim(),
+        cls: read("class"),
+        clickable: read("clickable") === "true",
+        bounds: bounds ? { x1: +bounds[1], y1: +bounds[2], x2: +bounds[3], y2: +bounds[4] } : null,
+      };
+    })
+    .filter(node =>
+      node.text &&
+      node.bounds &&
+      /TextView|EditText/i.test(node.cls) &&
+      !node.clickable &&
+      node.bounds.y1 >= 80 &&
+      node.bounds.y2 <= 1100 &&
+      node.bounds.x2 > node.bounds.x1,
+    );
+
+  const clean = username.replace(/^@/, "").trim().toLocaleLowerCase();
+  const usernameIndex = nodes.findIndex(node =>
+    node.text.toLocaleLowerCase() === clean ||
+    node.text.toLocaleLowerCase() === `@${clean}`,
+  );
+  const profileNodes = usernameIndex >= 0 ? nodes.slice(usernameIndex + 1) : nodes;
+  // Instagram places display name immediately after the handle and biography
+  // text immediately after the display name. Keep the fields separate so the
+  // matcher can report the real field that caused the decision.
+  const accountName = profileNodes[0]?.text ?? "";
+  const bio = profileNodes.slice(1).map(node => node.text).join("\n");
+  return findMalesOnlyMatch(username, accountName, bio, allowedNames);
 }
 
 const execFileP = promisify(execFile);

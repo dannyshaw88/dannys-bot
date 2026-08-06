@@ -1,3 +1,10 @@
+## [1.2.392] — 2026-08-06
+
+### Fixed — Males Only live profile-field matching
+
+- Males Only no longer searches unrelated accessibility labels as biography text.
+- Username and display-name substring matching remain supported, while bio matches remain exact-token only.
+
 ## [1.2.391] — 2026-08-06
 
 ### Fixed — Bio Spin line breaks
