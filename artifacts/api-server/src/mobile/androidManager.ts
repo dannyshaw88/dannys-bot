@@ -2612,26 +2612,36 @@ function escapeForAdbInput(s: string): string {
 // otherwise the client sees "200 OK" for a tap that did nothing on-device,
 // which is exactly the "clicks do nothing, no error anywhere" symptom this
 // is fixing.
-function runInputShell(serial: string, args: string[], label: string): void {
+async function runInputShell(serial: string, args: string[], label: string): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  const r = spawnSync(adb, ["-s", serial, "shell", "input", ...args], { encoding: "utf8", timeout: 5000 });
-  const out = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim();
-  if (r.status !== 0 || r.error || /error|exception|permission denied/i.test(out)) {
+  try {
+    const { stdout, stderr } = await execFileP(
+      adb,
+      ["-s", serial, "shell", "input", ...args],
+      { encoding: "utf8", timeout: 5000 } as any,
+    );
+    const out = `${stdout ?? ""}${stderr ?? ""}`.trim();
+    if (/error|exception|permission denied/i.test(out)) {
+      throw new Error(out);
+    }
+  } catch (e: any) {
+    const out = `${e.stderr ?? ""}${e.stdout ?? ""}`.trim();
+    const detail = out || (e.killed || e.signal ? "adb timed out" : e.message) || "unknown error";
     throw new Error(
-      `adb shell input ${label} failed (exit=${r.status ?? "spawn-error"})${out ? `: ${out}` : r.error ? `: ${r.error.message}` : ""}`
+      `adb shell input ${label} failed${detail ? `: ${detail}` : ""}`,
     );
   }
 }
 
 export async function inputText(serial: string, text: string): Promise<void> {
   const escaped = escapeForAdbInput(text);
-  runInputShell(serial, ["text", escaped], "text");
+  await runInputShell(serial, ["text", escaped], "text");
 }
 
 export async function tap(serial: string, x: number, y: number, source?: "manual" | "bot"): Promise<void> {
   recorder.addTap(serial, x, y, undefined, source ?? "bot");
-  runInputShell(serial, ["tap", String(x), String(y)], "tap");
+  await runInputShell(serial, ["tap", String(x), String(y)], "tap");
 }
 
 /**
@@ -2692,7 +2702,7 @@ export async function swipe(
     jx2 = Math.max(0, x2 + xOff);
   }
 
-  runInputShell(
+  await runInputShell(
     serial,
     ["swipe", String(jx1), String(jy1), String(jx2), String(jy2), String(Math.max(1, Math.round(durationMs)))],
     "swipe",
@@ -2700,7 +2710,7 @@ export async function swipe(
 }
 
 export async function keyevent(serial: string, code: string | number): Promise<void> {
-  runInputShell(serial, ["keyevent", String(code)], "keyevent");
+  await runInputShell(serial, ["keyevent", String(code)], "keyevent");
 }
 
 // ── Automation-cycle lifecycle steps ────────────────────────────────────────
