@@ -6430,6 +6430,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         } // end !isReelAd
       }
 
+      // ── View Reels — dismiss detected confirmation dialogs ───────────────
+      // Instagram can show a modal such as "You reposted …'s reel" after a
+      // Reels share/repost action. Keep this recovery isolated to View Reels:
+      // confirm the live accessibility tree contains a Close control, resolve
+      // that same live node, and never tap a guessed coordinate.
+      {
+        const _vrCloseXml = await android.dumpUi(serial).catch(() => "");
+        if (_vrCloseXml.includes('content-desc="Close"') || _vrCloseXml.includes('text="Close"')) {
+          const _vrClose = await android.findButtonByLabel(serial, "Close").catch(() => null);
+          if (_vrClose) {
+            await android.tap(serial, _vrClose.x, _vrClose.y);
+            onLog?.(`View Reels ${i + 1}/${totalReels}: dismissed detected dialog (Close)`);
+            await sleepOrAbort(serial, 250);
+          } else {
+            onLog?.(`View Reels ${i + 1}/${totalReels}: Close dialog detected but live Close button was not resolved`);
+          }
+        }
+      }
+
       // ── Click Author — navigate to creator profile, scroll, then Back ──────
       // Independent of the icon scan: uses the XML dump to locate
       // clips_author_username (bottom-left of the Reels viewer) directly.
