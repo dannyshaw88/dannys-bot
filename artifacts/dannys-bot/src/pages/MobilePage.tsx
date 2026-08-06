@@ -8108,6 +8108,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const [swipeResolution, setSwipeResolution] = React.useState({ w: 1080, h: 2400 });
   const [swipeSaving, setSwipeSaving] = React.useState(false);
   const [swipeTesting, setSwipeTesting] = React.useState(false);
+  const [swipeProgress, setSwipeProgress] = React.useState<number | null>(null);
   const [swipeOpen, setSwipeOpen] = React.useState(false);
 
   React.useEffect(() => {
@@ -8140,9 +8141,24 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const testSwipeGesture = async () => {
     if (!serial || swipeTesting) return;
     setSwipeTesting(true);
+    setSwipeProgress(0);
+    const startedAt = performance.now();
+    const duration = Math.max(100, swipeGesture.durationMs);
+    let frame = 0;
+    const animate = (now: number) => {
+      const progress = Math.min(1, (now - startedAt) / duration);
+      setSwipeProgress(progress);
+      if (progress < 1) frame = requestAnimationFrame(animate);
+    };
+    frame = requestAnimationFrame(animate);
     try {
       await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/test-swipe-gesture`, { method: "POST" });
-    } finally { setSwipeTesting(false); }
+      await new Promise<void>(resolve => setTimeout(resolve, duration));
+    } finally {
+      cancelAnimationFrame(frame);
+      setSwipeProgress(null);
+      setSwipeTesting(false);
+    }
   };
 
   const saveDismissDir = async (val: "auto" | "left" | "up") => {
@@ -8431,9 +8447,19 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
             <div className="flex justify-center">
               <div className="relative border-2 border-border bg-muted/30 rounded-lg overflow-hidden" style={{ width: 260, height: Math.min(520, 260 * swipeResolution.h / swipeResolution.w) }}>
                 <svg viewBox={`0 0 ${swipeResolution.w} ${swipeResolution.h}`} className="absolute inset-0 h-full w-full">
-                  <line x1={swipeGesture.x1} y1={swipeGesture.y1} x2={swipeGesture.x2} y2={swipeGesture.y2} stroke="currentColor" strokeWidth={Math.max(8, swipeResolution.w / 90)} strokeLinecap="round" />
+                  <line x1={swipeGesture.x1} y1={swipeGesture.y1} x2={swipeGesture.x2} y2={swipeGesture.y2} stroke="currentColor" strokeWidth={Math.max(8, swipeResolution.w / 90)} strokeLinecap="round" opacity={swipeProgress === null ? 0.7 : 0.25} />
                   <circle cx={swipeGesture.x1} cy={swipeGesture.y1} r={swipeResolution.w / 45} fill="hsl(var(--primary))" />
                   <circle cx={swipeGesture.x2} cy={swipeGesture.y2} r={swipeResolution.w / 45} fill="hsl(var(--destructive))" />
+                  {swipeProgress !== null && (
+                    <circle
+                      cx={swipeGesture.x1 + (swipeGesture.x2 - swipeGesture.x1) * swipeProgress}
+                      cy={swipeGesture.y1 + (swipeGesture.y2 - swipeGesture.y1) * swipeProgress}
+                      r={swipeResolution.w / 32}
+                      fill="hsl(var(--primary))"
+                      stroke="white"
+                      strokeWidth={Math.max(4, swipeResolution.w / 180)}
+                    />
+                  )}
                 </svg>
               </div>
             </div>
