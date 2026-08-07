@@ -1,0 +1,31 @@
+import { useQuery } from "@tanstack/react-query";
+
+interface EngineStatusEntry {
+  profileId: number;
+  loggedIn: boolean;
+  dailyCount: number;
+  hourlyCount: number;
+  dailyUnfollowCount: number;
+  dailyDmCount: number;
+  nextHumanSessionAt: number;
+  nextFollowAt: number;
+  nextContactAt: number;
+  nextUnfollowAt: number;
+}
+
+export function useEngineStatus() {
+  return useQuery<EngineStatusEntry[]>({
+    queryKey: ["/api/engine/status"],
+    queryFn: async () => {
+      const res = await fetch("/api/engine/status", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch engine status");
+      return res.json();
+    },
+    refetchInterval: 2000,
+  });
+}
+
+export function useProfileEngineStatus(profileId: number) {
+  const { data } = useEngineStatus();
+  return data?.find(e => e.profileId === profileId);
+}
