@@ -4451,7 +4451,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             for (let _s = 0; _s < _sugSwipes; _s++) {
               if (isCycleAborted(serial)) throw new Error("cycle-aborted");
               const _sugDur = 200 + Math.round(Math.random() * 80);
-              await android.swipe(serial, _sugX1, _sugY, _sugX2, _sugY, _sugDur);
+              await deviceProfileSwipe(
+                serial,
+                { x1: _sugX1, y1: _sugY, x2: _sugX2, y2: _sugY, durationMs: _sugDur },
+                "feed-suggestion-carousel",
+                "normal",
+              );
               await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
             }
             suggestionBrowses++;
@@ -5248,11 +5253,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               const { w: _saW, h: _saH } = getScreenSize(serial);
               for (let _saI = 0; _saI < _saScrolls; _saI++) {
                 if (isCycleAborted(serial)) throw new Error("cycle-aborted");
-                await android.swipe(
+                await deviceProfileSwipe(
                   serial,
-                  Math.round(_saW / 2), Math.round(_saH * 0.75),
-                  Math.round(_saW / 2), Math.round(_saH * 0.30),
-                  350 + Math.round(Math.random() * 350),
+                  {
+                    x1: Math.round(_saW / 2), y1: Math.round(_saH * 0.75),
+                    x2: Math.round(_saW / 2), y2: Math.round(_saH * 0.30),
+                    durationMs: 350 + Math.round(Math.random() * 350),
+                  },
+                  "stories-author-profile-scroll",
+                  "normal",
                 );
                 await sleepOrAbort(serial, 2500 + Math.round(Math.random() * 5500)); // 2.5–8 s
               }
@@ -5367,11 +5376,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // it keeps the log accurate about what really happened on screen.
     if (await stillInStoryViewer()) {
       logger.info({ serial, source: "stories-viewer-exit-down", from: [Math.round(w / 2), Math.round(h * 0.50)], to: [Math.round(w / 2), Math.round(h * 0.92)], durationMs: 300 }, "[mobile-input] swipe");
-      await android.swipe(
+      await deviceProfileSwipe(
         serial,
-        Math.round(w / 2), Math.round(h * 0.50),
-        Math.round(w / 2), Math.round(h * 0.92),
-        300,
+        {
+          x1: Math.round(w / 2), y1: Math.round(h * 0.50),
+          x2: Math.round(w / 2), y2: Math.round(h * 0.92),
+          durationMs: 300,
+        },
+        "stories-viewer-exit-down",
+        "normal",
       );
     }
     await sleepOrAbort(serial, 800);
@@ -7791,11 +7804,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const scrollCount = rollRange(scrollsMin, scrollsMax);
     const { w, h } = getScreenSize(serial);
     for (let i = 0; i < scrollCount; i++) {
-      await android.swipe(
+      await deviceProfileSwipe(
         serial,
-        Math.round(w * 0.5), Math.round(h * 0.65),
-        Math.round(w * 0.5), Math.round(h * 0.30),
-        380 + Math.round(Math.random() * 120),
+        {
+          x1: Math.round(w * 0.5), y1: Math.round(h * 0.65),
+          x2: Math.round(w * 0.5), y2: Math.round(h * 0.30),
+          durationMs: 380 + Math.round(Math.random() * 120),
+        },
+        "check-notifications-scroll",
+        "normal",
       );
       await sleepOrAbort(serial, 500 + Math.round(Math.random() * 500));
     }
@@ -7860,11 +7877,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const scrollCount = rollRange(scrollsMin, scrollsMax);
     const { w, h } = getScreenSize(serial);
     for (let i = 0; i < scrollCount; i++) {
-      await android.swipe(
+      await deviceProfileSwipe(
         serial,
-        Math.round(w * 0.5), Math.round(h * 0.65),
-        Math.round(w * 0.5), Math.round(h * 0.30),
-        380 + Math.round(Math.random() * 120),
+        {
+          x1: Math.round(w * 0.5), y1: Math.round(h * 0.65),
+          x2: Math.round(w * 0.5), y2: Math.round(h * 0.30),
+          durationMs: 380 + Math.round(Math.random() * 120),
+        },
+        "check-dm-scroll",
+        "normal",
       );
       await sleepOrAbort(serial, 500 + Math.round(Math.random() * 500));
     }
@@ -8020,11 +8041,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const scrollCount = rollRange(1, 10);
     const { w, h } = getScreenSize(serial);
     for (let i = 0; i < scrollCount; i++) {
-      await android.swipe(
+      await deviceProfileSwipe(
         serial,
-        Math.round(w * 0.5), Math.round(h * 0.65),
-        Math.round(w * 0.5), Math.round(h * 0.30),
-        380 + Math.round(Math.random() * 120),
+        {
+          x1: Math.round(w * 0.5), y1: Math.round(h * 0.65),
+          x2: Math.round(w * 0.5), y2: Math.round(h * 0.30),
+          durationMs: 380 + Math.round(Math.random() * 120),
+        },
+        "visit-saved-scroll",
+        "normal",
       );
       await sleepOrAbort(serial, 500 + Math.round(Math.random() * 600));
     }
@@ -8109,11 +8134,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // second setting/subsetting tap in this flow.
     const { w, h } = getScreenSize(serial);
     if (Math.random() < 0.5) {
-      await android.swipe(
+      await deviceProfileSwipe(
         serial,
-        Math.round(w * 0.5), Math.round(h * 0.68),
-        Math.round(w * 0.5), Math.round(h * 0.34),
-        420 + Math.round(Math.random() * 120),
+        {
+          x1: Math.round(w * 0.5), y1: Math.round(h * 0.68),
+          x2: Math.round(w * 0.5), y2: Math.round(h * 0.34),
+          durationMs: 420 + Math.round(Math.random() * 120),
+        },
+        "visit-settings-scroll",
+        "normal",
       );
       await sleepOrAbort(serial, 500 + Math.round(Math.random() * 400));
       onLog?.("Visit Settings: ✓ scrolled once");
@@ -8754,11 +8783,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const { w: _hlW } = getScreenSize(serial);
         onLog?.("Inject Browsing: still in highlight story — swiping down to close…");
         logger.info({ serial, source: "inject-highlight-dismiss-down", from: [Math.round(_hlW / 2), Math.round(_hlH * 0.25)], to: [Math.round(_hlW / 2), Math.round(_hlH * 0.82)], durationMs: 180 }, "[mobile-input] swipe");
-        await android.swipe(
+        await deviceProfileSwipe(
           serial,
-          Math.round(_hlW / 2), Math.round(_hlH * 0.25),
-          Math.round(_hlW / 2), Math.round(_hlH * 0.82),
-          180, // fast swipe
+          {
+            x1: Math.round(_hlW / 2), y1: Math.round(_hlH * 0.25),
+            x2: Math.round(_hlW / 2), y2: Math.round(_hlH * 0.82),
+            durationMs: 180,
+          },
+          "inject-highlight-dismiss-down",
+          "normal",
         );
         await sleepOrAbort(serial, 700);
         onLog?.("Inject Browsing: ✓ highlight viewed and dismissed");
