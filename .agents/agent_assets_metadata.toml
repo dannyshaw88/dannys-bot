@@ -1,0 +1,9 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "UuYe0SuhXpmpgHsQkAkb-"
+uri = "file://screenshots/dashboard-metric-alignment-test.jpg"
+type = "image"
+title = "Dashboard metric alignment test"
+description = "Temporary dashboard test showing 25 likes done, 3 follows done, and 5 reels watched centered in the top activity ticker."
