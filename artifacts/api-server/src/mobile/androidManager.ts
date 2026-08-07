@@ -9229,6 +9229,64 @@ export function loadKeyCalibrationMap(serial: string): KeyCalibrationMap | null 
 }
 
 /**
+ * Type only through the saved Android keyboard calibration map.
+ *
+ * This is intentionally strict. Callers that require real on-screen keyboard
+ * taps must not fall back to `adb shell input text` when calibration is
+ * missing or incomplete.
+ */
+export async function typeViaSavedCalibrationMap(
+  serial: string,
+  text: string,
+  onLog?: (msg: string) => void,
+): Promise<{ ok: boolean; available: boolean; missing: string[] }> {
+  const map = loadKeyCalibrationMap(serial);
+  if (!map) {
+    onLog?.("[cal-keyboard] no saved calibration map");
+    return { ok: false, available: false, missing: [...text] };
+  }
+
+  // Preflight every key before the first tap. Without this guard the lower
+  // level typing loop could enter part of a string, then discover a missing
+  // punctuation/shift/layer key and return with a half-written field.
+  const moreSymbolChars = new Set([
+    "~", "`", "|", "•", "√", "π", "÷", "×", "§", "∆", "£", "€", "¥",
+    "^", "°", "{", "}", "[", "]", "\\", "<", ">",
+  ]);
+  const hasPoint = (key: string) => {
+    const point = map[key];
+    return !!point && Number.isFinite(point.x) && Number.isFinite(point.y);
+  };
+  const required = new Set<string>();
+  let needsSymbols = false;
+  let needsMoreSymbols = false;
+  for (const ch of text) {
+    if (ch === " ") {
+      required.add("space");
+    } else if (ch === "\n") {
+      required.add("enter");
+    } else if (/^[a-z]$/i.test(ch)) {
+      required.add(ch.toLowerCase());
+      if (ch !== ch.toLowerCase()) required.add("shift");
+    } else {
+      required.add(ch);
+      if (moreSymbolChars.has(ch)) needsMoreSymbols = true;
+      else if (ch !== "," && ch !== ".") needsSymbols = true;
+    }
+  }
+  if (needsSymbols) required.add("symbols");
+  if (needsMoreSymbols) required.add("moreSymbols");
+  const missing = [...required].filter(key => !hasPoint(key));
+  if (missing.length) {
+    onLog?.(`[cal-keyboard] calibration preflight missing: ${missing.join(", ")}`);
+    return { ok: false, available: true, missing };
+  }
+
+  const result = await typeViaCalibrationMap(serial, text, map, onLog);
+  return { ...result, available: true };
+}
+
+/**
  * Resolve and tap a named keyboard control.
  *
  * Gboard is inconsistent about exposing its controls through UIAutomator. Use
@@ -9760,7 +9818,7 @@ export async function typeViaCalibrationMap(
       // Use the checked input path here. The old helper discarded adb's
       // exit/stderr, so a dead device or rejected input tap looked like a
       // successful character press.
-      runInputShell(
+      await runInputShell(
         serial,
         ["tap", String(Math.round(pos.x)), String(Math.round(pos.y))],
         "tap",

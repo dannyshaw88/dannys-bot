@@ -1125,8 +1125,8 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
           ? await electronClipboard().catch(() => "")
           : await navigator.clipboard.readText().catch(() => "");
         if (text) {
-          // Mirror Paste uses the ADB shell text-input path. The backend
-          // translates this desktop clipboard value into adb input text.
+          // Mirror Paste types the desktop clipboard value through real taps
+          // on the phone's saved Android keyboard calibration map.
           const r = await fetch(`${base}/input/clipboard-paste`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },

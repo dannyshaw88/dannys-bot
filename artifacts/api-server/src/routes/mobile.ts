@@ -7142,8 +7142,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // Functions: pickLocalFolderImage(), runMakePostStep()
   // Route:     (called from automation-cycle only)
   // Isolation: local-folder image pick, IG composer open, caption, upload.
-  //            Caption input uses android.inputText() (direct adb paste) —
-  //            do NOT route caption through typeViaOnscreenKeyboard.
+  //            Caption input remains on its existing direct adb-input path.
   // ═══════════════════════════════════════════════════════════════════════════
 
   async function runMakePostStep(serial: string, opts: {
@@ -8448,8 +8447,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
     }
 
-    // 4. Replace the focused Bio field using the ADB shell text-input path.
+    // 4. Replace the focused Bio field using real taps on the calibrated
+    //    Android keyboard. Never fall back to adb shell input text here.
     {
+      // Select the existing bio contents before typing the replacement. This
+      // is a selection command, not a text-injection path; the replacement
+      // characters below still arrive only through calibrated key taps.
       const tools = android.detectToolset();
       const adb = tools.adb.path ?? "";
       if (adb) {
@@ -8457,8 +8460,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           "KEYCODE_CTRL_LEFT", "KEYCODE_A"], { encoding: "utf8", timeout: 2000 });
         await sleepOrAbort(serial, 400);
       }
-      await android.inputTextHumanized(serial, bioText);
-      onLog?.(`Update Bio: entered bio text via adb input (${bioText.length} chars)`);
+      const typed = await android.typeViaSavedCalibrationMap(serial, bioText, message => {
+        onLog?.(`Update Bio: ${message}`);
+      });
+      if (!typed.ok) {
+        onLog?.(
+          `Update Bio: ✗ calibrated keyboard could not enter bio` +
+          `${typed.missing.length ? ` — missing ${typed.missing.join(", ")}` : ""}`,
+        );
+        await android.pressBack(serial);
+        return;
+      }
+      onLog?.(`Update Bio: entered bio text via calibrated Android keyboard (${bioText.length} chars)`);
     }
     await sleepOrAbort(serial, 800 + Math.round(Math.random() * 200));
 
@@ -8517,11 +8530,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // Route:     POST /api/mobile/devices/:serial/slots/:slotIdx/follow-users
   //            (also called from automation-cycle)
   // Isolation: HikerAPI candidate fetch, Instagram search, profile nav, follow
-  //            tap are all here. Search bar input uses android.inputText()
-  //            (direct adb paste) — NOT typeViaOnscreenKeyboard. If you are
-  //            adding a new text-input method to this tool, change only the
-  //            lines inside runFollowUsersStep(); do not touch View Stories or
-  //            any other tool's input path.
+  //            tap are all here. Search bar input uses the strict saved Android
+  //            keyboard calibration map and never falls back to adb text input.
   // ═══════════════════════════════════════════════════════════════════════════
 
   // ── HikerAPI-driven follow step ──────────────────────────────────────────
@@ -9619,8 +9629,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // the × clear button by resource-id, or falls back to backspace-over-
         // text using the EditText node's text attribute (no coordinates used).
         await android.clearInstagramSearchBar(serial, (msg) => onLog?.(`  ${msg}`));
-        // Use the ADB shell text-input path for the target username.
-        await android.inputTextHumanized(serial, `@${username}`);
+        // Use only real taps on the saved Android keyboard calibration map.
+        const typed = await android.typeViaSavedCalibrationMap(serial, `@${username}`, message => {
+          onLog?.(`  ${message}`);
+        });
+        if (!typed.ok) {
+          onLog?.(
+            `Follow: calibrated keyboard could not enter @${username}` +
+            `${typed.missing.length ? ` — missing ${typed.missing.join(", ")}` : ""} — skipping`,
+          );
+          await android.pressBack(serial);
+          await sleepOrAbort(serial, 500);
+          continue;
+        }
         // Small settle before handing off to findAndTapUserInSearch, which
         // now polls the dump internally (up to 4 attempts × 1.5 s) so the
         // results have time to load from Instagram's network.
@@ -11918,16 +11939,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
-  // Manual mirror paste intentionally uses the ADB shell text-input path.
-  // Some Android builds reject or silently ignore `cmd clipboard set` from
-  // the host, while `adb shell input text` is the path that works reliably
-  // with the connected phone.
+  // Manual mirror paste reads the desktop clipboard, then types it through
+  // real taps on the saved Android keyboard calibration map. It must not use
+  // adb shell input text or host-side clipboard injection.
   app.post("/api/mobile/devices/:serial/input/clipboard-paste", async (req: Request, res: Response) => {
     try {
       const input = inputTextSchema.parse(req.body);
       const serial = p(req, "serial");
-      await android.inputTextHumanized(serial, input.text);
-      res.json({ ok: true });
+      const result = await android.typeViaSavedCalibrationMap(serial, input.text, message => {
+        req.log.info({ serial, message }, "[mirror-calibrated-paste]");
+      });
+      if (!result.ok) {
+        return void res.status(422).json({
+          ok: false,
+          calibrated: result.available,
+          missing: result.missing,
+          error: result.available
+            ? "Saved keyboard calibration is missing one or more requested keys"
+            : "No saved keyboard calibration map for this device",
+        });
+      }
+      res.json({ ok: true, calibrated: true });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
