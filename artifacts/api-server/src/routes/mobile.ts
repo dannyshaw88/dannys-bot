@@ -13416,7 +13416,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const { timeoutMs } = z.object({
         timeoutMs: z.number().int().min(1000).max(30_000).default(15_000),
       }).parse(req.body);
-      const result = await android.captureOneTap(serial, timeoutMs);
+      const result = await android.captureOneTap(serial, timeoutMs, message => {
+        req.log.info({ serial, message }, "[keyboard-calibration]");
+      });
       if (!result) {
         return void res.status(408).json({ ok: false, error: "No tap detected within timeout — make sure a keyboard key was pressed" });
       }

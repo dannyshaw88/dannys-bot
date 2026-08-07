@@ -9185,30 +9185,33 @@ export async function typeViaOnscreenKeyboard(
 /** Map from key label (e.g. "a", "@", "space", "delete") to screen coordinate. */
 export type KeyCalibrationMap = Record<string, { x: number; y: number }>;
 
-// Per-session caches so repeated captureOneTap calls during a calibration
-// session skip the slow getevent -lp and UIAutomator dump queries.
-// Keyed by device serial. Cleared automatically when the server restarts.
-const _calDeviceInfoCache = new Map<string, { device: string; maxX: number; maxY: number }>();
-const _calScreenSizeCache = new Map<string, { w: number; h: number }>();
+// Per-session cache so repeated captureOneTap calls during a calibration
+// session skip the slow getevent -lp query. Keyed by device serial and cleared
+// automatically when the server restarts. The display size is intentionally
+// NOT cached: Android's logical display can change while the calibration
+// dialog is open, and input tap/UIAutomator use the current wm size.
+const _calDeviceInfoCache = new Map<string, {
+  device: string;
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}>();
 
 /**
- * Pre-warm the per-device calibration caches (touch device info + screen size).
+ * Pre-warm the per-device touchscreen calibration cache.
  * Call once when the calibration dialog opens so all subsequent captureOneTap
  * calls return almost immediately instead of spending 3-5 s on setup queries.
  */
 export async function prefetchCalibrationData(serial: string): Promise<boolean> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  if (!_calScreenSizeCache.has(serial)) {
-    const xml = await _uiDump(adb, serial);
-    const { w, h } = _getScreenSize(xml);
-    if (w && h) _calScreenSizeCache.set(serial, { w, h });
-  }
   if (!_calDeviceInfoCache.has(serial)) {
     const devInfo = await _getTouchDeviceInfo(adb, serial);
     if (devInfo) _calDeviceInfoCache.set(serial, devInfo);
   }
-  return _calScreenSizeCache.has(serial) && _calDeviceInfoCache.has(serial);
+  const { w, h } = getScreenSize(serial);
+  return w > 0 && h > 0 && _calDeviceInfoCache.has(serial);
 }
 
 function _calibrationPath(serial: string): string {
@@ -9613,7 +9616,13 @@ export function deleteKeyCalibrationMap(serial: string): void {
 async function _getTouchDeviceInfo(
   adb: string,
   serial: string,
-): Promise<{ device: string; maxX: number; maxY: number } | null> {
+): Promise<{
+  device: string;
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+} | null> {
   const out = await runAdb(adb, ["-s", serial, "shell", "getevent", "-lp"], 8000);
   if (!out) return null;
   // Split on "add device N:" to get per-device blocks.
@@ -9622,12 +9631,14 @@ async function _getTouchDeviceInfo(
     const deviceMatch = block.match(/^\s*(\/dev\/input\/\S+)/m);
     if (!deviceMatch) continue;
     const device = deviceMatch[1].trim();
-    const xMatch = block.match(/ABS_MT_POSITION_X\s*:.*?max\s+(\d+)/i);
-    const yMatch = block.match(/ABS_MT_POSITION_Y\s*:.*?max\s+(\d+)/i);
+    const xMatch = block.match(/ABS_MT_POSITION_X\s*:.*?min\s+(-?\d+).*?max\s+(-?\d+)/i);
+    const yMatch = block.match(/ABS_MT_POSITION_Y\s*:.*?min\s+(-?\d+).*?max\s+(-?\d+)/i);
     if (!xMatch || !yMatch) continue;
-    const maxX = parseInt(xMatch[1], 10);
-    const maxY = parseInt(yMatch[1], 10);
-    if (maxX > 0 && maxY > 0) return { device, maxX, maxY };
+    const minX = parseInt(xMatch[1], 10);
+    const maxX = parseInt(xMatch[2], 10);
+    const minY = parseInt(yMatch[1], 10);
+    const maxY = parseInt(yMatch[2], 10);
+    if (maxX > minX && maxY > minY) return { device, minX, maxX, minY, maxY };
   }
   return null;
 }
@@ -9644,23 +9655,16 @@ async function _getTouchDeviceInfo(
 export async function captureOneTap(
   serial: string,
   timeoutMs = 15_000,
+  onLog?: (msg: string) => void,
 ): Promise<{ x: number; y: number } | null> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
 
-  // Use cached screen size if available (populated by prefetchCalibrationData),
-  // otherwise fall back to a fresh UIAutomator dump.
-  let screenW: number, screenH: number;
-  const cachedSize = _calScreenSizeCache.get(serial);
-  if (cachedSize) {
-    screenW = cachedSize.w; screenH = cachedSize.h;
-  } else {
-    const xml = await _uiDump(adb, serial);
-    const { w, h } = _getScreenSize(xml);
-    if (!w || !h) return null;
-    _calScreenSizeCache.set(serial, { w, h });
-    screenW = w; screenH = h;
-  }
+  // Use the same current logical display dimensions as adb shell input tap and
+  // the rest of the mobile input path. UIAutomator root bounds can omit the
+  // bottom navigation area and must not define calibration's coordinate space.
+  const { w: screenW, h: screenH } = getScreenSize(serial);
+  if (!screenW || !screenH) return null;
 
   // Use cached device info if available, otherwise discover it now.
   let devInfo = _calDeviceInfoCache.get(serial);
@@ -9670,7 +9674,13 @@ export async function captureOneTap(
     _calDeviceInfoCache.set(serial, discovered);
     devInfo = discovered;
   }
-  const { device, maxX, maxY } = devInfo;
+  const { device, minX, maxX, minY, maxY } = devInfo;
+  const rangeX = maxX - minX;
+  const rangeY = maxY - minY;
+  onLog?.(
+    `[keyboard-calibration] capture ready: device=${device}, ` +
+    `rawX=${minX}..${maxX}, rawY=${minY}..${maxY}, display=${screenW}x${screenH}`,
+  );
 
   return new Promise<{ x: number; y: number } | null>((resolve) => {
     let rawX: number | null = null;
@@ -9702,9 +9712,18 @@ export async function captureOneTap(
           const m = line.match(/([0-9a-f]{8})\s*$/i);
           if (m) rawY = parseInt(m[1], 16);
         } else if (/SYN_REPORT/.test(line) && rawX !== null && rawY !== null) {
-          // First complete touch-down event captured — scale to screen pixels.
-          const x = Math.round((rawX / maxX) * screenW);
-          const y = Math.round((rawY / maxY) * screenH);
+          // First complete touch-down event captured. Normalize within the
+          // touchscreen's advertised axis bounds before mapping to the current
+          // logical display. Clamp out-of-range noise instead of allowing a
+          // stale/raw calibration value to escape the screen.
+          const normalizedX = Math.min(1, Math.max(0, (rawX - minX) / rangeX));
+          const normalizedY = Math.min(1, Math.max(0, (rawY - minY) / rangeY));
+          const x = Math.round(normalizedX * (screenW - 1));
+          const y = Math.round(normalizedY * (screenH - 1));
+          onLog?.(
+            `[keyboard-calibration] captured raw=(${rawX},${rawY}) ` +
+            `mapped=(${x},${y}) display=${screenW}x${screenH}`,
+          );
           finish({ x, y });
         }
       }

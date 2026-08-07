@@ -1,3 +1,34 @@
+## [1.2.414] — 2026-08-07
+
+### Fixed — Phone Farm keyboard calibration coordinate mapping
+
+- Fixed the bottom row of the Phone Farm keyboard calibration being saved in
+  the wrong vertical position on devices where the UIAutomator root does not
+  include the full navigation area.
+- Physical calibration taps now use the device's current logical `wm size`,
+  matching the coordinate space used by `adb shell input tap` and live
+  accessibility bounds.
+- Calibration now accounts for both the minimum and maximum values advertised
+  by the touchscreen's raw X/Y axes instead of assuming every axis starts at
+  zero.
+- Screen coordinates are clamped to the current logical display so noisy raw
+  touch values cannot create out-of-bounds saved key positions.
+- Added device-side calibration diagnostics showing the touchscreen device,
+  raw axis ranges, logical display size, captured raw point, and mapped screen
+  point in the API log.
+- The display size is read fresh for every captured key, preventing a stale
+  session cache from surviving a device display override change.
+
+### Build — Windows installer Actions workflow
+
+- `build-windows-installer.yml` remains the single active Windows installer
+  workflow.
+- The workflow still builds the API server and frontend, bundles Electron,
+  creates the Windows installer, and uploads the complete
+  `Aura-Farming-Windows-Installer` artifact.
+- The other Windows-related workflow files remain inert `workflow_call` stubs
+  so GitHub Actions cannot start duplicate installer builds.
+
 ## [1.2.413] — 2026-08-07
 
 ### Fixed — Windows installer dependency step
