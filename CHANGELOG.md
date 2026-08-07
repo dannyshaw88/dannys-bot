@@ -1,3 +1,13 @@
+## [1.2.415] — 2026-08-07
+
+### Added — Downloadable Windows installer workflow
+
+- Added a canonical GitHub Actions workflow that builds the web app and packages
+  the Windows Electron installer.
+- Successful runs provide an `Aura-Farming-Windows-Installer` download in the
+  Actions artifacts section.
+- Version-tagged runs also publish the installer to GitHub Releases.
+
 ## [1.2.414] — 2026-08-07
 
 ### Fixed — Phone Farm keyboard calibration coordinate mapping
