@@ -15,6 +15,20 @@
 - The panel returns to its default top-right position each time a new
   calibration session is opened.
 
+## [1.2.410] — 2026-08-07
+
+### Added — Keyboard calibration TEST TEXT
+
+- Added a `TEST TEXT` field and `TEST` button to the Phone Farm keyboard
+  calibration prompt.
+- The test types each entered character through the saved per-device
+  calibration coordinates, including the existing ABC, symbols, and extended
+  symbol layer navigation.
+- Calibration tests refuse fallback typing and report missing mapped keys in
+  the prompt and device log so an incomplete calibration cannot appear valid.
+- The Windows installer build remains the canonical GitHub Actions workflow and
+  packages this update as version `1.2.410`.
+
 ## [1.2.409] — 2026-08-06
 
 ### Changed — Humanized ADB text input

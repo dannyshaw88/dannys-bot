@@ -13340,6 +13340,35 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ ok: false, error: e?.message }); }
   });
 
+  /** Type text strictly through the saved per-device calibration map. */
+  app.post("/api/mobile/devices/:serial/keyboard-calibration/test", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const { text } = z.object({
+        text: z.string().min(1).max(200),
+      }).parse(req.body);
+      const map = android.loadKeyCalibrationMap(serial);
+      if (!map) {
+        return void res.status(422).json({
+          ok: false,
+          missing: [...text],
+          error: "No saved keyboard calibration map for this device",
+        });
+      }
+      const result = await android.typeViaCalibrationMap(serial, text, map, message => {
+        req.log.info({ serial, message }, "[keyboard-calibration]");
+      });
+      req.log.info(
+        { serial, characterCount: text.length, missing: result.missing },
+        "[keyboard-calibration] test complete",
+      );
+      res.status(result.ok ? 200 : 422).json(result);
+    } catch (e: any) {
+      req.log.error({ err: e }, "[keyboard-calibration] test failed");
+      res.status(400).json({ ok: false, error: e?.message });
+    }
+  });
+
   /** Wait for a single physical tap and return its screen-pixel coordinate. */
   app.post("/api/mobile/devices/:serial/keyboard-calibration/capture", async (req: Request, res: Response) => {
     try {

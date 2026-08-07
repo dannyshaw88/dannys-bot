@@ -1802,6 +1802,9 @@ function CalibrationDialog({
   const [editResult, setEditResult] = useState<string | null>(null);
   // editMap: tracking row-level capturing state (by mapKey)
   const [editCapturing, setEditCapturing] = useState<string | null>(null);
+  const [testText, setTestText] = useState("");
+  const [testingText, setTestingText] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
   // The calibration panel starts in its existing top-right position. Once the
   // title bar is dragged, keep the panel at an explicit viewport position.
   const [panelPosition, setPanelPosition] = useState<{ left: number; top: number } | null>(null);
@@ -1823,6 +1826,9 @@ function CalibrationDialog({
     setEditTarget(null);
     setEditResult(null);
     setEditCapturing(null);
+    setTestText("");
+    setTestingText(false);
+    setTestResult(null);
     setPanelPosition(null);
 
     // Load full existing map so the wizard can merge into it and editMap can
@@ -1886,6 +1892,38 @@ function CalibrationDialog({
         onLog?.(`[calibration] Saved ${Object.keys(mapToSave).length} keys for ${serial}`);
       }
     } catch { /**/ }
+  };
+
+  const testCalibratedText = async () => {
+    const text = testText;
+    if (!text.trim() || testingText) return;
+    setTestingText(true);
+    setTestResult(null);
+    try {
+      const resp = await fetch(
+        `/api/mobile/devices/${encodeURIComponent(serial)}/keyboard-calibration/test`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        },
+      );
+      const body = await resp.json();
+      if (body.ok) {
+        setTestResult(`✓ Typed ${text.length} character${text.length === 1 ? "" : "s"} using calibrated taps`);
+        onLog?.(`[calibration] TEST TEXT typed ${text.length} character${text.length === 1 ? "" : "s"}`);
+      } else {
+        const missing = Array.isArray(body.missing) && body.missing.length > 0
+          ? ` Missing: ${body.missing.join(", ")}`
+          : "";
+        setTestResult(`✗ Calibration test incomplete.${missing}`);
+        onLog?.(`[calibration] TEST TEXT missing mapped keys: ${body.missing?.join(", ") || "unknown"}`);
+      }
+    } catch {
+      setTestResult("✗ Test request failed — check server logs");
+    } finally {
+      setTestingText(false);
+    }
   };
 
   const clearExisting = async () => {
@@ -1983,6 +2021,38 @@ function CalibrationDialog({
             {mode === "editMap" ? "Edit Calibration Map" : "Keyboard Calibration"}
           </DialogTitle>
         </DialogHeader>
+
+        <div className="rounded-lg border border-cyan-700/60 bg-cyan-950/40 px-3 py-3">
+          <p className="text-xs font-bold uppercase tracking-wide text-cyan-200">TEST TEXT</p>
+          <p className="mt-1 text-[11px] leading-4 text-cyan-100/80">
+            Type a word while the phone keyboard is already open. TEST presses every character using only this device&apos;s saved mapped coordinates.
+          </p>
+          <div className="mt-2 flex gap-2">
+            <BaseInput
+              value={testText}
+              onChange={e => { setTestText(e.target.value); setTestResult(null); }}
+              onKeyDown={e => { if (e.key === "Enter") void testCalibratedText(); }}
+              placeholder="Enter test text"
+              aria-label="Test text"
+              disabled={testingText}
+              className="h-8 border-cyan-800 bg-slate-900 text-xs text-slate-100 placeholder:text-slate-500"
+            />
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void testCalibratedText()}
+              disabled={!testText.trim() || testingText || !!capturing || !!editCapturing}
+              className="h-8 shrink-0 bg-cyan-700 text-xs hover:bg-cyan-600"
+            >
+              {testingText ? <Loader2 className="h-3 w-3 animate-spin" /> : "TEST"}
+            </Button>
+          </div>
+          {testResult && (
+            <p className={`mt-2 text-[11px] font-mono ${testResult.startsWith("✓") ? "text-green-400" : "text-red-400"}`}>
+              {testResult}
+            </p>
+          )}
+        </div>
 
         {/* ── Edit Map view ── */}
         {mode === "editMap" ? (
