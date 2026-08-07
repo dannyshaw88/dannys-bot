@@ -455,7 +455,7 @@ export function SettingsPage() {
           <button
             key={label}
             onClick={() => setTab(label.toLowerCase())}
-            className={`inline-flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${settingsTab === label.toLowerCase() ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            className={`inline-flex items-center gap-1.5 px-[18px] py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${settingsTab === label.toLowerCase() ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           >
             {label}
             <TabIcon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
