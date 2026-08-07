@@ -1802,6 +1802,14 @@ function CalibrationDialog({
   const [editResult, setEditResult] = useState<string | null>(null);
   // editMap: tracking row-level capturing state (by mapKey)
   const [editCapturing, setEditCapturing] = useState<string | null>(null);
+  // The calibration panel starts in its existing top-right position. Once the
+  // title bar is dragged, keep the panel at an explicit viewport position.
+  const [panelPosition, setPanelPosition] = useState<{ left: number; top: number } | null>(null);
+  const panelDragRef = useRef<{
+    pointerId: number;
+    offsetX: number;
+    offsetY: number;
+  } | null>(null);
 
   // Reset state and load existing map whenever the dialog opens.
   useEffect(() => {
@@ -1815,6 +1823,7 @@ function CalibrationDialog({
     setEditTarget(null);
     setEditResult(null);
     setEditCapturing(null);
+    setPanelPosition(null);
 
     // Load full existing map so the wizard can merge into it and editMap can
     // display current coords without wiping anything.
@@ -1918,13 +1927,58 @@ function CalibrationDialog({
     }
   };
 
+  const handlePanelDragStart = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    const panel = event.currentTarget.parentElement;
+    if (!panel) return;
+    const bounds = panel.getBoundingClientRect();
+    panelDragRef.current = {
+      pointerId: event.pointerId,
+      offsetX: event.clientX - bounds.left,
+      offsetY: event.clientY - bounds.top,
+    };
+    setPanelPosition({ left: bounds.left, top: bounds.top });
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handlePanelDragMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = panelDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const panel = event.currentTarget.parentElement;
+    if (!panel) return;
+    const bounds = panel.getBoundingClientRect();
+    const margin = 8;
+    const left = Math.min(
+      Math.max(margin, event.clientX - drag.offsetX),
+      Math.max(margin, window.innerWidth - bounds.width - margin),
+    );
+    const top = Math.min(
+      Math.max(margin, event.clientY - drag.offsetY),
+      Math.max(margin, window.innerHeight - bounds.height - margin),
+    );
+    setPanelPosition({ left, top });
+  };
+
+  const handlePanelDragEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (panelDragRef.current?.pointerId !== event.pointerId) return;
+    panelDragRef.current = null;
+    try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* already released */ }
+  };
+
   return (
     <Dialog open={open} modal={false} onOpenChange={v => { if (!capturing && !editCapturing) onOpenChange(v); }}>
       <DialogContent
         hideOverlay
         className="fixed right-4 top-4 left-auto max-h-[calc(100vh-2rem)] max-w-md translate-x-0 translate-y-0 overflow-y-auto border-slate-700 bg-slate-950 text-slate-100"
+        style={panelPosition ? { left: panelPosition.left, top: panelPosition.top, right: "auto" } : undefined}
       >
-        <DialogHeader>
+        <DialogHeader
+          className="cursor-move select-none"
+          onPointerDown={handlePanelDragStart}
+          onPointerMove={handlePanelDragMove}
+          onPointerUp={handlePanelDragEnd}
+          onPointerCancel={handlePanelDragEnd}
+        >
           <DialogTitle className="text-sm">
             {mode === "editMap" ? "Edit Calibration Map" : "Keyboard Calibration"}
           </DialogTitle>
