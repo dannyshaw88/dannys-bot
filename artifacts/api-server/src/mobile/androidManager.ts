@@ -7325,10 +7325,11 @@ async function isKeyboardEmojiPickerOpen(serial: string): Promise<boolean> {
 /**
  * Switches the active Instagram account to the one matching `username` by
  * triggering Instagram's built-in account switcher:
- *   1. Long-press the profile tab (bottom-right nav) for 2 s → switcher opens
- *   2. UIAutomator dump the switcher XML
- *   3. Find the node whose text matches the username
- *   4. Tap it and wait for the account to load
+ *   1. Tap the profile tab once to open the active account profile
+ *   2. UIAutomator dump the profile and tap its top username control
+ *   3. UIAutomator dump the account-list sheet
+ *   4. Find the node whose text matches the username
+ *   5. Tap it and wait for the account to load
  *
  * Returns true if the switch was performed (or the account was already active),
  * false if the username wasn't found in the switcher.
@@ -7442,20 +7443,26 @@ export async function switchToInstagramAccount(
   onLog?.(`  ↳ Profile tab found — waiting ${PROFILE_TAB_SETTLE_MS / 1000}s for Instagram to finish rendering…`);
   await _sleep(PROFILE_TAB_SETTLE_MS);
 
-  // 2. Long-press the profile tab (a zero-distance swipe with a 2 s duration
-  //    is the standard ADB idiom for a long-press gesture).
-  onLog?.(`  ↳ Long-pressing profile tab to open account switcher…`);
-  await runAdb(adbPath, [
-    "-s", serial, "shell", "input", "swipe",
-    String(profileTab.x), String(profileTab.y),
-    String(profileTab.x), String(profileTab.y),
-    "2000",
-  ], 6000);
-  // Reduced 1500 → 700 ms: the subsequent _uiDump waits for UI idle (~5-9 s),
-  // so a long fixed pre-dump sleep is redundant on top of that.
+  // 2. Open the active account profile with a single tap. Instagram's newer
+  // account UI no longer reliably opens the account list from a long-press.
+  onLog?.(`  ↳ Tapping profile tab to open the active account profile…`);
+  await _adbTapAsync(adbPath, serial, profileTab.x, profileTab.y);
   await _sleep(700);
 
-  // 3. Dump the accessibility tree and look for the target username.
+  // 3. On the profile screen, tap the username in the top header. Restrict
+  // the match to the header region so a username in a post or suggestion
+  // cannot be mistaken for the account-switch control.
+  const profileXml = await _uiDump(adbPath, serial).catch(() => "");
+  const profileHeaderUsername = _findTopProfileUsername(profileXml);
+  if (!profileHeaderUsername) {
+    onLog?.(`  ⚠ Could not find @${clean} in the profile header — cannot open account list`);
+    return false;
+  }
+  onLog?.(`  ↳ Tapping profile header username @${clean} to open account list…`);
+  await _adbTapAsync(adbPath, serial, profileHeaderUsername.x, profileHeaderUsername.y);
+  await _sleep(700);
+
+  // 4. Dump the accessibility tree and look for the target username.
   //    Instagram displays each account row as a node with text="username"
   //    (no @ prefix) or content-desc="username". Try both the bare username
   //    and the @-prefixed variant since different IG versions use different
@@ -7576,11 +7583,11 @@ export async function switchToInstagramAccount(
     }
   }
 
-  // 4. Tap the username row to switch accounts.
+  // 5. Tap the username row to switch accounts.
   onLog?.(`  ✓ Found @${clean} in switcher — switching…`);
   _adbTap(adbPath, serial, coords.x, coords.y);
 
-  // 5. Check whether the switcher actually closed after the tap.
+  // 6. Check whether the switcher actually closed after the tap.
   //
   // Two distinct cases reach this point:
   //   a) Account needed switching → tap closes the sheet, feed reloads.
@@ -7608,7 +7615,7 @@ export async function switchToInstagramAccount(
     }
   }
 
-  // 6. Give Instagram time to finish loading the feed.
+  // 7. Give Instagram time to finish loading the feed.
   await _sleep(1500);
   return true;
 }
@@ -7694,6 +7701,35 @@ function _findElem(xml: string, ...candidates: string[]): { x: number; y: number
       const re2 = new RegExp(`${attr}="[^"]*${esc}[^"]*"[^>]*bounds="([^"]+)"`, "i");
       const m2 = xml.match(re2);
       if (m2) { const c2 = _parseCenter(m2[1]); if (c2) return c2; }
+    }
+  }
+  return null;
+}
+
+/** Find the active profile's username control in Instagram's top header. */
+function _findTopProfileUsername(xml: string): { x: number; y: number } | null {
+  const nodeRe = /<node\b([^>]*)>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = nodeRe.exec(xml)) !== null) {
+    const attrs = match[1];
+    const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+    if (!bounds) continue;
+    const x1 = Number(bounds[1]);
+    const y1 = Number(bounds[2]);
+    const x2 = Number(bounds[3]);
+    const y2 = Number(bounds[4]);
+    const centerY = (y1 + y2) / 2;
+    // The profile header is at the top; do not match post text or the grid.
+    if (centerY > 420 || y2 <= y1 || x2 <= x1) continue;
+    const labels = [
+      attrs.match(/\btext="([^"]*)"/i)?.[1] ?? "",
+      attrs.match(/\bcontent-desc="([^"]*)"/i)?.[1] ?? "",
+    ];
+    if (labels.some(label => {
+      const value = label.replace(/^@/, "").trim();
+      return /^[a-z0-9._]{2,40}$/i.test(value) && !/^(home|profile|edit profile|share profile|instagram)$/i.test(value);
+    })) {
+      return { x: Math.floor((x1 + x2) / 2), y: Math.floor((y1 + y2) / 2) };
     }
   }
   return null;
@@ -7853,6 +7889,10 @@ function _getScreenSizeFromXml(xml: string): { w: number; h: number } | null {
 
 function _adbTap(adb: string, serial: string, x: number, y: number): void {
   spawnSync(adb, ["-s", serial, "shell", "input", "tap", String(x), String(y)], { encoding: "utf8", timeout: 3000 });
+}
+
+async function _adbTapAsync(adb: string, serial: string, x: number, y: number): Promise<void> {
+  await runAdb(adb, ["-s", serial, "shell", "input", "tap", String(x), String(y)], 4000);
 }
 
 function _adbType(adb: string, serial: string, text: string): void {
