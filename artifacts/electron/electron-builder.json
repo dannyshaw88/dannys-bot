@@ -1,0 +1,53 @@
+{
+  "appId": "com.aurafarming.app",
+  "productName": "Aura Farming",
+  "copyright": "Copyright © 2025",
+  "artifactName": "aura-farming-setup-${version}.${ext}",
+  "directories": {
+    "output": "release"
+  },
+  "asar": false,
+  "files": [
+    "dist/**",
+    "!dist/**/*.map",
+    "node_modules/**"
+  ],
+  "extraResources": [
+    {
+      "from": "resources/bin",
+      "to": "bin",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "assets/icon.ico",
+      "to": "icon.ico"
+    }
+  ],
+  "npmRebuild": true,
+  "publish": {
+    "provider": "github",
+    "owner": "dannyshaw88",
+    "repo": "dannys-bot",
+    "releaseType": "release"
+  },
+  "win": {
+    "icon": "assets/icon.ico",
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "runAfterFinish": true,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": false,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Aura Farming",
+    "installerIcon": null,
+    "uninstallerIcon": null,
+    "include": "installer.nsh"
+  }
+}

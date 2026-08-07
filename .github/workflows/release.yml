@@ -1,0 +1,12 @@
+name: (Deprecated) Release Windows Installer
+on:
+  workflow_call:
+    inputs:
+      note:
+        required: false
+        type: string
+jobs:
+  deprecated-noop:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Deprecated; use build-windows-installer.yml."

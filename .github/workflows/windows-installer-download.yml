@@ -1,0 +1,19 @@
+name: (Deprecated) Windows Installer Download
+
+# DEPRECATED — the canonical Windows installer workflow is
+# `build-windows-installer.yml`. Keeping this file as an inert workflow_call
+# stub prevents two Windows builds from running for every push to main.
+
+on:
+  workflow_call:
+    inputs:
+      note:
+        required: false
+        type: string
+        default: "deprecated — see build-windows-installer.yml"
+
+jobs:
+  deprecated-noop:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "This workflow is deprecated. See build-windows-installer.yml."
