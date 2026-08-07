@@ -30,13 +30,17 @@ jobs:
         run: pnpm --filter @workspace/dannys-bot run build
         env:
           REPL_ID: ci
-      - name: Upload web bundles
+      - name: Upload API bundle
         uses: actions/upload-artifact@v4
         with:
-          name: web-builds
-          path: |
-            artifacts/api-server/dist
-            artifacts/dannys-bot/dist/public
+          name: api-server-dist
+          path: artifacts/api-server/dist
+          if-no-files-found: error
+      - name: Upload frontend bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: dannys-bot-dist
+          path: artifacts/dannys-bot/dist/public
           if-no-files-found: error
 
   package-windows:
@@ -48,11 +52,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Download web bundles
+      - name: Download API bundle
         uses: actions/download-artifact@v4
         with:
-          name: web-builds
-          path: .
+          name: api-server-dist
+          path: artifacts/api-server/dist
+      - name: Download frontend bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: dannys-bot-dist
+          path: artifacts/dannys-bot/dist/public
       - name: Install Electron dependencies
         working-directory: artifacts/electron
         run: npm install --ignore-scripts
