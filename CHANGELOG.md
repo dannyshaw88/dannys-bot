@@ -1,3 +1,20 @@
+## [1.2.410] — 2026-08-07
+
+### Added — Draggable Keyboard Calibration panel
+
+- Added drag positioning to the Keyboard Calibration panel in the Phone Farm
+  Mobile device view.
+- The panel can now be repositioned by dragging its title bar, allowing it to
+  be moved away from the phone mirror and placed wherever it is most useful
+  during calibration.
+- Dragging is limited to the visible application window so the panel cannot be
+  lost off-screen.
+- Calibration controls remain fully interactive because only the title bar
+  starts a drag; buttons, key rows, and the close control keep their existing
+  behavior.
+- The panel returns to its default top-right position each time a new
+  calibration session is opened.
+
 ## [1.2.409] — 2026-08-06
 
 ### Changed — Humanized ADB text input
