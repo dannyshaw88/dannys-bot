@@ -85,3 +85,4 @@
 - [Windows installer CI assertions](windows-installer-ci-assertions.md) — keep text-based workflow checks aligned with the current UI, especially after copy changes
 - [Uploaded attachment auto-commit](uploaded-attachment-auto-commit.md) — an uploaded asset may be committed automatically during a later push even when it was not manually staged
 - [Males Only allowlist filter](males-only-allowlist-filter.md) — explicit comma-separated names match HikerAPI username, full name, or bio; never infer gender
+- [Mobile offline HST gate](mobile-offline-hst-gate.md) — pause all slot cycles on non-ready ADB state while preserving the saved toggle for reconnect resume

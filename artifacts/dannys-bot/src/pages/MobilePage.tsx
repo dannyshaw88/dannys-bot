@@ -3370,6 +3370,12 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   const prevNonNullSerialRef = useRef<string | null>(phone?.serial ?? null);
   const [connectedKey, setConnectedKey] = useState(0);
 
+  // A phone can remain in the USB list while ADB reports it as offline.
+  // Treat that as unavailable for automation, but do not clear the saved
+  // Human Session Tool toggle: the scheduler will resume after the same serial
+  // returns to the ready "device" state.
+  const deviceUnavailable = !phone || phone.state !== "device";
+
   const setEnabledByUser = useCallback((enabled: boolean) => {
     if (enabled) {
       manualToggleOnRef.current = true;
@@ -3493,6 +3499,41 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectedKey, slotIdx, refreshKey]);
 
+  // Pause every slot immediately when the live ADB state becomes offline (or
+  // unauthorized). This is separate from the scheduling effect because that
+  // effect intentionally preserves timers through harmless React/USB reruns.
+  // Here the timer and any in-flight/queued cycle must be stopped explicitly.
+  useEffect(() => {
+    const serial = phone?.serial;
+    if (!serial || !deviceUnavailable) return;
+    const key = `${serial}:${slotIdx ?? 0}`;
+
+    const timer = _hstTimers.get(key);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      _hstTimers.delete(key);
+    }
+    _hstStop.add(key);
+    cancelQueuedSlot?.(slotIdx ?? 0);
+    setRunning(false);
+    setNextRunAt(null);
+    _hstNextRunAt.delete(key);
+
+    const ctrl = cycleAbortRef.current;
+    const abortingId = cycleIdRef.current;
+    cycleAbortRef.current = null;
+    cycleIdRef.current = null;
+    ctrl?.abort();
+    if (abortingId) {
+      fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle/abort`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cycleId: abortingId }),
+      }).catch(() => {});
+    }
+    onLog?.(`[HST] ${slotUsername ? `@${slotUsername}` : `slot${slotIdx ?? 0}`} paused — device is ${phone?.state ?? "unavailable"}`);
+  }, [phone?.serial, phone?.state, deviceUnavailable, slotIdx, slotUsername, cancelQueuedSlot, onLog]);
+
   // Poll /api/mobile/cycle-active every 2 s while the toggle is on.
   // This keeps `serverCycleRunning` accurate so:
   //   • the mirror stays live even right after remount (before runCycle fires)
@@ -3607,7 +3648,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     // and then the clamp effect fires seconds later when real settings arrive —
     // causing a spurious reschedule on every app launch.
     const _phone = phoneRef.current;
-    if (!_phone || !settings.enabled || !hydrated) { setRunning(false); return; }
+    if (deviceUnavailable || !settings.enabled || !hydrated) { setRunning(false); return; }
     const serial = _phone.serial;
     const key = `${serial}:${slotIdx ?? 0}`;
 
@@ -4087,7 +4128,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       rescheduleFnRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.enabled, hydrated]);
+  }, [settings.enabled, hydrated, phone?.serial, phone?.state, deviceUnavailable]);
 
   // Clamp: if the existing timer no longer fits within the new [min, max]
   // bounds, directly reschedule the module-level timer with a corrected delay.
@@ -7716,6 +7757,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
     backToSlot:  (idx: number | null) => setOpenSlotTool(idx),
   }));
   const { config: collisionConfig, requestSlot, releaseSlot, cancelQueuedSlot } = useCollisionPreventer(phone?.serial ?? null);
+  const deviceOffline = phone?.state === "offline";
   const hydratedRef = useRef(false);
   const lastSavedRef = useRef<string>(JSON.stringify(Array.from({ length: ACCT_SLOT_COUNT }, emptySlot)));
   // Kept outside the effect so clearTimeout on new keystrokes works without
@@ -7980,13 +8022,15 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                         />
                         <div className="flex flex-col min-w-0">
                           <span className={`text-[11px] font-semibold leading-tight whitespace-nowrap ${
-                            as.running
+                            deviceOffline && as.enabled
+                              ? "text-red-600 dark:text-red-400"
+                              : as.running
                               ? "text-blue-500"
                               : as.enabled
                                 ? "text-green-600 dark:text-green-400"
                                 : "text-muted-foreground"
                           }`}>
-                            {as.running ? "Running" : as.enabled ? "Active" : "Disabled"}
+                            {deviceOffline && as.enabled ? "Paused — Offline" : as.running ? "Running" : as.enabled ? "Active" : "Disabled"}
                           </span>
                           {as.enabled && !as.running && as.nextRunAt && (
                             <span className="text-[10px] text-muted-foreground whitespace-nowrap leading-tight">

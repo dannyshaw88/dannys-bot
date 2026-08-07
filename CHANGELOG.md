@@ -1,3 +1,34 @@
+## [1.2.411] — 2026-08-07
+
+### Fixed — Pause Human Session Tool when a phone is offline
+
+- Human Session Tool automation now stops immediately when a Phone Farm device
+  is still listed but ADB reports that it is `offline` or otherwise not ready.
+- Every account slot on the affected device is paused together, so no slot can
+  continue sending automation commands to a phone whose USB/ADB transport has
+  dropped.
+- Scheduled timers, queued Collision Preventer turns, and an in-progress
+  automation cycle are cancelled when the device becomes unavailable.
+- The saved Human Session Tool toggle is preserved. When the same phone
+  reconnects and returns to the ready ADB `device` state, its saved automation
+  schedule can resume without requiring the user to re-enable it.
+- The slot list now clearly shows `Paused — Offline` instead of suggesting that
+  an enabled slot is actively ready to run.
+- The API performs its own live ADB readiness check immediately before starting
+  every automation cycle. Stale browser state can therefore not start a cycle
+  against a missing, unauthorized, or offline device.
+
+### Build — Windows installer Actions workflow
+
+- Confirmed the Windows installer build is handled by the canonical
+  `build-windows-installer.yml` workflow.
+- The workflow builds the API server and frontend, bundles the Electron
+  application, creates the Windows installer, and uploads the `.exe` as the
+  `Aura-Farming-Windows-Installer` Actions artifact.
+- The application version is bumped to `1.2.411` in both the workspace package
+  and Electron package so the generated installer and updater see the release
+  correctly.
+
 ## [1.2.410] — 2026-08-07
 
 ### Added — Draggable Keyboard Calibration panel

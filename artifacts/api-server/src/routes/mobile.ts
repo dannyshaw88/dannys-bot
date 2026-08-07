@@ -10160,6 +10160,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   app.post("/api/mobile/devices/:serial/automation-cycle", async (req: Request, res: Response) => {
     const serial = p(req, "serial");
+    // The USB poll can still report a serial while ADB has transitioned it to
+    // offline. Never start a Human Session Tool cycle against that stale entry.
+    // The frontend keeps the saved toggle enabled and retries automatically
+    // when the same serial returns as a ready device.
+    try {
+      const currentDevice = (await android.listDevices()).find(device => device.serial === serial);
+      if (!currentDevice || currentDevice.state !== "device") {
+        res.status(409).json({
+          error: `Device ${serial} is not ready for automation (${currentDevice?.state ?? "not connected"})`,
+        });
+        return;
+      }
+    } catch (error) {
+      logger.warn({ err: error, serial }, "Could not verify device state before automation cycle");
+      res.status(503).json({ error: "Could not verify device connection before starting automation" });
+      return;
+    }
     if (automationCycleInProgress.has(serial) || checkFeedInProgress.has(serial)) {
       res.status(409).json({ error: "An automation cycle is already in progress on this device" });
       return;
