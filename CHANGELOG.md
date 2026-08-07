@@ -1,3 +1,24 @@
+## [1.2.413] — 2026-08-07
+
+### Fixed — Windows installer dependency step
+
+- Removed the redundant `npm install` from the Windows installer workflow.
+- The repository is a pnpm workspace, so the preceding workspace install
+  already installs and links the Electron package dependencies.
+- Running npm install again inside `artifacts/electron` caused npm to execute
+  the `cycletls` package build and fail on GitHub Actions because its optional
+  `concurrently` command was not available in that nested npm context.
+- The workflow now uses the dependencies from the workspace install and invokes
+  Electron Builder through pnpm, allowing the Electron bundle and Windows
+  installer steps to run with the same package-manager layout.
+
+### Build — Windows installer Actions workflow
+
+- `build-windows-installer.yml` remains the single canonical Windows installer
+  workflow.
+- It continues to build the API server and frontend, bundle Electron, create
+  the Windows installer, and upload the generated `.exe` artifact.
+
 ## [1.2.412] — 2026-08-07
 
 ### Fixed — Inject Browsing now reverses the configured account swipe

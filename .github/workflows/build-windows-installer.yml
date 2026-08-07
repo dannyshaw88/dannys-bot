@@ -29,15 +29,12 @@ jobs:
         run: pnpm --filter @workspace/dannys-bot run build
         env:
           REPL_ID: ci
-      - name: Install Electron dependencies
-        working-directory: artifacts/electron
-        run: npm install --ignore-scripts
       - name: Build Electron bundle
         working-directory: artifacts/electron
         run: node build.mjs
       - name: Build Windows installer
         working-directory: artifacts/electron
-        run: npx electron-builder --win --publish never
+        run: pnpm exec electron-builder --win --publish never
       - name: Upload installer to Actions artifacts
         uses: actions/upload-artifact@v4
         with:
