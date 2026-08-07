@@ -1,3 +1,33 @@
+## [1.2.412] — 2026-08-07
+
+### Fixed — Inject Browsing now reverses the configured account swipe
+
+- Fixed Phone Farm Human Session Tool → Follow Users → Inject Browsing returning
+  through a profile grid in the same direction as the original browsing swipe.
+- The account/device-specific swipe gesture configured in the Mobile device
+  settings is now used for both directions: the return gesture swaps the saved
+  start and end points instead of replaying the forward gesture.
+- The correction applies when returning to the profile top before highlights,
+  when recovering from a post-thumbnail that did not open, and when restoring
+  the profile top before the Follow button is used.
+- The number of return swipes remains exactly equal to the number of profile-grid
+  rows that were scrolled, preventing an extra swipe from overshooting the
+  profile and triggering pull-to-refresh.
+- The existing fallback swipe remains available on devices without a saved
+  gesture profile, while configured devices now consistently use their
+  calibrated per-device path.
+
+### Build — Windows installer Actions workflow
+
+- The canonical `build-windows-installer.yml` workflow remains the single
+  Windows installer workflow triggered by pushes to `main`, version tags, and
+  manual dispatch.
+- It builds the API server and frontend, bundles Electron, creates the Windows
+  installer, and uploads the generated executable as
+  `Aura-Farming-Windows-Installer`.
+- The workspace and Electron versions are both bumped to `1.2.412` so the
+  installer and updater use the same release version.
+
 ## [1.2.411] — 2026-08-07
 
 ### Fixed — Pause Human Session Tool when a phone is offline

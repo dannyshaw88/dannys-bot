@@ -8853,7 +8853,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         onLog?.(`Inject Browsing: scrolling back to top for highlights — ${rows} row(s)`);
         for (let _hsi = 0; _hsi < rows; _hsi++) {
           logger.info({ serial, source: "inject-profile-grid-scroll-back-for-highlights", from: [Math.round(w / 2), Math.round(h * 0.35)], to: [Math.round(w / 2), Math.round(h * 0.80)], durationMs: 400 }, "[mobile-input] swipe");
-          await deviceProfileSwipe(serial, { x1: Math.round(w / 2), y1: Math.round(h * 0.35), x2: Math.round(w / 2), y2: Math.round(h * 0.80), durationMs: 400 }, "inject-profile-grid-scroll-back");
+          // This is the exact inverse of the configured account/device gesture.
+          // Passing the back personality is required: deviceProfileSwipe uses
+          // the saved x1/y1 → x2/y2 path whenever a profile exists, so merely
+          // reversing this fallback would otherwise still send the normal
+          // configured direction.
+          await deviceProfileSwipe(
+            serial,
+            { x1: Math.round(w / 2), y1: Math.round(h * 0.35), x2: Math.round(w / 2), y2: Math.round(h * 0.80), durationMs: 400 },
+            "inject-profile-grid-scroll-back",
+            "back",
+          );
           await sleepOrAbort(serial, 350);
         }
         await sleepOrAbort(serial, 500);
@@ -8916,7 +8926,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // on the base profile grid (no viewer open) exits the profile entirely.
       onLog?.("Inject Browsing: no post opened here — scrolling up and retrying via a11y");
       logger.info({ serial }, "[inject-browsing] findFeedActionIcons=null, isInPostViewer=false — still on profile grid; scrolling up and re-scanning a11y tree for image_button nodes");
-      await deviceProfileSwipe(serial, { x1: x, y1: y2, x2: x, y2: y1, durationMs: 500 }, "inject-profile-grid-retry-scroll");
+      await deviceProfileSwipe(
+        serial,
+        { x1: x, y1: y2, x2: x, y2: y1, durationMs: 500 },
+        "inject-profile-grid-retry-scroll",
+        "back",
+      );
       await sleepOrAbort(serial, 800);
       const retryPosts = await android.findProfileGridPosts(serial, onLog).catch(() => [] as { x: number; y: number; cd: string }[]);
       if (retryPosts.length === 0) {
@@ -9854,7 +9869,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // as long as we don't scroll MORE rows than we scrolled down.
             for (let _si = 0; _si < didScroll; _si++) {
               logger.info({ serial, source: "inject-follow-profile-grid-scroll-back", from: [Math.round(bw / 2), Math.round(bh * 0.35)], to: [Math.round(bw / 2), Math.round(bh * 0.80)], durationMs: 400 }, "[mobile-input] swipe");
-              await deviceProfileSwipe(serial, { x1: Math.round(bw / 2), y1: Math.round(bh * 0.35), x2: Math.round(bw / 2), y2: Math.round(bh * 0.80), durationMs: 400 }, "inject-follow-profile-grid-scroll-back");
+              // Reverse the calibrated gesture, rather than sending the
+              // configured forward path again. This keeps the profile grid at
+              // the same top position after exactly `didScroll` rows.
+              await deviceProfileSwipe(
+                serial,
+                { x1: Math.round(bw / 2), y1: Math.round(bh * 0.35), x2: Math.round(bw / 2), y2: Math.round(bh * 0.80), durationMs: 400 },
+                "inject-follow-profile-grid-scroll-back",
+                "back",
+              );
               await sleepOrAbort(serial, 350);
             }
             await sleepOrAbort(serial, 500);
