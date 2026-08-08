@@ -10182,27 +10182,47 @@ export async function findAndTapUserInSearch(
     //   Text-match candidates (fix 1–4 logic) are kept as a secondary
     //   fallback for the rare case where IG does not expose avatar-ring nodes.
 
-    // Primary: scan for avatar-ring nodes — these mark real profile rows only.
-    const { w: swForRing } = getScreenSize(serial);
-    const ringPositions: Array<{ x: number; y: number }> = [];
-    const ringSeen = new Set<string>();
+    // Primary: require an exact username node. Avatar-ring nodes identify real
+    // profile rows, but they do not identify WHICH profile row they belong to.
+    // Tapping the first ring (or using DPAD order) can therefore follow an
+    // unrelated account when Instagram omits the requested username.
+    const cleanLc = clean.toLocaleLowerCase();
+    const exactNames = new Set([cleanLc, `@${cleanLc}`]);
+    const exactUserPositions: Array<{ x: number; y: number }> = [];
+    const exactUserSeen = new Set<string>();
     for (const seg of xml.split(/(?=<node )/)) {
       if (!seg.startsWith("<node ")) continue;
-      if (!seg.includes("/row_search_avatar_in_ring\"") &&
-          !seg.includes("/row_search_avatar_with_ring\"")) continue;
+      if (/class="android\.widget\.EditText"/i.test(seg)) continue;
+      if (seg.includes("/row_search_keyword_title\"") ||
+          seg.includes("/search_keyword_title\"") ||
+          seg.includes("/row_search_recent_chip\"") ||
+          seg.includes("/search_recent_chip\"")) continue;
+      const text = seg.match(/\btext="([^"]*)"/i)?.[1]?.trim().toLocaleLowerCase() ?? "";
+      const desc = seg.match(/\bcontent-desc="([^"]*)"/i)?.[1]?.trim().toLocaleLowerCase() ?? "";
+      if (!exactNames.has(text) && !exactNames.has(desc)) continue;
       const bb = seg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
       if (!bb) continue;
-      const cy = Math.round((parseInt(bb[2]) + parseInt(bb[4])) / 2);
-      const cx = Math.round(swForRing / 2); // tap screen horizontal centre
-      const key = `${cx},${cy}`;
-      if (!ringSeen.has(key)) { ringSeen.add(key); ringPositions.push({ x: cx, y: cy }); }
+      const x = Math.round((parseInt(bb[1]) + parseInt(bb[3])) / 2);
+      const y = Math.round((parseInt(bb[2]) + parseInt(bb[4])) / 2);
+      const key = `${x},${y}`;
+      if (!exactUserSeen.has(key)) {
+        exactUserSeen.add(key);
+        exactUserPositions.push({ x, y });
+      }
     }
+    exactUserPositions.sort((a, b) => a.y - b.y);
+    if (exactUserPositions.length === 0) {
+      onLog?.(`Follow: @${clean} exact username is not listed in search results — target aborted safely`);
+      continue;
+    }
+
+    const ringPositions: Array<{ x: number; y: number }> = exactUserPositions;
     ringPositions.sort((a, b) => a.y - b.y); // topmost (first result) first
 
     // Secondary fallback: text-match scan with chip nodes excluded.
     // Used only when no avatar-ring nodes are found in the tree.
-    const cleanLc = clean.toLowerCase();
-    const atCleanLc = `@${cleanLc}`;
+    const legacyCleanLc = clean.toLowerCase();
+    const atLegacyCleanLc = `@${legacyCleanLc}`;
     const seenKeys = new Set<string>();
     const candidatePos: Array<{ x: number; y: number }> = [];
     if (ringPositions.length === 0) {
@@ -10219,10 +10239,10 @@ export async function findAndTapUserInSearch(
         // Exact-match on text= or content-desc= only (avoids partial substring hits)
         const segLc = seg.toLowerCase();
         const hasMatch =
-          segLc.includes(`text="${cleanLc}"`) ||
-          segLc.includes(`text="${atCleanLc}"`) ||
-          segLc.includes(`content-desc="${cleanLc}"`) ||
-          segLc.includes(`content-desc="${atCleanLc}"`);
+          segLc.includes(`text="${legacyCleanLc}"`) ||
+          segLc.includes(`text="${atLegacyCleanLc}"`) ||
+          segLc.includes(`content-desc="${legacyCleanLc}"`) ||
+          segLc.includes(`content-desc="${atLegacyCleanLc}"`);
         if (!hasMatch) continue;
         const bb = seg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
         if (!bb) continue;
@@ -10235,11 +10255,8 @@ export async function findAndTapUserInSearch(
     }
 
     // Use ring positions if found (they bypass chips entirely); else text candidates.
-    const finalCandidates = ringPositions.length > 0 ? ringPositions : candidatePos;
-    const usingRings = ringPositions.length > 0;
-    if (usingRings) {
-      onLog?.(`Follow: @${clean} — ${ringPositions.length} real profile row(s) found via avatar-ring signal`);
-    }
+    const finalCandidates = ringPositions;
+    onLog?.(`Follow: @${clean} — exact username node found (${finalCandidates.length} match${finalCandidates.length === 1 ? "" : "es"})`);
 
     if (finalCandidates.length > 0) {
       // Try candidates top-to-bottom. After each tap, verify we landed on a
@@ -10286,7 +10303,13 @@ export async function findAndTapUserInSearch(
     }
   }
 
-  // ── Last-resort fallback (Follow tool only) ─────────────────────────────
+  // No exact username was exposed after polling. Never guess by row order,
+  // generic containers, or DPAD: those can open a different account.
+  onLog?.(`Follow: @${clean} exact username was not found after waiting — aborting target`);
+  return false;
+
+  // ── Last-resort fallback (unreachable; retained below only as historical
+  // documentation of the old unsafe behavior) ─────────────────────────────
   // Some Instagram/device combinations don't expose search result rows in the
   // accessibility tree even while they are visibly rendered. Since the exact
   // username was entered, use only device-agnostic evidence from the current

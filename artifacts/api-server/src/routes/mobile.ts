@@ -9859,6 +9859,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const found = await android.findAndTapUserInSearch(serial, username, onLog).catch(() => false);
         if (!found) {
           onLog?.(`Follow: @${username} not found in results — skipping`);
+          // Do not leave a failed target in Instagram's search field. Clear it
+          // before moving on so the next target starts from a clean query even
+          // when the normal back navigation does not dismiss the search UI.
+          await android.clearInstagramSearchBar(serial, (msg) => onLog?.(`  ${msg}`)).catch(() => {});
           await android.pressBack(serial);
           await sleepOrAbort(serial, 500);
           continue;
