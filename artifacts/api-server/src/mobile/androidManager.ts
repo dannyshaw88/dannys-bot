@@ -9266,6 +9266,10 @@ export type TypingSpeedProfile = {
   hesitationMaxMs: number;
 };
 
+// Keyboard layer is stateful across typing calls. Track the last layer
+// selected per device so a later call never assumes ABC blindly.
+const _calKeyboardLayer = new Map<string, "letters" | "symbols" | "moreSymbols">();
+
 // Per-session cache so repeated captureOneTap calls during a calibration
 // session skip the slow getevent -lp query. Keyed by device serial and cleared
 // automatically when the server restarts. The display size is intentionally
@@ -9900,7 +9904,11 @@ export async function typeViaCalibrationMap(
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const missing: string[] = [];
-  let layer: "letters" | "symbols" | "moreSymbols" = "letters";
+  let layer: "letters" | "symbols" | "moreSymbols" =
+    _calKeyboardLayer.get(serial) ?? "letters";
+  const speedMin = Math.max(0, Math.min(typingProfile.minMs, typingProfile.maxMs));
+  const speedMax = Math.max(speedMin, typingProfile.maxMs);
+  onLog?.(`[cal-keyboard] timing profile: inter-key ${speedMin}-${speedMax}ms, dwell ${typingProfile.dwellMinMs}-${typingProfile.dwellMaxMs}ms`);
 
   const tapMapped = async (label: string, description = label): Promise<boolean> => {
     const pos = map[label];
@@ -9924,10 +9932,12 @@ export async function typeViaCalibrationMap(
       onLog?.(`[cal-keyboard] tap failed for ${description} at (${pos.x},${pos.y}) — ${e?.message}`);
       return false;
     }
-    onLog?.(`[cal-keyboard] tapped ${description} at (${pos.x},${pos.y})`);
-    const min = Math.max(0, Math.min(typingProfile.minMs, typingProfile.maxMs));
-    const max = Math.max(min, typingProfile.maxMs);
-    await _sleep(min + Math.round(Math.random() * (max - min)));
+    const interKeyDelay = speedMin + Math.round(Math.random() * (speedMax - speedMin));
+    onLog?.(`[cal-keyboard] tapped ${description} at (${pos.x},${pos.y}); waiting ${interKeyDelay}ms before next key`);
+    // This is intentionally a separate wall-clock pause after the physical
+    // tap. Some Android builds ignore a same-coordinate input swipe's duration
+    // (the dwell value), but they cannot eliminate this inter-key delay.
+    await _sleep(interKeyDelay);
     return true;
   };
   const maybeHumanError = async () => {
@@ -9954,8 +9964,21 @@ export async function typeViaCalibrationMap(
     // Do not jump directly between non-adjacent layers: the saved coordinate
     // is a real key tap, so the intermediate screen matters.
     if (target === "letters") {
+      // On Gboard, ABC from the extended-symbol page returns to ?123 first.
+      // A second ABC tap is required to reach the letters page.
+      if (layer === "moreSymbols") {
+        const returnedToSymbols = await tapMapped("abc", "ABC (back to symbols)");
+        if (!returnedToSymbols) return false;
+        await _sleep(120);
+        layer = "symbols";
+        _calKeyboardLayer.set(serial, layer);
+      }
       const switched = await tapMapped("abc", "ABC");
-      if (switched) layer = "letters";
+      if (switched) {
+        await _sleep(120);
+        layer = "letters";
+        _calKeyboardLayer.set(serial, layer);
+      }
       return switched;
     }
     if (target === "symbols") {
@@ -9963,18 +9986,28 @@ export async function typeViaCalibrationMap(
         const returnedToLetters = await tapMapped("abc", "ABC");
         if (!returnedToLetters) return false;
         layer = "letters";
+        _calKeyboardLayer.set(serial, layer);
       }
       const switched = await tapMapped("symbols", "?123");
-      if (switched) layer = "symbols";
+      if (switched) {
+        await _sleep(120);
+        layer = "symbols";
+        _calKeyboardLayer.set(serial, layer);
+      }
       return switched;
     }
     if (layer === "letters") {
       const switchedToSymbols = await tapMapped("symbols", "?123");
       if (!switchedToSymbols) return false;
       layer = "symbols";
+      _calKeyboardLayer.set(serial, layer);
     }
     const switched = await tapMapped("moreSymbols", "more symbols");
-    if (switched) layer = "moreSymbols";
+    if (switched) {
+      await _sleep(120);
+      layer = "moreSymbols";
+      _calKeyboardLayer.set(serial, layer);
+    }
     return switched;
   };
 
@@ -10035,6 +10068,7 @@ export async function typeViaCalibrationMap(
   // digit was the final character, and prevents the next isolated caller from
   // inheriting the symbols screen and typing into the wrong key positions.
   if (layer !== "letters") await switchLayer("letters");
+  _calKeyboardLayer.set(serial, layer);
   return { ok: missing.length === 0, missing };
 }
 

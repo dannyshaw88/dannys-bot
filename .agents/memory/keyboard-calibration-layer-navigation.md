@@ -7,4 +7,4 @@ The calibrated typing path must treat ABC, `?123`, and extended-symbol screens a
 
 **Why:** Android keyboards render punctuation and controls on different screens; a coordinate saved for one layer is not valid after a layer transition, and opening emoji is a terminal UI state for the calibration walk.
 
-**How to apply:** When changing the calibration key list or calibrated typing engine, keep the layer buttons in the map, return to ABC before capturing the emoji opener, and verify uppercase, punctuation, digits, and extended symbols each select the correct layer.
+**How to apply:** When changing the calibration key list or calibrated typing engine, keep the layer buttons in the map, return to ABC before capturing the emoji opener, and verify uppercase, punctuation, digits, and extended symbols each select the correct layer. On Gboard, returning from extended symbols requires two ABC taps: extended symbols → ?123 → letters.

@@ -1,3 +1,28 @@
+## [1.2.420] — 2026-08-08
+
+### Fixed — Typing speed is now applied as a real inter-key delay
+
+- Applied the configured minimum and maximum typing-speed range as an
+  explicit wall-clock pause after every calibrated key tap.
+- Added per-device timing diagnostics to the keyboard-calibration log, showing
+  the active inter-key range and the randomly selected delay for each key.
+- Kept key dwell timing separate from inter-key timing so both settings remain
+  independently effective, including on Android builds that ignore the
+  duration of a same-coordinate swipe.
+
+## [1.2.419] — 2026-08-08
+
+### Fixed — Calibrated keyboard layer position tracking
+
+- Remembered the selected keyboard layer separately for each device between
+  typing calls instead of assuming every call starts on the letters page.
+- Corrected the Gboard transition from extended symbols back to letters:
+  `more symbols → ?123 → ABC` now uses the required two-step path.
+- Added settling time after layer transitions so the next calibrated tap cannot
+  land while the keyboard is still changing pages.
+- Ensured digit and symbol typing returns the keyboard to the letters layer,
+  allowing repeated text such as `Hello12345Hello12345` to type consistently.
+
 ## [1.2.418] — 2026-08-08
 
 ### Added — Per-scroll personality variation and device swipe timing
