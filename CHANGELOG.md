@@ -1,3 +1,14 @@
+## [1.2.422] — 2026-08-08
+
+### Fixed — View Feed starts from Home
+
+- View Feed now resolves and taps Instagram's verified Home tab before
+  scanning or acting on feed posts.
+- If the Home tab cannot be found, View Feed stops explicitly instead of
+  operating against a profile, search, Reels, or nested screen.
+- Added a short settling delay after the Home tap so the first feed
+  accessibility dump belongs to the feed surface.
+
 ## [1.2.421] — 2026-08-08
 
 ### Fixed — Swipe Profile coordinates sent exactly
