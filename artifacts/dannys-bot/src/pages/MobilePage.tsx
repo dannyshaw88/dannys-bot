@@ -1806,7 +1806,7 @@ function CalibrationDialog({
   const [lastResult, setLastResult] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   // "intro" → start screen | "wizard" → full step-through | "editMap" → view/fix individual keys
-  const [mode, setMode] = useState<"intro" | "wizard" | "editMap">("intro");
+  const [mode, setMode] = useState<"intro" | "wizard" | "2faWizard" | "editMap">("intro");
   // editMap: which key is currently being re-captured (null = none active)
   const [editTarget, setEditTarget] = useState<CalibKey | null>(null);
   const [editResult, setEditResult] = useState<string | null>(null);
@@ -1854,12 +1854,16 @@ function CalibrationDialog({
   }, [open, serial]);
 
   const existingCount = Object.keys(map).length;
+  const twoFaKeys = CALIB_KEYS.filter(key => key.label.startsWith("2fa:"));
+  const activeKeys = mode === "2faWizard"
+    ? twoFaKeys
+    : CALIB_KEYS.filter(key => !key.label.startsWith("2fa:"));
 
-  const currentKey = step < CALIB_KEYS.length ? CALIB_KEYS[step] : null;
-  const prevGroupIdx = step > 0 ? CALIB_KEYS[step - 1].groupIdx : -1;
+  const currentKey = step < activeKeys.length ? activeKeys[step] : null;
+  const prevGroupIdx = step > 0 ? activeKeys[step - 1].groupIdx : -1;
   const showGroupHeader = currentKey && (step === 0 || currentKey.groupIdx !== prevGroupIdx);
-  const isDone = step >= CALIB_KEYS.length;
-  const progress = Math.round((step / CALIB_KEYS.length) * 100);
+  const isDone = step >= activeKeys.length;
+  const progress = Math.round((step / activeKeys.length) * 100);
 
   const captureKey = async () => {
     if (!currentKey || capturing) return;
@@ -2178,6 +2182,10 @@ function CalibrationDialog({
               <Button className="flex-1" onClick={() => setMode("wizard")}>
                 {existingCount > 0 ? "Re-run full calibration" : "Keyboard is open — Start"}
               </Button>
+              <Button variant="outline" className="flex-1 border-cyan-700 text-cyan-200 hover:bg-cyan-950"
+                onClick={() => { setStep(0); setLastResult(null); setMode("2faWizard"); }}>
+                Calibrate 2FA keypad
+              </Button>
               <Button variant="outline" className="border-slate-600 text-slate-200 hover:bg-slate-800" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
@@ -2188,11 +2196,13 @@ function CalibrationDialog({
           /* ── Done ── */
           <div className="space-y-3">
             <p className="text-sm text-green-400 font-semibold">
-              ✓ All {CALIB_KEYS.length} keys walked — {Object.keys(map).length} captured
+              ✓ All {activeKeys.length} {mode === "2faWizard" ? "2FA keypad digits" : "keyboard keys"} walked — {Object.keys(map).length} captured
             </p>
-            <p className="text-xs text-slate-300">
+              <p className="text-xs text-slate-300">
               {Object.keys(map).length > 0
-                ? "Close the emoji picker and return the phone keyboard to ABC, then save so the bot can use the real tap coordinates."
+                ? mode === "2faWizard"
+                  ? "Save so the 2FA button can type generated codes using these keypad coordinates."
+                  : "Close the emoji picker and return the phone keyboard to ABC, then save so the bot can use the real tap coordinates."
                 : "No keys were captured. Try again — make sure the keyboard is open before capturing."}
             </p>
             {saved ? (
@@ -2215,7 +2225,7 @@ function CalibrationDialog({
             {/* Layer instructions */}
             {showGroupHeader && (
               <div className="rounded-lg border border-blue-700/60 bg-blue-950/60 px-3 py-2">
-                <p className="text-xs font-semibold text-blue-200">{currentKey!.groupName}</p>
+                <p className="text-xs font-semibold text-blue-200">{mode === "2faWizard" ? "Instagram 2FA keypad" : currentKey!.groupName}</p>
                 <p className="mt-0.5 text-xs text-blue-100">{currentKey!.instructions}</p>
               </div>
             )}
