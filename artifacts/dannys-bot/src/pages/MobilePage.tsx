@@ -8306,6 +8306,8 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const [dismissSaving, setDismissSaving] = React.useState(false);
   type SwipeGesture = { x1: number; y1: number; x2: number; y2: number; durationMinMs: number; durationMaxMs: number; jitterX: number; jitterY: number; startJitterMinY: number; startJitterMaxY: number };
   const [swipeGesture, setSwipeGesture] = React.useState<SwipeGesture>({ x1: 540, y1: 2100, x2: 540, y2: 500, durationMinMs: 400, durationMaxMs: 700, jitterX: 0, jitterY: 0, startJitterMinY: 0, startJitterMaxY: 0 });
+  type TypingSpeedProfile = { minMs: number; maxMs: number; errorPercentMin: number; errorPercentMax: number };
+  const [typingSpeedProfile, setTypingSpeedProfile] = React.useState<TypingSpeedProfile>({ minMs: 80, maxMs: 220, errorPercentMin: 0, errorPercentMax: 0 });
   const [swipeResolution, setSwipeResolution] = React.useState({ w: 1080, h: 2400 });
   const [swipeSaving, setSwipeSaving] = React.useState(false);
   const [swipeTesting, setSwipeTesting] = React.useState(false);
@@ -8326,6 +8328,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
         if (d.swipeGesture) setSwipeGesture({
           durationMinMs: 500, durationMaxMs: 500, jitterX: 0, jitterY: 0, startJitterMinY: 0, startJitterMaxY: 0, ...d.swipeGesture,
         });
+        if (d.typingSpeedProfile) setTypingSpeedProfile({ minMs: 80, maxMs: 220, errorPercentMin: 0, errorPercentMax: 0, ...d.typingSpeedProfile });
       })
       .catch(() => {});
     fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-spec`)
@@ -8344,6 +8347,14 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
         body: JSON.stringify({ swipeGesture: next }),
       });
     } finally { setSwipeSaving(false); }
+  };
+  const saveTypingSpeedProfile = async (next: TypingSpeedProfile) => {
+    if (!serial) return;
+    setTypingSpeedProfile(next);
+    await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-prefs`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ typingSpeedProfile: next }),
+    }).catch(() => {});
   };
 
   const updateSwipeFromPointer = (event: React.PointerEvent<SVGSVGElement>) => {
@@ -8700,6 +8711,29 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
             <Sun className="w-5 h-5" />
           </button>
           <span className="text-[10px] text-muted-foreground">{brightLabel}</span>
+        </div>
+      </div>
+
+      {/* ── Typing Speed Profile ─────────────────────────────────────── */}
+      <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Typing Speed Profile</p>
+          <p className="text-xs text-muted-foreground">Per-device typing timing and human-error simulation. Values are applied to every calibrated keyboard entry.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {([
+            ["minMs", "Typing speed: X min (ms)"],
+            ["maxMs", "Typing speed: Y max (ms)"],
+            ["errorPercentMin", "Error causality: X min (%)"],
+            ["errorPercentMax", "Error causality: Y max (%)"],
+          ] as const).map(([key, label]) => (
+            <label key={key} className="text-xs text-muted-foreground">{label}
+              <input type="number" min={0} max={key.startsWith("error") ? 100 : undefined}
+                value={typingSpeedProfile[key]}
+                onChange={e => saveTypingSpeedProfile({ ...typingSpeedProfile, [key]: Number(e.target.value) })}
+                className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
+            </label>
+          ))}
         </div>
       </div>
 

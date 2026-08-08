@@ -487,6 +487,7 @@ type DeviceAccount = { slots: DeviceSlot[] };
 type DeviceSettings = { googlePlayEmail?: string; googlePlayPassword?: string; selectedSimSlot?: number };
 type DevicePrefs = {
   dismissDirection?: "auto" | "left" | "up";
+  typingSpeedProfile?: { minMs: number; maxMs: number; errorPercentMin: number; errorPercentMax: number };
   swipeGesture?: { x1: number; y1: number; x2: number; y2: number; durationMinMs: number; durationMaxMs: number; jitterX: number; jitterY: number; startJitterMinY?: number; startJitterMaxY?: number };
 };
 type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings; account?: DeviceAccount; slotAutomation?: Record<string, AutomationSettings>; deviceSettings?: DeviceSettings; devicePrefs?: DevicePrefs };
@@ -2525,6 +2526,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const serial = p(req, "serial");
       const allowed = z.object({
         dismissDirection: z.enum(["auto", "left", "up"]).optional(),
+        typingSpeedProfile: z.object({
+          minMs: z.number().finite().min(0),
+          maxMs: z.number().finite().min(0),
+          errorPercentMin: z.number().finite().min(0).max(100),
+          errorPercentMax: z.number().finite().min(0).max(100),
+        }).optional(),
         swipeGesture: z.object({
           x1: z.number().finite(),
           y1: z.number().finite(),
@@ -8495,7 +8502,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           "KEYCODE_CTRL_LEFT", "KEYCODE_A"], { encoding: "utf8", timeout: 2000 });
         await sleepOrAbort(serial, 400);
       }
-      const typed = await android.typeViaSavedCalibrationMap(serial, bioText, message => {
+      const typed = await android.typeViaSavedCalibrationMap(serial, bioText, loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile, message => {
         onLog?.(`Update Bio: ${message}`);
       });
       if (!typed.ok) {
@@ -9669,7 +9676,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // text using the EditText node's text attribute (no coordinates used).
         await android.clearInstagramSearchBar(serial, (msg) => onLog?.(`  ${msg}`));
         // Use only real taps on the saved Android keyboard calibration map.
-        const typed = await android.typeViaSavedCalibrationMap(serial, username.replace(/^@+/, ""), message => {
+        const typed = await android.typeViaSavedCalibrationMap(serial, username.replace(/^@+/, ""), loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile, message => {
           onLog?.(`  ${message}`);
         });
         if (!typed.ok) {
@@ -11985,7 +11992,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       const input = inputTextSchema.parse(req.body);
       const serial = p(req, "serial");
-      const result = await android.typeViaSavedCalibrationMap(serial, input.text, message => {
+      const result = await android.typeViaSavedCalibrationMap(serial, input.text, loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile, message => {
         req.log.info({ serial, message }, "[mirror-calibrated-paste]");
       });
       if (!result.ok) {
@@ -13466,9 +13473,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           error: "No saved keyboard calibration map for this device",
         });
       }
+      const typingProfile = loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile;
       const result = await android.typeViaCalibrationMap(serial, text, map, message => {
         req.log.info({ serial, message }, "[keyboard-calibration]");
-      });
+      }, typingProfile);
       req.log.info(
         { serial, characterCount: text.length, missing: result.missing },
         "[keyboard-calibration] test complete",

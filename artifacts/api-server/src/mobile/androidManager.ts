@@ -9013,7 +9013,7 @@ export async function typeViaOnscreenKeyboard(
 
     if (missingCalKeys.size === 0) {
       onLog?.(`[keyboard] using calibration map (${Object.keys(calMap).length} keys)`);
-      const result = await typeViaCalibrationMap(serial, text, calMap, onLog);
+      const result = await typeViaCalibrationMap(serial, text, calMap, onLog, undefined);
       if (result.ok) return;
       onLog?.(`[keyboard] calibration typing incomplete — missing ${result.missing.join(", ")}`);
     } else {
@@ -9278,6 +9278,7 @@ export function loadKeyCalibrationMap(serial: string): KeyCalibrationMap | null 
 export async function typeViaSavedCalibrationMap(
   serial: string,
   text: string,
+  typingProfile?: { minMs: number; maxMs: number; errorPercentMin: number; errorPercentMax: number },
   onLog?: (msg: string) => void,
 ): Promise<{ ok: boolean; available: boolean; missing: string[] }> {
   const map = loadKeyCalibrationMap(serial);
@@ -9322,7 +9323,7 @@ export async function typeViaSavedCalibrationMap(
     return { ok: false, available: true, missing };
   }
 
-  const result = await typeViaCalibrationMap(serial, text, map, onLog);
+  const result = await typeViaCalibrationMap(serial, text, map, onLog, typingProfile);
   return { ...result, available: true };
 }
 
@@ -9842,6 +9843,7 @@ export async function typeViaCalibrationMap(
   text: string,
   map: KeyCalibrationMap,
   onLog?: (msg: string) => void,
+  typingProfile?: { minMs: number; maxMs: number; errorPercentMin: number; errorPercentMax: number },
 ): Promise<{ ok: boolean; missing: string[] }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
@@ -9870,6 +9872,22 @@ export async function typeViaCalibrationMap(
     onLog?.(`[cal-keyboard] tapped ${description} at (${pos.x},${pos.y})`);
     await _sleep(180 + Math.round(Math.random() * 100));
     return true;
+  };
+  const typeDelay = async () => {
+    const min = Math.max(0, Math.min(typingProfile?.minMs ?? 0, typingProfile?.maxMs ?? 0));
+    const max = Math.max(min, typingProfile?.maxMs ?? min);
+    if (max > 0) await _sleep(min + Math.round(Math.random() * (max - min)));
+  };
+  const maybeHumanError = async () => {
+    if (!typingProfile || !map.backspace) return;
+    const lo = Math.max(0, Math.min(typingProfile.errorPercentMin, typingProfile.errorPercentMax));
+    const hi = Math.min(100, Math.max(lo, typingProfile.errorPercentMax));
+    if (Math.random() * 100 >= lo + Math.random() * (hi - lo)) return;
+    const candidates = Object.keys(map).filter(k => /^[a-z]$/i.test(k) && k !== "backspace");
+    const wrong = candidates[Math.floor(Math.random() * candidates.length)];
+    if (!wrong) return;
+    await tapMapped(wrong, `intentional typing error '${wrong}'`);
+    await tapMapped("backspace", "Backspace after typing error");
   };
 
   const switchLayer = async (target: "letters" | "symbols" | "moreSymbols"): Promise<boolean> => {
@@ -9913,10 +9931,12 @@ export async function typeViaCalibrationMap(
   ]);
 
   for (const ch of text) {
+    await maybeHumanError();
     const label = ch === " " ? "space" : ch === "\n" ? "enter" : ch.toLowerCase();
     if (ch === " " || ch === "\n") {
       await switchLayer("letters");
       if (!await tapMapped(label, ch === " " ? "space" : "Enter")) missing.push(ch);
+      await typeDelay();
       continue;
     }
 
@@ -9931,6 +9951,7 @@ export async function typeViaCalibrationMap(
         }
       }
       if (!await tapMapped(map[label] ? label : ch, ch)) missing.push(ch);
+      await typeDelay();
       continue;
     }
 
@@ -9949,6 +9970,7 @@ export async function typeViaCalibrationMap(
       }
       missing.push(ch);
     }
+    await typeDelay();
   }
 
   // Leave the IME on its normal letters layer. This matters when a symbol or
