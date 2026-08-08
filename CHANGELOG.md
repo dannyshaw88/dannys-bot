@@ -1,3 +1,20 @@
+## [1.2.427] — 2026-08-08
+
+### Fixed — Follow target validation and Males Only filtering
+
+- Fixed the Human Session Tool Follow Users flow so it requires an exact
+  username match in Instagram’s live search results before opening a profile.
+  It no longer guesses by first-result order, avatar-ring presence, generic
+  row containers, or DPAD navigation.
+- When a requested username is not listed, the target is aborted safely, the
+  search field is cleared, and the flow continues with the next target instead
+  of risking a follow on the wrong account.
+- Fixed the Males Only allowlist so configured names match normal Instagram
+  display names with spaces, such as `Mario` matching `Mario Zone`.
+- Kept username matching strict and boundary-aware, and kept biography matching
+  case-insensitive with Unicode word boundaries to avoid unrelated substring
+  matches.
+
 ## [1.2.426] — 2026-08-08
 
 ### Fixed — Account state isolation, Trust Score persistence, and account controls
