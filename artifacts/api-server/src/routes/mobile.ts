@@ -10723,6 +10723,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       } else {
         tLog("▶ No launch popup — feed ready");
       }
+      // Instagram can expose the feed in the accessibility tree before the
+      // first feed render has finished. Give the launch screen a few seconds
+      // to settle before account switching or any tool taps begin.
+      tLog("▶ Dwell: allowing Instagram feed to finish rendering…");
+      await sleepOrAbort(serial, 3000);
       tLog("  ✓ Instagram open");
 
       // ═════════════════════════════════════════════════════════════════════

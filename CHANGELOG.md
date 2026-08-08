@@ -1,3 +1,11 @@
+## [1.2.429] — 2026-08-08
+
+### Fixed — Instagram launch settling
+
+- Added a three-second dwell after launch popup detection so Instagram has
+  time to finish rendering the feed before account switching and automation
+  actions begin.
+
 ## [1.2.428] — 2026-08-08
 
 ### Fixed — Follow navigation and Trust Score duration timers
