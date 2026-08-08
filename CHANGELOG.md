@@ -1,3 +1,17 @@
+## [1.2.420] — 2026-08-08
+
+### Fixed — Complete calibrated typing profile delivery
+
+- Included the per-device dwell-time controls in the active calibrated
+  keyboard typing path and Phone Farm settings UI.
+- Preserved the configured typing-speed, dwell-time, error, and hesitation
+  ranges when saving and loading device preferences.
+- Included the keyboard-layer position fix so repeated text containing digits
+  and symbols returns to the letters layer correctly.
+- This release is built by the canonical Windows Installer workflow on every
+  push to `main`, with the installer uploaded as
+  `Aura-Farming-Windows-Installer`.
+
 ## [1.2.419] — 2026-08-08
 
 ### Fixed — Calibrated keyboard layer position tracking
