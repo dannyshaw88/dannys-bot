@@ -5561,6 +5561,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     let postsScrolled = 0, postsClicked = 0, likes = 0, sharesFeed = 0, sharesDm = 0, saves = 0, authorVisits = 0;
 
+    // Explore grid media can open either a photo viewer or a Reel viewer.
+    // Those viewers have different accessibility trees, so a UI "Back"
+    // node is not a reliable exit control. Android BACK is intentionally the
+    // single exit path for both viewer types.
+    const exitExploreMediaViewer = async (iteration: number) => {
+      onLog?.(`View Explore ${iteration}/${scrollCount}: exiting media viewer with Android Back`);
+      await android.pressBack(serial);
+      await sleepOrAbort(serial, 800);
+    };
+
     // Scroll geometry: same safe band as runCheckFeedLoop.
     const x  = Math.round(w / 2);
 
@@ -6061,9 +6071,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             }
           }
 
-          // Press Back to return to the Explore grid after viewing the post.
-          await android.pressBack(serial);
-          await sleepOrAbort(serial, 800);
+          // Always leave clicked media through Android BACK. Do not search for
+          // or tap an accessibility Back node: Reels and photo viewers expose
+          // different trees, and media clicks can replace the entire UI.
+          await exitExploreMediaViewer(i + 1);
         } else {
           onLog?.(`View Explore ${i + 1}/${scrollCount}: no grid posts visible — skipping click`);
         }
