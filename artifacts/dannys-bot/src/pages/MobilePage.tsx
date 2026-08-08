@@ -8153,17 +8153,17 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
               <div className="flex items-end gap-3 flex-wrap">
                 {/* Username */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground block text-left">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1 text-left">
                     Username
+                    <Button type="button" variant="ghost" size="sm"
+                      title="Type username on the phone keyboard"
+                      aria-label="Type username on the phone keyboard"
+                      disabled={typingField !== null || !phone?.serial}
+                      onClick={() => void typeAccountField("username", slot.username)}
+                      className="h-5 w-5 p-0 text-muted-foreground hover:text-primary">
+                      {typingField === "username" ? "…" : <Keyboard className="w-3 h-3" aria-hidden="true" />}
+                    </Button>
                   </Label>
-                  <Button type="button" variant="ghost" size="sm"
-                    title="Type username on the phone keyboard"
-                    aria-label="Type username on the phone keyboard"
-                    disabled={typingField !== null || !phone?.serial}
-                    onClick={() => void typeAccountField("username", slot.username)}
-                    className="ml-1 h-6 px-1.5 text-muted-foreground hover:text-primary">
-                    {typingField === "username" ? "Typing…" : <Keyboard className="w-3 h-3" aria-hidden="true" />}
-                  </Button>
                   <Input
                     value={slot.username}
                     onChange={e => updateSlot(i, { username: e.target.value })}
@@ -8175,17 +8175,17 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
 
                 {/* Password */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground block text-left">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1 text-left">
                     Password
+                    <Button type="button" variant="ghost" size="sm"
+                      title="Type password on the phone keyboard"
+                      aria-label="Type password on the phone keyboard"
+                      disabled={typingField !== null || !phone?.serial}
+                      onClick={() => void typeAccountField("password", slot.password)}
+                      className="h-5 w-5 p-0 text-muted-foreground hover:text-primary">
+                      {typingField === "password" ? "…" : <Keyboard className="w-3 h-3" aria-hidden="true" />}
+                    </Button>
                   </Label>
-                  <Button type="button" variant="ghost" size="sm"
-                    title="Type password on the phone keyboard"
-                    aria-label="Type password on the phone keyboard"
-                    disabled={typingField !== null || !phone?.serial}
-                    onClick={() => void typeAccountField("password", slot.password)}
-                    className="ml-1 h-6 px-1.5 text-muted-foreground hover:text-primary">
-                    {typingField === "password" ? "Typing…" : <Keyboard className="w-3 h-3" aria-hidden="true" />}
-                  </Button>
                   <div className="flex items-center gap-1.5">
                     <Input
                       type={showPassword[i] ? "text" : "password"}
@@ -8204,17 +8204,17 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
 
                 {/* 2FA OTP Secret */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground block text-left">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1 text-left">
                     2FA OTP Secret
+                    <Button type="button" variant="ghost" size="sm"
+                      title="Type 2FA OTP Secret on the phone keyboard"
+                      aria-label="Type 2FA OTP Secret on the phone keyboard"
+                      disabled={typingField !== null || !phone?.serial}
+                      onClick={() => void typeGeneratedTotp(i, slot.totpSecret)}
+                      className="h-5 w-5 p-0 text-muted-foreground hover:text-primary">
+                      {typingField === "totpSecret" ? "…" : <Keyboard className="w-3 h-3" aria-hidden="true" />}
+                    </Button>
                   </Label>
-                  <Button type="button" variant="ghost" size="sm"
-                    title="Type 2FA OTP Secret on the phone keyboard"
-                    aria-label="Type 2FA OTP Secret on the phone keyboard"
-                    disabled={typingField !== null || !phone?.serial}
-                    onClick={() => void typeGeneratedTotp(i, slot.totpSecret)}
-                    className="ml-1 h-6 px-1.5 text-muted-foreground hover:text-primary">
-                    {typingField === "totpSecret" ? "Typing…" : <Keyboard className="w-3 h-3" aria-hidden="true" />}
-                  </Button>
                   <div className="flex items-center gap-1.5">
                     <Input
                       value={slot.totpSecret}
