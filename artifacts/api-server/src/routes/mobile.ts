@@ -64,6 +64,13 @@ function findMalesOnlyMatch(
     // not pass by consuming only the first four.
     return new RegExp(`(?:^|[._])${escaped}(?:\\d{1,4}(?=$|[._])|(?=$|[._]))`, "iu").test(value);
   };
+  const accountNameHasExactWord = (value: string, name: string) => {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // Display names are human-readable and commonly use spaces, hyphens,
+    // punctuation, or Unicode text boundaries. Do not apply the username
+    // dot/underscore-only rule to names such as "Mario Zone".
+    return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?:$|[^\\p{L}\\p{N}])`, "iu").test(value);
+  };
   // Prefer the account-name field when the same configured token appears in
   // more than one field, so the Debugging Log reflects the actual display
   // name that caused the allow decision.
@@ -71,7 +78,9 @@ function findMalesOnlyMatch(
     for (const name of allowedNames) {
       const matches = field[0] === "bio"
         ? bioHasExactToken(field[1], name)
-        : usernameHasMatchedWord(field[1], name);
+        : field[0] === "account name"
+          ? accountNameHasExactWord(field[1], name)
+          : usernameHasMatchedWord(field[1], name);
       if (matches) return { name, field: field[0] };
     }
   }
