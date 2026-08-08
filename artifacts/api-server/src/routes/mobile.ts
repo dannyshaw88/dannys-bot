@@ -488,7 +488,7 @@ type DeviceSettings = { googlePlayEmail?: string; googlePlayPassword?: string; s
 type DevicePrefs = {
   dismissDirection?: "auto" | "left" | "up";
   typingSpeedProfile?: { minMs: number; maxMs: number; errorPercentMin: number; errorPercentMax: number; dwellMinMs: number; dwellMaxMs: number; hesitationMinMs: number; hesitationMaxMs: number };
-  swipeGesture?: { x1: number; y1: number; x2: number; y2: number; durationMinMs: number; durationMaxMs: number; jitterX: number; jitterY: number; startJitterMinY?: number; startJitterMaxY?: number };
+  swipeGesture?: { x1: number; y1: number; x2: number; y2: number; durationMinMs: number; durationMaxMs: number; jitterX: number; jitterY: number; startJitterMinY?: number; startJitterMaxY?: number; pauseMinMs?: number; pauseMaxMs?: number; settleMinMs?: number; settleMaxMs?: number; accelerationPct?: number; decelerationPct?: number };
 };
 type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings; account?: DeviceAccount; slotAutomation?: Record<string, AutomationSettings>; deviceSettings?: DeviceSettings; devicePrefs?: DevicePrefs };
 type InstanceConfigMap = Record<string, InstanceConfig>;
@@ -2547,6 +2547,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           jitterY: z.number().finite(),
           startJitterMinY: z.number().finite().optional(),
           startJitterMaxY: z.number().finite().optional(),
+          pauseMinMs: z.number().finite().min(0).optional(),
+          pauseMaxMs: z.number().finite().min(0).optional(),
+          settleMinMs: z.number().finite().min(0).optional(),
+          settleMaxMs: z.number().finite().min(0).optional(),
+          accelerationPct: z.number().finite().min(0).max(100).optional(),
+          decelerationPct: z.number().finite().min(0).max(100).optional(),
         }).optional(),
       }).parse(req.body);
       const cfg = loadInstanceConfigs();
@@ -3195,6 +3201,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const durationMs = Math.max(1, Math.round(
       minDuration + span * (bandStart + Math.random() * (bandEnd - bandStart)),
     ));
+    const pauseMin = Math.max(0, Math.min(configured.pauseMinMs ?? 0, configured.pauseMaxMs ?? 0));
+    const pauseMax = Math.max(pauseMin, configured.pauseMaxMs ?? pauseMin);
+    const settleMin = Math.max(0, Math.min(configured.settleMinMs ?? 0, configured.settleMaxMs ?? 0));
+    const settleMax = Math.max(settleMin, configured.settleMaxMs ?? settleMin);
+    const pauseMs = Math.round(pauseMin + Math.random() * (pauseMax - pauseMin));
+    const settleMs = Math.round(settleMin + Math.random() * (settleMax - settleMin));
+    // A single adb swipe cannot carry a multi-point velocity curve. These
+    // values remain device-owned and are logged for the eventual low-level
+    // curve transport; duration is currently the safe curve approximation.
+    const accelerationPct = Math.max(0, Math.min(100, configured.accelerationPct ?? 35));
+    const decelerationPct = Math.max(0, Math.min(100, configured.decelerationPct ?? 35));
+    if (pauseMs > 0) await new Promise(resolve => setTimeout(resolve, pauseMs));
     const reversed = personality === "back";
     const path = {
       x1: clamp((reversed ? configured.x2 : configured.x1) + dx, size.w),
@@ -3203,8 +3221,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       y2: clamp((reversed ? configured.y1 : configured.y2) + (reversed ? startDy : endDy), size.h),
       durationMs,
     };
-    logger.info({ serial, source, personality, reversed, from: [path.x1, path.y1], to: [path.x2, path.y2], durationMs, profile: true }, "[mobile-input] device-profile swipe");
+    logger.info({ serial, source, personality, reversed, from: [path.x1, path.y1], to: [path.x2, path.y2], durationMs, pauseMs, settleMs, accelerationPct, decelerationPct, profile: true }, "[mobile-input] device-profile swipe");
     await android.swipe(serial, path.x1, path.y1, path.x2, path.y2, path.durationMs);
+    if (settleMs > 0) await new Promise(resolve => setTimeout(resolve, settleMs));
     return { ...path, profile: true };
   }
 
