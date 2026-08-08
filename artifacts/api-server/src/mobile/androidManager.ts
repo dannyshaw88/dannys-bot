@@ -9906,9 +9906,6 @@ export async function typeViaCalibrationMap(
   const missing: string[] = [];
   let layer: "letters" | "symbols" | "moreSymbols" =
     _calKeyboardLayer.get(serial) ?? "letters";
-  const speedMin = Math.max(0, Math.min(typingProfile.minMs, typingProfile.maxMs));
-  const speedMax = Math.max(speedMin, typingProfile.maxMs);
-  onLog?.(`[cal-keyboard] timing profile: inter-key ${speedMin}-${speedMax}ms, dwell ${typingProfile.dwellMinMs}-${typingProfile.dwellMaxMs}ms`);
 
   const tapMapped = async (label: string, description = label): Promise<boolean> => {
     const pos = map[label];
@@ -9932,12 +9929,10 @@ export async function typeViaCalibrationMap(
       onLog?.(`[cal-keyboard] tap failed for ${description} at (${pos.x},${pos.y}) — ${e?.message}`);
       return false;
     }
-    const interKeyDelay = speedMin + Math.round(Math.random() * (speedMax - speedMin));
-    onLog?.(`[cal-keyboard] tapped ${description} at (${pos.x},${pos.y}); waiting ${interKeyDelay}ms before next key`);
-    // This is intentionally a separate wall-clock pause after the physical
-    // tap. Some Android builds ignore a same-coordinate input swipe's duration
-    // (the dwell value), but they cannot eliminate this inter-key delay.
-    await _sleep(interKeyDelay);
+    onLog?.(`[cal-keyboard] tapped ${description} at (${pos.x},${pos.y})`);
+    const min = Math.max(0, Math.min(typingProfile.minMs, typingProfile.maxMs));
+    const max = Math.max(min, typingProfile.maxMs);
+    await _sleep(min + Math.round(Math.random() * (max - min)));
     return true;
   };
   const maybeHumanError = async () => {
