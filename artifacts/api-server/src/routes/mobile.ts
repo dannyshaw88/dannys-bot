@@ -3107,13 +3107,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     weights: { skim: number; normal: number; interested: number; back: number },
     allowBack = true,
     safeStartFrac = 0.80,
+    history?: { lastMode?: string; streak: number },
   ): { duration: number; fromY: number; toY: number; mode: string } {
     const effectiveBack = allowBack ? weights.back : 0;
-    const total = weights.skim + weights.normal + weights.interested + effectiveBack;
+    // Roll independently for every scroll, but avoid visibly artificial runs.
+    // Repeats remain possible; after three of the same mode, force the next
+    // roll to choose another mode. Back-scrolls are rarer and are capped at
+    // two consecutive rolls because a long reverse run is not natural reading.
+    const blocked = new Set<string>();
+    if (history?.lastMode && history.streak >= 3) blocked.add(history.lastMode);
+    if (history?.lastMode === "back" && history.streak >= 2) blocked.add("back");
+    const skim = blocked.has("skim") ? 0 : weights.skim;
+    const normal = blocked.has("normal") ? 0 : weights.normal;
+    const interested = blocked.has("interested") ? 0 : weights.interested;
+    const back = blocked.has("back") ? 0 : effectiveBack;
+    const total = skim + normal + interested + back;
     const roll = Math.random() * total;
     let cum = 0;
 
-    cum += weights.skim;
+    cum += skim;
     if (roll < cum) {
       // Skim: fast, full-height flick
       return {
@@ -3124,7 +3136,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       };
     }
 
-    cum += weights.normal;
+    cum += normal;
     if (roll < cum) {
       // Normal: comfortable mid-speed scroll
       return {
@@ -3135,7 +3147,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       };
     }
 
-    cum += weights.interested;
+    cum += interested;
     if (roll < cum) {
       // Interested: slow nudge — something caught the eye
       return {
@@ -3568,6 +3580,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       back:      Math.max(0,   8 + Math.round((Math.random() - 0.5) * 16)),  //   0–16
     };
     onLog?.(`Feed scroll personality — skim:${feedScrollWeights.skim} normal:${feedScrollWeights.normal} interested:${feedScrollWeights.interested} back:${feedScrollWeights.back}`);
+    const feedPersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
 
     for (let i = 0; i < count; i++) {
       if (isCycleAborted(serial)) throw new Error("cycle-aborted");
@@ -3578,7 +3591,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // There is no previous content on the first scroll, so a backward
       // personality would have nothing meaningful to revisit. Keep the
       // session personality distribution for later scrolls.
-      const sv = rollScrollVelocity(h, feedScrollWeights, /*allowBack=*/i > 0, /*safeStartFrac=*/0.88);
+      const sv = rollScrollVelocity(h, feedScrollWeights, /*allowBack=*/i > 0, /*safeStartFrac=*/0.88, feedPersonalityHistory);
+      feedPersonalityHistory.streak = feedPersonalityHistory.lastMode === sv.mode ? feedPersonalityHistory.streak + 1 : 1;
+      feedPersonalityHistory.lastMode = sv.mode;
       onLog?.(`View Feed ${i + 1}/${count} [${sv.mode}]`);
       logger.info({ serial, target: "feed-scroll", mode: sv.mode, from: [x, sv.fromY], to: [x, sv.toY], durationMs: sv.duration }, "[check-feed] swipe");
       await deviceProfileSwipe(serial, { x1: x, y1: sv.fromY, x2: x, y2: sv.toY, durationMs: sv.duration }, "feed-scroll", sv.mode as "skim" | "normal" | "interested" | "back");
@@ -5539,6 +5554,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       back:      Math.max(0,   8 + Math.round((Math.random() - 0.5) * 16)),  //   0–16
     };
     onLog?.(`Explore scroll personality — skim:${exploreScrollWeights.skim} normal:${exploreScrollWeights.normal} interested:${exploreScrollWeights.interested} back:${exploreScrollWeights.back}`);
+    const explorePersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
 
     for (let i = 0; i < scrollCount; i++) {
       if (isCycleAborted(serial)) throw new Error("cycle-aborted");
@@ -6044,7 +6060,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // Swipe up to reveal more Explore posts.
         // The first Explore advance is the first opportunity to reveal more
         // content; there is no prior grid position to revisit yet.
-        const esv = rollScrollVelocity(h, exploreScrollWeights, /*allowBack=*/i > 0, /*safeStartFrac=*/0.80);
+        const esv = rollScrollVelocity(h, exploreScrollWeights, /*allowBack=*/i > 0, /*safeStartFrac=*/0.80, explorePersonalityHistory);
+        explorePersonalityHistory.streak = explorePersonalityHistory.lastMode === esv.mode ? explorePersonalityHistory.streak + 1 : 1;
+        explorePersonalityHistory.lastMode = esv.mode;
         onLog?.(`View Explore ${i + 1}/${scrollCount}: next swipe [${esv.mode}]`);
         logger.info({ serial, source: "explore-scroll", mode: esv.mode, from: [x, esv.fromY], to: [x, esv.toY], durationMs: esv.duration }, "[mobile-input] swipe");
         await deviceProfileSwipe(serial, { x1: x, y1: esv.fromY, x2: x, y2: esv.toY, durationMs: esv.duration }, "explore-scroll", esv.mode as "skim" | "normal" | "interested" | "back");
@@ -6125,13 +6143,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       back:      Math.max(0,   5 + Math.round((Math.random() - 0.5) *  8)),  //   1–9 (low — occasional rewatch)
     };
     onLog?.(`Reels scroll personality — skim:${reelsScrollWeights.skim} normal:${reelsScrollWeights.normal} interested:${reelsScrollWeights.interested} back:${reelsScrollWeights.back}`);
+    const reelsPersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
 
     // Reels snap fully to the next clip on a swipe — unlike the feed's
     // partial scroll (runCheckFeedLoop), a single full-height swipe here
     // always lands on exactly the next reel.
     const swipeToNextReel = async (reelLabel: string) => {
       const rx = Math.round(w / 2);
-      const rsv = rollScrollVelocity(h, reelsScrollWeights, /*allowBack=*/false, /*safeStartFrac=*/0.80);
+      const rsv = rollScrollVelocity(h, reelsScrollWeights, /*allowBack=*/false, /*safeStartFrac=*/0.80, reelsPersonalityHistory);
+      reelsPersonalityHistory.streak = reelsPersonalityHistory.lastMode === rsv.mode ? reelsPersonalityHistory.streak + 1 : 1;
+      reelsPersonalityHistory.lastMode = rsv.mode;
       onLog?.(`${reelLabel}: advance swipe [${rsv.mode}]`);
       logger.info({ serial, source: "reels-advance", mode: rsv.mode, from: [rx, rsv.fromY], to: [rx, rsv.toY], durationMs: rsv.duration }, "[mobile-input] swipe");
       await deviceProfileSwipe(serial, { x1: rx, y1: rsv.fromY, x2: rx, y2: rsv.toY, durationMs: rsv.duration }, "reels-advance", rsv.mode as "skim" | "normal" | "interested" | "back");
