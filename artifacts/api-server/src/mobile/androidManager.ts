@@ -9951,6 +9951,10 @@ export async function typeViaCalibrationMap(
     }
   }
 
+  // Leave the IME on its normal letters layer. This matters when a symbol or
+  // digit was the final character, and prevents the next isolated caller from
+  // inheriting the symbols screen and typing into the wrong key positions.
+  if (layer !== "letters") await switchLayer("letters");
   return { ok: missing.length === 0, missing };
 }
 

@@ -5929,13 +5929,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               // original (topmost) author — later nodes are collaborators.
               // An empty name means we hit a container; skip it.
               let _aeNode: { x: number; y: number; name: string } | null = null;
-              for (const _aeSeg of _aeXml.split("<node ")) {
+              const _aeNodeRe = /<node\s([^>]*?)(?:\/?>)/g;
+              let _aeMatch: RegExpExecArray | null;
+              while ((_aeMatch = _aeNodeRe.exec(_aeXml)) !== null) {
+                const _aeSeg = _aeMatch[1];
                 const _aeRid = (_aeSeg.match(/resource-id="([^"]*)"/) ?? [])[1] ?? "";
                 const _isAuthor =
-                  _aeRid.includes("clips_author_username") ||
-                  _aeRid.includes("row_feed_photo_profile_name");
+                  /(?:^|:)clips_author_username$/.test(_aeRid) ||
+                  /(?:^|:)row_feed_photo_profile_name$/.test(_aeRid);
                 if (!_isAuthor) continue;
-                const _aeDesc = (_aeSeg.match(/(?:content-desc|text)="([^"]*)"/) ?? [])[1] ?? "";
+                const _aeDesc =
+                  (_aeSeg.match(/text="([^"]*)"/) ?? [])[1] ??
+                  (_aeSeg.match(/content-desc="([^"]*)"/) ?? [])[1] ??
+                  "";
                 // Skip nodes with no name — containers and collab groupings.
                 if (!_aeDesc) continue;
                 const _aeBb = _aeSeg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
@@ -9663,12 +9669,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // text using the EditText node's text attribute (no coordinates used).
         await android.clearInstagramSearchBar(serial, (msg) => onLog?.(`  ${msg}`));
         // Use only real taps on the saved Android keyboard calibration map.
-        const typed = await android.typeViaSavedCalibrationMap(serial, `@${username}`, message => {
+        const typed = await android.typeViaSavedCalibrationMap(serial, username.replace(/^@+/, ""), message => {
           onLog?.(`  ${message}`);
         });
         if (!typed.ok) {
           onLog?.(
-            `Follow: calibrated keyboard could not enter @${username}` +
+            `Follow: calibrated keyboard could not enter ${username}` +
             `${typed.missing.length ? ` — missing ${typed.missing.join(", ")}` : ""} — skipping`,
           );
           await android.pressBack(serial);
