@@ -7883,6 +7883,11 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
     }
   };
 
+  const typeGeneratedTotp = async (slotIdx: number, secret: string) => {
+    const code = await generateTotp(slotIdx, secret);
+    if (code) await typeAccountField("totpSecret", code);
+  };
+
   const addSlot = () => {
     setSlots(s => [...s, emptySlot()]);
     setShowPassword(s => [...s, false]);
@@ -7906,7 +7911,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
     setOpenSlotTool(prev => prev === i ? null : prev);
   };
 
-  const generateTotp = async (slotIdx: number, secret: string) => {
+  const generateTotp = async (slotIdx: number, secret: string): Promise<string | null> => {
     setTotpCode(c => c.map((v, i) => i === slotIdx ? null : v));
     setTotpError(e => e.map((v, i) => i === slotIdx ? null : v));
     try {
@@ -7920,7 +7925,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
         val = (val << 5) | idx; bits += 5;
         if (bits >= 8) { bytes.push((val >>> (bits - 8)) & 0xff); bits -= 8; }
       }
-      if (!bytes.length) { setTotpError(e => e.map((v, i) => i === slotIdx ? "Invalid secret" : v)); return; }
+      if (!bytes.length) { setTotpError(e => e.map((v, i) => i === slotIdx ? "Invalid secret" : v)); return null; }
       const key = await crypto.subtle.importKey("raw", new Uint8Array(bytes), { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
       const counter = Math.floor(Date.now() / 1000 / 30);
       const buf = new Uint8Array(8);
@@ -7932,8 +7937,10 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
       const codeStr = code.toString().padStart(6, "0");
       setTotpCode(cd => cd.map((v, i) => i === slotIdx ? codeStr : v));
       navigator.clipboard.writeText(codeStr).catch(() => {});
+      return codeStr;
     } catch {
       setTotpError(e => e.map((v, i) => i === slotIdx ? "Failed to generate" : v));
+      return null;
     }
   };
 
@@ -8149,7 +8156,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                     title="Type 2FA OTP Secret on the phone keyboard"
                     aria-label="Type 2FA OTP Secret on the phone keyboard"
                     disabled={typingField !== null || !phone?.serial}
-                    onClick={() => void typeAccountField("totpSecret", slot.totpSecret)}
+                    onClick={() => void typeGeneratedTotp(i, slot.totpSecret)}
                     className="ml-1 h-6 px-1.5 text-muted-foreground hover:text-primary">
                     {typingField === "totpSecret" ? "Typing…" : <Keyboard className="w-3 h-3" aria-hidden="true" />}
                   </Button>
