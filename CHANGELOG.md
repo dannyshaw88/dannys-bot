@@ -1,3 +1,17 @@
+## [1.2.418] — 2026-08-08
+
+### Added — Per-scroll personality variation and device swipe timing
+
+- Rolled Feed, Explore, and Reels scroll personalities independently for every
+  scroll instead of batching a personality across a session.
+- Allowed natural repeated personalities while limiting long identical runs and
+  repeated Back-scrolls.
+- Added per-device pre-swipe pause and post-swipe settling ranges to the saved
+  Swipe Gesture Profile.
+- Removed acceleration and deceleration controls because the active automation
+  transport does not support them reliably.
+- Updated the Windows installer version to 1.2.418.
+
 ## [1.2.417] — 2026-08-08
 
 ### Fixed — Swipe Gesture Profile enforcement
