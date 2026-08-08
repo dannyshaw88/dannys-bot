@@ -1757,6 +1757,12 @@ const CALIB_GROUPS: Array<{
       { label: "2fa:4", display: "4" }, { label: "2fa:5", display: "5" }, { label: "2fa:6", display: "6" },
       { label: "2fa:7", display: "7" }, { label: "2fa:8", display: "8" }, { label: "2fa:9", display: "9" },
       { label: "2fa:0", display: "0" },
+      { label: "2fa:minus", display: "−" },
+      { label: "2fa:enter", display: "↵ Enter" },
+      { label: "2fa:backspace", display: "⌫ Backspace" },
+      { label: "2fa:comma", display: "," },
+      { label: "2fa:period", display: "." },
+      { label: "2fa:action", display: "✓ Confirm / action" },
     ],
   },
   {
