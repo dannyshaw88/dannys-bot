@@ -1963,6 +1963,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     `mobile_trust_score_${serial}_${accountSlotId(serial, slotIdx)}`;
   const trustScoreTimerKey = (serial: string, slotIdx: number) =>
     `mobile_trust_score_timer_${serial}_${accountSlotId(serial, slotIdx)}`;
+  // Builds before stable slot IDs used the visible numeric index in these
+  // settings keys. Keep the legacy key as a read/migration fallback so a
+  // restart cannot make an existing assignment or countdown look new.
+  const legacyTrustScoreAssignmentKey = (serial: string, slotIdx: number) =>
+    `mobile_trust_score_${serial}_${slotIdx}`;
+  const legacyTrustScoreTimerKey = (serial: string, slotIdx: number) =>
+    `mobile_trust_score_timer_${serial}_${slotIdx}`;
   type TrustScoreTimerState = {
     scoreId: string;
     durationHours: number;
@@ -1975,7 +1982,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     serial: string,
     slotIdx: number,
   ): TrustScoreTimerState | null => {
-    const raw = all[trustScoreTimerKey(serial, slotIdx)];
+    const raw = all[trustScoreTimerKey(serial, slotIdx)] ?? all[legacyTrustScoreTimerKey(serial, slotIdx)];
     if (!raw) return null;
     try {
       const parsed = JSON.parse(raw);
@@ -2072,18 +2079,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   ]);
   const loadTrustScoreAssignment = async (serial: string, slotIdx: number) => {
     const all = await storage.getGlobalSettings();
-    const key = `mobile_trust_score_${serial}_${slotIdx}`;
+    const key = trustScoreAssignmentKey(serial, slotIdx);
     const configured = Object.prototype.hasOwnProperty.call(all, key);
+    const legacyKey = legacyTrustScoreAssignmentKey(serial, slotIdx);
+    const legacyConfigured = Object.prototype.hasOwnProperty.call(all, legacyKey);
     let scoreId: string | null = null;
-    if (configured) {
+    if (configured || legacyConfigured) {
       try {
-        const parsed = JSON.parse(all[key]);
+        const parsed = JSON.parse(all[configured ? key : legacyKey]);
         scoreId = typeof parsed === "string" && parsed.length > 0 ? parsed : null;
       } catch {
         scoreId = null;
       }
     }
-    return { all, configured, scoreId };
+    // Migrate the value asynchronously without making the settings read wait.
+    if (!configured && legacyConfigured) {
+      void storage.setGlobalSetting(key, all[legacyKey]);
+    }
+    return { all: configured ? all : { ...all, [key]: legacyConfigured ? all[legacyKey] : "" }, configured: configured || legacyConfigured, scoreId };
   };
 
   const resolveTrustScoreSettings = async (
@@ -2728,7 +2741,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         return;
       }
       const all = await storage.getGlobalSettings();
-      const assignmentRaw = all[trustScoreAssignmentKey(serial, slotIdx)];
+      const assignmentRaw = all[trustScoreAssignmentKey(serial, slotIdx)]
+        ?? all[legacyTrustScoreAssignmentKey(serial, slotIdx)];
       let scoreId: string | null = null;
       try {
         const parsed = JSON.parse(assignmentRaw ?? "null");

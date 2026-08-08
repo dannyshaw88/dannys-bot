@@ -7829,21 +7829,26 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
         // settings but no device/slot TrustScore assignment. Hydrate that
         // assignment from the account's existing profile badge. This does not
         // modify the saved automation baseline.
-        const trustScoreSlots = await hydrateAccountTrustScoreAssignments(phone.serial, loaded);
+        // Do not block the account list on profile hydration. The panel must
+        // become interactive immediately; hydration is a compatibility bridge
+        // for older profile badges and can refresh the affected slot afterward.
         if (!active) return;
-        if (trustScoreSlots.length > 0) {
-          setSlotRefreshKeys(prev => {
-            const next = { ...prev };
-            for (const idx of trustScoreSlots) next[idx] = (next[idx] ?? 0) + 1;
-            return next;
-          });
-        }
-        lastSavedRef.current = JSON.stringify(loaded);
         setSlots(loaded);
         setShowPassword(Array(loaded.length).fill(false));
         setShowEmailPassword(Array(loaded.length).fill(false));
         setTotpCode(Array(loaded.length).fill(null));
         setTotpError(Array(loaded.length).fill(null));
+        setLoading(false);
+        hydratedRef.current = true;
+        void hydrateAccountTrustScoreAssignments(phone.serial, loaded).then(trustScoreSlots => {
+          if (!active || trustScoreSlots.length === 0) return;
+          setSlotRefreshKeys(prev => {
+            const next = { ...prev };
+            for (const idx of trustScoreSlots) next[idx] = (next[idx] ?? 0) + 1;
+            return next;
+          });
+        });
+        lastSavedRef.current = JSON.stringify(loaded);
       })
       .catch(() => {})
       .finally(() => { if (active) { setLoading(false); hydratedRef.current = true; } });
