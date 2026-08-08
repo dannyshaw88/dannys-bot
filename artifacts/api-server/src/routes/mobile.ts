@@ -12044,15 +12044,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
-  // Manual mirror paste reads the desktop clipboard, then types it through
-  // real taps on the saved Android keyboard calibration map. It must not use
-  // adb shell input text or host-side clipboard injection.
-  app.post("/api/mobile/devices/:serial/input/clipboard-paste", async (req: Request, res: Response) => {
+  // Manual mirror "tap to type" sends characters through the saved
+  // per-device keyboard calibration map. The field to receive the text is
+  // intentionally not selected here: the user taps/focuses it in the mirror,
+  // then presses one of the desktop-side field buttons.
+  app.post("/api/mobile/devices/:serial/input/type-calibrated", async (req: Request, res: Response) => {
     try {
       const input = inputTextSchema.parse(req.body);
       const serial = p(req, "serial");
+      req.log.info({ serial, characterCount: input.text.length }, "[mirror-calibrated-type] starting");
       const result = await android.typeViaSavedCalibrationMap(serial, input.text, loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile, message => {
-        req.log.info({ serial, message }, "[mirror-calibrated-paste]");
+        req.log.info({ serial, message }, "[mirror-calibrated-type]");
       });
       if (!result.ok) {
         return void res.status(422).json({

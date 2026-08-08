@@ -7859,13 +7859,19 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
       return;
     }
     try {
-      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/input/clipboard-paste`, {
+      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/input/type-calibrated`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
       });
       const body = await response.json().catch(() => null);
-      if (!response.ok) setSaveError(body?.error ?? `Typing failed (${response.status})`);
+      if (!response.ok) {
+        setSaveError(body?.error ?? `Typing failed (${response.status})`);
+      } else {
+        setSaveError(null);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 1500);
+      }
     } catch (error: any) {
       setSaveError(error?.message ?? "Typing failed");
     }

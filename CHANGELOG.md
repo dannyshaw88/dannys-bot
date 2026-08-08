@@ -1,3 +1,14 @@
+## [1.2.423] — 2026-08-08
+
+### Fixed — Mirror tap-to-type uses calibrated typing
+
+- Fixed the Username, Password, and 2FA OTP Secret keyboard buttons so they
+  use the selected device's calibrated keyboard typing profile.
+- Typing is sent to whichever Instagram field is currently focused in the
+  mirror, including values such as `triciawelch50`.
+- Added explicit calibrated-typing logging and success feedback instead of
+  routing through the misleading clipboard-paste endpoint.
+
 ## [1.2.422] — 2026-08-08
 
 ### Fixed — View Feed starts from Home
