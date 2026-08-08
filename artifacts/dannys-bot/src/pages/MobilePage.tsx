@@ -1856,8 +1856,10 @@ function CalibrationDialog({
   const existingCount = Object.keys(map).length;
   const twoFaKeys = CALIB_KEYS.filter(key => key.label.startsWith("2fa:"));
   const activeKeys = mode === "2faWizard"
-    ? twoFaKeys
+    ? twoFaKeys.filter(key => !map[key.label])
     : CALIB_KEYS.filter(key => !key.label.startsWith("2fa:"));
+  const twoFaMappedCount = twoFaKeys.filter(key => !!map[key.label]).length;
+  const normalMappedCount = CALIB_KEYS.filter(key => !key.label.startsWith("2fa:") && !!map[key.mapKey ?? key.label]).length;
 
   const currentKey = step < activeKeys.length ? activeKeys[step] : null;
   const prevGroupIdx = step > 0 ? activeKeys[step - 1].groupIdx : -1;
@@ -2073,7 +2075,7 @@ function CalibrationDialog({
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <p className="text-xs text-slate-400">
-                {existingCount} / {CALIB_KEYS.length} keys mapped — click Re-tap to fix any wrong one
+                {normalMappedCount} / {CALIB_KEYS.length - twoFaKeys.length} keyboard keys · {twoFaMappedCount} / {twoFaKeys.length} 2FA digits mapped — click Re-tap to fix any wrong one
               </p>
               <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-slate-300 hover:bg-slate-800"
                 onClick={() => { setMode("intro"); setEditResult(null); }} disabled={!!editCapturing}>
@@ -2157,7 +2159,7 @@ function CalibrationDialog({
               <div className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-slate-300">
-                    Saved map: <span className="text-green-400 font-semibold">{existingCount}</span> / {CALIB_KEYS.length} keys
+                    Saved map: <span className="text-green-400 font-semibold">{normalMappedCount}</span> / {CALIB_KEYS.length - twoFaKeys.length} keyboard keys · <span className="text-cyan-300 font-semibold">{twoFaMappedCount}</span> / {twoFaKeys.length} 2FA digits
                   </span>
                   <Button
                     size="sm"
@@ -2183,8 +2185,13 @@ function CalibrationDialog({
                 {existingCount > 0 ? "Re-run full calibration" : "Keyboard is open — Start"}
               </Button>
               <Button variant="outline" className="flex-1 border-cyan-700 text-cyan-200 hover:bg-cyan-950"
-                onClick={() => { setStep(0); setLastResult(null); setMode("2faWizard"); }}>
-                Calibrate 2FA keypad
+                onClick={() => {
+                  const missingIndex = twoFaKeys.findIndex(key => !map[key.label]);
+                  setStep(missingIndex >= 0 ? 0 : 0);
+                  setLastResult(null);
+                  setMode("2faWizard");
+                }}>
+                {twoFaMappedCount === twoFaKeys.length ? "Recalibrate 2FA keypad" : `Calibrate 2FA keypad (${twoFaKeys.length - twoFaMappedCount} missing)`}
               </Button>
               <Button variant="outline" className="border-slate-600 text-slate-200 hover:bg-slate-800" onClick={() => onOpenChange(false)}>
                 Cancel
@@ -2233,7 +2240,7 @@ function CalibrationDialog({
             {/* Progress bar */}
             <div className="space-y-1">
               <div className="flex justify-between text-[10px] text-slate-400">
-                <span>{step} / {CALIB_KEYS.length} keys</span>
+              <span>{step} / {activeKeys.length} {mode === "2faWizard" ? "digits" : "keys"}</span>
                 <span>{progress}%</span>
               </div>
               <div className="h-1 overflow-hidden rounded-full bg-slate-700">
