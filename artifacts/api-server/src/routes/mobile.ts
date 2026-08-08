@@ -3009,16 +3009,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         return;
       }
       const all = await storage.getGlobalSettings();
+      const cfgBeforeDelete = loadInstanceConfigs();
+      const deletedSlot = cfgBeforeDelete[serial]?.account?.slots?.[slotIdx];
+      const deletedSlotId =
+        typeof deletedSlot?.slotId === "string" && deletedSlot.slotId.length >= 8
+          ? deletedSlot.slotId
+          : null;
       const prefixes = [
         `mobile_trust_score_${serial}_${slotIdx}`,
         `mobile_trust_score_timer_${serial}_${slotIdx}`,
       ];
+      if (deletedSlotId) {
+        prefixes.push(
+          `mobile_trust_score_${serial}_${deletedSlotId}`,
+          `mobile_trust_score_timer_${serial}_${deletedSlotId}`,
+        );
+      }
       for (const key of Object.keys(all)) {
-        if (key === prefixes[0] || key === prefixes[1]) {
+        if (prefixes.includes(key)) {
           await storage.deleteGlobalSetting(key);
         }
       }
-      const cfg = loadInstanceConfigs();
+      const cfg = cfgBeforeDelete;
       const slotAutomation = { ...(cfg[serial]?.slotAutomation ?? {}) };
       delete slotAutomation[String(slotIdx)];
       delete slotAutomation[slotAutomationKey(serial, slotIdx)];

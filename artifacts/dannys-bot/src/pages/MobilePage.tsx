@@ -7954,8 +7954,11 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   const removeSlot = (i: number) => {
     const serial = phone?.serial;
     if (serial) {
+      const deletedSlotId = slots[i]?.slotId;
       fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/slots/${i}`, { method: "DELETE" }).catch(() => {});
       localStorage.removeItem(slotTrustScoreKey(serial, i));
+      localStorage.removeItem(`mobile_ts_timer_${serial}_index-${i}`);
+      if (deletedSlotId) localStorage.removeItem(`mobile_ts_timer_${serial}_${deletedSlotId}`);
     }
     setSlots(s => s.filter((_, idx) => idx !== i));
     setShowPassword(s => s.filter((_, idx) => idx !== i));
@@ -8291,7 +8294,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                     so styling changes here don't affect other badge placements */}
                 <div style={{ display: "flex", alignSelf: "flex-end", height: "36px", gap: "8px" }}>
                   <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={i} width={114} />
-                  <TrustScoreCountdown serial={phone?.serial ?? ""} slotIdx={i} />
+                   <TrustScoreCountdown serial={phone?.serial ?? ""} slotIdx={i} slotId={slot.slotId} />
                 </div>
               </div>
           </div>

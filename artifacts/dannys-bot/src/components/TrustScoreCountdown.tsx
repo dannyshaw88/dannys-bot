@@ -16,13 +16,13 @@ type TimerResponse = {
 
 type TimerCheckpoint = { scoreId: string; remainingMs: number };
 
-function checkpointKey(serial: string, slotIdx: number): string {
-  return `mobile_ts_timer_${serial}_${slotIdx}`;
+function checkpointKey(serial: string, slotIdx: number, slotId?: string): string {
+  return `mobile_ts_timer_${serial}_${slotId || `index-${slotIdx}`}`;
 }
 
-function readCheckpoint(serial: string, slotIdx: number, scoreId: string): number | null {
+function readCheckpoint(serial: string, slotIdx: number, scoreId: string, slotId?: string): number | null {
   try {
-    const parsed = JSON.parse(localStorage.getItem(checkpointKey(serial, slotIdx)) ?? "null") as Partial<TimerCheckpoint> | null;
+    const parsed = JSON.parse(localStorage.getItem(checkpointKey(serial, slotIdx, slotId)) ?? "null") as Partial<TimerCheckpoint> | null;
     return parsed?.scoreId === scoreId && typeof parsed.remainingMs === "number" && parsed.remainingMs > 0
       ? parsed.remainingMs
       : null;
@@ -31,10 +31,10 @@ function readCheckpoint(serial: string, slotIdx: number, scoreId: string): numbe
   }
 }
 
-function writeCheckpoint(serial: string, slotIdx: number, scoreId: string, remainingMs: number): void {
+function writeCheckpoint(serial: string, slotIdx: number, scoreId: string, remainingMs: number, slotId?: string): void {
   try {
     localStorage.setItem(
-      checkpointKey(serial, slotIdx),
+      checkpointKey(serial, slotIdx, slotId),
       JSON.stringify({ scoreId, remainingMs: Math.max(0, Math.round(remainingMs)) }),
     );
   } catch {
@@ -57,9 +57,11 @@ function formatRemaining(ms: number): string {
 export function TrustScoreCountdown({
   serial,
   slotIdx,
+  slotId,
 }: {
   serial: string;
   slotIdx: number;
+  slotId?: string;
 }) {
   const levels = useMemo(() => getTrustLevels(), []);
   const [scoreId, setScoreId] = useState<string | null>(() =>
@@ -110,7 +112,7 @@ export function TrustScoreCountdown({
       // Preserve the last displayed value across that unmount/remount instead
       // of allowing the server's wall-clock expiry to consume the timer while
       // the phone is disconnected.
-      const checkpoint = readCheckpoint(serial, slotIdx, liveScoreId);
+      const checkpoint = readCheckpoint(serial, slotIdx, liveScoreId, slotId);
       const serverRemaining = typeof data.remainingMs === "number" ? data.remainingMs : 0;
       const effectiveRemaining = Math.max(serverRemaining, checkpoint ?? 0);
       if (!effectiveRemaining) {
@@ -129,7 +131,7 @@ export function TrustScoreCountdown({
     } catch {
       // A transient request failure should not make a persisted timer vanish.
     }
-  }, [levels, serial, slotIdx]);
+  }, [levels, serial, slotIdx, slotId]);
 
   useEffect(() => {
     void load();
@@ -191,8 +193,8 @@ export function TrustScoreCountdown({
 
   useEffect(() => {
     if (remainingMs === null || !scoreId) return;
-    writeCheckpoint(serial, slotIdx, scoreId, remainingMs);
-  }, [remainingMs, scoreId, serial, slotIdx]);
+    writeCheckpoint(serial, slotIdx, scoreId, remainingMs, slotId);
+  }, [remainingMs, scoreId, serial, slotIdx, slotId]);
 
   if (remainingMs === null || !scoreId || !nextScore) return null;
 

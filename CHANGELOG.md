@@ -1,3 +1,14 @@
+## [1.2.430] — 2026-08-08
+
+### Fixed — Trust Score slot state isolation
+
+- Fixed deleted account slots leaving their stable Trust Score assignment and
+  timer keys behind in the local database.
+- Trust Score countdown checkpoints now use the persisted slot identity rather
+  than the visible slot index, preventing a replacement account from
+  inheriting a deleted account's countdown.
+- Deleted slots now clear both stable and legacy local countdown checkpoints.
+
 ## [1.2.429] — 2026-08-08
 
 ### Fixed — Instagram launch settling
