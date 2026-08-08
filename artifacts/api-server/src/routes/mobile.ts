@@ -2523,12 +2523,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const assignmentPrefix = "mobile_trust_score_";
       const instanceConfigs = loadInstanceConfigs();
       for (const [assignmentKey, rawScore] of Object.entries(all)) {
-        if (!assignmentKey.startsWith(assignmentPrefix) || rawScore !== JSON.stringify(trustScoreId)) continue;
+        if (
+          !assignmentKey.startsWith(assignmentPrefix) ||
+          assignmentKey.startsWith("mobile_trust_score_timer_") ||
+          rawScore !== JSON.stringify(trustScoreId)
+        ) continue;
         let serial: string | null = null;
         let slotIdx = -1;
         for (const [candidateSerial, candidateConfig] of Object.entries(instanceConfigs)) {
           const candidateIdx = candidateConfig.account?.slots?.findIndex((slot: any) =>
-            assignmentKey === `mobile_trust_score_${candidateSerial}_${slot?.slotId}`,
+            assignmentKey === `mobile_trust_score_${candidateSerial}_${slot?.slotId}` ||
+            assignmentKey === `mobile_trust_score_${candidateSerial}_${candidateConfig.account?.slots?.indexOf(slot)}`,
           ) ?? -1;
           if (candidateIdx >= 0) {
             serial = candidateSerial;
@@ -2758,8 +2763,33 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         scoreId = typeof parsed === "string" ? parsed : null;
       } catch {}
       const timer = scoreId ? readTrustScoreTimer(all, serial, slotIdx) : null;
-      if (scoreId && !timer) {
-        const durationHours = Number(all[trustScoreDurationKey(scoreId)]);
+      const configuredDuration = scoreId == null
+        ? null
+        : Number(all[trustScoreDurationKey(scoreId)]);
+      const validConfiguredDuration =
+        Number.isInteger(configuredDuration) &&
+        configuredDuration >= 1 &&
+        configuredDuration <= 999
+          ? configuredDuration
+          : null;
+      // A duration edit must take effect for an already-assigned score. Do not
+      // keep serving an old timer (for example 75h) after the settings field
+      // has been changed to 50h.
+      const reconciledTimer = timer && validConfiguredDuration !== null &&
+        timer.durationHours !== validConfiguredDuration
+        ? {
+            scoreId,
+            durationHours: validConfiguredDuration,
+            startedAt: Date.now(),
+            remainingMs: null,
+            paused: false,
+          } satisfies TrustScoreTimerState
+        : timer;
+      if (reconciledTimer && reconciledTimer !== timer) {
+        await writeTrustScoreTimer(serial, slotIdx, reconciledTimer);
+      }
+      if (scoreId && !reconciledTimer) {
+        const durationHours = validConfiguredDuration;
         if (Number.isInteger(durationHours) && durationHours >= 1 && durationHours <= 999) {
           await writeTrustScoreTimer(serial, slotIdx, {
             scoreId,
@@ -2791,18 +2821,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         });
         return;
       }
-      if (!scoreId || !timer) {
+      if (!scoreId || !reconciledTimer) {
         res.json({ scoreId, running: false, paused: false, remainingMs: null, expiresAt: null });
         return;
       }
-      const remainingMs = trustScoreTimerRemainingMs(timer);
+      const remainingMs = trustScoreTimerRemainingMs(reconciledTimer);
       res.json({
         scoreId,
-        running: !timer.paused && remainingMs > 0,
-        paused: timer.paused,
-        durationHours: timer.durationHours,
+        running: !reconciledTimer.paused && remainingMs > 0,
+        paused: reconciledTimer.paused,
+        durationHours: reconciledTimer.durationHours,
         remainingMs,
-        expiresAt: timer.paused ? null : Date.now() + remainingMs,
+        expiresAt: reconciledTimer.paused ? null : Date.now() + remainingMs,
       });
     } catch (e: any) {
       res.status(500).json({ error: e?.message ?? "Failed to load TrustScore timer" });
