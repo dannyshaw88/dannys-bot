@@ -82,6 +82,7 @@
 - [Merge regression verification](merge-regression-verification.md) — conflict-recovery merges can reintroduce removed UI; compare both parents and verify active render, payload, and runtime before pushing
 - [TrustScore ownership parity](trustscore-ownership-parity.md) — every slot-owned setting must be registered in both frontend and API ownership maps
 - [Mobile slot identity](mobile-slot-identity.md) — account-owned state must use persisted slotId, never the renumberable visible slot index
+- [Device removal state boundary](device-removal-state-boundary.md) — removing a farm device must purge account-owned state before serial reuse
 - [TrustScore persistence and loading](trustscore-persistence-and-loading.md) — migrate legacy numeric timer keys and never block account-slot rendering on profile hydration
 - [TrustScore duration navigation save](trustscore-duration-navigation-save.md) — debounced duration inputs must flush pending writes when the TrustScore view unmounts
 - [Windows installer CI assertions](windows-installer-ci-assertions.md) — keep text-based workflow checks aligned with the current UI, especially after copy changes

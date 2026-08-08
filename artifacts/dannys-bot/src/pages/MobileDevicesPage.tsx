@@ -622,7 +622,18 @@ async function registerDevice(phone: UsbPhone): Promise<FarmDevice> {
 }
 
 async function removeDevice(slotIndex: number): Promise<void> {
-  await fetch(`/api/mobile/farm-devices/${slotIndex}`, { method: "DELETE" });
+  const deviceResponse = await fetch("/api/mobile/farm-devices");
+  const deviceData = deviceResponse.ok ? await deviceResponse.json().catch(() => null) : null;
+  const device = (deviceData?.devices ?? []).find((entry: FarmDevice) => entry.slotIndex === slotIndex);
+  if (device?.serial) {
+    const stateResponse = await fetch(
+      `/api/mobile/devices/${encodeURIComponent(device.serial)}/account-state`,
+      { method: "DELETE" },
+    );
+    if (!stateResponse.ok) throw new Error("Failed to clear removed device account state");
+  }
+  const response = await fetch(`/api/mobile/farm-devices/${slotIndex}`, { method: "DELETE" });
+  if (!response.ok) throw new Error("Failed to remove device");
 }
 
 // ─── Add Device Panel ─────────────────────────────────────────────────────────

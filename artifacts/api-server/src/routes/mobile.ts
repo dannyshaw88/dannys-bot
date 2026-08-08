@@ -2925,6 +2925,39 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to save the account" }); }
   });
 
+  // Removing a physical farm device is a destructive account-boundary
+  // operation.  The serial may be registered again later with completely
+  // different accounts, so do not let the old account slots, HST toggles,
+  // TrustScore badges, or countdowns follow the replacement accounts.
+  app.delete("/api/mobile/devices/:serial/account-state", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const all = await storage.getGlobalSettings();
+      const keyPrefixes = [
+        `mobile_trust_score_${serial}_`,
+        `mobile_trust_score_timer_${serial}_`,
+        `mobile_followed_users_${serial}_`,
+        `mobile_posted_media_${serial}_`,
+        `mobile_posted_profile_media_${serial}_`,
+      ];
+      await Promise.all(
+        Object.keys(all)
+          .filter(key => keyPrefixes.some(prefix => key.startsWith(prefix)))
+          .map(key => storage.deleteGlobalSetting(key)),
+      );
+
+      const cfg = loadInstanceConfigs();
+      if (cfg[serial]) {
+        const { account: _account, slotAutomation: _slotAutomation, ...deviceConfig } = cfg[serial];
+        cfg[serial] = deviceConfig;
+        saveInstanceConfigs(cfg);
+      }
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message ?? "Failed to clear device account state" });
+    }
+  });
+
   // Deleting an account slot must also delete every slot-owned setting. Slot
   // indexes are reused by the UI, so leaving these keys behind makes a newly
   // added account inherit the previous account's TrustScore/settings.
