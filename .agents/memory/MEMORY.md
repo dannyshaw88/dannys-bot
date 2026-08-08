@@ -90,3 +90,4 @@
 - [Males Only allowlist filter](males-only-allowlist-filter.md) — explicit comma-separated names match HikerAPI username, full name, or bio; never infer gender
 - [Mobile offline HST gate](mobile-offline-hst-gate.md) — pause all slot cycles on non-ready ADB state while preserving the saved toggle for reconnect resume
 - [Follow exact-target gate](follow-exact-target-gate.md) — never select a search result by row order; require an exact username node or abort and clear before the next target
+- [Follow one-back navigation](follow-one-back-navigation.md) — after profile follow, one Back returns to search results; a second Back exits Explore to Home

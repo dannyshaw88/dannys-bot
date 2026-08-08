@@ -10169,8 +10169,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             onLog?.(`Follow: ↩ abandoned follow @${username} after inject-browsing (variation — user can be re-scraped)`);
             await android.pressBack(serial);
             await sleepOrAbort(serial, 500);
-            await android.pressBack(serial);
-            await sleepOrAbort(serial, 800);
             const interPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
             if (interPopup) await sleepOrAbort(serial, 400);
             continue;
@@ -10210,29 +10208,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           });
         }
 
-        // Navigate back to the home feed after each user so the next
-        // runFollowUsersStep call finds the bottom nav accessible.
-        //
-        // Follow navigation is two levels deep:
-        //   pressBack #1: profile → search results (Home is not present here)
-        //   pressBack #2: search results → Explore (Home becomes available)
-        // Always complete both transitions before starting Stories or the next
-        // follow. A missing Home node after the first Back is expected and is
-        // not a reason to stop recovery.
-        await android.pressBack(serial);               // profile → search results
+        // Return to the search/explore results after each user. The profile
+        // was opened from the search results, so exactly one Back is correct:
+        // profile → search results. Do not press Back again when Home is absent;
+        // that second press exits the search context and lands on the home feed.
+        await android.pressBack(serial);
         await sleepOrAbort(serial, 500);
-        let _followHomeTab = await android.findHomeTab(serial).catch(() => null);
-        if (!_followHomeTab) {
-          onLog?.(`Follow: Home tab absent on search results — pressing Back again to return to Explore`);
-          await android.pressBack(serial);
-          await sleepOrAbort(serial, 500);
-          _followHomeTab = await android.findHomeTab(serial).catch(() => null);
-        }
-        if (_followHomeTab) {
-          await android.tap(serial, _followHomeTab.x, _followHomeTab.y);
-        } else {
-          onLog?.(`Follow: Home tab still not found after two Back presses — skipping Home tap`);
-        }
+        onLog?.("Follow: returned to search results after one Back; keeping Explore/search context");
         await sleepOrAbort(serial, 800);
         // Dismiss any popup that appeared after pressing back (e.g. IG Plus
         // upsell, notification prompts) before the next operation.

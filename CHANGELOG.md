@@ -1,3 +1,19 @@
+## [1.2.428] — 2026-08-08
+
+### Fixed — Follow navigation and Trust Score duration timers
+
+- Fixed Follow Users navigation after opening and following a profile. The
+  cleanup now presses Back exactly once to return to Instagram search results,
+  instead of pressing Back a second time and landing on the Home feed.
+- Removed the extra Back path used when abandoning a pre-follow browsing
+  attempt, keeping the flow in the search/Explore context for the next target.
+- Fixed Trust Score duration updates so an edited duration becomes authoritative
+  for already-assigned accounts, including assignments using legacy numeric slot
+  keys.
+- Reconciled stale persisted timers with the current Trust Score duration so an
+  old timer such as 75 hours cannot continue after the setting is changed to
+  50 hours.
+
 ## [1.2.427] — 2026-08-08
 
 ### Fixed — Follow target validation and Males Only filtering
