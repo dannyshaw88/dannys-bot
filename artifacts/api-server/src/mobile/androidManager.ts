@@ -7736,8 +7736,27 @@ function _findElem(xml: string, ...candidates: string[]): { x: number; y: number
   return null;
 }
 
-/** Find the active profile's username control in Instagram's top header. */
+/** Find the active profile's clickable username control in Instagram's top header. */
 function _findTopProfileUsername(xml: string): { x: number; y: number } | null {
+  // Instagram exposes the top account selector as this clickable container.
+  // Prefer the container over its child TextView: tapping the child can be
+  // interpreted as a scroll gesture on some builds/devices, while the parent
+  // owns the account-sheet action. Bounds come from the live accessibility
+  // node, so this works across device resolutions.
+  const usernameContainerRe =
+    /<node\b(?=[^>]*resource-id="[^"]*action_bar_username_container[^"]*")(?=[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^>]*)[^>]*>/i;
+  const usernameContainer = xml.match(usernameContainerRe);
+  if (usernameContainer) {
+    const x1 = Number(usernameContainer[1]);
+    const y1 = Number(usernameContainer[2]);
+    const x2 = Number(usernameContainer[3]);
+    const y2 = Number(usernameContainer[4]);
+    if (x2 > x1 && y2 > y1) {
+      return { x: Math.floor((x1 + x2) / 2), y: Math.floor((y1 + y2) / 2) };
+    }
+  }
+
+  // Compatibility fallback for builds that omit the container resource ID.
   const nodeRe = /<node\b([^>]*)>/gi;
   let match: RegExpExecArray | null;
   while ((match = nodeRe.exec(xml)) !== null) {
