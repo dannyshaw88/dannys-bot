@@ -2587,8 +2587,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const durationMinMs = Math.min(gesture.durationMinMs, gesture.durationMaxMs);
       const durationMaxMs = Math.max(gesture.durationMinMs, gesture.durationMaxMs);
       const durationMs = durationMinMs + Math.round(Math.random() * (durationMaxMs - durationMinMs));
-      await android.swipe(serial, path.x1, path.y1, path.x2, path.y2, durationMs);
-      res.json({ ok: true, resolution: size, path, durationMs });
+      // The UI supplies this exact randomized path. Disable the legacy
+      // low-level jitter so the coordinates in the response are precisely
+      // the coordinates sent to the device.
+      await android.swipe(serial, path.x1, path.y1, path.x2, path.y2, durationMs, false);
+      res.json({ ok: true, resolution: size, path, sentPath: path, durationMs });
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Swipe test failed" }); }
   });
 
@@ -3227,7 +3230,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       durationMs,
     };
     logger.info({ serial, source, personality, reversed, from: [path.x1, path.y1], to: [path.x2, path.y2], durationMs, pauseMs, settleMs, profile: true }, "[mobile-input] device-profile swipe");
-    await android.swipe(serial, path.x1, path.y1, path.x2, path.y2, path.durationMs);
+    // The profile already generated the complete randomized path. Do not
+    // apply android.swipe's legacy hidden center-line jitter on top of it.
+    await android.swipe(serial, path.x1, path.y1, path.x2, path.y2, path.durationMs, false);
     if (settleMs > 0) await new Promise(resolve => setTimeout(resolve, settleMs));
     return { ...path, profile: true };
   }

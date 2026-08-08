@@ -2741,6 +2741,7 @@ export async function swipe(
   x2: number,
   y2: number,
   durationMs: number = 300,
+  applyLegacyJitter = true,
 ): Promise<void> {
   // ── Coordinate jitter ────────────────────────────────────────────────────
   // Vertical feed-scrolls always use the same centre X, so every swipe lands
@@ -2757,7 +2758,7 @@ export async function swipe(
   let jx1 = x1, jy1 = y1, jx2 = x2, jy2 = y2;
   const isLongPress = (x1 === x2 && y1 === y2);
   const isVertical  = (x1 === x2 && y1 !== y2);
-  if (!isLongPress && isVertical) {
+  if (applyLegacyJitter && !isLongPress && isVertical) {
     const pct = (Math.random() * 0.005 + 0.005) * (Math.random() < 0.5 ? 1 : -1);
     const xOff = Math.round(x1 * pct);
     jx1 = Math.max(0, x1 + xOff);
