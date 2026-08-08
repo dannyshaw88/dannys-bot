@@ -9870,13 +9870,17 @@ export async function typeViaCalibrationMap(
       return false;
     }
     onLog?.(`[cal-keyboard] tapped ${description} at (${pos.x},${pos.y})`);
-    await _sleep(180 + Math.round(Math.random() * 100));
+    // When a device typing profile is configured, it is the complete
+    // inter-tap cadence. The previous unconditional 180–280ms pause made
+    // profile values appear ineffective because it dominated every keypress.
+    if (!typingProfile) {
+      await _sleep(180 + Math.round(Math.random() * 100));
+    } else {
+      const min = Math.max(0, Math.min(typingProfile.minMs, typingProfile.maxMs));
+      const max = Math.max(min, typingProfile.maxMs);
+      await _sleep(min + Math.round(Math.random() * (max - min)));
+    }
     return true;
-  };
-  const typeDelay = async () => {
-    const min = Math.max(0, Math.min(typingProfile?.minMs ?? 0, typingProfile?.maxMs ?? 0));
-    const max = Math.max(min, typingProfile?.maxMs ?? min);
-    if (max > 0) await _sleep(min + Math.round(Math.random() * (max - min)));
   };
   const maybeHumanError = async () => {
     if (!typingProfile || !map.backspace) return;
@@ -9936,7 +9940,6 @@ export async function typeViaCalibrationMap(
     if (ch === " " || ch === "\n") {
       await switchLayer("letters");
       if (!await tapMapped(label, ch === " " ? "space" : "Enter")) missing.push(ch);
-      await typeDelay();
       continue;
     }
 
@@ -9951,7 +9954,6 @@ export async function typeViaCalibrationMap(
         }
       }
       if (!await tapMapped(map[label] ? label : ch, ch)) missing.push(ch);
-      await typeDelay();
       continue;
     }
 
@@ -9970,7 +9972,6 @@ export async function typeViaCalibrationMap(
       }
       missing.push(ch);
     }
-    await typeDelay();
   }
 
   // Leave the IME on its normal letters layer. This matters when a symbol or
