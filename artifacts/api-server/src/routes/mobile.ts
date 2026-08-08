@@ -482,7 +482,7 @@ type AutomationSettings = {
   // 'left' / 'up' = manual override stored per device.
   dismissDirection?: "auto" | "left" | "up";
 };
-type DeviceSlot = { username: string; password: string; totpSecret?: string; emailAddress?: string; emailPassword?: string; phoneNumber?: string };
+type DeviceSlot = { slotId?: string; username: string; password: string; totpSecret?: string; emailAddress?: string; emailPassword?: string; phoneNumber?: string };
 type DeviceAccount = { slots: DeviceSlot[] };
 type DeviceSettings = { googlePlayEmail?: string; googlePlayPassword?: string; selectedSimSlot?: number };
 type DevicePrefs = {
@@ -1951,8 +1951,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     `trust_score_mobile_settings_${trustScoreId}`;
   const trustScoreDurationKey = (trustScoreId: string) =>
     `trust_score_duration_hours_${trustScoreId}`;
+  const accountSlotId = (serial: string, slotIdx: number): string => {
+    const slot = loadInstanceConfigs()[serial]?.account?.slots?.[slotIdx];
+    return typeof slot?.slotId === "string" && slot.slotId.length >= 8
+      ? slot.slotId
+      : `legacy-index-${slotIdx}`;
+  };
+  const slotAutomationKey = (serial: string, slotIdx: number) =>
+    accountSlotId(serial, slotIdx);
+  const trustScoreAssignmentKey = (serial: string, slotIdx: number) =>
+    `mobile_trust_score_${serial}_${accountSlotId(serial, slotIdx)}`;
   const trustScoreTimerKey = (serial: string, slotIdx: number) =>
-    `mobile_trust_score_timer_${serial}_${slotIdx}`;
+    `mobile_trust_score_timer_${serial}_${accountSlotId(serial, slotIdx)}`;
   type TrustScoreTimerState = {
     scoreId: string;
     durationHours: number;
@@ -2280,7 +2290,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         postStoryAddLink: false, postStoryLinkUrl: "",
         dismissDirection: "auto" as const,
       };
-      const saved = cfg[serial]?.slotAutomation?.[String(slotIdx)];
+      const saved = cfg[serial]?.slotAutomation?.[slotAutomationKey(serial, slotIdx)]
+        ?? cfg[serial]?.slotAutomation?.[String(slotIdx)];
       const merged: Record<string, any> = {
         ...defaults,
         ...saved,
@@ -2326,7 +2337,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // payload on top of the existing values — not replace everything.
       // Also provide hard-coded fallbacks for the few schema fields that have
       // no zod .default() so a brand-new slot never fails validation.
-      const existing = cfg[serial]?.slotAutomation?.[String(slotIdx)] ?? {};
+      const stableKey = slotAutomationKey(serial, slotIdx);
+      const existing = cfg[serial]?.slotAutomation?.[stableKey]
+        ?? cfg[serial]?.slotAutomation?.[String(slotIdx)] ?? {};
       const base: Record<string, any> = {
         actionDelayMin: 5, actionDelayMax: 10,
         likePercentMin: 3, likePercentMax: 5,
@@ -2382,7 +2395,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       logger.info(`[TOGGLE-DBG] POST slot settings serial=${serial} slotIdx=${slotIdx} enabled=${input.enabled} (all slots after save: ${JSON.stringify(Object.entries({ ...cfg[serial]?.slotAutomation, [String(slotIdx)]: input }).map(([k,v]: [string,any]) => ({ slot: k, enabled: v?.enabled })))})`);
       cfg[serial] = {
         ...cfg[serial],
-        slotAutomation: { ...cfg[serial]?.slotAutomation, [String(slotIdx)]: input },
+        slotAutomation: { ...cfg[serial]?.slotAutomation, [stableKey]: input },
       };
       saveInstanceConfigs(cfg);
       // Mirror the folder path into the dedicated file whenever it arrives
@@ -2486,12 +2499,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Adding a duration after a badge is already assigned must initialize
       // that slot immediately. Clearing a duration removes its running timer.
       const assignmentPrefix = "mobile_trust_score_";
+      const instanceConfigs = loadInstanceConfigs();
       for (const [assignmentKey, rawScore] of Object.entries(all)) {
         if (!assignmentKey.startsWith(assignmentPrefix) || rawScore !== JSON.stringify(trustScoreId)) continue;
-        const match = assignmentKey.slice(assignmentPrefix.length).match(/^(.*)_(\d+)$/);
-        if (!match) continue;
-        const serial = match[1];
-        const slotIdx = Number(match[2]);
+        let serial: string | null = null;
+        let slotIdx = -1;
+        for (const [candidateSerial, candidateConfig] of Object.entries(instanceConfigs)) {
+          const candidateIdx = candidateConfig.account?.slots?.findIndex((slot: any) =>
+            assignmentKey === `mobile_trust_score_${candidateSerial}_${slot?.slotId}`,
+          ) ?? -1;
+          if (candidateIdx >= 0) {
+            serial = candidateSerial;
+            slotIdx = candidateIdx;
+            break;
+          }
+        }
+        if (!serial) continue;
         if (!Number.isInteger(slotIdx) || slotIdx < 0) continue;
         if (body.hours === null || !body.hasNextScore) {
           await clearTrustScoreTimer(serial, slotIdx);
@@ -2608,7 +2631,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         res.status(400).json({ error: "Invalid slot index" });
         return;
       }
-      const key = `mobile_trust_score_${serial}_${slotIdx}`;
+      const key = trustScoreAssignmentKey(serial, slotIdx);
       const all = await storage.getGlobalSettings();
       const configured = Object.prototype.hasOwnProperty.call(all, key);
       let scoreId: string | null = null;
@@ -2634,7 +2657,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         scoreId: z.string().min(1).max(100).nullable(),
         hasNextScore: z.boolean().default(true),
       }).parse(req.body);
-      const assignmentKey = `mobile_trust_score_${serial}_${slotIdx}`;
+      const assignmentKey = trustScoreAssignmentKey(serial, slotIdx);
       const all = await storage.getGlobalSettings();
       let previousScoreId: string | null = null;
       try {
@@ -2705,7 +2728,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         return;
       }
       const all = await storage.getGlobalSettings();
-      const assignmentRaw = all[`mobile_trust_score_${serial}_${slotIdx}`];
+      const assignmentRaw = all[trustScoreAssignmentKey(serial, slotIdx)];
       let scoreId: string | null = null;
       try {
         const parsed = JSON.parse(assignmentRaw ?? "null");
@@ -2776,7 +2799,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         nextScoreId: z.string().min(1).max(100).nullable(),
         hasNextScore: z.boolean().default(true),
       }).parse(req.body);
-      const assignmentKey = `mobile_trust_score_${serial}_${slotIdx}`;
+      const assignmentKey = trustScoreAssignmentKey(serial, slotIdx);
       const all = await storage.getGlobalSettings();
       let currentScoreId: string | null = null;
       try {
@@ -2820,6 +2843,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // ── Per-device linked Instagram account (Account Settings tab) ──────────────
   const SLOT_COUNT = 1;
   const deviceSlotSchema = z.object({
+    // Stable identity: never derive account-owned state from the visible
+    // array index because deleting a slot renumbers every later account.
+    slotId: z.string().min(8).max(100).optional(),
     username: z.string(),
     password: z.string(),
     totpSecret: z.string().optional(),
@@ -2833,23 +2859,45 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   });
   const emptySlots = (): DeviceSlot[] => Array.from({ length: SLOT_COUNT }, () => ({ username: "", password: "" }));
   const migrateAccount = (raw: any): DeviceAccount => {
-    if (raw && Array.isArray(raw.slots)) return raw as DeviceAccount;
+    if (raw && Array.isArray(raw.slots)) {
+      return {
+        ...raw,
+        slots: raw.slots.map((slot: any) => ({
+          ...slot,
+          slotId: typeof slot?.slotId === "string" && slot.slotId.length >= 8
+            ? slot.slotId
+            : crypto.randomUUID(),
+        })),
+      } as DeviceAccount;
+    }
     // Legacy single-account format → migrate into slot 0
     if (raw && typeof raw.username === "string") {
       const slots = emptySlots();
-      slots[0] = { username: raw.username, password: raw.password ?? "", totpSecret: raw.totpSecret };
+      slots[0] = { slotId: crypto.randomUUID(), username: raw.username, password: raw.password ?? "", totpSecret: raw.totpSecret };
       return { slots };
     }
     return { slots: emptySlots() };
   };
   app.get("/api/mobile/devices/:serial/account", (req: Request, res: Response) => {
     const cfg = loadInstanceConfigs();
-    const raw = cfg[p(req, "serial")]?.account ?? null;
-    res.json(migrateAccount(raw));
+    const serial = p(req, "serial");
+    const raw = cfg[serial]?.account ?? null;
+    const migrated = migrateAccount(raw);
+    // Persist generated IDs immediately. Otherwise a legacy slot would get
+    // a fresh identity on every reload before the UI had a chance to save.
+    if (JSON.stringify(raw) !== JSON.stringify(migrated)) {
+      cfg[serial] = { ...cfg[serial], account: migrated };
+      saveInstanceConfigs(cfg);
+    }
+    res.json(migrated);
   });
   app.post("/api/mobile/devices/:serial/account", (req: Request, res: Response) => {
     try {
-      const input = deviceAccountSchema.parse(req.body);
+      const parsed = deviceAccountSchema.parse(req.body);
+      const input = {
+        ...parsed,
+        slots: parsed.slots.map(slot => ({ ...slot, slotId: slot.slotId ?? crypto.randomUUID() })),
+      };
       // Previously forced a minimum of SLOT_COUNT (5) slots, padding with
       // empty entries.  That caused deleted slots to silently reappear every
       // time the panel reloaded — the save wrote 2 slots, the pad restored
@@ -2887,6 +2935,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const cfg = loadInstanceConfigs();
       const slotAutomation = { ...(cfg[serial]?.slotAutomation ?? {}) };
       delete slotAutomation[String(slotIdx)];
+      delete slotAutomation[slotAutomationKey(serial, slotIdx)];
       cfg[serial] = { ...cfg[serial], slotAutomation };
       saveInstanceConfigs(cfg);
       res.json({ ok: true });
@@ -10166,12 +10215,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // start before the dedicated file takes over.
     try {
       const cfg = loadInstanceConfigs();
-      const existing = cfg[serial]?.slotAutomation?.[String(slotIdx)] ?? {};
+      const stableKey = slotAutomationKey(serial, slotIdx);
+      const existing = cfg[serial]?.slotAutomation?.[stableKey] ?? cfg[serial]?.slotAutomation?.[String(slotIdx)] ?? {};
       cfg[serial] = {
         ...cfg[serial],
         slotAutomation: {
           ...cfg[serial]?.slotAutomation,
-          [String(slotIdx)]: { ...existing, makePostLocalFolderPath: folderPath },
+          [stableKey]: { ...existing, makePostLocalFolderPath: folderPath },
         },
       };
       saveInstanceConfigs(cfg);
@@ -10195,12 +10245,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     setPostStoryFolderPath(serial, slotIdx, folderPath);
     try {
       const cfg = loadInstanceConfigs();
-      const existing = cfg[serial]?.slotAutomation?.[String(slotIdx)] ?? {};
+      const stableKey = slotAutomationKey(serial, slotIdx);
+      const existing = cfg[serial]?.slotAutomation?.[stableKey] ?? cfg[serial]?.slotAutomation?.[String(slotIdx)] ?? {};
       cfg[serial] = {
         ...cfg[serial],
         slotAutomation: {
           ...cfg[serial]?.slotAutomation,
-          [String(slotIdx)]: { ...existing, postStoryLocalFolderPath: folderPath },
+          [stableKey]: { ...existing, postStoryLocalFolderPath: folderPath },
         },
       };
       saveInstanceConfigs(cfg);
@@ -10220,12 +10271,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       clearProfilePicFolderPath(serial, slotIdx);
       try {
         const cfg = loadInstanceConfigs();
-        const existing = cfg[serial]?.slotAutomation?.[String(slotIdx)] ?? {};
+        const stableKey = slotAutomationKey(serial, slotIdx);
+        const existing = cfg[serial]?.slotAutomation?.[stableKey] ?? cfg[serial]?.slotAutomation?.[String(slotIdx)] ?? {};
         cfg[serial] = {
           ...cfg[serial],
           slotAutomation: {
             ...cfg[serial]?.slotAutomation,
-            [String(slotIdx)]: { ...existing, updateProfilePicFolderPath: "" },
+            [stableKey]: { ...existing, updateProfilePicFolderPath: "" },
           },
         };
         saveInstanceConfigs(cfg);
@@ -10235,12 +10287,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     setProfilePicFolderPath(serial, slotIdx, folderPath);
     try {
       const cfg = loadInstanceConfigs();
-      const existing = cfg[serial]?.slotAutomation?.[String(slotIdx)] ?? {};
+      const stableKey = slotAutomationKey(serial, slotIdx);
+      const existing = cfg[serial]?.slotAutomation?.[stableKey] ?? cfg[serial]?.slotAutomation?.[String(slotIdx)] ?? {};
       cfg[serial] = {
         ...cfg[serial],
         slotAutomation: {
           ...cfg[serial]?.slotAutomation,
-          [String(slotIdx)]: { ...existing, updateProfilePicFolderPath: folderPath },
+          [stableKey]: { ...existing, updateProfilePicFolderPath: folderPath },
         },
       };
       saveInstanceConfigs(cfg);

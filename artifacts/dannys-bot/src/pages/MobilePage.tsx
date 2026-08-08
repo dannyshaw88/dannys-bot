@@ -7476,8 +7476,8 @@ function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 142, hideIco
 }
 
 const ACCT_SLOT_COUNT = 5;
-const emptySlot = () => ({ username: "", password: "", totpSecret: "", emailAddress: "", emailPassword: "", phoneNumber: "" });
-type AccountSlot = { username: string; password: string; totpSecret: string; emailAddress: string; emailPassword: string; phoneNumber: string };
+const emptySlot = () => ({ slotId: crypto.randomUUID(), username: "", password: "", totpSecret: "", emailAddress: "", emailPassword: "", phoneNumber: "" });
+type AccountSlot = { slotId: string; username: string; password: string; totpSecret: string; emailAddress: string; emailPassword: string; phoneNumber: string };
 
 // ── Per-slot Human Session Tool view ─────────────────────────────────────────
 // Always mounted so the automation hook's run-loop persists even when the
@@ -7812,6 +7812,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
           // Use the exact count the server stored — do NOT pad to ACCT_SLOT_COUNT.
           // Padding caused deleted slots to reappear every time the panel reloaded.
           loaded = d.slots.map((s: any) => ({
+            slotId: typeof s?.slotId === "string" && s.slotId.length >= 8 ? s.slotId : crypto.randomUUID(),
             username: s?.username ?? "",
             password: s?.password ?? "",
             totpSecret: s?.totpSecret ?? "",
@@ -7820,7 +7821,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
             phoneNumber: s?.phoneNumber ?? "",
           }));
         } else if (d && d.username) {
-          loaded = [{ username: d.username, password: d.password ?? "", totpSecret: "", emailAddress: "", emailPassword: "", phoneNumber: "" }];
+          loaded = [{ slotId: crypto.randomUUID(), username: d.username, password: d.password ?? "", totpSecret: "", emailAddress: "", emailPassword: "", phoneNumber: "" }];
         } else {
           loaded = Array.from({ length: ACCT_SLOT_COUNT }, emptySlot);
         }
@@ -8009,8 +8010,8 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
           null or when a different slot's tool is open.  Keeping these mounted
           means automation run-loop timers survive transient USB poll flickers
           where the targeted serial temporarily disappears from the device list. */}
-      {slots.map((_, i) => (
-        <div key={`hst-${i}`} className={phone && openSlotTool === i ? "h-full" : "hidden"}>
+      {slots.map((slot, i) => (
+        <div key={`hst-${slot.slotId}`} className={phone && openSlotTool === i ? "h-full" : "hidden"}>
           <SlotHumanSessionView
             ref={el => { slotHandleRefs.current[i] = el; }}
             phone={phone}
