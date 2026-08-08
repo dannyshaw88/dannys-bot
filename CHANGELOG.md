@@ -1,3 +1,26 @@
+## [1.2.426] — 2026-08-08
+
+### Fixed — Account state isolation, Trust Score persistence, and account controls
+
+- Moved the calibrated keyboard buttons for Username, Password, and 2FA OTP
+  Secret onto the same row as each field title in the Devices → Accounts
+  section, making the controls easier to find without changing their behavior.
+- Fixed Trust Score countdowns resetting after application restarts by retaining
+  compatibility with older numeric slot keys while migrating them to stable
+  account-slot identities.
+- Fixed Trust Score template inheritance for accounts whose assignments were
+  still stored under the legacy numeric key format.
+- Made the Accounts section interactive immediately instead of waiting for
+  background profile-based Trust Score hydration to finish.
+- Added a complete account-state purge when a farm device is removed. This
+  clears its account slots, Human Session Tool settings and toggle state, Trust
+  Score badges and timers, and account-scoped histories before the device can
+  receive replacement accounts.
+- Confirmed the canonical `.github/workflows/build-windows-installer.yml`
+  remains the single active Windows Installer workflow. Every push to `main`
+  builds the web bundles, packages the Electron application on Windows, and
+  uploads the `Aura-Farming-Windows-Installer` artifact to GitHub Actions.
+
 ## [1.2.425] — 2026-08-08
 
 ### Fixed — Account-switcher profile settling
