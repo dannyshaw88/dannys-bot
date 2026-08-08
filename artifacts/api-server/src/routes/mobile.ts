@@ -10618,23 +10618,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // and profile-tab lookup without doing two more sequential dumps.
       const switchPreloadXml = (!adsChoice.dismissed && !launchPopup) ? launchXml : undefined;
       let accountSwitchFailed = false;
-      if (slotUsername) {
+      if (resolvedSlotUsername) {
         const lastUsername = automationLastActiveUsername.get(serial);
-        if (lastUsername === slotUsername) {
-          tLog(`▶ Already on @${slotUsername} from last cycle — skipping account switch`);
-          steps.push(`account-switch(skipped — already @${slotUsername})`);
+        if (lastUsername === resolvedSlotUsername) {
+          tLog(`▶ Already on @${resolvedSlotUsername} from last cycle — skipping account switch`);
+          steps.push(`account-switch(skipped — already @${resolvedSlotUsername})`);
         } else {
-          tLog(`▶ Switching to Instagram account: @${slotUsername}…`);
+          tLog(`▶ Switching to Instagram account: @${resolvedSlotUsername}…`);
           const switched = await android.switchToInstagramAccount(
             serial,
-            slotUsername,
+            resolvedSlotUsername,
             tLog,
             switchPreloadXml,
             loadInstanceConfigs()[serial]?.devicePrefs?.swipeGesture,
           );
           if (switched) {
-            steps.push(`account-switch(@${slotUsername})`);
-            automationLastActiveUsername.set(serial, slotUsername);
+            steps.push(`account-switch(@${resolvedSlotUsername})`);
+            automationLastActiveUsername.set(serial, resolvedSlotUsername);
             // Brief extra settle after switching — Instagram reloads the new
             // account's home feed, and ads-choice / interstitial dialogs can
             // reappear for accounts that haven't accepted them yet.
@@ -10645,7 +10645,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               await sleepOrAbort(serial, 500);
             }
           } else {
-            tLog(`✗ Account switch to @${slotUsername} failed — skipping all tools and going straight to cleanup`);
+            tLog(`✗ Account switch to @${resolvedSlotUsername} failed — skipping all tools and going straight to cleanup`);
             steps.push("account-switch(failed — aborting tool dispatch)");
             accountSwitchFailed = true;
           }
