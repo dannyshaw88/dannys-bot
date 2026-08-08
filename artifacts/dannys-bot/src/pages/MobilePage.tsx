@@ -8059,7 +8059,9 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
               <div className="flex items-end gap-3 flex-wrap">
                 {/* Username */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground block text-left">Username</Label>
+                  <Label className="text-xs text-muted-foreground block text-left">
+                    Username <Keyboard className="inline-block w-3 h-3 ml-1 align-[-2px]" aria-hidden="true" />
+                  </Label>
                   <Input
                     value={slot.username}
                     onChange={e => updateSlot(i, { username: e.target.value })}
@@ -8071,7 +8073,9 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
 
                 {/* Password */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground block text-left">Password</Label>
+                  <Label className="text-xs text-muted-foreground block text-left">
+                    Password <Keyboard className="inline-block w-3 h-3 ml-1 align-[-2px]" aria-hidden="true" />
+                  </Label>
                   <div className="flex items-center gap-1.5">
                     <Input
                       type={showPassword[i] ? "text" : "password"}
@@ -8090,7 +8094,9 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
 
                 {/* 2FA OTP Secret */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground block text-left">2FA OTP Secret</Label>
+                  <Label className="text-xs text-muted-foreground block text-left">
+                    2FA OTP Secret <Keyboard className="inline-block w-3 h-3 ml-1 align-[-2px]" aria-hidden="true" />
+                  </Label>
                   <div className="flex items-center gap-1.5">
                     <Input
                       value={slot.totpSecret}
