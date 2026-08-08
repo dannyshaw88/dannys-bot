@@ -1,3 +1,19 @@
+## [1.2.417] — 2026-08-08
+
+### Fixed — Swipe Gesture Profile enforcement
+
+- Removed hardcoded fallback swipe paths and durations from profile-dependent
+  Phone Farm content scrolling.
+- Instagram Feed, Explore, Reels, profile grids, and account-list scrolling now
+  require the connected device's saved Swipe Gesture Profile.
+- Chrome search/article scrolling and YouTube feed/Shorts scrolling now use the
+  saved per-device duration range instead of their own fixed timing.
+- Invalid or missing swipe profiles now fail explicitly rather than silently
+  using generated coordinates or default durations.
+- Fixed-purpose system gestures such as recents dismissal and screen navigation
+  remain intentionally independent of the content swipe profile.
+- Updated the Windows installer version to 1.2.417.
+
 ## [1.2.416] — 2026-08-08
 
 ### Added — Account field keyboard typing
