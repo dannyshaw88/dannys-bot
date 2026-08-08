@@ -7851,6 +7851,26 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   const updateSlot = (i: number, patch: Partial<AccountSlot>) =>
     setSlots(s => s.map((slot, idx) => idx === i ? { ...slot, ...patch } : slot));
 
+  const typeAccountField = async (field: "username" | "password" | "totpSecret", value: string) => {
+    const text = value.trim();
+    if (!phone?.serial) return;
+    if (!text) {
+      setSaveError(`${field === "totpSecret" ? "2FA OTP Secret" : field[0].toUpperCase() + field.slice(1)} is empty`);
+      return;
+    }
+    try {
+      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/input/clipboard-paste`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) setSaveError(body?.error ?? `Typing failed (${response.status})`);
+    } catch (error: any) {
+      setSaveError(error?.message ?? "Typing failed");
+    }
+  };
+
   const addSlot = () => {
     setSlots(s => [...s, emptySlot()]);
     setShowPassword(s => [...s, false]);
@@ -8060,7 +8080,12 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                 {/* Username */}
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground block text-left">
-                    Username <Keyboard className="inline-block w-3 h-3 ml-1 align-[-2px]" aria-hidden="true" />
+                    Username
+                    <button type="button" title="Type username on the phone keyboard" aria-label="Type username on the phone keyboard"
+                      disabled={loading || !phone?.serial} onClick={() => typeAccountField("username", slot.username)}
+                      className="inline-flex ml-1 align-[-3px] text-muted-foreground hover:text-primary disabled:opacity-40">
+                      <Keyboard className="w-3 h-3" aria-hidden="true" />
+                    </button>
                   </Label>
                   <Input
                     value={slot.username}
@@ -8074,7 +8099,12 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                 {/* Password */}
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground block text-left">
-                    Password <Keyboard className="inline-block w-3 h-3 ml-1 align-[-2px]" aria-hidden="true" />
+                    Password
+                    <button type="button" title="Type password on the phone keyboard" aria-label="Type password on the phone keyboard"
+                      disabled={loading || !phone?.serial} onClick={() => typeAccountField("password", slot.password)}
+                      className="inline-flex ml-1 align-[-3px] text-muted-foreground hover:text-primary disabled:opacity-40">
+                      <Keyboard className="w-3 h-3" aria-hidden="true" />
+                    </button>
                   </Label>
                   <div className="flex items-center gap-1.5">
                     <Input
@@ -8095,7 +8125,12 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                 {/* 2FA OTP Secret */}
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground block text-left">
-                    2FA OTP Secret <Keyboard className="inline-block w-3 h-3 ml-1 align-[-2px]" aria-hidden="true" />
+                    2FA OTP Secret
+                    <button type="button" title="Type 2FA OTP Secret on the phone keyboard" aria-label="Type 2FA OTP Secret on the phone keyboard"
+                      disabled={loading || !phone?.serial} onClick={() => typeAccountField("totpSecret", slot.totpSecret)}
+                      className="inline-flex ml-1 align-[-3px] text-muted-foreground hover:text-primary disabled:opacity-40">
+                      <Keyboard className="w-3 h-3" aria-hidden="true" />
+                    </button>
                   </Label>
                   <div className="flex items-center gap-1.5">
                     <Input

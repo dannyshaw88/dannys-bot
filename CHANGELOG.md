@@ -1,3 +1,18 @@
+## [1.2.416] — 2026-08-08
+
+### Added — Account field keyboard typing
+
+- Added type icons beside Username, Password, and 2FA OTP Secret in each
+  Phone Farm account slot.
+- Each icon sends the current field value to the connected phone's focused
+  keyboard field through the calibrated real-tap typing path.
+- The existing per-device typing speed and error-causality profile is applied,
+  including per-character delays and corrected simulated typing errors.
+- Empty fields and unavailable devices now report a clear failure instead of
+  silently doing nothing.
+- Updated the Windows installer version to 1.2.416 so the packaged desktop
+  build includes this feature.
+
 ## [1.2.415] — 2026-08-07
 
 ### Added — Downloadable Windows installer workflow
