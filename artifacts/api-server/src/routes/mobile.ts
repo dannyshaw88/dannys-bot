@@ -12071,6 +12071,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
+  app.post("/api/mobile/devices/:serial/input/type-2fa-calibrated", async (req: Request, res: Response) => {
+    try {
+      const input = inputTextSchema.parse(req.body);
+      const serial = p(req, "serial");
+      const result = await android.typeViaSaved2faKeypad(serial, input.text, loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile, message => {
+        req.log.info({ serial, message }, "[mirror-2fa-keypad]");
+      });
+      if (!result.ok) return void res.status(422).json({
+        ok: false, calibrated: result.available, missing: result.missing,
+        error: result.available ? "2FA keypad calibration is missing one or more digits" : "No saved calibration map for this device",
+      });
+      res.json({ ok: true, calibrated: true });
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
+
   // videoW/videoH are optional: the client's decoded video frame size at the
   // moment it computed x/y. screenrecord may stream at a downscaled size
   // relative to the device's real screen (see comment in the video WS route

@@ -9394,6 +9394,36 @@ export async function typeViaSavedCalibrationMap(
   return { ...result, available: true };
 }
 
+/** Type a numeric 2FA code using the separately calibrated Instagram keypad. */
+export async function typeViaSaved2faKeypad(
+  serial: string,
+  text: string,
+  typingProfile: TypingSpeedProfile | undefined,
+  onLog?: (msg: string) => void,
+): Promise<{ ok: boolean; available: boolean; missing: string[] }> {
+  const map = loadKeyCalibrationMap(serial);
+  const missing = [...new Set([...text].filter(ch => !/^\d$/.test(ch) || !map?.[`2fa:${ch}`]))];
+  if (!map || missing.length) {
+    onLog?.(`[2fa-keypad] calibration missing: ${missing.join(", ") || "all digits"}`);
+    return { ok: false, available: !!map, missing };
+  }
+  if (!typingProfile) throw new Error("Complete Typing Speed Profile is required for calibrated typing");
+  for (const ch of text) {
+    const pos = map[`2fa:${ch}`];
+    const dwellMin = Math.max(1, Math.min(typingProfile.dwellMinMs, typingProfile.dwellMaxMs));
+    const dwellMax = Math.max(dwellMin, typingProfile.dwellMaxMs);
+    const dwell = Math.round(dwellMin + Math.random() * (dwellMax - dwellMin));
+    await runInputShell(serial,
+      ["swipe", String(Math.round(pos.x)), String(Math.round(pos.y)), String(Math.round(pos.x)), String(Math.round(pos.y)), String(dwell)],
+      "2fa-keypad-dwell-tap");
+    const min = Math.max(0, Math.min(typingProfile.minMs, typingProfile.maxMs));
+    const max = Math.max(min, typingProfile.maxMs);
+    await _sleep(min + Math.round(Math.random() * (max - min)));
+    onLog?.(`[2fa-keypad] tapped ${ch} at (${pos.x},${pos.y})`);
+  }
+  return { ok: true, available: true, missing: [] };
+}
+
 /**
  * Resolve and tap a named keyboard control.
  *

@@ -1750,6 +1750,16 @@ const CALIB_GROUPS: Array<{
     ],
   },
   {
+    name: "Instagram 2FA keypad",
+    instructions: "Open Instagram's 2FA verification screen so its numeric keypad is visible. Capture each digit from that keypad; these coordinates are stored separately from the normal keyboard.",
+    keys: [
+      { label: "2fa:1", display: "1" }, { label: "2fa:2", display: "2" }, { label: "2fa:3", display: "3" },
+      { label: "2fa:4", display: "4" }, { label: "2fa:5", display: "5" }, { label: "2fa:6", display: "6" },
+      { label: "2fa:7", display: "7" }, { label: "2fa:8", display: "8" }, { label: "2fa:9", display: "9" },
+      { label: "2fa:0", display: "0" },
+    ],
+  },
+  {
     name: "More symbols (=\\< layer)",
     instructions: "Tap the =\\< / More symbols key on your phone now. Capture this extra punctuation layer too, then return to ABC when finished.",
     keys: [
@@ -7885,7 +7895,23 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
 
   const typeGeneratedTotp = async (slotIdx: number, secret: string) => {
     const code = await generateTotp(slotIdx, secret);
-    if (code) await typeAccountField("totpSecret", code);
+    if (!code || !phone?.serial) return;
+    setTypingField("totpSecret");
+    setSaveError(null);
+    try {
+      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/input/type-2fa-calibrated`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: code }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) setSaveError(body?.error ?? `2FA keypad typing failed (${response.status})`);
+      else { setSaved(true); setTimeout(() => setSaved(false), 1500); }
+    } catch (error: any) {
+      setSaveError(error?.message ?? "2FA keypad typing failed");
+    } finally {
+      setTypingField(null);
+    }
   };
 
   const addSlot = () => {
