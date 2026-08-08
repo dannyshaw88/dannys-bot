@@ -3261,18 +3261,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     feedSuggestionsPercentMin?: number; feedSuggestionsPercentMax?: number;
     onLog?: (msg: string) => void;
   }): Promise<{ count: number; likes: number; likeFailures: number; sharesFeed: number; sharesDm: number; saves: number; captionExpands: number; strayNavRecoveries: number; audioTaps: number; hashtagTaps: number; authorVisits: number; suggestionBrowses: number }> {
-    // Always establish the Home/feed surface before taking the first live
-    // post dump. View Feed can be launched while Instagram is on a profile,
-    // search, Reels, or another nested screen; scanning that tree as if it
-    // were the feed causes every downstream action to target the wrong UI.
-    const homeTab = await android.findHomeTab(serial).catch(() => null);
-    if (!homeTab) {
-      throw new Error("View Feed cannot start: Instagram Home tab was not found");
-    }
-    onLog?.(`View Feed: tapping Home tab before execution at (${homeTab.x}, ${homeTab.y})`);
-    await android.tap(serial, homeTab.x, homeTab.y, "bot");
-    await new Promise(resolve => setTimeout(resolve, 500));
-
     const {
       count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
       shareFeedPercentMin = 0, shareFeedPercentMax = 0,
@@ -3285,6 +3273,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       feedSuggestionsPercentMin = 0, feedSuggestionsPercentMax = 0,
       onLog,
     } = params;
+
+    // Always establish the Home/feed surface before taking the first live
+    // post dump. View Feed can be launched while Instagram is on a profile,
+    // search, Reels, or another nested screen; scanning that tree as if it
+    // were the feed causes every downstream action to target the wrong UI.
+    const homeTab = await android.findHomeTab(serial).catch(() => null);
+    if (!homeTab) {
+      throw new Error("View Feed cannot start: Instagram Home tab was not found");
+    }
+    onLog?.(`View Feed: tapping Home tab before execution at (${homeTab.x}, ${homeTab.y})`);
+    await android.tap(serial, homeTab.x, homeTab.y, "bot");
+    await new Promise(resolve => setTimeout(resolve, 500));
+
     const delayLoSec = Math.min(delayMinSec, delayMaxSec);
     const delayHiSec = Math.max(delayMinSec, delayMaxSec);
     const likeLoPct = Math.min(likePercentMin, likePercentMax);

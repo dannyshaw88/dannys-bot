@@ -1,3 +1,11 @@
+## [1.2.424] — 2026-08-08
+
+### Fixed — View Feed Home-tab logging initialization
+
+- Fixed a JavaScript initialization-order error that occurred when View Feed
+  logged its Home-tab precondition before `onLog` had been initialized.
+- View Feed now initializes its parameters before locating and tapping Home.
+
 ## [1.2.423] — 2026-08-08
 
 ### Fixed — Mirror tap-to-type uses calibrated typing
