@@ -8347,8 +8347,8 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const [dismissSaving, setDismissSaving] = React.useState(false);
   type SwipeGesture = { x1: number; y1: number; x2: number; y2: number; durationMinMs: number; durationMaxMs: number; jitterX: number; jitterY: number; startJitterMinY: number; startJitterMaxY: number };
   const [swipeGesture, setSwipeGesture] = React.useState<SwipeGesture>({ x1: 540, y1: 2100, x2: 540, y2: 500, durationMinMs: 400, durationMaxMs: 700, jitterX: 0, jitterY: 0, startJitterMinY: 0, startJitterMaxY: 0 });
-  type TypingSpeedProfile = { minMs: number; maxMs: number; errorPercentMin: number; errorPercentMax: number };
-  const [typingSpeedProfile, setTypingSpeedProfile] = React.useState<TypingSpeedProfile>({ minMs: 80, maxMs: 220, errorPercentMin: 0, errorPercentMax: 0 });
+  type TypingSpeedProfile = { minMs: number; maxMs: number; errorPercentMin: number; errorPercentMax: number; dwellMinMs: number; dwellMaxMs: number };
+  const [typingSpeedProfile, setTypingSpeedProfile] = React.useState<TypingSpeedProfile>({ minMs: 80, maxMs: 220, errorPercentMin: 0, errorPercentMax: 0, dwellMinMs: 40, dwellMaxMs: 80 });
   const [swipeResolution, setSwipeResolution] = React.useState({ w: 1080, h: 2400 });
   const [swipeSaving, setSwipeSaving] = React.useState(false);
   const [swipeTesting, setSwipeTesting] = React.useState(false);
@@ -8369,7 +8369,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
         if (d.swipeGesture) setSwipeGesture({
           durationMinMs: 500, durationMaxMs: 500, jitterX: 0, jitterY: 0, startJitterMinY: 0, startJitterMaxY: 0, ...d.swipeGesture,
         });
-        if (d.typingSpeedProfile) setTypingSpeedProfile({ minMs: 80, maxMs: 220, errorPercentMin: 0, errorPercentMax: 0, ...d.typingSpeedProfile });
+        if (d.typingSpeedProfile) setTypingSpeedProfile({ minMs: 80, maxMs: 220, errorPercentMin: 0, errorPercentMax: 0, dwellMinMs: 40, dwellMaxMs: 80, ...d.typingSpeedProfile });
       })
       .catch(() => {});
     fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-spec`)
@@ -8767,9 +8767,11 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
             ["maxMs", "Typing speed: Y max (ms)"],
             ["errorPercentMin", "Error causality: X min (%)"],
             ["errorPercentMax", "Error causality: Y max (%)"],
+            ["dwellMinMs", "Dwell time per tap: X min (ms)"],
+            ["dwellMaxMs", "Dwell time per tap: Y max (ms)"],
           ] as const).map(([key, label]) => (
             <label key={key} className="text-xs text-muted-foreground">{label}
-              <input type="number" min={0} max={key.startsWith("error") ? 100 : undefined}
+              <input type="number" min={key.startsWith("dwell") ? 1 : 0} max={key.startsWith("error") ? 100 : undefined}
                 value={typingSpeedProfile[key]}
                 onChange={e => saveTypingSpeedProfile({ ...typingSpeedProfile, [key]: Number(e.target.value) })}
                 className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground" />

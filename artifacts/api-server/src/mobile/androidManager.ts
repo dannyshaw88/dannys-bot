@@ -9260,6 +9260,8 @@ export type TypingSpeedProfile = {
   maxMs: number;
   errorPercentMin: number;
   errorPercentMax: number;
+  dwellMinMs: number;
+  dwellMaxMs: number;
 };
 
 // Per-session cache so repeated captureOneTap calls during a calibration
@@ -9886,8 +9888,10 @@ export async function typeViaCalibrationMap(
       !Number.isFinite(typingProfile.minMs) ||
       !Number.isFinite(typingProfile.maxMs) ||
       !Number.isFinite(typingProfile.errorPercentMin) ||
-      !Number.isFinite(typingProfile.errorPercentMax)) {
-    throw new Error("Typing Speed Profile is required for calibrated typing");
+      !Number.isFinite(typingProfile.errorPercentMax) ||
+      !Number.isFinite(typingProfile.dwellMinMs) ||
+      !Number.isFinite(typingProfile.dwellMaxMs)) {
+    throw new Error("Typing Speed Profile, including dwell time, is required for calibrated typing");
   }
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
@@ -9904,10 +9908,13 @@ export async function typeViaCalibrationMap(
       // Use the checked input path here. The old helper discarded adb's
       // exit/stderr, so a dead device or rejected input tap looked like a
       // successful character press.
+      const dwellMin = Math.max(1, Math.min(typingProfile.dwellMinMs, typingProfile.dwellMaxMs));
+      const dwellMax = Math.max(dwellMin, typingProfile.dwellMaxMs);
+      const dwellMs = Math.round(dwellMin + Math.random() * (dwellMax - dwellMin));
       await runInputShell(
         serial,
-        ["tap", String(Math.round(pos.x)), String(Math.round(pos.y))],
-        "tap",
+        ["swipe", String(Math.round(pos.x)), String(Math.round(pos.y)), String(Math.round(pos.x)), String(Math.round(pos.y)), String(dwellMs)],
+        "dwell-tap",
       );
     } catch (e: any) {
       onLog?.(`[cal-keyboard] tap failed for ${description} at (${pos.x},${pos.y}) — ${e?.message}`);
