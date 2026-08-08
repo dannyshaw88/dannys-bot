@@ -7013,10 +7013,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
   } catch { /* best effort */ }
 
-  // Per-(serial, slotIdx) file path.  Slot 0 also checks the legacy per-serial
-  // file so existing data is preserved after the upgrade.
+  // Per-(serial, stable slotId) file path. The route still accepts slotIdx,
+  // but the persisted filename follows the account identity so deletion and
+  // renumbering cannot move history to another account.
   const _followedFilePath = (serial: string, slotIdx: number) =>
-    path.join(FOLLOWED_DIR, `${serial.replace(/[^a-zA-Z0-9_\-]/g, "_")}_slot${slotIdx}.json`);
+    path.join(FOLLOWED_DIR, `${serial.replace(/[^a-zA-Z0-9_\-]/g, "_")}_slot${accountSlotId(serial, slotIdx)}.json`);
 
   // Legacy path used before per-slot isolation was introduced.
   const _followedFilePathLegacy = (serial: string) =>
@@ -7075,23 +7076,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     ? path.join(process.env.EQUINOX_DATA_DIR, "mobile-posted-local")
     : path.join(path.dirname(path.resolve(process.argv[1] ?? ".")), "..", "mobile-posted-local");
   try { fs.mkdirSync(POSTED_DIR, { recursive: true }); } catch { /* already exists */ }
-  const _postedFilePath = (serial: string) =>
-    path.join(POSTED_DIR, `${serial.replace(/[^a-zA-Z0-9_\-]/g, "_")}.json`);
-  const getPostedLocalFiles = (serial: string): string[] => {
-    if (!mobilePostedLocalFiles.has(serial)) {
+  const _postedFilePath = (serial: string, slotIdx = 0) =>
+    path.join(POSTED_DIR, `${serial.replace(/[^a-zA-Z0-9_\-]/g, "_")}_${accountSlotId(serial, slotIdx)}.json`);
+  const getPostedLocalFiles = (serial: string, slotIdx = 0): string[] => {
+    const key = `${serial}:${accountSlotId(serial, slotIdx)}`;
+    if (!mobilePostedLocalFiles.has(key)) {
       try {
-        const raw = fs.readFileSync(_postedFilePath(serial), "utf8");
-        mobilePostedLocalFiles.set(serial, JSON.parse(raw) as string[]);
+        const raw = fs.readFileSync(_postedFilePath(serial, slotIdx), "utf8");
+        mobilePostedLocalFiles.set(key, JSON.parse(raw) as string[]);
       } catch {
-        mobilePostedLocalFiles.set(serial, []);
+        mobilePostedLocalFiles.set(key, []);
       }
     }
-    return mobilePostedLocalFiles.get(serial)!;
+    return mobilePostedLocalFiles.get(key)!;
   };
-  const recordPostedLocalFile = (serial: string, fileName: string) => {
-    const list = getPostedLocalFiles(serial);
+  const recordPostedLocalFile = (serial: string, slotIdx: number, fileName: string) => {
+    const key = `${serial}:${accountSlotId(serial, slotIdx)}`;
+    const list = getPostedLocalFiles(serial, slotIdx);
     list.unshift(fileName);
-    try { fs.writeFileSync(_postedFilePath(serial), JSON.stringify(list.slice(0, 5000)), "utf8"); } catch { /* best effort */ }
+    try { fs.writeFileSync(_postedFilePath(serial, slotIdx), JSON.stringify(list.slice(0, 5000)), "utf8"); } catch { /* best effort */ }
   };
 
   // Account-scoped history of confirmed profile-feed posts. This is separate
@@ -7110,19 +7113,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     ? path.join(process.env.EQUINOX_DATA_DIR, "mobile-posted-profile-media")
     : path.join(path.dirname(path.resolve(process.argv[1] ?? ".")), "..", "mobile-posted-profile-media");
   try { fs.mkdirSync(POSTED_PROFILE_MEDIA_DIR, { recursive: true }); } catch { /* already exists */ }
-  const _postedProfileMediaPath = (serial: string) =>
-    path.join(POSTED_PROFILE_MEDIA_DIR, `${serial.replace(/[^a-zA-Z0-9_\-]/g, "_")}.json`);
-  const getPostedProfileMedia = (serial: string): PostedProfileMediaEntry[] => {
-    if (!mobilePostedProfileMedia.has(serial)) {
+  const _postedProfileMediaPath = (serial: string, slotIdx = 0) =>
+    path.join(POSTED_PROFILE_MEDIA_DIR, `${serial.replace(/[^a-zA-Z0-9_\-]/g, "_")}_${accountSlotId(serial, slotIdx)}.json`);
+  const getPostedProfileMedia = (serial: string, slotIdx = 0): PostedProfileMediaEntry[] => {
+    const key = `${serial}:${accountSlotId(serial, slotIdx)}`;
+    if (!mobilePostedProfileMedia.has(key)) {
       try {
-        const raw = fs.readFileSync(_postedProfileMediaPath(serial), "utf8");
+        const raw = fs.readFileSync(_postedProfileMediaPath(serial, slotIdx), "utf8");
         const parsed = JSON.parse(raw);
-        mobilePostedProfileMedia.set(serial, Array.isArray(parsed) ? parsed : []);
+        mobilePostedProfileMedia.set(key, Array.isArray(parsed) ? parsed : []);
       } catch {
-        mobilePostedProfileMedia.set(serial, []);
+        mobilePostedProfileMedia.set(key, []);
       }
     }
-    return mobilePostedProfileMedia.get(serial)!;
+    return mobilePostedProfileMedia.get(key)!;
   };
   const recordPostedProfileMedia = (serial: string, slotIdx: number, username: string, filename: string) => {
     const normalizedUsername = username.replace(/^@/, "").trim();
@@ -7134,10 +7138,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       slotIdx,
       postedAt: new Date().toISOString(),
     };
-    const list = getPostedProfileMedia(serial);
+    const list = getPostedProfileMedia(serial, slotIdx);
     list.unshift(entry);
     try {
-      fs.writeFileSync(_postedProfileMediaPath(serial), JSON.stringify(list.slice(0, 5000)), "utf8");
+      fs.writeFileSync(_postedProfileMediaPath(serial, slotIdx), JSON.stringify(list.slice(0, 5000)), "utf8");
     } catch { /* best effort — posting has already succeeded */ }
   };
 
@@ -7244,9 +7248,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
    * not an error.
    */
   async function pickLocalFolderImage(serial: string, opts: {
-    folderPath: string; random: boolean; noRepeat: boolean; onLog?: (msg: string) => void;
+    folderPath: string; random: boolean; noRepeat: boolean; slotIdx?: number; onLog?: (msg: string) => void;
   }): Promise<string | null> {
-    const { folderPath, random, noRepeat, onLog } = opts;
+    const { folderPath, random, noRepeat, slotIdx = 0, onLog } = opts;
     let entries: string[];
     try {
       entries = await fsPromises.readdir(folderPath);
@@ -7260,7 +7264,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return null;
     }
     if (noRepeat) {
-      const posted = new Set(getPostedLocalFiles(serial));
+      const posted = new Set(getPostedLocalFiles(serial, slotIdx));
       const filtered = images.filter(f => !posted.has(f));
       if (filtered.length === 0) {
         onLog?.("Make a Post: all local-folder images already posted (Do not repeat is ON)");
@@ -7325,7 +7329,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     await sleepOrAbort(serial, 1500);
 
     const fileName = await pickLocalFolderImage(serial, {
-      folderPath: localFolderPath, random: localFolderRandom, noRepeat: localFolderNoRepeat, onLog,
+      folderPath: localFolderPath, random: localFolderRandom, noRepeat: localFolderNoRepeat, slotIdx, onLog,
     });
     if (!fileName) return { posted: false };
     const localFilePath = path.join(localFolderPath, fileName);
@@ -7711,7 +7715,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return { posted: false };
     }
 
-    recordPostedLocalFile(serial, fileName);
+    recordPostedLocalFile(serial, slotIdx, fileName);
     recordPostedProfileMedia(serial, opts.slotIdx ?? 0, opts.accountUsername ?? "", fileName);
     if (deleteAfterUpload) {
       try { await fsPromises.unlink(localFilePath); } catch { /* best effort */ }
@@ -7744,7 +7748,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } = opts;
 
     const fileName = await pickLocalFolderImage(serial, {
-      folderPath: localFolderPath, random: localFolderRandom, noRepeat: localFolderNoRepeat, onLog,
+      folderPath: localFolderPath, random: localFolderRandom, noRepeat: localFolderNoRepeat, slotIdx, onLog,
     });
     if (!fileName) return { posted: false };
     const localFilePath = path.join(localFolderPath, fileName);
@@ -7896,7 +7900,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (archiveDismissed) onLog?.("Make a Post (Story): dismissed Stories archive popup");
     await android.dismissInstagramInterstitials(serial).catch(() => null);
 
-    recordPostedLocalFile(serial, fileName);
+    recordPostedLocalFile(serial, slotIdx, fileName);
     if (deleteAfterUpload) {
       try { await fsPromises.unlink(localFilePath); } catch { /* best effort */ }
     }
@@ -10305,7 +10309,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // for this serial (the "Do not repost the same image" no-repeat tracking list).
   app.get("/api/mobile/devices/:serial/posted-media", (req: Request, res: Response) => {
     const serial = req.params.serial as string;
-    const files = getPostedLocalFiles(serial);
+    const slotIdxRaw = Number(req.query.slotIdx);
+    const slotIdx = Number.isInteger(slotIdxRaw) && slotIdxRaw >= 0 ? slotIdxRaw : 0;
+    const files = getPostedLocalFiles(serial, slotIdx);
     res.json({ ok: true, files });
   });
 
@@ -10314,10 +10320,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.delete("/api/mobile/devices/:serial/posted-media/:filename", (req: Request, res: Response) => {
     const serial = req.params.serial as string;
     const filename = decodeURIComponent(req.params.filename as string);
-    const list = getPostedLocalFiles(serial);
+    const slotIdxRaw = Number(req.query.slotIdx);
+    const slotIdx = Number.isInteger(slotIdxRaw) && slotIdxRaw >= 0 ? slotIdxRaw : 0;
+    const key = `${serial}:${accountSlotId(serial, slotIdx)}`;
+    const list = getPostedLocalFiles(serial, slotIdx);
     const next = list.filter(f => f !== filename);
-    mobilePostedLocalFiles.set(serial, next);
-    try { fs.writeFileSync(_postedFilePath(serial), JSON.stringify(next), "utf8"); } catch { /* best effort */ }
+    mobilePostedLocalFiles.set(key, next);
+    try { fs.writeFileSync(_postedFilePath(serial, slotIdx), JSON.stringify(next), "utf8"); } catch { /* best effort */ }
     res.json({ ok: true, removed: list.length - next.length });
   });
 
@@ -10331,7 +10340,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const slotIdx = Number.isInteger(slotIdxRaw) && slotIdxRaw >= 0 ? slotIdxRaw : null;
     if (!username) return res.status(400).json({ ok: false, error: "username required" });
 
-    const entries = getPostedProfileMedia(serial).filter(entry =>
+    const entries = getPostedProfileMedia(serial, slotIdx ?? 0).filter(entry =>
       entry.username.replace(/^@/, "").trim().toLowerCase() === username &&
       (slotIdx === null || entry.slotIdx === slotIdx)
     );
