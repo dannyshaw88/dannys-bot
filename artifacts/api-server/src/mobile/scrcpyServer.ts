@@ -96,7 +96,7 @@ export type ScrcpySession = {
   onClose(cb: (reason: string) => void): void;
   /** x/y are in the coordinate space of `frameW`x`frameH` (the last known video frame size — usually width/height above, but pass explicitly to be safe against future resize support). */
   tap(x: number, y: number, frameW: number, frameH: number): void;
-  swipe(x1: number, y1: number, x2: number, y2: number, frameW: number, frameH: number, durationMs?: number, curve?: { accelerationPct?: number; decelerationPct?: number }): void;
+  swipe(x1: number, y1: number, x2: number, y2: number, frameW: number, frameH: number, durationMs?: number): void;
   keycode(code: number): void;
   stop(reason?: string): void;
 };
@@ -454,27 +454,14 @@ async function startScrcpySessionInner(serial: string, opts: { maxSize?: number;
       sendTouch(ACTION_DOWN, x, y, frameW, frameH, 1.0);
       setTimeout(() => sendTouch(ACTION_UP, x, y, frameW, frameH, 0.0), 40);
     },
-    swipe(x1, y1, x2, y2, frameW, frameH, durationMs = 300, curve = {}) {
+    swipe(x1, y1, x2, y2, frameW, frameH, durationMs = 300) {
       const steps = Math.max(2, Math.round(durationMs / 16));
-      const acceleration = Math.max(0, Math.min(1, (curve.accelerationPct ?? 35) / 100));
-      const deceleration = Math.max(0, Math.min(1, (curve.decelerationPct ?? 35) / 100));
-      // Convert the device profile's acceleration/deceleration preferences into
-      // a monotonic ease curve. The curve is intentionally asymmetric: the
-      // first portion controls how quickly the finger gets moving, while the
-      // last portion controls how early it settles before release.
-      const ease = (t: number): number => {
-        const accelPower = 1 + acceleration * 2;
-        const decelPower = 1 + deceleration * 2;
-        if (t < 0.5) return 0.5 * Math.pow(t * 2, accelPower);
-        return 1 - 0.5 * Math.pow((1 - t) * 2, decelPower);
-      };
       sendTouch(ACTION_DOWN, x1, y1, frameW, frameH, 1.0);
       for (let i = 1; i <= steps; i++) {
         const t = i / steps;
         setTimeout(() => {
-          const progress = ease(t);
-          const x = x1 + (x2 - x1) * progress;
-          const y = y1 + (y2 - y1) * progress;
+          const x = x1 + (x2 - x1) * t;
+          const y = y1 + (y2 - y1) * t;
           sendTouch(i === steps ? ACTION_UP : ACTION_MOVE, x, y, frameW, frameH, i === steps ? 0.0 : 1.0);
         }, (durationMs * i) / steps);
       }
