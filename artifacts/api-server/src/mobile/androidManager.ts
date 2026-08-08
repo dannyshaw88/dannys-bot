@@ -9941,6 +9941,11 @@ export async function typeViaCalibrationMap(
     await tapMapped(wrong, `intentional typing error '${wrong}'`);
     await tapMapped("backspace", "Backspace after typing error");
   };
+  const waitWordHesitation = async () => {
+    const hesitationMin = Math.max(0, Math.min(typingProfile.hesitationMinMs, typingProfile.hesitationMaxMs));
+    const hesitationMax = Math.max(hesitationMin, typingProfile.hesitationMaxMs);
+    await _sleep(hesitationMin + Math.round(Math.random() * (hesitationMax - hesitationMin)));
+  };
 
   const switchLayer = async (target: "letters" | "symbols" | "moreSymbols"): Promise<boolean> => {
     if (layer === target) return true;
@@ -9989,9 +9994,7 @@ export async function typeViaCalibrationMap(
       await switchLayer("letters");
       if (!await tapMapped(label, ch === " " ? "space" : "Enter")) missing.push(ch);
         if (ch === " ") {
-          const hesitationMin = Math.max(0, Math.min(typingProfile.hesitationMinMs, typingProfile.hesitationMaxMs));
-          const hesitationMax = Math.max(hesitationMin, typingProfile.hesitationMaxMs);
-          await _sleep(hesitationMin + Math.round(Math.random() * (hesitationMax - hesitationMin)));
+          await waitWordHesitation();
         }
       continue;
     }
@@ -10025,6 +10028,7 @@ export async function typeViaCalibrationMap(
       }
       missing.push(ch);
     }
+    if (ch === "." || ch === "_") await waitWordHesitation();
   }
 
   // Leave the IME on its normal letters layer. This matters when a symbol or
