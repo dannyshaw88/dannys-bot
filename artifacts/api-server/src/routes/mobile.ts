@@ -8863,20 +8863,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                        afterXml.includes("reel_progress_container");
 
       if (inViewer) {
-        // Fast swipe down from upper-third to lower-third to dismiss the viewer.
-        const { w: _hlW } = getScreenSize(serial);
-        onLog?.("Inject Browsing: still in highlight story — swiping down to close…");
-        logger.info({ serial, source: "inject-highlight-dismiss-down", from: [Math.round(_hlW / 2), Math.round(_hlH * 0.25)], to: [Math.round(_hlW / 2), Math.round(_hlH * 0.82)], durationMs: 180 }, "[mobile-input] swipe");
-        await deviceProfileSwipe(
-          serial,
-          {
-            x1: Math.round(_hlW / 2), y1: Math.round(_hlH * 0.25),
-            x2: Math.round(_hlW / 2), y2: Math.round(_hlH * 0.82),
-            durationMs: 180,
-          },
-          "inject-highlight-dismiss-down",
-          "normal",
-        );
+        // Story/reel viewers can expose different UI trees when a highlight
+        // opens a Reel. Android BACK is independent of that tree, so do not
+        // rely on a swipe-dismiss gesture here.
+        onLog?.("Inject Browsing: still in highlight story — pressing Android Back to close…");
+        await android.pressBack(serial);
         await sleepOrAbort(serial, 700);
         onLog?.("Inject Browsing: ✓ highlight viewed and dismissed");
       } else {
