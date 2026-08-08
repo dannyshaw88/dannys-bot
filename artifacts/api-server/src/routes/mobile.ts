@@ -2573,8 +2573,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const path = incoming.path
         ? { x1: clamp(incoming.path.x1, size.w), y1: clamp(incoming.path.y1, size.h), x2: clamp(incoming.path.x2, size.w), y2: clamp(incoming.path.y2, size.h) }
         : { x1: clamp(gesture.x1 + Math.round((Math.random() * 2 - 1) * jitterX), size.w), y1: clamp(gesture.y1 + Math.round(startJitterMinY + Math.random() * (startJitterMaxY - startJitterMinY) + Math.random() * 2 - 1), size.h), x2: clamp(gesture.x2 + Math.round((Math.random() * 2 - 1) * jitterX), size.w), y2: clamp(gesture.y2 + Math.round((Math.random() * 2 - 1) * jitterY), size.h) };
-      const durationMinMs = Math.min(gesture.durationMinMs ?? 500, gesture.durationMaxMs ?? 500);
-      const durationMaxMs = Math.max(gesture.durationMinMs ?? 500, gesture.durationMaxMs ?? 500);
+      if (!Number.isFinite(gesture.durationMinMs) || !Number.isFinite(gesture.durationMaxMs)) {
+        throw new Error("Swipe Gesture Profile duration is invalid");
+      }
+      const durationMinMs = Math.min(gesture.durationMinMs, gesture.durationMaxMs);
+      const durationMaxMs = Math.max(gesture.durationMinMs, gesture.durationMaxMs);
       const durationMs = durationMinMs + Math.round(Math.random() * (durationMaxMs - durationMinMs));
       await android.swipe(serial, path.x1, path.y1, path.x2, path.y2, durationMs);
       res.json({ ok: true, resolution: size, path, durationMs });
@@ -3147,8 +3150,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   /**
    * Executes a content-scroll using the hardware-specific gesture profile.
    * The profile is keyed by serial, so one phone can never inherit another
-   * phone's swipe geometry. If a device has no profile yet, callers retain
-   * their existing generated coordinates and duration.
+   * phone's swipe geometry. A missing profile is an explicit configuration
+   * error; content scrolling must never silently use generated coordinates.
    */
   async function deviceProfileSwipe(
     serial: string,
@@ -3161,8 +3164,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const size = getScreenSize(serial);
     const clamp = (value: number, max: number) => Math.max(0, Math.min(max - 1, Math.round(value)));
     if (!configured) {
-      await android.swipe(serial, fallback.x1, fallback.y1, fallback.x2, fallback.y2, fallback.durationMs);
-      return { ...fallback, profile: false };
+      throw new Error(`Swipe Gesture Profile is required for ${source}`);
     }
     const jitterX = Number.isFinite(configured.jitterX) ? configured.jitterX : 0;
     const jitterY = Number.isFinite(configured.jitterY) ? configured.jitterY : 0;
@@ -3171,8 +3173,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const startJitterMaxY = Math.max(startJitterMinY, configured.startJitterMaxY ?? startJitterMinY);
     const startDy = Math.round(startJitterMinY + Math.random() * (startJitterMaxY - startJitterMinY));
     const endDy = Math.round((Math.random() * 2 - 1) * jitterY);
-    const minDuration = Math.min(configured.durationMinMs ?? fallback.durationMs, configured.durationMaxMs ?? fallback.durationMs);
-    const maxDuration = Math.max(configured.durationMinMs ?? fallback.durationMs, configured.durationMaxMs ?? fallback.durationMs);
+    if (!Number.isFinite(configured.durationMinMs) || !Number.isFinite(configured.durationMaxMs)) {
+      throw new Error(`Swipe Gesture Profile duration is invalid for ${source}`);
+    }
+    const minDuration = Math.min(configured.durationMinMs, configured.durationMaxMs);
+    const maxDuration = Math.max(configured.durationMinMs, configured.durationMaxMs);
     // The saved profile owns the physical gesture. Personality only changes
     // how quickly it is performed, so calibrated coordinates remain stable.
     const span = maxDuration - minDuration;
@@ -13366,6 +13371,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           manualSearchScrollMin, manualSearchScrollMax,
           manualSearchLinkPctMin, manualSearchLinkPctMax,
           manualSearchDwellMin, manualSearchDwellMax,
+          typingProfile: devicePrefsPA.typingSpeedProfile,
+          swipeGesture: devicePrefsPA.swipeGesture,
            tapTrendingStoryMin, tapTrendingStoryMax,
           dismissDirection: dismissDir,
         });
@@ -13378,6 +13385,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           shortsScrollMin, shortsScrollMax,
           shortsWatchTimeMin, shortsWatchTimeMax,
           shortsLikePctMin, shortsLikePctMax,
+          swipeGesture: devicePrefsPA.swipeGesture,
           dismissDirection: dismissDir,
         });
       } else {

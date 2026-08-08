@@ -1053,6 +1053,12 @@ function chooseChromeManualSearchQuery(usedQueries: Set<string>): {
 export async function runChromeApp(
   serial: string,
   opts?: {
+    swipeGesture: {
+      x1: number; y1: number; x2: number; y2: number;
+      durationMinMs: number; durationMaxMs: number; jitterX: number; jitterY: number;
+      startJitterMinY?: number; startJitterMaxY?: number;
+    };
+    typingProfile: TypingSpeedProfile;
     scrollMin?: number; scrollMax?: number;
     storyTapMin?: number; storyTapMax?: number;
     tappedStoryScrollMin?: number; tappedStoryScrollMax?: number;
@@ -1070,6 +1076,13 @@ export async function runChromeApp(
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const steps: string[] = [];
+  if (!opts?.swipeGesture) throw new Error("Swipe Gesture Profile is required for Chrome content scrolling");
+  const profileSwipeDuration = () => {
+    const min = Math.min(opts.swipeGesture.durationMinMs, opts.swipeGesture.durationMaxMs);
+    const max = Math.max(opts.swipeGesture.durationMinMs, opts.swipeGesture.durationMaxMs);
+    if (!Number.isFinite(min) || !Number.isFinite(max)) throw new Error("Swipe Gesture Profile duration is invalid");
+    return Math.max(1, Math.round(min + Math.random() * (max - min)));
+  };
   try {
     // Launch Chrome — standard main activity, clear any existing task stack.
     // On some devices am start returns an error (Chrome not found under the
@@ -1444,7 +1457,7 @@ export async function runChromeApp(
 
       _adbTap(adb, serial, searchField.x, searchField.y);
       await _sleep(300);
-      await typeViaOnscreenKeyboard(serial, query, msg => steps.push(`Chrome manual search: ${msg}`));
+      await typeViaOnscreenKeyboard(serial, query, opts!.typingProfile, msg => steps.push(`Chrome manual search: ${msg}`));
       await keyevent(serial, 66); // KEYCODE_ENTER
       steps.push(`Chrome manual search ${searchNumber}/${totalSearches}: searched "${query}"`);
       await _sleep(2500 + Math.floor(Math.random() * 1500));
@@ -1458,7 +1471,7 @@ export async function runChromeApp(
         steps.push(`Chrome manual search ${searchNumber}/${totalSearches}: scrolling results ${resultScrolls}x`);
         const scrollX = Math.round(resultWidth / 2);
         for (let scroll = 0; scroll < resultScrolls; scroll++) {
-          await swipe(serial, scrollX, Math.round(resultHeight * 0.78), scrollX, Math.round(resultHeight * 0.28), 350 + Math.floor(Math.random() * 250));
+          await swipe(serial, scrollX, Math.round(resultHeight * 0.78), scrollX, Math.round(resultHeight * 0.28), profileSwipeDuration());
           await _sleep(650 + Math.floor(Math.random() * 650));
         }
         resultXml = await _uiDump(adb, serial);
@@ -1706,8 +1719,7 @@ export async function runChromeApp(
       if (articleScrolls > 0) {
         steps.push(`Chrome story ${tapNum}: scrolling article ${articleScrolls}x`);
         for (let sc = 0; sc < articleScrolls; sc++) {
-          const aDur = 300 + Math.floor(Math.random() * 250); // 300–550 ms per swipe
-          await swipe(serial, cx, fromY, cx, toY, aDur);
+          await swipe(serial, cx, fromY, cx, toY, profileSwipeDuration());
           await _sleep(600 + Math.floor(Math.random() * 700)); // 0.6–1.3 s between scrolls
         }
       } else {
@@ -1781,8 +1793,7 @@ export async function runChromeApp(
       if (cycleScrolls > 0) {
         steps.push(`Chrome ${label}: scrolling feed ${cycleScrolls}x`);
         for (let s = 0; s < cycleScrolls; s++) {
-          const dur = 350 + Math.floor(Math.random() * 300);
-          await swipe(serial, cx, fromY, cx, toY, dur);
+          await swipe(serial, cx, fromY, cx, toY, profileSwipeDuration());
           await _sleep(700 + Math.floor(Math.random() * 800));
         }
       }
@@ -1945,6 +1956,11 @@ function _findYoutubeVideoCards(
 export async function runYoutubeApp(
   serial: string,
   opts?: {
+    swipeGesture: {
+      x1: number; y1: number; x2: number; y2: number;
+      durationMinMs: number; durationMaxMs: number; jitterX: number; jitterY: number;
+      startJitterMinY?: number; startJitterMaxY?: number;
+    };
     scrollMin?: number; scrollMax?: number;
     clickPctMin?: number; clickPctMax?: number;
     /** Seconds to spend watching a tapped video before pressing Back. */
@@ -1963,6 +1979,13 @@ export async function runYoutubeApp(
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const steps: string[] = [];
+  if (!opts?.swipeGesture) throw new Error("Swipe Gesture Profile is required for YouTube content scrolling");
+  const profileSwipeDuration = () => {
+    const min = Math.min(opts.swipeGesture.durationMinMs, opts.swipeGesture.durationMaxMs);
+    const max = Math.max(opts.swipeGesture.durationMinMs, opts.swipeGesture.durationMaxMs);
+    if (!Number.isFinite(min) || !Number.isFinite(max)) throw new Error("Swipe Gesture Profile duration is invalid");
+    return Math.max(1, Math.round(min + Math.random() * (max - min)));
+  };
   try {
     // Launch YouTube main activity.
     spawnSync(adb, ["-s", serial, "shell", "am", "start", "-n",
@@ -2048,8 +2071,7 @@ export async function runYoutubeApp(
         if (scrollCount > 0) {
           steps.push(`YouTube: scrolling homepage ${scrollCount}x`);
           for (let i = 0; i < scrollCount; i++) {
-            const dur = 350 + Math.floor(Math.random() * 300);
-            await swipe(serial, cx, fromY, cx, toY, dur);
+            await swipe(serial, cx, fromY, cx, toY, profileSwipeDuration());
             await _sleep(700 + Math.floor(Math.random() * 800));
           }
         }
@@ -2129,9 +2151,8 @@ export async function runYoutubeApp(
             const scrollBackCount = scrollCount + 2;
             steps.push(`YouTube: Shorts roll fired — scrolling back to top (${scrollBackCount}x up)`);
             for (let i = 0; i < scrollBackCount; i++) {
-              const dur = 350 + Math.floor(Math.random() * 300);
               // Reverse swipe direction: toY→fromY scrolls the feed upward.
-              await swipe(serial, cx, toY, cx, fromY, dur);
+              await swipe(serial, cx, toY, cx, fromY, profileSwipeDuration());
               await _sleep(500 + Math.floor(Math.random() * 500));
             }
 
@@ -2195,7 +2216,7 @@ export async function runYoutubeApp(
               // Swipe up through additional Shorts.
               for (let s = 0; s < shortsTotal; s++) {
                 // Swipe up = advance to the next Short.
-                await swipe(serial, scx, sfromY, scx, stoY, 300 + Math.floor(Math.random() * 200));
+                await swipe(serial, scx, sfromY, scx, stoY, profileSwipeDuration());
                 await _sleep(1000 + Math.floor(Math.random() * 500)); // wait for Short to load
                 const watchMs = Math.round(
                   (shortsWatchTimeMin + Math.random() * Math.max(0, shortsWatchTimeMax - shortsWatchTimeMin)) * 1000,
@@ -7539,14 +7560,17 @@ export async function switchToInstagramAccount(
         const profile = swipeGesture;
         const normX = (value: number) => Math.max(0, Math.min(1, value / Math.max(1, screen.w - 1)));
         const normY = (value: number) => Math.max(0, Math.min(1, value / Math.max(1, screen.h - 1)));
-        const profileX1 = profile ? scrollBounds.x1 + normX(profile.x1) * sheetW : scrollBounds.x1 + sheetW / 2;
-        const profileY1 = profile ? scrollBounds.y1 + normY(profile.y1) * sheetH : scrollBounds.y2 - sheetH * 0.25;
-        const profileX2 = profile ? scrollBounds.x1 + normX(profile.x2) * sheetW : scrollBounds.x1 + sheetW / 2;
-        const profileY2 = profile ? scrollBounds.y1 + normY(profile.y2) * sheetH : scrollBounds.y1 + sheetH * 0.25;
-        const jitterX = profile ? Math.max(0, profile.jitterX || 0) * sheetW / Math.max(1, screen.w) : 0;
-        const jitterEndY = profile ? Math.max(0, profile.jitterY || 0) * sheetH / Math.max(1, screen.h) : 0;
-        const startMinY = profile ? Math.max(0, Math.min(profile.startJitterMinY || 0, profile.startJitterMaxY || 0)) * sheetH / Math.max(1, screen.h) : 0;
-        const startMaxY = profile ? Math.max(startMinY, profile.startJitterMaxY || startMinY) * sheetH / Math.max(1, screen.h) : 0;
+         if (!profile) {
+           throw new Error("Swipe Gesture Profile is required for account-list scrolling");
+         }
+         const profileX1 = scrollBounds.x1 + normX(profile.x1) * sheetW;
+         const profileY1 = scrollBounds.y1 + normY(profile.y1) * sheetH;
+         const profileX2 = scrollBounds.x1 + normX(profile.x2) * sheetW;
+         const profileY2 = scrollBounds.y1 + normY(profile.y2) * sheetH;
+         const jitterX = Math.max(0, profile.jitterX || 0) * sheetW / Math.max(1, screen.w);
+         const jitterEndY = Math.max(0, profile.jitterY || 0) * sheetH / Math.max(1, screen.h);
+         const startMinY = Math.max(0, Math.min(profile.startJitterMinY || 0, profile.startJitterMaxY || 0)) * sheetH / Math.max(1, screen.h);
+         const startMaxY = Math.max(startMinY, profile.startJitterMaxY || startMinY) * sheetH / Math.max(1, screen.h);
         const startOffset = startMinY + Math.random() * Math.max(0, startMaxY - startMinY);
         const x1 = clamp(profileX1 + (Math.random() * 2 - 1) * jitterX, scrollBounds.x1, scrollBounds.x2);
         const y1 = clamp(profileY1 + startOffset, scrollBounds.y1, scrollBounds.y2);
@@ -7557,8 +7581,11 @@ export async function switchToInstagramAccount(
         const fromY = Math.max(y1, y2);
         const toY = Math.min(y1, y2);
         const midX = clamp((x1 + x2) / 2, scrollBounds.x1, scrollBounds.x2);
-        const durationMin = profile ? Math.min(profile.durationMinMs, profile.durationMaxMs) : 300;
-        const durationMax = profile ? Math.max(profile.durationMinMs, profile.durationMaxMs) : 300;
+         if (!Number.isFinite(profile.durationMinMs) || !Number.isFinite(profile.durationMaxMs)) {
+           throw new Error("Swipe Gesture Profile duration is invalid for account-list scrolling");
+         }
+         const durationMin = Math.min(profile.durationMinMs, profile.durationMaxMs);
+         const durationMax = Math.max(profile.durationMinMs, profile.durationMaxMs);
         const duration = Math.max(1, Math.round(durationMin + Math.random() * (durationMax - durationMin)));
         onLog?.(`  ↳ Account-list swipe mapped to sheet bounds: (${midX}, ${fromY}) → (${midX}, ${toY}) over ${duration}ms`);
         await runAdb(adbPath, [
@@ -8975,6 +9002,7 @@ export async function findInstagramSearchBar(
 export async function typeViaOnscreenKeyboard(
   serial: string,
   text: string,
+  typingProfile: TypingSpeedProfile,
   onLog?: (msg: string) => void,
 ): Promise<void> {
   // ── Calibration-map path ───────────────────────────────────────────────────
@@ -9013,20 +9041,23 @@ export async function typeViaOnscreenKeyboard(
 
     if (missingCalKeys.size === 0) {
       onLog?.(`[keyboard] using calibration map (${Object.keys(calMap).length} keys)`);
-      const result = await typeViaCalibrationMap(serial, text, calMap, onLog, undefined);
+      const result = await typeViaCalibrationMap(serial, text, calMap, onLog, typingProfile);
       if (result.ok) return;
-      onLog?.(`[keyboard] calibration typing incomplete — missing ${result.missing.join(", ")}`);
+      throw new Error(`Calibrated typing incomplete — missing ${result.missing.join(", ")}`);
     } else {
-      onLog?.(
-        `[keyboard] calibration map missing requested key(s): ${[...missingCalKeys].join(", ")} — ` +
-        `using normal character typing path`,
+      throw new Error(
+        `Calibrated typing requires mapped key(s): ${[...missingCalKeys].join(", ")}`,
       );
     }
   }
 
+  throw new Error("Calibrated typing requires a saved keyboard calibration map");
+
+  /* Unreachable legacy accessibility typing implementation retained below
+   * only for source-history context; all software typing must use calibration.
+   */
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-
   let keyMap = new Map<string, { x: number; y: number }>();
   let keyMapMode: "letters" | "symbols" = "letters";
 
@@ -9224,6 +9255,12 @@ export async function typeViaOnscreenKeyboard(
 
 /** Map from key label (e.g. "a", "@", "space", "delete") to screen coordinate. */
 export type KeyCalibrationMap = Record<string, { x: number; y: number }>;
+export type TypingSpeedProfile = {
+  minMs: number;
+  maxMs: number;
+  errorPercentMin: number;
+  errorPercentMax: number;
+};
 
 // Per-session cache so repeated captureOneTap calls during a calibration
 // session skip the slow getevent -lp query. Keyed by device serial and cleared
@@ -9278,7 +9315,7 @@ export function loadKeyCalibrationMap(serial: string): KeyCalibrationMap | null 
 export async function typeViaSavedCalibrationMap(
   serial: string,
   text: string,
-  typingProfile?: { minMs: number; maxMs: number; errorPercentMin: number; errorPercentMax: number },
+  typingProfile: TypingSpeedProfile | undefined,
   onLog?: (msg: string) => void,
 ): Promise<{ ok: boolean; available: boolean; missing: string[] }> {
   const map = loadKeyCalibrationMap(serial);
@@ -9843,8 +9880,15 @@ export async function typeViaCalibrationMap(
   text: string,
   map: KeyCalibrationMap,
   onLog?: (msg: string) => void,
-  typingProfile?: { minMs: number; maxMs: number; errorPercentMin: number; errorPercentMax: number },
+  typingProfile: TypingSpeedProfile,
 ): Promise<{ ok: boolean; missing: string[] }> {
+  if (!typingProfile ||
+      !Number.isFinite(typingProfile.minMs) ||
+      !Number.isFinite(typingProfile.maxMs) ||
+      !Number.isFinite(typingProfile.errorPercentMin) ||
+      !Number.isFinite(typingProfile.errorPercentMax)) {
+    throw new Error("Typing Speed Profile is required for calibrated typing");
+  }
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const missing: string[] = [];
@@ -9870,16 +9914,9 @@ export async function typeViaCalibrationMap(
       return false;
     }
     onLog?.(`[cal-keyboard] tapped ${description} at (${pos.x},${pos.y})`);
-    // When a device typing profile is configured, it is the complete
-    // inter-tap cadence. The previous unconditional 180–280ms pause made
-    // profile values appear ineffective because it dominated every keypress.
-    if (!typingProfile) {
-      await _sleep(180 + Math.round(Math.random() * 100));
-    } else {
-      const min = Math.max(0, Math.min(typingProfile.minMs, typingProfile.maxMs));
-      const max = Math.max(min, typingProfile.maxMs);
-      await _sleep(min + Math.round(Math.random() * (max - min)));
-    }
+    const min = Math.max(0, Math.min(typingProfile.minMs, typingProfile.maxMs));
+    const max = Math.max(min, typingProfile.maxMs);
+    await _sleep(min + Math.round(Math.random() * (max - min)));
     return true;
   };
   const maybeHumanError = async () => {
