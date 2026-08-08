@@ -1,3 +1,11 @@
+## [1.2.425] — 2026-08-08
+
+### Fixed — Account-switcher profile settling
+
+- Replaced the fixed 700 ms wait after tapping Instagram's Profile tab with
+  a randomized 1000–2500 ms profile-header settling delay before locating and
+  tapping the username control.
+
 ## [1.2.423] — 2026-08-08
 
 ### Fixed — Mirror tap-to-type uses calibrated typing

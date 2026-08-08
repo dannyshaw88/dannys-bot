@@ -7469,7 +7469,9 @@ export async function switchToInstagramAccount(
   // account UI no longer reliably opens the account list from a long-press.
   onLog?.(`  ↳ Tapping profile tab to open the active account profile…`);
   await _adbTapAsync(adbPath, serial, profileTab.x, profileTab.y);
-  await _sleep(700);
+  const PROFILE_SCREEN_SETTLE_MS = 1000 + Math.floor(Math.random() * 1501);
+  onLog?.(`  ↳ Waiting ${PROFILE_SCREEN_SETTLE_MS}ms for the profile header to settle…`);
+  await _sleep(PROFILE_SCREEN_SETTLE_MS);
 
   // 3. On the profile screen, tap the username in the top header. Restrict
   // the match to the header region so a username in a post or suggestion
