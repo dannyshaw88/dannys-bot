@@ -487,7 +487,7 @@ type DeviceAccount = { slots: DeviceSlot[] };
 type DeviceSettings = { googlePlayEmail?: string; googlePlayPassword?: string; selectedSimSlot?: number };
 type DevicePrefs = {
   dismissDirection?: "auto" | "left" | "up";
-  typingSpeedProfile?: { minMs: number; maxMs: number; errorPercentMin: number; errorPercentMax: number; dwellMinMs: number; dwellMaxMs: number };
+  typingSpeedProfile?: { minMs: number; maxMs: number; errorPercentMin: number; errorPercentMax: number; dwellMinMs: number; dwellMaxMs: number; hesitationMinMs: number; hesitationMaxMs: number };
   swipeGesture?: { x1: number; y1: number; x2: number; y2: number; durationMinMs: number; durationMaxMs: number; jitterX: number; jitterY: number; startJitterMinY?: number; startJitterMaxY?: number };
 };
 type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings; account?: DeviceAccount; slotAutomation?: Record<string, AutomationSettings>; deviceSettings?: DeviceSettings; devicePrefs?: DevicePrefs };
@@ -2533,6 +2533,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           errorPercentMax: z.number().finite().min(0).max(100),
           dwellMinMs: z.number().finite().min(1),
           dwellMaxMs: z.number().finite().min(1),
+          hesitationMinMs: z.number().finite().min(0),
+          hesitationMaxMs: z.number().finite().min(0),
         }).optional(),
         swipeGesture: z.object({
           x1: z.number().finite(),

@@ -9262,6 +9262,8 @@ export type TypingSpeedProfile = {
   errorPercentMax: number;
   dwellMinMs: number;
   dwellMaxMs: number;
+  hesitationMinMs: number;
+  hesitationMaxMs: number;
 };
 
 // Per-session cache so repeated captureOneTap calls during a calibration
@@ -9890,8 +9892,10 @@ export async function typeViaCalibrationMap(
       !Number.isFinite(typingProfile.errorPercentMin) ||
       !Number.isFinite(typingProfile.errorPercentMax) ||
       !Number.isFinite(typingProfile.dwellMinMs) ||
-      !Number.isFinite(typingProfile.dwellMaxMs)) {
-    throw new Error("Typing Speed Profile, including dwell time, is required for calibrated typing");
+      !Number.isFinite(typingProfile.dwellMaxMs) ||
+      !Number.isFinite(typingProfile.hesitationMinMs) ||
+      !Number.isFinite(typingProfile.hesitationMaxMs)) {
+    throw new Error("Complete Typing Speed Profile, including dwell and hesitation, is required for calibrated typing");
   }
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
@@ -9984,6 +9988,11 @@ export async function typeViaCalibrationMap(
     if (ch === " " || ch === "\n") {
       await switchLayer("letters");
       if (!await tapMapped(label, ch === " " ? "space" : "Enter")) missing.push(ch);
+        if (ch === " ") {
+          const hesitationMin = Math.max(0, Math.min(typingProfile.hesitationMinMs, typingProfile.hesitationMaxMs));
+          const hesitationMax = Math.max(hesitationMin, typingProfile.hesitationMaxMs);
+          await _sleep(hesitationMin + Math.round(Math.random() * (hesitationMax - hesitationMin)));
+        }
       continue;
     }
 
