@@ -5663,22 +5663,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
     }
 
-    // Exit the story viewer by swiping down — only if we're actually still
-    // in it; if the loop already broke out because the viewer was gone,
-    // this would just be a harmless extra swipe on the feed, but skipping
-    // it keeps the log accurate about what really happened on screen.
+    // Exit the story viewer with Android Back — only if we're actually still
+    // in it. Do not use a swipe here: the established Story exit contract is
+    // Back, and a swipe can leave Instagram in the viewer or advance content.
     if (await stillInStoryViewer()) {
-      logger.info({ serial, source: "stories-viewer-exit-down", from: [Math.round(w / 2), Math.round(h * 0.50)], to: [Math.round(w / 2), Math.round(h * 0.92)], durationMs: 300 }, "[mobile-input] swipe");
-      await deviceProfileSwipe(
-        serial,
-        {
-          x1: Math.round(w / 2), y1: Math.round(h * 0.50),
-          x2: Math.round(w / 2), y2: Math.round(h * 0.92),
-          durationMs: 300,
-        },
-        "stories-viewer-exit-down",
-        "normal",
-      );
+      onLog?.("Story exit: pressing Android Back");
+      logger.info({ serial }, "[view-stories] exiting story viewer with Android Back");
+      await android.pressBack(serial);
     }
     await sleepOrAbort(serial, 800);
 
