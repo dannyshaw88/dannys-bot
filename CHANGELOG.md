@@ -1,3 +1,18 @@
+## [1.2.434] — 2026-08-09
+
+### Fixed — Installer path and mobile automation timing
+
+- Windows installers now default to `C:\Program Files\Aura Farming`, placing
+  the application executable at `C:\Program Files\Aura Farming\Aura Farming.exe`.
+  The installer still allows choosing a different directory.
+- Make a Post now includes the corrected account-slot handling and randomized
+  3–5 second Home dwell before continuing.
+- View Feed no longer taps Home twice when running inside an automation cycle;
+  the existing Home navigation is reused and the duplicate tap is logged as
+  skipped.
+- Reels action-column accessibility dumps are grouped behind the Debugging Log
+  chevron, including timestamp-varying diagnostic rows.
+
 ## [1.2.433] — 2026-08-09
 
 ### Fixed — Make a Post Home transition timing
