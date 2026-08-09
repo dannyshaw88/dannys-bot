@@ -3878,8 +3878,6 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             clickHashtagPercentMax: s.clickHashtagPercentMax,
             clickAuthorPercentMin: s.clickAuthorPercentMin,
             clickAuthorPercentMax: s.clickAuthorPercentMax,
-            feedSuggestionsPercentMin: s.feedSuggestionsPercentMin,
-            feedSuggestionsPercentMax: s.feedSuggestionsPercentMax,
             viewStoriesSlidesMin: s.viewStoriesSlidesMin,
             viewStoriesSlidesMax: s.viewStoriesSlidesMax,
             viewStoriesSlideWatchPctMin: s.viewStoriesSlideWatchPctMin,
@@ -5484,32 +5482,6 @@ export function AutomationSettingsPanel({
             </div>
           </div>
 
-          <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground block text-center">Suggestions % of slots</Label>
-            <div className="flex items-center gap-3">
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                maxLength={4}
-                className={NUM_INPUT_CLASS}
-                value={settings.feedSuggestionsPercentMin}
-                onChange={e => setSettings(s => ({ ...s, feedSuggestionsPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
-                disabled={loading}
-              />
-              <span className="text-muted-foreground text-sm">to</span>
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                maxLength={4}
-                className={NUM_INPUT_CLASS}
-                value={settings.feedSuggestionsPercentMax}
-                onChange={e => setSettings(s => ({ ...s, feedSuggestionsPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
-                disabled={loading}
-              />
-            </div>
-          </div>
         </div>}
 
         {saveError && <p className="text-xs text-destructive">{saveError}</p>}

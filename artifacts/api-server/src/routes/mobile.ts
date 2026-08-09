@@ -283,8 +283,6 @@ type AutomationSettings = {
   clickHashtagPercentMax: number;
   clickAuthorPercentMin: number;
   clickAuthorPercentMax: number;
-  feedSuggestionsPercentMin: number;
-  feedSuggestionsPercentMax: number;
   feedScrollMin: number;
   feedScrollMax: number;
   viewStoriesSlidesMin: number;
@@ -1604,8 +1602,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     clickHashtagPercentMax: z.number().min(0).max(100).default(0),
     clickAuthorPercentMin: z.number().min(0).max(100).default(0),
     clickAuthorPercentMax: z.number().min(0).max(100).default(0),
-    feedSuggestionsPercentMin: z.number().min(0).max(100).default(0),
-    feedSuggestionsPercentMax: z.number().min(0).max(100).default(0),
     feedScrollMin: z.number().min(1).max(50),
     feedScrollMax: z.number().min(1).max(50),
     viewStoriesSlidesMin: z.number().min(0).max(100).default(0),
@@ -1847,7 +1843,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       tapAudioPercentMin: 0, tapAudioPercentMax: 0,
       clickHashtagPercentMin: 0, clickHashtagPercentMax: 0,
       clickAuthorPercentMin: 0, clickAuthorPercentMax: 0,
-      feedSuggestionsPercentMin: 0, feedSuggestionsPercentMax: 0,
       feedScrollMin: 5, feedScrollMax: 10,
       viewStoriesSlidesMin: 0, viewStoriesSlidesMax: 0,
       viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
@@ -2257,7 +2252,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         tapAudioPercentMin: 0, tapAudioPercentMax: 0,
         clickHashtagPercentMin: 0, clickHashtagPercentMax: 0,
         clickAuthorPercentMin: 0, clickAuthorPercentMax: 0,
-        feedSuggestionsPercentMin: 0, feedSuggestionsPercentMax: 0,
         feedScrollMin: 5, feedScrollMax: 10,
         viewStoriesSlidesMin: 0, viewStoriesSlidesMax: 0,
         viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
@@ -3486,9 +3480,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     tapAudioPercentMin?: number; tapAudioPercentMax?: number;
     clickHashtagPercentMin?: number; clickHashtagPercentMax?: number;
     clickAuthorPercentMin?: number; clickAuthorPercentMax?: number;
-    feedSuggestionsPercentMin?: number; feedSuggestionsPercentMax?: number;
     onLog?: (msg: string) => void;
-  }): Promise<{ count: number; likes: number; likeFailures: number; sharesFeed: number; sharesDm: number; saves: number; captionExpands: number; strayNavRecoveries: number; audioTaps: number; hashtagTaps: number; authorVisits: number; suggestionBrowses: number }> {
+  }): Promise<{ count: number; likes: number; likeFailures: number; sharesFeed: number; sharesDm: number; saves: number; captionExpands: number; strayNavRecoveries: number; audioTaps: number; hashtagTaps: number; authorVisits: number }> {
     const {
       count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
       shareFeedPercentMin = 0, shareFeedPercentMax = 0,
@@ -3498,7 +3491,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       tapAudioPercentMin = 0, tapAudioPercentMax = 0,
       clickHashtagPercentMin = 0, clickHashtagPercentMax = 0,
       clickAuthorPercentMin = 0, clickAuthorPercentMax = 0,
-      feedSuggestionsPercentMin = 0, feedSuggestionsPercentMax = 0,
       homeAlreadyEstablished = false,
       onLog,
     } = params;
@@ -3545,10 +3537,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const clickAuthorLo = Math.min(clickAuthorPercentMin, clickAuthorPercentMax);
     const clickAuthorHi = Math.max(clickAuthorPercentMin, clickAuthorPercentMax);
     const clickAuthorChance = (clickAuthorLo + Math.random() * (clickAuthorHi - clickAuthorLo)) / 100;
-    const feedSuggestionsLo = Math.min(feedSuggestionsPercentMin, feedSuggestionsPercentMax);
-    const feedSuggestionsHi = Math.max(feedSuggestionsPercentMin, feedSuggestionsPercentMax);
-    const feedSuggestionsChance = (feedSuggestionsLo + Math.random() * (feedSuggestionsHi - feedSuggestionsLo)) / 100;
-    onLog?.(`Feed settings — like:${Math.round(likeChance * 100)}% expandCaption:${Math.round(captionExpandChance * 100)}% tapAudio:${Math.round(tapAudioChance * 100)}% clickHashtag:${Math.round(clickHashtagChance * 100)}% clickAuthor:${Math.round(clickAuthorChance * 100)}% suggestions:${Math.round(feedSuggestionsChance * 100)}% save:${Math.round(saveChance * 100)}% shareFeed:${Math.round(shareFeedChance * 100)}% shareDm:${Math.round(shareDmChance * 100)}%`);
+    onLog?.(`Feed settings — like:${Math.round(likeChance * 100)}% expandCaption:${Math.round(captionExpandChance * 100)}% tapAudio:${Math.round(tapAudioChance * 100)}% clickHashtag:${Math.round(clickHashtagChance * 100)}% clickAuthor:${Math.round(clickAuthorChance * 100)}% save:${Math.round(saveChance * 100)}% shareFeed:${Math.round(shareFeedChance * 100)}% shareDm:${Math.round(shareDmChance * 100)}%`);
 
     const { w, h } = getScreenSize(serial);
     const x  = Math.round(w / 2);
@@ -3592,7 +3581,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let audioTaps = 0;
     let hashtagTaps = 0;
     let authorVisits = 0;
-    let suggestionBrowses = 0;
     // Sponsored posts ("Ads") render a full-width CTA button ("Shop Now",
     // "Install Now", "Learn More") overlaid near the bottom of the media —
     // right where our double-tap-to-like jitter can land after a scroll that
@@ -4726,61 +4714,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
       }
 
-      // ── Suggestions slot (horizontal carousel) ──────────────────────────
-      // Instagram regularly inserts suggestion shelves into the feed
-      // ("Suggested for you", "People you may know", "Suggested Reels").
-      // These are horizontal-scroll carousels — swiping left browses the
-      // cards. Detected via the accessibility dump; if the roll hits and a
-      // suggestion shelf is visible, swipe left 1–10 times.
-      if (feedSuggestionsChance > 0 && Math.random() < feedSuggestionsChance) {
-        try {
-          if (isCycleAborted(serial)) throw new Error("cycle-aborted");
-          const _sugXml = await android.dumpUi(serial).catch(() => "");
-          const _isSuggestionSlot =
-            _sugXml.includes("Suggested for you") ||
-            _sugXml.includes("People you may know") ||
-            _sugXml.includes("Suggested Reels") ||
-            _sugXml.includes("Suggested reels") ||
-            _sugXml.includes('"suggested_users"') ||
-            _sugXml.includes("suggestion_unit");
-          if (_isSuggestionSlot) {
-            const _sugSwipes = 1 + Math.floor(Math.random() * 10);
-            onLog?.(`View Feed ${i + 1}/${count}: suggestion slot detected — swiping left ${_sugSwipes}×`);
-            // Find the shelf's actual Y from the UIAutomator bounds so the
-            // swipe lands on the carousel, not whatever post is at h/2.
-            let _sugY = Math.round(h * 0.35); // safe fallback: upper third
-            const _sugLabelRe = /(?:text|content-desc)="(?:Suggested for you|People you may know|Suggested [Rr]eels)"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/;
-            const _sugLabelBm = _sugXml.match(_sugLabelRe);
-            if (_sugLabelBm) {
-              _sugY = Math.round((Number(_sugLabelBm[2]) + Number(_sugLabelBm[4])) / 2);
-            } else {
-              const _sugContRe = /resource-id="[^"]*(?:suggested_users|suggestion_unit)[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/;
-              const _sugContBm = _sugXml.match(_sugContRe);
-              if (_sugContBm) {
-                _sugY = Math.round((Number(_sugContBm[2]) + Number(_sugContBm[4])) / 2);
-              }
-            }
-            const _sugX1 = Math.round(w * 0.72);
-            const _sugX2 = Math.round(w * 0.28);
-            for (let _s = 0; _s < _sugSwipes; _s++) {
-              if (isCycleAborted(serial)) throw new Error("cycle-aborted");
-              const _sugDur = 200 + Math.round(Math.random() * 80);
-              await deviceProfileSwipe(
-                serial,
-                { x1: _sugX1, y1: _sugY, x2: _sugX2, y2: _sugY, durationMs: _sugDur },
-                "feed-suggestion-carousel",
-                "normal",
-              );
-              await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
-            }
-            suggestionBrowses++;
-            onLog?.(`View Feed ${i + 1}/${count}: ✓ browsed suggestions (${_sugSwipes} swipes)`);
-          }
-        } catch (e: any) {
-          if (e?.message === "cycle-aborted") throw e;
-          onLog?.(`View Feed ${i + 1}/${count}: suggestions error — ${e?.message}`);
-        }
-      }
       feedTimingAfterSecondaryActions = Date.now();
 
       if (i < count - 1) {
@@ -4812,7 +4745,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       logger.warn({ serial, strayNavRecoveries }, "[check-feed] recovered from stray navigation (ad CTA) during this run");
       onLog?.(`⚠ Recovered from ${strayNavRecoveries} stray navigation(s) — likely tapped an ad CTA during scroll`);
     }
-    return { count, likes, likeFailures, sharesFeed, sharesDm, saves, captionExpands, strayNavRecoveries, audioTaps, hashtagTaps, authorVisits, suggestionBrowses };
+    return { count, likes, likeFailures, sharesFeed, sharesDm, saves, captionExpands, strayNavRecoveries, audioTaps, hashtagTaps, authorVisits };
   }
 
   // View stories from the stories bar at the top of the feed.
@@ -10637,7 +10570,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let postsUploaded = 0;
     // Hoisted so the catch block can include partial stats in the COMPLETE log
     // even when the cycle is aborted or errors mid-run.
-    let likes = 0, likeFailures = 0, sharesFeed = 0, sharesDm = 0, saves = 0, captionExpands = 0, strayNavRecoveries = 0, audioTaps = 0, hashtagTaps = 0, authorVisits = 0, suggestionBrowses = 0;
+    let likes = 0, likeFailures = 0, sharesFeed = 0, sharesDm = 0, saves = 0, captionExpands = 0, strayNavRecoveries = 0, audioTaps = 0, hashtagTaps = 0, authorVisits = 0;
     let feedScrolled = 0; // number of feed posts requested to scroll this cycle
     let exploreScrolled = 0; // number of explore scrolls this cycle
     let _slotUsername = "";       // captured from schema parse for catch-block use
@@ -10684,7 +10617,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         tapAudioPercentMin, tapAudioPercentMax,
         clickHashtagPercentMin, clickHashtagPercentMax,
         clickAuthorPercentMin, clickAuthorPercentMax,
-        feedSuggestionsPercentMin, feedSuggestionsPercentMax,
         viewStoriesSlidesMin, viewStoriesSlidesMax,
         viewStoriesSlideWatchPctMin, viewStoriesSlideWatchPctMax,
         viewStoriesLikePercentMin, viewStoriesLikePercentMax,
@@ -11225,7 +11157,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               await sleepOrAbort(serial, 2000);
             }
             tLog(`▶ Starting feed scroll — ${count} posts`);
-            ({ likes, likeFailures, sharesFeed, sharesDm, saves, captionExpands, strayNavRecoveries, audioTaps, hashtagTaps, authorVisits, suggestionBrowses } = await runCheckFeedLoop(serial, {
+            ({ likes, likeFailures, sharesFeed, sharesDm, saves, captionExpands, strayNavRecoveries, audioTaps, hashtagTaps, authorVisits } = await runCheckFeedLoop(serial, {
               count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
               homeAlreadyEstablished: !_isFirst,
               shareFeedPercentMin, shareFeedPercentMax,
@@ -11235,11 +11167,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               tapAudioPercentMin, tapAudioPercentMax,
               clickHashtagPercentMin, clickHashtagPercentMax,
               clickAuthorPercentMin, clickAuthorPercentMax,
-              feedSuggestionsPercentMin, feedSuggestionsPercentMax,
               onLog: (msg) => tLog(`  ${msg}`),
             }));
             feedScrolled = count;
-            steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${saves} saves, ${captionExpands} caption-expands, ${audioTaps} audio-taps, ${hashtagTaps} hashtag-taps, ${authorVisits} author-visits, ${suggestionBrowses} suggestion-browses, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
+            steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${saves} saves, ${captionExpands} caption-expands, ${audioTaps} audio-taps, ${hashtagTaps} hashtag-taps, ${authorVisits} author-visits, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
             tLog(`▶ Feed done — ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} DM-shares, ${saves} saves, ${captionExpands} caption-expands`);
           } else if (!feedEnabled) {
             steps.push("feed(skipped — View Feed disabled)");
