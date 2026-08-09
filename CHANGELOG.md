@@ -1,3 +1,14 @@
+## [1.2.445] — 2026-08-09
+
+### Changed — Separate Trust Score copy settings
+
+- Added independent Trust Score copy rows for Update Profile Picture —
+  Disable After Used and Update Bio — Disable After Used.
+- Removed both fields from the combined generic Phone Farm Update Avatar and
+  Update Bio copy settings.
+- Trust Score template copying now transfers each disable-after-use setting
+  independently between tiers.
+
 ## [1.2.444] — 2026-08-09
 
 ### Fixed — Trust Score checkbox editability
