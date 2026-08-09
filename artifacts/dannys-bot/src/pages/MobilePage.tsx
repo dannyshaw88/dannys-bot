@@ -6739,11 +6739,11 @@ export function AutomationSettingsPanel({
                       type="checkbox"
                       id={`update-profile-pic-disable-after-used-${slotIdx ?? 0}`}
                       checked={settings.updateProfilePicDisableAfterUsed}
-                      onChange={e => setSettings(s => ({ ...s, updateProfilePicDisableAfterUsed: e.target.checked }))}
-                       disabled={fieldDisabled("updateProfilePicDisableAfterUsed")}
+                       onChange={e => setSettings(s => ({ ...s, updateProfilePicDisableAfterUsed: e.target.checked }))}
+                       disabled={!isTrustScoreTemplateEditor || fieldDisabled("updateProfilePicDisableAfterUsed")}
                       className="w-4 h-4 accent-primary cursor-pointer"
                     />
-                    <label htmlFor={`update-profile-pic-disable-after-used-${slotIdx ?? 0}`} className="text-xs text-foreground cursor-pointer select-none">Disable After Used</label>
+                    <label htmlFor={`update-profile-pic-disable-after-used-${slotIdx ?? 0}`} className={`text-xs select-none ${isTrustScoreTemplateEditor ? "text-foreground cursor-pointer" : "text-muted-foreground/50 cursor-not-allowed"}`}>Disable After Used <span className="text-[10px]">(Trust Score)</span></label>
                   </div>
                 </div>
               </div>
@@ -6777,11 +6777,11 @@ export function AutomationSettingsPanel({
                       type="checkbox"
                       id={`update-bio-disable-after-used-${slotIdx ?? 0}`}
                       checked={settings.updateBioDisableAfterUsed}
-                      onChange={e => setSettings(s => ({ ...s, updateBioDisableAfterUsed: e.target.checked }))}
-                       disabled={fieldDisabled("updateBioDisableAfterUsed")}
+                       onChange={e => setSettings(s => ({ ...s, updateBioDisableAfterUsed: e.target.checked }))}
+                       disabled={!isTrustScoreTemplateEditor || fieldDisabled("updateBioDisableAfterUsed")}
                       className="w-4 h-4 accent-primary cursor-pointer"
                     />
-                    <label htmlFor={`update-bio-disable-after-used-${slotIdx ?? 0}`} className="text-xs text-foreground cursor-pointer select-none">Disable After Used</label>
+                    <label htmlFor={`update-bio-disable-after-used-${slotIdx ?? 0}`} className={`text-xs select-none ${isTrustScoreTemplateEditor ? "text-foreground cursor-pointer" : "text-muted-foreground/50 cursor-not-allowed"}`}>Disable After Used <span className="text-[10px]">(Trust Score)</span></label>
                   </div>
                 </div>
               </div>

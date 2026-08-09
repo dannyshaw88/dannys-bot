@@ -2039,11 +2039,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "updateProfilePicActivatePctMin",
     "updateProfilePicActivatePctMax",
     "updateProfilePicFolderPath",
-    "updateProfilePicDisableAfterUsed",
     "updateBioActivatePctMin",
     "updateBioActivatePctMax",
     "updateBioText",
-    "updateBioDisableAfterUsed",
+    // Disable-after-use behavior is owned by the Trust Score template, not
+    // by an individual physical phone/account slot.
     "makePostLocalFolderEnabled",
     "makePostLocalFolderPath",
     "makePostAddLocation",

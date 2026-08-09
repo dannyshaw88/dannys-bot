@@ -1,3 +1,19 @@
+## [1.2.442] — 2026-08-09
+
+### Changed — Trust Score owns Update Bio and Avatar disable-after-use
+
+- Update Bio and Update Avatar “Disable After Used” are now controlled by
+  Trust Score templates rather than individual Phone Farm device/account-slot
+  settings.
+- The controls remain available and editable in the Trust Score Human Session
+  Tool, where they can be copied with the template’s account-specific settings.
+- The same controls remain visible but greyed out in the live Phone Farm Human
+  Session Tool, preventing device-level edits to Trust Score-owned behavior.
+- Activation percentages, bio text, and avatar source/folder settings remain
+  in the Phone Farm tool as physical-slot settings.
+- Assigned Trust Scores now inherit the two disable-after-use values through
+  the existing template resolution path.
+
 ## [1.2.441] — 2026-08-09
 
 ### Fixed — Update Bio Edit Profile verification
