@@ -7456,7 +7456,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const {
       localFolderPath, localFolderRandom, localFolderNoRepeat, deleteAfterUpload,
       captionText, doFixAiSlop, alterationEnabled, alterationLevel,
-      imageSettingsEnabled, imageSettings, addLocation, onLog,
+      imageSettingsEnabled, imageSettings, addLocation, accountUsername, slotIdx, onLog,
     } = opts;
 
     // Make a Post always starts from Instagram's normal Home feed.  This
@@ -7472,7 +7472,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     onLog?.("Make a Post: tapping Instagram Home button…");
     await android.tap(serial, homeTab.x, homeTab.y);
-    await sleepOrAbort(serial, 1500);
+    // Do not immediately continue after the tab tap.  On slower phones the
+    // Home surface remains in its transition state for several seconds; the
+    // post flow must give Instagram time to render before any later picker or
+    // compose lookup is attempted.
+    onLog?.("Make a Post: waiting for Instagram Home to finish loading…");
+    await sleepOrAbort(serial, 3000);
 
     const fileName = await pickLocalFolderImage(serial, {
       folderPath: localFolderPath, random: localFolderRandom, noRepeat: localFolderNoRepeat, slotIdx, onLog,

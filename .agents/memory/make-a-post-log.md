@@ -7,6 +7,12 @@ description: Chronological record of every attempt to get Make a Post working vi
 
 **Why this file exists:** The Make a Post feature has been attempted ~20 times via the mobile API and has never worked. Every new session the agent repeats the same fixes. This file and the in-UI README-REPLIT block are the stop-gap.
 
+### 2026-08-09 — Home dwell report was preceded by an undefined slot variable
+- Production log showed `slotIdx is not defined` immediately after the Home tap, before the compose lookup. The function accepted `slotIdx` in its options but failed to destructure it, so the picker/`+` button was never attempted.
+- Fixed by destructuring `slotIdx` and adding an explicit three-second Home-render dwell with a visible readiness log line.
+- **Lesson:** when a failure appears immediately after navigation, trust the first thrown error before tuning UI selectors or dwell timing; downstream controls may never have been reached.
+- Status: API build passed and the API workflow restarted; physical-device confirmation is still required.
+
 ## MANDATORY before any Make a Post fix attempt
 
 1. Read this file top-to-bottom.
