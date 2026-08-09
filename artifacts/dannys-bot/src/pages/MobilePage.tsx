@@ -5056,9 +5056,9 @@ export function AutomationSettingsPanel({
       if (!response.ok) throw new Error("clear failed");
       await loadSurplus();
     } catch {
-      onLog?.(`Follow: failed to clear Surplus for ${labels[scope]}`);
+      // Keep the panel mounted if the scoped deletion request fails.
     }
-  }, [loadSurplus, onLog, phone?.serial, slotIdx]);
+  }, [loadSurplus, phone?.serial, slotIdx]);
 
   // Auto-refresh the followed list every 5 s while the panel is open so
   // users followed during a running cycle appear without manual re-toggle.
