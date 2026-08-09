@@ -11325,25 +11325,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 break;
               }
             }
-            // Always tap Home after Reels — the Back presses exit the full-screen
-            // viewer but leave the UI on the Reels tab. If the next account in
-            // the slot rotation runs its cycle from the Reels tab the bottom-nav
-            // layout is different enough to break account-switcher detection.
-            // If the Back loop didn't surface the home tab, try one more fresh
-            // lookup now that the viewer has had time to dismiss.
-            if (!_reHomeTab) {
-              _reHomeTab = await android.findHomeTab(serial).catch(() => null);
-            }
-            if (_reHomeTab) {
-              await android.tap(serial, _reHomeTab.x, _reHomeTab.y);
-              await sleepOrAbort(serial, 800);
-              tLog("▶ View Reels — tapped Home tab, back on home feed");
+            // Back is the complete Reels exit. Do not tap Home after the
+            // viewer has closed: the next tool owns its own starting-state
+            // navigation, and an extra Home tap can become a duplicate tap
+            // when the viewer's Back already returned to the feed.
+            if (_reelsExited) {
+              tLog("▶ View Reels — exited full-screen viewer with Back");
             } else {
-              // Positional fallback — home tab is always the leftmost nav icon.
-              const { w: _rhW, h: _rhH } = getScreenSize(serial);
-              await android.tap(serial, Math.round(_rhW * 0.12), Math.round(_rhH - 50));
-              await sleepOrAbort(serial, 800);
-              tLog("▶ View Reels — tapped Home tab (positional fallback), back on home feed");
+              tLog("▶ View Reels — Back exit completed without confirming Home tab");
             }
           } else if (!viewReelsEnabled) {
             steps.push("reels(skipped — View Reels disabled)");
