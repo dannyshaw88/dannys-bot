@@ -1,3 +1,21 @@
+## [1.2.439] — 2026-08-09
+
+### Fixed — Reels player detection and Suggestions scrolling
+
+- View Reels no longer depends exclusively on `reel_viewer_*` accessibility
+  resource IDs to recognize the player. On Instagram/device builds that render
+  the player visibly but omit those IDs from the UIAutomator tree, the focused
+  Instagram window is now accepted as the screen-level readiness signal.
+- Reels action detection and tapping behavior were not broadened or replaced;
+  this change only prevents a false “player never appeared” state before the
+  normal Reels flow begins.
+- Added a screen-state check before every Reels advance swipe. If Instagram
+  has reached the Reels Suggestions surface showing Friends, Popular profiles,
+  suggested profiles, or multiple Follow cards, the loop stops before sending
+  a Reels swipe through that page.
+- Reels cleanup still runs normally after the Suggestions surface is detected,
+  preventing the suggestion carousel from being mistaken for another Reel.
+
 ## [1.2.438] — 2026-08-09
 
 ### Fixed — Follow cleanup navigation
