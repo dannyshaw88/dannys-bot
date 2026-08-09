@@ -9750,38 +9750,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const skipped = before - filtered.length;
       if (skipped > 0) onLog?.(`Follow: skipped ${skipped} user${skipped !== 1 ? 's' : ''} already in the global skip list`);
     }
-    // ── HikerAPI metadata pre-filter ────────────────────────────────────
-    // Free — uses data already returned by the batch scrape; no extra calls.
-    // Only skips candidates where the metadata is definitively present and
-    // matches a filter; absent metadata passes through to the profile check.
-    // When writeSkippedUsers is true, each pre-filtered user is also written
-    // to the global skipped_users table so future cycles skip them cheaply.
-    if (filters && (filters.skipVerified || filters.skipPrivate || filters.maxFollowers !== undefined || filters.minFollowers !== undefined)) {
-      const before = filtered.length;
-      const preFiltered_kept: string[] = [];
-      for (const u of filtered) {
-        const meta = candidateMeta.get(u);
-        let reason: string | null = null;
-        if (meta) {
-          if (filters.skipVerified  && meta.isVerified === true)           reason = "verified-badge";
-          else if (filters.skipPrivate && meta.isPrivate === true)         reason = "private-account";
-          else if (filters.maxFollowers !== undefined && meta.followerCount !== undefined && meta.followerCount >= filters.maxFollowers)
-                                                                            reason = "too-many-followers";
-          else if (filters.minFollowers !== undefined && meta.followerCount !== undefined && meta.followerCount < filters.minFollowers)
-                                                                            reason = "too-few-followers";
-        }
-        if (reason) {
-          if (params.writeSkippedUsers) {
-            storage.addSkippedUser(u, reason).catch(() => {});
-          }
-        } else {
-          preFiltered_kept.push(u);
-        }
-      }
-      const preFiltered = before - preFiltered_kept.length;
-      filtered = preFiltered_kept;
-      if (preFiltered > 0) onLog?.(`Follow: pre-filtered ${preFiltered} candidate${preFiltered !== 1 ? "s" : ""} via HikerAPI metadata${params.writeSkippedUsers ? " (added to global skip list)" : ""}`);
-    }
+    // HikerAPI metadata is retained for source context only. Account-quality
+    // filters are evaluated against Instagram's live profile UI below.
 
     // Mutable candidate pool. Extended automatically by re-scraping HikerAPI
     // whenever the current batch is exhausted before `targetCount` is reached —
@@ -9912,19 +9882,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             onLog?.(`Follow: HikerAPI re-scrape error for "${src.value}": ${e?.message}`);
           }
         }
-        // Apply the same skip/pre-filter rules as the initial pass
+        // Apply only global skip rules; account-quality filters are checked
+        // against Instagram's live profile UI below.
         const newFiltered = newRaw.filter(u => {
           if (skipFollowedUsernames?.has(u.toLowerCase())) return false;
           if (skipSkippedUsernames?.has(u.toLowerCase())) return false;
-          if (filters) {
-            const meta = candidateMeta.get(u);
-            if (meta) {
-              if (filters.skipVerified  && meta.isVerified === true) return false;
-              if (filters.skipPrivate   && meta.isPrivate  === true) return false;
-              if (filters.maxFollowers !== undefined && meta.followerCount !== undefined && meta.followerCount >= filters.maxFollowers) return false;
-              if (filters.minFollowers !== undefined && meta.followerCount !== undefined && meta.followerCount <  filters.minFollowers) return false;
-            }
-          }
           return true;
         });
         if (!newFiltered.length) {
@@ -11064,18 +11026,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               let _sfCandidates = [...new Set(_sfRaw)].sort(() => Math.random() - 0.5);
               if (_sfSkipFollowed?.size) _sfCandidates = _sfCandidates.filter(u => !_sfSkipFollowed!.has(u.toLowerCase()));
               if (_sfSkipSkipped?.size)  _sfCandidates = _sfCandidates.filter(u => !_sfSkipSkipped!.has(u.toLowerCase()));
-              if (_sfFilters) {
-                _sfCandidates = _sfCandidates.filter(u => {
-                  const meta = _sfMeta.get(u);
-                  if (!meta) return true;
-                  if (_sfFilters.skipVerified && meta.isVerified === true) return false;
-                  if (_sfFilters.skipPrivate  && meta.isPrivate  === true) return false;
-                  if (_sfFilters.maxFollowers !== undefined && meta.followerCount !== undefined && meta.followerCount >= _sfFilters.maxFollowers) return false;
-                  if (_sfFilters.minFollowers !== undefined && meta.followerCount !== undefined && meta.followerCount <  _sfFilters.minFollowers) return false;
-                  return true;
-                });
-              }
-              // Males Only is deliberately deferred to runFollowUsersStep.
+              // Account-quality filters, including Males Only, are
+              // deliberately deferred to runFollowUsersStep. Candidates must
+              // be opened in Instagram and checked against the live
+              // accessibility tree before any Follow tap.
               // Candidates must be opened in Instagram and checked against the
               // live accessibility tree before any Follow tap.
 
