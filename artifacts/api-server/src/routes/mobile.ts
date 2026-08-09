@@ -8073,6 +8073,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     onLog?: (msg: string) => void;
   }): Promise<void> {
     const { scrollsMin, scrollsMax, clickPctMin, clickPctMax, onLog } = opts;
+    // Notifications can be launched after another tool leaves Instagram on a
+    // nested screen. Establish the Home surface before looking for the heart.
+    const homeTab = await android.findHomeTab(serial).catch(() => null);
+    if (homeTab) {
+      await android.tap(serial, homeTab.x, homeTab.y);
+      await sleepOrAbort(serial, 1000);
+    } else {
+      await android.pressBack(serial);
+      await sleepOrAbort(serial, 1000);
+    }
     // Find the notifications heart icon via accessibility tree scan.
     const icon = await android.findInstagramNotificationsIcon(serial).catch(() => null);
     if (!icon) {
@@ -8196,32 +8206,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   /** Visit own profile: tap profile icon in bottom nav, dwell briefly, return to home. */
   async function runVisitOwnProfile(serial: string, onLog?: (msg: string) => void): Promise<void> {
-    // Navigate reliably to the home feed BEFORE looking for the profile tab.
-    //
-    // WHY NOT pressBack: runCheckNotifications already calls pressBack at the
-    // end to return to the home feed. Pressing Back a second time from the
-    // home feed on this device either exits Instagram entirely (KEYCODE_BACK
-    // from the root feed Activity = app exit on many Xiaomi/Redmi builds) or
-    // shows a "press Back again to exit" snackbar. In either case the
-    // accessibility tree no longer contains the Instagram bottom nav bar, so
-    // all three strategies in findInstagramProfileTab return null and the step
-    // is silently skipped every cycle.
-    //
-    // FIX: tap the Home tab by resource-id / content-desc — this is always
-    // safe from any screen inside Instagram (it just refreshes the feed) and
-    // guarantees the nav bar is fully rendered before we scan for the Profile
-    // tab. Fall back to pressBack only if findHomeTab itself returns null
-    // (e.g., we are somehow outside Instagram entirely).
-    const homeTabFirst = await android.findHomeTab(serial).catch(() => null);
-    if (homeTabFirst) {
-      await android.tap(serial, homeTabFirst.x, homeTabFirst.y);
-      await sleepOrAbort(serial, 1000);
-    } else {
-      // Last resort: press Back and hope we land somewhere with a nav bar.
-      await android.pressBack(serial);
-      await sleepOrAbort(serial, 1000);
-    }
-
     // Locate profile tab via accessibility tree — more reliable than fixed %
     // coordinates which drift across screen resolutions and OEM skins.
     const profileTab = await android.findInstagramProfileTab(serial).catch(() => null);
@@ -8264,17 +8248,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
    *   - Settings and activity page Saved row: View content-desc="Saved"
    */
   async function runVisitSaved(serial: string, onLog?: (msg: string) => void): Promise<void> {
-    // 1. Ensure we're on the home feed first (same guard used by runVisitOwnProfile).
-    const homeTabFirst = await android.findHomeTab(serial).catch(() => null);
-    if (homeTabFirst) {
-      await android.tap(serial, homeTabFirst.x, homeTabFirst.y);
-      await sleepOrAbort(serial, 1000);
-    } else {
-      await android.pressBack(serial);
-      await sleepOrAbort(serial, 1000);
-    }
-
-    // 2. Tap the profile tab (bottom nav, rightmost icon).
+    // Tap the profile tab directly; it is available in the Instagram bottom
+    // navigation regardless of which tool opened this action.
     const profileTab = await android.findInstagramProfileTab(serial).catch(() => null);
     if (!profileTab) {
       onLog?.("Visit Saved: profile tab not found — skipping");
@@ -8362,17 +8337,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
    * Never use a blind coordinate tap and never tap a second-level setting.
    */
   async function runVisitSettings(serial: string, onLog?: (msg: string) => void): Promise<void> {
-    // 1. Ensure we're on the home feed first.
-    const homeTabFirst = await android.findHomeTab(serial).catch(() => null);
-    if (homeTabFirst) {
-      await android.tap(serial, homeTabFirst.x, homeTabFirst.y);
-      await sleepOrAbort(serial, 1000);
-    } else {
-      await android.pressBack(serial);
-      await sleepOrAbort(serial, 1000);
-    }
-
-    // 2. Tap the profile tab (bottom nav, rightmost icon).
+    // Tap the profile tab directly; it is available in the Instagram bottom
+    // navigation regardless of which tool opened this action.
     const profileTab = await android.findInstagramProfileTab(serial).catch(() => null);
     if (!profileTab) {
       onLog?.("Visit Settings: profile tab not found — skipping");
