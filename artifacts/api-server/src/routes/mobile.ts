@@ -11198,34 +11198,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // ── Stories ─────────────────────────────────────────────────────
         } else if (_tool === 'stories') {
           if (_toolActivated[_tool]) { // pre-rolled above
-            if (_isFirst) {
-              // First tool — Instagram just opened, already on the home feed.
-              // The story tray takes ~1–2 s to populate after the feed renders,
-              // so we wait long enough for the bubbles to appear before dumping.
-              tLog("▶ Stories: already on home feed — waiting for story tray to load…");
-              await sleepOrAbort(serial, 2500);
+            // Always establish the Home feed first, even when Stories is the
+            // first tool in the cycle. The phone can still be on a nested
+            // screen from a previous cycle or app resume.
+            tLog("▶ Tapping Home tab for stories…");
+            const homeTab = await android.findHomeTab(serial).catch(() => null);
+            if (homeTab) {
+              await android.tap(serial, homeTab.x, homeTab.y);
             } else {
-              // Another tool ran before Stories and may have left the phone
-              // anywhere (Reels full-screen, Search, profile, etc.). Always
-              // tap Home so the story tray is at the top and freshly loaded,
-              // regardless of which tool preceded this one.
-              tLog("▶ Tapping Home tab for stories…");
-              const homeTab = await android.findHomeTab(serial).catch(() => null);
-              if (homeTab) {
-                await android.tap(serial, homeTab.x, homeTab.y);
-              } else {
-                const { w: sw, h: sh } = getScreenSize(serial);
-                await android.tap(serial, Math.round(sw * 0.10), Math.round(sh * 0.975));
-              }
-              // Dismiss any popup that appeared after tapping Home.
-              const preStoriesPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
-              if (preStoriesPopup) {
-                steps.push(`pre-stories-popup-dismissed(${preStoriesPopup})`);
-                await sleepOrAbort(serial, 600);
-              }
-              tLog("▶ Waiting for story tray to load…");
-              await sleepOrAbort(serial, 5000);
+              const { w: sw, h: sh } = getScreenSize(serial);
+              await android.tap(serial, Math.round(sw * 0.10), Math.round(sh * 0.975));
             }
+            // Dismiss any popup that appeared after tapping Home.
+            const preStoriesPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
+            if (preStoriesPopup) {
+              steps.push(`pre-stories-popup-dismissed(${preStoriesPopup})`);
+              await sleepOrAbort(serial, 600);
+            }
+            tLog("▶ Waiting for story tray to load…");
+            await sleepOrAbort(serial, 5000);
             tLog(`▶ Starting stories (up to ${viewStoriesSlidesMax})`);
             const result = await runViewStoriesFromFeedLoop(serial, {
               slidesMin: viewStoriesSlidesMin, slidesMax: viewStoriesSlidesMax,
