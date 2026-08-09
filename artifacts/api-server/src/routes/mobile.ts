@@ -3671,7 +3671,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         n.rid.includes("row_feed_button_like") || /^(?:un)?like$/i.test(n.desc);
       const likeByCoord = new Map<string, ViewFeedA11yNode>();
       for (const node of nodes) {
-        if (!node.clickable || !isLike(node)) continue;
+        // Instagram exposes the real Like control inconsistently: the
+        // row_feed_button_like child can be a non-clickable Button while its
+        // tappable parent ViewGroup owns the same bounds. The resource ID is
+        // an unambiguous action identity, so accept it using its live bounds.
+        // Label-only Like/Unlike matches remain strict and must be clickable.
+        if (!isLike(node) || (!node.clickable && !node.rid.includes("row_feed_button_like"))) continue;
         const key = `${node.x},${node.y}`;
         const previous = likeByCoord.get(key);
         // Prefer the concrete resource-id node over a same-centre wrapper.
