@@ -3407,6 +3407,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     fallback: { x1: number; y1: number; x2: number; y2: number; durationMs: number },
     source: string,
     personality?: "skim" | "normal" | "interested" | "back",
+    axis?: "vertical",
   ): Promise<{ x1: number; y1: number; x2: number; y2: number; durationMs: number; profile: boolean }> {
     let configured: DevicePrefs["swipeGesture"] | undefined;
     try { configured = loadInstanceConfigs()[serial]?.devicePrefs?.swipeGesture; } catch { configured = undefined; }
@@ -3451,7 +3452,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const path = {
       x1: clamp((reversed ? configured.x2 : configured.x1) + dx, size.w),
       y1: clamp((reversed ? configured.y2 : configured.y1) + (reversed ? endDy : startDy), size.h),
-      x2: clamp((reversed ? configured.x1 : configured.x2) + dx, size.w),
+      x2: clamp((axis === "vertical"
+        ? (reversed ? configured.x2 : configured.x1)
+        : (reversed ? configured.x1 : configured.x2)) + dx, size.w),
       y2: clamp((reversed ? configured.y1 : configured.y2) + (reversed ? startDy : endDy), size.h),
       durationMs,
     };
@@ -6416,7 +6419,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       reelsPersonalityHistory.lastMode = rsv.mode;
       onLog?.(`${reelLabel}: advance swipe [${rsv.mode}]`);
       logger.info({ serial, source: "reels-advance", mode: rsv.mode, from: [rx, rsv.fromY], to: [rx, rsv.toY], durationMs: rsv.duration }, "[mobile-input] swipe");
-      await deviceProfileSwipe(serial, { x1: rx, y1: rsv.fromY, x2: rx, y2: rsv.toY, durationMs: rsv.duration }, "reels-advance", rsv.mode as "skim" | "normal" | "interested" | "back");
+      await deviceProfileSwipe(serial, { x1: rx, y1: rsv.fromY, x2: rx, y2: rsv.toY, durationMs: rsv.duration }, "reels-advance", rsv.mode as "skim" | "normal" | "interested" | "back", "vertical");
     };
 
     // Instagram can replace the Reels player with the Reels Suggestions
