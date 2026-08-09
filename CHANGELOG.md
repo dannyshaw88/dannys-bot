@@ -1,3 +1,11 @@
+## [1.2.432] — 2026-08-09
+
+### Improved — Cleaner Reels action-column logs
+
+- Reels accessibility scans now collapse the full action-column dump behind
+  the existing chevron, keeping the Debugging Log readable while preserving
+  the complete scan output for expansion, copying, and export.
+
 ## [1.2.431] — 2026-08-09
 
 ### Fixed — Complete account-slot state reset

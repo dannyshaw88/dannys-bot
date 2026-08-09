@@ -9704,7 +9704,9 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                     (previousIsDump && isAccessibilityDumpLine(line)) ||
                     (previousIsInjectBurst && isInjectBrowsingBurstLine(line)) ||
                     (previousIsStoryTray && isStoryTrayBurstLine(line)) ||
-                    (previousIsReelsBurst && isReelsBurstLine(line))
+                    (previousIsReelsBurst && (
+                      isReelsBurstLine(line) || isAccessibilityDumpLine(line)
+                    ))
                   )
                 ) previous.push(line);
                else groups.push([line]);
