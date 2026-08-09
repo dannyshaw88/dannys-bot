@@ -9184,8 +9184,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (isCycleAborted(serial)) throw new Error("cycle-aborted");
       logger.info({ serial, source: "inject-profile-grid-scroll-down", from: [x, y1], to: [x, y2] }, "[mobile-input] swipe");
       await deviceProfileSwipe(serial, { x1: x, y1: y1, x2: x, y2: y2, durationMs: 500 + Math.round(Math.random() * 200) }, "inject-profile-grid-scroll-down");
-      // Wait 4–10 seconds so images fully render before the next scroll.
-      const renderWait = 4000 + Math.round(Math.random() * 6000);
+      // Wait 4–7 seconds so images fully render before the next scroll.
+      const renderWait = 4000 + Math.round(Math.random() * 3000);
       onLog?.(`Inject Browsing: waiting ${(renderWait / 1000).toFixed(1)}s for media to render…`);
       await sleepOrAbort(serial, renderWait);
     }
