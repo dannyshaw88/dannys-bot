@@ -8798,11 +8798,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // 2. Tap the "Edit profile" button.
     {
       const xml = await android.dumpUi(serial);
-      const m = xml.match(/desc="Edit profile"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ||
-                xml.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^>]*desc="Edit profile"/);
+      const m = xml.match(/(?:desc|text|content-desc)="Edit profile"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i) ||
+                xml.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^>]*(?:desc|text|content-desc)="Edit profile"/i) ||
+                xml.match(/resource-id="[^"]*(?:edit_profile|edit_profile_button)[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
       if (!m) { onLog?.("Update Bio: ✗ Edit profile button not found"); await android.pressBack(serial); return; }
       await android.tap(serial, Math.round((+m[1] + +m[3]) / 2), Math.round((+m[2] + +m[4]) / 2));
-      onLog?.("Update Bio: tapped Edit profile");
     }
     await sleepOrAbort(serial, 1800 + Math.round(Math.random() * 400));
 
@@ -8810,8 +8810,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     {
       const xml = await android.dumpUi(serial);
       if (!xml.includes("edit_profile_fields") && !xml.includes("prism_form_field_container")) {
-        onLog?.("Update Bio: ✗ Edit Profile page did not load"); await android.pressBack(serial); return;
+        onLog?.("Update Bio: ✗ Edit Profile page did not load after verified Edit profile-node tap");
+        await android.pressBack(serial); return;
       }
+      onLog?.("Update Bio: ✓ Edit Profile page loaded after verified Edit profile-node tap");
       // The bio section is a Button with resource-id ending in "bio"; its
       // EditText child is what we tap to place the cursor.
       const m = xml.match(/resource-id="[^"]*\bbio\b[^"]*"[^/]*\/?>[\s\S]*?<[^>]*EditText[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ||

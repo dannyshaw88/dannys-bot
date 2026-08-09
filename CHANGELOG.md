@@ -1,3 +1,18 @@
+## [1.2.441] — 2026-08-09
+
+### Fixed — Update Bio Edit Profile verification
+
+- Update Bio now recognizes the live Edit profile control through its
+  accessibility text, description, content description, or supported resource
+  ID instead of relying only on one description attribute.
+- The automation no longer reports “tapped Edit profile” immediately after
+  dispatching a tap.
+- It now confirms that the Edit Profile page actually loaded before continuing
+  to the bio field.
+- If the page does not load, the log clearly reports the verified-node failure
+  and stops the Update Bio path instead of proceeding as though navigation
+  succeeded.
+
 ## [1.2.440] — 2026-08-09
 
 ### Improved — Reels swipe diagnostics
