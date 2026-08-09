@@ -1,5 +1,16 @@
 ## [1.2.447] — 2026-08-09
 
+### Removed — View Feed suggestion side-swipes
+
+- Removed the View Feed Suggestions % setting and all suggestion-carousel
+  browsing logic.
+- View Feed no longer performs horizontal/side swipes over “Suggested for
+  you”, “People you may know”, or Suggested Reels shelves.
+- Removed the obsolete suggestion counter from feed execution results and
+  summaries.
+- Normal vertical View Feed scrolling and all other automation tools remain
+  unchanged.
+
 ### Fixed — Story tray Home retry and safe abort
 
 - Stories now establishes the Home surface before checking for story bubbles.
