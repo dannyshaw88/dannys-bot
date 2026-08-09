@@ -6409,14 +6409,37 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Reels snap fully to the next clip on a swipe — unlike the feed's
     // partial scroll (runCheckFeedLoop), a single full-height swipe here
     // always lands on exactly the next reel.
+    const summarizeReelsSwipeScreen = (xml: string): string => {
+      if (!xml) return "empty-ui-dump";
+      const markers = [
+        "reel_viewer", "reels_feed_media_view", "clips_tab", "clips_author_username",
+        "Friends", "Popular profiles", "Suggested profiles", "People you may know",
+        "Follow", "Edit profile", "Share profile", "Discover people",
+        "task_view_thumbnail", "recents_container", "com.instagram.android",
+      ];
+      const found = markers.filter(marker => xml.includes(marker));
+      const texts = [...xml.matchAll(/(?:text|content-desc)="([^"]+)"/g)]
+        .map(match => match[1])
+        .filter(value => value.length > 1)
+        .slice(0, 16);
+      return `bytes=${xml.length} markers=[${found.join(",") || "none"}] labels=[${texts.join(" | ")}]`;
+    };
+
     const swipeToNextReel = async (reelLabel: string) => {
       const rx = Math.round(w / 2);
       const rsv = rollScrollVelocity(h, reelsScrollWeights, /*allowBack=*/false, /*safeStartFrac=*/0.80, reelsPersonalityHistory);
       reelsPersonalityHistory.streak = reelsPersonalityHistory.lastMode === rsv.mode ? reelsPersonalityHistory.streak + 1 : 1;
       reelsPersonalityHistory.lastMode = rsv.mode;
+      const beforeXml = await android.dumpUi(serial).catch(() => "");
+      onLog?.(`${reelLabel}: swipe screen BEFORE — ${summarizeReelsSwipeScreen(beforeXml)}`);
       onLog?.(`${reelLabel}: advance swipe [${rsv.mode}]`);
       logger.info({ serial, source: "reels-advance", mode: rsv.mode, from: [rx, rsv.fromY], to: [rx, rsv.toY], durationMs: rsv.duration }, "[mobile-input] swipe");
-      await deviceProfileSwipe(serial, { x1: rx, y1: rsv.fromY, x2: rx, y2: rsv.toY, durationMs: rsv.duration }, "reels-advance", rsv.mode as "skim" | "normal" | "interested" | "back");
+      const actualPath = await deviceProfileSwipe(serial, { x1: rx, y1: rsv.fromY, x2: rx, y2: rsv.toY, durationMs: rsv.duration }, "reels-advance", rsv.mode as "skim" | "normal" | "interested" | "back");
+      const afterXml = await android.dumpUi(serial).catch(() => "");
+      onLog?.(
+        `${reelLabel}: swipe screen AFTER — ${summarizeReelsSwipeScreen(afterXml)}` +
+        `; completed=${actualPath.x1},${actualPath.y1}->${actualPath.x2},${actualPath.y2}`,
+      );
     };
 
     // Instagram can replace the Reels player with the Reels Suggestions

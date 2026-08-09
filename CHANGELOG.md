@@ -1,3 +1,15 @@
+## [1.2.440] — 2026-08-09
+
+### Improved — Reels swipe diagnostics
+
+- Reels advance swipes now record the live UIAutomator state immediately
+  before and after each gesture, including detected screen markers and visible
+  accessibility labels.
+- Each entry records the requested swipe mode and the calibrated gesture path
+  actually used, making it possible to distinguish a screen transition from
+  gesture injection when a device behaves unexpectedly.
+- Swipe behavior itself was not changed by this diagnostic update.
+
 ## [1.2.439] — 2026-08-09
 
 ### Fixed — Reels player detection and Suggestions scrolling
