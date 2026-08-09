@@ -1,3 +1,11 @@
+## [1.2.435] — 2026-08-09
+
+### Fixed — Windows installer packaging
+
+- Corrected the NSIS Program Files default-directory macro so the Windows
+  installer can package successfully and defaults to
+  `C:\Program Files\Aura Farming`.
+
 ## [1.2.434] — 2026-08-09
 
 ### Fixed — Installer path and mobile automation timing
