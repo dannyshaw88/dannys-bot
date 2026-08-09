@@ -54,6 +54,11 @@
   ; property. Set the initial directory through NSIS so the directory page
   ; opens at Program Files while still allowing the user to change it.
   StrCpy $INSTDIR "$PROGRAMFILES\Aura Farming"
+  ; Aura Farming stays alive in the system tray after its window is closed.
+  ; Stop that tray process before NSIS checks files for replacement; otherwise
+  ; users can see "Aura Farming cannot be closed" even when no window is open.
+  ExecWait '"$SYSDIR\taskkill.exe" /F /T /IM "Aura Farming.exe"' $R9
+  Sleep 1000
   ; Signal to any already-installed version's uninstaller that this is an
   ; update, not a user-initiated uninstall.  The old customUnInstall reads
   ; this flag and skips deleting the desktop shortcut so the icon position

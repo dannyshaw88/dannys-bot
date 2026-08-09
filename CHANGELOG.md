@@ -1,3 +1,11 @@
+## [1.2.437] — 2026-08-09
+
+### Fixed — Installer closes hidden tray process
+
+- Windows installers now stop an existing hidden or tray-running Aura Farming
+  process before replacing files, preventing the misleading “Aura Farming
+  cannot be closed” prompt when no application window is visible.
+
 ## [1.2.436] — 2026-08-09
 
 ### Fixed — Windows installer build and default path
