@@ -155,6 +155,26 @@ async function fetchPhones(): Promise<PhonesResponse> {
   return r.json() as Promise<PhonesResponse>;
 }
 
+// The USB endpoint includes a fresh checkedAt on every poll. Do not let that
+// heartbeat replace the response object every three seconds: MobilePage owns
+// the large Accounts/HST tree, so an otherwise identical poll would rerender
+// the whole device view and make clicks feel delayed.
+function samePhoneSnapshot(a: PhonesResponse, b: PhonesResponse): boolean {
+  if (a.adbFound !== b.adbFound || a.adbPath !== b.adbPath ||
+      a.rawOutput !== b.rawOutput || a.phones.length !== b.phones.length) return false;
+  return a.phones.every((phone, i) => {
+    const other = b.phones[i];
+    return !!other &&
+      phone.serial === other.serial &&
+      phone.state === other.state &&
+      phone.model === other.model &&
+      phone.manufacturer === other.manufacturer &&
+      phone.marketName === other.marketName &&
+      phone.androidVersion === other.androidVersion &&
+      phone.product === other.product;
+  });
+}
+
 async function sendKey(serial: string, code: number, label: string, onLog?: (msg: string) => void) {
   onLog?.(`Key → ${label} (${code})`);
   try {
@@ -10050,7 +10070,10 @@ export function MobilePage() {
   const refresh = useCallback(async (showSpinner = false) => {
     if (showSpinner) setLoading(true);
     setError(null);
-    try { setData(await fetchPhones()); }
+    try {
+      const next = await fetchPhones();
+      setData(previous => previous && samePhoneSnapshot(previous, next) ? previous : next);
+    }
     catch (e: any) { setError(e?.message ?? "Failed to check devices"); }
     finally { setLoading(false); }
   }, []);
