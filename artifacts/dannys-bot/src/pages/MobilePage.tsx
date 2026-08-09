@@ -9753,17 +9753,20 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                // Once a tool stamp is active, its colour owns the whole block:
                // success, warning, error, and diagnostic sub-lines must not
                // fall through to the generic white/status colours.
-                let msgClass = 'text-white';
+                 let msgClass = 'text-white';
+                 const isReelsMessage = /\b(?:Reel|Reels)\b/i.test(msg) || /▶\s*View Reels\b/i.test(msg);
                 const activeToolClass =
                   currentTool === 'explore' ? 'text-green-400' :
                   currentTool === 'feed' ? 'text-orange-400' :
-                  currentTool === 'reels' ? 'text-rose-500' :
+                   currentTool === 'reels' ? 'text-red-500' :
                   currentTool === 'stories' ? 'text-cyan-400' :
                   currentTool === 'makepost' ? 'text-purple-400' :
                   currentTool === 'follow' ? 'text-blue-400' :
                   currentTool === 'randomactions' ? 'text-purple-400' :
                   null;
-                if (activeToolClass) {
+                 if (isReelsMessage) {
+                   msgClass = 'text-red-500';
+                 } else if (activeToolClass) {
                   msgClass = activeToolClass;
                 // Follow owns one color, including Spread Follow, inject
                 // browsing, success, navigation, and failure lines. Keep this
@@ -9774,7 +9777,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                 else if (/\bView Feed\b|▶ View Feed/.test(msg))      msgClass = 'text-orange-400';
                 else if (/\bView Explore\b|▶ View Explore|[Ee]xplore/.test(msg))
                                                                      msgClass = 'text-green-400';
-                else if (/[Rr]eel/.test(msg))                          msgClass = 'text-rose-500';
+                 else if (isReelsMessage)                                      msgClass = 'text-red-500';
                 else if (/▶.*[Ss]tories|\b[Ss]tories\b/.test(msg))  msgClass = 'text-cyan-400';
                 else if (/\bMake a Post\b|▶ Make a Post/.test(msg))  msgClass = 'text-purple-400';
                 else if (/\bRandom Actions\b|▶ Random Actions|^jitter-/.test(msg)) msgClass = 'text-purple-400';
