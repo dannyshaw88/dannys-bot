@@ -9349,6 +9349,13 @@ export async function typeViaSavedCalibrationMap(
   onLog?: (msg: string) => void,
 ): Promise<{ ok: boolean; available: boolean; missing: string[] }> {
   const map = loadKeyCalibrationMap(serial);
+  const mapPath = _calibrationPath(serial);
+  const uniqueChars = [...new Set([...text])].join("");
+  onLog?.(
+    `[cal-keyboard] serial=${serial} map=${map ? "loaded" : "missing"} ` +
+    `entries=${map ? Object.keys(map).length : 0} typingProfile=${typingProfile ? "loaded" : "missing"} ` +
+    `textLength=${text.length} uniqueChars=${JSON.stringify(uniqueChars)} path=${mapPath}`,
+  );
   if (!map) {
     onLog?.("[cal-keyboard] no saved calibration map");
     return { ok: false, available: false, missing: [...text] };
@@ -9386,7 +9393,10 @@ export async function typeViaSavedCalibrationMap(
   if (needsMoreSymbols) required.add("moreSymbols");
   const missing = [...required].filter(key => !hasPoint(key));
   if (missing.length) {
-    onLog?.(`[cal-keyboard] calibration preflight missing: ${missing.join(", ")}`);
+    onLog?.(
+      `[cal-keyboard] calibration preflight missing: ${missing.join(", ")} ` +
+      `(serial=${serial}, mappedKeys=${Object.keys(map).length})`,
+    );
     return { ok: false, available: true, missing };
   }
 

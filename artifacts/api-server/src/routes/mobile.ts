@@ -8868,7 +8868,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (!typed.ok) {
         onLog?.(
           `Update Bio: ✗ calibrated keyboard could not enter bio` +
-          `${typed.missing.length ? ` — missing ${typed.missing.join(", ")}` : ""}`,
+          `${typed.missing.length ? ` — missing ${typed.missing.join(", ")}` : ""}` +
+          ` (serial=${serial}, calibrationAvailable=${typed.available})`,
         );
         await android.pressBack(serial);
         return;
