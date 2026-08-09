@@ -9369,7 +9369,13 @@ export async function typeViaSavedCalibrationMap(
     "^", "°", "{", "}", "[", "]", "\\", "<", ">",
   ]);
   const hasPoint = (key: string) => {
-    const point = map[key];
+    const aliases: Record<string, string[]> = {
+      "'": ["'", "apostrophe", "singleQuote", "single-quote"],
+      "\"": ["\"", "quote", "doubleQuote", "double-quote"],
+    };
+    const point = [key, ...(aliases[key] ?? [])]
+      .map(alias => map[alias])
+      .find(candidate => candidate && Number.isFinite(candidate.x) && Number.isFinite(candidate.y));
     return !!point && Number.isFinite(point.x) && Number.isFinite(point.y);
   };
   const required = new Set<string>();
@@ -9976,7 +9982,13 @@ export async function typeViaCalibrationMap(
   _calKeyboardLayer.set(serial, layer);
 
   const tapMapped = async (label: string, description = label): Promise<boolean> => {
-    const pos = map[label];
+    const aliases: Record<string, string[]> = {
+      "'": ["'", "apostrophe", "singleQuote", "single-quote"],
+      "\"": ["\"", "quote", "doubleQuote", "double-quote"],
+    };
+    const pos = [label, ...(aliases[label] ?? [])]
+      .map(alias => map[alias])
+      .find(candidate => candidate && Number.isFinite(candidate.x) && Number.isFinite(candidate.y));
     if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) {
       onLog?.(`[cal-keyboard] '${description}' is not in calibration map`);
       return false;
