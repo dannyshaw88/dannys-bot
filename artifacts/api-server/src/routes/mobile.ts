@@ -6419,6 +6419,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await deviceProfileSwipe(serial, { x1: rx, y1: rsv.fromY, x2: rx, y2: rsv.toY, durationMs: rsv.duration }, "reels-advance", rsv.mode as "skim" | "normal" | "interested" | "back");
     };
 
+    // Instagram can replace the Reels player with the Reels Suggestions
+    // surface ("Friends" / "Popular profiles") after the available clips are
+    // exhausted.  It remains under the Reels tab, so a tab check alone cannot
+    // distinguish it from a playable Reel.  Never send the normal Reel
+    // advance swipe through that surface: the swipe is then interpreted as a
+    // horizontal suggestion-carousel interaction by Instagram.
+    const isReelsSuggestionsSurface = async (): Promise<boolean> => {
+      const xml = await android.dumpUi(serial).catch(() => "");
+      if (!xml) return false;
+      const hasReelsContext =
+        xml.includes('text="Reels"') ||
+        xml.includes('content-desc="Reels"') ||
+        xml.includes("clips_tab");
+      const hasSuggestionHeading =
+        /(?:text|content-desc)="(?:Friends|Popular profiles|Suggested profiles|People you may know)"/i.test(xml);
+      const followCards = (xml.match(/(?:text|content-desc)="Follow"/gi) ?? []).length;
+      return hasReelsContext && (hasSuggestionHeading || followCards >= 2);
+    };
+
     for (let i = 0; i < totalReels; i++) {
       if (isCycleAborted(serial)) throw new Error("cycle-aborted");
       const reelTimingStartedAt = Date.now();
@@ -6869,6 +6888,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       );
 
       if (i < totalReels - 1) {
+        if (await isReelsSuggestionsSurface()) {
+          onLog?.(`Reel ${i + 1}/${totalReels}: Reels Suggestions surface detected — stopping before advance swipe`);
+          break;
+        }
         await swipeToNextReel(`Reel ${i + 1}/${totalReels}`);
         await sleepOrAbort(serial, 400 + Math.round(Math.random() * 300));
       }
