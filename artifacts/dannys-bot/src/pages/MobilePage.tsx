@@ -9686,6 +9686,14 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                /\bInject Browsing:\s+(?:waiting for media to render|media .*?render|no .*?media)/i.test(line);
              const isStoryTrayBurstLine = (line: string) =>
                /\bStory tray:\s+/i.test(line);
+             // findReelActionIcons emits its diagnostic column dump through
+             // several individually timestamped lines. Those lines are not
+             // always full XML attributes, so keep them together explicitly
+             // instead of relying only on isAccessibilityDumpLine().
+             const isReelIconScanLine = (line: string) =>
+               /\[reel-icons\]/i.test(line) ||
+               /\b(?:x|y)=\d+\b.*\b(?:cd|rid|cls|txt)=/i.test(line) ||
+               /scanning right-side action column/i.test(line);
              const isReelsBurstLine = (line: string) =>
                /\b(?:Reel|View Reels):\s+/i.test(line) ||
                /▶\s*View Reels\b/i.test(line);
@@ -9695,6 +9703,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                 const previousIsDump = previous?.some(isAccessibilityDumpLine) ?? false;
                 const previousIsInjectBurst = previous?.some(isInjectBrowsingBurstLine) ?? false;
                 const previousIsStoryTray = previous?.some(isStoryTrayBurstLine) ?? false;
+                const previousIsReelIconScan = previous?.some(isReelIconScanLine) ?? false;
                 const previousIsReelsBurst = previous?.some(isReelsBurstLine) ?? false;
                 if (
                   previous &&
@@ -9704,8 +9713,13 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                     (previousIsDump && isAccessibilityDumpLine(line)) ||
                     (previousIsInjectBurst && isInjectBrowsingBurstLine(line)) ||
                     (previousIsStoryTray && isStoryTrayBurstLine(line)) ||
+                    (previousIsReelIconScan && (
+                      isReelIconScanLine(line) || isAccessibilityDumpLine(line)
+                    )) ||
                     (previousIsReelsBurst && (
-                      isReelsBurstLine(line) || isAccessibilityDumpLine(line)
+                      isReelsBurstLine(line) ||
+                      isReelIconScanLine(line) ||
+                      isAccessibilityDumpLine(line)
                     ))
                   )
                 ) previous.push(line);
@@ -9782,7 +9796,8 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                 // the summary/header for Reels bursts. Reels often immediately
                 // emit a very large accessibility/XML dump; showing three
                 // rows still exposed that clutter before the chevron.
-                const isReelsGroup = group.some(isReelsBurstLine);
+                const isReelsGroup = group.some(isReelsBurstLine) ||
+                  group.some(isReelIconScanLine);
                 const visibleRowCount = isReelsGroup ? 1 : 3;
                 const collapsible = group.length > visibleRowCount;
                const groupKey = `${groupIndex}:${timestampOf(group[0])}`;
