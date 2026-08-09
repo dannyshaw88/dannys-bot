@@ -12960,9 +12960,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.post("/api/mobile/devices/:serial/standby", async (req: Request, res: Response) => {
     try {
       const { on } = standbySchema.parse(req.body);
-      if (on) await android.wakeScreen(p(req, "serial"));
-      else     await android.sleepScreen(p(req, "serial"));
-      res.json({ ok: true });
+      const serial = p(req, "serial");
+      if (on) await android.ensureScreenOn(serial);
+      else {
+        await android.sleepScreen(serial);
+        // KEYCODE_SLEEP returns before some OEMs update dumpsys power. Read
+        // back briefly so the client never treats a stale optimistic value as
+        // the physical device state.
+        for (let i = 0; i < 8; i++) {
+          const actual = await android.isScreenOn(serial);
+          if (actual === false) {
+            res.json({ ok: true, on: false });
+            return;
+          }
+          await new Promise(resolve => setTimeout(resolve, 125));
+        }
+      }
+      const actual = await android.isScreenOn(serial);
+      res.json({ ok: true, on: actual ?? on });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 

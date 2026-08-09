@@ -8422,11 +8422,14 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const handleStandby = React.useCallback(async () => {
     if (!serial) return;
     const next = !screenOn;
-    setScreenOn(next);
-    await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/standby`, {
+    const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/standby`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ on: next }),
-    }).catch(() => {});
+    }).catch(() => null);
+    const result = response?.ok
+      ? await response.json().catch(() => null)
+      : null;
+    if (typeof result?.on === "boolean") setScreenOn(result.on);
   }, [serial, screenOn]);
 
   const handleReboot = React.useCallback(async () => {
