@@ -9597,7 +9597,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       try {
         await android.pressBack(serial);
         await sleepOrAbort(serial, 500);
-        onLog?.("Follow: cleanup — cleared search and pressed Back to normal UI");
+        // The first Android Back is commonly consumed by Gboard after the
+        // search field is cleared. Send a second Back so Instagram leaves
+        // the search surface and returns to the Home feed.
+        await android.pressBack(serial);
+        await sleepOrAbort(serial, 500);
+        onLog?.("Follow: cleanup — cleared search and pressed Back twice to normal UI");
       } catch (e: any) {
         if (e?.message === "cycle-aborted") throw e;
         onLog?.(`Follow: cleanup Back failed — ${e?.message ?? "unknown error"}`);

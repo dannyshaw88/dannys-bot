@@ -1,3 +1,11 @@
+## [1.2.438] — 2026-08-09
+
+### Fixed — Follow cleanup navigation
+
+- Follow cleanup now sends a second Android Back press after clearing the
+  search field so the first press can dismiss Gboard and the second can leave
+  Instagram’s search surface.
+
 ## [1.2.437] — 2026-08-09
 
 ### Fixed — Installer closes hidden tray process
