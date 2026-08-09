@@ -1,3 +1,25 @@
+## [1.2.447] — 2026-08-09
+
+### Fixed — Story tray Home retry and safe abort
+
+- Stories now establishes the Home surface before checking for story bubbles.
+- If no bubbles are found, Stories taps the live Home control once more and
+  performs one fresh accessibility-tree check.
+- If the second check still finds no bubbles, the Stories tool aborts cleanly
+  without opening a guessed target or performing story actions.
+- The retry is isolated to the Stories entry path and does not change View
+  Feed, Explore, Reels, Follow, or other automation tools.
+
+### Improved — View Feed carousel diagnostics
+
+- A failed View Feed Like/Unlike scan now records the raw action/media-region
+  accessibility nodes in the debugging log, including resource IDs,
+  descriptions, text, classes, bounds, and clickable state.
+- The diagnostic includes carousel media nodes so carousel-specific hierarchy
+  differences can be identified from the exported log without requiring a
+  mid-run manual dump.
+- This is diagnostic-only and does not alter View Feed tap behavior.
+
 ## [1.2.446] — 2026-08-09
 
 ### Fixed — Debugging Log tool colours

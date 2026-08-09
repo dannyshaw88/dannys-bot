@@ -3694,6 +3694,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const likes = [...likeByCoord.values()];
       if (likes.length === 0) {
         onLog?.("View Feed a11y scan: no clickable Like/Unlike node");
+        // View Feed diagnostic only: preserve the raw node attributes that
+        // explain a failed action-bar match. This is especially important for
+        // carousels, whose media hierarchy differs from single-photo posts.
+        // Do not dump the entire XML into the UI log; retain every node in the
+        // action-bar band plus media-group nodes so the next exported log is
+        // self-contained without changing automation behavior.
+        const diagnosticNodes = nodes.filter(n =>
+          (n.y1 >= 0.40 * getScreenSize(serial).h && n.y1 <= 0.82 * getScreenSize(serial).h) ||
+          /(?:carousel_)?media_group/i.test(n.rid),
+        );
+        onLog?.(
+          `View Feed a11y diagnostic: ${diagnosticNodes.length} raw node(s) in ` +
+          `action/media region`,
+        );
+        for (const n of diagnosticNodes) {
+          onLog?.(
+            `[feed-raw-node] ${n.clickable ? "CLICKABLE" : "view"} ` +
+            `rid="${n.rid}" desc="${n.desc}" text="${n.text}" ` +
+            `class="${n.cls}" bounds="[${n.x1},${n.y1}][${n.x2},${n.y2}"]"`,
+          );
+        }
         return null;
       }
 
@@ -4921,6 +4942,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // tray sometimes finishes populating slightly after the feed renders.
     if (storyBubbles.length === 0) {
       onLog?.(`Story tray: first dump found no story bubbles — waiting 2 s and retrying…`);
+      await new Promise(r => setTimeout(r, 2000));
+      trayXml = await android.dumpUi(serial).catch(() => "");
+      storyBubbles = extractStoryBubbles(trayXml);
+    }
+
+    if (storyBubbles.length === 0) {
+      onLog?.(`Story tray: no bubbles after initial Home check — tapping Home once more and re-checking…`);
+      const retryHome = await android.findHomeTab(serial).catch(() => null);
+      if (retryHome) {
+        await android.tap(serial, retryHome.x, retryHome.y);
+      } else {
+        const { w: retryW, h: retryH } = getScreenSize(serial);
+        await android.tap(serial, Math.round(retryW * 0.10), Math.round(retryH * 0.975));
+      }
       await new Promise(r => setTimeout(r, 2000));
       trayXml = await android.dumpUi(serial).catch(() => "");
       storyBubbles = extractStoryBubbles(trayXml);
@@ -11237,6 +11272,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             tLog("▶ Waiting for story tray to load…");
             await sleepOrAbort(serial, 5000);
             tLog(`▶ Starting stories (up to ${viewStoriesSlidesMax})`);
+            const storyEntry = await pickAndOpenRandomStory(
+              serial,
+              getScreenSize(serial).w,
+              getScreenSize(serial).h,
+              (msg) => tLog(`  ${msg}`),
+            );
+            if (!storyEntry.opened) {
+              steps.push("stories(aborted — no story bubbles after Home retry)");
+              tLog("▶ Stories aborted — no story bubbles available");
+              continue;
+            }
             const result = await runViewStoriesFromFeedLoop(serial, {
               slidesMin: viewStoriesSlidesMin, slidesMax: viewStoriesSlidesMax,
               slideWatchPctMin: viewStoriesSlideWatchPctMin, slideWatchPctMax: viewStoriesSlideWatchPctMax,
