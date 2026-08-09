@@ -3788,10 +3788,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // its own mix so the distribution never converges to a fixed signature
     // over many sessions. Weights are relative (don't need to sum to 100).
     const feedScrollWeights = {
-      skim:      Math.max(5,  28 + Math.round((Math.random() - 0.5) * 24)),  // ~16–40
-      normal:    Math.max(10, 50 + Math.round((Math.random() - 0.5) * 24)),  // ~38–62
-      interested:Math.max(2,  14 + Math.round((Math.random() - 0.5) * 16)),  //  ~6–22
-      back:      Math.max(0,   8 + Math.round((Math.random() - 0.5) * 16)),  //   0–16
+      skim:      25 + Math.floor(Math.random() * 16), // 25–40
+      normal:    38 + Math.floor(Math.random() * 25), // 38–62
+      interested: 5 + Math.floor(Math.random() * 6),  // 5–10
+      back:       Math.floor(Math.random() * 11),      // 0–10
     };
     onLog?.(`Feed scroll personality — skim:${feedScrollWeights.skim} normal:${feedScrollWeights.normal} interested:${feedScrollWeights.interested} back:${feedScrollWeights.back}`);
     const feedPersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
@@ -5771,10 +5771,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     // Session scroll personality — same approach as runCheckFeedLoop.
     const exploreScrollWeights = {
-      skim:      Math.max(5,  28 + Math.round((Math.random() - 0.5) * 24)),  // ~16–40
-      normal:    Math.max(10, 50 + Math.round((Math.random() - 0.5) * 24)),  // ~38–62
-      interested:Math.max(2,  14 + Math.round((Math.random() - 0.5) * 16)),  //  ~6–22
-      back:      Math.max(0,   8 + Math.round((Math.random() - 0.5) * 16)),  //   0–16
+      skim:      25 + Math.floor(Math.random() * 16), // 25–40
+      normal:    38 + Math.floor(Math.random() * 25), // 38–62
+      interested: 5 + Math.floor(Math.random() * 6),  // 5–10
+      back:       Math.floor(Math.random() * 11),      // 0–10
     };
     onLog?.(`Explore scroll personality — skim:${exploreScrollWeights.skim} normal:${exploreScrollWeights.normal} interested:${exploreScrollWeights.interested} back:${exploreScrollWeights.back}`);
     const explorePersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
@@ -6361,10 +6361,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // per clip, unlike the feed's partial nudge), which just means occasionally
     // rewatching a reel — a normal human behaviour kept at a low weight.
     const reelsScrollWeights = {
-      skim:      Math.max(5,  28 + Math.round((Math.random() - 0.5) * 24)),  // ~16–40
-      normal:    Math.max(10, 50 + Math.round((Math.random() - 0.5) * 24)),  // ~38–62
-      interested:Math.max(2,  14 + Math.round((Math.random() - 0.5) * 16)),  //  ~6–22
-      back:      Math.max(0,   5 + Math.round((Math.random() - 0.5) *  8)),  //   1–9 (low — occasional rewatch)
+      skim:      25 + Math.floor(Math.random() * 16), // 25–40
+      normal:    38 + Math.floor(Math.random() * 25), // 38–62
+      interested: 5 + Math.floor(Math.random() * 6),  // 5–10
+      back:       Math.floor(Math.random() * 11),      // 0–10
     };
     onLog?.(`Reels scroll personality — skim:${reelsScrollWeights.skim} normal:${reelsScrollWeights.normal} interested:${reelsScrollWeights.interested} back:${reelsScrollWeights.back}`);
     const reelsPersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
