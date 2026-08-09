@@ -3877,11 +3877,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           onLog?.(`View Feed ${i + 1}/${count}: skip card detected ("${feedbackCard}") — skipping like/share`);
           if (wantLike) likeFailures++;
         } else {
-          // Settle wait: give the feed post's action bar time to fully render
-          // after the scroll animation completes before dumping the a11y tree.
-          // Increased from 250-500 ms to a flat 900 ms — a dump taken too
-          // early was the main cause of "no Like button visible" misses.
-          await sleepOrAbort(serial, 900);
+          // Settle briefly after the scroll animation before dumping the
+          // action row. The dump itself is the authoritative readiness check;
+          // a long fixed wait here made every rolled action expensive.
+          await sleepOrAbort(serial, 350);
           // Look up the real action-bar icons for whatever's on screen right
           // now. The Like button's presence confirms this is a normal post
           // with a normal action bar; each icon's actual position (or
@@ -3909,10 +3908,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             onLog?.(`View Feed ${i + 1}/${count}: action bar found — ${iconSummary}`);
 
             if (wantLike) {
-              // The screen can change between independent actions. Reconfirm
-              // the live node immediately before tapping so a coordinate from
-              // an earlier row cannot land on navigation or another control.
-              const likeScan = await scanViewFeedA11y().catch(() => null);
+              // `icons` was just obtained from the live tree and its Like node
+              // is already structurally validated. Reusing it avoids a second
+              // full UIAutomator dump for the most common Feed action.
+              const likeScan = icons;
               if (!likeScan) {
                 likeFailures++;
                 onLog?.(`View Feed ${i + 1}/${count}: like skipped — current Like node was not confirmed`);
