@@ -1,3 +1,14 @@
+## [1.2.443] — 2026-08-09
+
+### Fixed — Trust Score disable-after-use controls
+
+- Removed the unwanted “(Trust Score)” text from the Disable After Used
+  labels.
+- Trust Score template editors can now edit and persist both Update Avatar
+  and Update Bio Disable After Used checkboxes.
+- The live Phone Farm Human Session Tool keeps those controls disabled because
+  the behavior is owned by the assigned Trust Score.
+
 ## [1.2.442] — 2026-08-09
 
 ### Changed — Trust Score owns Update Bio and Avatar disable-after-use

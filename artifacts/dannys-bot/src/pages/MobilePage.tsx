@@ -6743,7 +6743,7 @@ export function AutomationSettingsPanel({
                        disabled={!isTrustScoreTemplateEditor || fieldDisabled("updateProfilePicDisableAfterUsed")}
                       className="w-4 h-4 accent-primary cursor-pointer"
                     />
-                    <label htmlFor={`update-profile-pic-disable-after-used-${slotIdx ?? 0}`} className={`text-xs select-none ${isTrustScoreTemplateEditor ? "text-foreground cursor-pointer" : "text-muted-foreground/50 cursor-not-allowed"}`}>Disable After Used <span className="text-[10px]">(Trust Score)</span></label>
+                    <label htmlFor={`update-profile-pic-disable-after-used-${slotIdx ?? 0}`} className={`text-xs select-none ${isTrustScoreTemplateEditor ? "text-foreground cursor-pointer" : "text-muted-foreground/50 cursor-not-allowed"}`}>Disable After Used</label>
                   </div>
                 </div>
               </div>
@@ -6781,7 +6781,7 @@ export function AutomationSettingsPanel({
                        disabled={!isTrustScoreTemplateEditor || fieldDisabled("updateBioDisableAfterUsed")}
                       className="w-4 h-4 accent-primary cursor-pointer"
                     />
-                    <label htmlFor={`update-bio-disable-after-used-${slotIdx ?? 0}`} className={`text-xs select-none ${isTrustScoreTemplateEditor ? "text-foreground cursor-pointer" : "text-muted-foreground/50 cursor-not-allowed"}`}>Disable After Used <span className="text-[10px]">(Trust Score)</span></label>
+                    <label htmlFor={`update-bio-disable-after-used-${slotIdx ?? 0}`} className={`text-xs select-none ${isTrustScoreTemplateEditor ? "text-foreground cursor-pointer" : "text-muted-foreground/50 cursor-not-allowed"}`}>Disable After Used</label>
                   </div>
                 </div>
               </div>
