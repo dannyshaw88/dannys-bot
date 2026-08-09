@@ -1,5 +1,19 @@
 ## [1.2.447] — 2026-08-09
 
+### Changed — Inject Browsing media-render wait
+
+- Reduced the Follow Tool's Inject Browsing profile-grid media-render wait
+  from a randomized 4–10 seconds to 4–7 seconds after each grid scroll.
+- The change is isolated to Inject Browsing and does not alter the standalone
+  View Feed, Explore, Stories, or Reels timing paths.
+
+### Fixed — Reels debugging-log colour priority
+
+- Reels/Reel messages now render red even when they appear inside another
+  active tool block, instead of inheriting that parent tool's colour.
+- Normalized the Reels colour to the same red treatment in both standalone
+  Reels logs and embedded Reels diagnostics.
+
 ### Removed — View Feed suggestion side-swipes
 
 - Removed the View Feed Suggestions % setting and all suggestion-carousel
