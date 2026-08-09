@@ -1,11 +1,3 @@
-## [1.2.438] — 2026-08-09
-
-### Changed — Installer lock handling
-
-- Removed the automatic process-termination workaround from the installer.
-- The installer no longer assumes Aura Farming is running in the tray or
-  Task Manager; it now uses the normal NSIS file-replacement behavior.
-
 ## [1.2.437] — 2026-08-09
 
 ### Fixed — Installer closes hidden tray process
