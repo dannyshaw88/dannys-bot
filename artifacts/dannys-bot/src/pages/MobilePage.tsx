@@ -9895,6 +9895,22 @@ export function MobilePage() {
   // param) all connected phones are shown as before.
   const params = useParams<{ serial?: string }>();
   const targetSerial = params.serial ? decodeURIComponent(params.serial) : null;
+  const devicePageStartedAtRef = useRef(performance.now());
+  const previousTargetSerialRef = useRef<string | null>(targetSerial);
+  useEffect(() => {
+    const started = Number(sessionStorage.getItem("mobile_device_nav_started_at"));
+    const navigationMs = Number.isFinite(started) && started > 0
+      ? performance.now() - started
+      : null;
+    console.debug("[mobile-device-debug] MobilePage target changed", {
+      from: previousTargetSerialRef.current,
+      to: targetSerial,
+      navigationMs,
+      pageElapsedMs: performance.now() - devicePageStartedAtRef.current,
+    });
+    previousTargetSerialRef.current = targetSerial;
+    if (navigationMs !== null) sessionStorage.removeItem("mobile_device_nav_started_at");
+  }, [targetSerial]);
   const search = useSearch();
   const initialSlot = (() => {
     const s = new URLSearchParams(search).get("slot");
@@ -10068,15 +10084,37 @@ export function MobilePage() {
   }, []);
 
   const refresh = useCallback(async (showSpinner = false) => {
+    const pollStarted = performance.now();
     if (showSpinner) setLoading(true);
     setError(null);
     try {
       const next = await fetchPhones();
-      setData(previous => previous && samePhoneSnapshot(previous, next) ? previous : next);
+      let changed = false;
+      setData(previous => {
+        changed = !previous || !samePhoneSnapshot(previous, next);
+        return previous && !changed ? previous : next;
+      });
+      console.debug("[mobile-device-debug] USB poll complete", {
+        durationMs: Math.round((performance.now() - pollStarted) * 10) / 10,
+        showSpinner,
+        phoneCount: next.phones.length,
+        targetSerial,
+        snapshotChanged: changed,
+      });
     }
-    catch (e: any) { setError(e?.message ?? "Failed to check devices"); }
-    finally { setLoading(false); }
-  }, []);
+    catch (e: any) {
+      console.debug("[mobile-device-debug] USB poll failed", {
+        durationMs: Math.round((performance.now() - pollStarted) * 10) / 10,
+        showSpinner,
+        targetSerial,
+        error: e?.message ?? String(e),
+      });
+      setError(e?.message ?? "Failed to check devices");
+    }
+    finally {
+      setLoading(false);
+    }
+  }, [targetSerial]);
 
   useEffect(() => {
     refresh(true);

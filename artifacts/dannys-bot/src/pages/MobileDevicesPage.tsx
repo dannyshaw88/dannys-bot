@@ -1129,7 +1129,17 @@ export function MobileDevicesPage() {
                       online={onlineSerials.has(device.serial)}
                       active={activeCycleSerials.has(device.serial) && onlineSerials.has(device.serial)}
                       isStreaming={streamingSerials.has(device.serial) || (activeCycleSerials.has(device.serial) && onlineSerials.has(device.serial))}
-                      onClick={() => setLocation(`/mobile/farm/${encodeURIComponent(device.serial)}`)}
+                      onClick={() => {
+                        const started = performance.now();
+                        console.debug("[mobile-device-debug] device card clicked", {
+                          serial: device.serial,
+                          slotIndex: device.slotIndex,
+                          online: onlineSerials.has(device.serial),
+                          startedAt: new Date().toISOString(),
+                        });
+                        sessionStorage.setItem("mobile_device_nav_started_at", String(started));
+                        setLocation(`/mobile/farm/${encodeURIComponent(device.serial)}`);
+                      }}
                       onRemove={() => handleRemove(device.slotIndex)}
                       custom={slotCustom[device.slotIndex] ?? DEFAULT_SLOT_CUSTOM}
                       onCustomize={c => setSlotCustom(prev => ({ ...prev, [device.slotIndex]: c }))}
