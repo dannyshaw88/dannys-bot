@@ -3431,14 +3431,19 @@ export async function findFeedActionIcons(
     // Use the same centering heuristic as _findCentermostLikeNode, but match
     // "Unlike". The result is NEVER tapped for a like — callers must check
     // alreadyLiked and skip the like action to avoid accidental unlike.
-    const unlikeRe = /content-desc="Unlike"[^>]*bounds="(\[\d+,\d+\]\[\d+,\d+\])"/g;
     let bestUnlike: { x: number; y: number } | null = null;
     let bestDist = Infinity;
     const centerY = screenH / 2;
     const MAX_DIST = screenH * 0.38;
+    const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
     let um: RegExpExecArray | null;
-    while ((um = unlikeRe.exec(xml)) !== null) {
-      const c = _parseCenter(um[1]);
+    while ((um = nodeRe.exec(xml)) !== null) {
+      const attrs = um[1];
+      const contentDesc = attrs.match(/\bcontent-desc="([^"]*)"/i)?.[1] ?? "";
+      if (!/^Unlike$/i.test(contentDesc)) continue;
+      const bounds = attrs.match(/\bbounds="(\[\d+,\d+\]\[\d+,\d+\])"/i)?.[1];
+      if (!bounds) continue;
+      const c = _parseCenter(bounds);
       if (!c) continue;
       const dist = Math.abs(c.y - centerY);
       if (dist < bestDist) { bestDist = dist; bestUnlike = c; }
