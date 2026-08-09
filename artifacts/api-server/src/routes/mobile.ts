@@ -11774,12 +11774,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 // Write 0/0 back to the saved slot so it won't fire again next cycle.
                 try {
                   const _cfg = loadInstanceConfigs();
-                  const _existing = _cfg[serial]?.slotAutomation?.[String(slotIdx)] ?? {};
+                  const _slotKey = slotAutomationKey(serial, slotIdx);
+                  const _existing = _cfg[serial]?.slotAutomation?.[_slotKey]
+                    ?? _cfg[serial]?.slotAutomation?.[String(slotIdx)] ?? {};
                   _cfg[serial] = {
                     ..._cfg[serial],
                     slotAutomation: {
                       ..._cfg[serial]?.slotAutomation,
-                      [String(slotIdx)]: { ..._existing, updateProfilePicActivatePctMin: 0, updateProfilePicActivatePctMax: 0 },
+                      [_slotKey]: { ..._existing, updateProfilePicActivatePctMin: 0, updateProfilePicActivatePctMax: 0 },
                     },
                   };
                   saveInstanceConfigs(_cfg);
@@ -11796,12 +11798,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 // Write 0/0 back to the saved slot so it won't fire again next cycle.
                 try {
                   const _cfg = loadInstanceConfigs();
-                  const _existing = _cfg[serial]?.slotAutomation?.[String(slotIdx)] ?? {};
+                  const _slotKey = slotAutomationKey(serial, slotIdx);
+                  const _existing = _cfg[serial]?.slotAutomation?.[_slotKey]
+                    ?? _cfg[serial]?.slotAutomation?.[String(slotIdx)] ?? {};
                   _cfg[serial] = {
                     ..._cfg[serial],
                     slotAutomation: {
                       ..._cfg[serial]?.slotAutomation,
-                      [String(slotIdx)]: { ..._existing, updateBioActivatePctMin: 0, updateBioActivatePctMax: 0 },
+                      [_slotKey]: { ..._existing, updateBioActivatePctMin: 0, updateBioActivatePctMax: 0 },
                     },
                   };
                   saveInstanceConfigs(_cfg);
