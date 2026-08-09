@@ -7472,12 +7472,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     onLog?.("Make a Post: tapping Instagram Home button…");
     await android.tap(serial, homeTab.x, homeTab.y);
-    // Do not immediately continue after the tab tap.  On slower phones the
-    // Home surface remains in its transition state for several seconds; the
-    // post flow must give Instagram time to render before any later picker or
+    // Do not immediately continue after the tab tap. On slower phones the
+    // Home surface remains in its transition state for several seconds; use
+    // a natural randomized 3–5 second dwell before any later picker or
     // compose lookup is attempted.
-    onLog?.("Make a Post: waiting for Instagram Home to finish loading…");
-    await sleepOrAbort(serial, 3000);
+    const homeDwellMs = 3000 + Math.round(Math.random() * 2000);
+    onLog?.(`Make a Post: waiting ${ (homeDwellMs / 1000).toFixed(1) }s for Instagram Home to finish loading…`);
+    await sleepOrAbort(serial, homeDwellMs);
 
     const fileName = await pickLocalFolderImage(serial, {
       folderPath: localFolderPath, random: localFolderRandom, noRepeat: localFolderNoRepeat, slotIdx, onLog,

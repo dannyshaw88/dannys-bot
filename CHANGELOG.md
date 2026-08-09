@@ -1,3 +1,13 @@
+## [1.2.433] — 2026-08-09
+
+### Fixed — Make a Post Home transition timing
+
+- Fixed Make a Post failing immediately after tapping Home because the
+  account slot index was not available to the local-image selection step.
+- Make a Post now waits a randomized 3–5 seconds after tapping Home before
+  continuing, with the selected dwell recorded in the debugging log so the
+  transition timing is visible.
+
 ## [1.2.432] — 2026-08-09
 
 ### Improved — Cleaner Reels action-column logs
