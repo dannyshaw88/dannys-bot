@@ -5001,13 +5001,12 @@ export async function findStoryReplyComposerViaA11y(
       score += 65;
       reason ||= "lower EditText";
     }
-    if (
-      (attrs.includes('clickable="true"') || attrs.includes('focusable="true"')) &&
-      width >= w * 0.35
-    ) {
-      score += 35;
-      reason ||= "wide interactive lower control";
-    }
+    // Do not accept a merely wide/clickable lower-screen node as the
+    // composer. When Story replies are disabled, Instagram can still expose
+    // an unrelated lower control (or the canvas-backed reply area) in this
+    // zone. Treating geometry alone as proof caused the emoji-comment path to
+    // tap a visible "Send message" area even though replies were disabled.
+    // A semantic composer resource-id, label, or EditText is required.
     if (score === 0) continue;
 
     candidates.push({
