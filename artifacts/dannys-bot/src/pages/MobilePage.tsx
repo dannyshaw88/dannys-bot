@@ -3505,6 +3505,19 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     let active = true;
     setLoading(true);
     const serial = phone.serial; // capture at effect-run time
+    // Load only the master toggle first. This endpoint reads the raw slot
+    // record and does not resolve TrustScore templates, so the account cards
+    // reflect the real enabled/disabled state immediately while the detailed
+    // settings request continues in parallel.
+    const stateUrl = `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx ?? 0}/automation-state`;
+    fetch(stateUrl, { cache: "no-store" })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (active && typeof d?.enabled === "boolean") {
+          setSettings(s => ({ ...s, enabled: d.enabled }));
+        }
+      })
+      .catch(() => {});
     const settingsUrl = slotIdx !== undefined
       ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings`
       : `/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings`;
@@ -7840,7 +7853,16 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
         setTotpError(Array(loaded.length).fill(null));
         setLoading(false);
         hydratedRef.current = true;
-        void hydrateAccountTrustScoreAssignments(phone.serial, loaded).then(trustScoreSlots => {
+        // Do not block device selection on the legacy profile-to-slot
+        // TrustScore compatibility migration. It performs a profile fetch and
+        // one assignment request per slot, which made an otherwise idle device
+        // take 5–10 seconds to become interactive. Slot badges/countdowns and
+        // the HST settings hook already hydrate from the local slot state and
+        // server in parallel; reconcile legacy profile badges lazily after the
+        // account panel is usable.
+        void Promise.resolve().then(() =>
+          hydrateAccountTrustScoreAssignments(phone.serial, loaded)
+        ).then(trustScoreSlots => {
           if (!active || trustScoreSlots.length === 0) return;
           setSlotRefreshKeys(prev => {
             const next = { ...prev };
@@ -7955,6 +7977,8 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
     const serial = phone?.serial;
     if (serial) {
       const deletedSlotId = slots[i]?.slotId;
+      // The account save below is also server-side cleanup guarded, but keep
+      // the explicit delete for immediate removal of the old slot's state.
       fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/slots/${i}`, { method: "DELETE" }).catch(() => {});
       localStorage.removeItem(slotTrustScoreKey(serial, i));
       localStorage.removeItem(`mobile_ts_timer_${serial}_index-${i}`);

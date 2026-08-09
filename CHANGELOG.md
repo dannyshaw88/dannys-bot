@@ -1,3 +1,14 @@
+## [1.2.431] — 2026-08-09
+
+### Fixed — Complete account-slot state reset
+
+- Account saves now purge automation settings belonging to removed slot IDs,
+  including legacy numeric slot settings.
+- Removed Trust Score assignments and timers are purged during account saves,
+  preventing replacement accounts from inheriting badges or countdowns.
+- Slot deletion now clears the local badge and timer checkpoints, while the
+  server-side save boundary prevents delete/save races from restoring old state.
+
 ## [1.2.430] — 2026-08-08
 
 ### Fixed — Trust Score slot state isolation

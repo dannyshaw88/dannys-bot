@@ -2192,6 +2192,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // ── Per-slot Human Session Tool automation settings ─────────────────────────
   // Each Instagram account slot stores its own independent copy of all
   // automation settings. Settings are keyed by slot index in slotAutomation.
+  app.get("/api/mobile/devices/:serial/slots/:slotIdx/automation-state", (req: Request, res: Response) => {
+    try {
+      const slotIdx = parseInt(String(req.params.slotIdx), 10);
+      if (isNaN(slotIdx) || slotIdx < 0) {
+        res.status(400).json({ error: "Invalid slot index" });
+        return;
+      }
+      const serial = p(req, "serial");
+      const cfg = loadInstanceConfigs();
+      const saved = cfg[serial]?.slotAutomation?.[slotAutomationKey(serial, slotIdx)]
+        ?? cfg[serial]?.slotAutomation?.[String(slotIdx)]
+        ?? {};
+      res.json({ enabled: saved.enabled === true });
+    } catch (e: any) {
+      res.status(400).json({ error: e?.message ?? "Failed to load slot state" });
+    }
+  });
   app.get("/api/mobile/devices/:serial/slots/:slotIdx/automation-settings", async (req: Request, res: Response) => {
     try {
       const slotIdx = parseInt(String(req.params.slotIdx), 10);
@@ -2944,7 +2961,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     res.json(migrated);
   });
-  app.post("/api/mobile/devices/:serial/account", (req: Request, res: Response) => {
+  app.post("/api/mobile/devices/:serial/account", async (req: Request, res: Response) => {
     try {
       const parsed = deviceAccountSchema.parse(req.body);
       const input = {
@@ -2960,6 +2977,38 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const cfg = loadInstanceConfigs();
       cfg[serial] = { ...cfg[serial], account: input };
       saveInstanceConfigs(cfg);
+      // Account saves are also a state-boundary checkpoint. The UI can save
+      // the shortened slot array immediately after deleting a slot, before
+      // the separate DELETE request finishes. Purge every slot-owned record
+      // whose stable identity is no longer present, so a replacement slot
+      // cannot inherit the deleted account's HST toggle/settings or TrustScore.
+      const liveAutomationKeys = new Set(
+        input.slots.map(slot => `${serial}:${slot.slotId}`),
+      );
+      const savedAutomation = cfg[serial]?.slotAutomation ?? {};
+      const nextAutomation = Object.fromEntries(
+        Object.entries(savedAutomation).filter(([key]) =>
+          liveAutomationKeys.has(key) ||
+          (!/^\d+$/.test(key) && !key.startsWith(`${serial}:`)),
+        ),
+      );
+      cfg[serial] = { ...cfg[serial], slotAutomation: nextAutomation };
+      saveInstanceConfigs(cfg);
+      const allSettings = await storage.getGlobalSettings();
+      const liveTrustPrefixes = new Set(
+        input.slots.flatMap(slot => [
+          `mobile_trust_score_${serial}_${slot.slotId}`,
+          `mobile_trust_score_timer_${serial}_${slot.slotId}`,
+        ]),
+      );
+      await Promise.all(
+        Object.keys(allSettings)
+          .filter(key =>
+            key.startsWith(`mobile_trust_score_${serial}_`) &&
+            !liveTrustPrefixes.has(key),
+          )
+          .map(key => storage.deleteGlobalSetting(key)),
+      );
       res.json({ ok: true, account: input });
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to save the account" }); }
   });
