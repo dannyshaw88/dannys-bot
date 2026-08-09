@@ -5040,6 +5040,26 @@ export function AutomationSettingsPanel({
     } catch {} finally { setLoadingOverspill(false); }
   }, [slotUsername]);
 
+  const clearSurplus = React.useCallback(async (scope: "slot" | "device" | "all") => {
+    const labels = {
+      slot: "this account slot",
+      device: "all account slots on this device",
+      all: "all account slots on every device",
+    };
+    if (!window.confirm(`Clear surplus for ${labels[scope]}?`)) return;
+    try {
+      const response = await fetch("/api/mobile/surplus/scope", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ serial: phone?.serial, slotIdx, scope }),
+      });
+      if (!response.ok) throw new Error("clear failed");
+      await loadSurplus();
+    } catch {
+      onLog?.(`Follow: failed to clear Surplus for ${labels[scope]}`);
+    }
+  }, [loadSurplus, onLog, phone?.serial, slotIdx]);
+
   // Auto-refresh the followed list every 5 s while the panel is open so
   // users followed during a running cycle appear without manual re-toggle.
   React.useEffect(() => {
@@ -6107,6 +6127,17 @@ export function AutomationSettingsPanel({
           : "hidden"}>
           {showSurplus && (
             <div className="border border-border rounded-lg overflow-hidden">
+              <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
+                <button type="button" className="text-xs text-muted-foreground hover:text-foreground hover:underline" onClick={() => clearSurplus("slot")}>
+                  Clear Surplus
+                </button>
+                <button type="button" className="text-xs text-muted-foreground hover:text-foreground hover:underline" onClick={() => clearSurplus("device")}>
+                  Clear Surplus on Device
+                </button>
+                <button type="button" className="text-xs text-muted-foreground hover:text-foreground hover:underline" onClick={() => clearSurplus("all")}>
+                  Clear Surplus on All Accounts
+                </button>
+              </div>
               {loadingOverspill && mobileOverspillList.length === 0 ? (
                 <p className="text-xs text-muted-foreground p-3">Loading…</p>
               ) : mobileOverspillList.length === 0 ? (

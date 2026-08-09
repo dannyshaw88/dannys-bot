@@ -102,6 +102,7 @@ export interface IStorage {
   deleteOverspillUsers(ids: number[]): Promise<void>;
   clearOverspillByProfile(profileId: number): Promise<void>;
   clearOverspillByPhoneSlot(phoneSlotKey: string): Promise<void>;
+  clearAllOverspill(): Promise<void>;
 
   // Session Actions
   getSessionActionsByProfile(profileId: number, limit?: number): Promise<SessionAction[]>;
@@ -862,6 +863,10 @@ export class DatabaseStorage implements IStorage {
 
   async clearOverspillByPhoneSlot(phoneSlotKey: string): Promise<void> {
     await db.delete(overspillUsers).where(eq(overspillUsers.phoneSlotKey, phoneSlotKey));
+  }
+
+  async clearAllOverspill(): Promise<void> {
+    await db.delete(overspillUsers);
   }
 
   async getSessionActionsByProfile(profileId: number, limit: number = 500): Promise<SessionAction[]> {

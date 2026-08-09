@@ -3247,6 +3247,11 @@ export async function registerInstagramRoutes(
     res.json({ ok: true });
   });
 
+  app.delete("/api/mobile/surplus/all", async (_req, res) => {
+    await storage.clearAllOverspill();
+    res.json({ ok: true });
+  });
+
   app.post("/api/profiles/:profileId/followed-users", async (req, res) => {
     const profileId = Number(req.params.profileId);
     const { instagramUsername, sourceValue, sourceType } = req.body;

@@ -2189,6 +2189,36 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
   });
 
+  app.delete("/api/mobile/surplus/scope", async (req: Request, res: Response) => {
+    const serial = String(req.body?.serial ?? "").trim();
+    const scope = req.body?.scope;
+    const slotIdx = Number(req.body?.slotIdx);
+    if (!scope || (scope !== "slot" && scope !== "device" && scope !== "all")) {
+      return void res.status(400).json({ error: "scope must be slot, device, or all" });
+    }
+    if (scope === "all") {
+      await storage.clearAllOverspill();
+      return void res.json({ ok: true });
+    }
+    const cfg = loadInstanceConfigs();
+    const slots = cfg[serial]?.account?.slots ?? [];
+    const indexes = scope === "slot"
+      ? [Number.isInteger(slotIdx) ? slotIdx : -1]
+      : slots.map((_slot: any, index: number) => index);
+    const usernames = indexes
+      .map(index => slots[index]?.username)
+      .filter((username): username is string => typeof username === "string" && username.trim().length > 0)
+      .map(username => username.replace(/^@/, "").toLowerCase());
+    const profiles = await storage.getProfiles();
+    const profileIds = profiles
+      .filter(profile => usernames.includes(String(profile.username ?? "").replace(/^@/, "").toLowerCase()) ||
+        usernames.includes(String((profile as any).accountLabel ?? "").replace(/^@/, "").toLowerCase()))
+      .map(profile => profile.id);
+    await Promise.all(usernames.map(username => storage.clearOverspillByPhoneSlot(username)));
+    await Promise.all(profileIds.map(profileId => storage.clearOverspillByProfile(profileId)));
+    res.json({ ok: true });
+  });
+
   // ── Per-slot Human Session Tool automation settings ─────────────────────────
   // Each Instagram account slot stores its own independent copy of all
   // automation settings. Settings are keyed by slot index in slotAutomation.
