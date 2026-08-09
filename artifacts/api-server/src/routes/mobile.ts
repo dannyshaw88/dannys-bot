@@ -6509,9 +6509,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           for (let p = 0; p < MAX_POLLS && !reelReady; p++) {
             const pollXml = await android.dumpUi(serial).catch(() => "");
             lastPollXml = pollXml;
-            if (REEL_NODES.some(n => pollXml.includes(n))) {
+            // This poll is entered only after findReelsTab() succeeded and the
+            // Reels tab was tapped.  Some Xiaomi/Instagram builds render the
+            // full-screen Reels player without exposing any reel_viewer_* or
+            // reels_feed_media_view_* nodes to UIAutomator.  In that case the
+            // focused Instagram window is the reliable screen-level signal;
+            // requiring a player resource-id produces a false "never
+            // appeared" diagnosis even though Reels is visibly on screen.
+            const instagramWindowFocused =
+              pollXml.includes("com.instagram.android") &&
+              !pollXml.includes("task_view_thumbnail") &&
+              !pollXml.includes("recents_container") &&
+              !pollXml.includes("recents_view");
+            if (REEL_NODES.some(n => pollXml.includes(n)) || instagramWindowFocused) {
               reelReady = true;
-              if (p > 0) onLog?.(`Reel ${i + 1}/${totalReels}: player ready after ${p * POLL_MS / 1000}s extra wait`);
+              if (p > 0) {
+                onLog?.(
+                  `Reel ${i + 1}/${totalReels}: Instagram window ready after ${p * POLL_MS / 1000}s extra wait` +
+                  (REEL_NODES.some(n => pollXml.includes(n)) ? "" : " (screen-level fallback; player nodes unavailable on this build)"),
+                );
+              }
             } else {
               // Diagnose what the dump DID contain so future logs make it
               // immediately obvious why the player nodes are missing.
