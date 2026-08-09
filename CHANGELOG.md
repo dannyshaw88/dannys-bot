@@ -1,3 +1,12 @@
+## [1.2.446] — 2026-08-09
+
+### Fixed — Debugging Log tool colours
+
+- A tool stamp now owns the colour of every line in its block, including
+  success, warning, error, and diagnostic messages.
+- Removed the white colour fall-through that caused sections inside a tool
+  log to lose the tool’s consistent colour.
+
 ## [1.2.445] — 2026-08-09
 
 ### Changed — Separate Trust Score copy settings

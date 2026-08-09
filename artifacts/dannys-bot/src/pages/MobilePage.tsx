@@ -9777,39 +9777,42 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
               else if (/^▶/.test(msg))                currentTool = null;
               if (/Cycle\s+(complete|failed|aborted)/i.test(msg)) currentTool = null;
 
-              // Colour the message based on its tool / prefix.
-              // Tool-specific colours take priority over general prefix colours.
-              // System / untagged messages are white. Tool messages keep their tool colour.
-               let msgClass = 'text-white';
-               // Follow owns one color, including Spread Follow, inject
-               // browsing, success, navigation, and failure lines. Keep this
-               // ahead of generic ERROR/success rules so a Follow failure
-               // cannot turn red or white and lose its tool identity.
-               if      (currentTool === 'follow' ||
-                        /\bFollow\b|\bfollowing\b|\bSpread Follow\b|\bInject Browsing\b/i.test(msg))
-                                                                     msgClass = 'text-blue-400';
-               else if (/\bView Feed\b|▶ View Feed/.test(msg))      msgClass = 'text-orange-400';
-              else if (/\bView Explore\b|▶ View Explore|[Ee]xplore/.test(msg))
-                                                                    msgClass = 'text-green-400';
-              else if (/[Rr]eel/.test(msg))                          msgClass = 'text-rose-500';
-              else if (/▶.*[Ss]tories|\b[Ss]tories\b/.test(msg))  msgClass = 'text-cyan-400';
-              else if (/\bMake a Post\b|▶ Make a Post/.test(msg))  msgClass = 'text-purple-400';
-              else if (/\bRandom Actions\b|▶ Random Actions|^jitter-/.test(msg)) msgClass = 'text-purple-400';
-              else if (/Switching to Instagram account|account switcher|Long-pressing profile tab|Profile tab found/.test(msg))
-                                                                    msgClass = 'text-amber-400';
-              else if (/^(ERROR|FAILED|✗)/.test(msg))              msgClass = 'text-rose-500';
-              else if (/^⚠/.test(msg))                             msgClass = 'text-yellow-400';
-              else if (/^[✓✅]/.test(msg))                         msgClass = 'text-white/90';
-              else if (/shuffled/.test(msg))                       msgClass = 'text-blue-400';
-              else if (/^▶/.test(msg))                             msgClass = 'text-white/90';
-              // Sub-messages: fall back to the active tool's colour.
-              else if (currentTool === 'explore')  msgClass = 'text-green-400';
-              else if (currentTool === 'feed')     msgClass = 'text-orange-400';
-              else if (currentTool === 'reels')    msgClass = 'text-rose-500';
-              else if (currentTool === 'stories')  msgClass = 'text-cyan-400';
-              else if (currentTool === 'makepost')      msgClass = 'text-purple-400';
-              else if (currentTool === 'follow')        msgClass = 'text-blue-400';
-              else if (currentTool === 'randomactions') msgClass = 'text-purple-400';
+               // Colour the message based on its tool / prefix.
+               // Once a tool stamp is active, its colour owns the whole block:
+               // success, warning, error, and diagnostic sub-lines must not
+               // fall through to the generic white/status colours.
+                let msgClass = 'text-white';
+                const activeToolClass =
+                  currentTool === 'explore' ? 'text-green-400' :
+                  currentTool === 'feed' ? 'text-orange-400' :
+                  currentTool === 'reels' ? 'text-rose-500' :
+                  currentTool === 'stories' ? 'text-cyan-400' :
+                  currentTool === 'makepost' ? 'text-purple-400' :
+                  currentTool === 'follow' ? 'text-blue-400' :
+                  currentTool === 'randomactions' ? 'text-purple-400' :
+                  null;
+                if (activeToolClass) {
+                  msgClass = activeToolClass;
+                // Follow owns one color, including Spread Follow, inject
+                // browsing, success, navigation, and failure lines. Keep this
+                // ahead of generic ERROR/success rules so a Follow failure
+                // cannot turn red or white and lose its tool identity.
+                } else if (/\bFollow\b|\bfollowing\b|\bSpread Follow\b|\bInject Browsing\b/i.test(msg))
+                                                                      msgClass = 'text-blue-400';
+                else if (/\bView Feed\b|▶ View Feed/.test(msg))      msgClass = 'text-orange-400';
+                else if (/\bView Explore\b|▶ View Explore|[Ee]xplore/.test(msg))
+                                                                     msgClass = 'text-green-400';
+                else if (/[Rr]eel/.test(msg))                          msgClass = 'text-rose-500';
+                else if (/▶.*[Ss]tories|\b[Ss]tories\b/.test(msg))  msgClass = 'text-cyan-400';
+                else if (/\bMake a Post\b|▶ Make a Post/.test(msg))  msgClass = 'text-purple-400';
+                else if (/\bRandom Actions\b|▶ Random Actions|^jitter-/.test(msg)) msgClass = 'text-purple-400';
+                else if (/Switching to Instagram account|account switcher|Long-pressing profile tab|Profile tab found/.test(msg))
+                                                                     msgClass = 'text-amber-400';
+                else if (/^(ERROR|FAILED|✗)/.test(msg))              msgClass = 'text-rose-500';
+                else if (/^⚠/.test(msg))                             msgClass = 'text-yellow-400';
+                else if (/^[✓✅]/.test(msg))                         msgClass = 'text-white/90';
+                else if (/shuffled/.test(msg))                       msgClass = 'text-blue-400';
+                else if (/^▶/.test(msg))                             msgClass = 'text-white/90';
 
                 return (
                   <div key={key} className="flex min-w-0 py-[1px]">
