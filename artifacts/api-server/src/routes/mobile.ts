@@ -9802,7 +9802,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       targets = [..._pre.targets];
       targetCount = targets.length;
       if (targetCount === 0) { onLog?.("Follow: spread slot — no pre-fetched candidates"); return 0; }
-      onLog?.(`Follow: spread mode — ${targetCount} pre-fetched candidate(s)`);
+      onLog?.(`Follow: spread mode — ${targetCount} Surplus candidate(s)`);
       attemptedSet = new Set<string>(targets.map(u => u.toLowerCase()));
       // MAX_SCRAPE_ROUNDS stays 0 — no re-scraping in spread mode
     }
