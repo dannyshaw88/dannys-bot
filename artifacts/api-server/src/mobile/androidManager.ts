@@ -9966,8 +9966,14 @@ export async function typeViaCalibrationMap(
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const missing: string[] = [];
-  let layer: "letters" | "symbols" | "moreSymbols" =
-    _calKeyboardLayer.get(serial) ?? "letters";
+  // A newly focused Instagram text field opens Gboard on its letters layer.
+  // Do not trust the process-local cached layer here: a previous typing run
+  // may have been interrupted after tapping ?123, leaving the cache out of
+  // sync with the keyboard that Android presents for this new field.  Using
+  // the stale state makes the first punctuation character tap the wrong
+  // physical key while all ADB taps still appear successful.
+  let layer: "letters" | "symbols" | "moreSymbols" = "letters";
+  _calKeyboardLayer.set(serial, layer);
 
   const tapMapped = async (label: string, description = label): Promise<boolean> => {
     const pos = map[label];
