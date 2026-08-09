@@ -9588,6 +9588,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   ): Promise<number> {
     const { usersMin, usersMax, sources, onLog, onLike, recordFollow, browsing, skipFollowedUsernames, skipSkippedUsernames, filters } = params;
 
+    // Follow leaves Instagram on the search/results surface after each
+    // profile.  Always restore the normal Instagram UI before another tool
+    // starts: clear the current query through Instagram's live clear control,
+    // then leave the search surface with exactly one Back.  This is also
+    // required when the run stops early (including spread mode), otherwise
+    // the next tool cannot reliably find the Home tab.
+    const finishFollowNavigation = async () => {
+      try {
+        await android.clearInstagramSearchBar(serial, (msg) => onLog?.(`Follow: cleanup — ${msg}`));
+      } catch (e: any) {
+        onLog?.(`Follow: cleanup clear failed — ${e?.message ?? "unknown error"}`);
+      }
+      try {
+        await android.pressBack(serial);
+        await sleepOrAbort(serial, 500);
+        onLog?.("Follow: cleanup — cleared search and pressed Back to normal UI");
+      } catch (e: any) {
+        if (e?.message === "cycle-aborted") throw e;
+        onLog?.(`Follow: cleanup Back failed — ${e?.message ?? "unknown error"}`);
+      }
+    };
+
     // ── Shared state — populated by either the normal fetch path or the
     //    spread-mode preloaded path, then consumed by the shared follow loop. ──
     const _usePreloaded = !!params.preloadedCandidates;
@@ -9828,7 +9850,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
 
     const searchTab = await android.findInstagramSearchTab(serial, onLog).catch(() => null);
-    if (!searchTab) { onLog?.("Follow: Search tab not found — skipping"); return 0; }
+    if (!searchTab) {
+      onLog?.("Follow: Search tab not found — skipping");
+      await finishFollowNavigation();
+      return 0;
+    }
     await android.tap(serial, searchTab.x, searchTab.y);
     // Give the Explore page more time to fully render — 1500 ms was sometimes
     // too short on slower devices / cold-launch (only Follow enabled, no prior
@@ -10311,6 +10337,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       onLog?.(`Follow: saved ${surplusEntries.length} unused candidate${surplusEntries.length !== 1 ? "s" : ""} to Surplus for next cycle`);
     }
 
+    await finishFollowNavigation();
     return followed;
   }
 
