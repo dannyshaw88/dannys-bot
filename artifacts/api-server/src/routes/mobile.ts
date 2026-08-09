@@ -3446,6 +3446,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // `/automation-cycle` route below — the scroll/like/share loop.
   async function runCheckFeedLoop(serial: string, params: {
     count: number; delayMinSec: number; delayMaxSec: number;
+    /** Automation-cycle has already navigated here; standalone Check Feed has not. */
+    homeAlreadyEstablished?: boolean;
     likePercentMin: number; likePercentMax: number;
     shareFeedPercentMin?: number; shareFeedPercentMax?: number;
     shareDmPercentMin?: number; shareDmPercentMax?: number;
@@ -3467,6 +3469,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       clickHashtagPercentMin = 0, clickHashtagPercentMax = 0,
       clickAuthorPercentMin = 0, clickAuthorPercentMax = 0,
       feedSuggestionsPercentMin = 0, feedSuggestionsPercentMax = 0,
+      homeAlreadyEstablished = false,
       onLog,
     } = params;
 
@@ -3474,13 +3477,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // post dump. View Feed can be launched while Instagram is on a profile,
     // search, Reels, or another nested screen; scanning that tree as if it
     // were the feed causes every downstream action to target the wrong UI.
-    const homeTab = await android.findHomeTab(serial).catch(() => null);
-    if (!homeTab) {
-      throw new Error("View Feed cannot start: Instagram Home tab was not found");
+    if (!homeAlreadyEstablished) {
+      const homeTab = await android.findHomeTab(serial).catch(() => null);
+      if (!homeTab) {
+        throw new Error("View Feed cannot start: Instagram Home tab was not found");
+      }
+      onLog?.(`View Feed: tapping Home tab before execution at (${homeTab.x}, ${homeTab.y})`);
+      await android.tap(serial, homeTab.x, homeTab.y, "bot");
+      await new Promise(resolve => setTimeout(resolve, 500));
+    } else {
+      onLog?.("View Feed: Home feed already established — skipping duplicate Home tap");
     }
-    onLog?.(`View Feed: tapping Home tab before execution at (${homeTab.x}, ${homeTab.y})`);
-    await android.tap(serial, homeTab.x, homeTab.y, "bot");
-    await new Promise(resolve => setTimeout(resolve, 500));
 
     const delayLoSec = Math.min(delayMinSec, delayMaxSec);
     const delayHiSec = Math.max(delayMinSec, delayMaxSec);
@@ -11146,6 +11153,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             tLog(`▶ Starting feed scroll — ${count} posts`);
             ({ likes, likeFailures, sharesFeed, sharesDm, saves, captionExpands, strayNavRecoveries, audioTaps, hashtagTaps, authorVisits, suggestionBrowses } = await runCheckFeedLoop(serial, {
               count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
+              homeAlreadyEstablished: !_isFirst,
               shareFeedPercentMin, shareFeedPercentMax,
               shareDmPercentMin, shareDmPercentMax,
               savePercentMin, savePercentMax,
