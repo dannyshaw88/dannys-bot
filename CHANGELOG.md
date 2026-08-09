@@ -1,3 +1,14 @@
+## [1.2.444] — 2026-08-09
+
+### Fixed — Trust Score checkbox editability
+
+- Removed Update Avatar and Update Bio Disable After Used from the frontend
+  physical-slot ownership map.
+- Trust Score settings can now enable or disable both checkboxes instead of
+  treating them as locked template fields.
+- Assigned Phone Farm slots continue to receive these values from Trust Score
+  and cannot edit them locally.
+
 ## [1.2.443] — 2026-08-09
 
 ### Fixed — Trust Score disable-after-use controls
