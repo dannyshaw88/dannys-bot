@@ -7772,10 +7772,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           for (let i = 0; i < 80; i++) {
             await android.keyevent(serial, "67"); // KEYCODE_DEL
           }
-          await android.inputText(serial, "Manchester United Kingdom");
+          const locationText = "Manchester United Kingdom";
+          const typedLocation = await android.typeViaSavedCalibrationMap(
+            serial,
+            locationText,
+            loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile,
+            message => onLog?.(`Make a Post: ${message}`),
+          );
+          if (!typedLocation.ok) {
+            onLog?.(
+              `Make a Post: calibrated keyboard could not enter location` +
+              `${typedLocation.missing.length ? ` — missing ${typedLocation.missing.join(", ")}` : ""}`,
+            );
+            await android.pressBack(serial).catch(() => {});
+            await sleepOrAbort(serial, 800);
+          }
           await sleepOrAbort(serial, 1200);
 
-          const matchingLocation = await android.findButtonByLabel(serial, "Manchester, United Kingdom").catch(() => null);
+          const matchingLocation = typedLocation.ok
+            ? await android.findButtonByLabel(serial, "Manchester, United Kingdom").catch(() => null)
+            : null;
           if (matchingLocation) {
             onLog?.("Make a Post: selecting location \"Manchester, United Kingdom\"…");
             await android.tap(serial, matchingLocation.x, matchingLocation.y);
