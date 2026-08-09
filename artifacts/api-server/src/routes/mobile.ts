@@ -11201,7 +11201,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             tLog(`▶ Starting feed scroll — ${count} posts`);
             ({ likes, likeFailures, sharesFeed, sharesDm, saves, captionExpands, strayNavRecoveries, audioTaps, hashtagTaps, authorVisits, suggestionBrowses } = await runCheckFeedLoop(serial, {
               count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
-              homeAlreadyEstablished: !_isFirst,
+              // A preceding tool may leave Instagram on a profile, viewer, or
+              // another nested surface. Tool order does not prove that Home is
+              // currently established, so View Feed must perform its own live
+              // Home-tab navigation every time.
+              homeAlreadyEstablished: false,
               shareFeedPercentMin, shareFeedPercentMax,
               shareDmPercentMin, shareDmPercentMax,
               savePercentMin, savePercentMax,
