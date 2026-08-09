@@ -25,6 +25,7 @@ export function writeLocalSlotTrustScore(serial: string, slotIdx: number, scoreI
 }
 
 export async function loadSlotTrustScore(serial: string, slotIdx: number): Promise<string | null> {
+  if (!serial) return null;
   const localScore = readLocalSlotTrustScore(serial, slotIdx);
   try {
     const response = await fetch(

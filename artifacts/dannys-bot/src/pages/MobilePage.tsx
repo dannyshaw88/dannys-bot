@@ -7368,11 +7368,14 @@ function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 142, hideIco
   const current = levels.find(l => l.id === scoreId) ?? null;
 
   useEffect(() => {
+    if (!serial) return;
     let active = true;
-    loadSlotTrustScore(serial, slotIdx).then(id => {
-      if (active) setScoreId(id);
-    });
-    return () => { active = false; };
+    const timer = window.setTimeout(() => {
+      loadSlotTrustScore(serial, slotIdx).then(id => {
+        if (active) setScoreId(id);
+      });
+    }, 700 + slotIdx * 70);
+    return () => { active = false; window.clearTimeout(timer); };
   }, [serial, slotIdx]);
 
   const save = async (id: string | null) => {
