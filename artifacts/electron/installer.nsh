@@ -50,6 +50,10 @@
 ;   clears the flag.
 
 !macro customInit
+  ; electron-builder 25 does not support a defaultDirName configuration
+  ; property. Set the initial directory through NSIS so the directory page
+  ; opens at Program Files while still allowing the user to change it.
+  StrCpy $INSTDIR "$PROGRAMFILES\Aura Farming"
   ; Signal to any already-installed version's uninstaller that this is an
   ; update, not a user-initiated uninstall.  The old customUnInstall reads
   ; this flag and skips deleting the desktop shortcut so the icon position

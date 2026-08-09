@@ -1,3 +1,13 @@
+## [1.2.436] — 2026-08-09
+
+### Fixed — Windows installer build and default path
+
+- Fixed the installer packaging failure caused by an unsupported
+  `defaultDirName` electron-builder option.
+- The NSIS installer now opens with
+  `C:\Program Files\Aura Farming` as the default while retaining the option
+  to choose another directory.
+
 ## [1.2.435] — 2026-08-09
 
 ### Fixed — Windows installer packaging

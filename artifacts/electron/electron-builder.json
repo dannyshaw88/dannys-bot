@@ -43,7 +43,6 @@
     "oneClick": false,
     "runAfterFinish": true,
     "allowToChangeInstallationDirectory": true,
-    "defaultDirName": "${autopf}\\Aura Farming",
     "createDesktopShortcut": false,
     "createStartMenuShortcut": true,
     "shortcutName": "Aura Farming",
