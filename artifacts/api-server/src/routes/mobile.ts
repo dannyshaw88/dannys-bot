@@ -8537,7 +8537,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         doFixAiSlop: true,
         alterationEnabled: true,
         alterationLevel: "small",
-        onLog,
+      // The preparation pipeline is shared with Make a Post, but this caller
+      // is Update Profile Pic. Relabel delegated progress lines so Random
+      // Actions cannot misreport an avatar update as a post.
+      onLog: (msg) => onLog?.(msg.replace(/^Make a Post:/, "Update Profile Pic:")),
       });
     } catch (e: any) {
       onLog?.(`Update Profile Pic: ✗ image preparation failed: ${e?.message}`);
