@@ -423,6 +423,15 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
     // component instance.
     useVideoRef.current = WEBCODECS_SUPPORTED;
 
+    // Mounting/navigating to a device must not start a real Android mirror.
+    // Opening the stream performs ADB/scrcpy work and can wake or otherwise
+    // contend with the device while the user is only selecting it. The
+    // explicit Power button and active automation are the only live triggers.
+    if (!live) {
+      setStatus("waiting");
+      return () => { active = false; };
+    }
+
     const closeDecoder = (clearCanvas = false) => {
       try { decoderRef.current?.close(); } catch { /* ignore */ }
       decoderRef.current = null;
@@ -678,7 +687,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       closeDecoder();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serial]);
+  }, [serial, live]);
 
   // ── Mirror-live signal ───────────────────────────────────────────────────
   // When `live` goes true (Power pressed or cycle starts) tell the server so
