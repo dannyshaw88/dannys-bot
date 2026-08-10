@@ -9491,18 +9491,29 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
   const [checkingInfo,   setCheckingInfo]   = React.useState(false);
   const [expandedLogGroups, setExpandedLogGroups] = React.useState<Set<string>>(() => new Set());
 
-  // Only auto-scroll when the user is already at (or near) the bottom.
+  // Only auto-scroll when the user is currently at (or near) the bottom.
+  // Use the scroll container directly instead of scrollIntoView(): the
+  // sentinel can cause an ancestor/page scroll and its resulting scroll event
+  // can overwrite pinnedRef while a new log batch is being rendered.
   useEffect(() => {
-    if (pinnedRef.current) {
-      bottomRef.current?.scrollIntoView({ block: "end" });
-    }
+    if (!pinnedRef.current) return;
+    const frame = requestAnimationFrame(() => {
+      const el = scrollRef.current;
+      if (!el) return;
+      el.scrollTop = el.scrollHeight;
+      // Keep the follow state authoritative after the programmatic scroll.
+      pinnedRef.current = true;
+    });
+    return () => cancelAnimationFrame(frame);
   }, [lines.length]);
 
   const handleScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
-    // Consider "at bottom" when within 60px of the end.
-    pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+    // Consider "at bottom" when within 60px of the end. Re-evaluate this on
+    // every user scroll: scrolling back down must resume follow mode, while
+    // scrolling up must pause it until the user reaches the bottom again.
+    pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= 60;
   };
 
   const handleCheckScreenInfo = async () => {
