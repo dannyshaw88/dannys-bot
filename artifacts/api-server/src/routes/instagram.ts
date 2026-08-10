@@ -6030,6 +6030,19 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
     const sourcePath = path.join(tempDir, safeName);
     let workingPath = sourcePath;
     let processingStage = localPath ? "copying Windows local file" : "decoding image data";
+      const verifyProcessedBuffer = async (
+        output: Buffer,
+        input: Buffer,
+        stage: string,
+      ): Promise<void> => {
+        if (!output.length || output.equals(input)) {
+          throw new Error(`${stage} output was empty or byte-identical to its input`);
+        }
+        const metadata = await sharp(output).metadata();
+        if (!metadata.format || !metadata.width || !metadata.height) {
+          throw new Error(`${stage} output is missing a valid image format or dimensions`);
+        }
+      };
 
     try {
       if (localPath) {
@@ -6042,12 +6055,17 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
 
       if (shouldFixAiSlop) {
         processingStage = "Fix AI Slop";
+        const input = await fs.promises.readFile(workingPath);
         workingPath = await fixAiSlop(workingPath);
-        const processedStat = await fs.promises.stat(workingPath);
+        if (workingPath === sourcePath) {
+          throw new Error("Fix AI Slop returned the original source path");
+        }
+        const output = await fs.promises.readFile(workingPath);
+        await verifyProcessedBuffer(output, input, "Fix AI Slop");
         console.log(
-          `[images/process] Fix AI Slop output ready — ` +
+          `[images/process] Fix AI Slop output verified — ` +
           `source=${path.basename(sourcePath)} output=${path.basename(workingPath)} ` +
-          `bytes=${processedStat.size}`,
+          `bytes=${output.length}`,
         );
       }
 
@@ -6056,11 +6074,13 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
 
       if (alterationEnabled) {
         processingStage = "image alteration";
+        const input = output;
         output = await alterJpegBuffer(
           output,
           alterationLevel ?? "small",
           imageSettingsEnabled ? imageSettings : undefined,
         );
+        await verifyProcessedBuffer(output, input, "Image alteration");
       }
 
       const isJpeg = output.length >= 2 && output[0] === 0xff && output[1] === 0xd8;
