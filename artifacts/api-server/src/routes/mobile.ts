@@ -3843,7 +3843,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // its own mix so the distribution never converges to a fixed signature
     // over many sessions. Weights are relative (don't need to sum to 100).
     const feedScrollWeights = {
-      skim:      1 + Math.floor(Math.random() * 10), // 1–10
+      skim:      1 + Math.floor(Math.random() * 5),  // 1–5 (Super skim)
       normal:    5 + Math.floor(Math.random() * 6),  // 5–10 (Skim label)
       interested: 40 + Math.floor(Math.random() * 36), // 40–75 (Normal label)
       back:       Math.floor(Math.random() * 11),      // 0–10
@@ -5777,7 +5777,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     // Session scroll personality — same approach as runCheckFeedLoop.
     const exploreScrollWeights = {
-      skim:      1 + Math.floor(Math.random() * 10), // 1–10
+      skim:      1 + Math.floor(Math.random() * 5),  // 1–5 (Super skim)
       normal:    5 + Math.floor(Math.random() * 6),  // 5–10 (Skim label)
       interested: 40 + Math.floor(Math.random() * 36), // 40–75 (Normal label)
       back:       Math.floor(Math.random() * 11),      // 0–10
@@ -6379,7 +6379,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // per clip, unlike the feed's partial nudge), which just means occasionally
     // rewatching a reel — a normal human behaviour kept at a low weight.
     const reelsScrollWeights = {
-      skim:      1 + Math.floor(Math.random() * 10), // 1–10
+      skim:      1 + Math.floor(Math.random() * 5),  // 1–5 (Super skim)
       normal:    5 + Math.floor(Math.random() * 6),  // 5–10 (Skim label)
       interested: 40 + Math.floor(Math.random() * 36), // 40–75 (Normal label)
       back:       Math.floor(Math.random() * 11),      // 0–10
