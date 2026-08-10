@@ -7450,21 +7450,44 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const tempFiles: string[] = [];
     const tempDirs: string[] = [];
     const prefix = fileName.includes("/") ? "Make a Post" : "Make a Post";
+    const verifyProcessedImage = async (
+      candidatePath: string,
+      inputBytes: Buffer,
+      stage: string,
+    ): Promise<Buffer> => {
+      const outputBytes = await fsPromises.readFile(candidatePath);
+      if (!outputBytes.length || outputBytes.equals(inputBytes)) {
+        throw new Error(`${stage} output was empty or byte-identical to its input`);
+      }
+      try {
+        const metadata = await sharp(outputBytes).metadata();
+        if (!metadata.format || !metadata.width || !metadata.height) {
+          throw new Error("missing image format or dimensions");
+        }
+      } catch (e: any) {
+        throw new Error(`${stage} output is not a valid decodable image: ${e?.message ?? String(e)}`);
+      }
+      return outputBytes;
+    };
 
     let pushFilePath = localFilePath;
     if (doFixAiSlop) {
       onLog?.(`${prefix}: Fix AI Slop — stripping metadata & AI fingerprints…`);
       try {
-        pushFilePath = await fixAiSlop(localFilePath);
-        if (pushFilePath !== localFilePath) {
-          tempFiles.push(pushFilePath);
-          onLog?.(`${prefix}: Fix AI Slop ✓ — metadata stripped, DCT watermarks scrambled`);
-        } else {
-          onLog?.(`${prefix}: Fix AI Slop — sharp unavailable, skipped`);
+        const inputBytes = await fsPromises.readFile(pushFilePath);
+        pushFilePath = await fixAiSlop(pushFilePath);
+        if (pushFilePath === localFilePath) {
+          throw new Error("processor returned the original source path");
         }
+        tempFiles.push(pushFilePath);
+        await verifyProcessedImage(pushFilePath, inputBytes, "Fix AI Slop");
+        onLog?.(`${prefix}: Fix AI Slop verified — processed image is decodable and differs from input`);
       } catch (e: any) {
-        onLog?.(`${prefix}: Fix AI Slop error — ${e?.message ?? "unknown error"}, continuing with original`);
-        pushFilePath = localFilePath;
+        await Promise.all(tempFiles.map(file => fsPromises.unlink(file).catch(() => {})));
+        tempFiles.length = 0;
+        await Promise.all(tempDirs.map(dir => fsPromises.rm(dir, { recursive: true, force: true }).catch(() => {})));
+        tempDirs.length = 0;
+        throw new Error(`Fix AI Slop verification failed: ${e?.message ?? "unknown error"}`);
       }
     }
 
@@ -7488,6 +7511,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         tempDirs.push(tempDir);
         tempFiles.push(alteredPath);
         pushFilePath = alteredPath;
+        await verifyProcessedImage(pushFilePath, input, `${level} image alteration`);
 
         // alterJpegBuffer emits JPEG when Sharp is available. Keep the
         // extension aligned with the bytes so Android MediaStore/Instagram
@@ -7495,9 +7519,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (isJpeg && sourceExt !== ".jpg" && sourceExt !== ".jpeg") {
           pushFileName = `${path.basename(fileName, path.extname(fileName))}.jpg`;
         }
-        onLog?.(`${prefix}: ${level} image alteration ✓ — pushing processed copy`);
+        onLog?.(`${prefix}: ${level} image alteration verified — pushing processed copy`);
       } catch (e: any) {
-        onLog?.(`${prefix}: image alteration error — ${e?.message ?? "unknown error"}, continuing with previous image`);
+        await Promise.all(tempFiles.map(file => fsPromises.unlink(file).catch(() => {})));
+        tempFiles.length = 0;
+        await Promise.all(tempDirs.map(dir => fsPromises.rm(dir, { recursive: true, force: true }).catch(() => {})));
+        tempDirs.length = 0;
+        throw new Error(`${level} image alteration verification failed: ${e?.message ?? "unknown error"}`);
       }
     }
 
