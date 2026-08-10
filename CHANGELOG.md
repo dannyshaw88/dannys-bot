@@ -1,3 +1,14 @@
+## [1.2.458] — 2026-08-10
+
+### Fixed — Update Bio clears existing text
+
+- Update Bio now explicitly selects all existing Bio content and clears it
+  before starting calibrated typing.
+- The focused field is checked after clearing; if text remains, the operation
+  aborts instead of appending the new Bio at an arbitrary cursor position.
+- Included the latest account-switching diagnostic screenshots in the project
+  assets for reproducible debugging.
+
 ## [1.2.457] — 2026-08-10
 
 ### Fixed — Random Actions Update Bio replacement
