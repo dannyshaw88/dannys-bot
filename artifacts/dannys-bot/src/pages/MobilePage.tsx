@@ -2108,9 +2108,6 @@ function CalibrationDialog({
 
         <div className="rounded-lg border border-cyan-700/60 bg-cyan-950/40 px-3 py-3">
           <p className="text-xs font-bold uppercase tracking-wide text-cyan-200">TEST TEXT</p>
-          <p className="mt-1 text-[11px] leading-4 text-cyan-100/80">
-            Type a word while the phone keyboard is open. TEST presses every character using only this device&apos;s saved mapped coordinates.
-          </p>
           <div className="mt-2 flex gap-2">
             <BaseInput
               value={testText}
