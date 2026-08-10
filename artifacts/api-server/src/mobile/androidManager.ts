@@ -7472,17 +7472,22 @@ export async function switchToInstagramAccount(
   //    (7.5 s total budget), exits the moment the tab appears, zero extra
   //    wait on a warm Instagram where the nav bar is already rendered.
   let profileTab: { x: number; y: number } | null = null;
+  let profileTabSource = "unknown";
   if (preloadedXml) {
     profileTab =
       _findBottomProfileResource(preloadedXml)
        ?? _findBottomProfileLabel(preloadedXml);
+    if (profileTab) profileTabSource = "preloaded accessibility tree";
   }
   if (!profileTab) {
     const PROFILE_TAB_POLL_MS  = 1500;
     const PROFILE_TAB_MAX_POLL = 8;
     for (let pt = 0; pt < PROFILE_TAB_MAX_POLL; pt++) {
       profileTab = await findInstagramProfileTab(serial).catch(() => null);
-      if (profileTab) break;
+      if (profileTab) {
+        profileTabSource = `live accessibility poll ${pt + 1}/${PROFILE_TAB_MAX_POLL}`;
+        break;
+      }
       // Do not call dismissInstagramInterstitials() here. That helper performs
       // another full UIAutomator dump. On a cold/overloaded device one dump can
       // take 18–20 seconds, so the old "1.5 s" retry actually stacked two
@@ -7506,13 +7511,17 @@ export async function switchToInstagramAccount(
   // settle window after the tab is detected; this is deliberately a wait, not
   // a second gesture or a retry.
   const PROFILE_TAB_SETTLE_MS = 1500;
-  onLog?.(`  ↳ Profile tab found — waiting ${PROFILE_TAB_SETTLE_MS / 1000}s for Instagram to finish rendering…`);
+  onLog?.(`  ↳ Profile tab found at (${profileTab.x},${profileTab.y}) via ${profileTabSource} — waiting ${PROFILE_TAB_SETTLE_MS / 1000}s for Instagram to finish rendering…`);
   await _sleep(PROFILE_TAB_SETTLE_MS);
 
   // 2. Open the active account profile with a single tap. Instagram's newer
   // account UI no longer reliably opens the account list from a long-press.
-  onLog?.(`  ↳ Tapping profile tab to open the active account profile…`);
+  const profileBeforeTapXml = preloadedXml || "";
+  onLog?.(`  ↳ Tapping profile tab at (${profileTab.x},${profileTab.y}) to open the active account profile…`);
   await _adbTapAsync(adbPath, serial, profileTab.x, profileTab.y);
+  await _sleep(450);
+  const profileAfterTabTapXml = await _uiDump(adbPath, serial).catch(() => "");
+  onLog?.(`  ↳ Profile-tab tap result: xmlLength=${profileAfterTabTapXml.length}, changed=${profileBeforeTapXml ? profileAfterTabTapXml !== profileBeforeTapXml : "not-comparable"}, hasProfileHeader=${/action_bar_username_container/i.test(profileAfterTabTapXml)}, hasBottomNav=${/bottom_nav|tab_bar|profile_tab/i.test(profileAfterTabTapXml)}`);
   const PROFILE_SCREEN_SETTLE_MS = 1000 + Math.floor(Math.random() * 1501);
   onLog?.(`  ↳ Waiting ${PROFILE_SCREEN_SETTLE_MS}ms for the profile header to settle…`);
   await _sleep(PROFILE_SCREEN_SETTLE_MS);
