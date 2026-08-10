@@ -1,5 +1,17 @@
 ## [1.2.447] — 2026-08-09
 
+### Fixed — Follow filter skip navigation
+
+- When a candidate is rejected by a Follow profile filter, the automation now
+  returns once to the search results instead of repeatedly navigating through
+  the Home UI.
+- The rejected candidate's query is cleared, the live Instagram search bar is
+  tapped, and focus is confirmed before the next candidate is attempted.
+- Applied this behavior consistently to Males Only, Verified, Private,
+  follower-count, English Speaking, and profile-check failure skips.
+- Preserved the final Follow cleanup behavior so the tool still returns to the
+  normal Home UI only after the Follow run is complete.
+
 ### Fixed — Scroll personality labels
 
 - Renamed the user-facing per-scroll **Interested** label to **Normal** in

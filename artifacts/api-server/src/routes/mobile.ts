@@ -9646,6 +9646,31 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
     };
 
+    // A rejected profile must stay inside the Explore/search flow. Returning
+    // to the normal UI here makes the next candidate trigger the expensive
+    // Home → Search navigation again and can cause the cleanup Back sequence
+    // to land on Home. Return one level to results, clear the query, and leave
+    // the live search field focused for the next candidate.
+    const returnToClearedFollowSearch = async () => {
+      await android.pressBack(serial);
+      await sleepOrAbort(serial, 500);
+      await android.clearInstagramSearchBar(serial, (msg) => onLog?.(`Follow: skipped-user cleanup — ${msg}`));
+      const searchBar = await android.findInstagramSearchBar(serial, onLog).catch(() => null);
+      if (!searchBar) {
+        onLog?.("Follow: skipped-user cleanup — cleared search bar not found");
+        return false;
+      }
+      await android.tap(serial, searchBar.x, searchBar.y);
+      await sleepOrAbort(serial, 500);
+      const focused = await android.isInstagramSearchBarFocused(serial).catch(() => false);
+      if (!focused) {
+        onLog?.("Follow: skipped-user cleanup — search bar focus not confirmed");
+        return false;
+      }
+      onLog?.("Follow: skipped-user cleanup — search bar cleared and focused for next user");
+      return true;
+    };
+
     // ── Shared state — populated by either the normal fetch path or the
     //    spread-mode preloaded path, then consumed by the shared follow loop. ──
     const _usePreloaded = !!params.preloadedCandidates;
@@ -10032,8 +10057,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               if (!matchesAllowedName) {
                 onLog?.(`Follow: @${username} has no allowed Males Only name in username, name, or bio — skipping`);
                 if (params.writeSkippedUsers) storage.addSkippedUser(username, "males-only-name").catch(() => {});
-                await android.pressBack(serial);
-                await sleepOrAbort(serial, 500);
+                await returnToClearedFollowSearch();
                 continue;
               }
             }
@@ -10048,8 +10072,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               if (isVerified) {
                 onLog?.(`Follow: @${username} is verified — skipping (Skip Verified filter)`);
                 if (params.writeSkippedUsers) storage.addSkippedUser(username, "verified-badge").catch(() => {});
-                await android.pressBack(serial);
-                await sleepOrAbort(serial, 500);
+                await returnToClearedFollowSearch();
                 continue;
               }
             }
@@ -10076,8 +10099,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               if (isPrivate) {
                 onLog?.(`Follow: @${username} is private — skipping (Private Users filter)`);
                 if (params.writeSkippedUsers) storage.addSkippedUser(username, "private-account").catch(() => {});
-                await android.pressBack(serial);
-                await sleepOrAbort(serial, 500);
+                await returnToClearedFollowSearch();
                 continue;
               }
             }
@@ -10097,15 +10119,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   if (filters.maxFollowers !== undefined && count >= filters.maxFollowers) {
                     onLog?.(`Follow: @${username} has ${count.toLocaleString()} followers (≥25K) — skipping (-25K filter)`);
                     if (params.writeSkippedUsers) storage.addSkippedUser(username, "too-many-followers").catch(() => {});
-                    await android.pressBack(serial);
-                    await sleepOrAbort(serial, 500);
+                    await returnToClearedFollowSearch();
                     continue;
                   }
                   if (filters.minFollowers !== undefined && count < filters.minFollowers) {
                     onLog?.(`Follow: @${username} has ${count.toLocaleString()} followers (<${filters.minFollowers}) — skipping (50 Followers+ filter)`);
                     if (params.writeSkippedUsers) storage.addSkippedUser(username, "too-few-followers").catch(() => {});
-                    await android.pressBack(serial);
-                    await sleepOrAbort(serial, 500);
+                    await returnToClearedFollowSearch();
                     continue;
                   }
                 }
@@ -10172,8 +10192,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               if (skipForEnglish) {
                 onLog?.(`Follow: @${username} bio contains non-allowed script — skipping (English Speaking filter)`);
                 if (params.writeSkippedUsers) storage.addSkippedUser(username, "non-english").catch(() => {});
-                await android.pressBack(serial);
-                await sleepOrAbort(serial, 500);
+                await returnToClearedFollowSearch();
                 continue;
               }
             }
@@ -10182,15 +10201,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             if (filters.skipPrivate) {
               onLog?.(`Follow: private-account check failed for @${username} — skipping`);
               if (params.writeSkippedUsers) storage.addSkippedUser(username, "private-check-failed").catch(() => {});
-              await android.pressBack(serial);
-              await sleepOrAbort(serial, 500);
+              await returnToClearedFollowSearch();
               continue;
             }
             if (filters.malesOnly) {
               onLog?.(`Follow: Males Only profile check failed for @${username} (${filterErr?.message}) — skipping`);
               if (params.writeSkippedUsers) storage.addSkippedUser(username, "males-only-check-failed").catch(() => {});
-              await android.pressBack(serial);
-              await sleepOrAbort(serial, 500);
+              await returnToClearedFollowSearch();
               continue;
             }
             onLog?.(`Follow: profile-filter check failed for @${username} (${filterErr?.message}) — proceeding`);
