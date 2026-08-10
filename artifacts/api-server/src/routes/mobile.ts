@@ -11192,7 +11192,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // this makes every injected follow position explicit in the log.
       const _effectiveToolOrder = _toolSeq.map(_name =>
         _name.startsWith("follow_spread:")
-          ? `FOLLOW @${_name.slice("follow_spread:".length)}`
+          // Show each injected spread slot as the same tool label used by the
+          // shuffle. The specific candidate is logged when that Follow Users
+          // slot executes; the order display should make duplicate Follow
+          // positions visible rather than replacing them with usernames.
+          ? "FOLLOW USERS"
           : (_toolOrderLabels[_name] ?? _name),
       );
       tLog(`▶ Effective tool order${followSpreadFollows ? " (Spread Follows applied where active)" : ""}: ${
