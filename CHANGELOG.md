@@ -1,3 +1,23 @@
+## [1.2.466] — 2026-08-10
+
+### Improved — Typing gesture diagnostics and typo correction
+
+- Preserved the configured human-error typing behavior used for realistic
+  keyboard gestures.
+- Fixed the internal typo-correction path so its calibrated Backspace tap is
+  permitted only for that controlled correction and does not weaken the
+  general destructive-key safety guard.
+- The configured 35 ms Backspace correction timing is now applied instead of
+  being ignored.
+- Added installer-log diagnostics for human-error probability, typing-gap
+  configuration, keyboard layer, Backspace-map availability, typo and
+  Backspace tap results, elapsed gesture time, and actual pacing delays.
+- Added profile-tab source, coordinates, and post-tap accessibility-state
+  diagnostics to make initial account/profile navigation failures attributable
+  to the selected node and resulting screen state.
+- Confirmed the existing canonical Windows installer workflow remains the only
+  installer Actions workflow; no duplicate workflow was added.
+
 ## [1.2.465] — 2026-08-10
 
 ### Added — Follow typing diagnostics and calibration export
