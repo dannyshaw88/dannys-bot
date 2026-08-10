@@ -431,16 +431,16 @@ function TrustScoreAutomationEditor({
   const LevelIcon = level.icon;
   return (
     <div className="h-full flex flex-col">
-      <div className="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-border bg-background">
-        <div className="flex items-center gap-3 pl-2 shrink-0">
+      <div className="relative shrink-0 min-h-[52px] border-b border-border bg-background">
+        <div className="absolute left-1/2 top-1/2 z-10 -translate-y-1/2 pl-6">
           <button
             onClick={onBack}
-            className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-background px-2.5 py-1.5 text-sm font-semibold text-foreground shadow-sm hover:bg-accent transition-colors"
+            className="flex items-center gap-1.5 whitespace-nowrap text-sm font-semibold text-foreground hover:text-foreground/70 transition-colors"
           >
             <ChevronLeft className="w-4 h-4 shrink-0" /> Back to TrustScores
           </button>
         </div>
-        <div className="ml-auto flex items-center gap-3 shrink-0">
+        <div className="absolute right-[13px] top-1/2 z-10 -translate-y-1/2 flex items-center gap-3">
           <Button
             size="sm"
             variant="outline"
