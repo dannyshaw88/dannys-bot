@@ -2224,12 +2224,6 @@ function CalibrationDialog({
         ) : mode === "intro" ? (
         /* ── Intro / start screen ── */
           <div className="space-y-4">
-            <div className="rounded-lg border border-amber-500/50 bg-amber-950/50 px-3 py-3">
-              <p className="text-xs font-bold uppercase tracking-wide text-amber-200">Do this first</p>
-              <p className="mt-1 text-sm leading-5 text-amber-100">
-                Open Instagram on the phone, tap a text field, and make sure the keyboard is fully visible before starting.
-              </p>
-            </div>
             <ol className="list-decimal space-y-1.5 pl-5 text-xs leading-5 text-slate-300">
               <li>Open a DM composer, comment box, or search field.</li>
               <li>Leave the keyboard on the ABC / letters layer.</li>
