@@ -440,7 +440,7 @@ function TrustScoreAutomationEditor({
             <ChevronLeft className="w-4 h-4 shrink-0" /> Back to TrustScores
           </button>
         </div>
-        <div className="absolute right-[5px] top-1/2 z-10 -translate-y-1/2 flex items-center gap-3">
+        <div className="absolute right-[2px] top-1/2 z-10 -translate-y-1/2 flex items-center gap-3">
           <Button
             size="sm"
             variant="outline"
