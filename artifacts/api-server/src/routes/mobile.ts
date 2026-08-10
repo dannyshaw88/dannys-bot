@@ -3346,7 +3346,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
    *
    * Four modes, weighted by `weights` (treated as relative, not %-of-100):
    *   super skim — fast long swipe (flicking through boring content)
-   *   skim       — medium-paced scroll
+   *   fast       — medium-paced scroll
    *   normal     — slow short nudge (something caught the eye)
    *   back       — short reversed swipe (peeked back up)
    *
@@ -3392,7 +3392,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     cum += normal;
     if (roll < cum) {
-      // Skim: comfortable mid-speed scroll
+      // Fast: comfortable mid-speed scroll
       return {
         mode: "normal",
         duration: 450 + Math.round(Math.random() * 350),
@@ -3458,7 +3458,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const durationBand: Record<"skim" | "normal" | "interested" | "back", [number, number]> = {
       skim: [0, 0.35],
       normal: [0.25, 0.75],
-      interested: [0.65, 1],
+      interested: [0.80, 1],
       back: [0.25, 0.75],
     };
     const [bandStart, bandEnd] = personality ? durationBand[personality] : [0, 1];
@@ -3859,11 +3859,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // over many sessions. Weights are relative (don't need to sum to 100).
     const feedScrollWeights = {
       skim:      1 + Math.floor(Math.random() * 5),  // 1–5 (Super skim)
-      normal:    5 + Math.floor(Math.random() * 6),  // 5–10 (Skim label)
+      normal:    10 + Math.floor(Math.random() * 16), // 10–25 (Fast label)
       interested: 40 + Math.floor(Math.random() * 36), // 40–75 (Normal label)
       back:       Math.floor(Math.random() * 11),      // 0–10
     };
-    onLog?.(`Feed scroll personality — super skim:${feedScrollWeights.skim} skim:${feedScrollWeights.normal} normal:${feedScrollWeights.interested} back:${feedScrollWeights.back}`);
+    onLog?.(`Feed scroll personality — super skim:${feedScrollWeights.skim} fast:${feedScrollWeights.normal} normal:${feedScrollWeights.interested} back:${feedScrollWeights.back}`);
     const feedPersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
 
     for (let i = 0; i < count; i++) {
@@ -5793,11 +5793,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Session scroll personality — same approach as runCheckFeedLoop.
     const exploreScrollWeights = {
       skim:      1 + Math.floor(Math.random() * 5),  // 1–5 (Super skim)
-      normal:    5 + Math.floor(Math.random() * 6),  // 5–10 (Skim label)
+      normal:    10 + Math.floor(Math.random() * 16), // 10–25 (Fast label)
       interested: 40 + Math.floor(Math.random() * 36), // 40–75 (Normal label)
       back:       Math.floor(Math.random() * 11),      // 0–10
     };
-    onLog?.(`Explore scroll personality — super skim:${exploreScrollWeights.skim} skim:${exploreScrollWeights.normal} normal:${exploreScrollWeights.interested} back:${exploreScrollWeights.back}`);
+    onLog?.(`Explore scroll personality — super skim:${exploreScrollWeights.skim} fast:${exploreScrollWeights.normal} normal:${exploreScrollWeights.interested} back:${exploreScrollWeights.back}`);
     const explorePersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
 
     for (let i = 0; i < scrollCount; i++) {
@@ -6395,11 +6395,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // rewatching a reel — a normal human behaviour kept at a low weight.
     const reelsScrollWeights = {
       skim:      1 + Math.floor(Math.random() * 5),  // 1–5 (Super skim)
-      normal:    5 + Math.floor(Math.random() * 6),  // 5–10 (Skim label)
+      normal:    10 + Math.floor(Math.random() * 16), // 10–25 (Fast label)
       interested: 40 + Math.floor(Math.random() * 36), // 40–75 (Normal label)
       back:       Math.floor(Math.random() * 11),      // 0–10
     };
-    onLog?.(`Reels scroll personality — super skim:${reelsScrollWeights.skim} skim:${reelsScrollWeights.normal} normal:${reelsScrollWeights.interested} back:${reelsScrollWeights.back}`);
+    onLog?.(`Reels scroll personality — super skim:${reelsScrollWeights.skim} fast:${reelsScrollWeights.normal} normal:${reelsScrollWeights.interested} back:${reelsScrollWeights.back}`);
     const reelsPersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
 
     // Reels snap fully to the next clip on a swipe — unlike the feed's
