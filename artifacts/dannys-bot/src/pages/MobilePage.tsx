@@ -2576,7 +2576,7 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
   );
 }
 
-const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; live: boolean; onPower: () => void; phoneDims: { w: number; h: number } | null; paneSize: { w: number; h: number } | null; inspectMode?: boolean; logRecMode?: boolean; logMarkers?: LogMarker[]; onExpectedTap?: (x: number, y: number, kind?: "expected" | "vicinity") => void; custom: SlotCustomization; onCustomChange: (c: SlotCustomization) => void }>(function PhoneSlot({ phone, idx, onLog, onDimensions, live, onPower, phoneDims, paneSize, inspectMode = false, logRecMode, logMarkers, onExpectedTap, custom, onCustomChange }, ref) {
+const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; live: boolean; manualLive: boolean; onPower: () => void; phoneDims: { w: number; h: number } | null; paneSize: { w: number; h: number } | null; inspectMode?: boolean; logRecMode?: boolean; logMarkers?: LogMarker[]; onExpectedTap?: (x: number, y: number, kind?: "expected" | "vicinity") => void; custom: SlotCustomization; onCustomChange: (c: SlotCustomization) => void }>(function PhoneSlot({ phone, idx, onLog, onDimensions, live, manualLive, onPower, phoneDims, paneSize, inspectMode = false, logRecMode, logMarkers, onExpectedTap, custom, onCustomChange }, ref) {
   const liveCanvasRef = useRef<LiveCanvasHandle>(null);
   // Re-exposes LiveCanvas's own handle so the page-level Log tab (rendered
   // as a sibling, not a child, of this slot) can read the mirror's live
@@ -3232,7 +3232,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
           <NavBtn icon={<ImagePlus className="w-3.5 h-3.5" />} label="Image" onClick={() => setShowManualMedia(v => !v)} />
           <NavBtn icon={<Home        className="w-3.5 h-3.5" />} label="Home"   onClick={() => sendKey(phone.serial, 3,   "Home",   onLog)} />
           <div className="w-px h-4 bg-white/10" />
-          <NavBtn icon={<Power       className="w-3 h-3" />}     label="Power"  onClick={() => { liveCanvasRef.current?.clearToBlack(); onPower(); sendKey(phone.serial, 224, "Wake", onLog); }} />
+          <NavBtn icon={<Power       className="w-3 h-3" />}     label={manualLive ? "Power off" : "Power on"}  onClick={() => { liveCanvasRef.current?.clearToBlack(); onPower(); sendKey(phone.serial, manualLive ? 223 : 224, manualLive ? "Sleep" : "Wake", onLog); }} />
           <div className="w-px h-4 bg-white/10" />
           <NavBtn icon={<Keyboard    className="w-3 h-3" />}     label="Keyboard" onClick={() => setShowCalibration(true)} />
         </div>
@@ -10432,7 +10432,8 @@ export function MobilePage() {
                   //   • a HST cycle is actively executing right now (hstEnabled)
                   //   • a Phone Apps cycle is actively executing (phoneAppsRunning)
                   live={!!(phone && (liveOn[phone.serial] || hstEnabled || phoneAppsRunning))}
-                  onPower={() => { if (phone) setLiveOn(s => ({ ...s, [phone.serial]: true })); }}
+                  manualLive={!!(phone && liveOn[phone.serial])}
+                  onPower={() => { if (phone) setLiveOn(s => ({ ...s, [phone.serial]: !s[phone.serial] })); }}
                   ref={phone?.serial === activeSerial ? activeSlotRef : undefined}
                   inspectMode={inspectMode}
                   logRecMode={logRecMode}
