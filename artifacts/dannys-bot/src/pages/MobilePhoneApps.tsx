@@ -239,7 +239,9 @@ function DeviceQuickControls({ serial }: { serial: string | null | undefined }) 
       </button>
       <button onClick={() => changeBrightness(-15)} disabled={!serial || brightness <= 0} title={`Decrease brightness (${brightness}%)`}
         className={`${buttonClass} bg-white text-gray-900`}><Minus className="w-3.5 h-3.5" /></button>
-      <button onClick={() => changeBrightness(15)} disabled={!serial || brightness >= 100} title={`Increase brightness (${brightness}%)`}
+      {/* Brightness Plus must remain pressable at the ceiling so the control
+          never disappears into a disabled state; the API clamps at 100%. */}
+      <button onClick={() => changeBrightness(15)} disabled={!serial} title={`Increase brightness (${brightness}%)`}
         className={`${buttonClass} bg-white text-gray-900`}><Plus className="w-3.5 h-3.5" /></button>
     </div>
   );

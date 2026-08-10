@@ -1,3 +1,14 @@
+## [1.2.451] — 2026-08-10
+
+### Fixed — My Device brightness controls
+
+- Kept the **Brightness Plus** button pressable whenever a device is selected,
+  including when the current brightness is already at 100%.
+- Pressing Plus at the maximum now safely remains capped at 100% through the
+  existing server-side brightness limit instead of disabling the control.
+- Preserved the disabled state when no device is selected, since there is no
+  device target for the action.
+
 ## [1.2.450] — 2026-08-10
 
 ### Fixed — Random Actions bio entry
