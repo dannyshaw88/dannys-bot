@@ -3458,8 +3458,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const durationBand: Record<"skim" | "normal" | "interested" | "back", [number, number]> = {
       skim: [0, 0.35],
       normal: [0.25, 0.75],
-      interested: [0.80, 1],
-      back: [0.05, 0.20],
+      interested: [0.90, 1],
+      back: [0.05, 0.10],
     };
     const [bandStart, bandEnd] = personality ? durationBand[personality] : [0, 1];
     const durationMs = Math.max(1, Math.round(
