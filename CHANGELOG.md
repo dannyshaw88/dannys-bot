@@ -1,3 +1,16 @@
+## [1.2.463] — 2026-08-10
+
+### Release — Windows installer delivery
+
+- Verified that all current project files are included in the Git history before
+  release.
+- Confirmed the canonical `.github/workflows/build-windows-installer.yml`
+  workflow builds the API and frontend bundles, packages the Windows Electron
+  installer, uploads the `Aura-Farming-Windows-Installer` artifact, and
+  publishes tagged installers to GitHub Releases.
+- Kept the canonical workflow as the single Windows installer workflow rather
+  than adding a duplicate Actions workflow.
+
 ## [1.2.462] — 2026-08-10
 
 ### Added — Account switch header-tap diagnostics
