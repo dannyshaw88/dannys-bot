@@ -3847,7 +3847,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const sv = rollScrollVelocity(h, feedScrollWeights, /*allowBack=*/i > 0, /*safeStartFrac=*/0.88, feedPersonalityHistory);
       feedPersonalityHistory.streak = feedPersonalityHistory.lastMode === sv.mode ? feedPersonalityHistory.streak + 1 : 1;
       feedPersonalityHistory.lastMode = sv.mode;
-      onLog?.(`View Feed ${i + 1}/${count} [${sv.mode}]`);
+      const feedModeLabel = sv.mode === "interested" ? "normal" : sv.mode === "skim" ? "super skim" : sv.mode;
+      onLog?.(`View Feed ${i + 1}/${count} [${feedModeLabel}]`);
       logger.info({ serial, target: "feed-scroll", mode: sv.mode, from: [x, sv.fromY], to: [x, sv.toY], durationMs: sv.duration }, "[check-feed] swipe");
       await deviceProfileSwipe(serial, { x1: x, y1: sv.fromY, x2: x, y2: sv.toY, durationMs: sv.duration }, "feed-scroll", sv.mode as "skim" | "normal" | "interested" | "back");
       await sleepOrAbort(serial, 180);
@@ -6276,7 +6277,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const esv = rollScrollVelocity(h, exploreScrollWeights, /*allowBack=*/i > 0, /*safeStartFrac=*/0.80, explorePersonalityHistory);
         explorePersonalityHistory.streak = explorePersonalityHistory.lastMode === esv.mode ? explorePersonalityHistory.streak + 1 : 1;
         explorePersonalityHistory.lastMode = esv.mode;
-        onLog?.(`View Explore ${i + 1}/${scrollCount}: next swipe [${esv.mode}]`);
+        const exploreModeLabel = esv.mode === "interested" ? "normal" : esv.mode === "skim" ? "super skim" : esv.mode;
+        onLog?.(`View Explore ${i + 1}/${scrollCount}: next swipe [${exploreModeLabel}]`);
         logger.info({ serial, source: "explore-scroll", mode: esv.mode, from: [x, esv.fromY], to: [x, esv.toY], durationMs: esv.duration }, "[mobile-input] swipe");
         await deviceProfileSwipe(serial, { x1: x, y1: esv.fromY, x2: x, y2: esv.toY, durationMs: esv.duration }, "explore-scroll", esv.mode as "skim" | "normal" | "interested" | "back");
         await sleepOrAbort(serial, 800);
@@ -6384,7 +6386,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       reelsPersonalityHistory.lastMode = rsv.mode;
       const beforeXml = await android.dumpUi(serial).catch(() => "");
       onLog?.(`${reelLabel}: swipe screen BEFORE — ${summarizeReelsSwipeScreen(beforeXml)}`);
-      onLog?.(`${reelLabel}: advance swipe [${rsv.mode}]`);
+      const reelsModeLabel = rsv.mode === "interested" ? "normal" : rsv.mode === "skim" ? "super skim" : rsv.mode;
+      onLog?.(`${reelLabel}: advance swipe [${reelsModeLabel}]`);
       logger.info({ serial, source: "reels-advance", mode: rsv.mode, from: [rx, rsv.fromY], to: [rx, rsv.toY], durationMs: rsv.duration }, "[mobile-input] swipe");
       const actualPath = await deviceProfileSwipe(serial, { x1: rx, y1: rsv.fromY, x2: rx, y2: rsv.toY, durationMs: rsv.duration }, "reels-advance", rsv.mode as "skim" | "normal" | "interested" | "back");
       const afterXml = await android.dumpUi(serial).catch(() => "");

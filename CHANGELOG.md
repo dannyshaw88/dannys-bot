@@ -1,5 +1,17 @@
 ## [1.2.447] — 2026-08-09
 
+### Fixed — Scroll personality labels
+
+- Renamed the user-facing per-scroll **Interested** label to **Normal** in
+  Feed, Explore, and Reels debugging logs.
+- Renamed the user-facing internal fast-flick `skim` label to **Super Skim**
+  in individual swipe log entries, matching the personality roll stamp.
+- Kept the internal mode identifiers unchanged so gesture selection,
+  anti-repetition history, and duration bands retain their existing behavior.
+- The visible personality names and weights are now consistently reported as
+  **Super Skim (1–10%)**, **Skim (5–10%)**, **Normal (40–75%)**, and
+  **Back (0–10%)**.
+
 ### Improved — Phone Farm Add Device popup
 
 - Opening **Add Device** no longer shrinks the phone-card grid or replaces the
