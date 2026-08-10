@@ -9785,6 +9785,9 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
              // fewer than three rendered rows.
              const isSwipeScreenDiagnostic = (line: string) =>
                /\bswipe screen (?:BEFORE|AFTER)\s+—/i.test(line);
+             const isSwipeScreenBlockLine = (line: string) =>
+               isSwipeScreenDiagnostic(line) ||
+               /\badvance swipe\b/i.test(line);
              const groups: string[][] = [];
              for (const line of lines) {
                const previous = groups[groups.length - 1];
@@ -9794,6 +9797,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                 const previousIsReelIconScan = previous?.some(isReelIconScanLine) ?? false;
                 const previousIsReelsBurst = previous?.some(isReelsBurstLine) ?? false;
                 const previousIsSwipeScreen = previous?.some(isSwipeScreenDiagnostic) ?? false;
+                const previousIsSwipeScreenBlock = previous?.some(isSwipeScreenBlockLine) ?? false;
                 if (
                   previous &&
                   previous.length > 0 &&
@@ -9811,7 +9815,12 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                       isAccessibilityDumpLine(line)
                     )) ||
                     (previousIsSwipeScreen && (
-                      isSwipeScreenDiagnostic(line) ||
+                      isSwipeScreenBlockLine(line) ||
+                      isReelIconScanLine(line) ||
+                      isAccessibilityDumpLine(line)
+                    )) ||
+                    (previousIsSwipeScreenBlock && (
+                      isSwipeScreenBlockLine(line) ||
                       isReelIconScanLine(line) ||
                       isAccessibilityDumpLine(line)
                     ))
@@ -9911,7 +9920,11 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                   group.some(isReelIconScanLine);
                 const isSwipeScreenGroup = group.some(isSwipeScreenDiagnostic);
                 const visibleRowCount = isReelsGroup || isSwipeScreenGroup ? 1 : 3;
-                const collapsible = group.length > visibleRowCount;
+                // Swipe-screen diagnostics are collapsed even when the
+                // diagnostic consists of only one rendered row. These lines
+                // are inherently verbose and must never occupy the log as
+                // expanded diagnostic noise.
+                const collapsible = isSwipeScreenGroup || group.length > visibleRowCount;
                const groupKey = `${groupIndex}:${timestampOf(group[0])}`;
                const expanded = expandedLogGroups.has(groupKey);
                if (!collapsible || expanded) {
