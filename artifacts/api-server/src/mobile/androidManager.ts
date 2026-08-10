@@ -10069,7 +10069,7 @@ export async function typeViaCalibrationMap(
   map: KeyCalibrationMap,
   onLog?: (msg: string) => void,
   typingProfile: TypingSpeedProfile,
-  options?: { disableHumanErrors?: boolean; shiftEnterNewlines?: boolean },
+  options?: { disableHumanErrors?: boolean; shiftEnterNewlines?: boolean; debugLabel?: string },
 ): Promise<{ ok: boolean; missing: string[] }> {
   if (!typingProfile ||
       !Number.isFinite(typingProfile.minMs) ||
@@ -10129,6 +10129,9 @@ export async function typeViaCalibrationMap(
       return false;
     }
     onLog?.(`[cal-keyboard] tapped ${description} at (${pos.x},${pos.y})`);
+    if (options?.debugLabel && /(?:shift|enter|backspace|delete)/i.test(description)) {
+      onLog?.(`[${options.debugLabel}] key-event=${description} coordinate=(${pos.x},${pos.y}) dwellMs=${dwellMs}`);
+    }
     const min = Math.max(0, Math.min(typingProfile.minMs, typingProfile.maxMs));
     const max = Math.max(min, typingProfile.maxMs);
     await _sleep(min + Math.round(Math.random() * (max - min)));
@@ -10229,6 +10232,7 @@ export async function typeViaCalibrationMap(
         // Enter here; it is not a character and does not affect the saved
         // calibration map.
         if (!await tapMapped("shift", "Shift before newline")) missing.push(ch);
+        if (options?.debugLabel) onLog?.(`[${options.debugLabel}] newline sequence: Shift completed; sending Enter`);
       }
       if (!await tapMapped(label, ch === " " ? "space" : "Enter")) missing.push(ch);
         if (ch === " ") {

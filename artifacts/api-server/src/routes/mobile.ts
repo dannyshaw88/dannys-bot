@@ -8860,14 +8860,35 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // characters below still arrive only through calibrated key taps.
       const tools = android.detectToolset();
       const adb = tools.adb.path ?? "";
+      const bioFieldState = async (label: string) => {
+        const stateXml = await android.dumpUi(serial).catch(() => "");
+        const fields = [...stateXml.matchAll(/<node\b[^>]*class="android\.widget\.EditText"[^>]*>/gi)]
+          .map(match => match[0])
+          .filter(node => /focused="true"/i.test(node));
+        const field = fields[0];
+        const text = field?.match(/\btext="([^"]*)"/i)?.[1] ?? "";
+        const selection = field?.match(/\b(?:selection-start|selectionStart)="([^"]*)"[^>]*\b(?:selection-end|selectionEnd)="([^"]*)"/i);
+        onLog?.(
+          `[Update Bio DEBUG] ${label}: focusedEditTexts=${fields.length}` +
+          ` textLength=${text.length}` +
+          ` selection=${selection ? `${selection[1]}-${selection[2]}` : "not-exposed"}` +
+          ` hasBackspace=${stateXml.includes("backspace") || stateXml.includes("delete")}` +
+          ` hasShift=${stateXml.includes("shift") || stateXml.includes("Shift")}` +
+          ` hasEnter=${stateXml.includes("enter") || stateXml.includes("Enter")}`,
+        );
+      };
+      await bioFieldState("before Ctrl+A");
       if (adb) {
-        spawnSync(adb, ["-s", serial, "shell", "input", "keycombination",
+        const ctrlA = spawnSync(adb, ["-s", serial, "shell", "input", "keycombination",
           "KEYCODE_CTRL_LEFT", "KEYCODE_A"], { encoding: "utf8", timeout: 2000 });
+        onLog?.(`[Update Bio DEBUG] Ctrl+A exit=${ctrlA.status ?? "unknown"} stderr=${String(ctrlA.stderr ?? "").trim() || "none"}`);
         await sleepOrAbort(serial, 400);
       }
+      await bioFieldState("after Ctrl+A before typing");
       const typed = await android.typeViaSavedCalibrationMap(serial, bioText, loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile, message => {
         onLog?.(`Update Bio: ${message}`);
-      }, { disableHumanErrors: true, shiftEnterNewlines: true });
+      }, { disableHumanErrors: true, shiftEnterNewlines: true, debugLabel: "Update Bio DEBUG" });
+      await bioFieldState("after calibrated typing");
       if (!typed.ok) {
         onLog?.(
           `Update Bio: ✗ calibrated keyboard could not enter bio` +
