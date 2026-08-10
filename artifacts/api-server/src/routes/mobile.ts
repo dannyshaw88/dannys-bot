@@ -3766,22 +3766,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       let shareFeed = repostNode ? pos(repostNode) : null;
       let shareDm = dmNode ? pos(dmNode) : null;
 
-      // Some IG builds remove all labels, but expose exactly three clickable
-      // icon nodes as empty ViewGroups or Buttons.  This is structural
-      // elimination, not a coordinate guess.  Any other cardinality is
-      // ambiguous (disabled icon, count wrapper, or unrelated control).
-      if (!comment && !shareFeed && !shareDm) {
-        const unlabeledIcons = clickableRow.filter(n =>
-          !n.rid && !n.desc && !n.text &&
-          (n.cls === "android.view.ViewGroup" || n.cls === "android.widget.Button"),
-        );
-        if (unlabeledIcons.length === 3) {
-          unlabeledIcons.sort((a, b) => a.x - b.x);
-          comment = pos(unlabeledIcons[0]);
-          shareFeed = pos(unlabeledIcons[1]);
-          shareDm = pos(unlabeledIcons[2]);
-        }
-      }
+      // Do not infer unlabeled action identity from horizontal position.
+      // Instagram can expose the comment bubble (or a wrapper/count node)
+      // without exposing the paper-plane node. In that case Share via DM
+      // must remain null and be skipped rather than guessed.
 
       const mediaCandidates = nodes.filter(n =>
         /(?:carousel_)?media_group/.test(n.rid) &&
