@@ -12466,6 +12466,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
+  // Native mirror Paste: the desktop clipboard value is loaded into the
+  // device clipboard, then Android's real paste key is dispatched. This is
+  // deliberately separate from input/text and must never fall back to
+  // character-by-character typing.
+  app.post("/api/mobile/devices/:serial/input/clipboard-paste", async (req: Request, res: Response) => {
+    try {
+      const input = inputTextSchema.parse(req.body);
+      const serial = p(req, "serial");
+      await android.setClipboard(serial, input.text);
+      await android.pasteClipboard(serial);
+      res.json({ ok: true, method: "native-clipboard-paste" });
+    } catch (e: any) {
+      res.status(400).json({ ok: false, error: e?.message ?? "Clipboard paste failed" });
+    }
+  });
+
   // Manual mirror "tap to type" sends characters through the saved
   // per-device keyboard calibration map. The field to receive the text is
   // intentionally not selected here: the user taps/focuses it in the mirror,

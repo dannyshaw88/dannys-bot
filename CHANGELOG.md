@@ -1,3 +1,20 @@
+## [1.2.452] — 2026-08-10
+
+### Fixed — Native mirror clipboard paste
+
+- Restored the `/input/clipboard-paste` endpoint used by the phone mirror's
+  right-click Paste action.
+- The endpoint uses the native Android clipboard-paste operation and returns a
+  clear error instead of silently falling back to character-by-character text
+  injection.
+- Random Actions bio updates continue verifying the inserted text length before
+  allowing the Bio screen to be saved.
+
+### Changed — Dashboard saved activity wording
+
+- Activity summaries now say `saved` instead of the ungrammatical `saves`.
+- Added a ribbon icon beside saved activity counts.
+
 ## [1.2.451] — 2026-08-10
 
 ### Fixed — My Device brightness controls
