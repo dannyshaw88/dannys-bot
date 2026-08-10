@@ -7434,13 +7434,10 @@ async function isKeyboardEmojiPickerOpen(serial: string): Promise<boolean> {
  * Returns true if the switch was performed (or the account was already active),
  * false if the username wasn't found in the switcher.
  *
- * Pre-check: before opening the switcher, a UI dump is taken and the current
- * screen is scanned for the target username. Instagram's profile tab icon
- * almost always has content-desc="Profile picture for [username]" or
- * "[username]'s profile" when that account is active. If the username is
- * already there, the entire switcher flow (long-press → tap → BACK) is
- * skipped — avoiding the native Instagram feed reload that always accompanies
- * an account switch, even when switching to the same account.
+ * The account's active/already-selected state is determined from the account
+ * sheet after it opens. Do not infer it from the pre-sheet profile UI: that
+ * screen can contain the username for reasons unrelated to the selectable
+ * account row.
  */
 export async function switchToInstagramAccount(
   serial: string,
@@ -7459,36 +7456,6 @@ export async function switchToInstagramAccount(
   if (!adbPath) { onLog?.("  ⚠ ADB not found — cannot switch account"); return false; }
 
   const clean = username.replace(/^@/, "").trim();
-
-  // 0. Pre-check: look for the target account in the CURRENT UI without
-  //    opening the switcher. Instagram's profile-tab icon (bottom-right nav)
-  //    carries content-desc values such as:
-  //      "Profile picture for lineaberry2001"
-  //      "lineaberry2001's profile"
-  //      "@lineaberry2001"
-  //    Any of these reliably identifies the currently active account. If we
-  //    find it here, we return immediately — no long-press, no switcher, no
-  //    feed reload.
-  //
-  //    When preloadedXml is provided (shared from the launch-sequence dump) we
-  //    skip a redundant dump here — same screen state, saves 5-15 s.
-  try {
-    const preXml = preloadedXml ?? await _uiDump(adbPath, serial).catch(() => "");
-    const lc = preXml.toLowerCase();
-    const cleanLc = clean.toLowerCase();
-    const alreadyActive =
-      lc.includes(`"profile picture for ${cleanLc}"`) ||
-      lc.includes(`"${cleanLc}'s profile"`) ||
-      lc.includes(`"@${cleanLc}"`) ||
-      // Some builds put the username in a generic nav-tab content-desc without
-      // the surrounding phrase — only match if surrounded by word boundaries
-      // (quotes) so a substring of another username doesn't false-positive.
-      lc.includes(`"${cleanLc}"`);
-    if (alreadyActive) {
-      onLog?.(`  ✓ @${clean} already active (detected in current UI — skipping switcher)`);
-      return true;
-    }
-  } catch { /* pre-check dump failed — continue to full switcher flow */ }
 
   // 1. Find the profile tab.
   //    Try the preloaded XML first (same screen state, no extra dump needed).
@@ -7589,9 +7556,6 @@ export async function switchToInstagramAccount(
     xml = await _uiDump(adbPath, serial).catch(() => "");
     coords = _findVisibleAccountRow(xml, switcherScreenHeight, clean, `@${clean}`);
     if (coords) break; // found — proceed to tap
-    // Also break early if the username appears anywhere in the XML —
-    // that means we're already on this account (active-account path below).
-    if (xml.includes(`"@${clean}"`) || xml.includes(`"${clean}"`)) break;
     if (p < SWITCHER_MAX_POLL - 1) {
       onLog?.(`  ↳ Switcher not fully populated yet — retrying in ${SWITCHER_POLL_MS / 1000}s (poll ${p + 1}/${SWITCHER_MAX_POLL})`);
       await _sleep(SWITCHER_POLL_MS);
@@ -7604,19 +7568,6 @@ export async function switchToInstagramAccount(
     // content-desc (for example: "user, 5 follows and 2 more"). Match the
     // username as the first bounded token of a live row instead of requiring
     // the whole description to equal the username.
-    // Check if the username appears ANYWHERE in the dump (any attribute).
-    // Using simple includes() avoids regex escaping edge-cases entirely.
-    const targetHasAccountNode =
-      new RegExp(`(?:content-desc|text)="(?:@)?${clean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"[^>]*bounds="`, "i").test(xml);
-    const activeInXml =
-      (xml.includes(`"@${clean}"`) || xml.includes(`"${clean}"`)) &&
-      !targetHasAccountNode;
-    if (activeInXml) {
-      onLog?.(`  ↳ @${clean} is the currently active account — dismissing switcher`);
-      await runAdb(adbPath, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], 4000).catch(() => {});
-      return true;
-    }
-
     if (!coords) {
       coords = _findVisibleAccountRow(
         xml,
@@ -7684,8 +7635,8 @@ export async function switchToInstagramAccount(
 
     if (!coords) {
       onLog?.(`  ⚠ "@${clean}" not found in switcher — is the account logged in on this device?`);
-      // Dismiss the switcher so the cycle can continue with whatever account is active.
-      await runAdb(adbPath, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], 4000).catch(() => {});
+      // Never use Android Back here. The sheet's dismissal behavior varies by
+      // Instagram build, and Back can exit Instagram instead of closing it.
       return false;
     }
   }
@@ -7694,22 +7645,9 @@ export async function switchToInstagramAccount(
   onLog?.(`  ✓ Found @${clean} in switcher — switching…`);
   _adbTap(adbPath, serial, coords.x, coords.y);
 
-  // 6. Check whether the switcher actually closed after the tap.
-  //
-  // Two distinct cases reach this point:
-  //   a) Account needed switching → tap closes the sheet, feed reloads.
-  //   b) Account was ALREADY SELECTED but Instagram rendered it as a tappable
-  //      row anyway → tap does nothing, sheet stays open.
-  //
-  // Wait 1500 ms before dumping so a genuine account switch has time to
-  // animate and load the home-feed nav controls. A tap on an already-selected
-  // account produces no animation, so the switcher will still be open after
-  // the same delay. If the home feed is not yet visible after 1500 ms, press
-  // BACK once to dismiss the sheet.
-  //
-  // Guard: only send BACK when the dump succeeds. A failed dump (empty string)
-  // means the UI was still settling — skip the BACK rather than risk pressing
-  // it blindly into an unknown screen state.
+  // 6. Verify the resulting surface for diagnostics only. Never use Android
+  // Back as a generic sheet dismissal: on this Instagram build it can exit
+  // Instagram when the row tap did not close the sheet.
   await _sleep(1500);
   const postTapXml = await _uiDump(adbPath, serial).catch(() => "");
   if (postTapXml) {
@@ -7717,8 +7655,8 @@ export async function switchToInstagramAccount(
       /content-desc="Home[^"]*"/.test(postTapXml) ||
       !!_findByResId(postTapXml, ":id/feed_tab", ":id/home_tab");
     if (!homeFeedVisible) {
-      onLog?.(`  ↳ Switcher still open after tap (account was already selected) — dismissing with BACK`);
-      await pressBack(serial).catch(() => {});
+      onLog?.(`  ⚠ Account sheet still present after @${clean} tap — not pressing Android Back`);
+      return false;
     }
   }
 

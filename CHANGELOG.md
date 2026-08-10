@@ -1,3 +1,15 @@
+## [1.2.459] — 2026-08-10
+
+### Fixed — Instagram account switching safety
+
+- Account selection is now determined from the open Instagram account sheet,
+  not inferred from usernames found on the previous screen.
+- Removed the unsafe Android Back fallback after an account-row tap leaves the
+  sheet visible; that Back action could exit Instagram.
+- Missing target accounts now abort without sending a blind Back action.
+- The existing account-sheet tap and live-row detection flow remains in place;
+  no new workflow was added.
+
 ## [1.2.458] — 2026-08-10
 
 ### Fixed — Update Bio clears existing text
