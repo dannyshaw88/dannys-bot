@@ -1,3 +1,16 @@
+## [1.2.456] — 2026-08-10
+
+### Fixed — Fail-closed image processing safeguards
+
+- Make a Post now aborts before device upload if Fix AI Slop or image
+  alteration fails verification.
+- Settings → Fix Images now rejects empty, byte-identical, or undecodable
+  processed output instead of offering it for export.
+- Processing success is based on validated output bytes and image metadata, not
+  on diagnostic log messages.
+- Preserved the existing canonical Windows Installer workflow without adding a
+  duplicate GitHub Actions workflow.
+
 ## [1.2.455] — 2026-08-10
 
 ### Changed — Windows installer delivery
