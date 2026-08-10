@@ -10226,15 +10226,24 @@ export async function typeViaCalibrationMap(
     const label = ch === " " ? "space" : ch === "\n" ? "enter" : ch.toLowerCase();
     if (ch === " " || ch === "\n") {
       await switchLayer("letters");
-      if (ch === "\n" && options?.shiftEnterNewlines) {
-        // Instagram's bio editor accepts the keyboard's shifted return
-        // action as a line break. The shift tap is deliberately paired with
-        // Enter here; it is not a character and does not affect the saved
-        // calibration map.
-        if (!await tapMapped("shift", "Shift before newline")) missing.push(ch);
-        if (options?.debugLabel) onLog?.(`[${options.debugLabel}] newline sequence: Shift completed; sending Enter`);
+      if (ch === "\n") {
+        // A bio newline must not use Shift+Enter. On the farm keyboard that
+        // combination can enter selection/navigation mode and act on the last
+        // word. Send Android's plain Enter key event instead.
+        try {
+          await keyevent(serial, 66); // KEYCODE_ENTER
+          onLog?.(options?.debugLabel
+            ? `[${options.debugLabel}] newline: plain KEYCODE_ENTER (66); no Shift`
+            : "[cal-keyboard] newline: plain KEYCODE_ENTER (66); no Shift");
+          const min = Math.max(0, Math.min(typingProfile.minMs, typingProfile.maxMs));
+          const max = Math.max(min, typingProfile.maxMs);
+          await _sleep(min + Math.round(Math.random() * (max - min)));
+        } catch {
+          missing.push(ch);
+        }
+      } else if (!await tapMapped(label, "space")) {
+        missing.push(ch);
       }
-      if (!await tapMapped(label, ch === " " ? "space" : "Enter")) missing.push(ch);
         if (ch === " ") {
           await waitWordHesitation();
         }
