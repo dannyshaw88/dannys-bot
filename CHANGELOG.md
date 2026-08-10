@@ -1,5 +1,16 @@
 ## [1.2.447] — 2026-08-09
 
+### Improved — Phone Farm Add Device popup
+
+- Opening **Add Device** no longer shrinks the phone-card grid or replaces the
+  Add Device slot with a placeholder.
+- The existing Add New Device selection interface now appears as a floating,
+  right-side popup above the unchanged device layout.
+- The popup keeps its phone discovery, refresh, registration, cancellation,
+  error handling, and scrolling behavior.
+- The popup is constrained to the viewport with a responsive width and raised
+  shadow so it remains usable without disturbing the underlying cards.
+
 ### Improved — Keyboard calibration map and mirror positioning
 
 - Expanded the keyboard calibration dialog and made its title-bar dragging

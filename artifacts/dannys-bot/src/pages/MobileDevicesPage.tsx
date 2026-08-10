@@ -1083,9 +1083,8 @@ export function MobileDevicesPage() {
     setAddingSlot(null);
   };
 
-  // When "Add Device" is showing in a panel, the grid itself is not shown for
-  // that slot — instead we show the panel full-width alongside the existing
-  // device cards. For simplicity: show the panel as an overlay column.
+  // Add Device is rendered as a floating panel so opening it never resizes or
+  // reflows the device-card grid underneath.
   const showingAddPanel = addingSlot !== null;
 
   return (
@@ -1111,8 +1110,6 @@ export function MobileDevicesPage() {
               style={{
                 gridTemplateColumns: "repeat(3, 1fr)",
                 gridTemplateRows:    "repeat(2, 1fr)",
-                // If add panel open, shrink the grid to make room
-                maxWidth: showingAddPanel ? "55%" : "100%",
               }}
             >
               {Array.from({ length: visibleUp }).map((_, i) => {
@@ -1148,7 +1145,7 @@ export function MobileDevicesPage() {
                 }
 
                 // "Add Device" slot
-                if (slotIndex === addSlot && !showingAddPanel) {
+                if (slotIndex === addSlot) {
                   return (
                     <AddDeviceCard
                       key="add"
@@ -1156,20 +1153,13 @@ export function MobileDevicesPage() {
                     />
                   );
                 }
-
-                // Placeholder while add panel is open for this slot
-                return (
-                  <div
-                    key={`placeholder-${slotIndex}`}
-                    className="h-full rounded-2xl border-2 border-dashed border-border/20 bg-card/10"
-                  />
-                );
+                return <div key={`empty-${slotIndex}`} />;
               })}
             </div>
 
-            {/* Add Device panel — slides in on the right */}
+            {/* Add Device popup — floats above the unchanged device grid */}
             {showingAddPanel && (
-              <div className="w-[320px] shrink-0 rounded-2xl border border-border bg-card overflow-y-auto">
+              <div className="fixed right-6 top-[4.5rem] z-50 h-[calc(100vh-6rem)] w-[360px] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl border border-border bg-card shadow-2xl shadow-black/30">
                 <AddDevicePanel
                   registeredSerials={registeredSerials}
                   onAdded={handleAdded}
