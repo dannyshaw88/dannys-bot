@@ -6297,7 +6297,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         onLog?.(`View Explore ${i + 1}/${scrollCount}: next swipe [${exploreModeLabel}]`);
         logger.info({ serial, source: "explore-scroll", mode: esv.mode, from: [x, esv.fromY], to: [x, esv.toY], durationMs: esv.duration }, "[mobile-input] swipe");
         await deviceProfileSwipe(serial, { x1: x, y1: esv.fromY, x2: x, y2: esv.toY, durationMs: esv.duration }, "explore-scroll", esv.mode as "skim" | "normal" | "interested" | "back");
-        await sleepOrAbort(serial, 800);
+        // Explore-only render dwell: the grid often needs a few seconds after
+        // the gesture before its media cells are actually populated. Keep this
+        // hardcoded and isolated here; it must not alter Feed, Reels, Stories,
+        // or any other tool's swipe timing.
+        const exploreMediaDwellMs = 1000 + Math.floor(Math.random() * 4001);
+        onLog?.(`View Explore ${i + 1}/${scrollCount}: waiting ${exploreMediaDwellMs}ms for media to render after swipe`);
+        await sleepOrAbort(serial, exploreMediaDwellMs);
       }
     }
 
