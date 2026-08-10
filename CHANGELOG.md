@@ -1,3 +1,12 @@
+## [1.2.453] — 2026-08-10
+
+### Fixed — Random Actions bio keyboard entry
+
+- Restored Bio updates to the saved per-device keyboard calibration flow.
+- Disabled simulated typing-error correction for Bio updates.
+- Added a hard deny rule for Backspace, Delete, and Forward Delete key events
+  so destructive key presses cannot be sent by calibrated automation.
+
 ## [1.2.452] — 2026-08-10
 
 ### Fixed — Native mirror clipboard paste
