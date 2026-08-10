@@ -1850,6 +1850,7 @@ function CalibrationDialog({
   const [testText, setTestText] = useState("");
   const [testingText, setTestingText] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+  const [keySearch, setKeySearch] = useState("");
   // The calibration panel starts in its existing top-right position. Once the
   // title bar is dragged, keep the panel at an explicit viewport position.
   const [panelPosition, setPanelPosition] = useState<{ left: number; top: number } | null>(null);
@@ -1857,6 +1858,11 @@ function CalibrationDialog({
     pointerId: number;
     offsetX: number;
     offsetY: number;
+    width: number;
+    height: number;
+    pendingLeft: number;
+    pendingTop: number;
+    frame: number | null;
   } | null>(null);
 
   // Reset state and load existing map whenever the dialog opens.
@@ -1874,6 +1880,7 @@ function CalibrationDialog({
     setTestText("");
     setTestingText(false);
     setTestResult(null);
+    setKeySearch("");
     setPanelPosition(null);
 
     // Load full existing map so the wizard can merge into it and editMap can
@@ -1895,6 +1902,17 @@ function CalibrationDialog({
     : CALIB_KEYS.filter(key => !key.label.startsWith("2fa:"));
   const twoFaMappedCount = twoFaKeys.filter(key => !!map[key.label]).length;
   const normalMappedCount = CALIB_KEYS.filter(key => !key.label.startsWith("2fa:") && !!map[key.mapKey ?? key.label]).length;
+  const normalizedKeySearch = keySearch.trim().toLowerCase();
+  const filteredCalibGroups = CALIB_GROUPS.map((group, groupIdx) => ({
+    ...group,
+    groupIdx,
+    keys: group.keys.filter(key => {
+      if (!normalizedKeySearch) return true;
+      return [key.label, key.display, group.name].some(value =>
+        value.toLowerCase().includes(normalizedKeySearch),
+      );
+    }),
+  })).filter(group => group.keys.length > 0);
 
   const currentKey = step < activeKeys.length ? activeKeys[step] : null;
   const prevGroupIdx = step > 0 ? activeKeys[step - 1].groupIdx : -1;
@@ -2025,6 +2043,11 @@ function CalibrationDialog({
       pointerId: event.pointerId,
       offsetX: event.clientX - bounds.left,
       offsetY: event.clientY - bounds.top,
+      width: bounds.width,
+      height: bounds.height,
+      pendingLeft: bounds.left,
+      pendingTop: bounds.top,
+      frame: null,
     };
     setPanelPosition({ left: bounds.left, top: bounds.top });
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -2035,21 +2058,36 @@ function CalibrationDialog({
     if (!drag || drag.pointerId !== event.pointerId) return;
     const panel = event.currentTarget.parentElement;
     if (!panel) return;
-    const bounds = panel.getBoundingClientRect();
     const margin = 8;
     const left = Math.min(
       Math.max(margin, event.clientX - drag.offsetX),
-      Math.max(margin, window.innerWidth - bounds.width - margin),
+      Math.max(margin, window.innerWidth - drag.width - margin),
     );
     const top = Math.min(
       Math.max(margin, event.clientY - drag.offsetY),
-      Math.max(margin, window.innerHeight - bounds.height - margin),
+      Math.max(margin, window.innerHeight - drag.height - margin),
     );
-    setPanelPosition({ left, top });
+    drag.pendingLeft = left;
+    drag.pendingTop = top;
+    if (drag.frame === null) {
+      drag.frame = window.requestAnimationFrame(() => {
+        const current = panelDragRef.current;
+        if (!current) return;
+        current.frame = null;
+        setPanelPosition({ left: current.pendingLeft, top: current.pendingTop });
+      });
+    }
   };
 
   const handlePanelDragEnd = (event: React.PointerEvent<HTMLDivElement>) => {
     if (panelDragRef.current?.pointerId !== event.pointerId) return;
+    if (panelDragRef.current.frame !== null) {
+      window.cancelAnimationFrame(panelDragRef.current.frame);
+      setPanelPosition({
+        left: panelDragRef.current.pendingLeft,
+        top: panelDragRef.current.pendingTop,
+      });
+    }
     panelDragRef.current = null;
     try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* already released */ }
   };
@@ -2058,7 +2096,7 @@ function CalibrationDialog({
     <Dialog open={open} modal={false} onOpenChange={v => { if (!capturing && !editCapturing) onOpenChange(v); }}>
       <DialogContent
         hideOverlay
-        className="fixed right-4 top-4 left-auto max-h-[calc(100vh-2rem)] max-w-md translate-x-0 translate-y-0 overflow-y-auto border-slate-700 bg-slate-950 text-slate-100"
+        className="fixed right-4 top-4 left-auto w-[35rem] max-w-[calc(100vw-2rem)] max-h-[calc(100vh-2rem)] translate-x-0 translate-y-0 overflow-y-auto border-slate-700 bg-slate-950 text-slate-100"
         style={panelPosition ? { left: panelPosition.left, top: panelPosition.top, right: "auto" } : undefined}
       >
         <DialogHeader
@@ -2130,8 +2168,21 @@ function CalibrationDialog({
                 </p>
               </div>
             )}
+            <div className="sticky top-0 z-10 rounded-lg border border-slate-700 bg-slate-950 pb-2">
+              <label htmlFor="calibration-key-search" className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Search calibrated keys
+              </label>
+              <BaseInput
+                id="calibration-key-search"
+                value={keySearch}
+                onChange={event => setKeySearch(event.target.value)}
+                placeholder="Search by key, label, or layer (e.g. backspace, 2fa, symbols)"
+                aria-label="Search calibrated keys"
+                className="h-8 border-slate-700 bg-slate-900 text-xs text-slate-100 placeholder:text-slate-500"
+              />
+            </div>
             <div className="max-h-[52vh] overflow-y-auto space-y-4 pr-1">
-              {CALIB_GROUPS.map(group => (
+              {filteredCalibGroups.map(group => (
                 <div key={group.name}>
                   <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">{group.name}</p>
                   <div className="space-y-1">
