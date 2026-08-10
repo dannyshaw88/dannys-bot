@@ -2257,7 +2257,7 @@ function CalibrationDialog({
             )}
             <div className="flex gap-2">
               <Button className="flex-1" onClick={() => setMode("wizard")}>
-                {existingCount > 0 ? "Re-run full calibration" : "Keyboard is open — Start"}
+                {existingCount > 0 ? "Re-run full calibration" : "Keyboard is open, Start"}
               </Button>
               <Button variant="outline" className="flex-1 border-cyan-700 text-cyan-200 hover:bg-cyan-950"
                 onClick={() => {
@@ -2266,7 +2266,7 @@ function CalibrationDialog({
                   setLastResult(null);
                   setMode("2faWizard");
                 }}>
-                {twoFaMappedCount === twoFaKeys.length ? "Recalibrate 2FA keypad" : `Calibrate 2FA keypad (${twoFaKeys.length - twoFaMappedCount} missing)`}
+                {twoFaMappedCount === twoFaKeys.length ? "Recalibrate 2FA keypad" : "Calibrate 2FA keypad"}
               </Button>
               <Button variant="outline" className="border-slate-600 text-slate-200 hover:bg-slate-800" onClick={() => onOpenChange(false)}>
                 Cancel
