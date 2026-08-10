@@ -7523,6 +7523,38 @@ export async function switchToInstagramAccount(
   const profileXml = await _uiDump(adbPath, serial).catch(() => "");
   const profileHeaderUsername = _findTopProfileUsername(profileXml);
   if (!profileHeaderUsername) {
+    const profileDumpDiagnostics = (() => {
+      const root = profileXml.match(/<hierarchy[^>]*bounds="([^"]+)"/i)?.[1] ?? "";
+      const topNodes: string[] = [];
+      const nodeRe = /<node\b([^>]*)>/gi;
+      let match: RegExpExecArray | null;
+      while ((match = nodeRe.exec(profileXml)) !== null) {
+        const attrs = match[1];
+        const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+        if (!bounds || Number(bounds[2]) > 500) continue;
+        const text = attrs.match(/\btext="([^"]*)"/i)?.[1] ?? "";
+        const contentDesc = attrs.match(/content-desc="([^"]*)"/i)?.[1] ?? "";
+        const resourceId = attrs.match(/resource-id="([^"]*)"/i)?.[1] ?? "";
+        const clickable = /clickable="true"/i.test(attrs);
+        if (text || contentDesc || resourceId) {
+          topNodes.push(
+            `bounds="${bounds[0]}" text=${JSON.stringify(text)} ` +
+            `contentDesc=${JSON.stringify(contentDesc)} resourceId=${JSON.stringify(resourceId)} ` +
+            `clickable=${clickable}`,
+          );
+        }
+      }
+      return {
+        xmlLength: profileXml.length,
+        complete: profileXml.includes("</hierarchy>"),
+        rootBounds: root,
+        hasUsernameContainer: /action_bar_username_container/i.test(profileXml),
+        targetLabelOccurrences: (profileXml.match(new RegExp(clean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi")) ?? []).length,
+        topNodeCount: topNodes.length,
+        topNodes: topNodes.slice(0, 40),
+      };
+    })();
+    onLog?.(`  ↳ Profile-header selector diagnostics: ${JSON.stringify(profileDumpDiagnostics)}`);
     onLog?.(`  ⚠ Could not find @${clean} in the profile header — cannot open account list`);
     return false;
   }
