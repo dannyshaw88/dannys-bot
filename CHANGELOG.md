@@ -1,3 +1,12 @@
+## [1.2.454] — 2026-08-10
+
+### Fixed — Calibrated keyboard duplicate characters
+
+- Changed every shared calibrated text-typing character input from a
+  zero-distance swipe to one native tap at the calibrated coordinate.
+- Preserved the existing pacing, keyboard layers, capitalization, symbols, and
+  typing behavior while preventing Xiaomi/MIUI long-press key repeats.
+
 ## [1.2.453] — 2026-08-10
 
 ### Fixed — Random Actions bio keyboard entry
