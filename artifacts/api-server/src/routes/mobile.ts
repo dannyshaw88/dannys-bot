@@ -8889,9 +8889,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
 
     // 4. Replace the focused Bio field through the saved per-device keyboard
-    //    calibration map. Bio deliberately disables simulated human-error
-    //    corrections: Backspace/Delete are denied by the keyboard executor.
+    //    calibration map. First select all existing content and clear it;
+    //    typing must never begin in a field containing stale Bio text.
     {
+      try {
+        await android.clearFocusedTextField(
+          serial,
+          message => onLog?.(`Update Bio: ${message}`),
+        );
+        const clearedXml = await android.dumpUi(serial);
+        const focusedField = [...clearedXml.matchAll(/<node\b[^>]*class="android\.widget\.EditText"[^>]*>/gi)]
+          .map(match => match[0])
+          .find(node => /focused="true"/i.test(node));
+        const remaining = focusedField?.match(/\btext="([^"]*)"/i)?.[1] ?? "";
+        if (remaining.length > 0) {
+          onLog?.(`Update Bio: ✗ clear verification found ${remaining.length} remaining characters — aborting`);
+          await android.pressBack(serial);
+          return;
+        }
+        onLog?.("Update Bio: ✓ existing Bio text cleared and verified");
+      } catch (e: any) {
+        onLog?.(`Update Bio: ✗ could not select/clear existing Bio text — ${e?.message ?? String(e)}`);
+        await android.pressBack(serial);
+        return;
+      }
       const typed = await android.typeViaSavedCalibrationMap(
         serial,
         bioText,

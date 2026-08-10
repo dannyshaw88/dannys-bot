@@ -1,3 +1,14 @@
+## [1.2.457] — 2026-08-10
+
+### Fixed — Random Actions Update Bio replacement
+
+- Update Bio now explicitly selects all existing Bio text and deletes it
+  before calibrated typing begins.
+- The focused Bio field is re-checked after clearing, and the operation aborts
+  without typing if existing text remains.
+- This prevents new Bio content from being appended at an arbitrary cursor
+  position.
+
 ## [1.2.456] — 2026-08-10
 
 ### Fixed — Fail-closed image processing safeguards

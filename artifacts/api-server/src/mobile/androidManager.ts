@@ -2721,6 +2721,26 @@ export async function pasteClipboard(serial: string): Promise<void> {
   }
 }
 
+/**
+ * Select and clear the currently focused Android text field.
+ *
+ * This is intentionally separate from calibrated character typing: replacing
+ * a field requires a real select-all/delete operation before the first
+ * calibrated tap. The destructive key deny rule applies to the calibrated
+ * typing executor, not this explicit field-replacement operation.
+ */
+export async function clearFocusedTextField(serial: string, onLog?: (msg: string) => void): Promise<void> {
+  await runInputShell(
+    serial,
+    ["keycombination", "KEYCODE_CTRL_LEFT", "KEYCODE_A"],
+    "select-all",
+  );
+  await _sleep(180);
+  await runInputShell(serial, ["keyevent", "KEYCODE_DEL"], "clear-selected-text");
+  await _sleep(350);
+  onLog?.("[android-input] focused field selected-all and cleared");
+}
+
 export async function tap(serial: string, x: number, y: number, source?: "manual" | "bot"): Promise<void> {
   recorder.addTap(serial, x, y, undefined, source ?? "bot");
   await runInputShell(serial, ["tap", String(x), String(y)], "tap");
