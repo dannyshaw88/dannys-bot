@@ -1,3 +1,17 @@
+## [1.2.468] — 2026-08-10
+
+### Added — Follow Users target management
+
+- Added Import and Export controls to the Follow Users Surplus panel.
+- Import accepts newline-, CSV-, or TSV-separated usernames, normalizes
+  `@username` values, and skips duplicates already assigned to the slot.
+- Export downloads the selected slot's current surplus targets as a text file.
+- Added Split to evenly distribute the combined surplus target list across all
+  account slots on the same isolated device.
+- Split deduplicates targets and never reads or modifies slots on other devices.
+- Confirmed the existing canonical Windows installer workflow remains the only
+  Windows installer Actions workflow; no duplicate workflow was added.
+
 ## [1.2.467] — 2026-08-10
 
 ### Restored — Human-error typing across calibrated input
