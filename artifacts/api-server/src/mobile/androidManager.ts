@@ -6816,6 +6816,23 @@ export async function isInStoryViewerSlow(serial: string): Promise<boolean> {
     if (xml.includes(marker)) return true;
   }
 
+  // ── 1b. Newer Story viewer layout fallback ─────────────────────────────
+  // Some Instagram builds expose none of the historical story/reel viewer
+  // resource IDs, but do expose the visible lower reply bar and action row.
+  // This is still a positive Story signal when the reply composer is paired
+  // with a Story action label (Like Story/Share Story) or a lower-screen
+  // Send-message control. Check this before Home detection: treating this
+  // layout as Home caused the Stories tool to tap Home, scan the current
+  // viewer as a tray, and sometimes focus the reply composer.
+  const hasStoryReplyBar =
+    /(?:text|content-desc|hint)="Send message"/i.test(xml) ||
+    /(?:text|content-desc)="Send Message or Reaction"/i.test(xml) ||
+    /message_composer_container|composer_text|story_reply|reply_composer/i.test(xml);
+  const hasStoryActionSignal =
+    /(?:content-desc|text)="(?:Like Story|Share Story|Send)"/i.test(xml) ||
+    /(?:toolbar_like|story_like|story_share|story_action|reshare)/i.test(xml);
+  if (hasStoryReplyBar && hasStoryActionSignal) return true;
+
   // ── 1a. Story-creation / media-picker screen — NOT the viewer ────────────
   // If the device accidentally opened the "Add to story" upload editor (e.g.
   // because the upload control was selected instead of a friend's story
