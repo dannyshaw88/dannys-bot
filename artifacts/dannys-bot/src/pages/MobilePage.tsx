@@ -3232,7 +3232,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
           <NavBtn icon={<ImagePlus className="w-3.5 h-3.5" />} label="Image" onClick={() => setShowManualMedia(v => !v)} />
           <NavBtn icon={<Home        className="w-3.5 h-3.5" />} label="Home"   onClick={() => sendKey(phone.serial, 3,   "Home",   onLog)} />
           <div className="w-px h-4 bg-white/10" />
-          <NavBtn icon={<Power       className="w-3 h-3" />}     label="Power"  onClick={() => { liveCanvasRef.current?.clearToBlack(); onPower(); sendKey(phone.serial, 26, "Power", onLog); }} />
+          <NavBtn icon={<Power       className="w-3 h-3" />}     label="Power"  onClick={() => { liveCanvasRef.current?.clearToBlack(); onPower(); sendKey(phone.serial, 224, "Wake", onLog); }} />
           <div className="w-px h-4 bg-white/10" />
           <NavBtn icon={<Keyboard    className="w-3 h-3" />}     label="Keyboard" onClick={() => setShowCalibration(true)} />
         </div>
