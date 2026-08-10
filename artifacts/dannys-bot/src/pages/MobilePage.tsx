@@ -9802,7 +9802,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                    (/\b(?:Reel|Reels)\b/i.test(msg) || /▶\s*View Reels\b/i.test(msg));
                 const activeToolClass =
                   currentTool === 'explore' ? 'text-green-400' :
-                  currentTool === 'feed' ? 'text-white' :
+                  currentTool === 'feed' ? 'text-orange-400' :
                    currentTool === 'reels' ? 'text-red-500' :
                   currentTool === 'directmessaging' ? 'text-slate-300' :
                   currentTool === 'stories' ? 'text-cyan-400' :
@@ -9811,7 +9811,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                   currentTool === 'randomactions' ? 'text-purple-400' :
                   null;
                  if (isFeedMessage) {
-                   msgClass = 'text-white';
+                   msgClass = 'text-orange-400';
                  } else if (isDirectMessagingMessage) {
                    msgClass = 'text-slate-300';
                  } else if (isReelsMessage) {
@@ -9824,7 +9824,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                 // cannot turn red or white and lose its tool identity.
                 } else if (/\bFollow\b|\bfollowing\b|\bSpread Follow\b|\bInject Browsing\b/i.test(msg))
                                                                       msgClass = 'text-blue-400';
-                else if (isFeedMessage)                                      msgClass = 'text-white';
+                else if (isFeedMessage)                                      msgClass = 'text-orange-400';
                 else if (/\bView Explore\b|▶ View Explore|[Ee]xplore/.test(msg))
                                                                      msgClass = 'text-green-400';
                  else if (isDirectMessagingMessage)                            msgClass = 'text-slate-300';
