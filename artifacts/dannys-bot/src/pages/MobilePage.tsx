@@ -9900,9 +9900,9 @@ type MobileTab = "account" | "browser" | "metrics" | "phonesettings" | "actionlo
 // Left-side tabs shown in order before the spacer.
 const MOBILE_TABS_LEFT: { id: MobileTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "account",      label: "Accounts",  icon: Users       },
-  { id: "browser",      label: "Browser",   icon: Globe       },
-  { id: "metrics",      label: "Metrics",   icon: BarChart2   },
   { id: "phonesettings",label: "My Device", icon: MonitorSmartphone },
+  { id: "metrics",      label: "Metrics",   icon: BarChart2   },
+  { id: "browser",      label: "Browser",   icon: Globe       },
 ];
 // Right-side tabs — pushed to the far right with ml-auto on the first one.
 const MOBILE_TABS_RIGHT: { id: MobileTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
