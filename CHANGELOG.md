@@ -1,3 +1,16 @@
+## [1.2.450] — 2026-08-10
+
+### Fixed — Random Actions bio entry
+
+- Kept the bio replacement flow as one **Ctrl+A** selection followed by direct
+  calibrated typing over the selected bio.
+- Removed the extra explicit Delete step.
+- Disabled simulated typing-error correction for bio updates to prevent
+  accidental wrong-key and Backspace actions.
+- Added bio-specific Shift+Enter handling so multi-line bios remain separate
+  rows.
+- Preserved normal typing-error behavior for other calibrated typing flows.
+
 ## [1.2.449] — 2026-08-10
 
 ### Changed — Mobile scroll personality tuning
