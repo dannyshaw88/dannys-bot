@@ -1929,7 +1929,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       makePostLocalFolderEnabled: true, makePostLocalFolderPath: "",
       makePostLocalFolderNoRepeat: false, makePostLocalFolderRandom: false,
       makePostLocalFolderDeleteAfterUpload: false,
-      makePostUseChatGpt: false, makePostFixAiSlop: false,
+    makePostUseChatGpt: false, makePostFixAiSlop: false,
       makePostCaptionText: "",
       makePostImageSettings: {
         contrast: { enabled: true, min: 5, max: 250 },
