@@ -9779,6 +9779,12 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
              const isReelsBurstLine = (line: string) =>
                /\b(?:Reel|View Reels):\s+/i.test(line) ||
                /▶\s*View Reels\b/i.test(line);
+             // Swipe-screen summaries are intentionally verbose diagnostics
+             // (bytes, markers, labels, and completed coordinates). Keep the
+             // whole diagnostic block behind a chevron even when it contains
+             // fewer than three rendered rows.
+             const isSwipeScreenDiagnostic = (line: string) =>
+               /\bswipe screen (?:BEFORE|AFTER)\s+—/i.test(line);
              const groups: string[][] = [];
              for (const line of lines) {
                const previous = groups[groups.length - 1];
@@ -9787,6 +9793,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                 const previousIsStoryTray = previous?.some(isStoryTrayBurstLine) ?? false;
                 const previousIsReelIconScan = previous?.some(isReelIconScanLine) ?? false;
                 const previousIsReelsBurst = previous?.some(isReelsBurstLine) ?? false;
+                const previousIsSwipeScreen = previous?.some(isSwipeScreenDiagnostic) ?? false;
                 if (
                   previous &&
                   previous.length > 0 &&
@@ -9800,6 +9807,11 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                     )) ||
                     (previousIsReelsBurst && (
                       isReelsBurstLine(line) ||
+                      isReelIconScanLine(line) ||
+                      isAccessibilityDumpLine(line)
+                    )) ||
+                    (previousIsSwipeScreen && (
+                      isSwipeScreenDiagnostic(line) ||
                       isReelIconScanLine(line) ||
                       isAccessibilityDumpLine(line)
                     ))
@@ -9897,7 +9909,8 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                 // rows still exposed that clutter before the chevron.
                 const isReelsGroup = group.some(isReelsBurstLine) ||
                   group.some(isReelIconScanLine);
-                const visibleRowCount = isReelsGroup ? 1 : 3;
+                const isSwipeScreenGroup = group.some(isSwipeScreenDiagnostic);
+                const visibleRowCount = isReelsGroup || isSwipeScreenGroup ? 1 : 3;
                 const collapsible = group.length > visibleRowCount;
                const groupKey = `${groupIndex}:${timestampOf(group[0])}`;
                const expanded = expandedLogGroups.has(groupKey);
