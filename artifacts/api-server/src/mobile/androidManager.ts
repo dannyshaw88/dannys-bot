@@ -2701,6 +2701,26 @@ export async function setClipboard(serial: string, text: string): Promise<void> 
   }
 }
 
+/** Paste the current Android clipboard into the focused field. */
+export async function pasteClipboard(serial: string): Promise<void> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  try {
+    const { stdout, stderr } = await execFileP(
+      adb,
+      ["-s", serial, "shell", "input", "keyevent", "KEYCODE_PASTE"],
+      { encoding: "utf8", timeout: 5000 } as any,
+    );
+    const out = `${stdout ?? ""}${stderr ?? ""}`.trim();
+    if (/error|exception|unknown|not found|permission denied/i.test(out)) {
+      throw new Error(out);
+    }
+  } catch (e: any) {
+    const out = `${e.stderr ?? ""}${e.stdout ?? ""}`.trim();
+    throw new Error(`adb clipboard paste failed: ${out || e.message || "unknown error"}`);
+  }
+}
+
 export async function tap(serial: string, x: number, y: number, source?: "manual" | "bot"): Promise<void> {
   recorder.addTap(serial, x, y, undefined, source ?? "bot");
   await runInputShell(serial, ["tap", String(x), String(y)], "tap");
