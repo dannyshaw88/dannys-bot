@@ -7674,24 +7674,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // once via that same confirmed top-left position instead of silently
     // continuing on the wrong screen.
     if (await android.isOnNotificationsOrDirectScreenLive(serial).catch(() => false)) {
-      onLog?.("Make a Post: \"+\" tap opened Notifications/Direct instead of the composer — wrong icon tapped. Backing out and retrying via the top-left header icon…");
+      onLog?.("Make a Post: \"+\" tap opened Notifications/Direct instead of the composer — wrong icon tapped. Aborting without a second tap.");
       await android.pressBack(serial);
       await sleepOrAbort(serial, 800);
-      const retryXml = await android.dumpUi(serial).catch(() => "");
-      const retryBtn = retryXml ? android.findComposeTopLeftHeaderIcon(serial, retryXml) : null;
-      if (retryBtn) {
-        await android.tap(serial, retryBtn.x, retryBtn.y);
-        await sleepOrAbort(serial, 3500);
-        await android.logScreenLayout(serial, "Make a Post: after top-left-icon retry tap", onLog);
-      } else {
-        onLog?.("Make a Post: retry scan found no top-left header icon either — aborting this attempt.");
-      }
-      if (!retryBtn || await android.isOnNotificationsOrDirectScreenLive(serial).catch(() => false)) {
-        onLog?.("Make a Post: retry also failed to reach the composer — aborting this attempt.");
-        await android.pressBack(serial);
-        await android.removeDeviceFile(serial, devicePath).catch(() => {});
-        return { posted: false };
-      }
+      await android.removeDeviceFile(serial, devicePath).catch(() => {});
+      return { posted: false };
     }
 
     // Auto-clear any interstitial ("Turn on notifications?", a stray "Not now"
@@ -7950,14 +7937,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     await android.tap(serial, finalShareBtn.x, finalShareBtn.y);
 
     // Poll for the caption screen to disappear — the definitive sign the post
-    // was submitted and Instagram is uploading. A blind fixed 3-second wait was
-    // not enough: (a) uploads can take 10–15 s on a slow connection, and (b) a
-    // tap that silently didn't register (e.g. a stale coordinate) is
-    // indistinguishable without actively checking whether Share is still there.
-    //
-    // Strategy: check every 1.5 s for up to ~15 s total. If Share is still
-    // visible after 6 s (4 polls) we assume the first tap was swallowed and
-    // retry it once. If Share never disappears, abort and surface the failure.
+    // was submitted and Instagram is uploading. A failed action is logged and
+    // aborted; automation actions never retry a tap.
     // Poll for the post to be accepted. Each iteration does ONE UIAutomator
     // dump (checkMakeAPostUploadState) instead of two back-to-back calls
     // (findMakeAPostSuccessSignal + findShareFooterButton = ~8-10 s/round).
@@ -7990,14 +7971,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         shareConfirmed = true;
         break;
       }
-      // Share button still visible and clickable — genuinely stuck.
-      if (attempt === 3) {
-        onLog?.("Make a Post: Share still visible after 6 s — retrying tap…");
-        // Re-locate the button from the same cached state if possible,
-        // fall back to the pre-tap reference.
-        const retryShareBtn = await android.findShareFooterButton(serial).catch(() => null) ?? finalShareBtn;
-        await android.tap(serial, retryShareBtn.x, retryShareBtn.y);
-      }
+      // Share button remains visible and clickable. Do not tap again; continue
+      // polling once per cycle and fail closed if Instagram never accepts it.
     }
 
     // Dismiss any post-share interstitial ("OK", notifications prompt, etc.)
