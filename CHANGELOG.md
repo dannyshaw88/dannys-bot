@@ -1,3 +1,36 @@
+## [1.2.448] — 2026-08-10
+
+### Changed — Mobile scroll personalities
+
+- Updated the scroll personality sequence to **Super skim**, **Skim**, **Fast**,
+  **Normal**, and **Back**.
+- Renamed the former Normal behavior to Fast and changed its randomized weight
+  to 10–25.
+- Added the new Normal personality with a randomized weight of 40–75 and an
+  80–100% duration band.
+- Kept Super skim at weight 1–5 with a 0–35% duration band.
+- Kept Skim at weight 5–10 with a 25–75% duration band.
+- Changed Back to a 5–20% reverse duration band.
+- Applied the updated weights and labels consistently to Feed, Explore, and
+  Reels logging and execution.
+- The saved My Device swipe profile remains authoritative for swipe geometry;
+  personalities only select duration bands and reverse the calibrated gesture
+  for Back.
+
+### Changed — Trust Score settings header
+
+- Repositioned the Trust Score detail controls so **Back to TrustScores** aligns
+  with the Human Session Tool panel and fingerprint icon.
+- Kept Back to TrustScores as a text-only control.
+- Ordered the right-side actions as **Copy Settings**, previous **SCORE**, and
+  next **SCORE**, while preserving the rightmost SCORE button position.
+
+### Changed — My Device swipe duration safety
+
+- Hard-capped the persisted and executed `durationMaxMs` value at 150 ms.
+- Applied the cap across the My Device UI, API validation, test swipes, and
+  server-side Feed, Explore, Reels, Chrome, YouTube, and account-list swipes.
+
 ### Fixed — Instagram account-switch profile-tab targeting
 
 - Fixed account switching incorrectly selecting the avatar in Instagram’s top
