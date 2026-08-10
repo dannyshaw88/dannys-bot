@@ -8815,6 +8815,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // Navigates to the user's own profile → Edit profile → taps the Bio field →
   // clears it → types the supplied text → taps the Save/Submit button.
   async function runUpdateBio(serial: string, bioText: string, onLog?: (msg: string) => void): Promise<void> {
+    const originalBioText = bioText;
+    onLog?.(`Update Bio: input received — length=${originalBioText.length}, value=${JSON.stringify(originalBioText)}`);
     if (!bioText.trim()) { onLog?.("Update Bio: ✗ bio text is empty — skipping"); return; }
     // Normalize textarea/API line endings before resolving spin groups. Saved
     // settings can contain Windows CRLF (or legacy bare CR) line breaks; the
@@ -8822,7 +8824,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     bioText = bioText.replace(/\r\n?/g, "\n");
     // Resolve spin syntax before typing — each {a|b|c} group is rolled independently.
     bioText = resolveSpinSyntax(bioText);
-    onLog?.(`Update Bio: resolved bio contains ${bioText.split("\n").length} line${bioText.includes("\n") ? "s" : ""} — newline count=${(bioText.match(/\n/g) ?? []).length}`);
+    onLog?.(`Update Bio: spin resolved — inputLength=${originalBioText.length}, outputLength=${bioText.length}, value=${JSON.stringify(bioText)}, spinGroupsRemaining=${(bioText.match(/\{[^{}]*\}/g) ?? []).length}`);
 
     // 1. Tap the profile tab (bottom-right, tab_avatar).
     {
@@ -8893,6 +8895,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     //    typing must never begin in a field containing stale Bio text.
     {
       try {
+        onLog?.("Update Bio: clearing focused field — select-all then delete");
         await android.clearFocusedTextField(
           serial,
           message => onLog?.(`Update Bio: ${message}`),
@@ -8902,6 +8905,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           .map(match => match[0])
           .find(node => /focused="true"/i.test(node));
         const remaining = focusedField?.match(/\btext="([^"]*)"/i)?.[1] ?? "";
+        onLog?.(`Update Bio: clear verification — focusedEditTextFound=${Boolean(focusedField)}, remainingLength=${remaining.length}, remainingValue=${JSON.stringify(remaining)}`);
         if (remaining.length > 0) {
           onLog?.(`Update Bio: ✗ clear verification found ${remaining.length} remaining characters — aborting`);
           await android.pressBack(serial);
@@ -8913,6 +8917,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         await android.pressBack(serial);
         return;
       }
+      onLog?.(`Update Bio: typing start — length=${bioText.length}, value=${JSON.stringify(bioText)}`);
       const typed = await android.typeViaSavedCalibrationMap(
         serial,
         bioText,
@@ -8925,6 +8930,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         await android.pressBack(serial);
         return;
       }
+      onLog?.(`Update Bio: typing result — ok=${typed.ok}, calibrationAvailable=${typed.available}, missing=${typed.missing.join(",") || "none"}`);
       onLog?.(`Update Bio: entered bio text via keyboard calibration (${bioText.length} chars)`);
     }
     await sleepOrAbort(serial, 800 + Math.round(Math.random() * 200));

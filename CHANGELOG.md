@@ -1,3 +1,16 @@
+## [1.2.461] — 2026-08-10
+
+### Added — Update Bio typing diagnostics
+
+- Update Bio now logs the raw Bio input received by the automation cycle.
+- Logs the spin-resolved text and resulting length before navigation and typing.
+- Logs select-all/delete start, focused-field detection, and remaining text after
+  clear verification.
+- Logs the exact text and length passed to calibrated typing, plus calibration
+  success and missing-key results.
+- These messages flow through the existing installer-folder
+  `aura-farming-debug.log` logger.
+
 ## [1.2.460] — 2026-08-10
 
 ### Fixed — Account switch sheet dismissal
