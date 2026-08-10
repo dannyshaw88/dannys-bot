@@ -12037,7 +12037,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (reelsViewed)              parts.push(`${reelsViewed} reel${reelsViewed === 1 ? ' watched' : 's watched'}`);
         if (sharesDm)                 parts.push(`${sharesDm} DMs`);
         if (sharesFeed)               parts.push(`${sharesFeed} feed shares`);
-        if (saves)                    parts.push(`${saves} saves`);
+        if (saves)                    parts.push(`${saves} saved`);
         const summary = parts.length ? ` — ${parts.join(", ")}` : "";
         const hasCycleStatistics =
           totalLikes > 0 ||
@@ -12098,7 +12098,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (reelsViewed) parts.push(`${reelsViewed} reel${reelsViewed === 1 ? ' watched' : 's watched'}`);
         if (sharesDm) parts.push(`${sharesDm} DMs`);
         if (sharesFeed) parts.push(`${sharesFeed} feed shares`);
-        if (saves) parts.push(`${saves} saves`);
+        if (saves) parts.push(`${saves} saved`);
         if (postsUploaded) parts.push(`${postsUploaded} post${postsUploaded === 1 ? "" : "s"} uploaded`);
         if (feedScrolled) parts.push(`${feedScrolled} posts scrolled`);
         if (hasCycleStatistics) storage.createSessionAction({
@@ -12139,7 +12139,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (reelsViewed)              parts.push(`${reelsViewed} reel${reelsViewed === 1 ? ' watched' : 's watched'}`);
         if (sharesDm)                 parts.push(`${sharesDm} DMs`);
         if (sharesFeed)               parts.push(`${sharesFeed} feed shares`);
-        if (saves)                    parts.push(`${saves} saves`);
+        if (saves)                    parts.push(`${saves} saved`);
         const summary = parts.length ? ` — ${parts.join(", ")}` : "";
         if (aborted) {
           tLog(`Cycle aborted${summary}`);
@@ -12158,7 +12158,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (reelsViewed) parts.push(`${reelsViewed} reel${reelsViewed === 1 ? ' watched' : 's watched'}`);
         if (sharesDm) parts.push(`${sharesDm} DMs`);
         if (sharesFeed) parts.push(`${sharesFeed} feed shares`);
-        if (saves) parts.push(`${saves} saves`);
+        if (saves) parts.push(`${saves} saved`);
         if (postsUploaded) parts.push(`${postsUploaded} post${postsUploaded === 1 ? "" : "s"} uploaded`);
         if (feedScrolled) parts.push(`${feedScrolled} posts scrolled`);
         const statsSuffix = parts.length ? ` — ${parts.join(", ")}` : "";
