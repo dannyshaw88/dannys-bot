@@ -5018,6 +5018,7 @@ export function AutomationSettingsPanel({
   const [newFollowSourceType, setNewFollowSourceType] = useState<'hashtag' | 'target_followers'>('hashtag');
   const [newFollowSourceValue, setNewFollowSourceValue] = useState('');
   const importSourceFileRef = useRef<HTMLInputElement>(null);
+  const importFollowUsersFileRef = useRef<HTMLInputElement>(null);
 
   const handleImportFollowSources = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -5054,6 +5055,54 @@ export function AutomationSettingsPanel({
     const a = document.createElement('a');
     a.href = url; a.download = 'follow-sources.csv'; a.click();
     URL.revokeObjectURL(url);
+  };
+  const handleImportFollowUsers = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !phone?.serial || slotIdx === undefined) return;
+    try {
+      const text = await file.text();
+      const usernames = text.split(/\r?\n|,|\t/)
+        .map(value => value.trim().replace(/^@/, ""))
+        .filter(value => /^[a-z0-9._]{2,40}$/i.test(value));
+      const response = await fetch("/api/mobile/follow-surplus/import", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ serial: phone.serial, slotIdx, usernames }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body?.error ?? "Import failed");
+      addLog?.(`Follow Users import: added ${body.imported}, skipped ${body.skipped}`);
+      await loadSurplus();
+    } catch (error: any) {
+      addLog?.(`Follow Users import failed: ${error?.message ?? "unknown error"}`);
+    } finally {
+      event.target.value = "";
+    }
+  };
+  const handleExportFollowUsers = () => {
+    if (!mobileOverspillList.length) return;
+    const text = mobileOverspillList.map(user => `@${user.instagramUsername}`).join("\n");
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `follow-targets-${slotUsername || "slot"}.txt`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+  const handleSplitFollowUsers = async () => {
+    if (!phone?.serial) return;
+    try {
+      const response = await fetch("/api/mobile/follow-surplus/split", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ serial: phone.serial }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body?.error ?? "Split failed");
+      addLog?.(`Follow Users split: ${body.users} users across ${body.slots} account slots on this device`);
+      await loadSurplus();
+    } catch (error: any) {
+      addLog?.(`Follow Users split failed: ${error?.message ?? "unknown error"}`);
+    }
   };
   const [mobileFollowedList, setMobileFollowedList] = useState<{username:string;source?:string;followedAt:number}[]>([]);
   const [loadingFollowed, setLoadingFollowed] = useState(false);
@@ -6198,6 +6247,17 @@ export function AutomationSettingsPanel({
           {showSurplus && (
             <div className="border border-border rounded-lg overflow-hidden">
               <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
+                <input ref={importFollowUsersFileRef} type="file" accept=".txt,.csv,.tsv" className="hidden" onChange={handleImportFollowUsers} />
+                <button type="button" className="text-xs text-muted-foreground hover:text-foreground hover:underline" onClick={() => importFollowUsersFileRef.current?.click()}>
+                  Import
+                </button>
+                <button type="button" className="text-xs text-muted-foreground hover:text-foreground hover:underline" disabled={!mobileOverspillList.length} onClick={handleExportFollowUsers}>
+                  Export
+                </button>
+                <button type="button" className="text-xs font-semibold text-primary hover:underline" onClick={handleSplitFollowUsers}>
+                  Split
+                </button>
+                <span className="h-4 w-px bg-border" />
                 <button type="button" className="text-xs text-muted-foreground hover:text-foreground hover:underline" onClick={() => clearSurplus("slot")}>
                   Clear Surplus
                 </button>

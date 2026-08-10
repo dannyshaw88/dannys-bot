@@ -2235,6 +2235,60 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     res.json({ ok: true });
   });
 
+  // Manual Follow Users target management. These operations are deliberately
+  // scoped to a single physical device; they never inspect or modify slots on
+  // another phone.
+  app.post("/api/mobile/follow-surplus/import", async (req: Request, res: Response) => {
+    try {
+      const serial = String(req.body?.serial ?? "").trim();
+      const slotIdx = Number(req.body?.slotIdx);
+      const usernames = Array.isArray(req.body?.usernames)
+        ? req.body.usernames.map((v: unknown) => String(v).replace(/^@/, "").trim().toLowerCase())
+          .filter((v: string) => /^[a-z0-9._]{2,40}$/i.test(v))
+        : [];
+      const slots = loadInstanceConfigs()[serial]?.account?.slots ?? [];
+      const slotUsername = slots[slotIdx]?.username?.replace(/^@/, "").trim().toLowerCase();
+      if (!serial || !slotUsername) return void res.status(400).json({ error: "A valid device and account slot are required" });
+      const existing = await storage.getOverspillUsersByPhoneSlot(slotUsername);
+      const existingSet = new Set(existing.map(row => row.instagramUsername.toLowerCase()));
+      const unique = [...new Set(usernames)].filter(username => !existingSet.has(username));
+      await storage.addOverspillUsers(unique.map(username => ({
+        profileId: 0,
+        phoneSlotKey: slotUsername,
+        instagramUsername: username,
+        instagramUserId: "",
+        sourceValue: "manual import",
+        sourceType: "manual",
+        scrapedAt: new Date().toISOString(),
+      })));
+      res.json({ ok: true, imported: unique.length, skipped: usernames.length - unique.length });
+    } catch (e: any) { res.status(400).json({ error: e?.message ?? "Import failed" }); }
+  });
+
+  app.post("/api/mobile/follow-surplus/split", async (req: Request, res: Response) => {
+    try {
+      const serial = String(req.body?.serial ?? "").trim();
+      const slots = (loadInstanceConfigs()[serial]?.account?.slots ?? [])
+        .map((slot: any) => String(slot?.username ?? "").replace(/^@/, "").trim().toLowerCase())
+        .filter((username: string) => username.length > 0);
+      if (!serial || slots.length === 0) return void res.status(400).json({ error: "No account slots found for this device" });
+      const rows = (await Promise.all(slots.map(username => storage.getOverspillUsersByPhoneSlot(username)))).flat();
+      const users = [...new Map(rows.map(row => [row.instagramUsername.toLowerCase(), row])).values()];
+      await Promise.all(slots.map(username => storage.clearOverspillByPhoneSlot(username)));
+      const now = new Date().toISOString();
+      await storage.addOverspillUsers(users.map((row, index) => ({
+        profileId: 0,
+        phoneSlotKey: slots[index % slots.length],
+        instagramUsername: row.instagramUsername,
+        instagramUserId: row.instagramUserId ?? "",
+        sourceValue: row.sourceValue || "split",
+        sourceType: row.sourceType || "manual",
+        scrapedAt: now,
+      })));
+      res.json({ ok: true, users: users.length, slots: slots.length });
+    } catch (e: any) { res.status(400).json({ error: e?.message ?? "Split failed" }); }
+  });
+
   // ── Per-slot Human Session Tool automation settings ─────────────────────────
   // Each Instagram account slot stores its own independent copy of all
   // automation settings. Settings are keyed by slot index in slotAutomation.
