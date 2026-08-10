@@ -10218,11 +10218,26 @@ export async function typeViaCalibrationMap(
     label: string,
     description = label,
     _dwellOverrideMs?: number,
+    allowDestructive = false,
   ): Promise<boolean> => {
     if (/(?:backspace|delete|forward[ -]?delete)/i.test(label) ||
         /(?:backspace|delete|forward[ -]?delete)/i.test(description)) {
-      onLog?.(`[cal-keyboard] denied destructive key '${description}'`);
-      return false;
+      if (!allowDestructive) {
+        onLog?.(`[cal-keyboard] denied destructive key '${description}'`);
+        return false;
+      }
+    }
+    const dwellMin = allowDestructive && _dwellOverrideMs != null
+      ? Math.max(0, _dwellOverrideMs)
+      : Math.max(0, Math.min(typingProfile.minMs, typingProfile.maxMs));
+    const dwellMax = allowDestructive && _dwellOverrideMs != null
+      ? dwellMin
+      : Math.max(dwellMin, typingProfile.maxMs);
+    if (allowDestructive && options?.debugLabel) {
+      onLog?.(
+        `[${options.debugLabel}] destructive-key permitted key=${JSON.stringify(description)} ` +
+        `dwell=${dwellMin}ms layer=${layer} configuredTyping=${typingProfile.minMs}-${typingProfile.maxMs}ms`,
+      );
     }
     const aliases: Record<string, string[]> = {
       "'": ["'", "apostrophe", "singleQuote", "single-quote"],
@@ -10241,6 +10256,7 @@ export async function typeViaCalibrationMap(
         `coordinate=(${pos.x},${pos.y}) layer=${layer} display=${display.w}x${display.h}`,
       );
     }
+    const tapStartedAt = Date.now();
     try {
       // A zero-distance swipe is not a tap with a configurable dwell: on
       // Xiaomi/MIUI it can be interpreted as a long-press and emit repeats.
@@ -10256,13 +10272,13 @@ export async function typeViaCalibrationMap(
       onLog?.(`[cal-keyboard] tap failed for ${description} at (${pos.x},${pos.y}) — ${e?.message}`);
       return false;
     }
-    onLog?.(`[cal-keyboard] tapped ${description} at (${pos.x},${pos.y})`);
+    onLog?.(`[cal-keyboard] tapped ${description} at (${pos.x},${pos.y}) elapsed=${Date.now() - tapStartedAt}ms`);
     if (options?.debugLabel && /(?:shift|enter|backspace|delete)/i.test(description)) {
       onLog?.(`[${options.debugLabel}] key-event=${description} coordinate=(${pos.x},${pos.y})`);
     }
-    const min = Math.max(0, Math.min(typingProfile.minMs, typingProfile.maxMs));
-    const max = Math.max(min, typingProfile.maxMs);
-    await _sleep(min + Math.round(Math.random() * (max - min)));
+    const pause = dwellMin + Math.round(Math.random() * (dwellMax - dwellMin));
+    onLog?.(`[cal-keyboard] pacing after ${description}: ${pause}ms (range=${dwellMin}-${dwellMax}ms)`);
+    await _sleep(pause);
     return true;
   };
   const maybeHumanError = async () => {
@@ -10276,6 +10292,13 @@ export async function typeViaCalibrationMap(
     }
     const lo = Math.max(0, Math.min(typingProfile.errorPercentMin, typingProfile.errorPercentMax));
     const hi = Math.min(100, Math.max(lo, typingProfile.errorPercentMax));
+    if (options?.debugLabel) {
+      onLog?.(
+        `[${options.debugLabel}] human-error config probability=${lo}-${hi}% ` +
+        `typingGap=${typingProfile.minMs}-${typingProfile.maxMs}ms ` +
+        `backspaceMap=${map.backspace ? "present" : "missing"} layer=${layer}`,
+      );
+    }
     if (Math.random() * 100 >= lo + Math.random() * (hi - lo)) {
       if (options?.debugLabel) onLog?.(`[${options.debugLabel}] human-error correction not selected`);
       return;
@@ -10284,11 +10307,22 @@ export async function typeViaCalibrationMap(
     const wrong = candidates[Math.floor(Math.random() * candidates.length)];
     if (!wrong) return;
     if (options?.debugLabel) onLog?.(`[${options.debugLabel}] human-error correction selected wrongKey=${wrong}`);
-    await tapMapped(wrong, `intentional typing error '${wrong}'`);
+    const typoStartedAt = Date.now();
+    const typoSent = await tapMapped(wrong, `intentional typing error '${wrong}'`);
+    onLog?.(
+      `[${options?.debugLabel ?? "cal-keyboard"}] human-error typo-result key=${wrong} ` +
+      `sent=${typoSent} elapsed=${Date.now() - typoStartedAt}ms`,
+    );
     // Gboard interprets a held Backspace as word deletion. Typo correction
     // must remove exactly one character, regardless of the user's normal
     // calibrated-key dwell profile.
-    await tapMapped("backspace", "Backspace after typing error", 35);
+    const backspaceStartedAt = Date.now();
+    const backspaceSent = await tapMapped("backspace", "Backspace after typing error", 35, true);
+    onLog?.(
+      `[${options?.debugLabel ?? "cal-keyboard"}] human-error backspace-result ` +
+      `sent=${backspaceSent} elapsed=${Date.now() - backspaceStartedAt}ms ` +
+      `expectedSingleDelete=true`,
+    );
   };
   const waitWordHesitation = async () => {
     const hesitationMin = Math.max(0, Math.min(typingProfile.hesitationMinMs, typingProfile.hesitationMaxMs));
