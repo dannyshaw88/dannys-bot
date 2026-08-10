@@ -11335,47 +11335,50 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // Always establish the Home feed first, even when Stories is the
             // first tool in the cycle. The phone can still be on a nested
             // screen from a previous cycle or app resume.
-            tLog("▶ Tapping Home tab for stories…");
-            // A previous tool/cycle can leave Instagram inside a full-screen
-            // Story viewer. Never press Back here: the Story tool must not
-            // navigate or mutate an unknown screen while establishing state.
-            // Detect the pre-existing viewer and abort safely instead.
             const _alreadyInStory = await android.isInStoryViewerSlow(serial).catch(() => false);
+            let storyEntry: { slot: number; opened: boolean };
             if (_alreadyInStory) {
-              steps.push("stories(aborted — already in Story viewer)");
-              tLog("▶ Stories aborted — device is already in a Story viewer; no Back/navigation action taken");
-              continue;
-            }
-            const homeTab = await android.findHomeTab(serial).catch(() => null);
-            if (homeTab) {
-              await android.tap(serial, homeTab.x, homeTab.y);
+              // The story tool may be entered while the phone is already
+              // showing a story (for example, the preceding Feed action
+              // opened one). That is a valid starting state. Do not tap Home
+              // or press a story bubble: those actions would operate on the
+              // viewer and can focus the reply composer.
+              tLog("▶ Stories: already in Story viewer — skipping Home and story-bubble taps");
+              storyEntry = { slot: 0, opened: true };
             } else {
-              steps.push("stories(aborted — Home tab not positively detected)");
-              tLog("▶ Stories aborted — Home tab not positively detected; refusing coordinate fallback");
-              continue;
+              tLog("▶ Tapping Home tab for stories…");
+              // Only navigate to Home when we positively know we are not
+              // already in the Story viewer.
+              const homeTab = await android.findHomeTab(serial).catch(() => null);
+              if (homeTab) {
+                await android.tap(serial, homeTab.x, homeTab.y);
+              } else {
+                steps.push("stories(aborted — Home tab not positively detected)");
+                tLog("▶ Stories aborted — Home tab not positively detected; refusing coordinate fallback");
+                continue;
+              }
+              await sleepOrAbort(serial, 1200);
+              const _homeConfirmed = await android.findHomeTab(serial).catch(() => null);
+              if (!_homeConfirmed) {
+                steps.push("stories(aborted — Home tab confirmation failed)");
+                tLog("▶ Stories aborted — Home tab confirmation failed; refusing to open story tray");
+                continue;
+              }
+              const preStoriesPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
+              if (preStoriesPopup) {
+                steps.push(`pre-stories-popup-dismissed(${preStoriesPopup})`);
+                await sleepOrAbort(serial, 600);
+              }
+              tLog("▶ Waiting for story tray to load…");
+              await sleepOrAbort(serial, 5000);
+              tLog(`▶ Starting stories (up to ${viewStoriesSlidesMax})`);
+              storyEntry = await pickAndOpenRandomStory(
+                serial,
+                getScreenSize(serial).w,
+                getScreenSize(serial).h,
+                (msg) => tLog(`  ${msg}`),
+              );
             }
-            await sleepOrAbort(serial, 1200);
-            const _homeConfirmed = await android.findHomeTab(serial).catch(() => null);
-            if (!_homeConfirmed) {
-              steps.push("stories(aborted — Home tab confirmation failed)");
-              tLog("▶ Stories aborted — Home tab confirmation failed; refusing to open story tray");
-              continue;
-            }
-            // Dismiss any popup that appeared after tapping Home.
-            const preStoriesPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
-            if (preStoriesPopup) {
-              steps.push(`pre-stories-popup-dismissed(${preStoriesPopup})`);
-              await sleepOrAbort(serial, 600);
-            }
-            tLog("▶ Waiting for story tray to load…");
-            await sleepOrAbort(serial, 5000);
-            tLog(`▶ Starting stories (up to ${viewStoriesSlidesMax})`);
-            const storyEntry = await pickAndOpenRandomStory(
-              serial,
-              getScreenSize(serial).w,
-              getScreenSize(serial).h,
-              (msg) => tLog(`  ${msg}`),
-            );
             if (!storyEntry.opened) {
               steps.push("stories(aborted — no story bubbles after Home retry)");
               tLog("▶ Stories aborted — no story bubbles available");
