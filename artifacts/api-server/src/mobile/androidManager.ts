@@ -10069,6 +10069,7 @@ export async function typeViaCalibrationMap(
   map: KeyCalibrationMap,
   onLog?: (msg: string) => void,
   typingProfile: TypingSpeedProfile,
+  options?: { disableHumanErrors?: boolean; shiftEnterNewlines?: boolean },
 ): Promise<{ ok: boolean; missing: string[] }> {
   if (!typingProfile ||
       !Number.isFinite(typingProfile.minMs) ||
@@ -10134,6 +10135,7 @@ export async function typeViaCalibrationMap(
     return true;
   };
   const maybeHumanError = async () => {
+    if (options?.disableHumanErrors) return;
     if (!typingProfile || !map.backspace) return;
     const lo = Math.max(0, Math.min(typingProfile.errorPercentMin, typingProfile.errorPercentMax));
     const hi = Math.min(100, Math.max(lo, typingProfile.errorPercentMax));
@@ -10221,6 +10223,13 @@ export async function typeViaCalibrationMap(
     const label = ch === " " ? "space" : ch === "\n" ? "enter" : ch.toLowerCase();
     if (ch === " " || ch === "\n") {
       await switchLayer("letters");
+      if (ch === "\n" && options?.shiftEnterNewlines) {
+        // Instagram's bio editor accepts the keyboard's shifted return
+        // action as a line break. The shift tap is deliberately paired with
+        // Enter here; it is not a character and does not affect the saved
+        // calibration map.
+        if (!await tapMapped("shift", "Shift before newline")) missing.push(ch);
+      }
       if (!await tapMapped(label, ch === " " ? "space" : "Enter")) missing.push(ch);
         if (ch === " ") {
           await waitWordHesitation();
