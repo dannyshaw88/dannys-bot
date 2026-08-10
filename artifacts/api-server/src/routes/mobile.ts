@@ -8864,11 +8864,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         spawnSync(adb, ["-s", serial, "shell", "input", "keycombination",
           "KEYCODE_CTRL_LEFT", "KEYCODE_A"], { encoding: "utf8", timeout: 2000 });
         await sleepOrAbort(serial, 400);
-        // Delete the selected range explicitly. Do not rely on the next
-        // calibrated character tap to replace a selection; that can leave
-        // Gboard in word-selection/backspace behavior on some builds.
-        await android.keyevent(serial, "67"); // KEYCODE_DEL
-        await sleepOrAbort(serial, 250);
       }
       const typed = await android.typeViaSavedCalibrationMap(serial, bioText, loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile, message => {
         onLog?.(`Update Bio: ${message}`);
