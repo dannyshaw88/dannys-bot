@@ -1,3 +1,13 @@
+## [1.2.449] — 2026-08-10
+
+### Changed — Mobile scroll personality tuning
+
+- Reduced the Back personality weight to a randomized **0–5** across Feed,
+  Explore, and Reels.
+- Kept Back as a reversed calibrated swipe with a **5–10%** duration band.
+- Updated the active mobile API behavior without changing the saved My Device
+  swipe geometry or the 150 ms maximum duration cap.
+
 ## [1.2.448] — 2026-08-10
 
 ### Changed — Mobile scroll personalities
