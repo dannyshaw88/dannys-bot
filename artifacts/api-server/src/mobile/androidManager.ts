@@ -7526,9 +7526,43 @@ export async function switchToInstagramAccount(
     onLog?.(`  ⚠ Could not find @${clean} in the profile header — cannot open account list`);
     return false;
   }
+  const headerNode = (() => {
+    const boundsRe = /bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/;
+    const nodeRe = /<node\b([^>]*)>/gi;
+    let match: RegExpExecArray | null;
+    while ((match = nodeRe.exec(profileXml)) !== null) {
+      const attrs = match[1];
+      const bounds = attrs.match(boundsRe);
+      if (!bounds) continue;
+      const x1 = Number(bounds[1]); const y1 = Number(bounds[2]);
+      const x2 = Number(bounds[3]); const y2 = Number(bounds[4]);
+      if (profileHeaderUsername.x < x1 || profileHeaderUsername.x > x2 ||
+          profileHeaderUsername.y < y1 || profileHeaderUsername.y > y2) continue;
+      return {
+        resourceId: attrs.match(/resource-id="([^"]*)"/i)?.[1] ?? "",
+        text: attrs.match(/\btext="([^"]*)"/i)?.[1] ?? "",
+        contentDesc: attrs.match(/content-desc="([^"]*)"/i)?.[1] ?? "",
+        clickable: /clickable="true"/i.test(attrs),
+        bounds: `[${x1},${y1}][${x2},${y2}]`,
+      };
+    }
+    return null;
+  })();
+  onLog?.(`  ↳ Account-header tap target: (${profileHeaderUsername.x},${profileHeaderUsername.y}) node=${JSON.stringify(headerNode)}`);
   onLog?.(`  ↳ Tapping profile header username @${clean} to open account list…`);
   await _adbTapAsync(adbPath, serial, profileHeaderUsername.x, profileHeaderUsername.y);
   await _sleep(700);
+  const postHeaderTapXml = await _uiDump(adbPath, serial).catch(() => "");
+  const postHeaderState = {
+    hasUsernameContainer: /action_bar_username_container/.test(postHeaderTapXml),
+    hasEditProfile: /(?:text|content-desc)="Edit profile"/i.test(postHeaderTapXml),
+    hasScrollableSheet: /scrollable="true"/i.test(postHeaderTapXml),
+    accountRowLabelCount: (postHeaderTapXml.match(/(?:text|content-desc)="@?[a-z0-9._]{2,40}"/gi) ?? []).length,
+    targetLabelPresent: postHeaderTapXml.toLowerCase().includes(`"${clean.toLowerCase()}"`) ||
+      postHeaderTapXml.toLowerCase().includes(`"@${clean.toLowerCase()}"`),
+    sheetMarkers: (postHeaderTapXml.match(/(?:account|switch|chooser|dialog|bottom_sheet|modal|action_bar_username_container)/gi) ?? []).slice(0, 20),
+  };
+  onLog?.(`  ↳ Account-header tap result: xmlLength=${postHeaderTapXml.length}, state=${JSON.stringify(postHeaderState)}`);
 
   // 4. Dump the accessibility tree and look for the target username.
   //    Instagram displays each account row as a node with text="username"
@@ -7545,7 +7579,7 @@ export async function switchToInstagramAccount(
   //    IS logged in. Subsequent cycles (warm Instagram) succeed because the
   //    switcher populates faster. The poll exits on the first dump that
   //    contains the username — zero extra wait in the normal (warm) case.
-  let xml = "";
+  let xml = postHeaderTapXml;
   let coords: { x: number; y: number } | null = null;
   const escapedUsername = clean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const usernameRowPattern = new RegExp(`(?:^|,\\s*)@?${escapedUsername}(?:,|$)`, "i");

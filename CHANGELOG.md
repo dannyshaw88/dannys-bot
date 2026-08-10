@@ -1,3 +1,14 @@
+## [1.2.462] — 2026-08-10
+
+### Added — Account switch header-tap diagnostics
+
+- Logs the exact profile-header tap coordinates and the matched node's
+  resource ID, labels, clickability, and bounds.
+- Captures the UI hierarchy immediately after the single header tap.
+- Logs whether the username container, profile markers, target label, and
+  sheet/dialog markers are present after the tap.
+- Does not add retries or alter account-switch behavior.
+
 ## [1.2.461] — 2026-08-10
 
 ### Added — Update Bio typing diagnostics
