@@ -435,9 +435,9 @@ function TrustScoreAutomationEditor({
         <div className="flex items-center gap-3 pl-2 shrink-0">
           <button
             onClick={onBack}
-            className="flex items-center gap-1.5 whitespace-nowrap text-lg font-bold text-black hover:text-black/70 transition-colors"
+            className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-background px-2.5 py-1.5 text-sm font-semibold text-foreground shadow-sm hover:bg-accent transition-colors"
           >
-            <ChevronLeft className="w-5 h-5" /> Back to TrustScores
+            <ChevronLeft className="w-4 h-4 shrink-0" /> Back to TrustScores
           </button>
         </div>
         <div className="ml-auto flex items-center gap-3 shrink-0">
