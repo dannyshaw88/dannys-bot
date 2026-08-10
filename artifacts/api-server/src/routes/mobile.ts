@@ -10910,23 +10910,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Build the sequence from only the tools that passed their activate gate.
       const _toolSeq = ['feed', 'stories', 'explore', 'reels', 'checkDm', 'follow', 'post', 'postStory', 'Random Actions']
         .filter(t => _toolActivated[t]);
+      const _toolOrderLabels: Record<string, string> = {
+        feed: "VIEW FEED",
+        stories: "VIEW STORIES",
+        explore: "VIEW EXPLORE",
+        reels: "VIEW REELS",
+        checkDm: "DIRECT MESSAGING",
+        follow: "FOLLOW USERS",
+        post: "MAKE A POST",
+        postStory: "POST A STORY",
+        "Random Actions": "RANDOM ACTIONS",
+      };
       if (shuffleToolOrder) {
         for (let _si = _toolSeq.length - 1; _si > 0; _si--) {
           const _sj = Math.floor(Math.random() * (_si + 1));
           [_toolSeq[_si], _toolSeq[_sj]] = [_toolSeq[_sj], _toolSeq[_si]];
         }
-        const _debugToolOrderLabels: Record<string, string> = {
-          feed: "VIEW FEED",
-          stories: "VIEW STORIES",
-          explore: "VIEW EXPLORE",
-          reels: "VIEW REELS",
-          checkDm: "DIRECT MESSAGING",
-          follow: "FOLLOW USERS",
-          post: "MAKE A POST",
-          postStory: "POST A STORY",
-          "Random Actions": "RANDOM ACTIONS",
-        };
-        const _debugToolOrder = _toolSeq.map(_name => _debugToolOrderLabels[_name] ?? _name);
+        const _debugToolOrder = _toolSeq.map(_name => _toolOrderLabels[_name] ?? _name);
         tLog(`▶ Tool order shuffled: ${_debugToolOrder.length > 0 ? _debugToolOrder.join(' → ') : '(no tools active this execution)'}`);
       }
 
@@ -11126,6 +11126,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
         // targetCount === 1: spread never applies, follow runs normally via standard dispatcher
       }
+
+      // Report the order the dispatcher will actually execute. Spread Follows
+      // rewrites the base shuffled sequence after pre-fetching candidates, so
+      // this makes every injected follow position explicit in the log.
+      const _effectiveToolOrder = _toolSeq.map(_name =>
+        _name.startsWith("follow_spread:")
+          ? `FOLLOW @${_name.slice("follow_spread:".length)}`
+          : (_toolOrderLabels[_name] ?? _name),
+      );
+      tLog(`▶ Effective tool order${followSpreadFollows ? " (Spread Follows applied where active)" : ""}: ${
+        _effectiveToolOrder.length > 0 ? _effectiveToolOrder.join(' → ') : '(no tools active this execution)'
+      }`);
 
       let _toolsRan = 0; // how many tools have executed before the current one
 
