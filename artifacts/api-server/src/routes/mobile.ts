@@ -7760,27 +7760,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Confirm the picker is actually open before tapping Next. Check for any
     // recognizable picker signal: the expand toggle (only visible when a photo
     // is selected in the preview), or a labelled Next button.
-    onLog?.("Make a Post: looking for the \"Next\" button…");
-    let nextBtn1 = await android.findButtonByLabel(serial, "Next").catch(() => null);
-    let nextBtn1IsPositionalGuess = false;
-    if (!nextBtn1) {
-      // On this screen the top app bar (X / "New post" / Next) has zero
-      // accessibility children — "Next" is rendered but not labelled.
-      // Fall back to a fixed screen-fraction coordinate.
-      onLog?.("Make a Post: \"Next\" not found in accessibility tree — using positional fallback");
-      nextBtn1 = android.postNextButtonPositionalFallback(serial);
-      nextBtn1IsPositionalGuess = true;
-    }
-    // Sanity-check: if we're relying entirely on positional guesses with no
-    // confirming signal (no POST tab, no expand toggle, no labelled Next),
-    // the compose sheet likely never opened — bail rather than tap blind.
-    if (nextBtn1IsPositionalGuess && !postTab && !expandToggle) {
-      onLog?.("Make a Post: compose sheet did not open (no picker signal found at all) — aborting");
-      await android.pressBack(serial);
-      await android.removeDeviceFile(serial, devicePath).catch(() => {});
-      return { posted: false };
-    }
-
     // Tap the expand/fit toggle (two-arrow icon, bottom-left of preview) to
     // switch from IG's default centre-crop to the full original photo before
     // advancing to the filter/edit screen.
@@ -7790,6 +7769,32 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await sleepOrAbort(serial, 500);
     } else {
       onLog?.("Make a Post: expand/fit toggle not found — continuing without it");
+    }
+
+    // The expand/fit tap can animate the preview and temporarily place the
+    // gallery grid over the image. Never reuse a Next coordinate found before
+    // that transition: on affected Instagram builds it lands back on the
+    // image/grid instead of the top-bar button. Re-dump and locate the live
+    // control only after the picker has settled.
+    await sleepOrAbort(serial, 700);
+    onLog?.("Make a Post: re-scanning settled picker for live \"Next\" button…");
+    let nextBtn1 = await android.findButtonByLabel(serial, "Next").catch(() => null);
+    let nextBtn1IsPositionalGuess = false;
+    if (!nextBtn1) {
+      // On this screen the top app bar (X / "New post" / Next) has zero
+      // accessibility children — "Next" is rendered but not labelled.
+      onLog?.("Make a Post: live \"Next\" not found in accessibility tree — using positional fallback");
+      nextBtn1 = android.postNextButtonPositionalFallback(serial);
+      nextBtn1IsPositionalGuess = true;
+    }
+    // Sanity-check: if we're relying entirely on positional guesses with no
+    // confirming signal, the compose sheet likely never opened — bail rather
+    // than tapping through a temporary grid or an unrelated screen.
+    if (nextBtn1IsPositionalGuess && !postTab && !expandToggle) {
+      onLog?.("Make a Post: compose sheet did not open (no picker signal found at all) — aborting");
+      await android.pressBack(serial);
+      await android.removeDeviceFile(serial, devicePath).catch(() => {});
+      return { posted: false };
     }
 
     onLog?.(`Make a Post: found "Next" at (${nextBtn1.x}, ${nextBtn1.y}) — tapping…`);
