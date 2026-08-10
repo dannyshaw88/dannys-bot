@@ -5177,8 +5177,31 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (!(willLike || willShare || willComment || willClickAuthor)) {
         const watchPct = Math.min(slideWatchPctMin, slideWatchPctMax) +
           Math.random() * Math.abs(slideWatchPctMax - slideWatchPctMin);
-        const watchMs = Math.max(1500, Math.round((watchPct / 100) * 6000));
-        await sleepOrAbort(serial, watchMs);
+        const watchTarget = watchPct / 100;
+        const watchStarted = Date.now();
+        let reachedTarget = false;
+        let previousProgress: number | null = null;
+        while (Date.now() - watchStarted < 60000) {
+          const progress = await android.readStoryProgress(serial).catch(() => null);
+          if (progress == null) {
+            await sleepOrAbort(serial, 180);
+            continue;
+          }
+          if (previousProgress != null && progress + 0.15 < previousProgress) {
+            onLog?.(`View Stories ${s + 1}: story segment advanced before target (${(progress * 100).toFixed(0)}%)`);
+            break;
+          }
+          previousProgress = progress;
+          if (progress >= watchTarget) {
+            reachedTarget = true;
+            break;
+          }
+          await sleepOrAbort(serial, 180);
+        }
+        onLog?.(
+          `View Stories ${s + 1}: progress target=${(watchTarget * 100).toFixed(0)}% ` +
+          `reached=${reachedTarget ? "yes" : "no"} elapsed=${((Date.now() - watchStarted) / 1000).toFixed(1)}s`,
+        );
       }
       storyTimingAfterWatch = Date.now();
 

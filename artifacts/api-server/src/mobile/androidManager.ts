@@ -5155,6 +5155,45 @@ export async function isStoryViewerOpenFast(serial: string): Promise<boolean | n
 }
 
 /**
+ * Read the current Story progress from the transient in-memory screencap.
+ * Returns null when the progress row cannot be identified.
+ */
+export async function readStoryProgress(serial: string): Promise<number | null> {
+  const img = await _captureScreenPixels(serial);
+  if (!img) return null;
+  const { width, height, channels, pixels } = img;
+  const lum = (x: number, y: number) => {
+    const i = (y * width + x) * channels;
+    return (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3;
+  };
+  for (let y = Math.round(height * 0.008); y <= Math.round(height * 0.10); y += 2) {
+    const bright: Array<{ x1: number; x2: number }> = [];
+    let start = -1;
+    for (let x = 0; x < width; x++) {
+      if (lum(x, y) > 110) {
+        if (start < 0) start = x;
+      } else if (start >= 0) {
+        if (x - start >= Math.max(3, width * 0.01)) bright.push({ x1: start, x2: x - 1 });
+        start = -1;
+      }
+    }
+    if (start >= 0) bright.push({ x1: start, x2: width - 1 });
+    if (bright.length < 2) continue;
+    const widths = bright.map(c => c.x2 - c.x1 + 1);
+    const max = Math.max(...widths), min = Math.min(...widths);
+    if (max / Math.max(1, min) > 2.6) continue;
+    const total = bright.reduce((sum, c) => sum + c.x2 - c.x1 + 1, 0);
+    if (total < width * 0.42) continue;
+    // The active segment is the right-most bright segment; use its relative
+    // width as a conservative progress estimate within the visible row.
+    const segmentWidth = Math.max(...widths);
+    const activeWidth = bright[bright.length - 1].x2 - bright[bright.length - 1].x1 + 1;
+    return Math.min(1, Math.max(0, (bright.length - 1 + activeWidth / segmentWidth) / bright.length));
+  }
+  return null;
+}
+
+/**
  * Locate Instagram's bottom-nav Home tab (the house icon, leftmost of the
  * 5 nav items) via the real accessibility tree instead of a guessed screen
  * percentage. Percentage-based taps drift depending on device screen
