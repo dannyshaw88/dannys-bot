@@ -10138,14 +10138,24 @@ export async function typeViaCalibrationMap(
     return true;
   };
   const maybeHumanError = async () => {
-    if (options?.disableHumanErrors) return;
-    if (!typingProfile || !map.backspace) return;
+    if (options?.disableHumanErrors) {
+      if (options.debugLabel) onLog?.(`[${options.debugLabel}] human-error correction skipped (disabled)`);
+      return;
+    }
+    if (!typingProfile || !map.backspace) {
+      if (options?.debugLabel) onLog?.(`[${options.debugLabel}] human-error correction unavailable`);
+      return;
+    }
     const lo = Math.max(0, Math.min(typingProfile.errorPercentMin, typingProfile.errorPercentMax));
     const hi = Math.min(100, Math.max(lo, typingProfile.errorPercentMax));
-    if (Math.random() * 100 >= lo + Math.random() * (hi - lo)) return;
+    if (Math.random() * 100 >= lo + Math.random() * (hi - lo)) {
+      if (options?.debugLabel) onLog?.(`[${options.debugLabel}] human-error correction not selected`);
+      return;
+    }
     const candidates = Object.keys(map).filter(k => /^[a-z]$/i.test(k) && k !== "backspace");
     const wrong = candidates[Math.floor(Math.random() * candidates.length)];
     if (!wrong) return;
+    if (options?.debugLabel) onLog?.(`[${options.debugLabel}] human-error correction selected wrongKey=${wrong}`);
     await tapMapped(wrong, `intentional typing error '${wrong}'`);
     // Gboard interprets a held Backspace as word deletion. Typo correction
     // must remove exactly one character, regardless of the user's normal
@@ -10221,7 +10231,10 @@ export async function typeViaCalibrationMap(
     "^", "°", "{", "}", "[", "]", "\\", "<", ">",
   ]);
 
+  let charIndex = 0;
   for (const ch of text) {
+    const debugChar = ch === "\n" ? "\\n" : ch === " " ? "<space>" : ch;
+    if (options?.debugLabel) onLog?.(`[${options.debugLabel}] char ${charIndex + 1}/${text.length} begin=${debugChar}`);
     await maybeHumanError();
     const label = ch === " " ? "space" : ch === "\n" ? "enter" : ch.toLowerCase();
     if (ch === " " || ch === "\n") {
@@ -10247,6 +10260,8 @@ export async function typeViaCalibrationMap(
         if (ch === " ") {
           await waitWordHesitation();
         }
+      if (options?.debugLabel) onLog?.(`[${options.debugLabel}] char ${charIndex + 1}/${text.length} end=${debugChar}`);
+      charIndex++;
       continue;
     }
 
@@ -10261,6 +10276,8 @@ export async function typeViaCalibrationMap(
         }
       }
       if (!await tapMapped(map[label] ? label : ch, ch)) missing.push(ch);
+      if (options?.debugLabel) onLog?.(`[${options.debugLabel}] char ${charIndex + 1}/${text.length} end=${debugChar}`);
+      charIndex++;
       continue;
     }
 
@@ -10280,6 +10297,8 @@ export async function typeViaCalibrationMap(
       missing.push(ch);
     }
     if (ch === "." || ch === "_") await waitWordHesitation();
+    if (options?.debugLabel) onLog?.(`[${options.debugLabel}] char ${charIndex + 1}/${text.length} end=${debugChar}`);
+    charIndex++;
   }
 
   // Leave the IME on its normal letters layer. This matters when a symbol or

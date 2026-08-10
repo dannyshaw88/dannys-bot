@@ -6029,6 +6029,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
     const safeName = path.basename(filename).replace(/[^\w.\- ()[\]]/g, "_") || "image";
     const sourcePath = path.join(tempDir, safeName);
     let workingPath = sourcePath;
+    let processingStage = localPath ? "copying Windows local file" : "decoding image data";
 
     try {
       if (localPath) {
@@ -6040,13 +6041,21 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       }
 
       if (shouldFixAiSlop) {
+        processingStage = "Fix AI Slop";
         workingPath = await fixAiSlop(workingPath);
+        const processedStat = await fs.promises.stat(workingPath);
+        console.log(
+          `[images/process] Fix AI Slop output ready — ` +
+          `source=${path.basename(sourcePath)} output=${path.basename(workingPath)} ` +
+          `bytes=${processedStat.size}`,
+        );
       }
 
       let output = await fs.promises.readFile(workingPath);
       let outputFilename = safeName;
 
       if (alterationEnabled) {
+        processingStage = "image alteration";
         output = await alterJpegBuffer(
           output,
           alterationLevel ?? "small",
@@ -6078,7 +6087,18 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
         size: output.length,
       });
     } catch (e: any) {
-      return res.status(500).json({ error: e?.message ?? "Image processing failed" });
+      const reason = e?.message ?? "Image processing failed";
+      const diagnostic = [
+        `[images/process] FAILED`,
+        `file=${safeName}`,
+        `source=${localPath ? "Windows localPath" : "imageBase64"}`,
+        `stage=${processingStage}`,
+        `fixAiSlop=${!!shouldFixAiSlop}`,
+        `alteration=${!!alterationEnabled}`,
+        `error=${reason}`,
+      ].join(" ");
+      console.error(diagnostic, e?.stack ?? "");
+      return res.status(500).json({ error: diagnostic });
     } finally {
       await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => {});
       if (workingPath !== sourcePath) {

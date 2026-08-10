@@ -278,8 +278,8 @@ function detectFormat(buf: Buffer): ImageFormat {
 
 /**
  * Strips all AI-detectable signals from an image file and returns the path of
- * a processed temp file.  If processing fails, the original path is returned
- * unchanged and no temp file is created.
+ * a processed temp file. If processing fails, the error is propagated so FIA
+ * never silently uploads the original image after a failed processing attempt.
  *
  * The caller MUST call cleanupAiSlopTemp() after using the returned path.
  *
@@ -359,7 +359,7 @@ export async function fixAiSlop(inputPath: string): Promise<string> {
   } catch (err) {
     console.error("[fixAiSlop] failed:", err);
     await unlink(tmp).catch(() => {});
-    return inputPath;
+    throw new Error(`Fix AI Slop processing failed: ${(err as Error)?.message ?? String(err)}`);
   }
 }
 
