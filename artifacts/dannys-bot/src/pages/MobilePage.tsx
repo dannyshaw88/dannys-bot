@@ -9856,6 +9856,12 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                // fall through to the generic white/status colours.
                  let msgClass = 'text-white';
                  const isFeedMessage = currentTool === 'feed' || /\bView Feed\b|▶\s*View Feed\b/i.test(msg);
+                 // Story-feed waits and tray diagnostics can be emitted while
+                 // the surrounding cycle is still tagged as Feed. Stories
+                 // own these messages, so they must override Feed orange.
+                 const isStoryMessage = currentTool === 'stories' ||
+                   /\b(?:Story|Stories|story|stories)\b/i.test(msg) ||
+                   /waiting for (?:the )?story feed/i.test(msg);
                  const isDirectMessagingMessage = currentTool === 'directmessaging' ||
                    /▶\s*Direct Messaging\b|\bDirect Messaging\b/i.test(msg);
                  const isReelsMessage = !isFeedMessage &&
@@ -9870,7 +9876,9 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                   currentTool === 'follow' ? 'text-blue-400' :
                   currentTool === 'randomactions' ? 'text-purple-400' :
                   null;
-                 if (isFeedMessage) {
+                 if (isStoryMessage) {
+                   msgClass = 'text-blue-400';
+                 } else if (isFeedMessage) {
                    msgClass = 'text-orange-400';
                  } else if (isDirectMessagingMessage) {
                    msgClass = 'text-slate-300';
