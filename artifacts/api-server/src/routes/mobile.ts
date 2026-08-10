@@ -2655,7 +2655,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           x2: z.number().finite(),
           y2: z.number().finite(),
           durationMinMs: z.number().finite(),
-          durationMaxMs: z.number().finite(),
+          durationMaxMs: z.number().finite().max(150),
           jitterX: z.number().finite(),
           jitterY: z.number().finite(),
           startJitterMinY: z.number().finite().optional(),
@@ -2667,7 +2667,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }).optional(),
       }).parse(req.body);
       const cfg = loadInstanceConfigs();
-      cfg[serial] = { ...cfg[serial], devicePrefs: { ...cfg[serial]?.devicePrefs, ...allowed } };
+      cfg[serial] = {
+        ...cfg[serial],
+        devicePrefs: {
+          ...cfg[serial]?.devicePrefs,
+          ...allowed,
+          ...(allowed.swipeGesture
+            ? { swipeGesture: { ...allowed.swipeGesture, durationMaxMs: Math.min(150, allowed.swipeGesture.durationMaxMs) } }
+            : {}),
+        },
+      };
       saveInstanceConfigs(cfg);
       res.json({ ok: true });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
@@ -2698,7 +2707,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         throw new Error("Swipe Gesture Profile duration is invalid");
       }
       const durationMinMs = Math.min(gesture.durationMinMs, gesture.durationMaxMs);
-      const durationMaxMs = Math.max(gesture.durationMinMs, gesture.durationMaxMs);
+      const durationMaxMs = Math.min(150, Math.max(gesture.durationMinMs, gesture.durationMaxMs));
       const durationMs = durationMinMs + Math.round(Math.random() * (durationMaxMs - durationMinMs));
       // The UI supplies this exact randomized path. Disable the legacy
       // low-level jitter so the coordinates in the response are precisely
@@ -3441,8 +3450,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (!Number.isFinite(configured.durationMinMs) || !Number.isFinite(configured.durationMaxMs)) {
       throw new Error(`Swipe Gesture Profile duration is invalid for ${source}`);
     }
-    const minDuration = Math.min(configured.durationMinMs, configured.durationMaxMs);
-    const maxDuration = Math.max(configured.durationMinMs, configured.durationMaxMs);
+    const minDuration = Math.min(150, Math.min(configured.durationMinMs, configured.durationMaxMs));
+    const maxDuration = Math.min(150, Math.max(configured.durationMinMs, configured.durationMaxMs));
     // The saved profile owns the physical gesture. Personality only changes
     // how quickly it is performed, so calibrated coordinates remain stable.
     const span = maxDuration - minDuration;

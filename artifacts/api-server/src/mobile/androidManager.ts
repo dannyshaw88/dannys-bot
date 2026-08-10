@@ -1079,7 +1079,7 @@ export async function runChromeApp(
   if (!opts?.swipeGesture) throw new Error("Swipe Gesture Profile is required for Chrome content scrolling");
   const profileSwipeDuration = () => {
     const min = Math.min(opts.swipeGesture.durationMinMs, opts.swipeGesture.durationMaxMs);
-    const max = Math.max(opts.swipeGesture.durationMinMs, opts.swipeGesture.durationMaxMs);
+    const max = Math.min(150, Math.max(opts.swipeGesture.durationMinMs, opts.swipeGesture.durationMaxMs));
     if (!Number.isFinite(min) || !Number.isFinite(max)) throw new Error("Swipe Gesture Profile duration is invalid");
     return Math.max(1, Math.round(min + Math.random() * (max - min)));
   };
@@ -1982,7 +1982,7 @@ export async function runYoutubeApp(
   if (!opts?.swipeGesture) throw new Error("Swipe Gesture Profile is required for YouTube content scrolling");
   const profileSwipeDuration = () => {
     const min = Math.min(opts.swipeGesture.durationMinMs, opts.swipeGesture.durationMaxMs);
-    const max = Math.max(opts.swipeGesture.durationMinMs, opts.swipeGesture.durationMaxMs);
+    const max = Math.min(150, Math.max(opts.swipeGesture.durationMinMs, opts.swipeGesture.durationMaxMs));
     if (!Number.isFinite(min) || !Number.isFinite(max)) throw new Error("Swipe Gesture Profile duration is invalid");
     return Math.max(1, Math.round(min + Math.random() * (max - min)));
   };
@@ -7587,7 +7587,7 @@ export async function switchToInstagramAccount(
            throw new Error("Swipe Gesture Profile duration is invalid for account-list scrolling");
          }
          const durationMin = Math.min(profile.durationMinMs, profile.durationMaxMs);
-         const durationMax = Math.max(profile.durationMinMs, profile.durationMaxMs);
+         const durationMax = Math.min(150, Math.max(profile.durationMinMs, profile.durationMaxMs));
         const duration = Math.max(1, Math.round(durationMin + Math.random() * (durationMax - durationMin)));
         onLog?.(`  ↳ Account-list swipe mapped to sheet bounds: (${midX}, ${fromY}) → (${midX}, ${toY}) over ${duration}ms`);
         await runAdb(adbPath, [
