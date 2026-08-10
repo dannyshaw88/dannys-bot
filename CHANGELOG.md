@@ -1,3 +1,12 @@
+### Improved — Mobile device quick controls
+
+- Replaced the single brightness-cycle button with separate −50 and +50
+  controls, clamped between 0% and 100%.
+- Added an Airplane Mode button that enables airplane mode for a randomized
+  10–15 seconds, then disables it automatically.
+- The airplane control displays a live seconds countdown while the device is
+  offline.
+
 ## [1.2.447] — 2026-08-09
 
 ### Fixed — Human Session Tool interval scheduling

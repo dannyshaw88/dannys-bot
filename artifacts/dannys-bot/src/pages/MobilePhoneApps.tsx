@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Fingerprint, LockKeyhole, Loader2, Power, RotateCcw, Sun } from "lucide-react";
+import { CheckCircle2, Fingerprint, LockKeyhole, Loader2, Power, RotateCcw, Minus, Plus, Plane } from "lucide-react";
 
 // Collision preventer slot index reserved for phone apps (outside Instagram slot range 0..N).
 const PHONE_APPS_SLOT_IDX = 99;
@@ -166,10 +166,10 @@ interface MobilePhoneAppsProps {
 
 function DeviceQuickControls({ serial }: { serial: string | null | undefined }) {
   const [screenOn, setScreenOn] = useState(true);
-  const [brightStep, setBrightStep] = useState<0 | 1 | 2>(2);
+  const [brightness, setBrightness] = useState(100);
   const [rebooting, setRebooting] = useState(false);
-  const brightLevels: [0 | 1 | 2, number, string][] = [[0, 0, "0%"], [1, 50, "50%"], [2, 100, "100%"]];
-  const brightLabel = brightLevels[brightStep][2];
+  const [airplaneRemaining, setAirplaneRemaining] = useState<number | null>(null);
+  const airplaneTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const handleStandby = useCallback(async () => {
     if (!serial) return;
@@ -188,15 +188,38 @@ function DeviceQuickControls({ serial }: { serial: string | null | undefined }) 
     setTimeout(() => { setRebooting(false); setScreenOn(true); }, 15000);
   }, [serial, rebooting]);
 
-  const handleBrightness = useCallback(async () => {
+  const changeBrightness = useCallback(async (delta: number) => {
     if (!serial) return;
-    const nextStep: 0 | 1 | 2 = brightStep === 2 ? 0 : brightStep === 0 ? 1 : 2;
-    setBrightStep(nextStep);
+    const nextBrightness = Math.min(100, Math.max(0, brightness + delta));
+    setBrightness(nextBrightness);
     await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/brightness`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ percent: brightLevels[nextStep][1] }),
+      body: JSON.stringify({ percent: nextBrightness }),
     }).catch(() => {});
-  }, [serial, brightStep]);
+  }, [serial, brightness]);
+
+  const handleAirplane = useCallback(async () => {
+    if (!serial || airplaneRemaining !== null) return;
+    const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/airplane-cycle`, { method: "POST" }).catch(() => null);
+    const result = response?.ok ? await response.json().catch(() => null) : null;
+    if (typeof result?.durationSec !== "number") return;
+    setAirplaneRemaining(result.durationSec);
+    if (airplaneTimerRef.current) clearInterval(airplaneTimerRef.current);
+    airplaneTimerRef.current = setInterval(() => {
+      setAirplaneRemaining(value => {
+        if (value === null || value <= 1) {
+          if (airplaneTimerRef.current) clearInterval(airplaneTimerRef.current);
+          airplaneTimerRef.current = null;
+          return null;
+        }
+        return value - 1;
+      });
+    }, 1000);
+  }, [serial, airplaneRemaining]);
+
+  useEffect(() => () => {
+    if (airplaneTimerRef.current) clearInterval(airplaneTimerRef.current);
+  }, []);
 
   const buttonClass = "w-8 h-8 rounded-full flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm";
   return (
@@ -209,9 +232,14 @@ function DeviceQuickControls({ serial }: { serial: string | null | undefined }) 
         className={`${buttonClass} bg-green-500 hover:bg-green-600 text-white`}>
         <RotateCcw className={`w-3.5 h-3.5 ${rebooting ? "animate-spin" : ""}`} />
       </button>
-      <button onClick={handleBrightness} disabled={!serial} title={`Brightness: ${brightLabel} — click to cycle`}
-        className={`${buttonClass} ${brightStep === 0 ? "bg-black/10 text-black/30" : brightStep === 1 ? "bg-white/60 text-gray-700" : "bg-white text-gray-900"}`}>
-        <Sun className="w-3.5 h-3.5" />
+      <button onClick={() => changeBrightness(-50)} disabled={!serial || brightness <= 0} title={`Decrease brightness (${brightness}%)`}
+        className={`${buttonClass} bg-white text-gray-900`}><Minus className="w-3.5 h-3.5" /></button>
+      <button onClick={() => changeBrightness(50)} disabled={!serial || brightness >= 100} title={`Increase brightness (${brightness}%)`}
+        className={`${buttonClass} bg-white text-gray-900`}><Plus className="w-3.5 h-3.5" /></button>
+      <button onClick={handleAirplane} disabled={!serial || airplaneRemaining !== null}
+        title={airplaneRemaining === null ? "Cycle airplane mode for 10–15 seconds" : `Airplane mode — ${airplaneRemaining}s remaining`}
+        className={`${buttonClass} ${airplaneRemaining !== null ? "bg-amber-500 text-white" : "bg-sky-500 hover:bg-sky-600 text-white"}`}>
+        {airplaneRemaining !== null ? <span className="text-[10px] font-bold tabular-nums">{airplaneRemaining}</span> : <Plane className="w-3.5 h-3.5" />}
       </button>
     </div>
   );

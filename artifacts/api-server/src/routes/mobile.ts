@@ -13078,6 +13078,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
+  app.post("/api/mobile/devices/:serial/airplane-cycle", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const durationSec = 10 + Math.floor(Math.random() * 6);
+      await android.setAirplaneMode(serial, true);
+      res.json({ ok: true, durationSec });
+      setTimeout(() => {
+        void android.setAirplaneMode(serial, false);
+      }, durationSec * 1000);
+    } catch (e: any) { res.status(400).json({ error: e?.message }); }
+  });
+
   const recipeSchema = z.object({
     steps: z.array(z.any()),
   });
