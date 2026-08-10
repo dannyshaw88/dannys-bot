@@ -11978,13 +11978,40 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (sharesFeed)               parts.push(`${sharesFeed} feed shares`);
         if (saves)                    parts.push(`${saves} saves`);
         const summary = parts.length ? ` — ${parts.join(", ")}` : "";
-        tLog(`Cycle complete ✓${summary}`);
+        const hasCycleStatistics =
+          totalLikes > 0 ||
+          followedCount > 0 ||
+          storiesWatched > 0 ||
+          reelsViewed > 0 ||
+          sharesDm > 0 ||
+          sharesFeed > 0 ||
+          saves > 0 ||
+          postsUploaded > 0 ||
+          feedScrolled > 0 ||
+          exploreScrolled > 0;
+        tLog(hasCycleStatistics
+          ? `Cycle complete ✓${summary}`
+          : "Cycle ended — no tool statistics recorded");
       }
       await android.sleepScreen(serial);
       steps.push("power-off");
 
       // Persist cycle stats to DB so the Metrics tab survives software restarts.
-      if (slotUsername) {
+      // A cycle is only real when at least one tool produced a statistic.
+      // Device-flow failures can otherwise reach this cleanup path with every
+      // counter at zero and incorrectly increment the cycle total.
+      const hasCycleStatistics =
+        likes + storyLikes + exploreLikes + reelsLikes + injectBrowsingLikes > 0 ||
+        followedCount > 0 ||
+        storiesWatched > 0 ||
+        reelsViewed > 0 ||
+        sharesDm > 0 ||
+        sharesFeed > 0 ||
+        saves > 0 ||
+        postsUploaded > 0 ||
+        feedScrolled > 0 ||
+        exploreScrolled > 0;
+      if (slotUsername && hasCycleStatistics) {
         storage.incrementMobileStats(slotUsername, {
           likes: likes + storyLikes + exploreLikes + reelsLikes + injectBrowsingLikes,
           follows: followedCount,
@@ -12013,7 +12040,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (saves) parts.push(`${saves} saves`);
         if (postsUploaded) parts.push(`${postsUploaded} post${postsUploaded === 1 ? "" : "s"} uploaded`);
         if (feedScrolled) parts.push(`${feedScrolled} posts scrolled`);
-        storage.createSessionAction({
+        if (hasCycleStatistics) storage.createSessionAction({
           profileId: mobileProfileId ?? 0,
           toolId: 0,
           action: "tool_complete",
