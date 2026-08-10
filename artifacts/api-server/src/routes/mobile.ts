@@ -7328,6 +7328,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     alterationLevel?: AlterationLevel;
     imageSettingsEnabled?: boolean;
     imageSettings?: ImageFilterSettings;
+    homeTapCount?: number;
     onLog?: (msg: string) => void;
   };
 
@@ -7486,6 +7487,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       localFolderPath, localFolderRandom, localFolderNoRepeat, deleteAfterUpload,
       captionText, doFixAiSlop, alterationEnabled, alterationLevel,
       imageSettingsEnabled, imageSettings, addLocation, accountUsername, slotIdx, onLog,
+      homeTapCount = 1,
     } = opts;
 
     // Make a Post always starts from Instagram's normal Home feed.  This
@@ -7499,8 +7501,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       onLog?.("Make a Post: Instagram Home button not found — aborting before upload");
       return { posted: false };
     }
-    onLog?.("Make a Post: tapping Instagram Home button…");
-    await android.tap(serial, homeTab.x, homeTab.y);
+    const taps = Math.max(1, Math.round(homeTapCount));
+    for (let tapIndex = 0; tapIndex < taps; tapIndex++) {
+      onLog?.(`Make a Post: tapping Instagram Home button (${tapIndex + 1}/${taps})…`);
+      await android.tap(serial, homeTab.x, homeTab.y);
+      if (tapIndex + 1 < taps) await sleepOrAbort(serial, 500);
+    }
     // Do not immediately continue after the tab tap. On slower phones the
     // Home surface remains in its transition state for several seconds; use
     // a natural randomized 3–5 second dwell before any later picker or
@@ -11149,6 +11155,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }`);
 
       let _toolsRan = 0; // how many tools have executed before the current one
+      let _viewFeedExecuted = false;
 
       for (const _tool of _toolSeq) {
         if (isCycleAborted(serial)) break;
@@ -11189,6 +11196,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             feedScrolled = count;
             steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${saves} saves, ${captionExpands} caption-expands, ${audioTaps} audio-taps, ${hashtagTaps} hashtag-taps, ${authorVisits} author-visits, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
             tLog(`▶ Feed done — ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} DM-shares, ${saves} saves, ${captionExpands} caption-expands`);
+            _viewFeedExecuted = true;
           } else if (!feedEnabled) {
             steps.push("feed(skipped — View Feed disabled)");
             tLog("▶ View Feed disabled — skipping feed scroll");
@@ -11617,6 +11625,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     doFixAiSlop: makePostFixAiSlop,
                     addLocation: makePostAddLocation,
                     captionText: makePostCaptionText,
+                    homeTapCount: _viewFeedExecuted ? 2 : 1,
                     onLog: (msg) => tLog(`  ${msg}`),
                   });
                   if (result.posted) {
