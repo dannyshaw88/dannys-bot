@@ -10038,30 +10038,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             await sleepOrAbort(serial, 1000);
             const profileXml = await android.dumpUi(serial).catch(() => "");
 
-            // Males Only is intentionally an explicit allowlist, never gender
-            // inference. The live Instagram accessibility tree is authoritative;
-            // HikerAPI candidate metadata is never used for this decision.
-            if (filters.malesOnly) {
-              const allowedNames = (filters.maleNames ?? "")
-                .split(",")
-                .map(name => name.trim().toLocaleLowerCase())
-                .filter(Boolean);
-              let matchesAllowedName = false;
-              if (allowedNames.length) {
-                const matchedEntry = findLiveMalesOnlyMatch(username, profileXml, allowedNames);
-                matchesAllowedName = Boolean(matchedEntry);
-                if (matchedEntry) {
-                  onLog?.(`Follow: Males Only allowed @${username} — matched "${matchedEntry.name}" in live profile ${matchedEntry.field}`);
-                }
-              }
-              if (!matchesAllowedName) {
-                onLog?.(`Follow: @${username} has no allowed Males Only name in username, name, or bio — skipping`);
-                if (params.writeSkippedUsers) storage.addSkippedUser(username, "males-only-name").catch(() => {});
-                await returnToClearedFollowSearch();
-                continue;
-              }
-            }
-
             // ── Verified badge ──────────────────────────────────────────────
             if (filters.skipVerified) {
               const isVerified =
@@ -10192,6 +10168,31 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               if (skipForEnglish) {
                 onLog?.(`Follow: @${username} bio contains non-allowed script — skipping (English Speaking filter)`);
                 if (params.writeSkippedUsers) storage.addSkippedUser(username, "non-english").catch(() => {});
+                await returnToClearedFollowSearch();
+                continue;
+              }
+            }
+
+            // ── Males Only (last profile filter) ────────────────────────────
+            // This remains an explicit allowlist, never gender inference. The
+            // live Instagram accessibility tree is authoritative; HikerAPI
+            // candidate metadata is never used for this decision.
+            if (filters.malesOnly) {
+              const allowedNames = (filters.maleNames ?? "")
+                .split(",")
+                .map(name => name.trim().toLocaleLowerCase())
+                .filter(Boolean);
+              let matchesAllowedName = false;
+              if (allowedNames.length) {
+                const matchedEntry = findLiveMalesOnlyMatch(username, profileXml, allowedNames);
+                matchesAllowedName = Boolean(matchedEntry);
+                if (matchedEntry) {
+                  onLog?.(`Follow: Males Only allowed @${username} — matched "${matchedEntry.name}" in live profile ${matchedEntry.field}`);
+                }
+              }
+              if (!matchesAllowedName) {
+                onLog?.(`Follow: @${username} has no allowed Males Only name in username, name, or bio — skipping`);
+                if (params.writeSkippedUsers) storage.addSkippedUser(username, "males-only-name").catch(() => {});
                 await returnToClearedFollowSearch();
                 continue;
               }

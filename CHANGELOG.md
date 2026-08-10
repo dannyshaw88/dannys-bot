@@ -1,5 +1,14 @@
 ## [1.2.447] — 2026-08-09
 
+### Changed — Follow filter order
+
+- Moved the **Males Only** allowlist check to the final position in the live
+  profile-filter sequence.
+- Verified, Private, follower-count, and English Speaking checks now run
+  before Males Only.
+- Preserved the explicit username/display-name/bio allowlist behavior and
+  live accessibility-tree source.
+
 ### Fixed — Spread Follow Surplus retention
 
 - Spread Follow no longer deletes every loaded Surplus row immediately during
