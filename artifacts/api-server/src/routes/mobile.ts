@@ -8860,63 +8860,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
     }
 
-    // 4. Replace the focused Bio field through Android's clipboard and the
-    //    native Paste key event. Do not type this character-by-character:
-    //    the calibrated keyboard path intentionally injects human-error
-    //    corrections and can lose characters on MIUI/Instagram bio fields.
+    // 4. Replace the focused Bio field through the saved per-device keyboard
+    //    calibration map. Bio deliberately disables simulated human-error
+    //    corrections: Backspace/Delete are denied by the keyboard executor.
     {
-      // Select the existing bio contents before typing the replacement. This
-      // is a selection command, not a text-injection path; the replacement
-      // characters below still arrive only through calibrated key taps.
-      const tools = android.detectToolset();
-      const adb = tools.adb.path ?? "";
-      const bioFieldState = async (label: string) => {
-        const stateXml = await android.dumpUi(serial).catch(() => "");
-        const fields = [...stateXml.matchAll(/<node\b[^>]*class="android\.widget\.EditText"[^>]*>/gi)]
-          .map(match => match[0])
-          .filter(node => /focused="true"/i.test(node));
-        const field = fields[0];
-        const text = field?.match(/\btext="([^"]*)"/i)?.[1] ?? "";
-        const selection = field?.match(/\b(?:selection-start|selectionStart)="([^"]*)"[^>]*\b(?:selection-end|selectionEnd)="([^"]*)"/i);
-        onLog?.(
-          `[Update Bio DEBUG] ${label}: focusedEditTexts=${fields.length}` +
-          ` textLength=${text.length}` +
-          ` selection=${selection ? `${selection[1]}-${selection[2]}` : "not-exposed"}` +
-          ` hasBackspace=${stateXml.includes("backspace") || stateXml.includes("delete")}` +
-          ` hasShift=${stateXml.includes("shift") || stateXml.includes("Shift")}` +
-          ` hasEnter=${stateXml.includes("enter") || stateXml.includes("Enter")}`,
-        );
-      };
-      await bioFieldState("before Ctrl+A");
-      if (adb) {
-        const ctrlA = spawnSync(adb, ["-s", serial, "shell", "input", "keycombination",
-          "KEYCODE_CTRL_LEFT", "KEYCODE_A"], { encoding: "utf8", timeout: 2000 });
-        onLog?.(`[Update Bio DEBUG] Ctrl+A exit=${ctrlA.status ?? "unknown"} stderr=${String(ctrlA.stderr ?? "").trim() || "none"}`);
-        await sleepOrAbort(serial, 400);
-      }
-      await bioFieldState("after Ctrl+A before typing");
-      try {
-        await android.setClipboard(serial, bioText);
-        onLog?.(`Update Bio: clipboard loaded (${bioText.length} chars)`);
-        await android.pasteClipboard(serial);
-        await sleepOrAbort(serial, 700);
-      } catch (e: any) {
-        onLog?.(`Update Bio: ✗ clipboard paste failed — ${e?.message ?? String(e)}`);
+      const typed = await android.typeViaSavedCalibrationMap(
+        serial,
+        bioText,
+        loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile,
+        message => onLog?.(`Update Bio: ${message}`),
+        { disableHumanErrors: true, debugLabel: "Update Bio" },
+      );
+      if (!typed.ok) {
+        onLog?.(`Update Bio: ✗ calibrated typing incomplete — missing ${typed.missing.join(", ") || "required calibration"}`);
         await android.pressBack(serial);
         return;
       }
-      const pastedXml = await android.dumpUi(serial).catch(() => "");
-      const focusedAfterPaste = [...pastedXml.matchAll(/<node\b[^>]*class="android\.widget\.EditText"[^>]*>/gi)]
-        .map(match => match[0])
-        .find(node => /focused="true"/i.test(node));
-      const pastedText = focusedAfterPaste?.match(/\btext="([^"]*)"/i)?.[1] ?? "";
-      onLog?.(`Update Bio: after clipboard paste textLength=${pastedText.length} expected=${bioText.length}`);
-      if (pastedText.length !== bioText.length) {
-        onLog?.("Update Bio: ✗ pasted text length mismatch — refusing to save");
-        await android.pressBack(serial);
-        return;
-      }
-      onLog?.(`Update Bio: entered bio text via clipboard paste (${bioText.length} chars)`);
+      onLog?.(`Update Bio: entered bio text via keyboard calibration (${bioText.length} chars)`);
     }
     await sleepOrAbort(serial, 800 + Math.round(Math.random() * 200));
 

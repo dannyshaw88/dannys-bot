@@ -2793,6 +2793,13 @@ export async function swipe(
 }
 
 export async function keyevent(serial: string, code: string | number): Promise<void> {
+  const normalized = String(code).trim().toUpperCase();
+  if (normalized === "67" || normalized === "112" ||
+      normalized === "KEYCODE_DEL" || normalized === "KEYCODE_BACKSPACE" ||
+      normalized === "KEYCODE_FORWARD_DEL" || normalized === "BACKSPACE" ||
+      normalized === "DELETE" || normalized === "FORWARD_DELETE") {
+    throw new Error(`Denied destructive key event: ${code}`);
+  }
   await runInputShell(serial, ["keyevent", String(code)], "keyevent");
 }
 
@@ -9510,6 +9517,7 @@ export async function typeViaSavedCalibrationMap(
   text: string,
   typingProfile: TypingSpeedProfile | undefined,
   onLog?: (msg: string) => void,
+  options?: { disableHumanErrors?: boolean; debugLabel?: string },
 ): Promise<{ ok: boolean; available: boolean; missing: string[] }> {
   const map = loadKeyCalibrationMap(serial);
   const mapPath = _calibrationPath(serial);
@@ -9569,7 +9577,10 @@ export async function typeViaSavedCalibrationMap(
     return { ok: false, available: true, missing };
   }
 
-  const result = await typeViaCalibrationMap(serial, text, map, onLog, typingProfile);
+  const result = await typeViaCalibrationMap(serial, text, map, onLog, typingProfile, {
+    disableHumanErrors: options?.disableHumanErrors,
+    debugLabel: options?.debugLabel,
+  });
   return { ...result, available: true };
 }
 
@@ -10150,6 +10161,11 @@ export async function typeViaCalibrationMap(
     description = label,
     dwellOverrideMs?: number,
   ): Promise<boolean> => {
+    if (/(?:backspace|delete|forward[ -]?delete)/i.test(label) ||
+        /(?:backspace|delete|forward[ -]?delete)/i.test(description)) {
+      onLog?.(`[cal-keyboard] denied destructive key '${description}'`);
+      return false;
+    }
     const aliases: Record<string, string[]> = {
       "'": ["'", "apostrophe", "singleQuote", "single-quote"],
       "\"": ["\"", "quote", "doubleQuote", "double-quote"],
