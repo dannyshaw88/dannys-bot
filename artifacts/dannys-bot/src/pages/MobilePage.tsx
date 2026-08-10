@@ -9647,6 +9647,12 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                /\bInject Browsing:\s+(?:waiting for media to render|media .*?render|no .*?media)/i.test(line);
              const isStoryTrayBurstLine = (line: string) =>
                /\bStory tray:\s+/i.test(line);
+              // The fallback Story tray node sample is intentionally verbose
+              // and mostly consists of duplicate content-desc/resource-id
+              // entries. Keep it behind the same chevron used for XML dumps;
+              // the complete text remains available to Copy and Export.
+              const isStoryTrayDiagnosticLine = (line: string) =>
+                /Story tray:\s+still no bubbles after retry\s+—\s+dump node sample:/i.test(line);
              // findReelActionIcons emits its diagnostic column dump through
              // several individually timestamped lines. Those lines are not
              // always full XML attributes, so keep them together explicitly
@@ -9673,6 +9679,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                 const previousIsDump = previous?.some(isAccessibilityDumpLine) ?? false;
                 const previousIsInjectBurst = previous?.some(isInjectBrowsingBurstLine) ?? false;
                 const previousIsStoryTray = previous?.some(isStoryTrayBurstLine) ?? false;
+                 const previousIsStoryTrayDiagnostic = previous?.some(isStoryTrayDiagnosticLine) ?? false;
                 const previousIsReelIconScan = previous?.some(isReelIconScanLine) ?? false;
                 const previousIsReelsBurst = previous?.some(isReelsBurstLine) ?? false;
                 const previousIsSwipeScreen = previous?.some(isSwipeScreenDiagnostic) ?? false;
@@ -9685,6 +9692,9 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                     (previousIsDump && isAccessibilityDumpLine(line)) ||
                     (previousIsInjectBurst && isInjectBrowsingBurstLine(line)) ||
                     (previousIsStoryTray && isStoryTrayBurstLine(line)) ||
+                    (previousIsStoryTrayDiagnostic && (
+                      isStoryTrayDiagnosticLine(line) || isAccessibilityDumpLine(line)
+                    )) ||
                     (previousIsReelIconScan && (
                       isReelIconScanLine(line) || isAccessibilityDumpLine(line)
                     )) ||
@@ -9805,13 +9815,14 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                 // rows still exposed that clutter before the chevron.
                 const isReelsGroup = group.some(isReelsBurstLine) ||
                   group.some(isReelIconScanLine);
+                const isStoryTrayDiagnosticGroup = group.some(isStoryTrayDiagnosticLine);
                 const isSwipeScreenGroup = group.some(isSwipeScreenDiagnostic);
-                const visibleRowCount = isReelsGroup || isSwipeScreenGroup ? 1 : 3;
+                const visibleRowCount = isReelsGroup || isStoryTrayDiagnosticGroup || isSwipeScreenGroup ? 1 : 3;
                 // Swipe-screen diagnostics are collapsed even when the
                 // diagnostic consists of only one rendered row. These lines
                 // are inherently verbose and must never occupy the log as
                 // expanded diagnostic noise.
-                const collapsible = isSwipeScreenGroup || group.length > visibleRowCount;
+                const collapsible = isStoryTrayDiagnosticGroup || isSwipeScreenGroup || group.length > visibleRowCount;
                const groupKey = `${groupIndex}:${timestampOf(group[0])}`;
                const expanded = expandedLogGroups.has(groupKey);
                if (!collapsible || expanded) {
