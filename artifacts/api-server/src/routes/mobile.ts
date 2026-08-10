@@ -7778,20 +7778,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // control only after the picker has settled.
     await sleepOrAbort(serial, 700);
     onLog?.("Make a Post: re-scanning settled picker for live \"Next\" button…");
-    let nextBtn1 = await android.findButtonByLabel(serial, "Next").catch(() => null);
-    let nextBtn1IsPositionalGuess = false;
+    const nextBtn1 = await android.findButtonByLabel(serial, "Next").catch(() => null);
     if (!nextBtn1) {
-      // On this screen the top app bar (X / "New post" / Next) has zero
-      // accessibility children — "Next" is rendered but not labelled.
-      onLog?.("Make a Post: live \"Next\" not found in accessibility tree — using positional fallback");
-      nextBtn1 = android.postNextButtonPositionalFallback(serial);
-      nextBtn1IsPositionalGuess = true;
-    }
-    // Sanity-check: if we're relying entirely on positional guesses with no
-    // confirming signal, the compose sheet likely never opened — bail rather
-    // than tapping through a temporary grid or an unrelated screen.
-    if (nextBtn1IsPositionalGuess && !postTab && !expandToggle) {
-      onLog?.("Make a Post: compose sheet did not open (no picker signal found at all) — aborting");
+      onLog?.("Make a Post: live \"Next\" accessibility node not found after picker settled — aborting without coordinate fallback");
       await android.pressBack(serial);
       await android.removeDeviceFile(serial, devicePath).catch(() => {});
       return { posted: false };

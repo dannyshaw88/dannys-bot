@@ -6673,31 +6673,6 @@ export async function captureDebugScreenshot(serial: string, ts: number, label: 
 }
 
 /**
- * Positional fallback for the blue "Next" control on Instagram's very first
- * New Post screen (the photo-select/Recents grid).
- *
- * Root cause (confirmed via the in-app "Scan Screen Layout" tool, real
- * device, 2026-07-13): on this specific screen the top app bar (X / "New
- * post" title / Next) is rendered as an opaque view with NO decomposed
- * accessibility children at all — the layout scan came back with zero
- * elements in the entire top 33% of the screen. findButtonByLabel() /
- * _findElem() search the accessibility tree for a text/content-desc match,
- * so on this screen they have nothing to find; "Next" simply isn't exposed
- * as a labelled node. (Later screens — filter, edit, caption — do expose
- * "Next"/"Share" normally; only this first screen's bar is opaque.)
- *
- * Since there is no reliable accessibility signal here, fall back to a
- * fixed fraction of the screen: "Next" sits in the top app bar, right-aligned,
- * a little below the very top edge. Caller MUST verify the tap actually
- * advanced the screen (accessibility tree changes) since this is a blind
- * coordinate tap with no positive confirmation of its own.
- */
-export function postNextButtonPositionalFallback(serial: string): { x: number; y: number } {
-  const { w, h } = getScreenSize(serial);
-  return { x: Math.round(w * 0.92), y: Math.round(h * 0.035) };
-}
-
-/**
  * Pushes a local file (server-side path — same machine as the phone in the
  * real packaged app, per repl-setup) onto the device's DCIM/Camera folder,
  * then triggers a media-scanner broadcast so it immediately shows up in
