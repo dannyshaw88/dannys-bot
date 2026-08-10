@@ -232,15 +232,15 @@ function DeviceQuickControls({ serial }: { serial: string | null | undefined }) 
         className={`${buttonClass} bg-green-500 hover:bg-green-600 text-white`}>
         <RotateCcw className={`w-3.5 h-3.5 ${rebooting ? "animate-spin" : ""}`} />
       </button>
-      <button onClick={() => changeBrightness(-50)} disabled={!serial || brightness <= 0} title={`Decrease brightness (${brightness}%)`}
-        className={`${buttonClass} bg-white text-gray-900`}><Minus className="w-3.5 h-3.5" /></button>
-      <button onClick={() => changeBrightness(50)} disabled={!serial || brightness >= 100} title={`Increase brightness (${brightness}%)`}
-        className={`${buttonClass} bg-white text-gray-900`}><Plus className="w-3.5 h-3.5" /></button>
       <button onClick={handleAirplane} disabled={!serial || airplaneRemaining !== null}
         title={airplaneRemaining === null ? "Cycle airplane mode for 10–15 seconds" : `Airplane mode — ${airplaneRemaining}s remaining`}
         className={`${buttonClass} ${airplaneRemaining !== null ? "bg-amber-500 text-white" : "bg-sky-500 hover:bg-sky-600 text-white"}`}>
         {airplaneRemaining !== null ? <span className="text-[10px] font-bold tabular-nums">{airplaneRemaining}</span> : <Plane className="w-3.5 h-3.5" />}
       </button>
+      <button onClick={() => changeBrightness(-50)} disabled={!serial || brightness <= 0} title={`Decrease brightness (${brightness}%)`}
+        className={`${buttonClass} bg-white text-gray-900`}><Minus className="w-3.5 h-3.5" /></button>
+      <button onClick={() => changeBrightness(50)} disabled={!serial || brightness >= 100} title={`Increase brightness (${brightness}%)`}
+        className={`${buttonClass} bg-white text-gray-900`}><Plus className="w-3.5 h-3.5" /></button>
     </div>
   );
 }
