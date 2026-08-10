@@ -31,6 +31,41 @@ import { logger } from "../lib/logger";
 import { HikerApiClient } from "../instagram/hikerApiClient";
 
 type MalesOnlyMatch = { name: string; field: "account name" | "username" | "bio" };
+type CompiledMalesOnlyName = {
+  name: string;
+  bio: RegExp;
+  accountName: RegExp;
+  username: RegExp;
+};
+
+const malesOnlyMatcherCache = new Map<string, CompiledMalesOnlyName[]>();
+
+function getCompiledMalesOnlyNames(rawNames: string): CompiledMalesOnlyName[] {
+  const cached = malesOnlyMatcherCache.get(rawNames);
+  if (cached) return cached;
+
+  const compiled = rawNames
+    .split(",")
+    .map(name => name.trim().toLocaleLowerCase())
+    .filter(Boolean)
+    .map(name => {
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return {
+        name,
+        bio: new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?:$|[^\\p{L}\\p{N}])`, "iu"),
+        accountName: new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?:$|[^\\p{L}\\p{N}])`, "iu"),
+        username: new RegExp(`(?:^|[._])${escaped}(?:\\d{1,4}(?=$|[._])|(?=$|[._]))`, "iu"),
+      };
+    });
+
+  // Keep the cache bounded if a workspace has many distinct allowlists.
+  if (malesOnlyMatcherCache.size >= 8) {
+    const oldest = malesOnlyMatcherCache.keys().next().value;
+    if (oldest !== undefined) malesOnlyMatcherCache.delete(oldest);
+  }
+  malesOnlyMatcherCache.set(rawNames, compiled);
+  return compiled;
+}
 
 /**
  * Males Only is an explicit configured-name allowlist, not gender inference.
@@ -45,43 +80,24 @@ function findMalesOnlyMatch(
   username: string,
   accountName: string,
   bio: string,
-  allowedNames: string[],
+  allowedNames: CompiledMalesOnlyName[],
 ): MalesOnlyMatch | null {
   const normalizedFields: Array<[MalesOnlyMatch["field"], string]> = [
     ["account name", accountName],
     ["username", username],
     ["bio", bio],
   ];
-  const bioHasExactToken = (value: string, name: string) => {
-    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?:$|[^\\p{L}\\p{N}])`, "iu").test(value);
-  };
-  const usernameHasMatchedWord = (value: string, name: string) => {
-    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    // A username token must start at the beginning or after "."/"_".
-    // It may end at the username boundary, before "."/"_", or with 1–4
-    // digits immediately after the token (e.g. ron1989). Five digits must
-    // not pass by consuming only the first four.
-    return new RegExp(`(?:^|[._])${escaped}(?:\\d{1,4}(?=$|[._])|(?=$|[._]))`, "iu").test(value);
-  };
-  const accountNameHasExactWord = (value: string, name: string) => {
-    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    // Display names are human-readable and commonly use spaces, hyphens,
-    // punctuation, or Unicode text boundaries. Do not apply the username
-    // dot/underscore-only rule to names such as "Mario Zone".
-    return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?:$|[^\\p{L}\\p{N}])`, "iu").test(value);
-  };
   // Prefer the account-name field when the same configured token appears in
   // more than one field, so the Debugging Log reflects the actual display
   // name that caused the allow decision.
   for (const field of normalizedFields) {
-    for (const name of allowedNames) {
+    for (const entry of allowedNames) {
       const matches = field[0] === "bio"
-        ? bioHasExactToken(field[1], name)
+        ? entry.bio.test(field[1])
         : field[0] === "account name"
-          ? accountNameHasExactWord(field[1], name)
-          : usernameHasMatchedWord(field[1], name);
-      if (matches) return { name, field: field[0] };
+          ? entry.accountName.test(field[1])
+          : entry.username.test(field[1]);
+      if (matches) return { name: entry.name, field: field[0] };
     }
   }
   return null;
@@ -90,7 +106,7 @@ function findMalesOnlyMatch(
 function findLiveMalesOnlyMatch(
   username: string,
   profileXml: string,
-  allowedNames: string[],
+  allowedNames: CompiledMalesOnlyName[],
 ): MalesOnlyMatch | null {
   // Do not flatten the whole accessibility dump. It contains navigation
   // labels, buttons, suggested-user cards, and hidden containers; searching
@@ -10178,10 +10194,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // live Instagram accessibility tree is authoritative; HikerAPI
             // candidate metadata is never used for this decision.
             if (filters.malesOnly) {
-              const allowedNames = (filters.maleNames ?? "")
-                .split(",")
-                .map(name => name.trim().toLocaleLowerCase())
-                .filter(Boolean);
+              const allowedNames = getCompiledMalesOnlyNames(filters.maleNames ?? "");
               let matchesAllowedName = false;
               if (allowedNames.length) {
                 const matchedEntry = findLiveMalesOnlyMatch(username, profileXml, allowedNames);

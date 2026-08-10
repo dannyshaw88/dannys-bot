@@ -1,5 +1,14 @@
 ## [1.2.447] — 2026-08-09
 
+### Improved — Males Only allowlist matching
+
+- Added a bounded in-memory cache for compiled Males Only allowlist matchers.
+- A large allowlist, including lists of roughly 15,000 names, is now parsed
+  and converted to regular expressions once per distinct configuration instead
+  of being rebuilt for every candidate profile.
+- Preserved the existing username, account-name, and bio boundary rules,
+  numeric suffix behavior, field priority, and live accessibility-tree source.
+
 ### Changed — Follow filter order
 
 - Moved the **Males Only** allowlist check to the final position in the live
