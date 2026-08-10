@@ -4991,6 +4991,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     shareDmPercentMin: number; shareDmPercentMax: number;
     commentPercentMin: number; commentPercentMax: number;
     clickAuthorPercentMin: number; clickAuthorPercentMax: number;
+    alreadyInStoryViewer?: boolean;
     onLog?: (msg: string) => void;
   }): Promise<{ storiesWatched: number; storyLikes: number }> {
     const {
@@ -5103,8 +5104,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return result;
     };
 
-    // Open the story viewer: tap a random friend's story bubble.
-    const { slot: picked, opened: storyOpened } = await pickAndOpenRandomStory(serial, w, h, onLog);
+    // If the caller already confirmed the Story viewer, do not scan or tap
+    // Home-feed story bubbles inside the viewer.
+    const { slot: picked, opened: storyOpened } = params.alreadyInStoryViewer
+      ? (onLog?.("Story viewer already active — skipping story-bubble picker"), { slot: 0, opened: true })
+      : await pickAndOpenRandomStory(serial, w, h, onLog);
     logger.info({ serial, picked, totalStories, storyOpened }, "[view-stories] story open attempt");
 
     // If the tray tap didn't actually open a story (bottom nav was still
@@ -11391,6 +11395,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               shareDmPercentMin: viewStoriesShareDmPercentMin, shareDmPercentMax: viewStoriesShareDmPercentMax,
               commentPercentMin: viewStoriesCommentPercentMin, commentPercentMax: viewStoriesCommentPercentMax,
               clickAuthorPercentMin: viewStoriesClickAuthorPercentMin, clickAuthorPercentMax: viewStoriesClickAuthorPercentMax,
+              alreadyInStoryViewer: _alreadyInStory,
               onLog: (msg) => tLog(`  ${msg}`),
             });
             // runViewStoriesFromFeedLoop exits the viewer internally (ad-
