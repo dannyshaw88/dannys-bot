@@ -6868,15 +6868,11 @@ export async function findReelsTab(
   if (!xml) return null;
 
   // 1. Resource-id
-  const byId = _findByResId(
-    xml,
-    ":id/clips_tab", ":id/reels_tab", ":id/tab_clips", ":id/nav_clips",
-    ":id/clips_tab_icon_view", ":id/reels_icon", ":id/clips_icon",
-  );
+  const byId = _findBottomReelsResource(xml);
   if (byId) return byId;
 
   // 2. Accessibility label
-  const byLabel = _findElem(xml, "Reels");
+  const byLabel = _findBottomReelsLabel(xml);
   if (byLabel) return byLabel;
 
   // 3. Positional fallback — collect all clickable nodes in the bottom-nav
@@ -8531,6 +8527,49 @@ function _findBottomProfileLabel(xml: string): { x: number; y: number } | null {
     const attrs = m[1];
     const label = attrs.match(/(?:content-desc|text)="([^"]*)"/i)?.[1] ?? "";
     if (!/^profil(e|o)?$/i.test(label.trim())) continue;
+    const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+    if (!bm) continue;
+    const x = (Number(bm[1]) + Number(bm[3])) / 2;
+    const y = (Number(bm[2]) + Number(bm[4])) / 2;
+    if (y >= bottomMin) return { x: Math.round(x), y: Math.round(y) };
+  }
+  return null;
+}
+
+/**
+ * Reels resource IDs are also reused by profile/content tabs on some
+ * Instagram builds. Only accept a matching node when its center is in the
+ * bottom navigation band; a node in a profile's middle tab row is not the
+ * Reels navigation control.
+ */
+function _findBottomReelsResource(xml: string): { x: number; y: number } | null {
+  const { h: xmlH } = _getScreenSize(xml);
+  const bottomMin = Math.round(xmlH * 0.82);
+  const wanted = /(?:clips_tab|reels_tab|tab_clips|nav_clips|clips_tab_icon_view|reels_icon|clips_icon)$/i;
+  const re = /<node\s([^>]+?)\s*\/?>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml)) !== null) {
+    const attrs = m[1];
+    const rid = attrs.match(/resource-id="([^"]+)"/i)?.[1] ?? "";
+    if (!wanted.test(rid)) continue;
+    const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+    if (!bm) continue;
+    const x = (Number(bm[1]) + Number(bm[3])) / 2;
+    const y = (Number(bm[2]) + Number(bm[4])) / 2;
+    if (y >= bottomMin) return { x: Math.round(x), y: Math.round(y) };
+  }
+  return null;
+}
+
+function _findBottomReelsLabel(xml: string): { x: number; y: number } | null {
+  const { h: xmlH } = _getScreenSize(xml);
+  const bottomMin = Math.round(xmlH * 0.82);
+  const re = /<node\s([^>]+?)\s*\/?>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml)) !== null) {
+    const attrs = m[1];
+    const label = attrs.match(/(?:content-desc|text)="([^"]*)"/i)?.[1] ?? "";
+    if (!/^reels?$/i.test(label.trim())) continue;
     const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
     if (!bm) continue;
     const x = (Number(bm[1]) + Number(bm[3])) / 2;
