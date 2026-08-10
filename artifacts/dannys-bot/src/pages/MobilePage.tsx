@@ -236,6 +236,7 @@ type LogMarker = {
   /** Short label drawn next to the dot (e.g. the trimmed log line for bot taps). */
   label?: string;
 };
+type CalibrationPosition = { x: number; y: number; label: string } | null;
 
 type InspectNode = {
   index?: number;
@@ -266,7 +267,7 @@ type PendingPin = {
   parentNode: InspectNode | null;
 };
 
-const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; live: boolean; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; inspectMode?: boolean; inspectNodes?: InspectNode[] | null; onInspectResult?: (r: InspectResult) => void; onHoverNode?: (n: InspectNode | null) => void; clickTestMode?: boolean; logRecMode?: boolean; logMarkers?: LogMarker[]; onExpectedTap?: (x: number, y: number, kind?: "expected" | "vicinity") => void; onStatusChange?: (status: "connecting" | "waiting" | "live" | "asleep" | "error") => void }>(function LiveCanvas({ serial, live, onLog, onDimensions, inspectMode, inspectNodes, onInspectResult, onHoverNode, clickTestMode, logRecMode, logMarkers, onExpectedTap, onStatusChange }, ref) {
+const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; live: boolean; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; inspectMode?: boolean; inspectNodes?: InspectNode[] | null; onInspectResult?: (r: InspectResult) => void; onHoverNode?: (n: InspectNode | null) => void; clickTestMode?: boolean; logRecMode?: boolean; logMarkers?: LogMarker[]; calibrationPosition?: CalibrationPosition; onExpectedTap?: (x: number, y: number, kind?: "expected" | "vicinity") => void; onStatusChange?: (status: "connecting" | "waiting" | "live" | "asleep" | "error") => void }>(function LiveCanvas({ serial, live, onLog, onDimensions, inspectMode, inspectNodes, onInspectResult, onHoverNode, clickTestMode, logRecMode, logMarkers, calibrationPosition, onExpectedTap, onStatusChange }, ref) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   // Cache the 2D context so we don't re-call getContext() every frame.
   const ctxRef       = useRef<CanvasRenderingContext2D | null>(null);
@@ -1385,6 +1386,24 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
           </>
         );
       })()}
+      {calibrationPosition && (() => {
+        const ps = phoneSizeRef.current;
+        const dr = drawRectRef.current;
+        if (!ps || !dr) return null;
+        const cssX = dr.dx + (calibrationPosition.x / ps.w) * dr.dw;
+        const cssY = dr.dy + (calibrationPosition.y / ps.h) * dr.dh;
+        return (
+          <div
+            title={`${calibrationPosition.label}: (${calibrationPosition.x}, ${calibrationPosition.y})`}
+            style={{
+              position: "absolute", left: cssX, top: cssY, width: 18, height: 18,
+              marginLeft: -9, marginTop: -9, borderRadius: "50%",
+              background: "rgba(255, 25, 25, 0.95)", border: "2px solid white",
+              boxShadow: "0 0 8px rgba(255, 0, 0, 0.9)", zIndex: 30, pointerEvents: "none",
+            }}
+          />
+        );
+      })()}
 
       {/* Log Record mode banner */}
       {logRecMode && (
@@ -1827,11 +1846,13 @@ function CalibrationDialog({
   open,
   onOpenChange,
   onLog,
+  onCalibrationPosition,
 }: {
   serial: string;
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onLog?: (msg: string) => void;
+  onCalibrationPosition?: (position: CalibrationPosition) => void;
 }) {
   const [step, setStep] = useState(0);
   // Starts pre-populated with the saved map so the wizard merges into it rather
@@ -1868,6 +1889,7 @@ function CalibrationDialog({
   // Reset state and load existing map whenever the dialog opens.
   useEffect(() => {
     if (!open) return;
+    onCalibrationPosition?.(null);
     setStep(0);
     setMap({});
     setCapturing(false);
@@ -2208,6 +2230,17 @@ function CalibrationDialog({
                           >
                             {isActive ? <Loader2 className="w-3 h-3 animate-spin" /> : "Re-tap"}
                           </Button>
+                          {coord && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 px-2 text-[10px] text-red-300 hover:bg-red-950/50 hover:text-red-200"
+                              onClick={() => onCalibrationPosition?.({ x: coord.x, y: coord.y, label: k.display })}
+                              disabled={!!editCapturing}
+                            >
+                              Position
+                            </Button>
+                          )}
                         </div>
                       );
                     })}
@@ -2569,6 +2602,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
   const [clickTestMode, setClickTestMode] = useState(false);
   const [showCustomize, setShowCustomize] = useState(false);
   const [showCalibration, setShowCalibration] = useState(false);
+  const [calibrationPosition, setCalibrationPosition] = useState<CalibrationPosition>(null);
   const [showManualMedia, setShowManualMedia] = useState(false);
 
   // ── Element tree inspector ─────────────────────────────────────────────────
@@ -2894,6 +2928,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
             clickTestMode={clickTestMode}
             logRecMode={logRecMode}
             logMarkers={logMarkers}
+            calibrationPosition={calibrationPosition}
             onExpectedTap={onExpectedTap}
             onStatusChange={s => setCanvasStreaming(s === "live")}
           />
@@ -3216,8 +3251,12 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
         <CalibrationDialog
           serial={phone.serial}
           open={showCalibration}
-          onOpenChange={setShowCalibration}
+          onOpenChange={nextOpen => {
+            setShowCalibration(nextOpen);
+            if (!nextOpen) setCalibrationPosition(null);
+          }}
           onLog={onLog}
+          onCalibrationPosition={setCalibrationPosition}
         />
       )}
 

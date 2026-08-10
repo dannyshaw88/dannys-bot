@@ -1,5 +1,27 @@
 ## [1.2.447] — 2026-08-09
 
+### Improved — Keyboard calibration map and mirror positioning
+
+- Expanded the keyboard calibration dialog and made its title-bar dragging
+  responsive by updating the panel directly during pointer movement.
+- Added live search to the “View & fix individual keys” map editor.
+- Added a per-key **Position** action for mapped keys. Selecting it displays a
+  red marker on the live phone mirror at the saved tap coordinates, with the
+  key name and coordinates available on hover. The marker clears when the
+  calibration dialog closes or when another key is selected.
+- Removed unnecessary introductory calibration copy and simplified the
+  calibration button labels, including removing the 2FA missing-key count.
+
+### Fixed — View Feed share-to-DM node safety
+
+- Removed the unlabeled horizontal-position fallback that treated the first
+  three clickable action nodes as Comment, Share to Feed, and Share via DM.
+- View Feed now skips Share via DM when Instagram does not expose an
+  explicitly identifiable paper-plane accessibility node, preventing a
+  comment bubble or unrelated wrapper from receiving the DM tap.
+- The existing fresh accessibility scan immediately before the DM action
+  remains required, and the full log/export behavior is unchanged.
+
 ### Changed — Inject Browsing media-render wait
 
 - Reduced the Follow Tool's Inject Browsing profile-grid media-render wait
