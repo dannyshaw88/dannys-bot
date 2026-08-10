@@ -5837,7 +5837,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           const cell = gridCells[Math.floor(Math.random() * gridCells.length)];
           onLog?.(`View Explore ${i + 1}/${scrollCount}: clicking grid post at (${cell.x},${cell.y})`);
           await android.tap(serial, cell.x, cell.y);
-          await sleepOrAbort(serial, 1800); // let post detail view animate open
+          // Explore click-post dwell: remain on the selected grid post long
+          // enough for its media/viewer to render before continuing with any
+          // actions. This is intentionally isolated to View Explore.
+          const explorePostDwellMs = 1000 + Math.floor(Math.random() * 9001);
+          onLog?.(`View Explore ${i + 1}/${scrollCount}: dwelling ${explorePostDwellMs}ms on clicked post`);
+          await sleepOrAbort(serial, explorePostDwellMs);
           postsClicked++;
 
           const wantLike        = likeChance        > 0 && Math.random() < likeChance;
