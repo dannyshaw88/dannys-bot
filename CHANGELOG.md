@@ -1,5 +1,17 @@
 ## [1.2.447] — 2026-08-09
 
+### Fixed — Spread Follow Surplus retention
+
+- Spread Follow no longer deletes every loaded Surplus row immediately during
+  prefetch.
+- A Surplus candidate is removed only when its individual Follow slot is
+  actually dispatched.
+- Candidates loaded but never reached remain in Surplus for the next cycle,
+  preventing unused users from being lost when the target is fulfilled or the
+  cycle ends early.
+- Added explicit logging for Surplus candidates that are loaded versus
+  consumed after dispatch.
+
 ### Fixed — Follow filter skip navigation
 
 - When a candidate is rejected by a Follow profile filter, the automation now

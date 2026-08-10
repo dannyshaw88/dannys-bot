@@ -10975,6 +10975,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Backup queue: extra pre-fetched candidates kept for filter-retry and
       // HikerAPI re-scrape fallback.  Flushed to Surplus after the tool loop.
       let _sfBackupQueue: string[] = [];
+      // Surplus rows stay in the table until their candidate is actually
+      // handed to the Follow tool. This prevents a pre-fetched but never
+      // reached candidate from being lost.
+      const _sfSurplusIds = new Map<string, number>();
       let _sfHikerToken: string = "";
       let _sfSpreadProfileId: number | undefined;
       let _sfSpreadSlotKey: string = "";
@@ -11028,13 +11032,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     const u = row.instagramUsername;
                     if (_sfSkipFollowed?.has(u.toLowerCase())) continue;
                     if (_sfSkipSkipped?.has(u.toLowerCase())) continue;
+                    _sfSurplusIds.set(u.toLowerCase(), row.id);
                     if (!_sfSource.has(u)) _sfSource.set(u, row.sourceValue || "surplus");
                     _sfRaw.push(u);
                   }
-                  if (rows.length) {
-                    storage.deleteOverspillUsers(rows.map(r => r.id)).catch(() => {});
-                    tLog(`  Spread Follows: consumed ${rows.length} surplus candidate(s)`);
-                  }
+                  if (rows.length) tLog(`  Spread Follows: loaded ${rows.length} surplus candidate(s)`);
                 } catch {}
               } else if (_sfSlotKey) {
                 try {
@@ -11043,13 +11045,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     const u = row.instagramUsername;
                     if (_sfSkipFollowed?.has(u.toLowerCase())) continue;
                     if (_sfSkipSkipped?.has(u.toLowerCase())) continue;
+                    _sfSurplusIds.set(u.toLowerCase(), row.id);
                     if (!_sfSource.has(u)) _sfSource.set(u, row.sourceValue || "surplus");
                     _sfRaw.push(u);
                   }
-                  if (rows.length) {
-                    storage.deleteOverspillUsers(rows.map(r => r.id)).catch(() => {});
-                    tLog(`  Spread Follows: consumed ${rows.length} surplus candidate(s)`);
-                  }
+                  if (rows.length) tLog(`  Spread Follows: loaded ${rows.length} surplus candidate(s)`);
                 } catch {}
               }
 
@@ -11438,7 +11438,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               : undefined;
 
             // Helper — calls runFollowUsersStep for exactly one candidate.
-            const _runOneSpreadSlot = (candidate: string) => runFollowUsersStep(serial, {
+            const _runOneSpreadSlot = async (candidate: string) => {
+              const surplusId = _sfSurplusIds.get(candidate.toLowerCase());
+              if (surplusId !== undefined) {
+                await storage.deleteOverspillUsers([surplusId]).catch(() => {});
+                _sfSurplusIds.delete(candidate.toLowerCase());
+                tLog(`  Spread Follows: consumed Surplus @${candidate} after dispatch`);
+              }
+              return runFollowUsersStep(serial, {
               usersMin: 1, usersMax: 1,
               sources: followSources,
               preloadedCandidates: {
@@ -11456,7 +11463,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               filters:  _ssFilters,
               profileId: mobileProfileId ?? undefined,
               phoneSlotKey: mobileProfileId ? undefined : (slotUsername || undefined),
-            });
+              });
+            };
 
             let _sfCount = await _runOneSpreadSlot(_spreadUsername);
 
