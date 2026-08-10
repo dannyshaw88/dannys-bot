@@ -89,16 +89,17 @@ function FilledHammerIcon({ className, style }: { className?: string; style?: Re
 }
 
 export function FilledFarmIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
-  // Distinct phone-device mark for My Device / Phone Farm
+  // Rounded-square app icon with phone silhouette inside
   return (
-    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none">
-      {/* Tilted handset silhouette with screen details */}
-      <rect x="6.5" y="2.5" width="11" height="19" rx="2.5" fill="currentColor"/>
-      <rect x="8.5" y="5" width="7" height="12" rx="1" fill="white"/>
-      <circle cx="12" cy="19.2" r="1" fill="white"/>
-      <rect x="10.5" y="3.8" width="3" height="0.8" rx="0.4" fill="white"/>
-      {/* Small second-device tab gives it a different silhouette from the old app tile */}
-      <path d="M18.5 7.5h1a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-1" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+      {/* Rounded square background */}
+      <rect x="1" y="1" width="22" height="22" rx="5"/>
+      {/* Phone body — white */}
+      <rect x="7.5" y="3.5" width="9" height="17" rx="2" fill="white"/>
+      {/* Screen — currentColor (appears as icon background colour through the screen) */}
+      <rect x="9" y="5" width="6" height="12" rx="0.8"/>
+      {/* Home button — white */}
+      <rect x="10.5" y="18" width="3" height="1.2" rx="0.6" fill="white"/>
     </svg>
   );
 }
