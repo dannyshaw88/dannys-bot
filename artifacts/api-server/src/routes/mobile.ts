@@ -299,6 +299,8 @@ type AutomationSettings = {
   clickHashtagPercentMax: number;
   clickAuthorPercentMin: number;
   clickAuthorPercentMax: number;
+  feedRerunChanceMin: number;
+  feedRerunChanceMax: number;
   feedScrollMin: number;
   feedScrollMax: number;
   viewStoriesSlidesMin: number;
@@ -1618,6 +1620,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     clickHashtagPercentMax: z.number().min(0).max(100).default(0),
     clickAuthorPercentMin: z.number().min(0).max(100).default(0),
     clickAuthorPercentMax: z.number().min(0).max(100).default(0),
+    feedRerunChanceMin: z.number().min(0).max(100).default(0),
+    feedRerunChanceMax: z.number().min(0).max(100).default(0),
     feedScrollMin: z.number().min(1).max(50),
     feedScrollMax: z.number().min(1).max(50),
     viewStoriesSlidesMin: z.number().min(0).max(100).default(0),
@@ -1859,6 +1863,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       tapAudioPercentMin: 0, tapAudioPercentMax: 0,
       clickHashtagPercentMin: 0, clickHashtagPercentMax: 0,
       clickAuthorPercentMin: 0, clickAuthorPercentMax: 0,
+      feedRerunChanceMin: 0, feedRerunChanceMax: 0,
       feedScrollMin: 5, feedScrollMax: 10,
       viewStoriesSlidesMin: 0, viewStoriesSlidesMax: 0,
       viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
@@ -2268,6 +2273,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         tapAudioPercentMin: 0, tapAudioPercentMax: 0,
         clickHashtagPercentMin: 0, clickHashtagPercentMax: 0,
         clickAuthorPercentMin: 0, clickAuthorPercentMax: 0,
+        feedRerunChanceMin: 0, feedRerunChanceMax: 0,
         feedScrollMin: 5, feedScrollMax: 10,
         viewStoriesSlidesMin: 0, viewStoriesSlidesMax: 0,
         viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
@@ -6926,6 +6932,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     clickHashtagPercentMax: z.number().min(0).max(100).default(0),
     clickAuthorPercentMin: z.number().min(0).max(100).default(0),
     clickAuthorPercentMax: z.number().min(0).max(100).default(0),
+    feedRerunChanceMin: z.number().min(0).max(100).default(0),
+    feedRerunChanceMax: z.number().min(0).max(100).default(0),
     viewStoriesSlidesMin: z.number().min(0).max(100).default(0),
     viewStoriesSlidesMax: z.number().min(0).max(100).default(0),
     viewStoriesSlideWatchPctMin: z.number().min(1).max(100).default(50),
@@ -10673,6 +10681,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         tapAudioPercentMin, tapAudioPercentMax,
         clickHashtagPercentMin, clickHashtagPercentMax,
         clickAuthorPercentMin, clickAuthorPercentMax,
+        feedRerunChanceMin, feedRerunChanceMax,
         viewStoriesSlidesMin, viewStoriesSlidesMax,
         viewStoriesSlideWatchPctMin, viewStoriesSlideWatchPctMax,
         viewStoriesLikePercentMin, viewStoriesLikePercentMax,
@@ -11185,6 +11194,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           }
         }
         // targetCount === 1: spread never applies, follow runs normally via standard dispatcher
+      }
+
+      // View Feed re-run is appended after the completed shuffled sequence.
+      // Reusing the same `feed` dispatcher entry reapplies every View Feed
+      // setting and action, including likes, hashtags, and author clicks.
+      const _feedRerunLo = Math.min(feedRerunChanceMin, feedRerunChanceMax);
+      const _feedRerunHi = Math.max(feedRerunChanceMin, feedRerunChanceMax);
+      const _feedRerunChance = _feedRerunLo + Math.random() * (_feedRerunHi - _feedRerunLo);
+      if (_toolActivated.feed && _feedRerunChance > 0 && Math.random() * 100 < _feedRerunChance) {
+        _toolSeq.push("feed");
+        tLog(`▶ View Feed re-run rolled (${Math.round(_feedRerunChance)}%) — appended at end of cycle`);
       }
 
       // Report the order the dispatcher will actually execute. Spread Follows

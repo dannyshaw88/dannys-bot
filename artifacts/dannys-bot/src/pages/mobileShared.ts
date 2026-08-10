@@ -109,6 +109,8 @@ export interface AutomationSettingsData {
   clickHashtagPercentMax: number;
   clickAuthorPercentMin: number;
   clickAuthorPercentMax: number;
+  feedRerunChanceMin: number;
+  feedRerunChanceMax: number;
   feedScrollMin: number;
   feedScrollMax: number;
   viewStoriesSlidesMin: number;
@@ -262,6 +264,7 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   tapAudioPercentMin: 0, tapAudioPercentMax: 0,
   clickHashtagPercentMin: 0, clickHashtagPercentMax: 0,
   clickAuthorPercentMin: 0, clickAuthorPercentMax: 0,
+  feedRerunChanceMin: 0, feedRerunChanceMax: 0,
   feedScrollMin: 5, feedScrollMax: 10,
   viewStoriesSlidesMin: 0, viewStoriesSlidesMax: 0,
   viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
@@ -456,6 +459,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'feedTapAudio',      label: 'Tap Audio %',                   fields: ['tapAudioPercentMin','tapAudioPercentMax'] },
     { key: 'feedClickHashtag',  label: 'Click Hashtag %',               fields: ['clickHashtagPercentMin','clickHashtagPercentMax'] },
     { key: 'feedClickAuthor',   label: 'Click Author %',                fields: ['clickAuthorPercentMin','clickAuthorPercentMax'] },
+    { key: 'feedRerunChance',   label: 'Re-run Chance %',                fields: ['feedRerunChanceMin','feedRerunChanceMax'] },
   ]},
   { key: 'stories',       label: 'View Stories', sub: [
     { key: 'storiesEnabled',    label: 'Enabled',                       fields: ['storiesEnabled'] },
