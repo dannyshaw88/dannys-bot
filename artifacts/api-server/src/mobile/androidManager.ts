@@ -9985,7 +9985,11 @@ export async function typeViaCalibrationMap(
   let layer: "letters" | "symbols" | "moreSymbols" = "letters";
   _calKeyboardLayer.set(serial, layer);
 
-  const tapMapped = async (label: string, description = label): Promise<boolean> => {
+  const tapMapped = async (
+    label: string,
+    description = label,
+    dwellOverrideMs?: number,
+  ): Promise<boolean> => {
     const aliases: Record<string, string[]> = {
       "'": ["'", "apostrophe", "singleQuote", "single-quote"],
       "\"": ["\"", "quote", "doubleQuote", "double-quote"],
@@ -10003,7 +10007,9 @@ export async function typeViaCalibrationMap(
       // successful character press.
       const dwellMin = Math.max(1, Math.min(typingProfile.dwellMinMs, typingProfile.dwellMaxMs));
       const dwellMax = Math.max(dwellMin, typingProfile.dwellMaxMs);
-      const dwellMs = Math.round(dwellMin + Math.random() * (dwellMax - dwellMin));
+      const dwellMs = dwellOverrideMs != null
+        ? Math.max(1, Math.round(dwellOverrideMs))
+        : Math.round(dwellMin + Math.random() * (dwellMax - dwellMin));
       await runInputShell(
         serial,
         ["swipe", String(Math.round(pos.x)), String(Math.round(pos.y)), String(Math.round(pos.x)), String(Math.round(pos.y)), String(dwellMs)],
@@ -10028,7 +10034,10 @@ export async function typeViaCalibrationMap(
     const wrong = candidates[Math.floor(Math.random() * candidates.length)];
     if (!wrong) return;
     await tapMapped(wrong, `intentional typing error '${wrong}'`);
-    await tapMapped("backspace", "Backspace after typing error");
+    // Gboard interprets a held Backspace as word deletion. Typo correction
+    // must remove exactly one character, regardless of the user's normal
+    // calibrated-key dwell profile.
+    await tapMapped("backspace", "Backspace after typing error", 35);
   };
   const waitWordHesitation = async () => {
     const hesitationMin = Math.max(0, Math.min(typingProfile.hesitationMinMs, typingProfile.hesitationMaxMs));
