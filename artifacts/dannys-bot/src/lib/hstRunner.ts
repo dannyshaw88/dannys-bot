@@ -91,9 +91,9 @@ async function scheduleRestartRecovery(serial: string, slotIdx: number, key: str
 
   const safeMin = Math.max(1, Math.min(
     Number(settings.cycleIntervalMin ?? 20),
-    Number(settings.cycleIntervalMax ?? 30),
+    Number(settings.cycleIntervalMax ?? 20),
   ));
-  const safeMax = Math.max(safeMin, Number(settings.cycleIntervalMax ?? 30));
+  const safeMax = Math.max(safeMin, Number(settings.cycleIntervalMax ?? 20));
   const delayMs = (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
   scheduleNextBg(serial, slotIdx, key, delayMs);
 }
@@ -325,8 +325,8 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
   if (_hstStop.has(key)) { _hstStop.delete(key); _hstNextRunAt.delete(key); return; }
 
   // Reschedule using the configured interval.
-  const safeMin = Math.max(1, Math.min(Number(s.cycleIntervalMin ?? 25), Number(s.cycleIntervalMax ?? 99)));
-  const safeMax = Math.max(safeMin, Number(s.cycleIntervalMax ?? 99));
+  const safeMin = Math.max(1, Math.min(Number(s.cycleIntervalMin ?? 20), Number(s.cycleIntervalMax ?? 20)));
+  const safeMax = Math.max(safeMin, Number(s.cycleIntervalMax ?? 20));
   const gapMs   = (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
   scheduleNextBg(serial, slotIdx, key, gapMs);
 }

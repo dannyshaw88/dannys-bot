@@ -1,5 +1,19 @@
 ## [1.2.447] — 2026-08-09
 
+### Fixed — Human Session Tool interval scheduling
+
+- Manual toggle off/on still starts the requested account cycle immediately,
+  but subsequent cycles now use that account's configured **Run every X–Y
+  minutes** values.
+- Removed the Collision Preventer rest-window override from normal HST
+  scheduling, which could replace account intervals with a hardcoded-looking
+  5–20 minute delay.
+- Updated the always-mounted background HST runner so startup recovery and
+  post-cycle scheduling also read the persisted account interval rather than
+  stale 20–30 or 25–99 minute fallbacks.
+- Collision Preventer continues to manage collision queueing and rest behavior
+  without changing the account's normal HST schedule.
+
 ### Improved — Males Only allowlist matching
 
 - Added a bounded in-memory cache for compiled Males Only allowlist matchers.
