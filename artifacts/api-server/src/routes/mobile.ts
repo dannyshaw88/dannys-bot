@@ -11337,27 +11337,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // screen from a previous cycle or app resume.
             tLog("▶ Tapping Home tab for stories…");
             // A previous tool/cycle can leave Instagram inside a full-screen
-            // Story viewer. In that state findHomeTab() is absent and the old
-            // positional fallback (bottom-left) was not a valid navigation
-            // action; the code then waited for a tray and could treat the
-            // already-open Story as the newly opened one. Exit any existing
-            // viewer first and require a positive Home-tab confirmation.
-            let _viewerRecovered = false;
-            for (let _backAttempt = 0; _backAttempt < 3; _backAttempt++) {
-              const _alreadyInStory = await android.isInStoryViewerSlow(serial).catch(() => false);
-              if (!_alreadyInStory) break;
-              _viewerRecovered = true;
-              tLog(`▶ Stories: already in Story viewer — pressing Back to recover (${_backAttempt + 1}/3)…`);
-              await android.pressBack(serial);
-              await sleepOrAbort(serial, 900);
-            }
-            if (_viewerRecovered) {
-              const _stillInStory = await android.isInStoryViewerSlow(serial).catch(() => false);
-              if (_stillInStory) {
-                steps.push("stories(aborted — could not exit pre-existing story viewer)");
-                tLog("▶ Stories aborted — could not exit pre-existing Story viewer safely");
-                continue;
-              }
+            // Story viewer. Never press Back here: the Story tool must not
+            // navigate or mutate an unknown screen while establishing state.
+            // Detect the pre-existing viewer and abort safely instead.
+            const _alreadyInStory = await android.isInStoryViewerSlow(serial).catch(() => false);
+            if (_alreadyInStory) {
+              steps.push("stories(aborted — already in Story viewer)");
+              tLog("▶ Stories aborted — device is already in a Story viewer; no Back/navigation action taken");
+              continue;
             }
             const homeTab = await android.findHomeTab(serial).catch(() => null);
             if (homeTab) {
