@@ -1,3 +1,17 @@
+### Fixed — Instagram account-switch profile-tab targeting
+
+- Fixed account switching incorrectly selecting the avatar in Instagram’s top
+  story tray instead of the Profile tab in the bottom-right navigation.
+- Resource-ID profile-tab matches are now accepted only when their node bounds
+  place them in the bottom navigation band.
+- Explicit `Profile`/`Profil` accessibility-label matches from preloaded launch
+  dumps receive the same bottom-of-screen validation.
+- Retained the existing bottom-right avatar and multi-tab positional fallbacks,
+  so unlabeled Xiaomi/Instagram nodes remain supported without guessed
+  coordinates.
+- This prevents a generic story avatar from being mistaken for the active
+  account profile-switching control.
+
 ### Improved — Mobile device quick controls
 
 - Replaced the single brightness-cycle button with separate −50 and +50

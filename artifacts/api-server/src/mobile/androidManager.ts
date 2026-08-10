@@ -7433,9 +7433,8 @@ export async function switchToInstagramAccount(
   let profileTab: { x: number; y: number } | null = null;
   if (preloadedXml) {
     profileTab =
-      _findByResId(preloadedXml, ":id/profile", ":id/tab_profile", ":id/nav_profile",
-        ":id/bottom_tab_profile", ":id/avatar_tab")
-      ?? _findElem(preloadedXml, "Profile");
+      _findBottomProfileResource(preloadedXml)
+       ?? _findBottomProfileLabel(preloadedXml);
   }
   if (!profileTab) {
     const PROFILE_TAB_POLL_MS  = 1500;
@@ -8425,9 +8424,7 @@ export async function findInstagramProfileTab(serial: string): Promise<{ x: numb
     }
   }
   // ── Strategy 2: known resource-ids — :id/profile_tab confirmed on this device (node [96]).
-  const byId = _findByResId(xml,
-    ":id/profile_tab", ":id/profile", ":id/tab_profile", ":id/nav_profile",
-    ":id/bottom_tab_profile", ":id/avatar_tab");
+  const byId = _findBottomProfileResource(xml);
   if (byId) return byId;
   // ── Strategy 2b: unlabeled bottom-right profile avatar.
   // Some Xiaomi/Instagram combinations expose the avatar as a plain ImageView
@@ -8498,6 +8495,49 @@ export async function findInstagramProfileTab(serial: string): Promise<{ x: numb
   const spanW = deduped[deduped.length - 1].x - deduped[0].x;
   if (spanW < xmlW * 0.55) return null; // guard (b): too narrow → action-icon cluster, not nav bar
   return deduped[deduped.length - 1]; // rightmost = Profile tab
+}
+
+/**
+ * Resolve resource-id profile-tab nodes only when they are physically in the
+ * bottom navigation band. Instagram reuses avatar/profile resource IDs in
+ * the story tray and feed, so an ID-only lookup can return the top-left story
+ * avatar instead of the bottom-right navigation tab.
+ */
+function _findBottomProfileResource(xml: string): { x: number; y: number } | null {
+  const { h: xmlH } = _getScreenSize(xml);
+  const bottomMin = Math.round(xmlH * 0.82);
+  const wanted = /(?:profile_tab|\/profile|tab_profile|nav_profile|bottom_tab_profile|avatar_tab)$/i;
+  const re = /<node\s([^>]+?)\s*\/?>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml)) !== null) {
+    const attrs = m[1];
+    const rid = attrs.match(/resource-id="([^"]+)"/i)?.[1] ?? "";
+    if (!wanted.test(rid)) continue;
+    const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+    if (!bm) continue;
+    const x = (Number(bm[1]) + Number(bm[3])) / 2;
+    const y = (Number(bm[2]) + Number(bm[4])) / 2;
+    if (y >= bottomMin) return { x: Math.round(x), y: Math.round(y) };
+  }
+  return null;
+}
+
+function _findBottomProfileLabel(xml: string): { x: number; y: number } | null {
+  const { h: xmlH } = _getScreenSize(xml);
+  const bottomMin = Math.round(xmlH * 0.82);
+  const re = /<node\s([^>]+?)\s*\/?>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml)) !== null) {
+    const attrs = m[1];
+    const label = attrs.match(/(?:content-desc|text)="([^"]*)"/i)?.[1] ?? "";
+    if (!/^profil(e|o)?$/i.test(label.trim())) continue;
+    const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+    if (!bm) continue;
+    const x = (Number(bm[1]) + Number(bm[3])) / 2;
+    const y = (Number(bm[2]) + Number(bm[4])) / 2;
+    if (y >= bottomMin) return { x: Math.round(x), y: Math.round(y) };
+  }
+  return null;
 }
 
 /**
