@@ -9944,6 +9944,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (!searchBar) { onLog?.("Follow: search bar accessibility node not found — stopping"); break; }
         await android.tap(serial, searchBar.x, searchBar.y);
         await sleepOrAbort(serial, 1000 + Math.floor(Math.random() * 4000));
+        const searchFocused = await android.isInstagramSearchBarFocused(serial).catch(() => false);
+        if (!searchFocused) {
+          onLog?.("Follow: search bar tap was not confirmed focused — stopping without pressing Back");
+          break;
+        }
 
         // Clear any leftover text from the previous search, then type the
         // new username.  KEYCODE_CTRL_A cannot send modifier+key chords via
@@ -9961,8 +9966,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             `Follow: calibrated keyboard could not enter ${username}` +
             `${typed.missing.length ? ` — missing ${typed.missing.join(", ")}` : ""} — skipping`,
           );
-          await android.pressBack(serial);
-          await sleepOrAbort(serial, 500);
+          onLog?.("Follow: leaving failed search state without Back because field entry was not confirmed");
           continue;
         }
         // Small settle before handing off to findAndTapUserInSearch, which
@@ -9978,8 +9982,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // before moving on so the next target starts from a clean query even
           // when the normal back navigation does not dismiss the search UI.
           await android.clearInstagramSearchBar(serial, (msg) => onLog?.(`  ${msg}`)).catch(() => {});
-          await android.pressBack(serial);
-          await sleepOrAbort(serial, 500);
+          const stillSearchFocused = await android.isInstagramSearchBarFocused(serial).catch(() => false);
+          if (stillSearchFocused) {
+            await android.pressBack(serial);
+            await sleepOrAbort(serial, 500);
+          } else {
+            onLog?.("Follow: search field no longer focused — skipping Back to protect Instagram context");
+          }
           continue;
         }
 

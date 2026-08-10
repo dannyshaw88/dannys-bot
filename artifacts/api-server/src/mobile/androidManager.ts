@@ -9010,6 +9010,35 @@ export async function findInstagramSearchBar(
   return null;
 }
 
+/** Confirm that Instagram's live search field owns focus before typing or
+ * sending any navigation key. This prevents a failed search tap from making
+ * Back exit Instagram entirely. */
+export async function isInstagramSearchBarFocused(serial: string): Promise<boolean> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const { h: screenH } = getScreenSize(serial);
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return false;
+  const topLimit = Math.round(screenH * 0.30);
+  for (const match of xml.matchAll(/<node\b[^>]*>/gi)) {
+    const node = match[0];
+    const bounds = node.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+    if (!bounds) continue;
+    const centerY = (Number(bounds[2]) + Number(bounds[4])) / 2;
+    if (centerY > topLimit) continue;
+    const resourceId = node.match(/\bresource-id="([^"]*)"/i)?.[1] ?? "";
+    const label = [
+      node.match(/\btext="([^"]*)"/i)?.[1] ?? "",
+      node.match(/\bcontent-desc="([^"]*)"/i)?.[1] ?? "",
+      node.match(/\bhint="([^"]*)"/i)?.[1] ?? "",
+    ].join(" ");
+    if (!/focused="true"/i.test(node) || !/edittext/i.test(node) ||
+        !/search/i.test(`${resourceId} ${label}`)) continue;
+    return true;
+  }
+  return false;
+}
+
 /**
  * Type text on the on-screen keyboard character by character.
  *
