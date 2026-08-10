@@ -11336,12 +11336,43 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // first tool in the cycle. The phone can still be on a nested
             // screen from a previous cycle or app resume.
             tLog("▶ Tapping Home tab for stories…");
+            // A previous tool/cycle can leave Instagram inside a full-screen
+            // Story viewer. In that state findHomeTab() is absent and the old
+            // positional fallback (bottom-left) was not a valid navigation
+            // action; the code then waited for a tray and could treat the
+            // already-open Story as the newly opened one. Exit any existing
+            // viewer first and require a positive Home-tab confirmation.
+            let _viewerRecovered = false;
+            for (let _backAttempt = 0; _backAttempt < 3; _backAttempt++) {
+              const _alreadyInStory = await android.isInStoryViewerSlow(serial).catch(() => false);
+              if (!_alreadyInStory) break;
+              _viewerRecovered = true;
+              tLog(`▶ Stories: already in Story viewer — pressing Back to recover (${_backAttempt + 1}/3)…`);
+              await android.pressBack(serial);
+              await sleepOrAbort(serial, 900);
+            }
+            if (_viewerRecovered) {
+              const _stillInStory = await android.isInStoryViewerSlow(serial).catch(() => false);
+              if (_stillInStory) {
+                steps.push("stories(aborted — could not exit pre-existing story viewer)");
+                tLog("▶ Stories aborted — could not exit pre-existing Story viewer safely");
+                continue;
+              }
+            }
             const homeTab = await android.findHomeTab(serial).catch(() => null);
             if (homeTab) {
               await android.tap(serial, homeTab.x, homeTab.y);
             } else {
-              const { w: sw, h: sh } = getScreenSize(serial);
-              await android.tap(serial, Math.round(sw * 0.10), Math.round(sh * 0.975));
+              steps.push("stories(aborted — Home tab not positively detected)");
+              tLog("▶ Stories aborted — Home tab not positively detected; refusing coordinate fallback");
+              continue;
+            }
+            await sleepOrAbort(serial, 1200);
+            const _homeConfirmed = await android.findHomeTab(serial).catch(() => null);
+            if (!_homeConfirmed) {
+              steps.push("stories(aborted — Home tab confirmation failed)");
+              tLog("▶ Stories aborted — Home tab confirmation failed; refusing to open story tray");
+              continue;
             }
             // Dismiss any popup that appeared after tapping Home.
             const preStoriesPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
