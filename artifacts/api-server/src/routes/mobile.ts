@@ -8923,7 +8923,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         bioText,
         loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile,
         message => onLog?.(`Update Bio: ${message}`),
-        { disableHumanErrors: true, debugLabel: "Update Bio" },
+        { debugLabel: "Update Bio" },
       );
       if (!typed.ok) {
         onLog?.(`Update Bio: ✗ calibrated typing incomplete — missing ${typed.missing.join(", ") || "required calibration"}`);
@@ -10105,7 +10105,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // Use only real taps on the saved Android keyboard calibration map.
         const typed = await android.typeViaSavedCalibrationMap(serial, username.replace(/^@+/, ""), loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile, message => {
           onLog?.(`  ${message}`);
-        }, { debugLabel: "Follow", disableHumanErrors: true });
+        }, { debugLabel: "Follow" });
         if (!typed.ok) {
           onLog?.(
             `Follow: calibrated keyboard could not enter ${username}` +

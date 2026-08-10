@@ -1,3 +1,18 @@
+## [1.2.467] — 2026-08-10
+
+### Restored — Human-error typing across calibrated input
+
+- Restored the configured human-error simulation for Follow username searches.
+- Restored the same behavior for Bio Update, so calibrated typing consistently
+  uses each device's configured error percentage wherever the shared typing
+  engine is used.
+- Kept the detailed typo, Backspace, timing, keyboard-layer, and pacing
+  diagnostics in place for installer testing.
+- Kept the controlled Backspace correction path and destructive-key safety
+  guard unchanged.
+- Confirmed the existing canonical Windows installer workflow remains the
+  single installer workflow; no duplicate Actions workflow was added.
+
 ## [1.2.466] — 2026-08-10
 
 ### Improved — Typing gesture diagnostics and typo correction
