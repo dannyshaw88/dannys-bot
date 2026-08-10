@@ -3314,7 +3314,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
    * Rolls a single scroll-swipe velocity from a session-level weight set.
    *
    * Four modes, weighted by `weights` (treated as relative, not %-of-100):
-   *   skim       — fast long swipe (flicking through boring content)
+   *   super skim — fast long swipe (flicking through boring content)
    *   normal     — medium-paced scroll
    *   interested — slow short nudge (something caught the eye)
    *   back       — short reversed swipe (peeked back up)
@@ -3350,7 +3350,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     cum += skim;
     if (roll < cum) {
-      // Skim: fast, full-height flick
+      // Super Skim: fast, full-height flick
       return {
         mode: "skim",
         duration: 150 + Math.round(Math.random() * 200),
@@ -3827,12 +3827,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // its own mix so the distribution never converges to a fixed signature
     // over many sessions. Weights are relative (don't need to sum to 100).
     const feedScrollWeights = {
-      skim:      25 + Math.floor(Math.random() * 16), // 25–40
-      normal:    38 + Math.floor(Math.random() * 25), // 38–62
+      skim:      5 + Math.floor(Math.random() * 6), // 5–10
+      normal:    40 + Math.floor(Math.random() * 36), // 40–75
       interested: 5 + Math.floor(Math.random() * 6),  // 5–10
       back:       Math.floor(Math.random() * 11),      // 0–10
     };
-    onLog?.(`Feed scroll personality — skim:${feedScrollWeights.skim} normal:${feedScrollWeights.normal} interested:${feedScrollWeights.interested} back:${feedScrollWeights.back}`);
+    onLog?.(`Feed scroll personality — super skim:${feedScrollWeights.skim} normal:${feedScrollWeights.normal} interested:${feedScrollWeights.interested} back:${feedScrollWeights.back}`);
     const feedPersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
 
     for (let i = 0; i < count; i++) {
@@ -5760,12 +5760,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     // Session scroll personality — same approach as runCheckFeedLoop.
     const exploreScrollWeights = {
-      skim:      25 + Math.floor(Math.random() * 16), // 25–40
-      normal:    38 + Math.floor(Math.random() * 25), // 38–62
+      skim:      5 + Math.floor(Math.random() * 6), // 5–10
+      normal:    40 + Math.floor(Math.random() * 36), // 40–75
       interested: 5 + Math.floor(Math.random() * 6),  // 5–10
       back:       Math.floor(Math.random() * 11),      // 0–10
     };
-    onLog?.(`Explore scroll personality — skim:${exploreScrollWeights.skim} normal:${exploreScrollWeights.normal} interested:${exploreScrollWeights.interested} back:${exploreScrollWeights.back}`);
+    onLog?.(`Explore scroll personality — super skim:${exploreScrollWeights.skim} normal:${exploreScrollWeights.normal} interested:${exploreScrollWeights.interested} back:${exploreScrollWeights.back}`);
     const explorePersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
 
     for (let i = 0; i < scrollCount; i++) {
@@ -6350,12 +6350,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // per clip, unlike the feed's partial nudge), which just means occasionally
     // rewatching a reel — a normal human behaviour kept at a low weight.
     const reelsScrollWeights = {
-      skim:      25 + Math.floor(Math.random() * 16), // 25–40
-      normal:    38 + Math.floor(Math.random() * 25), // 38–62
+      skim:      5 + Math.floor(Math.random() * 6), // 5–10
+      normal:    40 + Math.floor(Math.random() * 36), // 40–75
       interested: 5 + Math.floor(Math.random() * 6),  // 5–10
       back:       Math.floor(Math.random() * 11),      // 0–10
     };
-    onLog?.(`Reels scroll personality — skim:${reelsScrollWeights.skim} normal:${reelsScrollWeights.normal} interested:${reelsScrollWeights.interested} back:${reelsScrollWeights.back}`);
+    onLog?.(`Reels scroll personality — super skim:${reelsScrollWeights.skim} normal:${reelsScrollWeights.normal} interested:${reelsScrollWeights.interested} back:${reelsScrollWeights.back}`);
     const reelsPersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
 
     // Reels snap fully to the next clip on a swipe — unlike the feed's
