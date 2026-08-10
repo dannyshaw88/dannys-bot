@@ -3315,8 +3315,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
    *
    * Four modes, weighted by `weights` (treated as relative, not %-of-100):
    *   super skim — fast long swipe (flicking through boring content)
-   *   normal     — medium-paced scroll
-   *   interested — slow short nudge (something caught the eye)
+   *   skim       — medium-paced scroll
+   *   normal     — slow short nudge (something caught the eye)
    *   back       — short reversed swipe (peeked back up)
    *
    * Pass `allowBack = false` for Reels (a back-swipe navigates to the
@@ -3361,7 +3361,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     cum += normal;
     if (roll < cum) {
-      // Normal: comfortable mid-speed scroll
+      // Skim: comfortable mid-speed scroll
       return {
         mode: "normal",
         duration: 450 + Math.round(Math.random() * 350),
@@ -3372,7 +3372,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     cum += interested;
     if (roll < cum) {
-      // Interested: slow nudge — something caught the eye
+      // Normal: slow nudge — something caught the eye
       return {
         mode: "interested",
         duration: 900 + Math.round(Math.random() * 600),
@@ -3832,7 +3832,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       interested: 5 + Math.floor(Math.random() * 6),  // 5–10
       back:       Math.floor(Math.random() * 11),      // 0–10
     };
-    onLog?.(`Feed scroll personality — super skim:${feedScrollWeights.skim} normal:${feedScrollWeights.normal} interested:${feedScrollWeights.interested} back:${feedScrollWeights.back}`);
+    onLog?.(`Feed scroll personality — super skim:${feedScrollWeights.skim} skim:${feedScrollWeights.normal} normal:${feedScrollWeights.interested} back:${feedScrollWeights.back}`);
     const feedPersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
 
     for (let i = 0; i < count; i++) {
@@ -5765,7 +5765,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       interested: 5 + Math.floor(Math.random() * 6),  // 5–10
       back:       Math.floor(Math.random() * 11),      // 0–10
     };
-    onLog?.(`Explore scroll personality — super skim:${exploreScrollWeights.skim} normal:${exploreScrollWeights.normal} interested:${exploreScrollWeights.interested} back:${exploreScrollWeights.back}`);
+    onLog?.(`Explore scroll personality — super skim:${exploreScrollWeights.skim} skim:${exploreScrollWeights.normal} normal:${exploreScrollWeights.interested} back:${exploreScrollWeights.back}`);
     const explorePersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
 
     for (let i = 0; i < scrollCount; i++) {
@@ -6355,7 +6355,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       interested: 5 + Math.floor(Math.random() * 6),  // 5–10
       back:       Math.floor(Math.random() * 11),      // 0–10
     };
-    onLog?.(`Reels scroll personality — super skim:${reelsScrollWeights.skim} normal:${reelsScrollWeights.normal} interested:${reelsScrollWeights.interested} back:${reelsScrollWeights.back}`);
+    onLog?.(`Reels scroll personality — super skim:${reelsScrollWeights.skim} skim:${reelsScrollWeights.normal} normal:${reelsScrollWeights.interested} back:${reelsScrollWeights.back}`);
     const reelsPersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
 
     // Reels snap fully to the next clip on a swipe — unlike the feed's
