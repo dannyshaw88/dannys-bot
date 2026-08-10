@@ -1862,7 +1862,7 @@ function CalibrationDialog({
     height: number;
     pendingLeft: number;
     pendingTop: number;
-    frame: number | null;
+    panel: HTMLElement;
   } | null>(null);
 
   // Reset state and load existing map whenever the dialog opens.
@@ -2047,8 +2047,12 @@ function CalibrationDialog({
       height: bounds.height,
       pendingLeft: bounds.left,
       pendingTop: bounds.top,
-      frame: null,
+      panel,
     };
+    // Move the element directly during the gesture; React state updates in a
+    // pointer-move loop make the drag feel sluggish when the dialog is large.
+    panel.style.left = `${bounds.left}px`;
+    panel.style.right = "auto";
     setPanelPosition({ left: bounds.left, top: bounds.top });
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -2069,25 +2073,16 @@ function CalibrationDialog({
     );
     drag.pendingLeft = left;
     drag.pendingTop = top;
-    if (drag.frame === null) {
-      drag.frame = window.requestAnimationFrame(() => {
-        const current = panelDragRef.current;
-        if (!current) return;
-        current.frame = null;
-        setPanelPosition({ left: current.pendingLeft, top: current.pendingTop });
-      });
-    }
+    drag.panel.style.left = `${left}px`;
+    drag.panel.style.top = `${top}px`;
   };
 
   const handlePanelDragEnd = (event: React.PointerEvent<HTMLDivElement>) => {
     if (panelDragRef.current?.pointerId !== event.pointerId) return;
-    if (panelDragRef.current.frame !== null) {
-      window.cancelAnimationFrame(panelDragRef.current.frame);
-      setPanelPosition({
-        left: panelDragRef.current.pendingLeft,
-        top: panelDragRef.current.pendingTop,
-      });
-    }
+    setPanelPosition({
+      left: panelDragRef.current.pendingLeft,
+      top: panelDragRef.current.pendingTop,
+    });
     panelDragRef.current = null;
     try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* already released */ }
   };
@@ -2096,7 +2091,7 @@ function CalibrationDialog({
     <Dialog open={open} modal={false} onOpenChange={v => { if (!capturing && !editCapturing) onOpenChange(v); }}>
       <DialogContent
         hideOverlay
-        className="fixed right-4 top-4 left-auto w-[35rem] max-w-[calc(100vw-2rem)] max-h-[calc(100vh-2rem)] translate-x-0 translate-y-0 overflow-y-auto border-slate-700 bg-slate-950 text-slate-100"
+        className="fixed right-4 top-4 left-auto w-[38.5rem] max-w-[calc(100vw-2rem)] max-h-[calc(100vh-2rem)] translate-x-0 translate-y-0 overflow-y-auto border-slate-700 bg-slate-950 text-slate-100"
         style={panelPosition ? { left: panelPosition.left, top: panelPosition.top, right: "auto" } : undefined}
       >
         <DialogHeader
