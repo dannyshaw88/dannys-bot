@@ -8714,8 +8714,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // clears it → types the supplied text → taps the Save/Submit button.
   async function runUpdateBio(serial: string, bioText: string, onLog?: (msg: string) => void): Promise<void> {
     if (!bioText.trim()) { onLog?.("Update Bio: ✗ bio text is empty — skipping"); return; }
+    // Normalize textarea/API line endings before resolving spin groups. Saved
+    // settings can contain Windows CRLF (or legacy bare CR) line breaks; the
+    // calibrated keyboard path intentionally maps newline only to Enter.
+    bioText = bioText.replace(/\r\n?/g, "\n");
     // Resolve spin syntax before typing — each {a|b|c} group is rolled independently.
     bioText = resolveSpinSyntax(bioText);
+    onLog?.(`Update Bio: resolved bio contains ${bioText.split("\n").length} line${bioText.includes("\n") ? "s" : ""} — newline count=${(bioText.match(/\n/g) ?? []).length}`);
 
     // 1. Tap the profile tab (bottom-right, tab_avatar).
     {
