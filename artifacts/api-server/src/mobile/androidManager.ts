@@ -10144,8 +10144,6 @@ export async function typeViaCalibrationMap(
       !Number.isFinite(typingProfile.hesitationMaxMs)) {
     throw new Error("Complete Typing Speed Profile, including dwell and hesitation, is required for calibrated typing");
   }
-  const tools = detectToolset();
-  const adb = requireTool(tools.adb, "adb");
   const missing: string[] = [];
   // A newly focused Instagram text field opens Gboard on its letters layer.
   // Do not trust the process-local cached layer here: a previous typing run
@@ -10159,7 +10157,7 @@ export async function typeViaCalibrationMap(
   const tapMapped = async (
     label: string,
     description = label,
-    dwellOverrideMs?: number,
+    _dwellOverrideMs?: number,
   ): Promise<boolean> => {
     if (/(?:backspace|delete|forward[ -]?delete)/i.test(label) ||
         /(?:backspace|delete|forward[ -]?delete)/i.test(description)) {
@@ -10178,18 +10176,15 @@ export async function typeViaCalibrationMap(
       return false;
     }
     try {
-      // Use the checked input path here. The old helper discarded adb's
-      // exit/stderr, so a dead device or rejected input tap looked like a
-      // successful character press.
-      const dwellMin = Math.max(1, Math.min(typingProfile.dwellMinMs, typingProfile.dwellMaxMs));
-      const dwellMax = Math.max(dwellMin, typingProfile.dwellMaxMs);
-      const dwellMs = dwellOverrideMs != null
-        ? Math.max(1, Math.round(dwellOverrideMs))
-        : Math.round(dwellMin + Math.random() * (dwellMax - dwellMin));
+      // A zero-distance swipe is not a tap with a configurable dwell: on
+      // Xiaomi/MIUI it can be interpreted as a long-press and emit repeats.
+      // Calibration records coordinates, so emit exactly one native tap and
+      // keep human pacing in the delay below. Never turn a character tap into
+      // a gesture.
       await runInputShell(
         serial,
-        ["swipe", String(Math.round(pos.x)), String(Math.round(pos.y)), String(Math.round(pos.x)), String(Math.round(pos.y)), String(dwellMs)],
-        "dwell-tap",
+        ["tap", String(Math.round(pos.x)), String(Math.round(pos.y))],
+        "calibrated-tap",
       );
     } catch (e: any) {
       onLog?.(`[cal-keyboard] tap failed for ${description} at (${pos.x},${pos.y}) — ${e?.message}`);
@@ -10197,7 +10192,7 @@ export async function typeViaCalibrationMap(
     }
     onLog?.(`[cal-keyboard] tapped ${description} at (${pos.x},${pos.y})`);
     if (options?.debugLabel && /(?:shift|enter|backspace|delete)/i.test(description)) {
-      onLog?.(`[${options.debugLabel}] key-event=${description} coordinate=(${pos.x},${pos.y}) dwellMs=${dwellMs}`);
+      onLog?.(`[${options.debugLabel}] key-event=${description} coordinate=(${pos.x},${pos.y})`);
     }
     const min = Math.max(0, Math.min(typingProfile.minMs, typingProfile.maxMs));
     const max = Math.max(min, typingProfile.maxMs);
