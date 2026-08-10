@@ -1,3 +1,17 @@
+## [1.2.465] — 2026-08-10
+
+### Added — Follow typing diagnostics and calibration export
+
+- Follow Users now enables the shared per-character calibrated-keyboard
+  diagnostics, including each intended key, saved tap coordinate, active
+  keyboard layer, and typing-session result.
+- Added an **Export calibration JSON** action to the calibrated keyboard panel.
+- The exported file contains the selected device serial, export timestamp,
+  mapped-key count, and every saved key coordinate so calibration can be
+  independently reviewed against the keys physically pressed on the mirror.
+- Confirmed the existing canonical Windows installer workflow remains the
+  single installer workflow; no duplicate Actions workflow was added.
+
 ## [1.2.464] — 2026-08-10
 
 ### Added — Shared calibrated typing diagnostics

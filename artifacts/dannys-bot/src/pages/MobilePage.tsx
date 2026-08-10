@@ -1985,6 +1985,25 @@ function CalibrationDialog({
     } catch { /**/ }
   };
 
+  const exportMap = () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      serial,
+      keyCount: Object.keys(map).length,
+      map,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `keyboard-calibration-${serial}.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    onLog?.(`[calibration] Exported ${Object.keys(map).length} keys for ${serial}`);
+  };
+
   const testCalibratedText = async () => {
     const text = testText;
     if (!text.trim() || testingText) return;
@@ -2285,6 +2304,14 @@ function CalibrationDialog({
                   onClick={() => { setSaved(false); setMode("editMap"); }}
                 >
                   View & fix individual keys →
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full h-7 text-xs border-cyan-700 text-cyan-200 hover:bg-cyan-950"
+                  onClick={exportMap}
+                >
+                  Export calibration JSON
                 </Button>
               </div>
             )}
