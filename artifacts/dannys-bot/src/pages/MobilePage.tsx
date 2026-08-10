@@ -21,7 +21,7 @@ import {
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
   ChevronLeft, ChevronRight, ChevronDown, Home, Power, Trash2,
   FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim,
-  Palette, Plus, X, RotateCcw, Sun, Keyboard,
+  Palette, Plus, X, Keyboard,
   Users, Globe, BarChart2, ClipboardList, Bug, ImagePlus, Tablet,
 } from "lucide-react";
 
@@ -8498,53 +8498,6 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   // SIM phone number manual inputs (keyed by slot index)
   const [simPhoneInputs, setSimPhoneInputs] = React.useState<Record<number, string>>({});
 
-  // Device quick-controls (Standby / Restart / Brightness)
-  const [screenOn,    setScreenOn]    = React.useState(true);
-  // brightStep: 0=0%, 1=50%, 2=100%. Starts at 2 so first press always → 0%.
-  // Not synced from device — sync would snap to a mid-value and break the fixed cycle.
-  const [brightStep,  setBrightStep]  = React.useState<0 | 1 | 2>(2);
-  const [rebooting,   setRebooting]   = React.useState(false);
-
-  const BRIGHT_LEVELS: [0 | 1 | 2, number, string][] = [[0, 0, '0%'], [1, 50, '50%'], [2, 100, '100%']];
-  const brightPercent = BRIGHT_LEVELS[brightStep][1];
-  const brightLabel   = BRIGHT_LEVELS[brightStep][2];
-
-  const handleStandby = React.useCallback(async () => {
-    if (!serial) return;
-    const next = !screenOn;
-    const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/standby`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ on: next }),
-    }).catch(() => null);
-    const result = response?.ok
-      ? await response.json().catch(() => null)
-      : null;
-    if (typeof result?.on === "boolean") setScreenOn(result.on);
-  }, [serial, screenOn]);
-
-  const handleReboot = React.useCallback(async () => {
-    if (!serial || rebooting) return;
-    setRebooting(true);
-    await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/reboot`, {
-      method: "POST",
-    }).catch(() => {});
-    // Give the device ~15 s to go offline then assume it came back.
-    setTimeout(() => { setRebooting(false); setScreenOn(true); }, 15000);
-  }, [serial, rebooting]);
-
-  const handleBrightness = React.useCallback(async () => {
-    if (!serial) return;
-    // Fixed cycle: 100% → 0% → 50% → 100% → …
-    // Press 1: 0%  Press 2: 50%  Press 3: 100%  Press 4: 0% …
-    const nextStep: 0 | 1 | 2 = brightStep === 2 ? 0 : brightStep === 0 ? 1 : 2;
-    setBrightStep(nextStep);
-    const percent = BRIGHT_LEVELS[nextStep][1];
-    await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/brightness`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ percent }),
-    }).catch(() => {});
-  }, [serial, brightStep]);
-
   // App close gesture (dismiss direction)
   const [dismissDir,    setDismissDir]    = React.useState<"auto" | "left" | "up">("auto");
   const [dismissSaving, setDismissSaving] = React.useState(false);
@@ -8907,56 +8860,6 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
 
   return (
     <div className="h-full overflow-y-auto p-6 space-y-6">
-
-      {/* ── Device Quick Controls ────────────────────────────────────── */}
-      <div className="flex items-center gap-4">
-        {/* Standby */}
-        <div className="flex flex-col items-center gap-1.5">
-          <button
-            onClick={handleStandby}
-            disabled={!serial}
-            title={screenOn ? "Put device to sleep" : "Wake device"}
-            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md
-              ${screenOn
-                ? "bg-red-500 hover:bg-red-600 text-white"
-                : "bg-red-500/30 hover:bg-red-500/50 text-red-400 ring-2 ring-red-500/40"}`}
-          >
-            <Power className="w-5 h-5" />
-          </button>
-          <span className="text-[10px] text-muted-foreground">{screenOn ? "Standby" : "Wake"}</span>
-        </div>
-
-        {/* Restart */}
-        <div className="flex flex-col items-center gap-1.5">
-          <button
-            onClick={handleReboot}
-            disabled={!serial || rebooting}
-            title="Restart device"
-            className="w-12 h-12 rounded-full flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md bg-green-500 hover:bg-green-600 text-white"
-          >
-            <RotateCcw className={`w-5 h-5 ${rebooting ? "animate-spin" : ""}`} />
-          </button>
-          <span className="text-[10px] text-muted-foreground">{rebooting ? "Restarting…" : "Restart"}</span>
-        </div>
-
-        {/* Brightness */}
-        <div className="flex flex-col items-center gap-1.5">
-          <button
-            onClick={handleBrightness}
-            disabled={!serial}
-            title={`Brightness: ${brightLabel} — click to cycle (0% → 50% → 100% → 0%)`}
-            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md
-              ${brightStep === 0
-                ? "bg-white/10 border border-white/20 text-white/30 hover:bg-white/15"
-                : brightStep === 1
-                ? "bg-white/60 text-gray-700 hover:bg-white/70"
-                : "bg-white text-gray-900 hover:bg-gray-100"}`}
-          >
-            <Sun className="w-5 h-5" />
-          </button>
-          <span className="text-[10px] text-muted-foreground">{brightLabel}</span>
-        </div>
-      </div>
 
       {/* ── Typing Speed Profile ─────────────────────────────────────── */}
       <div className="bg-card border border-border rounded-xl p-5 space-y-3">

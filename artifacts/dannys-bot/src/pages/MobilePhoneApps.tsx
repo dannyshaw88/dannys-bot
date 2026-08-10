@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Fingerprint, LockKeyhole, Loader2 } from "lucide-react";
+import { CheckCircle2, Fingerprint, LockKeyhole, Loader2, Power, RotateCcw, Sun } from "lucide-react";
 
 // Collision preventer slot index reserved for phone apps (outside Instagram slot range 0..N).
 const PHONE_APPS_SLOT_IDX = 99;
@@ -164,14 +164,70 @@ interface MobilePhoneAppsProps {
   onToggle:    (v: boolean) => void;
 }
 
+function DeviceQuickControls({ serial }: { serial: string | null | undefined }) {
+  const [screenOn, setScreenOn] = useState(true);
+  const [brightStep, setBrightStep] = useState<0 | 1 | 2>(2);
+  const [rebooting, setRebooting] = useState(false);
+  const brightLevels: [0 | 1 | 2, number, string][] = [[0, 0, "0%"], [1, 50, "50%"], [2, 100, "100%"]];
+  const brightLabel = brightLevels[brightStep][2];
+
+  const handleStandby = useCallback(async () => {
+    if (!serial) return;
+    const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/standby`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ on: !screenOn }),
+    }).catch(() => null);
+    const result = response?.ok ? await response.json().catch(() => null) : null;
+    if (typeof result?.on === "boolean") setScreenOn(result.on);
+  }, [serial, screenOn]);
+
+  const handleReboot = useCallback(async () => {
+    if (!serial || rebooting) return;
+    setRebooting(true);
+    await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/reboot`, { method: "POST" }).catch(() => {});
+    setTimeout(() => { setRebooting(false); setScreenOn(true); }, 15000);
+  }, [serial, rebooting]);
+
+  const handleBrightness = useCallback(async () => {
+    if (!serial) return;
+    const nextStep: 0 | 1 | 2 = brightStep === 2 ? 0 : brightStep === 0 ? 1 : 2;
+    setBrightStep(nextStep);
+    await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/brightness`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ percent: brightLevels[nextStep][1] }),
+    }).catch(() => {});
+  }, [serial, brightStep]);
+
+  const buttonClass = "w-8 h-8 rounded-full flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm";
+  return (
+    <div className="flex items-center gap-1.5 shrink-0" aria-label="Device controls">
+      <button onClick={handleStandby} disabled={!serial} title={screenOn ? "Put device to sleep" : "Wake device"}
+        className={`${buttonClass} ${screenOn ? "bg-red-500 hover:bg-red-600 text-white" : "bg-red-500/30 text-red-400 ring-1 ring-red-500/40"}`}>
+        <Power className="w-3.5 h-3.5" />
+      </button>
+      <button onClick={handleReboot} disabled={!serial || rebooting} title="Restart device"
+        className={`${buttonClass} bg-green-500 hover:bg-green-600 text-white`}>
+        <RotateCcw className={`w-3.5 h-3.5 ${rebooting ? "animate-spin" : ""}`} />
+      </button>
+      <button onClick={handleBrightness} disabled={!serial} title={`Brightness: ${brightLabel} — click to cycle`}
+        className={`${buttonClass} ${brightStep === 0 ? "bg-black/10 text-black/30" : brightStep === 1 ? "bg-white/60 text-gray-700" : "bg-white text-gray-900"}`}>
+        <Sun className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
+
 export function MobilePhoneApps({
   serial: _serial, deviceName, enabled, nextRunAt, onOpenTool, onToggle,
 }: MobilePhoneAppsProps) {
   return (
     <>
       {/* Section heading */}
-      <div className="flex items-start justify-between gap-4">
-        <h2 className="text-lg font-bold text-black">Mobile Phone Apps</h2>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <h2 className="text-lg font-bold text-black whitespace-nowrap">Mobile Phone Apps</h2>
+          <DeviceQuickControls serial={_serial} />
+        </div>
         <span className="text-xs text-muted-foreground text-right shrink-0 pt-1">{deviceName}</span>
       </div>
 
