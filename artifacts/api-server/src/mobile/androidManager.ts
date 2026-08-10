@@ -10165,6 +10165,13 @@ export async function typeViaCalibrationMap(
   // physical key while all ADB taps still appear successful.
   let layer: "letters" | "symbols" | "moreSymbols" = "letters";
   _calKeyboardLayer.set(serial, layer);
+  const display = getScreenSize(serial);
+  const activeIme = await getActiveInputMethodPackage(serial).catch(() => "");
+  onLog?.(
+    `[cal-keyboard] typing-session start serial=${serial} display=${display.w}x${display.h} ` +
+    `ime=${activeIme || "unknown"} initialLayer=${layer} textLength=${text.length} ` +
+    `debugLabel=${options?.debugLabel ?? "none"}`,
+  );
 
   const tapMapped = async (
     label: string,
@@ -10186,6 +10193,12 @@ export async function typeViaCalibrationMap(
     if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) {
       onLog?.(`[cal-keyboard] '${description}' is not in calibration map`);
       return false;
+    }
+    if (options?.debugLabel) {
+      onLog?.(
+        `[${options.debugLabel}] tap-plan key=${JSON.stringify(description)} ` +
+        `coordinate=(${pos.x},${pos.y}) layer=${layer} display=${display.w}x${display.h}`,
+      );
     }
     try {
       // A zero-distance swipe is not a tap with a configurable dwell: on
@@ -10380,6 +10393,11 @@ export async function typeViaCalibrationMap(
   // inheriting the symbols screen and typing into the wrong key positions.
   if (layer !== "letters") await switchLayer("letters");
   _calKeyboardLayer.set(serial, layer);
+  onLog?.(
+    `[cal-keyboard] typing-session end serial=${serial} display=${display.w}x${display.h} ` +
+    `ime=${activeIme || "unknown"} finalLayer=${layer} ok=${missing.length === 0} ` +
+    `missing=${missing.join(",") || "none"}`,
+  );
   return { ok: missing.length === 0, missing };
 }
 

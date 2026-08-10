@@ -1,3 +1,18 @@
+## [1.2.464] — 2026-08-10
+
+### Added — Shared calibrated typing diagnostics
+
+- Added session start/end records to the installer debug log for all calibrated
+  typing flows.
+- Logs the device serial, current display dimensions, active input method,
+  keyboard layer, requested text length, and final success/missing-key result.
+- Logs each planned calibrated key tap with its intended key description,
+  saved coordinate, active layer, and display dimensions.
+- Covers Follow Users, Bio Update, captions, manual calibrated typing, and other
+  features using the shared calibration engine.
+- Typing behavior itself is unchanged; the diagnostics expose stale
+  calibration, wrong display scaling, and keyboard-layer drift.
+
 ## [1.2.463] — 2026-08-10
 
 ### Release — Windows installer delivery
