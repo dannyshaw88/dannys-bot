@@ -1,3 +1,13 @@
+## [1.2.455] — 2026-08-10
+
+### Changed — Windows installer delivery
+
+- Retained the existing canonical `.github/workflows/build-windows-installer.yml`
+  workflow as the single Windows installer pipeline.
+- Confirmed that pushes to `main` build the web bundles, package the Windows
+  installer, and upload it to GitHub Actions artifacts.
+- No duplicate or replacement GitHub Actions workflow was created.
+
 ## [1.2.454] — 2026-08-10
 
 ### Fixed — Calibrated keyboard duplicate characters
