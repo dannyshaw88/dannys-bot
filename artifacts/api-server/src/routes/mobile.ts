@@ -3861,7 +3861,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       skim:      1 + Math.floor(Math.random() * 5),  // 1–5 (Super skim)
       normal:    10 + Math.floor(Math.random() * 16), // 10–25 (Fast label)
       interested: 40 + Math.floor(Math.random() * 36), // 40–75 (Normal label)
-      back:       Math.floor(Math.random() * 11),      // 0–10
+      back:       Math.floor(Math.random() * 6),       // 0–5
     };
     onLog?.(`Feed scroll personality — super skim:${feedScrollWeights.skim} fast:${feedScrollWeights.normal} normal:${feedScrollWeights.interested} back:${feedScrollWeights.back}`);
     const feedPersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
@@ -5795,7 +5795,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       skim:      1 + Math.floor(Math.random() * 5),  // 1–5 (Super skim)
       normal:    10 + Math.floor(Math.random() * 16), // 10–25 (Fast label)
       interested: 40 + Math.floor(Math.random() * 36), // 40–75 (Normal label)
-      back:       Math.floor(Math.random() * 11),      // 0–10
+      back:       Math.floor(Math.random() * 6),       // 0–5
     };
     onLog?.(`Explore scroll personality — super skim:${exploreScrollWeights.skim} fast:${exploreScrollWeights.normal} normal:${exploreScrollWeights.interested} back:${exploreScrollWeights.back}`);
     const explorePersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
@@ -6397,7 +6397,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       skim:      1 + Math.floor(Math.random() * 5),  // 1–5 (Super skim)
       normal:    10 + Math.floor(Math.random() * 16), // 10–25 (Fast label)
       interested: 40 + Math.floor(Math.random() * 36), // 40–75 (Normal label)
-      back:       Math.floor(Math.random() * 11),      // 0–10
+      back:       Math.floor(Math.random() * 6),       // 0–5
     };
     onLog?.(`Reels scroll personality — super skim:${reelsScrollWeights.skim} fast:${reelsScrollWeights.normal} normal:${reelsScrollWeights.interested} back:${reelsScrollWeights.back}`);
     const reelsPersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
