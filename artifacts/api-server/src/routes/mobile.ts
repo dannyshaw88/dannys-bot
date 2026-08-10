@@ -5027,6 +5027,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       Math.random() * Math.abs(commentPercentMax - commentPercentMin)) / 100;
     const clickAuthorChance = (Math.min(clickAuthorPercentMin, clickAuthorPercentMax) +
       Math.random() * Math.abs(clickAuthorPercentMax - clickAuthorPercentMin)) / 100;
+    const commentsConfigured = Number(commentPercentMin) > 0 && Number(commentPercentMax) > 0;
+    onLog?.(
+      `Story actions configured: like=${likePercentMin}-${likePercentMax}% ` +
+      `share=${shareDmPercentMin}-${shareDmPercentMax}% ` +
+      `comment=${commentPercentMin}-${commentPercentMax}% ` +
+      `commentGate=${commentsConfigured ? "enabled" : "disabled"}`,
+    );
 
     // Returns true only while the story viewer is genuinely still on screen.
     // Root-cause fix (Jul 2026): every prior fix in this loop assumed that
@@ -5142,7 +5149,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Like, share, and/or comment on this story?
       const willLike        = likeChance        > 0 && Math.random() < likeChance;
       const willShare       = shareChance       > 0 && Math.random() < shareChance;
-      const willComment     = commentChance     > 0 && Math.random() < commentChance;
+      const willComment     = commentsConfigured && commentChance > 0 && Math.random() < commentChance;
+      onLog?.(
+        `View Stories ${s + 1}: action roll like=${willLike ? "yes" : "no"} ` +
+        `share=${willShare ? "yes" : "no"} comment=${willComment ? "yes" : "no"} ` +
+        `commentGate=${commentsConfigured ? "enabled" : "disabled"}`,
+      );
       const willClickAuthor = clickAuthorChance > 0 && Math.random() < clickAuthorChance;
       storyTimingAfterChecks = Date.now();
 
@@ -5396,7 +5408,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       //                       cell from the live IME accessibility tree
       //   TAP-SEND-PAPER-AIRPLANE → emoji in field, send button visible:
       //                       id="row_thread_composer_send_button_background" desc="Send"
-      if (willComment && (await stillInStoryViewer(/* fastOnly= */ true))) {
+      if (commentsConfigured && willComment && (await stillInStoryViewer(/* fastOnly= */ true))) {
         try {
           const _cXml = await android.dumpUi(serial).catch(() => "");
           const _hasComposerContainer =
