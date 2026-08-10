@@ -7645,9 +7645,10 @@ export async function switchToInstagramAccount(
   onLog?.(`  ✓ Found @${clean} in switcher — switching…`);
   _adbTap(adbPath, serial, coords.x, coords.y);
 
-  // 6. Verify the resulting surface for diagnostics only. Never use Android
-  // Back as a generic sheet dismissal: on this Instagram build it can exit
-  // Instagram when the row tap did not close the sheet.
+  // 6. Verify the resulting surface. A different account closes the sheet and
+  // logs in naturally, so no Back is needed. When the tapped row is the
+  // already-active account, Instagram can leave the account sheet open; in
+  // that one case, dismiss it with exactly one Android Back. Never retry Back.
   await _sleep(1500);
   const postTapXml = await _uiDump(adbPath, serial).catch(() => "");
   if (postTapXml) {
@@ -7655,8 +7656,27 @@ export async function switchToInstagramAccount(
       /content-desc="Home[^"]*"/.test(postTapXml) ||
       !!_findByResId(postTapXml, ":id/feed_tab", ":id/home_tab");
     if (!homeFeedVisible) {
-      onLog?.(`  ⚠ Account sheet still present after @${clean} tap — not pressing Android Back`);
-      return false;
+      const escapedClean = clean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const selectedTargetRow = new RegExp(
+        `<node\\b(?=[^>]*(?:text|content-desc)="@?${escapedClean}"[^>]*)(?=[^>]*(?:selected|checked|activated)="true")[^>]*>`,
+        "i",
+      ).test(postTapXml);
+      if (!selectedTargetRow) {
+        onLog?.(`  ⚠ @${clean} tap did not expose a selected account row or Home surface — aborting without Android Back`);
+        return false;
+      }
+      onLog?.(`  ↳ @${clean} was already active and its selected row remains open — pressing Android Back once`);
+      await pressBack(serial).catch(() => {});
+      await _sleep(700);
+      const afterBackXml = await _uiDump(adbPath, serial).catch(() => "");
+      const stillNotHome =
+        !!afterBackXml &&
+        !/content-desc="Home[^"]*"/.test(afterBackXml) &&
+        !_findByResId(afterBackXml, ":id/feed_tab", ":id/home_tab");
+      if (stillNotHome) {
+        onLog?.(`  ⚠ Account sheet did not verify closed after the single Back; no second Back will be sent`);
+        return false;
+      }
     }
   }
 

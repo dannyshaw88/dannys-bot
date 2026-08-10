@@ -1,3 +1,16 @@
+## [1.2.460] — 2026-08-10
+
+### Fixed — Account switch sheet dismissal
+
+- A different account now relies on Instagram to close the account sheet and
+  complete login naturally, with no Android Back action.
+- Android Back is allowed only once when the tapped target row is positively
+  marked selected and the sheet remains open, indicating the already-active
+  account case.
+- If the post-tap UI does not positively identify either Home or a selected
+  target row, switching aborts without pressing Back.
+- A second Back is never attempted.
+
 ## [1.2.459] — 2026-08-10
 
 ### Fixed — Instagram account switching safety
