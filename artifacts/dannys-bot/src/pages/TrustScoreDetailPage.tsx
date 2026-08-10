@@ -441,24 +441,26 @@ function TrustScoreAutomationEditor({
           </button>
         </div>
         <div className="absolute right-[2px] top-1/2 z-10 -translate-y-1/2 flex items-center gap-3">
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-1.5 text-xs h-7 px-2.5"
-            onClick={() => setShowCopyDialog(true)}
-          >
-            <Copy className="w-3 h-3" /> Copy Settings
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => previousLevel && setLocation(`/trust-scores/${previousLevel.id}`)}
-            disabled={!previousLevel}
-            className="gap-1 h-7 px-2"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-            SCORE
-          </Button>
+          <div className="flex items-center gap-3 translate-x-[5px]">
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 text-xs h-7 px-2.5"
+              onClick={() => setShowCopyDialog(true)}
+            >
+              <Copy className="w-3 h-3" /> Copy Settings
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => previousLevel && setLocation(`/trust-scores/${previousLevel.id}`)}
+              disabled={!previousLevel}
+              className="gap-1 h-7 px-2"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              SCORE
+            </Button>
+          </div>
           <Button
             variant="outline"
             size="sm"
