@@ -1,3 +1,17 @@
+## [1.2.471] — 2026-08-11
+
+### Added — Saves statistics and Dashboard ribbon
+
+- Added a persisted Saves metric to the Statistics page with daily and
+  lifetime totals.
+- Aggregated saves from Feed, Explore, Reels, and Random Actions into the same
+  account-level Saves total.
+- Added Saves to the mobile statistics breakdown and chart data.
+- Changed the Dashboard active tab indicator to an Instagram-style black
+  ribbon, replacing the previous blue/cyan accent treatment.
+- Confirmed the canonical Windows installer workflow remains the only active
+  installer workflow.
+
 ## [1.2.470] — 2026-08-11
 
 ### Improved — Human-error typing diagnostics
