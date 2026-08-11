@@ -27,7 +27,7 @@ const ACTIVITY_METRICS: ActivityMetric[] = [
   { pattern: /^\d+\s+DMs$/i, icon: Mail, color: "text-violet-500" },
   { pattern: /^\d+\s+posts?\s+uploaded$/i, icon: ImagePlus, color: "text-fuchsia-500" },
   { pattern: /^\d+\s+feed\s+shares$/i, icon: Zap, color: "text-amber-500" },
-  { pattern: /^\d+\s+saved$/i, icon: Ribbon, color: "text-cyan-500" },
+  { pattern: /^\d+\s+saved$/i, icon: Ribbon, color: "text-black", filled: true },
   { pattern: /^\d+\s+stories?\s+watched$/i, icon: BookOpen, color: "text-indigo-500" },
   { pattern: /^\d+\s+reels?\s+watched$/i, icon: Clapperboard, color: "text-sky-500" },
   { pattern: /^\d+\s+posts?\s+scrolled$/i, icon: BarChart2, color: "text-teal-500" },
@@ -58,7 +58,7 @@ export function ActivityDetailOverview({
   if (!normalized) return null;
 
   const parts = normalized
-    .split(/,\s*/)
+    .split(/,\s*|\s+—\s+|--+/)
     .map(part => part.trim())
     .filter(Boolean);
   return (
