@@ -2796,6 +2796,22 @@ export async function swipe(
   durationMs: number = 300,
   applyLegacyJitter = true,
 ): Promise<void> {
+  // Keep every automation gesture inside the app-safe region.  This is
+  // centralized here because Feed, Reels, Explore, Stories, and device-profile
+  // swipes all eventually use this helper.  A swipe that starts or ends in the
+  // Android edge zones can invoke launcher/Recents/floating-window navigation
+  // instead of staying inside Instagram.
+  const { w: screenW, h: screenH } = getScreenSize(serial);
+  const safeX = Math.max(1, Math.round(screenW * 0.04));
+  const safeTop = Math.max(1, Math.round(screenH * 0.07));
+  const safeBottom = Math.min(screenH - 1, Math.round(screenH * 0.92));
+  const clampX = (value: number) => Math.min(screenW - safeX, Math.max(safeX, Math.round(value)));
+  const clampY = (value: number) => Math.min(safeBottom, Math.max(safeTop, Math.round(value)));
+  const boundedX1 = clampX(x1);
+  const boundedY1 = clampY(y1);
+  const boundedX2 = clampX(x2);
+  const boundedY2 = clampY(y2);
+
   // ── Coordinate jitter ────────────────────────────────────────────────────
   // Vertical feed-scrolls always use the same centre X, so every swipe lands
   // on the exact same pixel — on a soft keyboard this types the same letter
@@ -2808,14 +2824,14 @@ export async function swipe(
   //      endpoints so the line stays perfectly straight, just shifted ±0.5–1 %.
   //   3. All other swipes: no jitter — targets are precise (card dismissals,
   //      user-defined mirror gestures, etc.).
-  let jx1 = x1, jy1 = y1, jx2 = x2, jy2 = y2;
-  const isLongPress = (x1 === x2 && y1 === y2);
-  const isVertical  = (x1 === x2 && y1 !== y2);
+  let jx1 = boundedX1, jy1 = boundedY1, jx2 = boundedX2, jy2 = boundedY2;
+  const isLongPress = (boundedX1 === boundedX2 && boundedY1 === boundedY2);
+  const isVertical  = (boundedX1 === boundedX2 && boundedY1 !== boundedY2);
   if (applyLegacyJitter && !isLongPress && isVertical) {
     const pct = (Math.random() * 0.005 + 0.005) * (Math.random() < 0.5 ? 1 : -1);
-    const xOff = Math.round(x1 * pct);
-    jx1 = Math.max(0, x1 + xOff);
-    jx2 = Math.max(0, x2 + xOff);
+    const xOff = Math.round(boundedX1 * pct);
+    jx1 = clampX(boundedX1 + xOff);
+    jx2 = clampX(boundedX2 + xOff);
   }
 
   await runInputShell(
