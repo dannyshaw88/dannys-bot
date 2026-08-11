@@ -12167,6 +12167,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (saves) parts.push(`${saves} saved`);
         if (postsUploaded) parts.push(`${postsUploaded} post${postsUploaded === 1 ? "" : "s"} uploaded`);
         if (feedScrolled) parts.push(`${feedScrolled} posts scrolled`);
+         if (exploreScrolled) parts.push(`${exploreScrolled} Explore scroll${exploreScrolled === 1 ? "" : "s"}`);
         if (hasCycleStatistics) storage.createSessionAction({
           profileId: mobileProfileId ?? 0,
           toolId: 0,
@@ -12227,6 +12228,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (saves) parts.push(`${saves} saved`);
         if (postsUploaded) parts.push(`${postsUploaded} post${postsUploaded === 1 ? "" : "s"} uploaded`);
         if (feedScrolled) parts.push(`${feedScrolled} posts scrolled`);
+         if (exploreScrolled) parts.push(`${exploreScrolled} Explore scroll${exploreScrolled === 1 ? "" : "s"}`);
         const statsSuffix = parts.length ? ` — ${parts.join(", ")}` : "";
         storage.createSessionAction({
           profileId: _mobileProfileId ?? 0,
