@@ -10196,8 +10196,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         await sleepOrAbort(serial, 500);
 
         // Tap the matched user in results
-        const found = await android.findAndTapUserInSearch(serial, username, onLog).catch(() => false);
-        if (!found) {
+        const searchResult = await android.findAndTapUserInSearch(serial, username, onLog).catch(() => ({ found: false }));
+        if (!searchResult.found) {
           onLog?.(`Follow: @${username} not found in results — skipping`);
           // Stay on the Search/Explore surface for the next candidate. A failed
           // result lookup has not opened a profile, so pressing Back here can
@@ -10208,7 +10208,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           continue;
         }
 
-        await sleepOrAbort(serial, 1500);
+        let profileXml = searchResult.profileXml ?? "";
+        // The post-tap verifier already dumped a confirmed profile tree. Reuse
+        // it when it contains the profile header; only wait/dump again when
+        // the verifier's tree is too sparse for the configured live filters.
+        const profileEvidencePresent =
+          profileXml.includes(":id/follow_button") ||
+          profileXml.includes(":id/follow_btn") ||
+          profileXml.includes(":id/inline_follow_button") ||
+          /(?:text|content-desc)="(?:Follow|Following|Requested)"/.test(profileXml);
+        if (!profileEvidencePresent) {
+          await sleepOrAbort(serial, 1500);
+          profileXml = await android.dumpUi(serial).catch(() => "");
+        }
 
         // ── Profile-quality filter gate ────────────────────────────────────
         // ONE shared XML dump covers ALL active profile-quality filters:
@@ -10217,8 +10229,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // (badge + follower count) before the dump fires.
         if (filters && (filters.skipVerified || filters.skipPrivate || filters.maxFollowers !== undefined || filters.minFollowers !== undefined || filters.requireEnglish || filters.malesOnly)) {
           try {
-            await sleepOrAbort(serial, 1000);
-            const profileXml = await android.dumpUi(serial).catch(() => "");
+            if (!profileXml || !profileXml.includes("</hierarchy>")) {
+              await sleepOrAbort(serial, 1000);
+              profileXml = await android.dumpUi(serial).catch(() => "");
+            }
 
             // ── Verified badge ──────────────────────────────────────────────
             if (filters.skipVerified) {

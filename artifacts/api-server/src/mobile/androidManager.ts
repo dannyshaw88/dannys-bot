@@ -10606,7 +10606,7 @@ export async function findAndTapUserInSearch(
   serial: string,
   username: string,
   onLog?: (msg: string) => void,
-): Promise<boolean> {
+): Promise<{ found: boolean; profileXml?: string }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const clean = username.replace(/^@/, "");
@@ -10760,7 +10760,7 @@ export async function findAndTapUserInSearch(
           verifyXml.includes(":id/follow_btn") ||
           verifyXml.includes(":id/inline_follow_button")
         );
-        if (onProfile) return true; // landed on a profile page — caller handles Follow tap
+        if (onProfile) return { found: true, profileXml: verifyXml }; // caller handles Follow tap and may reuse the verified dump
         // Not on a profile page — likely hit a chip; dismiss / back and try next row
         if (ci < finalCandidates.length - 1) {
           onLog?.(`Follow: row ${ci + 1} did not open a profile (chip?) — trying next row`);
@@ -10772,14 +10772,14 @@ export async function findAndTapUserInSearch(
       // the caller would otherwise continue into the profile/follow phase
       // while still on the search results screen.
       onLog?.(`Follow: no result row opened a confirmed profile for @${clean}`);
-      return false;
+       return { found: false };
     }
   }
 
   // No exact username was exposed after polling. Never guess by row order,
   // generic containers, or DPAD: those can open a different account.
   onLog?.(`Follow: @${clean} exact username was not found after waiting — aborting target`);
-  return false;
+  return { found: false };
 
   // ── Last-resort fallback (unreachable; retained below only as historical
   // documentation of the old unsafe behavior) ─────────────────────────────
