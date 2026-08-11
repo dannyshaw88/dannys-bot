@@ -6708,28 +6708,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         onLog?.(`Reel ${i + 1}/${totalReels}: scanning right-side action column…`);
         const icons = await android.findReelActionIcons(serial, (msg) => onLog?.(`  ${msg}`)).catch(() => null);
 
-        // ── Like — decoupled from icon scan ────────────────────────────────
-        // 93 % of likes use double-tap on the video area and need NO icon
-        // coordinate from findReelActionIcons.  Do not gate them on icons
-        // being non-null: on builds where the Reels action column lacks
-        // content-desc labels (e.g. Redmi 12 5G), findReelActionIcons returns
-        // null, and the old `if (!icons)` block was silently skipping every
-        // double-tap like even though they require no a11y information at all.
+        // ── Like — require validated live action-node evidence ─────────────
+        // Never guess a video coordinate when the action-column scan found no
+        // Like/Unlike node. A double-tap fallback is unsafe here: the current
+        // screen may be a profile, suggested-user card, ad, or another
+        // non-player surface, and a guessed tap can navigate away from Reels.
         if (wantLike) {
-          if (icons?.alreadyLiked) {
+          if (!icons) {
+            onLog?.(`Reel ${i + 1}/${totalReels}: Like/Unlike node not found — skipping like safely`);
+          } else if (icons.alreadyLiked) {
             onLog?.(`Reel ${i + 1}/${totalReels}: already liked — skipping like`);
           } else {
-            const useDoubleTap = !icons || Math.random() < 0.93; // force dt when icons unavailable
-            if (useDoubleTap) {
-              const { w: _rW, h: _rH } = getScreenSize(serial);
-              const dtX = Math.round(_rW * 0.38) + Math.round((Math.random() - 0.5) * 20);
-              const dtY = Math.round(_rH * 0.45) + Math.round((Math.random() - 0.5) * 40);
-              onLog?.(`Reel ${i + 1}/${totalReels}: double-tapping video at (${dtX},${dtY})…`);
-              await android.doubleTap(serial, dtX, dtY);
-            } else {
-              onLog?.(`Reel ${i + 1}/${totalReels}: tapping heart icon at (${icons!.like.x},${icons!.like.y})…`);
-              await android.tap(serial, icons!.like.x, icons!.like.y);
+            if (!icons.like) {
+              onLog?.(`Reel ${i + 1}/${totalReels}: Like node not found — skipping like safely`);
+              continue;
             }
+            onLog?.(`Reel ${i + 1}/${totalReels}: tapping validated Like node at (${icons.like.x},${icons.like.y})…`);
+            await android.tap(serial, icons.like.x, icons.like.y);
             likes++;
             onLog?.(`Reel ${i + 1}/${totalReels}: ✓ liked`);
             await sleepOrAbort(serial, 250);
