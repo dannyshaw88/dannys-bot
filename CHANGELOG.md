@@ -1,3 +1,20 @@
+## [1.2.469] — 2026-08-11
+
+### Fixed — Follow Users multi-candidate search flow
+
+- Prevented failed search-result cleanup from pressing Back after a username
+  was not found.
+- The Follow tool now stays on Instagram's Search/Explore surface when moving
+  from one candidate to the next.
+- After a failed result lookup, the existing search field is cleared without
+  navigating away from Search.
+- Filter-rejected profiles continue to use the single Back needed to leave the
+  profile, then return directly to the cleared search bar for the next target.
+- Removed the extra navigation path that could return to the feed and cause a
+  later username tap to land on the wrong visible profile node.
+- Confirmed the canonical Windows installer workflow remains the only active
+  installer workflow; no duplicate Actions workflow was created.
+
 ## [1.2.468] — 2026-08-10
 
 ### Added — Follow Users target management

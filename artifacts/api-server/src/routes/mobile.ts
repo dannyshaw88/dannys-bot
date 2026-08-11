@@ -10186,17 +10186,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const found = await android.findAndTapUserInSearch(serial, username, onLog).catch(() => false);
         if (!found) {
           onLog?.(`Follow: @${username} not found in results — skipping`);
-          // Do not leave a failed target in Instagram's search field. Clear it
-          // before moving on so the next target starts from a clean query even
-          // when the normal back navigation does not dismiss the search UI.
+          // Stay on the Search/Explore surface for the next candidate. A failed
+          // result lookup has not opened a profile, so pressing Back here can
+          // leave Explore and return to the feed; the next loop iteration will
+          // find, focus, and clear the live search bar directly.
           await android.clearInstagramSearchBar(serial, (msg) => onLog?.(`  ${msg}`)).catch(() => {});
-          const stillSearchFocused = await android.isInstagramSearchBarFocused(serial).catch(() => false);
-          if (stillSearchFocused) {
-            await android.pressBack(serial);
-            await sleepOrAbort(serial, 500);
-          } else {
-            onLog?.("Follow: search field no longer focused — skipping Back to protect Instagram context");
-          }
+          onLog?.("Follow: failed result cleaned without Back — staying in Search for next candidate");
           continue;
         }
 
