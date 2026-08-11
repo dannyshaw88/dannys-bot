@@ -4077,8 +4077,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     // Keep the gesture inside the node-confirmed media
                     // rectangle. A small central band avoids captions/CTA
                     // overlays while retaining natural variation.
-                    const xFraction = 0.40 + Math.random() * 0.20;
-                    const yFraction = 0.25 + Math.random() * 0.20;
+                     const xFraction = 0.45 + Math.random() * 0.10;
+                     const yFraction = 0.35 + Math.random() * 0.10;
                     const dtX = Math.round(mb.x1 + mediaW * xFraction);
                     let dtY: number;
                     dtY = Math.round(mb.y1 + mediaH * yFraction);

@@ -3910,7 +3910,12 @@ export async function findFeedActionIcons(
         const mediaLike = /media|photo|image|carousel|video/i.test(`${rid} ${cls} ${desc} ${text}`);
         const imageClass = /ImageView|TextureView|SurfaceView|VideoView/i.test(cls);
         if (!mediaLike && !imageClass) continue;
-        if (width < w * 0.60 || height < screenH * 0.18) continue;
+        // An author/header/profile container can be large and "media-like" in
+        // the accessibility tree, but it is short and not the post canvas.
+        // Require a near-full-width, genuinely tall rectangle so this fallback
+        // cannot return the author row as media.
+        if (width < w * 0.80 || height < screenH * 0.30) continue;
+        if (height < width * 0.55) continue;
         if (b.y1 < screenH * 0.06 || b.y2 >= like.y) continue;
         candidates.push({ bounds: b, area: width * height });
       }
