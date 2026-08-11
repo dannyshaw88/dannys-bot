@@ -7847,9 +7847,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // control only after the picker has settled.
     await sleepOrAbort(serial, 700);
     onLog?.("Make a Post: re-scanning settled picker for live \"Next\" button…");
-    const nextBtn1 = await android.findButtonByLabel(serial, "Next").catch(() => null);
+    let nextBtn1: { x: number; y: number } | null = null;
+    for (let nextScan = 0; nextScan < 4 && !nextBtn1; nextScan++) {
+      nextBtn1 = await android.findPostNextButton(serial).catch(() => null);
+      if (!nextBtn1 && nextScan < 3) await sleepOrAbort(serial, 500);
+    }
     if (!nextBtn1) {
-      onLog?.("Make a Post: live \"Next\" accessibility node not found after picker settled — aborting without coordinate fallback");
+      onLog?.("Make a Post: live \"Next\" accessibility node not found after retries — aborting");
       await android.pressBack(serial);
       await android.removeDeviceFile(serial, devicePath).catch(() => {});
       return { posted: false };

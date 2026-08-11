@@ -5301,6 +5301,50 @@ export async function findButtonByLabel(serial: string, label: string): Promise<
 }
 
 /**
+ * Locate the post-picker Next control from the live UIAutomator tree.
+ * Instagram has builds where the top-bar control is rendered without text or
+ * content-desc, so this deliberately uses the node's current bounds and
+ * clickability rather than a fixed screen coordinate.
+ */
+export async function findPostNextButton(serial: string): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+
+  const labelled = _findElem(xml, "Next", "Continue");
+  if (labelled) return labelled;
+
+  const byResource = _findByResId(xml, ":id/next_button", ":id/next");
+  if (byResource) return byResource;
+
+  const { w, h } = getScreenSize(serial);
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/gi;
+  const candidates: { x: number; y: number; area: number }[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = nodeRe.exec(xml)) !== null) {
+    const attrs = match[1];
+    if (!/clickable="true"/i.test(attrs)) continue;
+    const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+    if (!bounds) continue;
+    const x1 = Number(bounds[1]), y1 = Number(bounds[2]);
+    const x2 = Number(bounds[3]), y2 = Number(bounds[4]);
+    const bw = x2 - x1, bh = y2 - y1;
+    if (bw <= 0 || bh <= 0) continue;
+    const centerX = (x1 + x2) / 2, centerY = (y1 + y2) / 2;
+    if (centerY > h * 0.14 || centerX < w * 0.72) continue;
+    if (bw > w * 0.28 || bh > h * 0.10) continue;
+    const text = (attrs.match(/\btext="([^"]*)"/i)?.[1] ?? "").toLowerCase();
+    const desc = (attrs.match(/content-desc="([^"]*)"/i)?.[1] ?? "").toLowerCase();
+    const rid = (attrs.match(/resource-id="([^"]*)"/i)?.[1] ?? "").toLowerCase();
+    if (/close|cancel|back|dismiss|x\b/.test(`${text} ${desc} ${rid}`)) continue;
+    candidates.push({ x: Math.floor(centerX), y: Math.floor(centerY), area: bw * bh });
+  }
+  candidates.sort((a, b) => a.area - b.area);
+  return candidates[0] ? { x: candidates[0].x, y: candidates[0].y } : null;
+}
+
+/**
  * Locate Instagram's location-picker search field. This is deliberately
  * resource-id based: the field's visible hint/text varies by build, while
  * row_search_edit_text is present in the live location-picker dump.
