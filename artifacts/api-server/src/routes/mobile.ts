@@ -10156,13 +10156,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       try {
         onLog?.(`Follow: → @${username} (candidate ${_fi}/${targets.length})`);
 
-        // Tap the search bar — give the keyboard a short settle window, then
-        // rely on the live focus check below instead of sleeping 1–5 seconds
-        // on every candidate.  The focus check remains the fail-closed gate.
+        // Tap the search bar — wait longer so the Explore page settles and the
+        // field has time to focus before the keyboard opens.  A 600 ms wait was
+        // too short: on slower devices the bar tap could land below the field
+        // (causing a scroll/pull-to-refresh) or the keyboard didn't animate up
+        // before typeViaOnscreenKeyboard started.
         const searchBar = await android.findInstagramSearchBar(serial, onLog).catch(() => null);
         if (!searchBar) { onLog?.("Follow: search bar accessibility node not found — stopping"); break; }
         await android.tap(serial, searchBar.x, searchBar.y);
-        await sleepOrAbort(serial, 700 + Math.floor(Math.random() * 700));
+        await sleepOrAbort(serial, 1000 + Math.floor(Math.random() * 4000));
         const searchFocused = await android.isInstagramSearchBarFocused(serial).catch(() => false);
         if (!searchFocused) {
           onLog?.("Follow: search bar tap was not confirmed focused — stopping without pressing Back");
@@ -10206,7 +10208,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           continue;
         }
 
-        await sleepOrAbort(serial, 900);
+        await sleepOrAbort(serial, 1500);
 
         // ── Profile-quality filter gate ────────────────────────────────────
         // ONE shared XML dump covers ALL active profile-quality filters:
@@ -10215,7 +10217,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // (badge + follower count) before the dump fires.
         if (filters && (filters.skipVerified || filters.skipPrivate || filters.maxFollowers !== undefined || filters.minFollowers !== undefined || filters.requireEnglish || filters.malesOnly)) {
           try {
-            await sleepOrAbort(serial, 500);
+            await sleepOrAbort(serial, 1000);
             const profileXml = await android.dumpUi(serial).catch(() => "");
 
             // ── Verified badge ──────────────────────────────────────────────
