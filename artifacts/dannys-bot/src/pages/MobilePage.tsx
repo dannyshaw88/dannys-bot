@@ -6242,10 +6242,10 @@ export function AutomationSettingsPanel({
 
         {/* ── Surplus panel (toggled via the Surplus button above) ────── */}
         <div className={showSurplus
-          ? "absolute inset-x-0 bottom-0 top-[2.75rem] z-30 overflow-y-auto rounded-lg border border-border bg-background p-3 shadow-xl"
+          ? "absolute inset-x-0 bottom-0 top-[2.75rem] z-30 flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-background p-3 shadow-xl"
           : "hidden"}>
           {showSurplus && (
-            <div className="border border-border rounded-lg overflow-hidden">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border">
               <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
                 <input ref={importFollowUsersFileRef} type="file" accept=".txt,.csv,.tsv" className="hidden" onChange={handleImportFollowUsers} />
                 <button type="button" className="text-xs text-muted-foreground hover:text-foreground hover:underline" onClick={() => importFollowUsersFileRef.current?.click()}>
@@ -6273,7 +6273,7 @@ export function AutomationSettingsPanel({
               ) : mobileOverspillList.length === 0 ? (
                 <p className="text-xs text-muted-foreground p-3">No surplus candidates yet — leftover HikerAPI candidates will appear here after the first Follow cycle.</p>
               ) : (
-                <div className="max-h-40 overflow-y-auto">
+                <div className="min-h-0 flex-1 overflow-y-auto">
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 bg-muted">
                       <tr>
@@ -6300,16 +6300,16 @@ export function AutomationSettingsPanel({
 
         {/* ── Followed Users panel (toggled via the Followed button above) */}
         <div className={showFollowedUsers
-          ? "absolute inset-x-0 bottom-0 top-[2.75rem] z-30 overflow-y-auto rounded-lg border border-border bg-background p-3 shadow-xl"
+          ? "absolute inset-x-0 bottom-0 top-[2.75rem] z-30 flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-background p-3 shadow-xl"
           : "hidden"}>
           {showFollowedUsers && (
-            <div className="border border-border rounded-lg overflow-hidden">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border">
               {loadingFollowed ? (
                 <p className="text-xs text-muted-foreground p-3">Loading…</p>
               ) : mobileFollowedList.length === 0 ? (
                 <p className="text-xs text-muted-foreground p-3">No users followed in this server session yet.</p>
               ) : (
-                <div className="max-h-40 overflow-y-auto">
+                <div className="min-h-0 flex-1 overflow-y-auto">
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 bg-muted">
                       <tr>
