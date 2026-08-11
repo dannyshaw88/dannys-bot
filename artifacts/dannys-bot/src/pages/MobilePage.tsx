@@ -10019,7 +10019,8 @@ const MOBILE_TABS_LEFT: { id: MobileTab; label: string; icon: React.ComponentTyp
   { id: "account",      label: "Accounts",  icon: Users       },
   { id: "phonesettings",label: "My Device", icon: MonitorSmartphone },
   { id: "metrics",      label: "Metrics",   icon: BarChart2   },
-  { id: "browser",      label: "Browser",   icon: Globe       },
+  // Browser remains implemented and wired below, but is intentionally hidden
+  // from the Device tab navigation until it is needed again.
 ];
 // Right-side tabs — pushed to the far right with ml-auto on the first one.
 const MOBILE_TABS_RIGHT: { id: MobileTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [

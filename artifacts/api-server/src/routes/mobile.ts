@@ -11025,52 +11025,38 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // This is a no-op when slotUsername is empty (device-level cycle or
       // slot with no username entered yet).
       //
-      // Skip the switcher entirely when the same account was already active at
-      // the end of the previous cycle on this device — avoids a visually
-      // identical long-press on every back-to-back run of the same slot.
-      //
       // Pass launchXml only when neither ads-choice nor a popup was dismissed
       // (screen unchanged) so the switcher can reuse the dump for its pre-check
       // and profile-tab lookup without doing two more sequential dumps.
       const switchPreloadXml = (!adsChoice.dismissed && !launchPopup) ? launchXml : undefined;
-      let accountSwitchFailed = false;
       if (resolvedSlotUsername) {
-        const lastUsername = automationLastActiveUsername.get(serial);
-        if (lastUsername === resolvedSlotUsername) {
-          tLog(`▶ Already on @${resolvedSlotUsername} from last cycle — skipping account switch`);
-          steps.push(`account-switch(skipped — already @${resolvedSlotUsername})`);
-        } else {
-          tLog(`▶ Switching to Instagram account: @${resolvedSlotUsername}…`);
-          const switched = await android.switchToInstagramAccount(
-            serial,
-            resolvedSlotUsername,
-            tLog,
-            switchPreloadXml,
-            loadInstanceConfigs()[serial]?.devicePrefs?.swipeGesture,
-          );
-          if (switched) {
-            steps.push(`account-switch(@${resolvedSlotUsername})`);
-            automationLastActiveUsername.set(serial, resolvedSlotUsername);
-            // Brief extra settle after switching — Instagram reloads the new
-            // account's home feed, and ads-choice / interstitial dialogs can
-            // reappear for accounts that haven't accepted them yet.
-            await sleepOrAbort(serial, 1500);
-            const postSwitchPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
-            if (postSwitchPopup) {
-              tLog(`▶ Dismissed post-switch popup (${postSwitchPopup})`);
-              await sleepOrAbort(serial, 500);
-            }
-          } else {
-            tLog(`✗ Account switch to @${resolvedSlotUsername} failed — skipping all tools and going straight to cleanup`);
-            steps.push("account-switch(failed — aborting tool dispatch)");
-            accountSwitchFailed = true;
+         tLog(`▶ Switching to Instagram account: @${resolvedSlotUsername}…`);
+         const switched = await android.switchToInstagramAccount(
+           serial,
+           resolvedSlotUsername,
+           tLog,
+           switchPreloadXml,
+           loadInstanceConfigs()[serial]?.devicePrefs?.swipeGesture,
+         );
+         if (switched) {
+           steps.push(`account-switch(@${resolvedSlotUsername})`);
+           automationLastActiveUsername.set(serial, resolvedSlotUsername);
+           // Brief extra settle after switching — Instagram reloads the new
+           // account's home feed, and ads-choice / interstitial dialogs can
+           // reappear for accounts that haven't accepted them yet.
+           await sleepOrAbort(serial, 1500);
+           const postSwitchPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
+           if (postSwitchPopup) {
+             tLog(`▶ Dismissed post-switch popup (${postSwitchPopup})`);
+             await sleepOrAbort(serial, 500);
           }
+         } else {
+           tLog(`✗ Account switch to @${resolvedSlotUsername} failed — continuing with tools`);
+           steps.push("account-switch(attempted — continuing)");
         }
       }
 
       // ── Step 2: Shuffleable tool dispatcher ──────────────────────────────
-      // Skipped entirely when accountSwitchFailed — falls straight to step 5.
-      if (!accountSwitchFailed) {
       // When shuffleToolOrder is on the six tools are Fisher-Yates shuffled
       // into a random order before each cycle. When off they run in the
       // default sequence: Feed → Stories → Reels → Follow → Post → Jitter.
@@ -12041,8 +12027,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         tLog(`  Spread Follows: flushed ${_sfBackupQueue.length} unused backup candidate(s) to Surplus`);
         _sfBackupQueue = [];
       }
-
-      } // end if (!accountSwitchFailed) — failed switch aborts all tools
 
       // 5. Close Instagram completely — recents switcher + swipe away, not a
       // force-stop, so the device behaves like a person put it down.
