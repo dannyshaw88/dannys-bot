@@ -21,7 +21,7 @@ import {
   User, Heart, MessageCircle, Eye, UserPlus, UserMinus, Mail, Activity,
   Settings2, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Fingerprint, ImagePlus,
   BarChart2, Zap, Repeat2, ShieldAlert, PhoneOff, Lock, Flag, Shield,
-  Smartphone, Clapperboard, BookOpen,
+  Smartphone, Clapperboard, BookOpen, Bookmark,
 } from "lucide-react";
 import { type Profile, type Tool } from "@shared/schema";
 import { queryClient } from "@/lib/queryClient";
@@ -160,6 +160,7 @@ const FARM_STAT_LABELS: { key: string; label: string; icon: React.ReactNode; col
   { key: "dms",             label: "DMs",            icon: <Mail className="w-3 h-3" />,        color: "text-violet-500" },
   { key: "posts",           label: "Posts",          icon: <ImagePlus className="w-3 h-3" />,  color: "text-fuchsia-500" },
   { key: "feed_shares",     label: "Shares",         icon: <Zap className="w-3 h-3" />,         color: "text-amber-500" },
+  { key: "saves",           label: "Saves",           icon: <Bookmark className="w-3 h-3" />,   color: "text-black" },
   { key: "reel_scrolls",   label: "Reel",           icon: <Clapperboard className="w-3 h-3" />, color: "text-purple-500", showEye: true },
   { key: "feed_scrolls",   label: "Feed",           icon: <BarChart2 className="w-3 h-3" />,   color: "text-teal-500",   showEye: true },
   { key: "explore_scrolls", label: "Explore",        icon: <Activity className="w-3 h-3" />,    color: "text-orange-500", showEye: true },
@@ -176,6 +177,7 @@ const FARM_DEFAULT_COL_WIDTHS: Record<string, number> = {
   dms:               80,
   posts:             80,
   feed_shares:      100,
+  saves:            80,
   reel_scrolls:      95,
   feed_scrolls:      95,
   explore_scrolls:  110,
@@ -195,6 +197,7 @@ const MOBILE_METRIC_DEFS: {
   { key: "reels",            label: "Reels Viewed",    icon: <Clapperboard className="w-3.5 h-3.5" />, color: "text-sky-500", pieColor: "#0ea5e9" },
   { key: "dms",              label: "DMs Sent",        icon: <Mail className="w-3.5 h-3.5" />,     color: "text-violet-500", pieColor: "#8b5cf6" },
   { key: "feed_shares",      label: "Shares",          icon: <Zap className="w-3.5 h-3.5" />,      color: "text-amber-500",  pieColor: "#f59e0b" },
+  { key: "saves",            label: "Saves",           icon: <Bookmark className="w-3.5 h-3.5" />, color: "text-black",      pieColor: "#000000" },
   { key: "reel_scrolls",     label: "Reel",            icon: <Clapperboard className="w-3.5 h-3.5" />, color: "text-purple-500", pieColor: "#a855f7" },
   { key: "feed_scrolls",     label: "Feed",            icon: <BarChart2 className="w-3.5 h-3.5" />, color: "text-teal-500",  pieColor: "#14b8a6" },
   { key: "explore_scrolls",  label: "Explore",         icon: <Activity className="w-3.5 h-3.5" />, color: "text-orange-500", pieColor: "#f97316" },

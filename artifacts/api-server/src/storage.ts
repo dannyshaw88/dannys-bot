@@ -54,7 +54,7 @@ export interface IStorage {
   getStatsByProfile(profileId: number): Promise<any[]>;
   getLifetimeStatsByProfile(): Promise<Record<number, number>>;
   incrementStat(profileId: number, toolType: string): Promise<void>;
-  incrementMobileStats(username: string, metrics: { likes: number; follows: number; stories: number; reels: number; dms: number; feedShares: number; cycles: number; reelScrolls?: number; feedScrolls?: number; exploreScrolls?: number }): Promise<void>;
+  incrementMobileStats(username: string, metrics: { likes: number; follows: number; stories: number; reels: number; dms: number; feedShares: number; saves?: number; cycles: number; reelScrolls?: number; feedScrolls?: number; exploreScrolls?: number }): Promise<void>;
   getMobileSlotStats(username: string): Promise<{ daily: Record<string, number>; lifetime: Record<string, number> }>;
   getDailyAbdStats(): Promise<Record<number, number>>;
 
@@ -691,7 +691,7 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async incrementMobileStats(username: string, metrics: { likes: number; follows: number; stories: number; reels: number; dms: number; feedShares: number; cycles: number; reelScrolls?: number; feedScrolls?: number; exploreScrolls?: number }): Promise<void> {
+  async incrementMobileStats(username: string, metrics: { likes: number; follows: number; stories: number; reels: number; dms: number; feedShares: number; saves?: number; cycles: number; reelScrolls?: number; feedScrolls?: number; exploreScrolls?: number }): Promise<void> {
     const today = new Date().toISOString().split('T')[0];
     const entries: Array<[string, number]> = ([
       [`mob:${username}:likes`,          metrics.likes],
@@ -700,6 +700,7 @@ export class DatabaseStorage implements IStorage {
       [`mob:${username}:reels`,          metrics.reels],
       [`mob:${username}:dms`,            metrics.dms],
       [`mob:${username}:feed_shares`,    metrics.feedShares],
+      [`mob:${username}:saves`,          metrics.saves ?? 0],
       [`mob:${username}:cycles`,         metrics.cycles],
       [`mob:${username}:reel_scrolls`,   metrics.reelScrolls ?? 0],
       [`mob:${username}:feed_scrolls`,   metrics.feedScrolls ?? 0],

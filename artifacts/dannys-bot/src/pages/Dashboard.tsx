@@ -11653,7 +11653,7 @@ export function Dashboard() {
   const tabClass = (t: Tab) =>
     `px-4 py-2.5 text-sm font-semibold transition-colors border-b-2 -mb-px flex items-center gap-2 ${
       activeTab === t
-        ? "border-primary text-primary"
+        ? "border-black bg-black text-white rounded-t-md"
         : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
     }`;
 
@@ -11684,10 +11684,10 @@ export function Dashboard() {
       <Card className="desktop-card border-none shadow-sm">
         <div className="flex items-center border-b border-border/50 px-4">
           <button className={tabClass("api-log")} onClick={() => setActiveTab("api-log")}>
-            <Zap className="w-4 h-4 text-cyan-500" fill="currentColor" /> Activity Log
+            <Zap className="w-4 h-4 text-white" fill="currentColor" /> Activity Log
           </button>
           <button className={tabClass("whats-new")} onClick={() => setActiveTab("whats-new")}>
-            <Bell className="w-4 h-4 text-cyan-500" fill="currentColor" /> What's New
+            <Bell className="w-4 h-4 text-white" fill="currentColor" /> What's New
           </button>
           <div className="ml-auto flex items-center gap-1">
             {activeTab === "api-log" && (

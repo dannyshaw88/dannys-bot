@@ -12146,6 +12146,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           reels: reelsViewed,
           dms: sharesDm,
           feedShares: sharesFeed,
+          saves,
           cycles: 1,
           reelScrolls: reelsViewed,
           feedScrolls: feedScrolled,
