@@ -9799,6 +9799,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         candidateSource: Map<string, string>;
         candidateMeta: Map<string, { isVerified?: boolean; isPrivate?: boolean; followerCount?: number }>;
       };
+       /** The caller has already left Instagram on a confirmed, focused,
+        * cleared Search field (used for spread backup candidates). */
+       searchAlreadyReady?: boolean;
        /** Keep the Search surface only when another spread slot follows
         *  immediately. The final slot must restore the normal Instagram UI. */
        keepSearchOpenAfterStep?: boolean;
@@ -10035,9 +10038,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let _fi = 0;              // manual index into `targets` (grows as re-scrapes inject new entries)
     let scrapeRound = 0;
 
-    // Navigate to Search tab. Give the just-opened feed a moment to settle
-    // before attempting to locate the bottom nav.
-    await sleepOrAbort(serial, 1500);
+    // Navigate to Search only for the first candidate in a spread. Backup
+    // candidates reuse the confirmed cleared/focused Search field left by the
+    // previous rejected candidate.
+    if (!params.searchAlreadyReady) {
+      await sleepOrAbort(serial, 1500);
 
     // Floating-window guard (MIUI "Floating windows" feature, confirmed 15 Jul
     // 2026 from live log + screenshot evidence). When Instagram is running in a
@@ -10067,17 +10072,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await sleepOrAbort(serial, 3000);
     }
 
-    const searchTab = await android.findInstagramSearchTab(serial, onLog).catch(() => null);
-    if (!searchTab) {
-      onLog?.("Follow: Search tab not found — skipping");
-      await finishFollowNavigation();
-      return 0;
+      const searchTab = await android.findInstagramSearchTab(serial, onLog).catch(() => null);
+      if (!searchTab) {
+        onLog?.("Follow: Search tab not found — skipping");
+        await finishFollowNavigation();
+        return 0;
+      }
+      await android.tap(serial, searchTab.x, searchTab.y);
+      await sleepOrAbort(serial, 2500);
+    } else {
+      onLog?.("Follow: reusing confirmed cleared Search field for next spread candidate");
     }
-    await android.tap(serial, searchTab.x, searchTab.y);
-    // Give the Explore page more time to fully render — 1500 ms was sometimes
-    // too short on slower devices / cold-launch (only Follow enabled, no prior
-    // feed scroll), leaving the search bar absent from the accessibility tree.
-    await sleepOrAbort(serial, 2500);
 
     while (followed < targetCount) {
       // Pool exhausted — fetch a fresh batch from HikerAPI rather than giving up
@@ -11679,7 +11684,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               : undefined;
 
             // Helper — calls runFollowUsersStep for exactly one candidate.
-            const _runOneSpreadSlot = async (candidate: string) => {
+            const _runOneSpreadSlot = async (candidate: string, searchAlreadyReady = false) => {
               const surplusId = _sfSurplusIds.get(candidate.toLowerCase());
               if (surplusId !== undefined) {
                 await storage.deleteOverspillUsers([surplusId]).catch(() => {});
@@ -11704,37 +11709,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               filters:  _ssFilters,
               profileId: mobileProfileId ?? undefined,
               phoneSlotKey: mobileProfileId ? undefined : (slotUsername || undefined),
-               keepSearchOpenAfterStep: _toolSeq[_toolIndex + 1]?.startsWith("follow_spread:") === true,
+               searchAlreadyReady,
+               // The spread owns cleanup across its entire candidate and
+               // backup sequence. Never press Back between candidates.
+               keepSearchOpenAfterStep: true,
               });
             };
 
             let _sfCount = await _runOneSpreadSlot(_spreadUsername);
 
-            // Helper — navigates back to the home feed before a backup slot.
-            // When a candidate is filtered the phone is left on the search
-            // results page with the rejected username still in the bar.  Each
-            // backup attempt calls runFollowUsersStep fresh, which re-taps the
-            // search tab at startup.  Tapping the search tab when it is already
-            // active dismisses the search and leaves Instagram in a broken
-            // explore-grid state where findInstagramSearchBar can't locate the
-            // bar, and no results ever appear.
-            // Navigating to home first gives every backup call the same clean
-            // starting state as the very first spread slot.
-            const _resetToHome = async () => {
-              try {
-                const _ht = await android.findHomeTab(serial).catch(() => null);
-                if (_ht) { await android.tap(serial, _ht.x, _ht.y); }
-                else { await android.pressBack(serial); }
-                await sleepOrAbort(serial, 800);
-              } catch { /* best-effort — cycle-aborted will surface on next sleepOrAbort */ }
-            };
-
             // If filtered/skipped at follow-time, try backup candidates first.
             while (_sfCount === 0 && _sfBackupQueue.length > 0) {
               const _nextUser = _sfBackupQueue.shift()!;
               tLog(`  Spread Follow: @${_spreadUsername} filtered — trying backup @${_nextUser}`);
-              await _resetToHome();
-              _sfCount = await _runOneSpreadSlot(_nextUser);
+              _sfCount = await _runOneSpreadSlot(_nextUser, true);
             }
 
             // Backup queue exhausted — do one HikerAPI re-scrape round.
@@ -11772,8 +11760,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   while (_sfCount === 0 && _sfBackupQueue.length > 0) {
                     const _nextUser = _sfBackupQueue.shift()!;
                     tLog(`  Spread Follow: trying re-scraped @${_nextUser}`);
-                    await _resetToHome();
-                    _sfCount = await _runOneSpreadSlot(_nextUser);
+                    _sfCount = await _runOneSpreadSlot(_nextUser, true);
                   }
                 } else {
                   tLog(`  Spread Follow: re-scrape found no viable candidates — slot unfulfilled`);
@@ -11782,6 +11769,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 if (e?.message === "cycle-aborted") throw e;
                 tLog(`  Spread Follow: re-scrape error — ${e?.message}`);
               }
+            }
+
+            // The complete spread is now finished: the primary candidate,
+            // backups, and any replacement scrape candidates have all been
+            // exhausted or one has succeeded. Restore the normal Instagram UI
+            // exactly once for the next tool/dispatcher entry.
+            try {
+              await android.clearInstagramSearchBar(serial, (msg) => tLog(`  Spread Follow: final cleanup — ${msg}`));
+              await android.pressBack(serial);
+              await sleepOrAbort(serial, 500);
+              await android.pressBack(serial);
+              await sleepOrAbort(serial, 500);
+              tLog("  Spread Follow: final cleanup — pressed Back twice to restore normal UI");
+            } catch (e: any) {
+              if (e?.message === "cycle-aborted") throw e;
+              tLog(`  Spread Follow: final cleanup failed — ${e?.message ?? "unknown error"}`);
             }
 
             followedCount += _sfCount;
