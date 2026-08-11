@@ -21,3 +21,17 @@ uri = "file://attached_assets/alterego_fitness_hks_decoded.json"
 type = "unspecified"
 title = "Decoded EQX account export"
 description = "Original EQX export decrypted with the project’s built-in decoder and saved as local JSON. Contains the original account fields and values."
+
+[[outputs]]
+id = "Fb-haYAB8he9qlCWxj3eJ"
+uri = "file://attached_assets/AlterEgo_Fitness_IQQ_1786468586556_decoded.json"
+type = "unspecified"
+title = "Decoded IQQ EQX export"
+description = "Full locally decoded JSON export from the uploaded IQQ EQX file."
+
+[[outputs]]
+id = "GuScSigG1_fDoc_JtaEI0"
+uri = "file://attached_assets/AlterEgo_Fitness_WRE_1786468586557_decoded.json"
+type = "unspecified"
+title = "Decoded WRE EQX export"
+description = "Full locally decoded JSON export from the uploaded WRE EQX file."

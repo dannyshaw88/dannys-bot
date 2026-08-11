@@ -3435,7 +3435,7 @@ function resolveSpinSyntax(text: string): string {
 }
 // HTML `maxLength` isn't reliably enforced on type="number" inputs, so clamp
 // values to 4 digits (0-9999) in code as well.
-const clamp4 = (n: number) => Math.min(9999, Math.max(0, Math.trunc(Number.isFinite(n) ? n : 0)));
+const clamp4 = (n: number) => Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.trunc(Number.isFinite(n) ? n : 0)));
 
 // ── Module-level HST timer registry ─────────────────────────────────────────
 // Timers live here, OUTSIDE React, so component cleanup, dep changes, and
@@ -6106,12 +6106,12 @@ export function AutomationSettingsPanel({
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground block text-center">Scroll amount</Label>
             <div className="flex items-center gap-3">
-              <Input type="number" min={0} max={50} maxLength={4} className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} maxLength={8} className={NUM_INPUT_CLASS}
                 value={settings.checkDmScrollMin}
                 onChange={e => setSettings(s => ({ ...s, checkDmScrollMin: clamp4(Number(e.target.value)) }))}
                 disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} max={50} maxLength={4} className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} maxLength={8} className={NUM_INPUT_CLASS}
                 value={settings.checkDmScrollMax}
                 onChange={e => setSettings(s => ({ ...s, checkDmScrollMax: clamp4(Number(e.target.value)) }))}
                 disabled={loading} />
@@ -6494,9 +6494,9 @@ export function AutomationSettingsPanel({
             <div className="space-y-1.5">
               <Label className="text-sm text-muted-foreground block text-center">Feed posts</Label>
               <div className="flex items-center gap-2">
-                <Input type="number" min={0} max={50} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                <Input type="number" min={0} maxLength={8} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
                 <span className="text-muted-foreground text-sm">to</span>
-                <Input type="number" min={0} max={50} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                <Input type="number" min={0} maxLength={8} className={NUM_INPUT_CLASS} value={settings.injectBrowsingFeedMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingFeedMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
               </div>
             </div>
             <div className="space-y-1.5">
