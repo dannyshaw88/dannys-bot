@@ -8131,13 +8131,22 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   const updateSlot = (i: number, patch: Partial<AccountSlot>) =>
     setSlots(s => s.map((slot, idx) => idx === i ? { ...slot, ...patch } : slot));
 
-  const [typingField, setTypingField] = useState<"username" | "password" | "totpSecret" | null>(null);
+  const [typingField, setTypingField] = useState<"username" | "password" | "totpSecret" | "emailAddress" | "emailPassword" | "phoneNumber" | null>(null);
 
-  const typeAccountField = async (field: "username" | "password" | "totpSecret", value: string) => {
+  const typeAccountField = async (field: "username" | "password" | "totpSecret" | "emailAddress" | "emailPassword" | "phoneNumber", value: string) => {
     const text = value.trim();
     if (!phone?.serial) return;
     if (!text) {
-      setSaveError(`${field === "totpSecret" ? "2FA OTP Secret" : field[0].toUpperCase() + field.slice(1)} is empty`);
+      const fieldLabel = field === "totpSecret"
+        ? "2FA OTP Secret"
+        : field === "emailAddress"
+        ? "Email Address"
+        : field === "emailPassword"
+        ? "Email Password"
+        : field === "phoneNumber"
+        ? "Phone Number"
+        : field[0].toUpperCase() + field.slice(1);
+      setSaveError(`${fieldLabel} is empty`);
       return;
     }
     setTypingField(field);
@@ -8491,8 +8500,18 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
               {/* Row 2: Email Address + Email Password + Phone Number */}
               <div className="flex items-end gap-3 flex-wrap">
                 {/* Email Address */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground block text-left">Email Address</Label>
+                 <div className="space-y-1.5">
+                   <Label className="text-xs text-muted-foreground flex items-center gap-1 text-left">
+                     Email Address
+                     <Button type="button" variant="ghost" size="sm"
+                       title="Type email address on the phone keyboard"
+                       aria-label="Type email address on the phone keyboard"
+                       disabled={typingField !== null || !phone?.serial}
+                       onClick={() => void typeAccountField("emailAddress", slot.emailAddress)}
+                       className="h-5 w-5 p-0 text-muted-foreground hover:text-primary">
+                       {typingField === "emailAddress" ? "…" : <Keyboard className="w-3 h-3" aria-hidden="true" />}
+                     </Button>
+                   </Label>
                   <Input
                     value={slot.emailAddress}
                     onChange={e => updateSlot(i, { emailAddress: e.target.value })}
@@ -8503,8 +8522,18 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                 </div>
 
                 {/* Email Password */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground block text-left">Email Password</Label>
+                 <div className="space-y-1.5">
+                   <Label className="text-xs text-muted-foreground flex items-center gap-1 text-left">
+                     Email Password
+                     <Button type="button" variant="ghost" size="sm"
+                       title="Type email password on the phone keyboard"
+                       aria-label="Type email password on the phone keyboard"
+                       disabled={typingField !== null || !phone?.serial}
+                       onClick={() => void typeAccountField("emailPassword", slot.emailPassword)}
+                       className="h-5 w-5 p-0 text-muted-foreground hover:text-primary">
+                       {typingField === "emailPassword" ? "…" : <Keyboard className="w-3 h-3" aria-hidden="true" />}
+                     </Button>
+                   </Label>
                   <div className="flex items-center gap-1.5">
                     <Input
                       type={showEmailPassword[i] ? "text" : "password"}
@@ -8522,8 +8551,18 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                 </div>
 
                 {/* Phone Number */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground block text-left">Phone Number</Label>
+                 <div className="space-y-1.5">
+                   <Label className="text-xs text-muted-foreground flex items-center gap-1 text-left">
+                     Phone Number
+                     <Button type="button" variant="ghost" size="sm"
+                       title="Type phone number on the phone keyboard"
+                       aria-label="Type phone number on the phone keyboard"
+                       disabled={typingField !== null || !phone?.serial}
+                       onClick={() => void typeAccountField("phoneNumber", slot.phoneNumber)}
+                       className="h-5 w-5 p-0 text-muted-foreground hover:text-primary">
+                       {typingField === "phoneNumber" ? "…" : <Keyboard className="w-3 h-3" aria-hidden="true" />}
+                     </Button>
+                   </Label>
                   <Input
                     value={slot.phoneNumber}
                     onChange={e => updateSlot(i, { phoneNumber: e.target.value })}
