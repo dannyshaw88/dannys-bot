@@ -9379,6 +9379,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             "back",
           );
           await sleepOrAbort(serial, 350);
+          // The profile header stats (post count / followers / following)
+          // disappear while the grid is scrolled and reappear at the top.
+          // Check after every recovery swipe so an unpredictable gesture
+          // cannot cause redundant swipes and repeated profile re-rendering.
+          const topStats = await android.getProfilePostCount(serial).catch(() => null);
+          if (topStats !== null) {
+            onLog?.(`Inject Browsing: profile header detected after ${_hsi + 1}/${rows} upward swipe(s) — stopping top recovery early`);
+            break;
+          }
         }
         await sleepOrAbort(serial, 500);
       }
@@ -10425,6 +10434,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 "back",
               );
               await sleepOrAbort(serial, 350);
+              // A visible post-count stat means the profile header is back in
+              // view, so the grid has reached the top. Do not perform the
+              // remaining planned swipes; each extra swipe can refresh the
+              // profile and look like repeated browsing to Instagram.
+              const topStats = await android.getProfilePostCount(serial).catch(() => null);
+              if (topStats !== null) {
+                onLog?.(`Inject Browsing: profile header detected after ${_si + 1}/${didScroll} upward swipe(s) — stopping top recovery early`);
+                break;
+              }
             }
             await sleepOrAbort(serial, 500);
           }
