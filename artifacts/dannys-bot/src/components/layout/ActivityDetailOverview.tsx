@@ -3,6 +3,7 @@ import {
   BarChart2,
   BookOpen,
   Clapperboard,
+  Activity,
   Heart,
   ImagePlus,
   Mail,
@@ -30,6 +31,7 @@ const ACTIVITY_METRICS: ActivityMetric[] = [
   { pattern: /^\d+\s+stories?\s+watched$/i, icon: BookOpen, color: "text-indigo-500" },
   { pattern: /^\d+\s+reels?\s+watched$/i, icon: Clapperboard, color: "text-sky-500" },
   { pattern: /^\d+\s+posts?\s+scrolled$/i, icon: BarChart2, color: "text-teal-500" },
+  { pattern: /^\d+\s+Explore\s+scrolls?$/i, icon: Activity, color: "text-orange-500" },
 ];
 
 function renderMetricPart(part: string, index: number): ReactNode {

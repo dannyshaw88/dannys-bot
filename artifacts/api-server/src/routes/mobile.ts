@@ -12224,7 +12224,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (saves)                    parts.push(`${saves} saved`);
         const summary = parts.length ? ` — ${parts.join(", ")}` : "";
         if (aborted) {
-          tLog(`Cycle aborted${summary}`);
+          tLog(`${parts.length ? `${parts.join(", ")} — ` : ""}Cycle aborted`);
         } else {
           tLog(`Cycle failed — ${e?.message ?? "unknown error"}${summary}`);
         }
@@ -12250,7 +12250,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           toolId: 0,
           action: "tool_complete",
           targetUsername: _slotUsername,
-          detail: aborted ? `Cycle aborted${statsSuffix}` : `Cycle error: ${e?.message ?? "unknown"}${statsSuffix}`,
+          detail: aborted ? `${parts.join(", ")}${parts.length ? " — " : ""}Cycle aborted` : `Cycle error: ${e?.message ?? "unknown"}${statsSuffix}`,
           result: aborted ? "ok" : "error",
           sourceValue: `${serial}:${incomingSlotIdx}`,
           sourceType: "phone",
