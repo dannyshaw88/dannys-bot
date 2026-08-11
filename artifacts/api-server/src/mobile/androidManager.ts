@@ -2759,12 +2759,25 @@ export async function tap(serial: string, x: number, y: number, source?: "manual
  * Fixing this requires both taps to happen inside a *single* adb shell
  * invocation, with the pause done on-device (`sleep`) rather than in two
  * separate host-side spawns — that keeps the on-device gap tight and
- * consistent regardless of adb/USB latency.
+ * consistent regardless of adb/USB latency. The inter-tap delay is randomized
+ * between 50 ms and 250 ms and is logged for every gesture.
  */
-export async function doubleTap(serial: string, x: number, y: number): Promise<void> {
+export async function doubleTap(
+  serial: string,
+  x: number,
+  y: number,
+  onLog?: (msg: string) => void,
+): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  const cmd = `input tap ${x} ${y}; sleep 0.05; input tap ${x} ${y}`;
+  const interTapDelayMs = 50 + Math.floor(Math.random() * 201);
+  const interTapDelaySeconds = (interTapDelayMs / 1000).toFixed(3);
+  logger.info(
+    { serial, x, y, interTapDelayMs },
+    "[android-input] double-tap",
+  );
+  onLog?.(`Double-tap at (${x},${y}) — inter-tap delay ${interTapDelayMs}ms`);
+  const cmd = `input tap ${x} ${y}; sleep ${interTapDelaySeconds}; input tap ${x} ${y}`;
   const r = spawnSync(adb, ["-s", serial, "shell", cmd], { encoding: "utf8", timeout: 5000 });
   const out = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim();
   if (r.status !== 0 || r.error || /error|exception|permission denied/i.test(out)) {

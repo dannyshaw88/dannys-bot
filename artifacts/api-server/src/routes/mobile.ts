@@ -4085,7 +4085,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     onLog?.(`View Feed ${i + 1}/${count}: double-tap using media bounds (${Math.round(xFraction * 100)}% across, ${Math.round(yFraction * 100)}% down)`);
                      logger.info({ serial, target: "image-double-tap", x: dtX, y: dtY, mediaBoundsUsed: !!likeScan.mediaBounds }, "[check-feed] double-tap like");
                     onLog?.(`View Feed ${i + 1}/${count}: double-tapping image at (${dtX},${dtY})…`);
-                    await android.doubleTap(serial, dtX, dtY);
+                     await android.doubleTap(serial, dtX, dtY, (msg) => onLog?.(`  ${msg}`));
                   } else {
                     // Safe node-targeted fallback when this is a video post,
                     // the random double-tap roll misses, or the media border
