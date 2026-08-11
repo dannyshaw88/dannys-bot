@@ -82,6 +82,38 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.2.2",
+    date: "11 Aug 2026",
+    items: [
+      {
+        category: "Mobile Account Fields",
+        text: "Added the calibrated phone-keyboard button to Email Address, Email Password, and Phone Number in every Mobile Phone Farm account slot. These fields now have the same one-click device typing workflow already available for Username, Password, and 2FA OTP Secret.",
+        technical: [
+          "MobilePage.tsx extends the shared typing-field state and typeAccountField helper to support emailAddress, emailPassword, and phoneNumber.",
+          "Each new keyboard button sends the field value through POST /api/mobile/devices/:serial/input/type-calibrated, preserving the device-specific calibration map, human timing, loading state, empty-value validation, and serial checks used by the existing account fields.",
+          "The three controls are placed beside the field labels and are disabled while another calibrated typing operation is running or when no phone is connected.",
+        ],
+      },
+      {
+        category: "Metrics UI",
+        text: "Metric icons are now preserved when cycle results are stamped after a phone restart, and the extra double-hyphen separator has been removed from combined metric/abort details. Save metrics now use a black filled ribbon consistently in Statistics and Dashboard activity details.",
+        technical: [
+          "ActivityDetailOverview now splits metric details on commas and either single or repeated hyphen separators, while retaining the metric-specific icon rendering for each segment.",
+          "The saved metric uses the filled Ribbon icon with text-black instead of the previous cyan outline ribbon.",
+          "The Statistics page's Saves column and mobile metric definition both use a filled black Bookmark icon, matching the Dashboard activity renderer.",
+        ],
+      },
+      {
+        category: "GitHub Actions",
+        text: "Verified the existing canonical Windows Installer workflow remains the only active installer workflow. No duplicate workflow was created.",
+        technical: [
+          "Every push to main continues to trigger .github/workflows/build-windows-installer.yml, which builds the API and frontend, packages the Electron Windows installer, and uploads the Aura-Farming-Windows-Installer artifact.",
+          "The other installer workflow files remain deprecated inert stubs as documented in replit.md.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.2.1",
     date: "18 Jul 2026",
     items: [
