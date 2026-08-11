@@ -11553,15 +11553,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               _reHomeTab = await android.findHomeTab(serial).catch(() => null);
               if (_reHomeTab) {
                 _reelsExited = true;
+                await android.tap(serial, _reHomeTab.x, _reHomeTab.y);
+                tLog(`▶ View Reels — tapped Home tab node at (${_reHomeTab.x},${_reHomeTab.y})`);
                 break;
               }
             }
-            // Back is the complete Reels exit. Do not tap Home after the
-            // viewer has closed: the next tool owns its own starting-state
-            // navigation, and an extra Home tap can become a duplicate tap
-            // when the viewer's Back already returned to the feed.
             if (_reelsExited) {
-              tLog("▶ View Reels — exited full-screen viewer with Back");
+              tLog("▶ View Reels — exited full-screen viewer with Back and Home tab node");
             } else {
               tLog("▶ View Reels — Back exit completed without confirming Home tab");
             }
