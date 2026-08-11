@@ -8982,7 +8982,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         bioText,
         loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile,
         message => onLog?.(`Update Bio: ${message}`),
-        { debugLabel: "Update Bio" },
+        // Bio text must be entered exactly as generated. Human-error
+        // simulation types a random character and then presses Backspace;
+        // on Gboard that destructive correction can race the prior tap and
+        // delete a real character/word while still reporting ok=true.
+        { debugLabel: "Update Bio", disableHumanErrors: true },
       );
       if (!typed.ok) {
         onLog?.(`Update Bio: ✗ calibrated typing incomplete — missing ${typed.missing.join(", ") || "required calibration"}`);
