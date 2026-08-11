@@ -2803,8 +2803,11 @@ export async function swipe(
   // instead of staying inside Instagram.
   const { w: screenW, h: screenH } = getScreenSize(serial);
   const safeX = Math.max(1, Math.round(screenW * 0.04));
-  const safeTop = Math.max(1, Math.round(screenH * 0.07));
-  const safeBottom = Math.min(screenH - 1, Math.round(screenH * 0.92));
+  // Keep a larger exclusion zone around Android's system gesture areas. On
+  // 720x1600 devices this keeps endpoints at least 192px from the bottom and
+  // 192px from the top instead of allowing a swipe within ~128px of an edge.
+  const safeTop = Math.max(1, Math.round(screenH * 0.12));
+  const safeBottom = Math.min(screenH - 1, Math.round(screenH * 0.85));
   const clampX = (value: number) => Math.min(screenW - safeX, Math.max(safeX, Math.round(value)));
   const clampY = (value: number) => Math.min(safeBottom, Math.max(safeTop, Math.round(value)));
   const boundedX1 = clampX(x1);
