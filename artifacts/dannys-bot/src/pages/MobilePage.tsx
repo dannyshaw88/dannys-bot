@@ -3941,6 +3941,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       const min = Math.max(1, Math.min(s.feedScrollMin, s.feedScrollMax));
       const max = Math.max(s.feedScrollMin, s.feedScrollMax);
       const count = Math.floor(Math.random() * (max - min + 1)) + min;
+      // Start every scheduled account cycle with a clean in-memory device log.
+      // Server-side/downloaded debug logs remain independent.
+      clearLogLines();
+      clearActionLogLines();
       setRunning(true);
       onLog?.(`Cycle starting → power on, open Instagram, ${count} downward scrolls`);
       // Generate a unique ID for this cycle.  Both the cycle POST and the abort
@@ -10027,7 +10031,6 @@ const MOBILE_TABS_RIGHT: { id: MobileTab; label: string; icon: React.ComponentTy
   { id: "actionlog", label: "Action Log",    icon: ClipboardList },
   { id: "log",       label: "Debugging Log", icon: Bug           },
 ];
-const LOG_MAX_LINES = 500;
 
 /** Deterministic numeric browser-profile ID from a device serial.
  *  Kept in the 1,000,000–9,999,999 range to avoid collision with real DB profile IDs. */

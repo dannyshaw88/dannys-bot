@@ -17,7 +17,6 @@ import {
   type ReactNode,
 } from "react";
 
-const LOG_MAX_LINES = 500;
 const ACTION_LOG_RE = /Cycle\s+(complete|failed|aborted)/i; // "Cycle failed" added to catch-block tLog
 
 interface SerialLogs {
@@ -54,11 +53,10 @@ export function DeviceLogProvider({ children }: { children: ReactNode }) {
     setStore(prev => {
       const cur = prev[serial] ?? { logLines: [], actionLogLines: [] };
       const nextLog = [...cur.logLines, line];
-      const trimLog = nextLog.length > LOG_MAX_LINES ? nextLog.slice(-LOG_MAX_LINES) : nextLog;
       const nextAction = actionLine
-        ? [...cur.actionLogLines, actionLine].slice(-LOG_MAX_LINES)
+        ? [...cur.actionLogLines, actionLine]
         : cur.actionLogLines;
-      return { ...prev, [serial]: { logLines: trimLog, actionLogLines: nextAction } };
+      return { ...prev, [serial]: { logLines: nextLog, actionLogLines: nextAction } };
     });
   }, []);
 
