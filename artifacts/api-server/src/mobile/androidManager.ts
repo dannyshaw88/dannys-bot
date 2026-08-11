@@ -10429,11 +10429,19 @@ export async function typeViaCalibrationMap(
       `[${options?.debugLabel ?? "cal-keyboard"}] human-error typo-result key=${wrong} ` +
       `sent=${typoSent} elapsed=${Date.now() - typoStartedAt}ms`,
     );
-    // Gboard interprets a held Backspace as word deletion. Typo correction
-    // must remove exactly one character, regardless of the user's normal
-    // calibrated-key dwell profile.
+    // Do not tap the calibrated Backspace key here. On Gboard/MIUI that
+    // coordinate can behave like a held key even with a short requested dwell
+    // and delete the preceding real word/characters. Android's DEL key event
+    // removes exactly one committed character: the injected typo.
     const backspaceStartedAt = Date.now();
-    const backspaceSent = await tapMapped("backspace", "Backspace after typing error", 35, true);
+    let backspaceSent = false;
+    try {
+      await keyevent(serial, 67); // KEYCODE_DEL
+      backspaceSent = true;
+      await _sleep(35);
+    } catch {
+      backspaceSent = false;
+    }
     onLog?.(
       `[${options?.debugLabel ?? "cal-keyboard"}] human-error backspace-result ` +
       `sent=${backspaceSent} elapsed=${Date.now() - backspaceStartedAt}ms ` +
