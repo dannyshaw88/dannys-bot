@@ -7,3 +7,10 @@ uri = "file://screenshots/dashboard-metric-alignment-test.jpg"
 type = "image"
 title = "Dashboard metric alignment test"
 description = "Temporary dashboard test showing 25 likes done, 3 follows done, and 5 reels watched centered in the top activity ticker."
+
+[[outputs]]
+id = "Yi2iute4SEYkG68PSkJRf"
+uri = "file://attached_assets/alterego_fitness_hks_redacted.eqx"
+type = "unspecified"
+title = "Redacted EQX export"
+description = "Valid EQX export with the account username preserved and credential, 2FA, token, cookie, and session fields redacted."
