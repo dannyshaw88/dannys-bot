@@ -10311,14 +10311,27 @@ export async function typeViaCalibrationMap(
         `backspaceMap=${map.backspace ? "present" : "missing"} layer=${layer}`,
       );
     }
-    if (Math.random() * 100 >= lo + Math.random() * (hi - lo)) {
+    const errorRoll = Math.random() * 100;
+    const errorThreshold = lo + Math.random() * (hi - lo);
+    if (options?.debugLabel) {
+      onLog?.(
+        `[${options.debugLabel}] human-error roll=${errorRoll.toFixed(3)} ` +
+        `threshold=${errorThreshold.toFixed(3)}% range=${lo}-${hi}% layer=${layer}`,
+      );
+    }
+    if (errorRoll >= errorThreshold) {
       if (options?.debugLabel) onLog?.(`[${options.debugLabel}] human-error correction not selected`);
       return;
     }
     const candidates = Object.keys(map).filter(k => /^[a-z]$/i.test(k) && k !== "backspace");
     const wrong = candidates[Math.floor(Math.random() * candidates.length)];
     if (!wrong) return;
-    if (options?.debugLabel) onLog?.(`[${options.debugLabel}] human-error correction selected wrongKey=${wrong}`);
+    if (options?.debugLabel) {
+      onLog?.(
+        `[${options.debugLabel}] human-error correction selected ` +
+        `wrongKey=${wrong} intendedCorrection=one-character`,
+      );
+    }
     const typoStartedAt = Date.now();
     const typoSent = await tapMapped(wrong, `intentional typing error '${wrong}'`);
     onLog?.(
@@ -10333,7 +10346,7 @@ export async function typeViaCalibrationMap(
     onLog?.(
       `[${options?.debugLabel ?? "cal-keyboard"}] human-error backspace-result ` +
       `sent=${backspaceSent} elapsed=${Date.now() - backspaceStartedAt}ms ` +
-      `expectedSingleDelete=true`,
+        `expectedSingleDelete=true dwell=35ms layer=${layer}`,
     );
   };
   const waitWordHesitation = async () => {

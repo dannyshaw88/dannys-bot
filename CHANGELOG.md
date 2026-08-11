@@ -1,3 +1,16 @@
+## [1.2.470] — 2026-08-11
+
+### Improved — Human-error typing diagnostics
+
+- Added explicit per-character error-roll and threshold logging for calibrated
+  typing.
+- Logs now show the configured probability range, generated roll, selected
+  threshold, keyboard layer, and whether a correction was selected.
+- Correction logs identify the wrong key and explicitly mark the intended
+  correction as one character.
+- Backspace diagnostics now include the fixed 35 ms dwell and active keyboard
+  layer, making rapid deletion events traceable in the installer debug log.
+
 ## [1.2.469] — 2026-08-11
 
 ### Fixed — Follow Users multi-candidate search flow
