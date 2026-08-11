@@ -9799,6 +9799,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         candidateSource: Map<string, string>;
         candidateMeta: Map<string, { isVerified?: boolean; isPrivate?: boolean; followerCount?: number }>;
       };
+       /** Keep the Search surface only when another spread slot follows
+        *  immediately. The final slot must restore the normal Instagram UI. */
+       keepSearchOpenAfterStep?: boolean;
     },
   ): Promise<number> {
     const { usersMin, usersMax, sources, onLog, onLike, recordFollow, browsing, skipFollowedUsernames, skipSkippedUsernames, filters } = params;
@@ -10547,7 +10550,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       onLog?.(`Follow: saved ${surplusEntries.length} unused candidate${surplusEntries.length !== 1 ? "s" : ""} to Surplus for next cycle`);
     }
 
-    if (_usePreloaded) {
+    if (_usePreloaded && params.keepSearchOpenAfterStep) {
       // Spread Follows invokes this step once per assigned candidate/backup.
       // Do not leave Search with the normal two-Back final cleanup between
       // segments: the next Spread Follow segment is about to reuse the same
@@ -11381,7 +11384,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       let _toolsRan = 0; // how many tools have executed before the current one
       let _viewFeedExecuted = false;
 
-      for (const _tool of _toolSeq) {
+      for (const [_toolIndex, _tool] of _toolSeq.entries()) {
         if (isCycleAborted(serial)) break;
         const _isFirst = _toolsRan === 0;
 
@@ -11687,6 +11690,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               filters:  _ssFilters,
               profileId: mobileProfileId ?? undefined,
               phoneSlotKey: mobileProfileId ? undefined : (slotUsername || undefined),
+               keepSearchOpenAfterStep: _toolSeq[_toolIndex + 1]?.startsWith("follow_spread:") === true,
               });
             };
 
