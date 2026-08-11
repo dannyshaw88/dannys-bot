@@ -13306,6 +13306,34 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(500).json({ error: e?.message }); }
   });
 
+  // Graceful device restart: stop the active HST cycle first so its partial
+  // counters are persisted by the cycle's existing abort path before ADB
+  // disappears. Scheduled timers are cleared by the web client for this
+  // serial; the server only owns the in-flight cycle/reboot boundary.
+  app.post("/api/mobile/devices/:serial/graceful-reboot", async (req: Request, res: Response) => {
+    const serial = p(req, "serial");
+    try {
+      const activeCycleId = automationCycleCurrentId.get(serial);
+      if (activeCycleId) automationCycleAbortedId.set(serial, activeCycleId);
+
+      const deadline = Date.now() + 30_000;
+      while (automationCycleInProgress.has(serial) && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+
+      const stillRunning = automationCycleInProgress.has(serial);
+      if (stillRunning) {
+        res.status(409).json({ ok: false, error: "Automation cycle did not finish before restart timeout" });
+        return;
+      }
+
+      android.rebootDevice(serial);
+      res.json({ ok: true, interruptedCycle: Boolean(activeCycleId) });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message ?? "Graceful restart failed" });
+    }
+  });
+
   app.get("/api/mobile/devices/:serial/brightness", async (req: Request, res: Response) => {
     try {
       const percent = android.getBrightness(p(req, "serial"));

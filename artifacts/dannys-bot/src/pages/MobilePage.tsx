@@ -7947,6 +7947,28 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
     onAnyEnabledRef.current?.(anyEnabled);
   }, [slotAutomationStates]);
 
+  // A device restart must invalidate every pending HST timer on this phone.
+  // The saved enabled settings remain intact; once the device reconnects,
+  // normal startup recovery schedules each slot from its configured interval.
+  useEffect(() => {
+    const onGracefulRestart = (event: Event) => {
+      const detail = (event as CustomEvent<{ serial?: string }>).detail;
+      if (!phone?.serial || detail?.serial !== phone.serial) return;
+      for (const slotIdx of Object.keys(slotAutomationStates).map(Number)) {
+        const key = `${phone.serial}:${slotIdx}`;
+        const timer = _hstTimers.get(key);
+        if (timer !== undefined) {
+          clearTimeout(timer);
+          _hstTimers.delete(key);
+        }
+        _hstStop.add(key);
+        _hstNextRunAt.delete(key);
+      }
+    };
+    window.addEventListener("mobile-device-graceful-restart", onGracefulRestart);
+    return () => window.removeEventListener("mobile-device-graceful-restart", onGracefulRestart);
+  }, [phone?.serial, slotAutomationStates]);
+
   // One ref per slot — each points to that slot's SlotHumanSessionView handle.
   // The mirror toggle calls slotHandleRefs.current[i]?.setEnabled(v) directly,
   // hitting exactly that slot's setEnabledByUser with no indirection.
