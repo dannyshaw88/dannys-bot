@@ -10537,7 +10537,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       onLog?.(`Follow: saved ${surplusEntries.length} unused candidate${surplusEntries.length !== 1 ? "s" : ""} to Surplus for next cycle`);
     }
 
-    await finishFollowNavigation();
+    if (_usePreloaded) {
+      // Spread Follows invokes this step once per assigned candidate/backup.
+      // Do not leave Search with the normal two-Back final cleanup between
+      // segments: the next Spread Follow segment is about to reuse the same
+      // Search surface. Filter-rejected candidates already use
+      // returnToClearedFollowSearch(), which returns here with one Back and a
+      // cleared/focused search field.
+      try {
+        await android.clearInstagramSearchBar(serial, (msg) => onLog?.(`Spread Follow: cleanup — ${msg}`));
+        onLog?.("Spread Follow: cleanup — cleared search; keeping Search open for next assignment");
+      } catch (e: any) {
+        if (e?.message === "cycle-aborted") throw e;
+        onLog?.(`Spread Follow: cleanup clear failed — ${e?.message ?? "unknown error"}`);
+      }
+    } else {
+      await finishFollowNavigation();
+    }
     return followed;
   }
 
