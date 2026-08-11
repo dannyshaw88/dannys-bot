@@ -14,3 +14,10 @@ uri = "file://attached_assets/alterego_fitness_hks_redacted.eqx"
 type = "unspecified"
 title = "Redacted EQX export"
 description = "Valid EQX export with the account username preserved and credential, 2FA, token, cookie, and session fields redacted."
+
+[[outputs]]
+id = "EVTNAHNDGP6BVwaTh1FOi"
+uri = "file://attached_assets/alterego_fitness_hks_decoded.json"
+type = "unspecified"
+title = "Decoded EQX account export"
+description = "Original EQX export decrypted with the project’s built-in decoder and saved as local JSON. Contains the original account fields and values."
