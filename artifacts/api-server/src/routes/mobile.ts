@@ -4072,8 +4072,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     // View Feed. When bounds are unavailable, the branch below
                     // uses the confirmed Like node instead.
                      const mb = likeScan.mediaBounds!;
-                    const mediaW = mb.x2 - mb.x1;
-                    const mediaH = mb.y2 - mb.y1;
+                     const mediaW = mb.x2 - mb.x1;
+                     // Use only the currently visible portion of the
+                     // node-confirmed media, ending just above the live Like
+                     // row. A recycled container may extend outside the
+                     // viewport even though its node bounds look valid.
+                     const visibleY1 = Math.max(mb.y1, 0);
+                     const visibleY2 = Math.min(mb.y2, likeScan.like.y - 24);
+                     const mediaH = visibleY2 - visibleY1;
                     // Keep the gesture inside the node-confirmed media
                     // rectangle. A small central band avoids captions/CTA
                     // overlays while retaining natural variation.
@@ -4081,7 +4087,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                      const yFraction = 0.35 + Math.random() * 0.10;
                     const dtX = Math.round(mb.x1 + mediaW * xFraction);
                     let dtY: number;
-                    dtY = Math.round(mb.y1 + mediaH * yFraction);
+                     dtY = Math.round(visibleY1 + mediaH * yFraction);
                     onLog?.(`View Feed ${i + 1}/${count}: double-tap using media bounds (${Math.round(xFraction * 100)}% across, ${Math.round(yFraction * 100)}% down)`);
                      logger.info({ serial, target: "image-double-tap", x: dtX, y: dtY, mediaBoundsUsed: !!likeScan.mediaBounds }, "[check-feed] double-tap like");
                     onLog?.(`View Feed ${i + 1}/${count}: double-tapping image at (${dtX},${dtY})…`);

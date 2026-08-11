@@ -3916,7 +3916,17 @@ export async function findFeedActionIcons(
         // cannot return the author row as media.
         if (width < w * 0.80 || height < screenH * 0.30) continue;
         if (height < width * 0.55) continue;
-        if (b.y1 < screenH * 0.06 || b.y2 >= like.y) continue;
+        // RecyclerView can retain a media container for a post that has
+        // scrolled mostly out of view. A large rectangle above Like is not
+        // sufficient: its bottom edge must be close to the current action row
+        // and it must contain a meaningful visible interval immediately above
+        // that row. Otherwise a double-tap can land on a header/CTA belonging
+        // to the post that was scrolled past.
+        const visibleBottom = Math.min(b.y2, like.y - Math.max(24, Math.round(screenH * 0.02)));
+        const visibleTop = Math.max(b.y1, Math.round(screenH * 0.08));
+        if (visibleBottom <= visibleTop) continue;
+        if (like.y - b.y2 > screenH * 0.18) continue;
+        if (b.y1 < screenH * 0.06) continue;
         candidates.push({ bounds: b, area: width * height });
       }
       candidates.sort((a, b) => b.area - a.area);
