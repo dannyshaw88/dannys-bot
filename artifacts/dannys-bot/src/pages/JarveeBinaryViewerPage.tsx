@@ -1,53 +1,78 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, CheckCircle2, Clipboard, FileSearch, FileText, Upload } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clipboard, FileSearch, FileText, Upload, Loader2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
-function printableStrings(bytes: Uint8Array, minLength = 4) {
-  const decoder = new TextDecoder("utf-8", { fatal: false });
-  const results: string[] = [];
-  let start = -1;
-  for (let i = 0; i <= bytes.length; i++) {
-    const printable = i < bytes.length && (bytes[i] === 9 || bytes[i] === 10 || bytes[i] === 13 || (bytes[i] >= 32 && bytes[i] <= 126));
-    if (printable && start < 0) start = i;
-    if ((!printable || i === bytes.length) && start >= 0) {
-      const value = decoder.decode(bytes.slice(start, i)).trim();
-      if (value.length >= minLength) results.push(value);
-      start = -1;
-    }
+type JarveeProfile = Record<string, string | undefined>;
+
+const FIELDS: Array<[string, string]> = [
+  ["username", "Username"], ["password", "Password"], ["email", "Email address"],
+  ["proxyHost", "Proxy host"], ["proxyPort", "Proxy port"], ["proxyUsername", "Proxy username"],
+  ["proxyPassword", "Proxy password"], ["twoFASecretKey", "2FA secret key"], ["backupCodes", "Backup codes"],
+  ["phoneNumber", "Phone number"], ["userAgentApi", "API user agent"], ["userAgentEmbedded", "Embedded browser user agent"],
+  ["deviceId", "Device ID"], ["deviceUuid", "Device UUID"], ["phoneId", "Phone ID"], ["adid", "Advertising ID"],
+  ["apiCookies", "API cookies"], ["tags", "Tags"], ["notes", "Notes"], ["accStatus", "Account status"],
+];
+
+function encodeBase64(bytes: Uint8Array) {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 8192) {
+    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + 8192, bytes.length)));
   }
-  return results;
+  return btoa(binary);
 }
 
 export default function JarveeBinaryViewerPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const [fileName, setFileName] = useState("");
-  const [text, setText] = useState("");
-  const [strings, setStrings] = useState<string[]>([]);
+  const [profiles, setProfiles] = useState<JarveeProfile[]>([]);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const readFile = async (file?: File) => {
     if (!file) return;
     setError("");
     setFileName(file.name);
+    setProfiles([]);
+    setLoading(true);
     try {
       const buffer = await file.arrayBuffer();
       const bytes = new Uint8Array(buffer);
-      const decoded = new TextDecoder("utf-8", { fatal: false }).decode(bytes).replace(/\u0000/g, "");
-      const extracted = printableStrings(bytes);
-      setText(decoded.trim() || "(No directly decodable text was found.)");
-      setStrings(extracted);
+      const isJarveeBinary = bytes[0] === 0xFF && bytes[1] === 0xFE && bytes[2] === 0xFF && bytes[3] === 0xFF && bytes[4] === 0xFF;
+      if (isJarveeBinary) {
+        const response = await fetch("/api/profiles/parse-jarvee", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileBase64: encodeBase64(bytes) }),
+        });
+        const data = await response.json();
+        if (!response.ok || !Array.isArray(data.profiles) || data.profiles.length === 0) {
+          throw new Error(data.error ?? "No account information was found in this Jarvee file.");
+        }
+        setProfiles(data.profiles);
+      } else {
+        const encoding = bytes[0] === 0xFF && bytes[1] === 0xFE ? "utf-16le" : bytes[0] === 0xFE && bytes[1] === 0xFF ? "utf-16be" : "utf-8";
+        const text = new TextDecoder(encoding).decode(buffer);
+        const lines = text.split(/\r?\n/).filter(line => line.trim());
+        const headers = (lines.shift() ?? "").split(/\t|,/).map(value => value.trim());
+        const parsed = lines.map(line => {
+          const values = line.split(/\t|,/);
+          return Object.fromEntries(headers.map((header, index) => [header || `Column ${index + 1}`, values[index]?.trim() ?? ""]));
+        }).filter(row => Object.values(row).some(Boolean));
+        if (!parsed.length) throw new Error("No readable account information was found in this file.");
+        setProfiles(parsed);
+      }
     } catch {
-      setText("");
-      setStrings([]);
-      setError("This file could not be read in the browser.");
+      setProfiles([]);
+      setError("No readable Jarvee account information was found in this file.");
+    } finally {
+      setLoading(false);
     }
   };
 
   const copyText = async () => {
-    const output = [text, strings.length ? "\n--- Printable strings extracted from binary ---\n" + strings.join("\n") : ""].join("");
+    const output = profiles.map((profile, index) => [`Account ${index + 1}`, ...FIELDS.map(([key, label]) => `${label}: ${profile[key] ?? ""}`)].join("\n")).join("\n\n");
     await navigator.clipboard.writeText(output);
     toast({ title: "Text copied to clipboard" });
   };
@@ -69,7 +94,7 @@ export default function JarveeBinaryViewerPage() {
             <div className="flex-1">
               <h2 className="text-sm font-semibold">Choose a Jarvee binary file</h2>
               <p className="text-xs text-muted-foreground mt-1">The file is read locally and converted to text. Nothing is saved, uploaded, or added to Accounts.</p>
-              <input ref={inputRef} type="file" accept=".bin,.dat,.jarvee,application/octet-stream" className="hidden" onChange={e => void readFile(e.target.files?.[0])} />
+              <input ref={inputRef} type="file" className="hidden" onChange={e => void readFile(e.target.files?.[0])} />
               <div className="flex items-center gap-3 mt-4">
                 <Button onClick={() => inputRef.current?.click()}><Upload className="w-4 h-4 mr-2" />Browse</Button>
                 {fileName && <span className="text-sm text-foreground truncate">{fileName}</span>}
@@ -77,25 +102,33 @@ export default function JarveeBinaryViewerPage() {
             </div>
           </div>
           {error && <div className="mt-4 flex items-center gap-2 text-sm text-destructive"><AlertCircle className="w-4 h-4" />{error}</div>}
-          {fileName && !error && <div className="mt-4 flex items-center gap-2 text-xs text-emerald-600"><CheckCircle2 className="w-4 h-4" />Read successfully — display only; no account import occurred.</div>}
+          {fileName && !error && !loading && <div className="mt-4 flex items-center gap-2 text-xs text-emerald-600"><CheckCircle2 className="w-4 h-4" />Account data extracted — display only; no account import occurred.</div>}
         </div>
 
         <div className="desktop-card overflow-hidden">
           <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border">
-            <div className="flex items-center gap-2"><FileText className="w-4 h-4 text-primary" /><h2 className="text-sm font-semibold">Converted text</h2></div>
-            <Button variant="outline" size="sm" disabled={!text && !strings.length} onClick={() => void copyText()}><Clipboard className="w-3.5 h-3.5 mr-1.5" />Copy text</Button>
+            <div className="flex items-center gap-2"><FileText className="w-4 h-4 text-primary" /><h2 className="text-sm font-semibold">Jarvee account information</h2></div>
+            <Button variant="outline" size="sm" disabled={!profiles.length} onClick={() => void copyText()}><Clipboard className="w-3.5 h-3.5 mr-1.5" />Copy text</Button>
           </div>
-          {!text && !strings.length ? (
-            <div className="py-20 text-center text-sm text-muted-foreground">Browse for a Jarvee binary file to view its contents here.</div>
+          {loading ? (
+            <div className="py-20 flex justify-center items-center gap-2 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" />Extracting account information…</div>
+          ) : !profiles.length ? (
+            <div className="py-20 text-center text-sm text-muted-foreground">Browse for a Jarvee file to view usernames, passwords, email addresses, proxies, 2FA, cookies, and device information here.</div>
           ) : (
             <div className="p-5 space-y-5">
-              <pre className="min-h-[280px] max-h-[620px] overflow-auto rounded-lg bg-slate-950 text-slate-100 p-4 text-xs leading-relaxed whitespace-pre-wrap break-words">{text}</pre>
-              {strings.length > 0 && (
-                <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Printable strings found in binary ({strings.length})</h3>
-                  <pre className="max-h-[420px] overflow-auto rounded-lg bg-muted/50 p-4 text-xs leading-relaxed whitespace-pre-wrap break-words">{strings.join("\n")}</pre>
+              {profiles.map((profile, index) => (
+                <div key={index} className="rounded-lg border border-border overflow-hidden">
+                  <div className="px-4 py-3 bg-muted/40 text-sm font-semibold">Account {index + 1}{profile.username ? ` — ${profile.username}` : ""}</div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-border">
+                    {FIELDS.filter(([key]) => profile[key]).map(([key, label]) => (
+                      <div key={key} className="bg-background px-4 py-3 min-w-0">
+                        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
+                        <div className="mt-1 text-sm text-foreground break-all whitespace-pre-wrap">{profile[key]}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
           )}
         </div>
