@@ -6674,10 +6674,9 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
         accountLabel:              ja.accountLabel          ?? "",
         description:               "",
         username:                  ja.username,
-        // In this Jarvee export layout the parser's accountLabel value is the
-        // usable account password. The parser password slot is the internal
-        // per-account Jarvee identifier, which should not be shown.
-        password:                  ja.accountLabel          ?? "",
+        // Keep the dedicated parser password result in the password field.
+        // Never substitute account labels or internal Jarvee IDs.
+        password:                  ja.password              ?? "",
         email:                     ja.email                 ?? "",
         proxyHost:                 ja.proxyHost             ?? "",
         proxyPort:                 ja.proxyPort != null ? String(ja.proxyPort) : "",

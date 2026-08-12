@@ -94,6 +94,8 @@ const SENT_DM_RE = /(?:Hey|Hiii|Hii|Hi|Heyy|Hows it going)/i;
 const JARVEE_LABEL_RE = /^.{2,80}\s*\|\s*[A-Z][A-Z0-9 _-]{1,20}$/;
 // Jarvee account-status sentences — never a password.
 const JARVEE_STATUS_RE = /^(The account is|Account is (waiting|running|paused|stopped|active)|This account)/i;
+// Jarvee's serialized account identifier is metadata, never a credential.
+const JARVEE_ID_RE = /^Instagram_[A-Za-z0-9_]+$/;
 // TOTP 2FA secrets use base32 alphabet (A-Z, 2-7), typically 16-64 chars.
 // This discriminates them from base64 IG usernames (which contain lowercase/+//).
 // Jarvee sometimes exports them with spaces (grouped format, e.g. "RGG2 7WSL LXC3 K2HT").
@@ -150,6 +152,7 @@ function isLikelyPassword(s: string): boolean {
   if (DEVICE_RE.test(s)) return false;
   if (JARVEE_LABEL_RE.test(s)) return false;
   if (JARVEE_STATUS_RE.test(s)) return false;
+  if (JARVEE_ID_RE.test(s)) return false;
   if (s.includes(" ")) return false; // passwords never contain spaces; Jarvee config labels often do
   return true;
 }
