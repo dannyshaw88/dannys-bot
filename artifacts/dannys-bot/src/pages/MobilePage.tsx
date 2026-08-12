@@ -5250,11 +5250,11 @@ export function AutomationSettingsPanel({
               </span>
             </div>
           )}
-          {slotIdx !== undefined && (
-            <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={slotIdx} width={121} />
-          )}
           {slotUsername && (
             <span className="text-lg font-bold text-foreground whitespace-nowrap">for @{slotUsername}</span>
+          )}
+          {slotIdx !== undefined && (
+            <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={slotIdx} width={121} />
           )}
         </div>
       </div>
