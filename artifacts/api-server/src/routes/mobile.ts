@@ -13307,6 +13307,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     res.json({ serials, slots });
   });
 
+  // The farm grid uses the same rolling debug buffer as the device detail
+  // page, so its current-tool label cannot drift into a separate lifecycle
+  // state. Return the latest tool header seen for this device.
+  app.get("/api/mobile/devices/:serial/current-tool", (req: Request, res: Response) => {
+    const serial = p(req, "serial");
+    const lines = debugLogBuffer.get(serial) ?? [];
+    let tool: string | null = null;
+    for (const line of lines) {
+      const message = line.replace(/^\[[^\]]+\]\s*(?:\[[^\]]+\]\s*)?/, "");
+      if (/▶\s*View Explore/i.test(message)) tool = "Explore";
+      else if (/▶\s*View Feed/i.test(message)) tool = "View Feed";
+      else if (/▶\s*View Reels/i.test(message)) tool = "Reel Viewer";
+      else if (/▶\s*Direct Messaging/i.test(message)) tool = "Direct Messaging";
+      else if (/▶.*Stories/i.test(message)) tool = "Stories";
+      else if (/▶\s*Make a Post/i.test(message)) tool = "Make a Post";
+      else if (/▶\s*Follow Users/i.test(message)) tool = "Follow Users";
+      else if (/▶\s*Random Actions/i.test(message)) tool = "Random Actions";
+      else if (/Cycle\s+(?:complete|failed|aborted)/i.test(message)) tool = null;
+    }
+    res.json({ tool });
+  });
+
   // ── Element Inspector ─────────────────────────────────────────────────────
   // Like Chrome DevTools F12 — click a point on the phone mirror and get back
   // every accessibility node whose bounds contain that point, sorted from most

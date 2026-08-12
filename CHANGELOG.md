@@ -1,3 +1,15 @@
+## [1.2.484] — 2026-08-12
+
+### Added — Phone Farm current tool indicator
+
+- Phone Farm device cards now show the live current tool between the phone
+  visual and device name, including labels such as Reel Viewer and Follow
+  Users.
+- The indicator reads the device's rolling debugging log state and clears when
+  the cycle completes.
+- Increased the active-device Aura glow height by approximately 15% and made
+  it slightly more solid.
+
 ## [1.2.483] — 2026-08-12
 
 ### Fixed — Jarvee Binary Viewer export action

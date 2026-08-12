@@ -802,6 +802,7 @@ function DeviceCard({
   online,
   active,
   isStreaming,
+  currentTool,
   onClick,
   onRemove,
   custom,
@@ -812,6 +813,7 @@ function DeviceCard({
   online:      boolean;
   active:      boolean;
   isStreaming: boolean;
+  currentTool: string | null;
   onClick:     () => void;
   onRemove:    () => void;
   custom:      SlotCustomization;
@@ -901,6 +903,13 @@ function DeviceCard({
           mirrorUrl={mirrorUrl}
         />
 
+        <div className="h-5 shrink-0 flex items-center justify-center">
+          {currentTool && (
+            <span className="text-[11px] font-bold uppercase tracking-wide text-primary">
+              {currentTool}
+            </span>
+          )}
+        </div>
         <div className="shrink-0 text-center space-y-0.5">
           <p className="text-base font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
             {resolveDisplayName(device, phone)}
@@ -1006,6 +1015,7 @@ export function MobileDevicesPage() {
 
   // Serials where the phone mirror is powered on — polled every 2 s.
   const [streamingSerials, setStreamingSerials] = useState<Set<string>>(new Set());
+  const [currentTools, setCurrentTools] = useState<Map<string, string>>(new Map());
 
   const refreshDevices = useCallback(async () => {
     try {
@@ -1040,6 +1050,15 @@ export function MobileDevicesPage() {
     } catch { /* ignore */ }
   }, []);
 
+  const refreshCurrentTools = useCallback(async () => {
+    const entries = await Promise.all([...activeCycleSerials].map(async serial => {
+      const data = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/current-tool`)
+        .then(r => r.ok ? r.json() : null).catch(() => null);
+      return [serial, data?.tool] as const;
+    }));
+    setCurrentTools(new Map(entries.filter((entry): entry is readonly [string, string] => Boolean(entry[1]))));
+  }, [activeCycleSerials]);
+
   useEffect(() => {
     refreshDevices();
     refreshUsb();
@@ -1050,6 +1069,12 @@ export function MobileDevicesPage() {
     const streamId   = setInterval(refreshStreamActive, 2_000);
     return () => { clearInterval(usbId); clearInterval(cycleId); clearInterval(streamId); };
   }, [refreshDevices, refreshUsb, refreshCycleActive, refreshStreamActive]);
+
+  useEffect(() => {
+    void refreshCurrentTools();
+    const id = setInterval(() => void refreshCurrentTools(), 2_000);
+    return () => clearInterval(id);
+  }, [refreshCurrentTools]);
 
   const onlineSerials = new Set(
     usbPhones.filter(p => p.state === "device").map(p => p.serial)
@@ -1126,6 +1151,7 @@ export function MobileDevicesPage() {
                       online={onlineSerials.has(device.serial)}
                       active={activeCycleSerials.has(device.serial) && onlineSerials.has(device.serial)}
                       isStreaming={streamingSerials.has(device.serial) || (activeCycleSerials.has(device.serial) && onlineSerials.has(device.serial))}
+                      currentTool={currentTools.get(device.serial) ?? null}
                       onClick={() => {
                         const started = performance.now();
                         console.debug("[mobile-device-debug] device card clicked", {

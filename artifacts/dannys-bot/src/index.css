@@ -378,7 +378,7 @@
    Base is ~3× brighter than before; gradient fades toward the top.
    Vertical semi-axis extended 25% higher (55% → 69%). */
 @keyframes device-card-inner-glow-pulse {
-  0%, 100% { opacity: 0.55; }
+  0%, 100% { opacity: 0.68; }
   50%       { opacity: 1; }
 }
 .device-card-active {
@@ -399,11 +399,11 @@
   /* z-index: -1 within the isolation context puts the glow behind all children. */
   z-index: -1;
   background: radial-gradient(
-    ellipse 80% 93% at 50% 100%,
-    rgba(34, 211, 238, 0.93)  0%,
-    rgba(34, 211, 238, 0.46) 32%,
-    rgba(34, 211, 238, 0.12) 58%,
-    transparent              78%
+    ellipse 80% 108% at 50% 100%,
+    rgba(34, 211, 238, 0.96)  0%,
+    rgba(34, 211, 238, 0.55) 32%,
+    rgba(34, 211, 238, 0.16) 58%,
+    transparent              82%
   );
   pointer-events: none;
   border-radius: inherit;
