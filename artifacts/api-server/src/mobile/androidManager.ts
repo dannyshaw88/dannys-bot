@@ -5433,7 +5433,8 @@ export async function findDmSendButton(serial: string): Promise<{ x: number; y: 
  *     attribute frequently reports "" in the UIAutomator dump even when the
  *     field has visible text, so reading text-length and bailing on 0 silently
  *     leaves stale text in place.  60 backspaces on an already-empty field are
- *     harmless; on a field with text they always clear it.
+ *     harmless; on a field with text they always clear it. The sweep is sent
+ *     as one ADB invocation rather than 60 separate child processes.
  */
 export async function clearInstagramSearchBar(
   serial: string,
@@ -5470,9 +5471,11 @@ export async function clearInstagramSearchBar(
   onLog?.(`Follow: sending KEYCODE_MOVE_END + 60× KEYCODE_DEL to ensure search bar is clear`);
   runInputShell(serial, ["keyevent", "123"], "keyevent"); // KEYCODE_MOVE_END → cursor to end
   await _sleep(80);
-  for (let i = 0; i < 60; i++) {
-    runInputShell(serial, ["keyevent", "67"], "keyevent"); // KEYCODE_DEL (backspace)
-  }
+  runInputShell(
+    serial,
+    ["keyevent", ...Array.from({ length: 60 }, () => "67")],
+    "keyevent sweep",
+  ); // KEYCODE_DEL (backspace)
   await _sleep(200);
 }
 
