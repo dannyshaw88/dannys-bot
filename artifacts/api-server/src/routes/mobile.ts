@@ -3504,8 +3504,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (!Number.isFinite(configured.durationMinMs) || !Number.isFinite(configured.durationMaxMs)) {
       throw new Error(`Swipe Gesture Profile duration is invalid for ${source}`);
     }
-    const minDuration = Math.min(150, Math.min(configured.durationMinMs, configured.durationMaxMs));
-    const maxDuration = Math.min(150, Math.max(configured.durationMinMs, configured.durationMaxMs));
+    // The device profile owns gesture duration as well as geometry. Do not
+    // collapse calibrated ranges to the old 150 ms ceiling: on slower phones
+    // that turns the configured swipe into a touch-down/tap, which can focus
+    // Instagram's Send message composer instead of advancing the viewer.
+    const minDuration = Math.max(1, Math.min(configured.durationMinMs, configured.durationMaxMs));
+    const maxDuration = Math.max(minDuration, Math.max(configured.durationMinMs, configured.durationMaxMs));
     // The saved profile owns the physical gesture. Personality only changes
     // how quickly it is performed, so calibrated coordinates remain stable.
     const span = maxDuration - minDuration;
