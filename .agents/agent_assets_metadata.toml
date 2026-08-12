@@ -35,3 +35,10 @@ uri = "file://attached_assets/AlterEgo_Fitness_WRE_1786468586557_decoded.json"
 type = "unspecified"
 title = "Decoded WRE EQX export"
 description = "Full locally decoded JSON export from the uploaded WRE EQX file."
+
+[[outputs]]
+id = "RZG0ZPgK1_k9jKonI0zBl"
+uri = "file://attached_assets/AlterEgo_Fitness_WRE_imported-account.json"
+type = "unspecified"
+title = "AlterEgo Fitness WRE — Full Account Export"
+description = "Complete parsed Jarvee account information, including device, proxy, authentication, follow-source, followed-user, and DM-recipient fields."
