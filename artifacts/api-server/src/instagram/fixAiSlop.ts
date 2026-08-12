@@ -336,11 +336,16 @@ export async function fixAiSlop(
     let sharp: any;
     try {
       sharp = (await import("sharp")).default;
-    } catch {
-      await writeFile(tmp, stripped);
-      console.log(`[fixAiSlop] Sharp unavailable — binary strip only (no pixel perturbation)`);
-      onLog?.("Fix AI Slop: WARNING — Sharp unavailable; only metadata stripping ran, no pixel perturbation");
-      return tmp;
+    } catch (err) {
+      // Metadata stripping alone is not sufficient protection for this
+      // workflow. Never return a partially protected image: callers must
+      // abort before pushing or uploading when the pixel-perturbation stage
+      // cannot run in the packaged runtime.
+      await unlink(tmp).catch(() => {});
+      const detail = err instanceof Error ? `: ${err.message}` : "";
+      console.error(`[fixAiSlop] Sharp unavailable — refusing to continue${detail}`);
+      onLog?.(`Fix AI Slop: FAILED — Sharp unavailable; refusing to push an unprotected image`);
+      throw new Error(`Fix AI Slop requires Sharp pixel processing, but Sharp is unavailable${detail}`);
     }
 
     // 2a: Re-encode via Sharp to strip any remaining metadata (ICC profiles,
