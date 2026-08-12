@@ -2761,7 +2761,9 @@ export async function tap(serial: string, x: number, y: number, source?: "manual
  * invocation, with the pause done on-device (`sleep`) rather than in two
  * separate host-side spawns — that keeps the on-device gap tight and
  * consistent regardless of adb/USB latency. The inter-tap delay is randomized
- * between 50 ms and 250 ms and is logged for every gesture.
+ * between 35 ms and 120 ms and is logged for every gesture. Reel media can
+ * begin its single-tap open transition quickly, so the upper bound must stay
+ * well below the previous 250 ms ceiling.
  */
 export async function doubleTap(
   serial: string,
@@ -2771,7 +2773,7 @@ export async function doubleTap(
 ): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  const interTapDelayMs = 50 + Math.floor(Math.random() * 201);
+  const interTapDelayMs = 35 + Math.floor(Math.random() * 86);
   const interTapDelaySeconds = (interTapDelayMs / 1000).toFixed(3);
   logger.info(
     { serial, x, y, interTapDelayMs },
