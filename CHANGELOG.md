@@ -1,3 +1,14 @@
+## [1.2.479] — 2026-08-12
+
+### Added — Per-device Reel swipe evidence
+
+- Reel advance swipes now record the device screen coordinate space, calibrated
+  gesture profile values, final transformed path, foreground package, and live
+  accessibility-tree presence immediately before and after the gesture.
+- The evidence is captured from the device runtime rather than inferred from
+  screenshot filenames or dashboard polling timestamps, so different device
+  resolutions and mirror scaling can be diagnosed independently.
+
 ## [1.2.478] — 2026-08-12
 
 ### Added — Temporary Jarvee binary account viewer
