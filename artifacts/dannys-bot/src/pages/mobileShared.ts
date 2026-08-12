@@ -350,7 +350,7 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   updateBioText: "",
   updateBioDisableAfterUsed: false,
   makePostUseChatGpt: false,
-  makePostFixAiSlop: false,
+  makePostFixAiSlop: true,
   makePostPostToProfilePctMin: 100, makePostPostToProfilePctMax: 100,
   makePostPostToStoryPctMin: 0, makePostPostToStoryPctMax: 0,
   makePostCaptionText: "",

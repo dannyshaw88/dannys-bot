@@ -1789,7 +1789,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostLocalFolderDeleteAfterUpload: z.boolean().default(false),
     makePostAddLocation: z.boolean().default(false),
     makePostUseChatGpt: z.boolean().default(false),
-    makePostFixAiSlop: z.boolean().default(false),
+    makePostFixAiSlop: z.boolean().default(true),
     makePostPostToProfilePctMin: z.number().min(0).max(100).default(100),
     makePostPostToProfilePctMax: z.number().min(0).max(100).default(100),
     makePostPostToStoryPctMin: z.number().min(0).max(100).default(0),
@@ -1929,7 +1929,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       makePostLocalFolderEnabled: true, makePostLocalFolderPath: "",
       makePostLocalFolderNoRepeat: false, makePostLocalFolderRandom: false,
       makePostLocalFolderDeleteAfterUpload: false,
-    makePostUseChatGpt: false, makePostFixAiSlop: false,
+    makePostUseChatGpt: false, makePostFixAiSlop: true,
       makePostCaptionText: "",
       makePostImageSettings: {
         contrast: { enabled: true, min: 5, max: 250 },
@@ -2401,7 +2401,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostLocalFolderEnabled: true, makePostLocalFolderPath: "",
         makePostLocalFolderNoRepeat: false, makePostLocalFolderRandom: false,
         makePostLocalFolderDeleteAfterUpload: false,
-        makePostUseChatGpt: false, makePostFixAiSlop: false,
+        makePostUseChatGpt: false, makePostFixAiSlop: true,
         makePostPostToProfilePctMin: 100, makePostPostToProfilePctMax: 100,
         makePostPostToStoryPctMin: 0, makePostPostToStoryPctMax: 0,
         makePostCaptionText: "",
@@ -7267,7 +7267,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // perturbation before pushing the image to the device.  MUST be in this
     // schema or Zod strips it from the request body and doFixAiSlop is always
     // undefined (falsy) regardless of what the frontend sends.
-    makePostFixAiSlop: z.boolean().default(false),
+    makePostFixAiSlop: z.boolean().default(true),
     // Post destination: probability that a given Make a Post attempt goes to
     // the profile feed vs. to a Story.  Defaults keep existing behaviour
     // (profile=100%, story=0%).  If story is rolled first (random < storyPct),
