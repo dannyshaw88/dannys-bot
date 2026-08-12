@@ -64,7 +64,25 @@ jobs:
           path: artifacts/dannys-bot/dist/public
       - name: Install Electron dependencies
         working-directory: artifacts/electron
-        run: npm install --ignore-scripts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $maxAttempts = 3
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            Write-Host "Installing Electron dependencies (attempt $attempt/$maxAttempts)"
+            npm install --ignore-scripts `
+              --fetch-retries=5 `
+              --fetch-retry-factor=2 `
+              --fetch-retry-mintimeout=2000 `
+              --fetch-retry-maxtimeout=60000
+            if ($LASTEXITCODE -eq 0) {
+              break
+            }
+            if ($attempt -eq $maxAttempts) {
+              throw "npm install failed after $maxAttempts attempts"
+            }
+            Start-Sleep -Seconds (10 * $attempt)
+          }
       - name: Build Electron bundle
         working-directory: artifacts/electron
         run: node build.mjs
