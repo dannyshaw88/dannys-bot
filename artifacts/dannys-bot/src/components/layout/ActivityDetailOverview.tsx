@@ -64,7 +64,7 @@ export function ActivityDetailOverview({
     .map(part => part.trim())
     .filter(Boolean);
   return (
-    <span className={`inline-flex items-center gap-2 whitespace-nowrap ${className}`}>
+    <span className={`inline-flex flex-wrap items-center gap-x-2 gap-y-1 ${className}`}>
       {parts.map((part, index) => (
         <span key={`part-${index}`} className="inline-flex items-center">
           {renderMetricPart(part, index)}
