@@ -4960,11 +4960,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let trayXml = await android.dumpUi(serial).catch(() => "");
     let storyBubbles = extractStoryBubbles(trayXml);
 
-    // If the first dump finds nothing, wait 2 s and retry once — the story
+    // If the first dump finds nothing, wait briefly and retry once — the story
     // tray sometimes finishes populating slightly after the feed renders.
     if (storyBubbles.length === 0) {
-      onLog?.(`Story tray: first dump found no story bubbles — waiting 2 s and retrying…`);
-      await new Promise(r => setTimeout(r, 2000));
+      onLog?.(`Story tray: first dump found no story bubbles — waiting 500 ms and retrying…`);
+      await new Promise(r => setTimeout(r, 500));
       trayXml = await android.dumpUi(serial).catch(() => "");
       storyBubbles = extractStoryBubbles(trayXml);
     }
@@ -4978,7 +4978,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const { w: retryW, h: retryH } = getScreenSize(serial);
         await android.tap(serial, Math.round(retryW * 0.10), Math.round(retryH * 0.975));
       }
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, 500));
       trayXml = await android.dumpUi(serial).catch(() => "");
       storyBubbles = extractStoryBubbles(trayXml);
     }
@@ -11519,8 +11519,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 steps.push(`pre-stories-popup-dismissed(${preStoriesPopup})`);
                 await sleepOrAbort(serial, 600);
               }
-              tLog("▶ Waiting for story tray to load…");
-              await sleepOrAbort(serial, 5000);
+              // The story scanner performs the live accessibility check itself.
+              // A long fixed sleep here only delays the first dump when the tray
+              // is already rendered; keep a short settle window for animation.
+              tLog("▶ Checking story tray readiness…");
+              await sleepOrAbort(serial, 800);
               tLog(`▶ Starting stories (up to ${viewStoriesSlidesMax})`);
               storyEntry = await pickAndOpenRandomStory(
                 serial,

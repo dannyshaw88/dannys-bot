@@ -1,3 +1,12 @@
+## [1.2.474] — 2026-08-12
+
+### Improved — Faster story tray startup
+
+- Reduced the fixed story-tray settle delay from 5 seconds to 800 ms.
+- Kept the live UIAutomator tray scan and confirmed-bubble tap safety intact.
+- Reduced retry waits from 2 seconds to 500 ms when the first scan finds no
+  bubbles.
+
 ## [1.2.473] — 2026-08-12
 
 ### Improved — Follow search cleanup speed
