@@ -3875,7 +3875,14 @@ export async function findFeedActionIcons(
     xml.includes("android.view.TextureView") ||
     xml.includes("android.widget.VideoView") ||
     xml.includes(":id/video_player") ||
-    xml.includes(":id/row_feed_video");
+    xml.includes(":id/row_feed_video") ||
+    // Embedded Reels often expose neither a VideoView nor a video_player
+    // resource-id in the Feed hierarchy. Their accessibility text/resource
+    // markers are still enough to prove that a media double-tap would open
+    // the full-screen Reel viewer instead of liking the Feed post.
+    /(?:text|content-desc)="[^"]*\bReel\s+by\b[^"]*"/i.test(xml) ||
+    xml.includes("reels_feed_media_view") ||
+    xml.includes("clips_media");
   const hasInteractiveMediaOverlay =
     /(?:text|content-desc)="[^"]*(?:ask me anything|why pick a|poll|quiz|question sticker|add yours|link sticker|shop now|learn more)[^"]*"/i.test(xml) ||
     /resource-id="[^"]*(?:question|poll|quiz|sticker|link_sticker|interactive)[^"]*"/i.test(xml);
