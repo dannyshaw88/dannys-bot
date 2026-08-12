@@ -12,7 +12,7 @@ import {
   Send,
   Eye,
 } from "lucide-react";
-import { normalizeActivityDetail } from "./activityDetailUtils";
+import { compactCycleMetrics } from "./activityDetailUtils";
 
 type ActivityMetric = {
   pattern: RegExp;
@@ -56,7 +56,7 @@ export function ActivityDetailOverview({
   detail?: string;
   className?: string;
 }) {
-  const normalized = normalizeActivityDetail(detail);
+  const normalized = compactCycleMetrics(detail);
   if (!normalized) return null;
 
   const parts = normalized

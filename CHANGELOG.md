@@ -1,3 +1,12 @@
+## [1.2.481] — 2026-08-12
+
+### Fixed — Compact historical Dashboard cycle rows
+
+- Dashboard Activity Log now also compacts older persisted cycle traces into
+  non-zero outcome metrics, so historical rows no longer display lifecycle
+  steps such as power-on, unlock, or launch.
+- New cycle rows continue to use the server-side metrics-only detail format.
+
 ## [1.2.480] — 2026-08-12
 
 ### Fixed — Dashboard activity uses metrics only
