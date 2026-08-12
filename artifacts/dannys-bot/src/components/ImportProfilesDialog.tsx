@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from "react";
-import { Upload, FileText, CheckCircle2, XCircle, Loader2, AlertTriangle, X } from "lucide-react";
+import { Upload, FileText, CheckCircle2, XCircle, Loader2, AlertTriangle, X, Download } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -530,6 +530,44 @@ export function ImportProfilesDialog({ open, onOpenChange }: Props) {
     }
   };
 
+  const exportImportedDetails = () => {
+    if (!parsed?.length) return;
+    const fields: Array<keyof ParsedProfile> = [
+      "accountLabel", "username", "password", "email", "proxyHost", "proxyPort",
+      "proxyUsername", "proxyPassword", "userAgentEmbedded", "userAgentApi", "tags",
+      "dateOfBirth", "notes", "phoneNumber", "twoFASecretKey", "backupCodes",
+      "emailValidationUsername", "emailValidationPassword", "emailValidationPop3Server",
+      "emailValidationPort", "accStatus", "deviceId", "deviceUuid", "phoneId", "adid",
+      "apiCookies",
+    ];
+    const labels: Record<keyof ParsedProfile, string> = {
+      accountLabel: "Account label", username: "Instagram username", password: "Instagram password",
+      email: "Email", proxyHost: "Proxy host", proxyPort: "Proxy port",
+      proxyUsername: "Proxy username", proxyPassword: "Proxy password",
+      userAgentEmbedded: "Embedded browser user agent", userAgentApi: "API/mobile user agent",
+      tags: "Tags", dateOfBirth: "Date of birth", notes: "Notes", phoneNumber: "Phone number",
+      twoFASecretKey: "2FA secret key", backupCodes: "Backup codes",
+      emailValidationUsername: "Email validation username",
+      emailValidationPassword: "Email validation password",
+      emailValidationPop3Server: "Email validation POP3 server",
+      emailValidationPort: "Email validation port", accStatus: "Account status",
+      deviceId: "Device ID", deviceUuid: "Device UUID", phoneId: "Phone ID",
+      adid: "Advertising ID", apiCookies: "API cookies",
+    };
+    const text = parsed.map((profile, index) => [
+      `PROFILE ${index + 1}`,
+      ...fields.map(field => `${labels[field]}: ${profile[field] || ""}`),
+    ].join("\n")).join("\n\n" + "=".repeat(72) + "\n\n");
+    const blob = new Blob([text + "\n"], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${fileName.replace(/\.[^/.]+$/, "") || "jarvee-import"}-details.txt`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Export ready", description: `Exported details for ${parsed.length} profile${parsed.length === 1 ? "" : "s"}.` });
+  };
+
   const handleClose = () => {
     if (!importing) { reset(); onOpenChange(false); }
   };
@@ -683,6 +721,9 @@ export function ImportProfilesDialog({ open, onOpenChange }: Props) {
                   </div>
                 )}
               </div>
+              <Button variant="outline" onClick={exportImportedDetails} className="w-fit">
+                <Download className="w-4 h-4 mr-2" /> Export details (.txt)
+              </Button>
               {failCount > 0 && (
                 <div className="border border-border rounded-xl overflow-hidden">
                   <div className="overflow-auto max-h-48">

@@ -1,3 +1,12 @@
+## [1.2.482] — 2026-08-12
+
+### Added — Jarvee import details export
+
+- Added a visible **Export details (.txt)** action after a profile import.
+- The export includes every extracted field for each parsed profile, including
+  credentials, proxy data, user agents, device identifiers, 2FA, cookies, and
+  email-validation fields.
+
 ## [1.2.481] — 2026-08-12
 
 ### Fixed — Compact historical Dashboard cycle rows
