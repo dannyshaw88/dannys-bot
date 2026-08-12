@@ -1,3 +1,17 @@
+## [1.2.478] — 2026-08-12
+
+### Added — Temporary Jarvee binary account viewer
+
+- Added a dedicated **Jarvee Binary** button directly beneath Settings in the left navigation.
+- Added a temporary, display-only Jarvee file reader. It does not import, create, update, or save accounts.
+- The Windows file picker now defaults to **All files**, so Jarvee exports are not restricted to a short list of extensions.
+- Binary Jarvee files are parsed through the existing server-side BinaryFormatter/XOR parser instead of being shown as unreadable raw characters.
+- Account details are displayed in structured fields for username, Instagram password, email address, email password, description, proxy host/port, proxy username/password, 2FA secret, device information, browser user agent, account label, and other available metadata.
+- Followed usernames are grouped into one collapsible field and displayed one username per line.
+- Removed non-requested Follow Sources and DM Recipients from the viewer.
+- Added copy-to-clipboard support for the extracted account details.
+- The canonical `.github/workflows/build-windows-installer.yml` remains the single GitHub Actions workflow for building and publishing the Windows installer. Deprecated duplicate workflow stubs were intentionally left unchanged.
+
 ## [1.2.477] — 2026-08-12
 
 ### Fixed — Human typo correction deletion
