@@ -2855,6 +2855,16 @@ export async function keyevent(serial: string, code: string | number): Promise<v
   await runInputShell(serial, ["keyevent", String(code)], "keyevent");
 }
 
+/**
+ * Typing-only correction primitive. The general keyevent helper deliberately
+ * rejects destructive keys so unrelated automation cannot erase user content.
+ * Human typo correction is the one narrowly-scoped exception: it must delete
+ * exactly the injected character and then continue the same typing session.
+ */
+export async function deleteOneCharacterForTyping(serial: string): Promise<void> {
+  await runInputShell(serial, ["keyevent", "67"], "typing-correction-delete");
+}
+
 // ── Automation-cycle lifecycle steps ────────────────────────────────────────
 // Real button/gesture actions used to bookend each automation cycle — the
 // phone should look like a person picked it up, used Instagram, put it down,
@@ -10445,7 +10455,7 @@ export async function typeViaCalibrationMap(
     const backspaceStartedAt = Date.now();
     let backspaceSent = false;
     try {
-      await keyevent(serial, 67); // KEYCODE_DEL
+      await deleteOneCharacterForTyping(serial);
       backspaceSent = true;
       await _sleep(35);
     } catch {

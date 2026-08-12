@@ -1,3 +1,13 @@
+## [1.2.477] — 2026-08-12
+
+### Fixed — Human typo correction deletion
+
+- Human typo correction now uses a dedicated typing-only delete primitive.
+- The general keyevent guard still blocks destructive keyevents for unrelated
+  automation, while the correction path can delete exactly the injected typo
+  and continue typing.
+- Full ADB input errors remain surfaced if the device rejects the delete.
+
 ## [1.2.476] — 2026-08-12
 
 ### Fixed — Complete Dashboard cycle metric stamping
