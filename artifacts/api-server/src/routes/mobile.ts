@@ -12242,12 +12242,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (postsUploaded) parts.push(`${postsUploaded} post${postsUploaded === 1 ? "" : "s"} uploaded`);
         if (feedScrolled) parts.push(`${feedScrolled} posts scrolled`);
          if (exploreScrolled) parts.push(`${exploreScrolled} Explore scroll${exploreScrolled === 1 ? "" : "s"}`);
-        if (hasCycleStatistics) storage.createSessionAction({
+        storage.createSessionAction({
           profileId: mobileProfileId ?? 0,
           toolId: 0,
           action: "tool_complete",
           targetUsername: slotUsername || "",
-          detail: parts.length ? parts.join(", ") : "No actions taken",
+          detail: cycleMetricSummary(),
           result: "ok",
           sourceValue: `${serial}:${slotIdx}`,
           sourceType: "phone",

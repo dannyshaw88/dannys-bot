@@ -1,3 +1,14 @@
+## [1.2.476] — 2026-08-12
+
+### Fixed — Complete Dashboard cycle metric stamping
+
+- Dashboard cycle completion entries now always include every configured cycle
+  metric, including metrics that remained at zero or were not performed.
+- Zero-value metrics are stamped in the completion detail instead of being
+  omitted.
+- Statistics persistence remains unchanged: zero values do not increment
+  lifetime or daily totals.
+
 ## [1.2.475] — 2026-08-12
 
 ### Fixed — Random Actions notification navigation
