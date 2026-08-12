@@ -10851,14 +10851,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let _slotUsername = "";       // captured from schema parse for catch-block use
     let _mobileProfileId: number | null = null; // same
     const cycleMetricSummary = () => [
+      `1 cycle`,
       `${likes + storyLikes + exploreLikes + reelsLikes + injectBrowsingLikes} likes`,
       `${followedCount} follows`,
       `${storiesWatched} stories watched`,
       `${reelsViewed} reels watched`,
       `${sharesDm} DMs`,
-      `${sharesFeed} feed shares`,
-      `${saves} saved`,
       `${postsUploaded} posts uploaded`,
+      `${sharesFeed + sharesDm} shares`,
+      `${saves} saved`,
       `${reelsViewed} reels scrolled`,
       `${feedScrolled} posts scrolled`,
       `${exploreScrolled} Explore scrolls`,

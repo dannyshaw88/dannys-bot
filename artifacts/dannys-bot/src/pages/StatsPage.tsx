@@ -154,9 +154,9 @@ const FARM_STAT_LABELS: { key: string; label: string; icon: React.ReactNode; col
   { key: "session_tool",    label: "Session",  icon: <Fingerprint className="w-3 h-3" />, color: "text-cyan-500" },
   { key: "trustscore",      label: "Trust Score",    icon: <Shield className="w-3 h-3" />,      color: "text-indigo-500" },
   { key: "cycles",          label: "Cycles",         icon: <Activity className="w-3 h-3" />,   color: "text-cyan-500" },
-  { key: "likes",           label: "Likes",          icon: <Heart className="w-3 h-3" fill="currentColor" />, color: "text-rose-500" },
+  { key: "likes",           label: "Likes",          icon: <Heart className="w-3 h-3" fill="currentColor" />, color: "text-red-500" },
   { key: "follows",         label: "Follows",        icon: <UserPlus className="w-3 h-3" />,    color: "text-blue-500" },
-  { key: "stories",         label: "Stories",        icon: <BookOpen className="w-3 h-3" />,    color: "text-emerald-500", showEye: true },
+  { key: "stories",         label: "Stories",        icon: <BookOpen className="w-3 h-3" />,    color: "text-indigo-500", showEye: true },
   { key: "dms",             label: "DMs",            icon: <Mail className="w-3 h-3" />,        color: "text-violet-500" },
   { key: "posts",           label: "Posts",          icon: <ImagePlus className="w-3 h-3" />,  color: "text-fuchsia-500" },
    { key: "feed_shares",     label: "Shares",         icon: <Send className="w-3 h-3" />,        color: "text-amber-500" },
@@ -191,9 +191,9 @@ const MOBILE_METRIC_DEFS: {
   pieColor: string;
 }[] = [
   { key: "cycles",          label: "Cycles",          icon: <Activity className="w-3.5 h-3.5" />, color: "text-cyan-500",   pieColor: "#06b6d4" },
-  { key: "likes",           label: "Likes",           icon: <Heart className="w-3.5 h-3.5" />,    color: "text-rose-500",   pieColor: "#f43f5e" },
+  { key: "likes",           label: "Likes",           icon: <Heart className="w-3.5 h-3.5" />,    color: "text-red-500",   pieColor: "#ef4444" },
   { key: "follows",         label: "Follows",         icon: <UserPlus className="w-3.5 h-3.5" />, color: "text-blue-500",   pieColor: "#3b82f6" },
-  { key: "stories",         label: "Story Views",     icon: <BookOpen className="w-3.5 h-3.5" />, color: "text-emerald-500", pieColor: "#10b981" },
+  { key: "stories",         label: "Story Views",     icon: <BookOpen className="w-3.5 h-3.5" />, color: "text-indigo-500", pieColor: "#6366f1" },
   { key: "reels",            label: "Reels Viewed",    icon: <Clapperboard className="w-3.5 h-3.5" />, color: "text-sky-500", pieColor: "#0ea5e9" },
   { key: "dms",              label: "DMs Sent",        icon: <Mail className="w-3.5 h-3.5" />,     color: "text-violet-500", pieColor: "#8b5cf6" },
   { key: "feed_shares",      label: "Shares",          icon: <Send className="w-3.5 h-3.5" />,     color: "text-amber-500",  pieColor: "#f59e0b" },

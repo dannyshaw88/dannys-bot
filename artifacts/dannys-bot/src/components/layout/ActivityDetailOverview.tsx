@@ -22,11 +22,12 @@ type ActivityMetric = {
 };
 
 const ACTIVITY_METRICS: ActivityMetric[] = [
+  { pattern: /^\d+\s+cycles?$/i, icon: Activity, color: "text-cyan-500" },
   { pattern: /^\d+\s+follows?(?:\s+done)?$/i, icon: UserPlus, color: "text-blue-500" },
   { pattern: /^\d+\s+likes?(?:\s+done)?$/i, icon: Heart, color: "text-red-500", filled: true },
   { pattern: /^\d+\s+DMs$/i, icon: Mail, color: "text-violet-500" },
   { pattern: /^\d+\s+posts?\s+uploaded$/i, icon: ImagePlus, color: "text-fuchsia-500" },
-  { pattern: /^\d+\s+feed\s+shares$/i, icon: Send, color: "text-amber-500" },
+  { pattern: /^\d+\s+shares$/i, icon: Send, color: "text-amber-500" },
   { pattern: /^\d+\s+saved$/i, icon: Bookmark, color: "text-black", filled: true },
   { pattern: /^\d+\s+stories?\s+watched$/i, icon: BookOpen, color: "text-indigo-500" },
   { pattern: /^\d+\s+reels?\s+watched$/i, icon: Clapperboard, color: "text-sky-500" },
