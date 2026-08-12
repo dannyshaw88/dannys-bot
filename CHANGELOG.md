@@ -1,3 +1,12 @@
+## [1.2.475] — 2026-08-12
+
+### Fixed — Random Actions notification navigation
+
+- Check Notifications now requires a positively detected Home tab and taps it
+  before scanning for the Notifications icon.
+- Removed the unsafe Back-button fallback when Home cannot be identified;
+  the action now skips safely instead.
+
 ## [1.2.474] — 2026-08-12
 
 ### Improved — Faster story tray startup

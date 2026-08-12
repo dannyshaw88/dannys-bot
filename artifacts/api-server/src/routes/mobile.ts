@@ -8292,13 +8292,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Notifications can be launched after another tool leaves Instagram on a
     // nested screen. Establish the Home surface before looking for the heart.
     const homeTab = await android.findHomeTab(serial).catch(() => null);
-    if (homeTab) {
-      await android.tap(serial, homeTab.x, homeTab.y);
-      await sleepOrAbort(serial, 1000);
-    } else {
-      await android.pressBack(serial);
-      await sleepOrAbort(serial, 1000);
+    if (!homeTab) {
+      onLog?.("Random Actions: Home tab not positively detected — skipping check notifications");
+      logger.warn({ serial }, "[jitter-check-notif] Home tab not found; refusing notification navigation");
+      return;
     }
+    onLog?.(`Random Actions: tapping Home before notifications at (${homeTab.x},${homeTab.y})`);
+    await android.tap(serial, homeTab.x, homeTab.y);
+    await sleepOrAbort(serial, 1000);
     // Find the notifications heart icon via accessibility tree scan.
     const icon = await android.findInstagramNotificationsIcon(serial).catch(() => null);
     if (!icon) {
