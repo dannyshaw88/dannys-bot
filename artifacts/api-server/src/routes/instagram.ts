@@ -6672,7 +6672,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
 
       const profiles = jarveeAccounts.map(ja => ({
         accountLabel:              ja.accountLabel          ?? "",
-        description:               ja.description           ?? "",
+        description:               "",
         username:                  ja.username,
         // Keep the dedicated parser password result in the password field.
         // Never substitute account labels or internal Jarvee IDs.
