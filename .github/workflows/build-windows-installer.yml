@@ -89,6 +89,24 @@ jobs:
       - name: Build Electron bundle
         working-directory: artifacts/electron
         run: node build.mjs
+      - name: Verify Windows packaging inputs
+        working-directory: artifacts/electron
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $required = @(
+            "dist/main.js",
+            "dist/server/start.mjs",
+            "dist/frontend/public/index.html",
+            "resources/bin/win32/idevice_id.exe",
+            "assets/icon.ico"
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path $path -PathType Leaf)) {
+              throw "Required Windows packaging input is missing: $path"
+            }
+            Write-Host "Verified: $path"
+          }
       - name: Select Visual Studio toolchain for native Electron modules
         uses: ilammy/msvc-dev-cmd@v1
         with:
@@ -100,7 +118,7 @@ jobs:
           "npm_config_msvs_version=2022" >> $env:GITHUB_ENV
       - name: Build Windows installer
         working-directory: artifacts/electron
-        run: npx electron-builder --win --publish never
+        run: npx electron-builder --win --publish never --debug
         env:
           DANNY_BOT_UPDATER_TOKEN: ${{ secrets.UPDATER_TOKEN }}
       - name: Upload installer to Actions artifacts

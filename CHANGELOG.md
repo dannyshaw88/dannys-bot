@@ -1,3 +1,29 @@
+## [1.2.486] — 2026-08-12
+
+### Added — Low-overhead mobile input forensics
+
+- Every dispatched mobile tap now records the device serial, coordinates, and
+  whether it came from a manual or automated input source.
+- Every dispatched swipe now records both the requested path and the final path
+  after coordinate clamping and jitter are applied, along with its duration.
+- Calibrated profile swipes now include the Explore/feed source, personality,
+  reversal state, randomized pause, and settle delay in the live device log.
+- The evidence is captured at the actual Android input-dispatch boundary, so
+  future incidents can distinguish an intended gesture from the coordinates
+  actually sent to the phone without adding accessibility dumps, screenshots,
+  or delays to the automation flow.
+
+### Improved — Windows installer diagnostics
+
+- The canonical GitHub Actions Windows installer workflow now verifies the
+  generated Electron bundle, API entrypoint, frontend entrypoint, Windows
+  device tooling, and installer icon before packaging.
+- Electron Builder now runs in debug mode in CI so packaging failures include
+  the underlying file, dependency, or native-module error instead of only a
+  generic exit code.
+- The existing single canonical Windows installer workflow remains unchanged
+  as the only workflow responsible for producing the downloadable installer.
+
 ## [1.2.485] — 2026-08-12
 
 ### Fixed — Aborted phone cycles now appear in Statistics
