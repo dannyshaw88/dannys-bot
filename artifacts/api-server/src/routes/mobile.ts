@@ -7368,6 +7368,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // so the frontend can show "Running" only for the slot that is actually
   // executing, not for every slot on the same physical phone.
   const automationCycleActiveSlot = new Map<string, number>();
+  // Exact tool currently executing on each physical device. This is updated
+  // by the dispatcher itself rather than inferred from asynchronous log text.
+  const automationCurrentTool = new Map<string, string>();
 
   // Per-serial persistent log of users followed. Survives server restarts by
   // writing each entry to a JSON file on disk alongside the database.
@@ -11538,6 +11541,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       for (const [_toolIndex, _tool] of _toolSeq.entries()) {
         if (isCycleAborted(serial)) break;
         const _isFirst = _toolsRan === 0;
+        const _currentToolLabels: Record<string, string> = {
+          feed: "View Feed",
+          stories: "Stories",
+          explore: "Explore",
+          reels: "Reel Viewer",
+          checkDm: "Direct Messaging",
+          follow: "Follow Users",
+          post: "Make a Post",
+          postStory: "Post a Story",
+          "Random Actions": "Random Actions",
+        };
+        automationCurrentTool.set(
+          serial,
+          _tool.startsWith("follow_spread:") ? "Follow Users" : (_currentToolLabels[_tool] ?? _tool),
+        );
 
         // ── Feed ────────────────────────────────────────────────────────
         if (_tool === 'feed') {
@@ -12418,6 +12436,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } finally {
       automationCycleInProgress.delete(serial);
       automationCycleActiveSlot.delete(serial);
+      automationCurrentTool.delete(serial);
       checkFeedInProgress.delete(serial);
       automationCycleCurrentId.delete(serial);
       automationCycleAbortedId.delete(serial);
@@ -13312,21 +13331,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // state. Return the latest tool header seen for this device.
   app.get("/api/mobile/devices/:serial/current-tool", (req: Request, res: Response) => {
     const serial = p(req, "serial");
-    const lines = debugLogBuffer.get(serial) ?? [];
-    let tool: string | null = null;
-    for (const line of lines) {
-      const message = line.replace(/^\[[^\]]+\]\s*(?:\[[^\]]+\]\s*)?/, "");
-      if (/▶\s*View Explore/i.test(message)) tool = "Explore";
-      else if (/▶\s*View Feed/i.test(message)) tool = "View Feed";
-      else if (/▶\s*View Reels/i.test(message)) tool = "Reel Viewer";
-      else if (/▶\s*Direct Messaging/i.test(message)) tool = "Direct Messaging";
-      else if (/▶.*Stories/i.test(message)) tool = "Stories";
-      else if (/▶\s*Make a Post/i.test(message)) tool = "Make a Post";
-      else if (/▶\s*Follow Users/i.test(message)) tool = "Follow Users";
-      else if (/▶\s*Random Actions/i.test(message)) tool = "Random Actions";
-      else if (/Cycle\s+(?:complete|failed|aborted)/i.test(message)) tool = null;
-    }
-    res.json({ tool });
+    res.json({ tool: automationCurrentTool.get(serial) ?? null });
   });
 
   // ── Element Inspector ─────────────────────────────────────────────────────
