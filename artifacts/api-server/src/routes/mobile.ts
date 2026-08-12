@@ -13971,6 +13971,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.post("/api/mobile/devices/:serial/run-phone-app", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
+      // Phone Apps and Human Session Tool share the same physical device.
+      // Never wake/tap another app while an Instagram cycle owns the device;
+      // doing so can race the post/share flow and make account-switch UI appear
+      // to happen at the wrong point in the cycle.
+      if (automationCycleInProgress.has(serial) || checkFeedInProgress.has(serial)) {
+        res.status(409).json({
+          ok: false,
+          skipped: true,
+          error: "Device is busy with an Instagram automation cycle",
+        });
+        return;
+      }
       const { app: appId, scrollMin, scrollMax, storyTapMin, storyTapMax,
               tappedStoryScrollMin, tappedStoryScrollMax,
               internalLinkPctMin, internalLinkPctMax,
@@ -14086,6 +14098,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.post("/api/mobile/devices/:serial/phone-apps-complete", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
+      // Do not let a late scheduler completion request lock or otherwise
+      // manipulate a device that has already been claimed by HST.
+      if (automationCycleInProgress.has(serial) || checkFeedInProgress.has(serial)) {
+        res.status(409).json({
+          ok: false,
+          skipped: true,
+          error: "Device is busy with an Instagram automation cycle",
+        });
+        return;
+      }
       await android.sleepScreen(serial);
       logger.info({ serial }, "phone apps cycle complete; phone locked");
       res.json({ ok: true, locked: true });
