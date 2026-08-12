@@ -1,6 +1,7 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { TrustScoresTabContent, BulkImportTabContent } from "@/pages/ToolsPage";
 import ImagesPage from "@/pages/ImagesPage";
+import { JarveeBinaryViewerContent } from "@/pages/JarveeBinaryViewerPage";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -594,7 +595,7 @@ export function SettingsPage() {
         </div>
       )}
 
-      {settingsTab === "jarvee import" && <JarveeImportTabContent />}
+      {settingsTab === "jarvee import" && <JarveeBinaryViewerContent />}
 
       <div className={`space-y-4 w-full ${["my account", "trust scores", "fix images", "import", "jarvee import"].includes(settingsTab) ? "hidden" : ""}`}>
 

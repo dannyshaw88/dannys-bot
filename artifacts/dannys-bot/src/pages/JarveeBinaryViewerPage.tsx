@@ -25,7 +25,7 @@ function encodeBase64(bytes: Uint8Array) {
   return btoa(binary);
 }
 
-export default function JarveeBinaryViewerPage() {
+export function JarveeBinaryViewerContent() {
   const inputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const [fileName, setFileName] = useState("");
@@ -104,7 +104,7 @@ export default function JarveeBinaryViewerPage() {
   };
 
   return (
-    <AppLayout>
+    <div>
       <div className="max-w-5xl mx-auto pb-10">
         <div className="flex items-center gap-3 mb-6">
           <div className="p-2.5 rounded-xl bg-primary/10 text-primary"><FileSearch className="w-5 h-5" /></div>
@@ -189,6 +189,14 @@ export default function JarveeBinaryViewerPage() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+export default function JarveeBinaryViewerPage() {
+  return (
+    <AppLayout>
+      <JarveeBinaryViewerContent />
     </AppLayout>
   );
 }
