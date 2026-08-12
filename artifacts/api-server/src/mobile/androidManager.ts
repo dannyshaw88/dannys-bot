@@ -2748,6 +2748,10 @@ export async function clearFocusedTextField(serial: string, onLog?: (msg: string
 }
 
 export async function tap(serial: string, x: number, y: number, source?: "manual" | "bot"): Promise<void> {
+  logger.info(
+    { serial, x, y, source: source ?? "bot" },
+    "[mobile-input] tap dispatched",
+  );
   recorder.addTap(serial, x, y, undefined, source ?? "bot");
   await runInputShell(serial, ["tap", String(x), String(y)], "tap");
 }
@@ -2845,6 +2849,18 @@ export async function swipe(
     jx2 = clampX(boundedX2 + xOff);
   }
 
+  logger.info(
+    {
+      serial,
+      requestedFrom: [x1, y1],
+      requestedTo: [x2, y2],
+      dispatchedFrom: [jx1, jy1],
+      dispatchedTo: [jx2, jy2],
+      durationMs: Math.max(1, Math.round(durationMs)),
+      legacyJitter: applyLegacyJitter && !isLongPress && isVertical,
+    },
+    "[mobile-input] swipe dispatched",
+  );
   await runInputShell(
     serial,
     ["swipe", String(jx1), String(jy1), String(jx2), String(jy2), String(Math.max(1, Math.round(durationMs)))],
