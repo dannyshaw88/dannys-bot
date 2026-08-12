@@ -2234,14 +2234,6 @@ export function ProfilesPage() {
                 {exportingEqx ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <FileDown className="w-4 h-4 shrink-0 text-primary" />}
                 Export EQX File{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
-              <button
-                onClick={() => { setActionsOpen(false); jarveeImportRef.current?.click(); }}
-                disabled={jarveeImporting}
-                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {jarveeImporting ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <Upload className="w-4 h-4 shrink-0 text-muted-foreground" />}
-                Import Binary File
-              </button>
               <div className="col-span-3 mx-4 my-1 border-t border-border" />
               <button onClick={() => { setActionsOpen(false); handleBulkOpenBrowsers(); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
                 <Monitor className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="whitespace-nowrap">Open EB</span><span className="ml-1 text-[8px] font-semibold text-foreground">Ctrl+O</span>

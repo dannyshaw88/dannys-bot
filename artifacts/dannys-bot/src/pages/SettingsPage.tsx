@@ -25,6 +25,7 @@ const SETTINGS_TABS = [
   { label: "Trust Scores", icon: Shield },
   { label: "Fix Images", icon: Palette },
   { label: "Import", icon: Upload },
+  { label: "Jarvee Import", icon: Upload },
   { label: "Scraping", icon: Database },
   { label: "Automation", icon: Timer },
   { label: "Security", icon: ShieldAlert },
@@ -100,6 +101,71 @@ const INJECTABLE_MODELS: Array<FakePhoneEntry & { label: string; image?: string 
   { manufacturer: "Xiaomi", marketName: "Redmi A3",      androidVersion: "14", label: "Redmi A3"       },
   { manufacturer: "Xiaomi", marketName: "POCO M6 Pro",   androidVersion: "14", label: "POCO M6 Pro"    },
 ];
+
+function JarveeImportTabContent() {
+  const { toast } = useToast();
+  const [importing, setImporting] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const importFiles = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    if (!files.length) return;
+    setImporting(true);
+    let imported = 0;
+    let failed = 0;
+    const errors: string[] = [];
+    try {
+      for (const file of files) {
+        try {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          let binary = "";
+          for (let i = 0; i < bytes.length; i += 8192) {
+            binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+          }
+          const res = await fetch("/api/profiles/import-jarvee", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ fileBase64: btoa(binary) }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            failed++;
+            errors.push(`${file.name}: ${data.error ?? "Unknown error"}`);
+          } else {
+            imported += data.imported ?? 0;
+            failed += data.failed ?? 0;
+            if (data.failed > 0) errors.push(`${file.name}: some accounts failed`);
+          }
+        } catch (error: any) {
+          failed++;
+          errors.push(`${file.name}: ${error?.message ?? "Could not read file"}`);
+        }
+      }
+      if (failed === 0) {
+        toast({ title: "Jarvee import complete", description: `${imported} account${imported === 1 ? "" : "s"} imported successfully.` });
+      } else {
+        toast({ title: `Jarvee import: ${imported} imported, ${failed} failed`, description: errors.join("; "), variant: "destructive" });
+      }
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <div className="desktop-card p-6 space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold">Jarvee Binary Import</h2>
+        <p className="text-sm text-muted-foreground mt-1">Import Jarvee binary account files. Imported accounts are set to Pending and must be verified before use.</p>
+      </div>
+      <input ref={inputRef} type="file" accept="*" multiple className="hidden" onChange={importFiles} />
+      <Button type="button" onClick={() => inputRef.current?.click()} disabled={importing}>
+        {importing ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Importing…</> : <><Upload className="w-4 h-4 mr-2" />Choose Jarvee Binary File{importing ? "" : "s"}</>}
+      </Button>
+    </div>
+  );
+}
 
 function FakePhoneCard() {
   const { toast } = useToast();
@@ -485,7 +551,9 @@ export function SettingsPage() {
         </div>
       )}
 
-      <div className={`space-y-4 w-full ${["my account", "trust scores", "fix images", "import"].includes(settingsTab) ? "hidden" : ""}`}>
+      {settingsTab === "jarvee import" && <JarveeImportTabContent />}
+
+      <div className={`space-y-4 w-full ${["my account", "trust scores", "fix images", "import", "jarvee import"].includes(settingsTab) ? "hidden" : ""}`}>
 
         {/* Talk to Equinox Bot shortcut */}
         <button
