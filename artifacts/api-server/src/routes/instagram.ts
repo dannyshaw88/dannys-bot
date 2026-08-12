@@ -6672,6 +6672,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
 
       const profiles = jarveeAccounts.map(ja => ({
         accountLabel:              ja.accountLabel          ?? "",
+         description:               ja.accountLabel          ?? "",
         username:                  ja.username,
         password:                  ja.password,
         email:                     ja.email                 ?? "",

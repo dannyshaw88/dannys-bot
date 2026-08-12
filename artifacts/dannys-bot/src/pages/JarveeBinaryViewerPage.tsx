@@ -8,6 +8,7 @@ type JarveeProfile = Record<string, string | string[] | undefined>;
 
 const FIELDS: Array<[string, string]> = [
   ["username", "Username"], ["password", "Password"], ["email", "Email address"], ["emailPassword", "Email password"],
+  ["description", "Description"],
   ["proxyHost", "Proxy host"], ["proxyPort", "Proxy port"], ["proxyUsername", "Proxy username"],
   ["proxyPassword", "Proxy password"], ["twoFASecretKey", "2FA secret key"], ["backupCodes", "Backup codes"],
   ["phoneNumber", "Phone number"], ["userAgentApi", "API user agent"], ["userAgentEmbedded", "Embedded browser user agent"],
@@ -121,7 +122,7 @@ export default function JarveeBinaryViewerPage() {
                 <div key={index} className="rounded-lg border border-border overflow-hidden">
                   <div className="px-4 py-3 bg-muted/40 text-sm font-semibold">Account {index + 1}{profile.username ? ` — ${profile.username}` : ""}</div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-border">
-                    {FIELDS.filter(([key]) => profile[key]).map(([key, label]) => (
+                    {FIELDS.map(([key, label]) => (
                       <div key={key} className="bg-background px-4 py-3 min-w-0">
                         <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
                         {key === "followedUsernames" ? (
@@ -130,11 +131,11 @@ export default function JarveeBinaryViewerPage() {
                               {Array.isArray(profile[key]) ? `${profile[key].length} usernames` : "View usernames"}
                             </summary>
                             <div className="mt-2 max-h-64 overflow-auto rounded border border-border bg-muted/30 p-2 text-sm text-foreground whitespace-pre-line">
-                              {Array.isArray(profile[key]) ? profile[key].join("\n") : profile[key]}
+                              {Array.isArray(profile[key]) ? profile[key].join("\n") : profile[key] || "No data extracted"}
                             </div>
                           </details>
                         ) : (
-                          <div className="mt-1 text-sm text-foreground break-all whitespace-pre-wrap">{Array.isArray(profile[key]) ? profile[key].join("\n") : profile[key]}</div>
+                          <div className="mt-1 text-sm text-foreground break-all whitespace-pre-wrap">{Array.isArray(profile[key]) ? profile[key].join("\n") : profile[key] || "No data extracted"}</div>
                         )}
                       </div>
                     ))}
