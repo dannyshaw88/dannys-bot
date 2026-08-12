@@ -6672,9 +6672,12 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
 
       const profiles = jarveeAccounts.map(ja => ({
         accountLabel:              ja.accountLabel          ?? "",
-         description:               ja.accountLabel          ?? "",
+        description:               "",
         username:                  ja.username,
-        password:                  ja.password,
+        // In this Jarvee export layout the parser's accountLabel value is the
+        // usable account password. The parser password slot is the internal
+        // per-account Jarvee identifier, which should not be shown.
+        password:                  ja.accountLabel          ?? "",
         email:                     ja.email                 ?? "",
         proxyHost:                 ja.proxyHost             ?? "",
         proxyPort:                 ja.proxyPort != null ? String(ja.proxyPort) : "",
