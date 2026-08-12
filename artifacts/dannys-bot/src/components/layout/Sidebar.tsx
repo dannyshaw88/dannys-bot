@@ -124,6 +124,7 @@ export function Sidebar() {
     { name: "Phone Farm",      shortLabel: "PHONE FARM",     path: "/mobile",       icon: FilledFarmIcon        },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon },
     { name: "Settings",        shortLabel: "SETTINGS",       path: "/settings",     icon: FilledSettingsIcon  },
+    { name: "Jarvee Binary",   shortLabel: "JARVEE BINARY",  path: "/settings/jarvee-binary", icon: FileSearch },
   ];
 
   return (
@@ -146,6 +147,7 @@ export function Sidebar() {
             if (item.path === "/profiles") return location === "/profiles" || location.startsWith("/profiles/");
             if (item.path === "/mobile") return location === "/mobile" || location.startsWith("/mobile/");
              if (item.path === "/stats") return location === "/stats";
+             if (item.path === "/settings/jarvee-binary") return location === "/settings/jarvee-binary" || location === "/settings/jarvee-binary-viewer";
             return location.startsWith(item.path);
           })();
           const Icon = item.icon;
@@ -180,18 +182,6 @@ export function Sidebar() {
             </div>
           );
           })}
-          {location.startsWith("/settings") && (
-            <button
-              onClick={() => setLocation("/settings/jarvee-binary")}
-              className={cn(
-                "flex items-center gap-2 w-full pl-4 pr-2 py-3 text-left transition-colors",
-                location === "/settings/jarvee-binary" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground"
-              )}
-            >
-              <FileSearch className="w-4 h-4 shrink-0" />
-              <span className="text-[9px] font-bold tracking-wide leading-tight">JARVEE<br />BINARY VIEWER</span>
-            </button>
-          )}
         </div>
 
       </nav>
