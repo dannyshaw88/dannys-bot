@@ -6617,7 +6617,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     const swipeToNextReel = async (reelLabel: string) => {
       const rx = Math.round(w / 2);
-      const rsv = rollScrollVelocity(h, reelsScrollWeights, /*allowBack=*/false, /*safeStartFrac=*/0.80, reelsPersonalityHistory);
+      // The lower 20% of the Instagram viewer contains the "Send message"
+      // composer. Starting a swipe at 80% can press/focus that field before
+      // Android recognizes the movement, opening the keyboard instead of
+      // advancing the reel. Keep the touch-down clearly above the composer.
+      const rsv = rollScrollVelocity(h, reelsScrollWeights, /*allowBack=*/false, /*safeStartFrac=*/0.68, reelsPersonalityHistory);
       reelsPersonalityHistory.streak = reelsPersonalityHistory.lastMode === rsv.mode ? reelsPersonalityHistory.streak + 1 : 1;
       reelsPersonalityHistory.lastMode = rsv.mode;
       const beforeXml = await android.dumpUi(serial).catch(() => "");
