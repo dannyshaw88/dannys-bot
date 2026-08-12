@@ -10833,6 +10833,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let exploreScrolled = 0; // number of explore scrolls this cycle
     let _slotUsername = "";       // captured from schema parse for catch-block use
     let _mobileProfileId: number | null = null; // same
+    const cycleMetricSummary = () => [
+      `${likes + storyLikes + exploreLikes + reelsLikes + injectBrowsingLikes} likes`,
+      `${followedCount} follows`,
+      `${storiesWatched} stories watched`,
+      `${reelsViewed} reels watched`,
+      `${sharesDm} DMs`,
+      `${sharesFeed} feed shares`,
+      `${saves} saved`,
+      `${postsUploaded} posts uploaded`,
+      `${reelsViewed} reels scrolled`,
+      `${feedScrolled} posts scrolled`,
+      `${exploreScrolled} Explore scrolls`,
+    ].join(", ");
     const cycleStart = Date.now();
     // tLog prefixes every log line with elapsed seconds so the user can see
     // exactly where each chunk of time is going in the Log tab.
@@ -12144,15 +12157,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       steps.push("swipe-up");
       {
         const totalLikes = likes + storyLikes + exploreLikes + reelsLikes + injectBrowsingLikes;
-        const parts: string[] = [];
-        if (followedCount)            parts.push(`${followedCount} follow${followedCount === 1 ? ' done' : 's done'}`);
-        if (totalLikes)               parts.push(`${totalLikes} like${totalLikes === 1 ? ' done' : 's done'}`);
-        if (storiesWatched)           parts.push(`${storiesWatched} stor${storiesWatched === 1 ? 'ie watched' : 'ies watched'}`);
-        if (reelsViewed)              parts.push(`${reelsViewed} reel${reelsViewed === 1 ? ' watched' : 's watched'}`);
-        if (sharesDm)                 parts.push(`${sharesDm} DMs`);
-        if (sharesFeed)               parts.push(`${sharesFeed} feed shares`);
-        if (saves)                    parts.push(`${saves} saved`);
-        const summary = parts.length ? ` — ${parts.join(", ")}` : "";
+        const summary = ` — ${cycleMetricSummary()}`;
         const hasCycleStatistics =
           totalLikes > 0 ||
           followedCount > 0 ||
@@ -12164,9 +12169,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           postsUploaded > 0 ||
           feedScrolled > 0 ||
           exploreScrolled > 0;
-        tLog(hasCycleStatistics
-          ? `Cycle complete ✓${summary}`
-          : "Cycle ended — no tool statistics recorded");
+        tLog(`Cycle complete ✓${summary}`);
       }
       await android.sleepScreen(serial);
       steps.push("power-off");
@@ -12256,9 +12259,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (sharesDm)                 parts.push(`${sharesDm} DMs`);
         if (sharesFeed)               parts.push(`${sharesFeed} feed shares`);
         if (saves)                    parts.push(`${saves} saved`);
-        const summary = parts.length ? ` — ${parts.join(", ")}` : "";
+        const summary = ` — ${cycleMetricSummary()}`;
         if (aborted) {
-          tLog(`${parts.length ? `${parts.join(", ")} — ` : ""}Cycle aborted`);
+          tLog(`${cycleMetricSummary()} — Cycle aborted`);
         } else {
           tLog(`Cycle failed — ${e?.message ?? "unknown error"}${summary}`);
         }
@@ -12278,13 +12281,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (postsUploaded) parts.push(`${postsUploaded} post${postsUploaded === 1 ? "" : "s"} uploaded`);
         if (feedScrolled) parts.push(`${feedScrolled} posts scrolled`);
          if (exploreScrolled) parts.push(`${exploreScrolled} Explore scroll${exploreScrolled === 1 ? "" : "s"}`);
-        const statsSuffix = parts.length ? ` — ${parts.join(", ")}` : "";
+        const statsSuffix = ` — ${cycleMetricSummary()}`;
         storage.createSessionAction({
           profileId: _mobileProfileId ?? 0,
           toolId: 0,
           action: "tool_complete",
           targetUsername: _slotUsername,
-          detail: aborted ? `${parts.join(", ")}${parts.length ? " — " : ""}Cycle aborted` : `Cycle error: ${e?.message ?? "unknown"}${statsSuffix}`,
+          detail: aborted ? `${cycleMetricSummary()} — Cycle aborted` : `Cycle error: ${e?.message ?? "unknown"}${statsSuffix}`,
           result: aborted ? "ok" : "error",
           sourceValue: `${serial}:${incomingSlotIdx}`,
           sourceType: "phone",
