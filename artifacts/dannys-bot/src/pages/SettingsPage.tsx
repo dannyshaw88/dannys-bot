@@ -104,6 +104,7 @@ const INJECTABLE_MODELS: Array<FakePhoneEntry & { label: string; image?: string 
 
 function JarveeImportTabContent() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [importing, setImporting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -148,6 +149,8 @@ function JarveeImportTabContent() {
       } else {
         toast({ title: `Jarvee import: ${imported} imported, ${failed} failed`, description: errors.join("; "), variant: "destructive" });
       }
+      await queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/profiles"], type: "active" });
     } finally {
       setImporting(false);
     }
