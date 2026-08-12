@@ -9811,6 +9811,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     },
   ): Promise<number> {
     const { usersMin, usersMax, sources, onLog, onLike, recordFollow, browsing, skipFollowedUsernames, skipSkippedUsernames, filters } = params;
+    let searchReadyForReuse = !!params.searchAlreadyReady;
 
     // Follow leaves Instagram on the search/results surface after each
     // profile.  Always restore the normal Instagram UI before another tool
@@ -9861,6 +9862,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         return false;
       }
       onLog?.("Follow: skipped-user cleanup — search bar cleared and focused for next user");
+      searchReadyForReuse = true;
       return true;
     };
 
@@ -10185,7 +10187,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // search text accumulates.  clearInstagramSearchBar() finds and taps
         // the × clear button by resource-id, or falls back to backspace-over-
         // text using the EditText node's text attribute (no coordinates used).
-        await android.clearInstagramSearchBar(serial, (msg) => onLog?.(`  ${msg}`));
+        if (searchReadyForReuse) {
+          onLog?.("Follow: reusing confirmed clear/focus state — skipping redundant search cleanup");
+        } else {
+          await android.clearInstagramSearchBar(serial, (msg) => onLog?.(`  ${msg}`));
+        }
+        searchReadyForReuse = false;
         // Use only real taps on the saved Android keyboard calibration map.
         const typed = await android.typeViaSavedCalibrationMap(serial, username.replace(/^@+/, ""), loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile, message => {
           onLog?.(`  ${message}`);
@@ -10212,6 +10219,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // leave Explore and return to the feed; the next loop iteration will
           // find, focus, and clear the live search bar directly.
           await android.clearInstagramSearchBar(serial, (msg) => onLog?.(`  ${msg}`)).catch(() => {});
+          searchReadyForReuse = true;
           onLog?.("Follow: failed result cleaned without Back — staying in Search for next candidate");
           continue;
         }
@@ -10580,7 +10588,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // returnToClearedFollowSearch(), which returns here with one Back and a
       // cleared/focused search field.
       try {
-        await android.clearInstagramSearchBar(serial, (msg) => onLog?.(`Spread Follow: cleanup — ${msg}`));
+        if (searchReadyForReuse) {
+          onLog?.("Spread Follow: cleanup — search already confirmed clear/focused; skipping redundant cleanup");
+        } else {
+          await android.clearInstagramSearchBar(serial, (msg) => onLog?.(`Spread Follow: cleanup — ${msg}`));
+        }
         onLog?.("Spread Follow: cleanup — cleared search; keeping Search open for next assignment");
       } catch (e: any) {
         if (e?.message === "cycle-aborted") throw e;

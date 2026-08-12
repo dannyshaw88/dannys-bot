@@ -1,3 +1,15 @@
+## [1.2.473] — 2026-08-12
+
+### Improved — Follow search cleanup speed
+
+- Follow now carries forward a confirmed cleared and focused Search state
+  between candidates and spread backups.
+- Redundant UIAutomator dumps and 60-key deletion sweeps are skipped when the
+  Search field is already known to be ready for the next username.
+- Full cleanup remains enabled whenever the Search state is uncertain.
+- This preserves exact username matching, filter gates, and fail-closed
+  navigation while removing duplicate cleanup work.
+
 ## [1.2.472] — 2026-08-12
 
 ### Improved — Mobile cycle metrics and device isolation
