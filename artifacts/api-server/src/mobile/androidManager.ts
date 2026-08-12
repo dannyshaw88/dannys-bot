@@ -2427,7 +2427,12 @@ export async function dismissInstagramInterstitials(
     (lowerXml.includes("interacting with content") ||
       lowerXml.includes("content shared from facebook"));
   if (isFacebookSharedDialog) {
-    const okPos = _findLiveNodeByResId(xml, "primary_button") ?? _findElem(xml, "OK");
+    // Do not use substring resource-id matching here: the dialog exposes
+    // `primary_button_row` before the actual `primary_button` node. Resolve
+    // only the live Button whose exact resource-id is primary_button and whose
+    // own label is OK, otherwise this dialog can drift into the Learn more
+    // action on builds with different wrapper hit targets.
+    const okPos = _findLiveNodeByExactResIdAndText(xml, "primary_button", "OK");
     if (okPos) {
       _adbTap(adb, serial, okPos.x, okPos.y);
       await _sleep(600);
@@ -8132,6 +8137,30 @@ function _findLiveNodeByResId(xml: string, ...ids: string[]): { x: number; y: nu
   for (const node of xml.match(/<node\b[^>]*>/gi) ?? []) {
     const resourceId = node.match(/\bresource-id="([^"]*)"/i)?.[1]?.toLowerCase() ?? "";
     if (!resourceId || !wanted.some(id => resourceId.includes(id))) continue;
+    const bounds = node.match(/\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+    if (!bounds) continue;
+    return {
+      x: Math.round((Number(bounds[1]) + Number(bounds[3])) / 2),
+      y: Math.round((Number(bounds[2]) + Number(bounds[4])) / 2),
+    };
+  }
+  return null;
+}
+
+/** Find a live node by exact resource-id and exact text/content-desc. */
+function _findLiveNodeByExactResIdAndText(
+  xml: string,
+  resourceId: string,
+  label: string,
+): { x: number; y: number } | null {
+  const wantedId = resourceId.toLowerCase();
+  const wantedLabel = label.toLowerCase();
+  for (const node of xml.match(/<node\b[^>]*>/gi) ?? []) {
+    const nodeResourceId = node.match(/\bresource-id="([^"]*)"/i)?.[1]?.toLowerCase() ?? "";
+    if (!nodeResourceId.endsWith(`/id/${wantedId}`) && nodeResourceId !== wantedId) continue;
+    const nodeText = node.match(/\btext="([^"]*)"/i)?.[1]?.trim().toLowerCase() ?? "";
+    const nodeDesc = node.match(/\bcontent-desc="([^"]*)"/i)?.[1]?.trim().toLowerCase() ?? "";
+    if (nodeText !== wantedLabel && nodeDesc !== wantedLabel) continue;
     const bounds = node.match(/\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
     if (!bounds) continue;
     return {
