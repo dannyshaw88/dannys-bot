@@ -7,13 +7,13 @@ import { useToast } from "@/hooks/use-toast";
 type JarveeProfile = Record<string, string | string[] | undefined>;
 
 const FIELDS: Array<[string, string]> = [
-  ["username", "Username"], ["password", "Password"], ["email", "Email address"],
+  ["username", "Username"], ["password", "Password"], ["email", "Email address"], ["emailPassword", "Email password"],
   ["proxyHost", "Proxy host"], ["proxyPort", "Proxy port"], ["proxyUsername", "Proxy username"],
   ["proxyPassword", "Proxy password"], ["twoFASecretKey", "2FA secret key"], ["backupCodes", "Backup codes"],
   ["phoneNumber", "Phone number"], ["userAgentApi", "API user agent"], ["userAgentEmbedded", "Embedded browser user agent"],
   ["deviceId", "Device ID"], ["deviceUuid", "Device UUID"], ["phoneId", "Phone ID"], ["adid", "Advertising ID"],
   ["apiCookies", "API cookies"], ["tags", "Tags"], ["notes", "Notes"], ["accStatus", "Account status"],
-  ["followSources", "Follow sources"], ["followedUsernames", "Followed usernames"], ["dmRecipients", "DM recipients"],
+  ["followedUsernames", "Followed usernames"], ["dmRecipients", "DM recipients"],
 ];
 
 function encodeBase64(bytes: Uint8Array) {
@@ -73,7 +73,7 @@ export default function JarveeBinaryViewerPage() {
   };
 
   const copyText = async () => {
-    const output = profiles.map((profile, index) => [`Account ${index + 1}`, ...FIELDS.map(([key, label]) => `${label}: ${Array.isArray(profile[key]) ? profile[key].join(", ") : profile[key] ?? ""}`)].join("\n")).join("\n\n");
+    const output = profiles.map((profile, index) => [`Account ${index + 1}`, ...FIELDS.map(([key, label]) => `${label}: ${Array.isArray(profile[key]) ? profile[key].join("\n") : profile[key] ?? ""}`)].join("\n")).join("\n\n");
     await navigator.clipboard.writeText(output);
     toast({ title: "Text copied to clipboard" });
   };
@@ -124,7 +124,18 @@ export default function JarveeBinaryViewerPage() {
                     {FIELDS.filter(([key]) => profile[key]).map(([key, label]) => (
                       <div key={key} className="bg-background px-4 py-3 min-w-0">
                         <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
-                        <div className="mt-1 text-sm text-foreground break-all whitespace-pre-wrap">{Array.isArray(profile[key]) ? profile[key].join(", ") : profile[key]}</div>
+                        {key === "followedUsernames" ? (
+                          <details className="mt-1">
+                            <summary className="cursor-pointer text-sm text-primary font-medium">
+                              {Array.isArray(profile[key]) ? `${profile[key].length} usernames` : "View usernames"}
+                            </summary>
+                            <div className="mt-2 max-h-64 overflow-auto rounded border border-border bg-muted/30 p-2 text-sm text-foreground whitespace-pre-line">
+                              {Array.isArray(profile[key]) ? profile[key].join("\n") : profile[key]}
+                            </div>
+                          </details>
+                        ) : (
+                          <div className="mt-1 text-sm text-foreground break-all whitespace-pre-wrap">{Array.isArray(profile[key]) ? profile[key].join("\n") : profile[key]}</div>
+                        )}
                       </div>
                     ))}
                   </div>
