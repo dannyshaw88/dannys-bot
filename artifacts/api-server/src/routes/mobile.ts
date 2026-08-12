@@ -12196,7 +12196,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           stories: storiesWatched,
           reels: reelsViewed,
           dms: sharesDm,
-          feedShares: sharesFeed,
+          // "Shares" in Statistics is the combined share-action metric:
+          // Share to Feed/Repost plus Share to DMs.
+          feedShares: sharesFeed + sharesDm,
           saves,
           cycles: 1,
           reelScrolls: reelsViewed,
