@@ -3534,20 +3534,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       y2: clamp((reversed ? configured.y1 : configured.y2) + (reversed ? startDy : endDy), size.h),
       durationMs,
     };
-    // Reels has a bottom navigation/action-control region that can consume a
-    // swipe which starts too low. The shared calibrated profile may be safe
-    // for Feed but still place its start point at ~88% of a Reel's screen.
-    // Preserve the calibrated gesture and span; only translate an
-    // over-low Reel advance upward into the content area.
-    if (source === "reels-advance" && !reversed && path.y1 > Math.round(size.h * 0.80)) {
-      const maxStartY = Math.round(size.h * 0.78);
-      const shiftY = path.y1 - maxStartY;
-      path = {
-        ...path,
-        y1: maxStartY,
-        y2: clamp(path.y2 - shiftY, size.h),
-      };
-    }
     // Keep an evidence trail for Reel navigation regressions.  The mirrored
     // frame, wm coordinate space, and calibrated gesture profile can differ
     // across phones, so a numeric coordinate alone is not enough to classify a
