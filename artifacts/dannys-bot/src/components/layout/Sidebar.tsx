@@ -124,7 +124,6 @@ export function Sidebar() {
     { name: "Phone Farm",      shortLabel: "PHONE FARM",     path: "/mobile",       icon: FilledFarmIcon        },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon },
     { name: "Settings",        shortLabel: "SETTINGS",       path: "/settings",     icon: FilledSettingsIcon  },
-    { name: "Jarvee Binary",   shortLabel: "JARVEE BINARY",  path: "/settings/jarvee-binary", icon: FileSearch },
   ];
 
   return (
