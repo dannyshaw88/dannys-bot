@@ -1,3 +1,12 @@
+## [1.2.483] — 2026-08-12
+
+### Fixed — Jarvee Binary Viewer export action
+
+- Added the missing **Export .txt** button directly beside **Copy text** on
+  the Jarvee Binary Viewer page.
+- The downloaded file contains all fields displayed by the viewer for every
+  extracted account.
+
 ## [1.2.482] — 2026-08-12
 
 ### Added — Jarvee import details export

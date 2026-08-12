@@ -1,6 +1,6 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, CheckCircle2, Clipboard, FileSearch, FileText, Upload, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clipboard, Download, FileSearch, FileText, Upload, Loader2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -73,10 +73,27 @@ export default function JarveeBinaryViewerPage() {
     }
   };
 
+  const getExportText = () => profiles.map((profile, index) => [
+    `Account ${index + 1}`,
+    ...FIELDS.map(([key, label]) => `${label}: ${Array.isArray(profile[key]) ? profile[key].join("\n") : profile[key] ?? ""}`),
+  ].join("\n")).join("\n\n" + "=".repeat(72) + "\n\n");
+
   const copyText = async () => {
-    const output = profiles.map((profile, index) => [`Account ${index + 1}`, ...FIELDS.map(([key, label]) => `${label}: ${Array.isArray(profile[key]) ? profile[key].join("\n") : profile[key] ?? ""}`)].join("\n")).join("\n\n");
+    const output = getExportText();
     await navigator.clipboard.writeText(output);
     toast({ title: "Text copied to clipboard" });
+  };
+
+  const exportTextFile = () => {
+    const blob = new Blob([getExportText() + "\n"], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    const baseName = fileName.replace(/\.[^/.]+$/, "") || "jarvee-account-details";
+    anchor.download = `${baseName}-details.txt`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Export downloaded", description: "The extracted Jarvee details were saved as a text file." });
   };
 
   return (
@@ -110,7 +127,10 @@ export default function JarveeBinaryViewerPage() {
         <div className="desktop-card overflow-hidden">
           <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border">
             <div className="flex items-center gap-2"><FileText className="w-4 h-4 text-primary" /><h2 className="text-sm font-semibold">Jarvee account information</h2></div>
-            <Button variant="outline" size="sm" disabled={!profiles.length} onClick={() => void copyText()}><Clipboard className="w-3.5 h-3.5 mr-1.5" />Copy text</Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" disabled={!profiles.length} onClick={() => void copyText()}><Clipboard className="w-3.5 h-3.5 mr-1.5" />Copy text</Button>
+              <Button variant="outline" size="sm" disabled={!profiles.length} onClick={exportTextFile}><Download className="w-3.5 h-3.5 mr-1.5" />Export .txt</Button>
+            </div>
           </div>
           {loading ? (
             <div className="py-20 flex justify-center items-center gap-2 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" />Extracting account information…</div>
