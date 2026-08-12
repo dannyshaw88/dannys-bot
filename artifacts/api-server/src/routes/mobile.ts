@@ -12262,7 +12262,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           toolId: 0,
           action: "tool_complete",
           targetUsername: slotUsername || "",
-          detail: cycleMetricSummary(),
+          // Dashboard activity details list the actions performed; the cycle
+          // count belongs in Statistics and should not be repeated here.
+          detail: cycleMetricSummary().replace(/^1 cycle,\s*/, ""),
           result: "ok",
           sourceValue: `${serial}:${slotIdx}`,
           sourceType: "phone",
