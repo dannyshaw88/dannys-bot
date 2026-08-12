@@ -784,8 +784,7 @@ export function StatsPage() {
         value: mobileSlotStats?.daily?.[metric.key] ?? 0,
         color: metric.pieColor,
       }))
-      .filter(d => d.value > 0)
-      .sort((a, b) => b.value - a.value),
+      ,
   [mobileSlotStats]);
 
   const mobileLifetimePieData = useMemo(() =>
@@ -795,8 +794,7 @@ export function StatsPage() {
         value: mobileSlotStats?.lifetime?.[metric.key] ?? 0,
         color: metric.pieColor,
       }))
-      .filter(d => d.value > 0)
-      .sort((a, b) => b.value - a.value),
+      ,
   [mobileSlotStats]);
 
   const getMobileStat = (key: string, period: "daily" | "lifetime") =>
@@ -960,7 +958,7 @@ export function StatsPage() {
                           ] as const).map(chart => (
                             <div key={chart.title} className="rounded-lg border border-border/50 bg-muted/5 p-3">
                               <p className="text-xs font-semibold text-muted-foreground mb-2">{chart.title}</p>
-                              {chart.data.length === 0 ? (
+                              {chart.data.every(entry => entry.value === 0) ? (
                                 <div className="h-44 flex items-center justify-center text-muted-foreground text-xs">
                                   {chart.empty}
                                 </div>

@@ -1,3 +1,21 @@
+## [1.2.472] — 2026-08-12
+
+### Improved — Mobile cycle metrics and device isolation
+
+- Dashboard cycle summaries now stamp every configured mobile metric in
+  Statistics order, including zero values for metrics that did not run.
+- Aborted cycles still receive a final Dashboard completion entry with the
+  complete metric summary followed by the abort status.
+- The persisted Shares statistic now combines Share to Feed/Repost and
+  Share to DMs, while the separate DMs statistic remains available.
+- Metrics pie charts now include every mobile statistic except Cycles,
+  including newly added metrics even when their current value is zero.
+- Phone Apps execution is blocked while an Instagram automation cycle owns the
+  device, preventing concurrent wake/tap/lock operations during posting and
+  account switching.
+- Preserved the existing canonical Windows Installer GitHub Actions workflow;
+  no duplicate installer workflow was added.
+
 ## [1.2.471] — 2026-08-11
 
 ### Added — Saves statistics and Dashboard ribbon
