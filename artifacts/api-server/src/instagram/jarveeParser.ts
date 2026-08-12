@@ -33,6 +33,7 @@ export interface JarveeAccount {
   deviceString?: string;
   userAgentWeb?: string;
   accountLabel?: string;         // Jarvee account name/label (not the IG username)
+  description?: string;          // full multiline Jarvee description field
   followSources: string[];       // usernames to follow followers of (target_followers)
   followedUsernames: string[];   // already-followed IG usernames (dedup list)
   dmRecipients: string[];        // already-DM'd IG usernames (dedup list)
@@ -485,6 +486,24 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
     const uaItem = searchWindow.find(w => /Mozilla\/5\.0/.test(w.value));
     const userAgentWeb = uaItem?.value ?? "";
 
+    // Jarvee stores the Description editor as one length-prefixed string.
+    // It may contain many newline-delimited rows, so do not split it or use
+    // the short account-label candidates above. Restrict this search to the
+    // account's post-proxy window and prefer the first multiline value that
+    // is not a known device/browser/credential field.
+    const descriptionItem = window.slice(proxyIdx + 1).find(w =>
+      w.value.includes("\n") &&
+      w.value.trim().length > 0 &&
+      !EMAIL_RE.test(w.value) &&
+      !URL_RE.test(w.value) &&
+      !DEVICE_RE.test(w.value) &&
+      !/Mozilla\/5\.0/.test(w.value) &&
+      !JARVEE_LABEL_RE.test(w.value) &&
+      w.value !== proxyUsername &&
+      w.value !== proxyPassword
+    );
+    const description = descriptionItem?.value ?? "";
+
     // ── Account label: Jarvee's "Name" field ─────────────────────────────────
     // Jarvee labels appear in the format "AccountName | STATUS"
     // (e.g. "AlterEgo_Fitness_SWQ | MODERATE").  This pipe+STATUS pattern is
@@ -521,6 +540,7 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
       deviceString:      deviceString || undefined,
       userAgentWeb:      userAgentWeb || undefined,
       accountLabel:      accountLabel || undefined,
+      description:       description || undefined,
       followSources,
       followedUsernames,
       dmRecipients,
