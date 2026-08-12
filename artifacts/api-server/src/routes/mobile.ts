@@ -5857,10 +5857,31 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         await android.tap(serial, _stFeedTab.x, _stFeedTab.y);
         await sleepOrAbort(serial, 700);
       } else {
-        onLog?.("Story exit: home-feed tab not found after story loop — pressing Back to recover from possible profile-page navigation");
-        logger.info({ serial }, "[view-stories] home tab absent post-exit — pressing Back to recover");
-        await android.pressBack(serial);
-        await sleepOrAbort(serial, 600);
+        // When the reply composer/keyboard is focused, Back dismisses only the
+        // keyboard. Returning immediately here leaves Instagram inside the
+        // story viewer and the next dispatcher tool starts on that screen.
+        // Recover in bounded steps, re-dumping after every Back, until Home is
+        // positively visible or the viewer is positively gone.
+        for (let _stRecovery = 0; _stRecovery < 3; _stRecovery++) {
+          onLog?.(
+            `Story exit: home tab absent after story loop — pressing Back ` +
+            `(${_stRecovery + 1}/3) and rechecking`,
+          );
+          logger.info({ serial, attempt: _stRecovery + 1 }, "[view-stories] home tab absent post-exit — pressing Back and rechecking");
+          await android.pressBack(serial);
+          await sleepOrAbort(serial, 600);
+          const _stRecoveredHome = await android.findHomeTab(serial).catch(() => null);
+          if (_stRecoveredHome) {
+            onLog?.("Story exit: Home tab confirmed after Back recovery — returning to home feed");
+            await android.tap(serial, _stRecoveredHome.x, _stRecoveredHome.y);
+            await sleepOrAbort(serial, 700);
+            break;
+          }
+          if (!(await android.isInStoryViewerSlow(serial).catch(() => false))) {
+            onLog?.("Story exit: Story viewer no longer detected after Back recovery");
+            break;
+          }
+        }
       }
     }
 
