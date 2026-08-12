@@ -7927,18 +7927,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     onLog?.(`Make a Post: found "Next" at (${nextBtn1.x}, ${nextBtn1.y}) — tapping…`);
     await android.tap(serial, nextBtn1.x, nextBtn1.y);
-    await sleepOrAbort(serial, 1500);
 
-    // Confirm the tap actually advanced the screen. "Next" itself isn't a
-    // reliable signal here — on this screen it's frequently unlabelled (see
-    // above), so a labelled-Next re-check would come back null whether the
-    // tap worked or not. Instead check for the expand toggle, which IS a
-    // reliable, labelled-or-positional signal unique to the photo-select
-    // screen: if it's still visible after the tap, we never left this
-    // screen and the tap was swallowed or missed.
-    const stillOnPicker = await android.findExpandPhotoButton(serial).catch(() => null);
-    if (stillOnPicker) {
-      onLog?.("Make a Post: tapped \"Next\" but the picker screen did not advance — aborting this attempt");
+    // Instagram keeps the picker tree alive while the image-editor transition
+    // runs. A single 1.5 s expand-toggle check races that transition: it can
+    // report the old picker even though the tap succeeded, causing us to abort
+    // before ever looking for the editor's second Next button.
+    //
+    // Prefer the editor's live labelled Next node as the success signal. Only
+    // fail after a bounded settle window in which the picker signal remains and
+    // no editor Next appears. All candidates still come from fresh UI dumps.
+    let editorNext: { x: number; y: number } | null = null;
+    let stillOnPicker: { x: number; y: number } | null = null;
+    for (let advanceScan = 0; advanceScan < 10; advanceScan++) {
+      await sleepOrAbort(serial, advanceScan === 0 ? 700 : 500);
+      editorNext = await android.findButtonByLabel(serial, "Next").catch(() => null);
+      if (editorNext) break;
+      stillOnPicker = await android.findExpandPhotoButton(serial).catch(() => null);
+      if (!stillOnPicker) break;
+    }
+    if (!editorNext && stillOnPicker) {
+      onLog?.("Make a Post: tapped \"Next\" but the picker screen did not advance after waiting for the editor — aborting this attempt");
       await android.pressBack(serial);
       await android.removeDeviceFile(serial, devicePath).catch(() => {});
       return { posted: false };
@@ -7948,7 +7956,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // filter strip, ratio controls) shows a labelled "Next" in the app bar —
     // give it extra time to settle before looking, since the audio-suggestion
     // overlay animation can delay accessibility-tree population.
-    const nextBtn2 = await android.findButtonByLabel(serial, "Next").catch(() => null);
+    const nextBtn2 = editorNext ?? await android.findButtonByLabel(serial, "Next").catch(() => null);
     if (nextBtn2) {
       onLog?.(`Make a Post: tapping filter/edit "Next" at (${nextBtn2.x}, ${nextBtn2.y})…`);
       await android.tap(serial, nextBtn2.x, nextBtn2.y);
