@@ -3397,6 +3397,9 @@ export interface FeedActionIcons {
    *  the media area on video posts (that opens the full-screen Reel player);
    *  they must fall back to the heart-icon tap instead. */
   isVideoPost?: boolean;
+  /** True when the media contains an interactive sticker/prompt overlay
+   * (question, poll, quiz, link CTA, etc.) that can intercept a double-tap. */
+  hasInteractiveMediaOverlay?: boolean;
   /** Bounding box of the post's media area, when Instagram exposes a
    *  carousel_media_group or media_group node above the action bar. Callers
    *  use this to place the double-tap in the upper portion of the image,
@@ -3862,6 +3865,9 @@ export async function findFeedActionIcons(
     xml.includes("android.widget.VideoView") ||
     xml.includes(":id/video_player") ||
     xml.includes(":id/row_feed_video");
+  const hasInteractiveMediaOverlay =
+    /(?:text|content-desc)="[^"]*(?:ask me anything|why pick a|poll|quiz|question sticker|add yours|link sticker|shop now|learn more)[^"]*"/i.test(xml) ||
+    /resource-id="[^"]*(?:question|poll|quiz|sticker|link_sticker|interactive)[^"]*"/i.test(xml);
 
   // Find the media container bounding box from the same dump (zero extra cost).
   // Used by callers to place the double-tap in the upper portion of the image,
@@ -3943,7 +3949,7 @@ export async function findFeedActionIcons(
     }
   }
 
-  return { like, comment, shareFeed, shareDm, save, alreadyLiked, isVideoPost, mediaBounds };
+  return { like, comment, shareFeed, shareDm, save, alreadyLiked, isVideoPost, hasInteractiveMediaOverlay, mediaBounds };
 }
 
 export interface ReelActionIcons {

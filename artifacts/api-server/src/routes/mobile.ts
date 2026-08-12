@@ -4052,9 +4052,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 // media rectangle was confirmed by the live node tree. Video
                 // posts must use the Like node because a media double-tap
                 // opens the full-screen player.
-                 const useDoubleTap = Math.random() < 0.93 &&
+                  const useDoubleTap = Math.random() < 0.93 &&
                    !likeScan.isVideoPost &&
+                    !likeScan.hasInteractiveMediaOverlay &&
                    !!likeScan.mediaBounds;
+                  if (likeScan.hasInteractiveMediaOverlay) {
+                    onLog?.(`View Feed ${i + 1}/${count}: interactive media overlay detected — using Like node instead of double-tap`);
+                  }
                  let _likeActionSucceeded = false;
                  try {
                   if (useDoubleTap) {
