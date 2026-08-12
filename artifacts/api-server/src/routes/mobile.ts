@@ -9862,6 +9862,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // to land on Home. Return one level to results, clear the query, and leave
     // the live search field focused for the next candidate.
     const returnToClearedFollowSearch = async () => {
+      // This state is only valid after every confirmation below succeeds.
+      // Invalidate it before touching navigation so a failed Back/search
+      // recovery can never leak a stale "reuse" claim into the next user.
+      searchReadyForReuse = false;
       await android.pressBack(serial);
       await sleepOrAbort(serial, 500);
       await android.clearInstagramSearchBar(serial, (msg) => onLog?.(`Follow: skipped-user cleanup — ${msg}`));
@@ -10181,12 +10185,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const username = targets[_fi++];
       try {
         onLog?.(`Follow: → @${username} (candidate ${_fi}/${targets.length})`);
+        // A result tap opens a profile. The previous candidate's confirmed
+        // Search state must never survive that navigation.
+        searchReadyForReuse = false;
 
         // Tap the search bar — wait longer so the Explore page settles and the
         // field has time to focus before the keyboard opens.  A 600 ms wait was
         // too short: on slower devices the bar tap could land below the field
         // (causing a scroll/pull-to-refresh) or the keyboard didn't animate up
         // before typeViaOnscreenKeyboard started.
+        // After a profile navigation, never assume the previous Search
+        // surface survived. Re-enter Search from the live semantic tab node
+        // before looking for the input bar.
+        if (_fi > 1 && !searchReadyForReuse) {
+          const recoverySearchTab = await android.findInstagramSearchTab(serial, onLog).catch(() => null);
+          if (!recoverySearchTab) {
+            onLog?.("Follow: Search tab not confirmed after profile navigation — stopping");
+            break;
+          }
+          await android.tap(serial, recoverySearchTab.x, recoverySearchTab.y);
+          await sleepOrAbort(serial, 2500);
+        }
         const searchBar = await android.findInstagramSearchBar(serial, onLog).catch(() => null);
         if (!searchBar) { onLog?.("Follow: search bar accessibility node not found — stopping"); break; }
         await android.tap(serial, searchBar.x, searchBar.y);
@@ -12246,18 +12265,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Always log regardless of whether slotUsername matched an EB profile —
       // use profileId 0 as a system sentinel so entries are always visible.
       {
-        const totalLikes = likes + storyLikes + exploreLikes + reelsLikes + injectBrowsingLikes;
-        const parts: string[] = [];
-        if (followedCount) parts.push(`${followedCount} follow${followedCount === 1 ? ' done' : 's done'}`);
-        if (totalLikes) parts.push(`${totalLikes} like${totalLikes === 1 ? ' done' : 's done'}`);
-        if (storiesWatched) parts.push(`${storiesWatched} stor${storiesWatched === 1 ? 'ie watched' : 'ies watched'}`);
-        if (reelsViewed) parts.push(`${reelsViewed} reel${reelsViewed === 1 ? ' watched' : 's watched'}`);
-        if (sharesDm) parts.push(`${sharesDm} DMs`);
-        if (sharesFeed) parts.push(`${sharesFeed} feed shares`);
-        if (saves) parts.push(`${saves} saved`);
-        if (postsUploaded) parts.push(`${postsUploaded} post${postsUploaded === 1 ? "" : "s"} uploaded`);
-        if (feedScrolled) parts.push(`${feedScrolled} posts scrolled`);
-         if (exploreScrolled) parts.push(`${exploreScrolled} Explore scroll${exploreScrolled === 1 ? "" : "s"}`);
+        // Activity details should stamp only tools that actually ran. Do not
+        // list disabled tools or percentage-roll misses as if they were used.
+        const usedToolSteps = steps.filter((step) => !/\(skipped\b/i.test(step));
         storage.createSessionAction({
           profileId: mobileProfileId ?? 0,
           toolId: 0,
@@ -12265,7 +12275,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           targetUsername: slotUsername || "",
           // Dashboard activity details list the actions performed; the cycle
           // count belongs in Statistics and should not be repeated here.
-          detail: cycleMetricSummary().replace(/^1 cycle,\s*/, ""),
+          detail: usedToolSteps.join(", ") || "No tools executed",
           result: "ok",
           sourceValue: `${serial}:${slotIdx}`,
           sourceType: "phone",
@@ -12321,13 +12331,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (postsUploaded) parts.push(`${postsUploaded} post${postsUploaded === 1 ? "" : "s"} uploaded`);
         if (feedScrolled) parts.push(`${feedScrolled} posts scrolled`);
          if (exploreScrolled) parts.push(`${exploreScrolled} Explore scroll${exploreScrolled === 1 ? "" : "s"}`);
-        const statsSuffix = ` — ${cycleMetricSummary()}`;
+        const usedToolSteps = steps.filter((step) => !/\(skipped\b/i.test(step));
+        const toolsSuffix = usedToolSteps.length ? ` — ${usedToolSteps.join(", ")}` : "";
         storage.createSessionAction({
           profileId: _mobileProfileId ?? 0,
           toolId: 0,
           action: "tool_complete",
           targetUsername: _slotUsername,
-          detail: aborted ? `${cycleMetricSummary()} — Cycle aborted` : `Cycle error: ${e?.message ?? "unknown"}${statsSuffix}`,
+          detail: aborted
+            ? `${usedToolSteps.join(", ") || "No tools executed"} — Cycle aborted`
+            : `Cycle error: ${e?.message ?? "unknown"}${toolsSuffix}`,
           result: aborted ? "ok" : "error",
           sourceValue: `${serial}:${incomingSlotIdx}`,
           sourceType: "phone",
