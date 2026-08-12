@@ -84,6 +84,13 @@ export default function JarveeBinaryViewerPage() {
     toast({ title: "Text copied to clipboard" });
   };
 
+  const copyField = async (label: string, value: string | string[] | undefined) => {
+    const text = Array.isArray(value) ? value.join("\n") : value ?? "";
+    if (!text) return;
+    await navigator.clipboard.writeText(text);
+    toast({ title: `${label} copied to clipboard` });
+  };
+
   const exportTextFile = () => {
     const blob = new Blob([getExportText() + "\n"], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -155,7 +162,23 @@ export default function JarveeBinaryViewerPage() {
                             </div>
                           </details>
                         ) : (
-                          <div className="mt-1 text-sm text-foreground break-all whitespace-pre-wrap">{Array.isArray(profile[key]) ? profile[key].join("\n") : profile[key] || "No data extracted"}</div>
+                          <div className="mt-1 flex items-start gap-2">
+                            <div className="min-w-0 flex-1 text-sm text-foreground break-all whitespace-pre-wrap">
+                              {Array.isArray(profile[key]) ? profile[key].join("\n") : profile[key] || "No data extracted"}
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 shrink-0 text-muted-foreground hover:text-primary"
+                              title={`Copy ${label}`}
+                              aria-label={`Copy ${label}`}
+                              disabled={!profile[key] || (Array.isArray(profile[key]) && profile[key].length === 0)}
+                              onClick={() => void copyField(label, profile[key])}
+                            >
+                              <Clipboard className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
                         )}
                       </div>
                     ))}
