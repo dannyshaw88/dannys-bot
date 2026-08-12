@@ -4,12 +4,12 @@
   "accounts": [
     {
       "username": "AlterEgo_Fitness_WRE",
-      "password": null,
+      "password": "ffcjiescu579",
       "proxyHost": "178.212.56.208",
       "proxyPort": 29842,
       "proxyUsername": "afitne",
       "proxyPassword": "1j3mz6nJ",
-      "emailPassword": "[]",
+      "emailPassword": "ffcjiescu579",
       "twoFASecret": "T5H7JUJJBE3UULWM2DDL4HHDQVRVP2IC",
       "deviceString": "33/13; 420dpi; 1080x2340; Samsung; SM-S911B; s23; snapdragon8gen2; en_US",
       "userAgentWeb": "Mozilla/5.0 (Linux; Android 13; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36",
@@ -1998,8 +1998,7 @@
         "bianceo_recovery",
         "breck.anderson_",
         "Hours"
-      ],
-      "email": "cdgfswetuobf@outlook.com"
+      ]
     }
   ]
 }
