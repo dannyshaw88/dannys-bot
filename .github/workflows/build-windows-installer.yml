@@ -86,6 +86,15 @@ jobs:
       - name: Build Electron bundle
         working-directory: artifacts/electron
         run: node build.mjs
+      - name: Select Visual Studio toolchain for native Electron modules
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Configure node-gyp for Visual Studio 2022
+        shell: pwsh
+        run: |
+          "GYP_MSVS_VERSION=2022" >> $env:GITHUB_ENV
+          "npm_config_msvs_version=2022" >> $env:GITHUB_ENV
       - name: Build Windows installer
         working-directory: artifacts/electron
         run: npx electron-builder --win --publish never
