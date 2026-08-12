@@ -10941,6 +10941,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       `${feedScrolled} posts scrolled`,
       `${exploreScrolled} Explore scrolls`,
     ].join(", ");
+    // Dashboard COMPLETE rows are intentionally metrics-only. The detailed
+    // tool lifecycle remains in the live device log; persisting `steps` here
+    // made the Activity Log show implementation internals such as
+    // power-on/unlock/launch/airplane-mode instead of what the cycle actually
+    // accomplished.
+    const dashboardMetricSummary = () => {
+      const totalLikes = likes + storyLikes + exploreLikes + reelsLikes + injectBrowsingLikes;
+      const parts: string[] = [];
+      if (totalLikes) parts.push(`${totalLikes} likes`);
+      if (followedCount) parts.push(`${followedCount} follows`);
+      if (storiesWatched) parts.push(`${storiesWatched} stories watched`);
+      if (reelsViewed) parts.push(`${reelsViewed} reels watched`);
+      if (sharesDm) parts.push(`${sharesDm} DMs`);
+      if (postsUploaded) parts.push(`${postsUploaded} posts uploaded`);
+      if (sharesFeed + sharesDm) parts.push(`${sharesFeed + sharesDm} shares`);
+      if (saves) parts.push(`${saves} saved`);
+      if (reelsViewed) parts.push(`${reelsViewed} reels scrolled`);
+      if (feedScrolled) parts.push(`${feedScrolled} posts scrolled`);
+      if (exploreScrolled) parts.push(`${exploreScrolled} Explore scrolls`);
+      return parts.join(", ") || "No metrics recorded";
+    };
     const cycleStart = Date.now();
     // tLog prefixes every log line with elapsed seconds so the user can see
     // exactly where each chunk of time is going in the Log tab.
@@ -12316,9 +12337,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           toolId: 0,
           action: "tool_complete",
           targetUsername: slotUsername || "",
-          // Dashboard activity details list the actions performed; the cycle
-          // count belongs in Statistics and should not be repeated here.
-          detail: usedToolSteps.join(", ") || "No tools executed",
+          // Dashboard detail is the compact, non-zero metrics summary. The
+          // full tool lifecycle is retained in the live device log.
+          detail: dashboardMetricSummary(),
           result: "ok",
           sourceValue: `${serial}:${slotIdx}`,
           sourceType: "phone",
@@ -12374,16 +12395,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (postsUploaded) parts.push(`${postsUploaded} post${postsUploaded === 1 ? "" : "s"} uploaded`);
         if (feedScrolled) parts.push(`${feedScrolled} posts scrolled`);
          if (exploreScrolled) parts.push(`${exploreScrolled} Explore scroll${exploreScrolled === 1 ? "" : "s"}`);
-        const usedToolSteps = steps.filter((step) => !/\(skipped\b/i.test(step));
-        const toolsSuffix = usedToolSteps.length ? ` — ${usedToolSteps.join(", ")}` : "";
         storage.createSessionAction({
           profileId: _mobileProfileId ?? 0,
           toolId: 0,
           action: "tool_complete",
           targetUsername: _slotUsername,
-          detail: aborted
-            ? `${usedToolSteps.join(", ") || "No tools executed"} — Cycle aborted`
-            : `Cycle error: ${e?.message ?? "unknown"}${toolsSuffix}`,
+           detail: aborted
+             ? `${dashboardMetricSummary()} — Cycle aborted`
+             : `${dashboardMetricSummary()} — Cycle error: ${e?.message ?? "unknown"}`,
           result: aborted ? "ok" : "error",
           sourceValue: `${serial}:${incomingSlotIdx}`,
           sourceType: "phone",

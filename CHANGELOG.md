@@ -1,3 +1,13 @@
+## [1.2.480] — 2026-08-12
+
+### Fixed — Dashboard activity uses metrics only
+
+- Dashboard cycle completion rows now show only non-zero outcome metrics, such
+  as likes, follows, Explore scrolls, shares, saves, and posts uploaded.
+- Internal lifecycle steps such as power-on, unlock, launch, and airplane-mode
+  are no longer persisted into the Dashboard Activity Log detail.
+- Detailed execution steps remain available in the live device log.
+
 ## [1.2.479] — 2026-08-12
 
 ### Added — Per-device Reel swipe evidence
