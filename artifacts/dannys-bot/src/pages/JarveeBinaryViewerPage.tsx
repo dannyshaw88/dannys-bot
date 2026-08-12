@@ -13,7 +13,7 @@ const FIELDS: Array<[string, string]> = [
   ["phoneNumber", "Phone number"], ["userAgentApi", "API user agent"], ["userAgentEmbedded", "Embedded browser user agent"],
   ["deviceId", "Device ID"], ["deviceUuid", "Device UUID"], ["phoneId", "Phone ID"], ["adid", "Advertising ID"],
   ["apiCookies", "API cookies"], ["tags", "Tags"], ["notes", "Notes"], ["accStatus", "Account status"],
-  ["followedUsernames", "Followed usernames"], ["dmRecipients", "DM recipients"],
+  ["followedUsernames", "Followed usernames"],
 ];
 
 function encodeBase64(bytes: Uint8Array) {

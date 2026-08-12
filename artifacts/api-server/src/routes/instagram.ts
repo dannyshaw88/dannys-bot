@@ -6699,7 +6699,6 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
         apiCookies:                "",
          followSources:             ja.followSources ?? [],
          followedUsernames:         ja.followedUsernames ?? [],
-         dmRecipients:              ja.dmRecipients ?? [],
       }));
 
       return res.json({ profiles });
