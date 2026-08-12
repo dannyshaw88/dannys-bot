@@ -10245,6 +10245,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // (badge + follower count) before the dump fires.
         if (filters && (filters.skipVerified || filters.skipPrivate || filters.maxFollowers !== undefined || filters.minFollowers !== undefined || filters.requireEnglish || filters.malesOnly)) {
           try {
+            const filterGateStartedAt = Date.now();
             if (!profileXml || !profileXml.includes("</hierarchy>")) {
               await sleepOrAbort(serial, 1000);
               profileXml = await android.dumpUi(serial).catch(() => "");
@@ -10393,7 +10394,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               const allowedNames = getCompiledMalesOnlyNames(filters.maleNames ?? "");
               let matchesAllowedName = false;
               if (allowedNames.length) {
+                const malesMatchStartedAt = Date.now();
                 const matchedEntry = findLiveMalesOnlyMatch(username, profileXml, allowedNames);
+                onLog?.(`Follow: Males Only checked ${allowedNames.length.toLocaleString()} configured name(s) in ${Date.now() - malesMatchStartedAt} ms`);
                 matchesAllowedName = Boolean(matchedEntry);
                 if (matchedEntry) {
                   onLog?.(`Follow: Males Only allowed @${username} — matched "${matchedEntry.name}" in live profile ${matchedEntry.field}`);
@@ -10406,6 +10409,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 continue;
               }
             }
+            onLog?.(`Follow: profile filters completed in ${Date.now() - filterGateStartedAt} ms`);
 
           } catch (filterErr: any) {
             if (filters.skipPrivate) {
