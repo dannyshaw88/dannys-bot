@@ -20,6 +20,7 @@ import { TrustScoresPage } from "@/pages/TrustScoresPage";
 import { TrustScoreDetailPage } from "@/pages/TrustScoreDetailPage";
 import { ToolsPage } from "@/pages/ToolsPage";
 import { EbAuditPage } from "@/pages/EbAuditPage";
+import JarveeBinaryViewerPage from "@/pages/JarveeBinaryViewerPage";
 import { BrowserWindowsProvider, useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { SidebarSlotProvider } from "@/contexts/SidebarSlotContext";
 import { NavigationHistoryProvider } from "@/contexts/NavigationHistoryContext";
@@ -114,6 +115,8 @@ function Router() {
       <Route path="/profiles/:id" component={ProfileDetailsPage} />
       <Route path="/proxies" component={ProxiesPage} />
       <Route path="/settings" component={SettingsPage} />
+      <Route path="/settings/jarvee-binary" component={JarveeBinaryViewerPage} />
+      <Route path="/settings/jarvee-binary-viewer" component={JarveeBinaryViewerPage} />
       <Route path="/browser/:id" component={StandaloneBrowserPage} />
       <Route path="/bulk-import"><Redirect to="/settings" /></Route>
       <Route path="/mobile" component={MobileDevicesPage} />

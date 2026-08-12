@@ -4,7 +4,7 @@ import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
 import { useNavigationHistory } from "@/contexts/NavigationHistoryContext";
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Loader2, FileSearch } from "lucide-react";
 
 function FilledDashboardIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
@@ -180,6 +180,18 @@ export function Sidebar() {
             </div>
           );
           })}
+          {location.startsWith("/settings") && (
+            <button
+              onClick={() => setLocation("/settings/jarvee-binary")}
+              className={cn(
+                "flex items-center gap-2 w-full pl-4 pr-2 py-3 text-left transition-colors",
+                location === "/settings/jarvee-binary" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+              )}
+            >
+              <FileSearch className="w-4 h-4 shrink-0" />
+              <span className="text-[9px] font-bold tracking-wide leading-tight">JARVEE<br />BINARY VIEWER</span>
+            </button>
+          )}
         </div>
 
       </nav>
