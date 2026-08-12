@@ -4,7 +4,7 @@ import { AlertCircle, CheckCircle2, Clipboard, FileSearch, FileText, Upload, Loa
 import { useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
-type JarveeProfile = Record<string, string | undefined>;
+type JarveeProfile = Record<string, string | string[] | undefined>;
 
 const FIELDS: Array<[string, string]> = [
   ["username", "Username"], ["password", "Password"], ["email", "Email address"],
@@ -13,6 +13,7 @@ const FIELDS: Array<[string, string]> = [
   ["phoneNumber", "Phone number"], ["userAgentApi", "API user agent"], ["userAgentEmbedded", "Embedded browser user agent"],
   ["deviceId", "Device ID"], ["deviceUuid", "Device UUID"], ["phoneId", "Phone ID"], ["adid", "Advertising ID"],
   ["apiCookies", "API cookies"], ["tags", "Tags"], ["notes", "Notes"], ["accStatus", "Account status"],
+  ["followSources", "Follow sources"], ["followedUsernames", "Followed usernames"], ["dmRecipients", "DM recipients"],
 ];
 
 function encodeBase64(bytes: Uint8Array) {
@@ -72,7 +73,7 @@ export default function JarveeBinaryViewerPage() {
   };
 
   const copyText = async () => {
-    const output = profiles.map((profile, index) => [`Account ${index + 1}`, ...FIELDS.map(([key, label]) => `${label}: ${profile[key] ?? ""}`)].join("\n")).join("\n\n");
+    const output = profiles.map((profile, index) => [`Account ${index + 1}`, ...FIELDS.map(([key, label]) => `${label}: ${Array.isArray(profile[key]) ? profile[key].join(", ") : profile[key] ?? ""}`)].join("\n")).join("\n\n");
     await navigator.clipboard.writeText(output);
     toast({ title: "Text copied to clipboard" });
   };
@@ -123,7 +124,7 @@ export default function JarveeBinaryViewerPage() {
                     {FIELDS.filter(([key]) => profile[key]).map(([key, label]) => (
                       <div key={key} className="bg-background px-4 py-3 min-w-0">
                         <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
-                        <div className="mt-1 text-sm text-foreground break-all whitespace-pre-wrap">{profile[key]}</div>
+                        <div className="mt-1 text-sm text-foreground break-all whitespace-pre-wrap">{Array.isArray(profile[key]) ? profile[key].join(", ") : profile[key]}</div>
                       </div>
                     ))}
                   </div>
