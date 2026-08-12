@@ -3527,13 +3527,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const settleMs = Math.round(settleMin + Math.random() * (settleMax - settleMin));
     if (pauseMs > 0) await new Promise(resolve => setTimeout(resolve, pauseMs));
     const reversed = personality === "back";
-    const path = {
+    let path = {
       x1: clamp((reversed ? configured.x2 : configured.x1) + dx, size.w),
       y1: clamp((reversed ? configured.y2 : configured.y1) + (reversed ? endDy : startDy), size.h),
       x2: clamp((reversed ? configured.x1 : configured.x2) + dx, size.w),
       y2: clamp((reversed ? configured.y1 : configured.y2) + (reversed ? startDy : endDy), size.h),
       durationMs,
     };
+    // Reels has a bottom navigation/action-control region that can consume a
+    // swipe which starts too low. The shared calibrated profile may be safe
+    // for Feed but still place its start point at ~88% of a Reel's screen.
+    // Preserve the calibrated gesture and span; only translate an
+    // over-low Reel advance upward into the content area.
+    if (source === "reels-advance" && !reversed && path.y1 > Math.round(size.h * 0.80)) {
+      const maxStartY = Math.round(size.h * 0.78);
+      const shiftY = path.y1 - maxStartY;
+      path = {
+        ...path,
+        y1: maxStartY,
+        y2: clamp(path.y2 - shiftY, size.h),
+      };
+    }
     logger.info({ serial, source, personality, reversed, from: [path.x1, path.y1], to: [path.x2, path.y2], durationMs, pauseMs, settleMs, profile: true }, "[mobile-input] device-profile swipe");
     // The profile already generated the complete randomized path. Do not
     // apply android.swipe's legacy hidden center-line jitter on top of it.
