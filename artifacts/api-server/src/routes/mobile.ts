@@ -12396,6 +12396,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (postsUploaded) parts.push(`${postsUploaded} post${postsUploaded === 1 ? "" : "s"} uploaded`);
         if (feedScrolled) parts.push(`${feedScrolled} posts scrolled`);
          if (exploreScrolled) parts.push(`${exploreScrolled} Explore scroll${exploreScrolled === 1 ? "" : "s"}`);
+        // Aborted cycles are still real cycles for Statistics. Persist the
+        // partial counters collected before the abort, including the cycle
+        // itself, just as the normal completion path does.
+        if (aborted && _slotUsername) {
+          storage.incrementMobileStats(_slotUsername, {
+            likes: totalLikes,
+            follows: followedCount,
+            stories: storiesWatched,
+            reels: reelsViewed,
+            dms: sharesDm,
+            feedShares: sharesFeed + sharesDm,
+            saves,
+            cycles: 1,
+            reelScrolls: reelsViewed,
+            feedScrolls: feedScrolled,
+            exploreScrolls: exploreScrolled,
+          }).catch((statError: any) =>
+            logger.warn({ err: statError }, "[mobile-cycle] aborted stat persist error"),
+          );
+        }
         storage.createSessionAction({
           profileId: _mobileProfileId ?? 0,
           toolId: 0,

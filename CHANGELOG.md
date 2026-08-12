@@ -1,3 +1,21 @@
+## [1.2.485] — 2026-08-12
+
+### Fixed — Aborted phone cycles now appear in Statistics
+
+- Aborted Human Session Tool cycles now persist a cycle count for the correct
+  slot username instead of appearing only in the Dashboard Activity Log.
+- Partial metrics collected before an abort are persisted as well, including
+  likes, follows, stories, reels, shares, saves, and scroll counts.
+- The existing Dashboard aborted-cycle entry remains unchanged.
+
+### Changed — Jarvee Binary Viewer moved to Settings
+
+- Moved the structured Jarvee Binary Viewer from the left navigation into the
+  new **Settings → Jarvee Import** tab.
+- Preserved the original viewer experience: field-by-field extraction, copy
+  controls, full-text copying, `.txt` export, and display-only parsing.
+- Removed the old Jarvee Binary item from the left navigation.
+
 ## [1.2.484] — 2026-08-12
 
 ### Added — Phone Farm current tool indicator
