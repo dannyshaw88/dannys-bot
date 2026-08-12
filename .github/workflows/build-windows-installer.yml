@@ -45,7 +45,10 @@ jobs:
 
   package-windows:
     name: Build Windows Installer
-    runs-on: windows-latest
+    # Pin the runner: windows-latest has moved to Visual Studio 18, which
+    # this Electron 33/@electron-rebuild native-module stack cannot discover.
+    # The better-sqlite3 rebuild requires the VS 2022 toolchain.
+    runs-on: windows-2022
     needs: build-web
     steps:
       - uses: actions/checkout@v4
