@@ -106,6 +106,7 @@ function JarveeImportTabContent() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [importing, setImporting] = useState(false);
+  const [results, setResults] = useState<Array<{ file: string; username: string; ok: boolean; error?: string; sourcesImported?: number; followedImported?: number; dmRecipients?: number }>>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const importFiles = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -113,9 +114,11 @@ function JarveeImportTabContent() {
     event.target.value = "";
     if (!files.length) return;
     setImporting(true);
+    setResults([]);
     let imported = 0;
     let failed = 0;
     const errors: string[] = [];
+    const nextResults: typeof results = [];
     try {
       for (const file of files) {
         try {
@@ -134,16 +137,30 @@ function JarveeImportTabContent() {
           if (!res.ok) {
             failed++;
             errors.push(`${file.name}: ${data.error ?? "Unknown error"}`);
+            nextResults.push({ file: file.name, username: "—", ok: false, error: data.error ?? "Import failed" });
           } else {
             imported += data.imported ?? 0;
             failed += data.failed ?? 0;
+            for (const account of data.accounts ?? []) {
+              nextResults.push({
+                file: file.name,
+                username: account.username ?? "—",
+                ok: account.ok === true,
+                error: account.error,
+                sourcesImported: account.sourcesImported,
+                followedImported: account.followedImported,
+                dmRecipients: account.dmRecipients,
+              });
+            }
             if (data.failed > 0) errors.push(`${file.name}: some accounts failed`);
           }
         } catch (error: any) {
           failed++;
           errors.push(`${file.name}: ${error?.message ?? "Could not read file"}`);
+          nextResults.push({ file: file.name, username: "—", ok: false, error: error?.message ?? "Could not read file" });
         }
       }
+      setResults(nextResults);
       if (failed === 0) {
         toast({ title: "Jarvee import complete", description: `${imported} account${imported === 1 ? "" : "s"} imported successfully.` });
       } else {
@@ -166,6 +183,29 @@ function JarveeImportTabContent() {
       <Button type="button" onClick={() => inputRef.current?.click()} disabled={importing}>
         {importing ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Importing…</> : <><Upload className="w-4 h-4 mr-2" />Choose Jarvee Binary File{importing ? "" : "s"}</>}
       </Button>
+      {results.length > 0 && (
+        <div className="border border-border rounded-lg overflow-hidden">
+          <div className="px-4 py-3 bg-muted/40 text-sm font-semibold">Import results</div>
+          <div className="divide-y divide-border">
+            {results.map((result, index) => (
+              <div key={`${result.file}-${result.username}-${index}`} className="px-4 py-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <span className={result.ok ? "text-emerald-600" : "text-destructive"}>{result.ok ? "✓" : "✕"}</span>
+                  <span className="font-semibold">{result.username}</span>
+                  <span className="text-xs text-muted-foreground">({result.file})</span>
+                </div>
+                {result.ok ? (
+                  <div className="mt-1 ml-5 text-xs text-muted-foreground">
+                    Follow sources: {result.sourcesImported ?? 0} · Followed users: {result.followedImported ?? 0} · DM recipients: {result.dmRecipients ?? 0}
+                  </div>
+                ) : (
+                  <div className="mt-1 ml-5 text-xs text-destructive">{result.error ?? "Import failed"}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
