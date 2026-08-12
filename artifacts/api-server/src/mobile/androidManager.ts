@@ -2415,25 +2415,26 @@ export async function dismissInstagramInterstitials(
   // primary button (id="primary_button"). Tapping any other area does
   // nothing and the automation gets completely stuck.
   //
-  // Detection: id="dialog_container" is the unique wrapper; the headline
+  // Detection: resource-id="...:id/dialog_container" is the unique wrapper; the headline
   // guard accepts the title variants used by different Instagram builds
   // (some expose it as text, others as content-desc, and some omit
   // "Interacting with"). This remains specific to the Facebook-shared
   // education dialog and does not tap a generic OK button.
   const lowerXml = xml.toLowerCase();
   const isFacebookSharedDialog =
-    lowerXml.includes('id="dialog_container"') &&
+    lowerXml.includes("dialog_container") &&
     lowerXml.includes("shared from facebook") &&
     (lowerXml.includes("interacting with content") ||
       lowerXml.includes("content shared from facebook"));
   if (isFacebookSharedDialog) {
-    const okPos = _findByResId(xml, ":id/primary_button") ?? _findElem(xml, "OK");
+    const okPos = _findLiveNodeByResId(xml, "primary_button") ?? _findElem(xml, "OK");
     if (okPos) {
       _adbTap(adb, serial, okPos.x, okPos.y);
       await _sleep(600);
       logger.info({ serial }, "[instagram] shared-Facebook story dialog detected — tapped OK");
       return "Interacting with content from Facebook — OK";
     }
+    logger.warn({ serial }, "[instagram] shared-Facebook story dialog detected but live OK button was not resolved");
   }
 
   // "Allow the use of cookies by Instagram?" full-screen consent dialog —
