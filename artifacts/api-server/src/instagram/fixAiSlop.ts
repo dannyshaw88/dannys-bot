@@ -290,7 +290,10 @@ function detectFormat(buf: Buffer): ImageFormat {
  *                     pass to defeat SynthID pixel-level watermarks and CNN-
  *                     based perceptual hash detectors.
  */
-export async function fixAiSlop(inputPath: string): Promise<string> {
+export async function fixAiSlop(
+  inputPath: string,
+  onLog?: (message: string) => void,
+): Promise<string> {
   const tmp = join(
     tmpdir(),
     `equinox_fixaislop_${randomBytes(8).toString("hex")}.jpg`,
@@ -324,6 +327,7 @@ export async function fixAiSlop(inputPath: string): Promise<string> {
     console.log(
       `[fixAiSlop] binary strip — format=${fmt}, removed ${removedCount} AI metadata block(s)`,
     );
+    onLog?.(`Fix AI Slop: binary strip complete — format=${fmt}, removed ${removedCount} metadata block(s)`);
 
     // ── Step 2: Sharp pixel perturbation (optional, defeats SynthID) ──────
     // If Sharp is unavailable (e.g. Electron on Windows without native binary)
@@ -335,6 +339,7 @@ export async function fixAiSlop(inputPath: string): Promise<string> {
     } catch {
       await writeFile(tmp, stripped);
       console.log(`[fixAiSlop] Sharp unavailable — binary strip only (no pixel perturbation)`);
+      onLog?.("Fix AI Slop: WARNING — Sharp unavailable; only metadata stripping ran, no pixel perturbation");
       return tmp;
     }
 
@@ -355,6 +360,7 @@ export async function fixAiSlop(inputPath: string): Promise<string> {
     console.log(
       `[fixAiSlop] done — format=${fmt}, quality=${quality}, binary-stripped ${removedCount} block(s), pixel-perturbed`,
     );
+    onLog?.(`Fix AI Slop: full processing complete — JPEG quality ${quality}, pixel perturbation applied`);
     return tmp;
   } catch (err) {
     console.error("[fixAiSlop] failed:", err);

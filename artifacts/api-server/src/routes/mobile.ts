@@ -7544,11 +7544,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     };
 
     let pushFilePath = localFilePath;
+    onLog?.(`${prefix}: Fix AI Slop setting = ${doFixAiSlop ? "ON" : "OFF"}`);
     if (doFixAiSlop) {
       onLog?.(`${prefix}: Fix AI Slop — stripping metadata & AI fingerprints…`);
       try {
         const inputBytes = await fsPromises.readFile(pushFilePath);
-        pushFilePath = await fixAiSlop(pushFilePath);
+        pushFilePath = await fixAiSlop(pushFilePath, onLog);
         if (pushFilePath === localFilePath) {
           throw new Error("processor returned the original source path");
         }
