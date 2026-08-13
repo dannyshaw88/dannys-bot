@@ -4450,6 +4450,18 @@ function useCollisionPreventer(serial: string | null) {
     for (const entry of queued) entry.resolve(false);
   }, []);
 
+  const resetCollision = useCallback(() => {
+    if (restTimerRef.current !== null) {
+      clearTimeout(restTimerRef.current);
+      restTimerRef.current = null;
+    }
+    const queued = queueRef.current;
+    queueRef.current = [];
+    busyRef.current = false;
+    activeSlotRef.current = null;
+    for (const entry of queued) entry.resolve(false);
+  }, []);
+
   // Turning the preventer off removes the rest window, but must never release
   // an account while another account is still active. If the device is idle
   // (including during a rest timer), grant the oldest queued turn immediately;
@@ -4472,7 +4484,7 @@ function useCollisionPreventer(serial: string | null) {
     activeSlotRef.current = null;
   }, []);
 
-  return { config, setConfig, requestSlot, releaseSlot, cancelQueuedSlot };
+  return { config, setConfig, requestSlot, releaseSlot, cancelQueuedSlot, resetCollision };
 }
 
 // ── Copy Settings dialog ──────────────────────────────────────────────────────
@@ -7933,6 +7945,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   const handleSlotAutomationState = useCallback((slotIdx: number, state: SlotAutomationState) => {
     setSlotAutomationStates(prev => ({ ...prev, [slotIdx]: state }));
   }, []);
+  const { config: collisionConfig, requestSlot, releaseSlot, cancelQueuedSlot, resetCollision } = useCollisionPreventer(phone?.serial ?? null);
 
   // Notify parent whenever the "any slot enabled" summary changes.
   const onAnyEnabledRef = useRef(onAnyEnabled);
@@ -7947,14 +7960,19 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
     onAnyEnabledRef.current?.(anyEnabled);
   }, [slotAutomationStates]);
 
-  // A device restart must invalidate every pending HST timer on this phone.
-  // The saved enabled settings remain intact; once the device reconnects,
-  // normal startup recovery schedules each slot from its configured interval.
+  // A device restart resets only slots that do not already have a future
+  // execution timestamp. A scheduled slot remains queued exactly where it
+  // was; running/active-without-a-timestamp slots receive a fresh interval
+  // after the device reconnects.
   useEffect(() => {
     const onGracefulRestart = (event: Event) => {
       const detail = (event as CustomEvent<{ serial?: string }>).detail;
       if (!phone?.serial || detail?.serial !== phone.serial) return;
-      for (const slotIdx of Object.keys(slotAutomationStates).map(Number)) {
+      for (const [slotIdxString, state] of Object.entries(slotAutomationStates)) {
+        const slotIdx = Number(slotIdxString);
+        const hasFutureExecution = typeof state.nextRunAt === "number"
+          && state.nextRunAt > Date.now();
+        if (hasFutureExecution && !state.running) continue;
         const key = `${phone.serial}:${slotIdx}`;
         const timer = _hstTimers.get(key);
         if (timer !== undefined) {
@@ -7964,10 +7982,11 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
         _hstStop.add(key);
         _hstNextRunAt.delete(key);
       }
+      resetCollision();
     };
     window.addEventListener("mobile-device-graceful-restart", onGracefulRestart);
     return () => window.removeEventListener("mobile-device-graceful-restart", onGracefulRestart);
-  }, [phone?.serial, slotAutomationStates]);
+  }, [phone?.serial, slotAutomationStates, resetCollision]);
 
   // One ref per slot — each points to that slot's SlotHumanSessionView handle.
   // The mirror toggle calls slotHandleRefs.current[i]?.setEnabled(v) directly,
@@ -8021,7 +8040,6 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
     backToSlots: () => { setOpenSlotTool(null); setOpenPhoneAppsTool(false); },
     backToSlot:  (idx: number | null) => setOpenSlotTool(idx),
   }));
-  const { config: collisionConfig, requestSlot, releaseSlot, cancelQueuedSlot } = useCollisionPreventer(phone?.serial ?? null);
   const deviceOffline = phone?.state === "offline";
   const hydratedRef = useRef(false);
   const lastSavedRef = useRef<string>(JSON.stringify(Array.from({ length: ACCT_SLOT_COUNT }, emptySlot)));
