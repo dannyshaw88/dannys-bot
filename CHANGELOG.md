@@ -1,3 +1,9 @@
+## [1.2.491] — 2026-08-13
+
+### Fixed — Device restart error handling
+
+- Restart now surfaces ADB and active-cycle failures instead of silently reporting success.
+
 ## [1.2.490] — 2026-08-13
 
 ### Fixed — View Explore Search-tab navigation
