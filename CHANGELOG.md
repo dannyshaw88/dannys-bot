@@ -1,3 +1,15 @@
+## [1.2.489] — 2026-08-13
+
+### Added — End-to-end image alteration audit proof
+
+- Make a Post now logs SHA-256 identities for the source and processed images,
+  along with processed byte count, format, and dimensions.
+- The processed SHA-256 and exact filename are logged again when the file is
+  pushed to the device, proving which verified temporary artifact was selected
+  for upload.
+- Existing verification still blocks empty, byte-identical, or undecodable
+  processed images before upload.
+
 ## [1.2.488] — 2026-08-13
 
 ### Fixed — Follow Search-bar accessibility detection across devices
