@@ -1344,9 +1344,15 @@ async function createWindow() {
       const searched = candidates
         .filter((candidate) => candidate !== "wmr.exe" && candidate !== "wmr")
         .join(" | ");
-      const errorMessage = /ENOENT/i.test(rawMessage)
-        ? `WMR executable could not be launched (ENOENT). Confirm wmr.exe exists at: ${searched}`
-        : rawMessage;
+      const errorCode = String(error?.code ?? "");
+      const selected = executable === "wmr.exe" || executable === "wmr"
+        ? "Windows PATH"
+        : executable;
+      const errorMessage = errorCode === "ENOENT" && executable !== "wmr.exe" && executable !== "wmr"
+        ? `WMR was found at ${selected}, but Windows could not load it (ENOENT). The download may be the wrong architecture or missing a required DLL/runtime. Re-download the Windows release and test "${selected}" from Command Prompt.`
+        : errorCode === "ENOENT"
+          ? `WMR executable was not found on Windows PATH. Confirm wmr.exe exists at: ${searched}`
+          : rawMessage;
       return { ok: false, error: errorMessage };
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
