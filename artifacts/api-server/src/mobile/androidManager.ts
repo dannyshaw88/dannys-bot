@@ -2935,7 +2935,12 @@ export async function sleepScreen(serial: string): Promise<void> {
 export function rebootDevice(serial: string): void {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  spawnSync(adb, ["-s", serial, "reboot"], { encoding: "utf8", timeout: 5000 });
+  const result = spawnSync(adb, ["-s", serial, "reboot"], { encoding: "utf8", timeout: 5000 });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    const detail = String(result.stderr || result.stdout || "").trim();
+    throw new Error(`adb reboot failed${detail ? `: ${detail}` : ` (exit ${result.status ?? "unknown"})`}`);
+  }
 }
 
 export function setBrightness(serial: string, percent: number): void {

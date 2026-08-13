@@ -185,7 +185,13 @@ function DeviceQuickControls({ serial }: { serial: string | null | undefined }) 
     if (!serial || rebooting) return;
     setRebooting(true);
     window.dispatchEvent(new CustomEvent("mobile-device-graceful-restart", { detail: { serial } }));
-    await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/graceful-reboot`, { method: "POST" }).catch(() => {});
+    const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/graceful-reboot`, { method: "POST" }).catch(() => null);
+    if (!response?.ok) {
+      setRebooting(false);
+      const result = await response?.json().catch(() => null);
+      window.alert(result?.error ?? "Device restart failed");
+      return;
+    }
     setTimeout(() => { setRebooting(false); setScreenOn(true); }, 15000);
   }, [serial, rebooting]);
 
