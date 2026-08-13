@@ -1,3 +1,18 @@
+## [1.2.488] — 2026-08-13
+
+### Fixed — Follow Search-bar accessibility detection across devices
+
+- Follow now accepts a recognized Instagram Search-bar accessibility container
+  even when that container is not marked clickable, focusable, or as an
+  `EditText`, which handles UI dumps where the interactive child is temporarily
+  absent.
+- Search detection now also recognizes `hint="Search"` accessibility labels.
+- Detection continues to use live accessibility-node bounds and dynamic device
+  screen dimensions only; no device-specific coordinates or fixed pixel
+  positions were added.
+- Coordinate fallback remains disabled when no validated Search-bar node is
+  available.
+
 ## [1.2.487] — 2026-08-13
 
 ### Fixed — Mobile cycles no longer fail on swipe diagnostics
