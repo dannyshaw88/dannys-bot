@@ -190,7 +190,8 @@ export default function ImagesPage(props: ImagesPageProps) {
     processingRef.current = true;
 
     void (async () => {
-      const queue = localItems.filter(item => item.status !== "success");
+      // A completed item can be processed again so restoration settings can be tuned.
+      const queue = localItems;
       for (const item of queue) {
         if (!processingRef.current) break;
         setLocalItems(prev => prev.map(current => current.id === item.id
@@ -487,7 +488,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                   <Button 
                     variant="secondary" 
                     size="sm" 
-                    disabled={items.length === 0 || items.every(i => i.status === 'success')}
+                    disabled={items.length === 0}
                     onClick={handleStartProcessing}
                     className="shadow-xs h-8 bg-foreground text-background hover:bg-foreground/90 border-0"
                   >
