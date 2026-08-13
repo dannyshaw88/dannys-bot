@@ -6151,7 +6151,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
         const strategy = disruptionStrategy ?? "frequency";
         const strength = disruptionStrength ?? "balanced";
         const strengthConfig = {
-          high: { threshold: 0.11, delta: 2, saturation: 1.04, brightness: 1.004, step: 2, sharpen: 1.5 },
+          high: { threshold: 0.07, delta: 3, saturation: 1.05, brightness: 1.005, step: 3, sharpen: 1.65 },
           extreme: { threshold: 0.05, delta: 3, saturation: 1.06, brightness: 1.006, step: 3, sharpen: 1.8 },
         }[strength];
         logProcessing("scan — loading pixel buffer and locating high-frequency signal");
