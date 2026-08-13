@@ -198,30 +198,6 @@ export default function ImagesPage(props: ImagesPageProps) {
           setLocalItems(prev => prev.map(current => current.id === item.id
             ? { ...current, progress: 28 }
             : current));
-           const electronApi = (window as any).electronAPI;
-           const wmrRequested = localDetectorPass;
-           const wmrAttempted = Boolean(wmrRequested && item.sourcePath && electronApi?.wmrProcess);
-           const wmrResult = wmrAttempted
-             ? await electronApi.wmrProcess({ filePath: item.sourcePath, filename: item.name })
-             : null;
-           if (wmrResult?.ok && typeof wmrResult.dataUrl === "string") {
-             setLocalItems(prev => prev.map(current => current.id === item.id
-               ? { ...current, status: "success", progress: 100, processedPreviewUrl: wmrResult.dataUrl, processedData: wmrResult.dataUrl, processingLog: ["WMR SynthID regeneration completed locally"] }
-               : current));
-             continue;
-           }
-           if (wmrRequested) {
-             throw new Error(
-               wmrResult?.error
-                 ? `Detector-oriented WMR processing failed: ${wmrResult.error}`
-                 : "Detector-oriented WMR processing is unavailable. No fallback was used.",
-             );
-           }
-           const wmrFallbackLog = wmrRequested
-             ? [wmrAttempted
-               ? `WMR SynthID regeneration failed — fallback pipeline used: ${wmrResult?.error ?? "no output returned"}`
-               : `WMR SynthID regeneration was not attempted — ${item.sourcePath ? "Electron bridge unavailable" : "native source path unavailable"}; fallback pipeline used`]
-             : [];
            const response = await fetch("/api/images/process", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -251,7 +227,7 @@ export default function ImagesPage(props: ImagesPageProps) {
               progress: 100,
               processedPreviewUrl: result.dataUrl,
               processedData: result.dataUrl,
-                processingLog: [...wmrFallbackLog, ...(Array.isArray(result.processingLog) ? result.processingLog : [])],
+                processingLog: Array.isArray(result.processingLog) ? result.processingLog : [],
             }
             : current));
         } catch (error: any) {

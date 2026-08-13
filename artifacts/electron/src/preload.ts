@@ -38,9 +38,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   openMediaFileDialog: () => ipcRenderer.invoke("open-media-file-dialog"),
   saveProcessedImages: (files: Array<{ filename: string; dataUrl: string }>) =>
     ipcRenderer.invoke("save-processed-images", files),
-  wmrStatus: () => ipcRenderer.invoke("wmr-status"),
-  wmrProcess: (args: { filePath: string; filename: string }) =>
-    ipcRenderer.invoke("wmr-process", args),
   openWallpaperFileDialog: () => ipcRenderer.invoke("open-wallpaper-file-dialog"),
   countFolderFiles: (folderPath: string) => ipcRenderer.invoke("count-folder-files", folderPath),
   readClipboardText: () => ipcRenderer.invoke("clipboard-read-text"),

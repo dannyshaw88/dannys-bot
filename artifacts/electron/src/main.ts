@@ -1,6 +1,6 @@
 import { app, BrowserWindow, Menu, Tray, nativeImage, dialog, ipcMain, screen, shell, powerSaveBlocker } from "electron";
 import { autoUpdater } from "electron-updater";
-import { spawn, ChildProcess, exec, execFile, execFileSync } from "child_process";
+import { spawn, ChildProcess, exec } from "child_process";
 import { promisify } from "util";
 import http from "http";
 import net from "net";
@@ -52,20 +52,6 @@ process.on("unhandledRejection", (reason: unknown) => {
 });
 
 const execAsync = promisify(exec);
-
-function resolvePathExecutable(binaryName: string): string | null {
-  try {
-    const command = process.platform === "win32" ? "where.exe" : "which";
-    const result = execFileSync(command, [binaryName], {
-      encoding: "utf8",
-      windowsHide: true,
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    return result.split(/\r?\n/)[0]?.trim() || null;
-  } catch {
-    return null;
-  }
-}
 
 let serverPort = 0;
 let serverProc: ChildProcess | null = null;
@@ -1303,74 +1289,6 @@ async function createWindow() {
       fs.writeFileSync(path.join(folder, filename), Buffer.from(data, "base64"));
     }
     return { canceled: false, folder, count: files?.length ?? 0 };
-  });
-
-  // Optional local WMR backend. The binary is deliberately not bundled:
-  // users install the release from the upstream MIT repository and place it
-  // in the app's writable userData/wmr directory (or on PATH).
-  ipcMain.handle("wmr-status", async () => {
-    const binaryName = process.platform === "win32" ? "wmr.exe" : "wmr";
-    const pathExecutable = resolvePathExecutable(binaryName);
-    const candidates = [
-      path.join(getUserDataPath(), "wmr", binaryName),
-      path.join(app.getPath("appData"), "Aura Farming", "wmr", binaryName),
-      path.join(process.resourcesPath, "bin", binaryName),
-      ...(pathExecutable ? [pathExecutable] : []),
-    ];
-    for (const candidate of candidates) {
-      if (candidate === "wmr.exe" || candidate === "wmr" || fs.existsSync(candidate)) {
-        if (candidate === "wmr.exe" || candidate === "wmr" || fs.existsSync(candidate)) {
-          return { available: true, path: candidate };
-        }
-      }
-    }
-    return { available: false };
-  });
-
-  ipcMain.handle("wmr-process", async (_e, args: { filePath: string; filename: string }) => {
-    const binaryName = process.platform === "win32" ? "wmr.exe" : "wmr";
-    const pathExecutable = resolvePathExecutable(binaryName);
-    const candidates = [
-      path.join(getUserDataPath(), "wmr", binaryName),
-      path.join(app.getPath("appData"), "Aura Farming", "wmr", binaryName),
-      path.join(process.resourcesPath, "bin", binaryName),
-      ...(pathExecutable ? [pathExecutable] : []),
-    ];
-    const executable = candidates.find((candidate) =>
-      candidate === "wmr.exe" || candidate === "wmr" || fs.existsSync(candidate),
-    );
-    if (!executable) return { ok: false, unavailable: true, error: "WMR is not installed" };
-    if (!args?.filePath || !fs.existsSync(args.filePath)) return { ok: false, error: "Source image was not found" };
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "aura-wmr-"));
-    const ext = path.extname(args.filename || args.filePath) || ".png";
-    const outputPath = path.join(tempDir, `cleaned${ext}`);
-    try {
-      await new Promise<void>((resolve, reject) => {
-        execFile(executable, ["synthid", args.filePath, "-o", outputPath], { windowsHide: true, timeout: 30 * 60 * 1000 }, (error, _stdout, stderr) => {
-          if (error) reject(new Error(String(stderr || error.message).trim()));
-          else resolve();
-        });
-      });
-      if (!fs.existsSync(outputPath)) throw new Error("WMR completed without creating an output file");
-      const data = fs.readFileSync(outputPath);
-      const mime = ext.toLowerCase() === ".png" ? "image/png" : ext.toLowerCase() === ".webp" ? "image/webp" : "image/jpeg";
-      return { ok: true, dataUrl: `data:${mime};base64,${data.toString("base64")}`, filename: args.filename };
-    } catch (error: any) {
-      const rawMessage = error?.message ?? "WMR processing failed";
-      const searched = candidates
-        .filter((candidate) => candidate !== "wmr.exe" && candidate !== "wmr")
-        .join(" | ");
-      const errorCode = String(error?.code ?? "");
-      const selected = executable === "wmr.exe" || executable === "wmr"
-        ? "Windows PATH"
-        : executable;
-      const errorMessage = errorCode === "ENOENT"
-        ? `WMR was found at ${selected}, but Windows could not load it (ENOENT). The download may be the wrong architecture or missing a required DLL/runtime. Re-download the Windows release and test "${selected}" from Command Prompt.`
-        : rawMessage;
-      return { ok: false, error: errorMessage };
-    } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
   });
 
   // Open a native OS image picker for the Phone Farm custom wallpaper control.
