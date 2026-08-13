@@ -388,21 +388,14 @@ export default function ImagesPage(props: ImagesPageProps) {
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1 mt-0.5">
                       <Label className="text-sm font-medium text-foreground cursor-pointer select-none" onClick={() => setLocalDetectorPass(!localDetectorPass)}>
-                        Detector-oriented pass
+                        Combined harsh pass
                       </Label>
                       <p className="text-[10px] leading-4 text-muted-foreground max-w-[210px]">
-                        Adds the stronger 2× spectral rewrite pass used for difficult hidden-signal images.
+                        Applies pixel micro-jitter, chroma shift, resampling, and frequency rewrite together.
                       </p>
                     </div>
                     <Switch checked={localDetectorPass} onCheckedChange={setLocalDetectorPass} className="data-[state=checked]:bg-cyan-500 shrink-0" />
                   </div>
-                  {localDetectorPass && (
-                    <div className="rounded-md border border-cyan-500/30 bg-cyan-500/5 px-2.5 py-2 text-xs text-muted-foreground">
-                      <span className="font-medium text-foreground">Combined harsh pass</span>
-                      <br />
-                      Pixel micro-jitter + chroma shift + resample + frequency rewrite
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
