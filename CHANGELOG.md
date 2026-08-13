@@ -1,3 +1,9 @@
+## [1.2.495] — 2026-08-13
+
+### Fixed — Follow search targeting
+
+- Follow now prefers Instagram’s exact top `action_bar_search_edit_text` node for username searches.
+
 ## [1.2.494] — 2026-08-13
 
 ### Fixed — Human Session Tool filter copying
