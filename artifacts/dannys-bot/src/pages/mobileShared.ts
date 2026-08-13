@@ -412,16 +412,7 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
 /** Fields that stay restricted in Settings → TrustScores. Inject Browsing
  * and Follow Filters are Human Session Tool controls, not TrustScore controls. */
 export const TRUST_SCORE_TEMPLATE_LOCKED_FIELDS = new Set(
-  [...TRUST_SCORE_SLOT_OWNED_FIELDS,
-    "followFiltersEnabled",
-    "followFilterPrivateUsers",
-    "followFilterEnglishSpeaking",
-    "followFilterMinFollowers50",
-    "followFilterVerifiedUsers",
-    "followFilterMaxFollowers25k",
-    "followFilterMalesOnly",
-    "followFilterMaleNames",
-  ].filter(field => ![
+  [...TRUST_SCORE_SLOT_OWNED_FIELDS].filter(field => ![
     "injectBrowsingEnabled",
   ].includes(field)),
 );
