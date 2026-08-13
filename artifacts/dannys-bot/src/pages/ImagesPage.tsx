@@ -198,7 +198,17 @@ export default function ImagesPage(props: ImagesPageProps) {
           setLocalItems(prev => prev.map(current => current.id === item.id
             ? { ...current, progress: 28 }
             : current));
-          const response = await fetch("/api/images/process", {
+           const electronApi = (window as any).electronAPI;
+           const wmrResult = localDetectorPass && item.sourcePath && electronApi?.wmrProcess
+             ? await electronApi.wmrProcess({ filePath: item.sourcePath, filename: item.name })
+             : null;
+           if (wmrResult?.ok && typeof wmrResult.dataUrl === "string") {
+             setLocalItems(prev => prev.map(current => current.id === item.id
+               ? { ...current, status: "success", progress: 100, processedPreviewUrl: wmrResult.dataUrl, processedData: wmrResult.dataUrl, processingLog: ["WMR SynthID regeneration completed locally"] }
+               : current));
+             continue;
+           }
+           const response = await fetch("/api/images/process", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
