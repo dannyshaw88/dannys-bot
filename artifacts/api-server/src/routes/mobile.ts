@@ -3542,7 +3542,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // after each advance. Do not repeat those expensive dumps here; the
     // calibrated path and final input coordinates are still logged below.
     logger.info({ serial, source, personality, reversed, from: [path.x1, path.y1], to: [path.x2, path.y2], durationMs, pauseMs, settleMs, profile: true }, "[mobile-input] device-profile swipe");
-    onLog?.(`[mobile-input] ${source} ${personality ?? "default"} dispatched: (${path.x1},${path.y1}) → (${path.x2},${path.y2}) duration=${path.durationMs}ms pause=${pauseMs}ms settle=${settleMs}ms reversed=${reversed}`);
     // The profile already generated the complete randomized path. Do not
     // apply android.swipe's legacy hidden center-line jitter on top of it.
     await android.swipe(serial, path.x1, path.y1, path.x2, path.y2, path.durationMs, false);
