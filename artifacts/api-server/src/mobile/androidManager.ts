@@ -8785,6 +8785,38 @@ export async function findInstagramProfileTab(serial: string): Promise<{ x: numb
       return { x: avatar.x, y: avatar.y };
     }
   }
+  // ── Strategy 2c: clickable navigation container around an unlabeled icon.
+  // On some builds the avatar ImageView is not clickable and has no semantic
+  // attributes, while its bottom-nav parent is the actionable node. Use that
+  // parent's live bounds rather than inventing a screen coordinate.
+  {
+    const rightMin = Math.round(xmlW * 0.75);
+    const bottomMin = Math.round(xmlH * 0.82);
+    const candidates: { x: number; y: number; area: number }[] = [];
+    const containerRe = /<node\s([^>]+?)\s*\/?>/g;
+    let cm: RegExpExecArray | null;
+    while ((cm = containerRe.exec(xml)) !== null) {
+      const attrs = cm[1];
+      if (!/clickable="true"/i.test(attrs)) continue;
+      const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (!bm) continue;
+      const x1 = Number(bm[1]), y1 = Number(bm[2]);
+      const x2 = Number(bm[3]), y2 = Number(bm[4]);
+      const w = x2 - x1, h = y2 - y1;
+      const cx = Math.round((x1 + x2) / 2);
+      const cy = Math.round((y1 + y2) / 2);
+      if (cx < rightMin || cy < bottomMin) continue;
+      if (w < 40 || h < 40 || w > 320 || h > 320) continue;
+      if (w / Math.max(1, h) > 2.8 || h / Math.max(1, w) > 2.8) continue;
+      candidates.push({ x: cx, y: cy, area: w * h });
+    }
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => b.x - a.x || a.area - b.area);
+      const container = candidates[0];
+      onLog?.(`  ↳ Profile tab found via clickable bottom-right navigation node at (${container.x},${container.y})`);
+      return { x: container.x, y: container.y };
+    }
+  }
   // ── Strategy 3: positional fallback.
   // Collect clickable nodes in the bottom-nav band (y > 88 % of screen height),
   // deduplicate, sort left-to-right, return the RIGHTMOST — the Profile tab is
