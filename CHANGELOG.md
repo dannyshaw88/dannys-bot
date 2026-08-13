@@ -1,3 +1,10 @@
+## [1.2.492] — 2026-08-13
+
+### Changed — Follow Filters ownership
+
+- Follow Filters are now configured in the Human Session Tool and included in its Copy Settings.
+- TrustScore templates and TrustScore Copy Settings keep Follow Filters read-only.
+
 ## [1.2.491] — 2026-08-13
 
 ### Fixed — Device restart error handling
