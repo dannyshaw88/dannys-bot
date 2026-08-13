@@ -199,7 +199,9 @@ export default function ImagesPage(props: ImagesPageProps) {
             ? { ...current, progress: 28 }
             : current));
            const electronApi = (window as any).electronAPI;
-           const wmrResult = localDetectorPass && item.sourcePath && electronApi?.wmrProcess
+           const wmrRequested = localDetectorPass;
+           const wmrAttempted = Boolean(wmrRequested && item.sourcePath && electronApi?.wmrProcess);
+           const wmrResult = wmrAttempted
              ? await electronApi.wmrProcess({ filePath: item.sourcePath, filename: item.name })
              : null;
            if (wmrResult?.ok && typeof wmrResult.dataUrl === "string") {
@@ -208,6 +210,11 @@ export default function ImagesPage(props: ImagesPageProps) {
                : current));
              continue;
            }
+           const wmrFallbackLog = wmrRequested
+             ? [wmrAttempted
+               ? `WMR SynthID regeneration failed — fallback pipeline used: ${wmrResult?.error ?? "no output returned"}`
+               : `WMR SynthID regeneration was not attempted — ${item.sourcePath ? "Electron bridge unavailable" : "native source path unavailable"}; fallback pipeline used`]
+             : [];
            const response = await fetch("/api/images/process", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -237,7 +244,7 @@ export default function ImagesPage(props: ImagesPageProps) {
               progress: 100,
               processedPreviewUrl: result.dataUrl,
               processedData: result.dataUrl,
-               processingLog: Array.isArray(result.processingLog) ? result.processingLog : [],
+                processingLog: [...wmrFallbackLog, ...(Array.isArray(result.processingLog) ? result.processingLog : [])],
             }
             : current));
         } catch (error: any) {
