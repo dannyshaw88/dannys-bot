@@ -10270,7 +10270,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (searchReadyForReuse) {
           onLog?.("Follow: reusing confirmed clear/focus state — skipping redundant search cleanup");
         } else {
-          await android.clearInstagramSearchBar(serial, (msg) => onLog?.(`  ${msg}`));
+          // The Search node was just found and tapped above. Do not perform a
+          // second UIAutomator dump here: on slower devices it can consume
+          // the full dump timeout even when the field is already empty.
+          await android.clearInstagramSearchBar(
+            serial,
+            (msg) => onLog?.(`  ${msg}`),
+            { skipNodeLookup: true },
+          );
         }
         searchReadyForReuse = false;
         // Use only real taps on the saved Android keyboard calibration map.

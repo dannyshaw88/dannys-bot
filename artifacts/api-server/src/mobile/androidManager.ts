@@ -5480,35 +5480,40 @@ export async function findDmSendButton(serial: string): Promise<{ x: number; y: 
 export async function clearInstagramSearchBar(
   serial: string,
   onLog?: (msg: string) => void,
+  options?: { skipNodeLookup?: boolean },
 ): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  const xml = await _uiDump(adb, serial).catch(() => "");
-  if (!xml) return;
+  if (!options?.skipNodeLookup) {
+    const xml = await _uiDump(adb, serial).catch(() => "");
+    if (!xml) return;
 
-  // Strategy 1 — node-based clear button (best-effort, no coordinates needed)
-  const clearBtn =
-    _findByResId(xml,
-      ":id/search_bar_delete_icon",
-      ":id/search_bar_clear_button",
-      ":id/clear_search_button",
-      ":id/clear_button",
-      ":id/action_clear_text",
-      ":id/search_close_btn",
-      ":id/query_refinement",
-    ) ??
-    _findElem(xml, "Clear search", "Clear text", "Clear");
+    // Strategy 1 — node-based clear button (best-effort, no coordinates needed)
+    const clearBtn =
+      _findByResId(xml,
+        ":id/search_bar_delete_icon",
+        ":id/search_bar_clear_button",
+        ":id/clear_search_button",
+        ":id/clear_button",
+        ":id/action_clear_text",
+        ":id/search_close_btn",
+        ":id/query_refinement",
+      ) ??
+      _findElem(xml, "Clear search", "Clear text", "Clear");
 
-  if (clearBtn) {
-    onLog?.(`Follow: tapping search bar clear button at (${clearBtn.x},${clearBtn.y})`);
-    _adbTap(adb, serial, clearBtn.x, clearBtn.y);
-    await _sleep(300);
+    if (clearBtn) {
+      onLog?.(`Follow: tapping search bar clear button at (${clearBtn.x},${clearBtn.y})`);
+      _adbTap(adb, serial, clearBtn.x, clearBtn.y);
+      await _sleep(300);
+    }
+  } else {
+    onLog?.("Follow: search bar already focused — clearing with key events without another UI dump");
   }
 
   // Strategy 2 — unconditional KEYCODE_MOVE_END + backspace sweep.
-  // Always runs whether or not Strategy 1 fired.  Instagram's EditText `text`
-  // attribute is unreliable (often "" even with visible text), so we never
-  // use it to decide whether to skip — we just always sweep.
+  // The focused-field path deliberately avoids a second UIAutomator dump:
+  // the caller has just validated and tapped the live Search node, so another
+  // dump can block for the full device-specific UIAutomator timeout.
   onLog?.(`Follow: sending KEYCODE_MOVE_END + 60× KEYCODE_DEL to ensure search bar is clear`);
   runInputShell(serial, ["keyevent", "123"], "keyevent"); // KEYCODE_MOVE_END → cursor to end
   await _sleep(80);
