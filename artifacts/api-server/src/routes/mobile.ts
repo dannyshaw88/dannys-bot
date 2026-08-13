@@ -2103,6 +2103,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "makePostEnabled",
     "postStoryEnabled",
   ]);
+  // Follow Filters are configured per Human Session Tool slot. They remain
+  // visible/editable in TrustScore settings for compatibility, but TrustScore
+  // template values must never replace the HST values used at execution time.
+  const FOLLOW_FILTER_FIELDS = new Set([
+    "followFiltersEnabled",
+    "followFilterPrivateUsers",
+    "followFilterEnglishSpeaking",
+    "followFilterMinFollowers50",
+    "followFilterVerifiedUsers",
+    "followFilterMaxFollowers25k",
+    "followFilterMalesOnly",
+    "followFilterMaleNames",
+  ]);
   const loadTrustScoreAssignment = async (serial: string, slotIdx: number) => {
     const all = await storage.getGlobalSettings();
     const key = trustScoreAssignmentKey(serial, slotIdx);
@@ -2158,6 +2171,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       field => template[field] === false,
     );
     for (const [field, value] of Object.entries(template)) {
+      if (FOLLOW_FILTER_FIELDS.has(field)) continue;
       if (TRUST_SCORE_SLOT_OWNED_FIELDS.has(field)) continue;
       if (TRUST_SCORE_TOOL_FIELDS.has(field) && templateDisabledTools.includes(field)) {
         effective[field] = false;
