@@ -8,6 +8,7 @@ import path from "path";
 import * as http from "http";
 import * as os from "os";
 import sharp from "sharp";
+import { createHash } from "node:crypto";
 import { WebSocketServer } from "ws";
 import * as android from "../mobile/androidManager";
 import * as proxyRelay from "../mobile/proxyRelay";
@@ -7554,6 +7555,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   ): Promise<{
     pushFilePath: string;
     pushFileName: string;
+    audit: { sourceSha256: string; processedSha256: string; processedBytes: number; format: string; width: number; height: number };
     cleanup: () => Promise<void>;
   }> {
     const { doFixAiSlop, alterationEnabled, alterationLevel, imageSettingsEnabled, imageSettings, onLog } = opts;
@@ -7579,8 +7581,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
       return outputBytes;
     };
+    const describeImage = async (imagePath: string, bytes: Buffer) => {
+      const metadata = await sharp(bytes).metadata();
+      return {
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+        bytes: bytes.length,
+        format: metadata.format ?? "unknown",
+        width: metadata.width ?? 0,
+        height: metadata.height ?? 0,
+      };
+    };
 
     let pushFilePath = localFilePath;
+    const sourceBytes = await fsPromises.readFile(localFilePath);
+    const sourceAudit = await describeImage(localFilePath, sourceBytes);
     onLog?.(`${prefix}: Fix AI Slop setting = ${doFixAiSlop ? "ON" : "OFF"}`);
     if (doFixAiSlop) {
       onLog?.(`${prefix}: Fix AI Slop — stripping metadata & AI fingerprints…`);
@@ -7591,8 +7605,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           throw new Error("processor returned the original source path");
         }
         tempFiles.push(pushFilePath);
-        await verifyProcessedImage(pushFilePath, inputBytes, "Fix AI Slop");
+        const outputBytes = await verifyProcessedImage(pushFilePath, inputBytes, "Fix AI Slop");
+        const outputAudit = await describeImage(pushFilePath, outputBytes);
         onLog?.(`${prefix}: Fix AI Slop verified — processed image is decodable and differs from input`);
+        onLog?.(`${prefix}: Fix AI Slop audit — sourceSha256=${sourceAudit.sha256} processedSha256=${outputAudit.sha256} bytes=${outputAudit.bytes} format=${outputAudit.format} dimensions=${outputAudit.width}x${outputAudit.height}`);
       } catch (e: any) {
         await Promise.all(tempFiles.map(file => fsPromises.unlink(file).catch(() => {})));
         tempFiles.length = 0;
@@ -7622,7 +7638,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         tempDirs.push(tempDir);
         tempFiles.push(alteredPath);
         pushFilePath = alteredPath;
-        await verifyProcessedImage(pushFilePath, input, `${level} image alteration`);
+        const outputBytes = await verifyProcessedImage(pushFilePath, input, `${level} image alteration`);
+        const outputAudit = await describeImage(pushFilePath, outputBytes);
 
         // alterJpegBuffer emits JPEG when Sharp is available. Keep the
         // extension aligned with the bytes so Android MediaStore/Instagram
@@ -7631,6 +7648,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           pushFileName = `${path.basename(fileName, path.extname(fileName))}.jpg`;
         }
         onLog?.(`${prefix}: ${level} image alteration verified — pushing processed copy`);
+        onLog?.(`${prefix}: ${level} alteration audit — sourceSha256=${sourceAudit.sha256} processedSha256=${outputAudit.sha256} bytes=${outputAudit.bytes} format=${outputAudit.format} dimensions=${outputAudit.width}x${outputAudit.height}`);
       } catch (e: any) {
         await Promise.all(tempFiles.map(file => fsPromises.unlink(file).catch(() => {})));
         tempFiles.length = 0;
@@ -7640,9 +7658,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
     }
 
+    const processedBytes = await fsPromises.readFile(pushFilePath);
+    const processedAudit = await describeImage(pushFilePath, processedBytes);
     return {
       pushFilePath,
       pushFileName,
+      audit: {
+        sourceSha256: sourceAudit.sha256,
+        processedSha256: processedAudit.sha256,
+        processedBytes: processedAudit.bytes,
+        format: processedAudit.format,
+        width: processedAudit.width,
+        height: processedAudit.height,
+      },
       cleanup: async () => {
         for (const tempFile of tempFiles) {
           await fsPromises.unlink(tempFile).catch(() => {});
@@ -7778,7 +7806,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return { posted: false };
     }
     await prepared.cleanup();
-    onLog?.(`Make a Post: ✓ pushed to ${devicePath}, media-scanner notified`);
+    onLog?.(`Make a Post: ✓ pushed to ${devicePath}, media-scanner notified — processedSha256=${prepared.audit.processedSha256} filename=${prepared.pushFileName} bytes=${prepared.audit.processedBytes}`);
     await sleepOrAbort(serial, 1200); // let the scanner index the file before we open the picker
 
     onLog?.("Make a Post: looking for the \"+\" compose icon…");
@@ -8194,7 +8222,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return { posted: false };
     }
     await prepared.cleanup();
-    onLog?.(`Make a Post (Story): ✓ pushed to ${devicePath}`);
+    onLog?.(`Make a Post (Story): ✓ pushed to ${devicePath} — processedSha256=${prepared.audit.processedSha256} filename=${prepared.pushFileName} bytes=${prepared.audit.processedBytes}`);
     await sleepOrAbort(serial, 1200);
 
     // Step 1 — Tap the "+" compose button (same entry point as profile post)
@@ -8775,7 +8803,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let actualDevicePath: string;
     try {
       actualDevicePath = await android.pushFileToDevice(serial, prepared.pushFilePath, prepared.pushFileName);
-      onLog?.(`Update Profile Pic: pushed ${localFile} to device`);
+      onLog?.(`Update Profile Pic: pushed ${localFile} to device — processedSha256=${prepared.audit.processedSha256} filename=${prepared.pushFileName} bytes=${prepared.audit.processedBytes}`);
     } catch (e: any) {
       onLog?.(`Update Profile Pic: ✗ push failed: ${e?.message}`);
       await prepared.cleanup();
