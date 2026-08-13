@@ -74,7 +74,7 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [localMetadataCleanup, setLocalMetadataCleanup] = useState(true);
   const [localFrequencyDisruption, setLocalFrequencyDisruption] = useState(true);
   const [localDetectorPass, setLocalDetectorPass] = useState(true);
-  const [localDisruptionStrategy, setLocalDisruptionStrategy] = useState<"frequency" | "chroma" | "resample" | "combined">("frequency");
+  const [localDisruptionStrategy, setLocalDisruptionStrategy] = useState<"frequency" | "chroma" | "resample" | "combined">("combined");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
