@@ -9291,8 +9291,11 @@ export async function findInstagramSearchBar(
       const isEditText = /class="android\.widget\.EditText"/i.test(node);
       const mentionsSearch = /search/i.test(`${resourceId} ${label}`);
       const interactive = /(?:clickable|focusable)="true"/i.test(node);
-      if (!interactive && !isEditText) continue;
       const matchedId = searchIds.find(id => resourceId.toLowerCase().includes(id));
+      // Instagram can expose the visible search control as a non-interactive
+      // container while its editable child is temporarily absent. A known
+      // search resource-id remains valid accessibility evidence.
+      if (!interactive && !isEditText && !matchedId) continue;
       // A generic EditText is not enough: Instagram can expose keyboard,
       // hidden form, or login fields in the same top region.
       if (!matchedId && !mentionsSearch) continue;
@@ -9339,7 +9342,7 @@ export async function findInstagramSearchBar(
       if (!xmlLine.includes('clickable="true"') && !xmlLine.includes('focusable="true"')) continue;
       // "search" must appear inside a text="" or content-desc="" attribute value
       // (not just anywhere in the line, e.g. a resource-id containing "search")
-      if (!/(?:text|content-desc)="[^"]*[Ss]earch[^"]*"/.test(xmlLine)) continue;
+      if (!/(?:text|content-desc|hint)="[^"]*[Ss]earch[^"]*"/.test(xmlLine)) continue;
       return { x: Math.round((Number(bm[1]) + Number(bm[3])) / 2), y: Math.round(centerY) };
     }
     // attempt loop continues — wait and re-dump
