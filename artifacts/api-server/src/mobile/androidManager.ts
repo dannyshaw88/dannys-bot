@@ -7839,13 +7839,19 @@ export async function switchToInstagramAccount(
     }
 
     // The switcher is populated, but the requested account may be below the
-    // current viewport. Scroll the live accessibility container once. The
-    // gesture is derived from that node's bounds; never from device dimensions.
+    // current viewport. Always scroll once when the target is not visible.
+    // Instagram frequently exposes the sheet's child overlays instead of a
+    // scrollable parent, so scrollable="true" is not a prerequisite.
     if (!coords) {
-      const scrollBounds = _findScrollableBounds(xml);
-      if (scrollBounds) {
-        onLog?.(`  ↳ @${clean} is below the visible account rows — scrolling the live switcher list once…`);
-        const screen = getScreenSize(serial);
+      onLog?.(`  ↳ @${clean} is not visible — scrolling the expanded account sheet once regardless of accessibility flags…`);
+      const screen = getScreenSize(serial);
+      const scrollBounds = _findScrollableBounds(xml) ?? {
+        x1: 0,
+        y1: Math.round(screen.h * 0.24),
+        x2: screen.w,
+        y2: Math.round(screen.h * 0.90),
+      };
+      {
         const sheetW = Math.max(1, scrollBounds.x2 - scrollBounds.x1);
         const sheetH = Math.max(1, scrollBounds.y2 - scrollBounds.y1);
         const clamp = (value: number, min: number, max: number) =>
