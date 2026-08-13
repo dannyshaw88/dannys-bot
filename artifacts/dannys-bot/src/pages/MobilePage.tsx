@@ -5021,9 +5021,21 @@ export function AutomationSettingsPanel({
   // The TrustScore editor passes templateLockedFields, so its normal template
   // values remain editable while excluded slot fields stay locked.
   const loading = loadingExternal || trustScoreSlotLocked;
+  const FOLLOW_FILTER_FIELDS = new Set([
+    "followFiltersEnabled",
+    "followFilterPrivateUsers",
+    "followFilterEnglishSpeaking",
+    "followFilterMinFollowers50",
+    "followFilterVerifiedUsers",
+    "followFilterMaxFollowers25k",
+    "followFilterMalesOnly",
+    "followFilterMaleNames",
+  ]);
   const fieldDisabled = (...fields: string[]) =>
     loadingExternal || fields.some(field =>
-      trustScoreSlotLocked
+      FOLLOW_FILTER_FIELDS.has(field)
+        ? false
+        : trustScoreSlotLocked
         ? !TRUST_SCORE_SLOT_EDITABLE_FIELDS.has(field) || templateDisabledTools.has(field)
         : fieldLocked(field),
     );
