@@ -2092,6 +2092,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   );
   const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
     "followSources",
+    "followFiltersEnabled",
+    "followFilterPrivateUsers",
+    "followFilterEnglishSpeaking",
+    "followFilterMinFollowers50",
+    "followFilterVerifiedUsers",
+    "followFilterMaxFollowers25k",
+    "followFilterMalesOnly",
+    "followFilterMaleNames",
     "updateProfilePicActivatePctMin",
     "updateProfilePicActivatePctMax",
     "updateProfilePicFolderPath",
