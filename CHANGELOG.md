@@ -1,3 +1,10 @@
+## [1.2.490] — 2026-08-13
+
+### Fixed — View Explore Search-tab navigation
+
+- Prevented View Explore from mistaking the top Search bar for the bottom Search tab.
+- Bottom-tab fallback detection now requires a Search/Explore node in the bottom navigation area.
+
 ## [1.2.489] — 2026-08-13
 
 ### Added — End-to-end image alteration audit proof
