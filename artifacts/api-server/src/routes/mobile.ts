@@ -3873,12 +3873,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       );
       const media = mediaCandidates[0];
 
-      const authorCandidates = nodes.filter(n =>
-        n.clickable && n.rid.includes("row_feed_photo_profile_name") && n.y < like.y,
-      );
+      // The author must belong to the current post, not merely be any
+      // clickable row_feed_photo_profile_name node above the action row.
+      // Recycled feed/profile nodes can otherwise win this scan (including
+      // the account profile control in the lower-right navigation area).
+      const { w: authorScreenW } = getScreenSize(serial);
+      const authorCandidates = nodes.filter(n => {
+        if (!n.clickable || !n.rid.includes("row_feed_photo_profile_name") || n.y >= like.y) {
+          return false;
+        }
+        if (media) {
+          // A feed post's author header is immediately above its media and
+          // occupies the same horizontal post bounds. Both values come from
+          // the current accessibility dump.
+          return n.y < media.y1 && n.x2 > media.x1 && n.x1 < media.x2;
+        }
+        // If this build omits media_group, retain only author candidates in
+        // the dynamically derived central region of the device display.
+        return n.x > authorScreenW * 0.15 && n.x < authorScreenW * 0.85;
+      });
       // The current post's header is the author node immediately before the
-      // current post media.  If media is unavailable, the nearest preceding
-      // author node is still safer than the first/topmost recycled row.
+      // current post media. If media is unavailable, the central-region
+      // filter above prevents navigation/profile controls from being chosen.
       authorCandidates.sort((a, b) => {
         if (media) {
           const aGap = media.y1 - a.y;
