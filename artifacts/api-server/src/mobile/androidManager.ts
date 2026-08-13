@@ -7077,11 +7077,10 @@ export async function isInStoryViewerSlow(serial: string): Promise<boolean> {
  * Strategy (tried in order):
  *  1. Known resource-ids (clips_tab, reels_tab, …)
  *  2. Accessibility label "Reels"
- *  3. Positional fallback — scan the bottom-nav band (y > 88 % of xml height)
- *     for clickable nodes, sort left-to-right, return index 1 (the confirmed
- *     Reels slot on this device: home / reels / shop / search / profile).
- *     If the node count differs from 5, we still return index 1 as the best
- *     guess — callers should log and verify with the diagnostic dump.
+ *  3. Semantic bottom-nav scan — accept a Reels/Clips resource-id or label
+ *     from the bottom-nav band even when the exposed child is non-clickable.
+ *  4. Positional fallback — only use index 1 when the complete five-item
+ *     navigation row is present. Never guess from an incomplete scan.
  *
  * The positional fallback uses the XML-reported dimensions (not wm size) so
  * every percentage threshold stays consistent with the dump coordinates
@@ -7108,8 +7107,34 @@ export async function findReelsTab(
   //    band, de-duplicate overlapping bounds, sort left-to-right, pick index 1.
   const { w: xmlW, h: xmlH } = _getScreenSize(xml);
   const botMin = Math.round(xmlH * 0.88);
-  const raw: { x: number; y: number }[] = [];
+
+  // Some Instagram builds expose the icon child as non-clickable while the
+  // parent navigation container owns the tap action. Semantic evidence is
+  // stronger than the child's clickable flag, so accept known Reels/Clips
+  // identifiers and labels directly from the bottom-nav band.
   const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+  let semanticMatch: RegExpExecArray | null;
+  while ((semanticMatch = nodeRe.exec(xml)) !== null) {
+    const attrs = semanticMatch[1];
+    const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+    if (!bm) continue;
+    const y1 = Number(bm[2]);
+    const y2 = Number(bm[4]);
+    if (y2 < botMin) continue;
+    const rid = attrs.match(/resource-id="([^"]*)"/i)?.[1] ?? "";
+    const desc = attrs.match(/content-desc="([^"]*)"/i)?.[1] ?? "";
+    if (!/(?:clips_tab|reels_tab|tab_reels|nav_reels|bottom_tab_reels)/i.test(rid) &&
+        !/^reels?$/i.test(desc) &&
+        !/^clips?$/i.test(desc)) continue;
+    const result = {
+      x: Math.round((Number(bm[1]) + Number(bm[3])) / 2),
+      y: Math.round((y1 + y2) / 2),
+    };
+    onLog?.(`Reels tab: semantic bottom-nav node "${rid}" "${desc}" at (${result.x},${result.y})`);
+    return result;
+  }
+
+  const raw: { x: number; y: number }[] = [];
   let nm: RegExpExecArray | null;
   while ((nm = nodeRe.exec(xml)) !== null) {
     const attrs = nm[1];
@@ -7133,8 +7158,9 @@ export async function findReelsTab(
     (deduped.length ? deduped.map(n => `(${n.x},${n.y})`).join(" | ") : "none"),
   );
 
-  // Need at least 2 nodes: index 0 = Home, index 1 = Reels
-  if (deduped.length >= 2) return deduped[1];
+  // An incomplete scan is unsafe: when Home/Reels are omitted, index 1 can
+  // be Direct Messages (the observed regression). Require the full nav row.
+  if (deduped.length >= 5) return deduped[1];
   return null;
 }
 
