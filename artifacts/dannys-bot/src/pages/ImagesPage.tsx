@@ -75,6 +75,9 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [localFrequencyDisruption, setLocalFrequencyDisruption] = useState(true);
   const [localDetectorPass, setLocalDetectorPass] = useState(true);
   const [localDisruptionStrength, setLocalDisruptionStrength] = useState<"high" | "extreme">("high");
+  const [localRestoreLowBlend, setLocalRestoreLowBlend] = useState(100);
+  const [localRestoreDetail, setLocalRestoreDetail] = useState(82);
+  const [localRestoreBlur, setLocalRestoreBlur] = useState(2);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -215,6 +218,9 @@ export default function ImagesPage(props: ImagesPageProps) {
                detectorPass: localDetectorPass,
                disruptionStrategy: "combined",
                disruptionStrength: localDisruptionStrength,
+               restorationLowBlend: localRestoreLowBlend / 100,
+               restorationDetail: localRestoreDetail / 100,
+               restorationBlur: localRestoreBlur / 10,
             }),
           });
           const result = await response.json().catch(() => null);
@@ -409,6 +415,23 @@ export default function ImagesPage(props: ImagesPageProps) {
                         <option value="high">High</option>
                         <option value="extreme">Extreme</option>
                       </select>
+                    </div>
+                  )}
+                  {localDetectorPass && (
+                    <div className="space-y-3 rounded-md border border-border/60 p-3">
+                      <Label className="text-xs font-medium">Restoration editor</Label>
+                      <label className="block text-[11px] text-muted-foreground">
+                        Low-frequency recovery: {localRestoreLowBlend}%
+                        <input type="range" min="0" max="100" value={localRestoreLowBlend} onChange={(e) => setLocalRestoreLowBlend(Number(e.target.value))} className="w-full accent-cyan-500" />
+                      </label>
+                      <label className="block text-[11px] text-muted-foreground">
+                        Disrupted detail retention: {localRestoreDetail}%
+                        <input type="range" min="0" max="150" value={localRestoreDetail} onChange={(e) => setLocalRestoreDetail(Number(e.target.value))} className="w-full accent-cyan-500" />
+                      </label>
+                      <label className="block text-[11px] text-muted-foreground">
+                        Restoration blur: {(localRestoreBlur / 10).toFixed(1)}
+                        <input type="range" min="0" max="50" value={localRestoreBlur} onChange={(e) => setLocalRestoreBlur(Number(e.target.value))} className="w-full accent-cyan-500" />
+                      </label>
                     </div>
                   )}
                 </div>

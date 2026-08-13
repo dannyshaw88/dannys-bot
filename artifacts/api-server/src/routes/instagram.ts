@@ -6017,6 +6017,9 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       detectorPass,
       disruptionStrategy,
       disruptionStrength,
+      restorationLowBlend,
+      restorationDetail,
+      restorationBlur,
     } = req.body as {
       imageBase64?: string;
       localPath?: string;
@@ -6031,6 +6034,9 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       detectorPass?: boolean;
       disruptionStrategy?: "frequency" | "chroma" | "resample" | "combined";
       disruptionStrength?: "high" | "extreme";
+      restorationLowBlend?: number;
+      restorationDetail?: number;
+      restorationBlur?: number;
     };
 
     if (!imageBase64 && !localPath) return res.status(400).json({ error: "No image provided" });
@@ -6211,19 +6217,23 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
 
       if (detectorPass && disruptionStrategy === "combined" && originalForRestoration && output.length) {
         processingStage = "quality restoration";
+        const lowBlend = Math.max(0, Math.min(1, restorationLowBlend ?? 1));
+        const detailRetention = Math.max(0, Math.min(1.5, restorationDetail ?? 0.82));
+        const blurRadius = Math.max(0, Math.min(5, restorationBlur ?? 2));
         const originalRaw = await sharp(originalForRestoration).raw().toBuffer({ resolveWithObject: true });
         const disruptedRaw = await sharp(output).resize(originalRaw.info.width, originalRaw.info.height, { fit: "fill", kernel: "lanczos3" })
           .raw().toBuffer({ resolveWithObject: true });
-        const originalLow = await sharp(originalForRestoration).blur(2).raw().toBuffer();
+        const originalLow = await sharp(originalForRestoration).blur(blurRadius).raw().toBuffer();
         const disruptedLow = await sharp(output).resize(originalRaw.info.width, originalRaw.info.height, { fit: "fill", kernel: "lanczos3" })
-          .blur(2).raw().toBuffer();
+          .blur(blurRadius).raw().toBuffer();
         const channels = Math.min(originalRaw.info.channels, disruptedRaw.info.channels);
         for (let i = 0; i < disruptedRaw.data.length; i++) {
           const channel = i % disruptedRaw.info.channels;
           if (channel >= channels || channel === 3) continue;
           const originalIndex = Math.min(i, originalLow.length - 1);
           const highFrequency = disruptedRaw.data[i] - disruptedLow[originalIndex];
-          disruptedRaw.data[i] = Math.max(0, Math.min(255, Math.round(originalLow[originalIndex] + highFrequency * 0.82)));
+          const blendedLow = disruptedLow[originalIndex] * (1 - lowBlend) + originalLow[originalIndex] * lowBlend;
+          disruptedRaw.data[i] = Math.max(0, Math.min(255, Math.round(blendedLow + highFrequency * detailRetention)));
         }
         const restored = sharp(disruptedRaw.data, {
           raw: { width: originalRaw.info.width, height: originalRaw.info.height, channels: disruptedRaw.info.channels },
