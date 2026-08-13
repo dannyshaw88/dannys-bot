@@ -72,6 +72,7 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [localImgSettingsEnabled, setLocalImgSettingsEnabled] = useState(true);
   const [localImgSettings, setLocalImgSettings] = useState<ImageFilterSettings>(DEFAULT_IMAGE_SETTINGS);
   const [localMetadataCleanup, setLocalMetadataCleanup] = useState(true);
+  const [localFrequencyDisruption, setLocalFrequencyDisruption] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -208,6 +209,7 @@ export default function ImagesPage(props: ImagesPageProps) {
               imageSettingsEnabled,
               imageSettings,
                metadataCleanup: localMetadataCleanup,
+               frequencyDisruption: localFrequencyDisruption,
             }),
           });
           const result = await response.json().catch(() => null);
@@ -366,6 +368,18 @@ export default function ImagesPage(props: ImagesPageProps) {
                       </p>
                     </div>
                     <Switch checked={localMetadataCleanup} onCheckedChange={setLocalMetadataCleanup} className="data-[state=checked]:bg-cyan-500 shrink-0" />
+                  </div>
+
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1 mt-0.5">
+                      <Label className="text-sm font-medium text-foreground cursor-pointer select-none" onClick={() => setLocalFrequencyDisruption(!localFrequencyDisruption)}>
+                        Structured pixel disruption
+                      </Label>
+                      <p className="text-[10px] leading-4 text-muted-foreground max-w-[210px]">
+                        Applies a subtle distributed pixel pattern to disrupt hidden frequency signals. Results are not guaranteed.
+                      </p>
+                    </div>
+                    <Switch checked={localFrequencyDisruption} onCheckedChange={setLocalFrequencyDisruption} className="data-[state=checked]:bg-cyan-500 shrink-0" />
                   </div>
                 </div>
               </div>

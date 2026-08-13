@@ -123,6 +123,7 @@ export async function alterJpegBuffer(
   input: Buffer,
   level: AlterationLevel,
   customSettings?: ImageFilterSettings,
+  frequencyDisruption = true,
 ): Promise<Buffer> {
   const cfg = buildConfig(level, customSettings);
   const comLen = level === "small" ? 8 : level === "medium" ? 32 : 64;
@@ -139,6 +140,26 @@ export async function alterJpegBuffer(
     const { data: rawPixels, info } = await sharp(input)
       .raw()
       .toBuffer({ resolveWithObject: true });
+
+    // A very low-amplitude, spatially distributed dither. This is the
+    // practical local equivalent of the public site's “structured
+    // perturbation” claim: it changes the signal across the image instead of
+    // relying only on metadata or a visible crop. It is intentionally
+    // conservative and is not advertised as guaranteed SynthID removal.
+    if (frequencyDisruption) {
+      const channels = info.channels as number;
+      for (let y = 0; y < info.height; y++) {
+        for (let x = 0; x < info.width; x++) {
+          const phase = Math.sin((x * 0.37) + (y * 0.19)) + Math.cos((x * 0.11) - (y * 0.29));
+          if (Math.abs(phase) < 0.55) continue;
+          const delta = phase > 0 ? 1 : -1;
+          const offset = (y * info.width + x) * channels;
+          for (let channel = 0; channel < Math.min(3, channels); channel++) {
+            rawPixels[offset + channel] = Math.max(0, Math.min(255, rawPixels[offset + channel] + delta));
+          }
+        }
+      }
+    }
 
     const noiseMax = cfg.noise.max - cfg.noise.min;
     if (noiseMax > 0) {

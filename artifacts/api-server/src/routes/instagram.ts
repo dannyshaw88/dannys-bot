@@ -6013,6 +6013,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       imageSettingsEnabled,
       imageSettings,
       metadataCleanup,
+      frequencyDisruption,
     } = req.body as {
       imageBase64?: string;
       localPath?: string;
@@ -6023,6 +6024,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       imageSettingsEnabled?: boolean;
       imageSettings?: ImageFilterSettings;
       metadataCleanup?: boolean;
+      frequencyDisruption?: boolean;
     };
 
     if (!imageBase64 && !localPath) return res.status(400).json({ error: "No image provided" });
@@ -6092,6 +6094,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
           output,
           alterationLevel ?? "small",
           imageSettingsEnabled ? imageSettings : undefined,
+          frequencyDisruption !== false,
         );
         await verifyProcessedBuffer(output, input, "Image alteration");
         logProcessing(`Image alteration verified — processed image is decodable and differs from input`);
