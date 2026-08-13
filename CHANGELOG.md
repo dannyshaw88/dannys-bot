@@ -1,3 +1,10 @@
+## [1.2.499] — 2026-08-13
+
+### Added — Swipe dispatch diagnostics
+
+- View Feed now logs the configured device gesture, fallback gesture, applied jitter,
+  resolved coordinates, duration range, pause, and settle values for each profile swipe.
+
 ## [1.2.498] — 2026-08-13
 
 ### Changed — Mirror log noise

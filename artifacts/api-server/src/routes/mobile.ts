@@ -3574,7 +3574,34 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // The Reels caller already captures one live accessibility dump before and
     // after each advance. Do not repeat those expensive dumps here; the
     // calibrated path and final input coordinates are still logged below.
-    logger.info({ serial, source, personality, reversed, from: [path.x1, path.y1], to: [path.x2, path.y2], durationMs, pauseMs, settleMs, profile: true }, "[mobile-input] device-profile swipe");
+    logger.info({
+      serial,
+      source,
+      personality,
+      reversed,
+      profileConfiguredFrom: [configured.x1, configured.y1],
+      profileConfiguredTo: [configured.x2, configured.y2],
+      profileDurationRangeMs: [configured.durationMinMs, configured.durationMaxMs],
+      profileJitter: {
+        xMax: configured.jitterX,
+        yMax: configured.jitterY,
+        startY: [configured.startJitterMinY, configured.startJitterMaxY],
+        applied: { x: dx, startY: startDy, endY: endDy },
+      },
+      profilePauseRangeMs: [configured.pauseMinMs, configured.pauseMaxMs],
+      profileSettleRangeMs: [configured.settleMinMs, configured.settleMaxMs],
+      requestedFallback: {
+        from: [fallback.x1, fallback.y1],
+        to: [fallback.x2, fallback.y2],
+        durationMs: fallback.durationMs,
+      },
+      from: [path.x1, path.y1],
+      to: [path.x2, path.y2],
+      durationMs,
+      pauseMs,
+      settleMs,
+      profile: true,
+    }, "[mobile-input] device-profile swipe resolved");
     // The profile already generated the complete randomized path. Do not
     // apply android.swipe's legacy hidden center-line jitter on top of it.
     await android.swipe(serial, path.x1, path.y1, path.x2, path.y2, path.durationMs, false);
