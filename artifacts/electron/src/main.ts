@@ -1295,10 +1295,12 @@ async function createWindow() {
   // users install the release from the upstream MIT repository and place it
   // in the app's writable userData/wmr directory (or on PATH).
   ipcMain.handle("wmr-status", async () => {
+    const binaryName = process.platform === "win32" ? "wmr.exe" : "wmr";
     const candidates = [
-      path.join(getUserDataPath(), "wmr", process.platform === "win32" ? "wmr.exe" : "wmr"),
-      path.join(process.resourcesPath, "bin", process.platform === "win32" ? "wmr.exe" : "wmr"),
-      process.platform === "win32" ? "wmr.exe" : "wmr",
+      path.join(getUserDataPath(), "wmr", binaryName),
+      path.join(app.getPath("appData"), "Aura Farming", "wmr", binaryName),
+      path.join(process.resourcesPath, "bin", binaryName),
+      binaryName,
     ];
     for (const candidate of candidates) {
       if (candidate === "wmr.exe" || candidate === "wmr" || fs.existsSync(candidate)) {
@@ -1311,10 +1313,12 @@ async function createWindow() {
   });
 
   ipcMain.handle("wmr-process", async (_e, args: { filePath: string; filename: string }) => {
+    const binaryName = process.platform === "win32" ? "wmr.exe" : "wmr";
     const candidates = [
-      path.join(getUserDataPath(), "wmr", process.platform === "win32" ? "wmr.exe" : "wmr"),
-      path.join(process.resourcesPath, "bin", process.platform === "win32" ? "wmr.exe" : "wmr"),
-      process.platform === "win32" ? "wmr.exe" : "wmr",
+      path.join(getUserDataPath(), "wmr", binaryName),
+      path.join(app.getPath("appData"), "Aura Farming", "wmr", binaryName),
+      path.join(process.resourcesPath, "bin", binaryName),
+      binaryName,
     ];
     const executable = candidates.find((candidate) =>
       candidate === "wmr.exe" || candidate === "wmr" || fs.existsSync(candidate),
