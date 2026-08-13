@@ -7658,9 +7658,9 @@ export async function switchToInstagramAccount(
   }
   if (!profileTab) {
     const PROFILE_TAB_POLL_MS  = 1500;
-    // Some Instagram/Xiaomi builds draw the Profile icon but never expose it
-    // in UIAutomator. Do not spend 12 seconds waiting for an accessibility
-    // node that will never arrive; the visible bottom-nav geometry is stable.
+    // Some Instagram/Xiaomi builds expose the bottom-nav container later than
+    // its child icon. Keep this short, then inspect the live tree again using
+    // node bounds only; never synthesize a screen coordinate.
     const PROFILE_TAB_MAX_POLL = 2;
     for (let pt = 0; pt < PROFILE_TAB_MAX_POLL; pt++) {
       profileTab = await findInstagramProfileTab(serial).catch(() => null);
@@ -7679,16 +7679,8 @@ export async function switchToInstagramAccount(
     }
   }
   if (!profileTab) {
-    const screen = getScreenSize(serial);
-    profileTab = {
-      x: Math.round(screen.w * 0.92),
-      // Instagram's bottom nav sits above Android's three-button/gesture
-      // navigation area. 94% can land on the Android nav bar on Xiaomi
-      // devices; the visible Profile icon is centered around 90%.
-      y: Math.round(screen.h * 0.90),
-    };
-    profileTabSource = "fallback visible bottom-right profile position";
-    onLog?.(`  ⚠ Profile tab is visible but not exposed in accessibility — tapping known bottom-right Profile position at (${profileTab.x},${profileTab.y})`);
+    onLog?.("  ⚠ Profile tab node not found in accessibility — refusing coordinate fallback");
+    return false;
   }
 
   // The profile tab can appear in the accessibility tree before Instagram has
