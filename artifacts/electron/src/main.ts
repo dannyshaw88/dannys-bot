@@ -1336,7 +1336,14 @@ async function createWindow() {
       const mime = ext.toLowerCase() === ".png" ? "image/png" : ext.toLowerCase() === ".webp" ? "image/webp" : "image/jpeg";
       return { ok: true, dataUrl: `data:${mime};base64,${data.toString("base64")}`, filename: args.filename };
     } catch (error: any) {
-      return { ok: false, error: error?.message ?? "WMR processing failed" };
+      const rawMessage = error?.message ?? "WMR processing failed";
+      const searched = candidates
+        .filter((candidate) => candidate !== "wmr.exe" && candidate !== "wmr")
+        .join(" | ");
+      const errorMessage = /ENOENT/i.test(rawMessage)
+        ? `WMR executable could not be launched (ENOENT). Confirm wmr.exe exists at: ${searched}`
+        : rawMessage;
+      return { ok: false, error: errorMessage };
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
