@@ -359,7 +359,11 @@ export async function fixAiSlop(
 
     // 2b: 7-layer pixel-perturbation — defeats SynthID and CNN-based perceptual
     //     hash detectors.  Imperceptible to the human eye.
-    const finalBuf = await makeUniqueImage(reencoded);
+    // Fix AI Slop must never accept makeUniqueImage's normal COM-only fallback.
+    // That fallback is appropriate for ordinary image alteration, but would
+    // make this function falsely report "pixel perturbation applied" after a
+    // Sharp failure in a packaged Windows/Electron runtime.
+    const finalBuf = await makeUniqueImage(reencoded, { requireSharp: true });
     await writeFile(tmp, finalBuf);
 
     console.log(

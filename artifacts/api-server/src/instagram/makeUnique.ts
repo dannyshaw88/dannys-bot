@@ -156,9 +156,16 @@ function injectComSegment(buf: Buffer): Buffer {
  * Tuned for 100-account scale: effectively infinite variation space,
  * all transformations remain invisible to the human eye.
  */
-export async function makeUniqueImage(input: Buffer): Promise<Buffer> {
+export async function makeUniqueImage(
+  input: Buffer,
+  options: { requireSharp?: boolean } = {},
+): Promise<Buffer> {
+  const requireSharp = options.requireSharp === true;
   const sharp = await getSharp();
   if (!sharp) {
+    if (requireSharp) {
+      throw new Error("Sharp is unavailable for required pixel perturbation");
+    }
     return injectComSegment(input);
   }
 
@@ -247,6 +254,9 @@ export async function makeUniqueImage(input: Buffer): Promise<Buffer> {
 
     return result as unknown as Buffer;
   } catch (err) {
+    if (requireSharp) {
+      throw new Error(`Sharp pixel perturbation failed: ${(err as Error)?.message ?? String(err)}`);
+    }
     console.warn("[makeUnique] image pipeline error, using fallback:", (err as Error).message);
     return injectComSegment(input);
   }

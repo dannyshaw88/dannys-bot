@@ -1,3 +1,11 @@
+## [1.2.501] — 2026-08-13
+
+### Fixed — Do not silently bypass Fix AI Slop pixel processing
+
+- Fix AI Slop now fails the upload when Sharp is unavailable or its pixel
+  perturbation pipeline errors, instead of accepting the COM-only fallback while
+  logging that pixel perturbation succeeded.
+
 ## [1.2.500] — 2026-08-13
 
 ### Fixed — Graceful reboot preserves aborted-cycle metrics
