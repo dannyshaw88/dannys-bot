@@ -9295,7 +9295,10 @@ export async function findInstagramSearchBar(
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) await _sleep(800);
     const xml = await _uiDump(adb, serial);
-    if (!xml) continue;
+    if (!xml) {
+      onLog?.(`Follow: @${clean} search-results dump was empty — target aborted safely`);
+      return { found: false };
+    }
 
     // 30 % gives up to 720 px on a 2400 px screen — comfortably above the
     // search bar while still safely below any Explore-grid content.
@@ -10720,9 +10723,10 @@ export async function typeViaCalibrationMap(
  *
  * Instagram's search is a network round-trip — results can take 1–5 s to
  * appear in the accessibility tree even when they are visually visible.
- * A single 1500 ms dump reliably misses slow responses.  Poll up to 4 times
- * with 1.5 s gaps (up to ~8 s total) so the results have time to load.
- * This is UI-state polling, not action-retrying — no tap is repeated.
+ * The caller already waits for the search interaction to settle before this
+ * lookup. Do one live dump only: if the exact username is not exposed now,
+ * fail closed immediately instead of spending ~10 seconds repeating the same
+ * lookup.
  */
 export async function findAndTapUserInSearch(
   serial: string,
@@ -10737,13 +10741,12 @@ export async function findAndTapUserInSearch(
   // rendering results before the first dump.
   await _sleep(2500);
 
-  for (let attempt = 1; attempt <= 4; attempt++) {
-    if (attempt > 1) {
-      onLog?.(`Follow: results not in tree yet — waiting (attempt ${attempt}/4)…`);
-      await _sleep(1500);
-    }
+  {
     const xml = await _uiDump(adb, serial);
-    if (!xml) continue;
+    if (!xml) {
+      onLog?.(`Follow: @${clean} search-results dump was empty — target aborted safely`);
+      return { found: false };
+    }
 
     // ── Candidate selection ───────────────────────────────────────────────────
     //
@@ -10808,7 +10811,7 @@ export async function findAndTapUserInSearch(
     exactUserPositions.sort((a, b) => a.y - b.y);
     if (exactUserPositions.length === 0) {
       onLog?.(`Follow: @${clean} exact username is not listed in search results — target aborted safely`);
-      continue;
+      return { found: false };
     }
 
     const ringPositions: Array<{ x: number; y: number }> = exactUserPositions;
