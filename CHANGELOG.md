@@ -1,3 +1,9 @@
+## [1.2.494] — 2026-08-13
+
+### Fixed — Human Session Tool filter copying
+
+- Follow Filter settings now copy correctly between account slots and remain slot-owned during TrustScore execution.
+
 ## [1.2.493] — 2026-08-13
 
 ### Fixed — Reels exit behavior
