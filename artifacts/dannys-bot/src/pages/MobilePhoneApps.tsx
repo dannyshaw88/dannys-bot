@@ -523,9 +523,6 @@ function MobilePhoneAppsPanel({
     if (timerRef.current) clearTimeout(timerRef.current);
     updateNextRunAt(Date.now() + delayMs);
     timerRef.current = setTimeout(runCycle, delayMs);
-    onLogRef.current?.(
-      `Phone Apps — next cycle scheduled in ${Math.max(0, Math.round(delayMs / 1000))}s`,
-    );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [updateNextRunAt]);
 

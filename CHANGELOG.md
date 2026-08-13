@@ -1,3 +1,9 @@
+## [1.2.498] — 2026-08-13
+
+### Changed — Mirror log noise
+
+- Hide routine stream connection, frame-size, and Phone Apps scheduling messages from the debugging log.
+
 ## [1.2.497] — 2026-08-13
 
 ### Chore — Attached diagnostic asset

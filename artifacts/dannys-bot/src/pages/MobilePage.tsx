@@ -487,7 +487,6 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       if (!phoneSizeRef.current || phoneSizeRef.current.w !== frame.displayWidth || phoneSizeRef.current.h !== frame.displayHeight) {
         const sz = { w: frame.displayWidth, h: frame.displayHeight };
         phoneSizeRef.current = sz;
-        addLog(`Frame ${sz.w}×${sz.h}`);
         onDimensions?.(sz.w, sz.h);
       }
       // Draw the frame letterboxed to fill the canvas while preserving the
@@ -535,7 +534,6 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       closeDecoder();
       attemptCount++;
       const url = useVideoRef.current ? makeVideoWsUrl(serial) : makeWsUrl(serial);
-      addLog(`[${attemptCount}] Connecting (${useVideoRef.current ? "video" : "screenshot"}) → ${url}`);
       setStatus("connecting");
 
       let ws: WebSocket;
@@ -553,7 +551,6 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
 
       ws.onopen = () => {
         if (!active) { ws.close(); return; }
-        addLog("WS open — waiting for first frame…");
         setStatus("waiting");
         noFrameTimer = setTimeout(() => {
           if (!frameSeenRef.current && active) {
@@ -610,7 +607,6 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         if (!frameSeenRef.current) {
           frameSeenRef.current = true;
           if (noFrameTimer) { clearTimeout(noFrameTimer); noFrameTimer = null; }
-          addLog(`First frame! (${(ev.data as ArrayBuffer).byteLength} bytes)`);
         }
 
         if (!useVideoRef.current) {
@@ -628,7 +624,6 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
             if (!phoneSizeRef.current) {
               const sz = { w: img.naturalWidth, h: img.naturalHeight };
               phoneSizeRef.current = sz;
-              addLog(`Frame ${sz.w}×${sz.h}`);
               onDimensions?.(sz.w, sz.h);
             }
             // Same letterbox-draw as the H.264 path so mapToPhone() works
