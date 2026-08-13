@@ -1,3 +1,15 @@
+## [1.2.487] — 2026-08-13
+
+### Fixed — Mobile cycles no longer fail on swipe diagnostics
+
+- Removed an invalid live-log callback reference from the calibrated mobile
+  swipe helper that could abort a cycle with `onLog is not defined`.
+- Preserved the low-overhead structured swipe diagnostics, including the
+  device, source, personality, coordinates, duration, pause, settle, and
+  reversal data.
+- Cycles can now continue recording metrics normally after the forensic input
+  logging change.
+
 ## [1.2.486] — 2026-08-12
 
 ### Added — Low-overhead mobile input forensics
