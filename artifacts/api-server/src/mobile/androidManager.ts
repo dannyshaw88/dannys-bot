@@ -4197,6 +4197,7 @@ export async function findReelActionIcons(serial: string, onLog?: (msg: string) 
   const commentNode  = colNodes.find(n => /^comment$/i.test(n.cd)) ?? null;
   const repostNode   = colNodes.find(n => /\brepost\b/i.test(n.cd)) ?? null;
   const sendNode     = colNodes.find(n => /\b(send|direct|message|share)\b/i.test(n.cd) && n !== repostNode) ?? null;
+  const hasExplicitShareDmNode = !!sendNode;
   // "Save" (unsaved) or "Saved" (already saved) — exact match only to avoid
   // catching unrelated labels like "Save to Collection" sheet buttons.
   const saveColNode  = colNodes.find(n => /^saved?$/i.test(n.cd)) ?? null;
@@ -4286,6 +4287,13 @@ export async function findReelActionIcons(serial: string, onLog?: (msg: string) 
       onLog?.(`[reel-icons] save found via full-screen scan (floaty type) at (${c3.x},${c3.y}) cd="${cd3}"`);
       break;
     }
+  }
+
+  // Never infer the paper-plane/DM action from vertical position. A visually
+  // identical unlabeled node can be Comment or Repost on another Instagram
+  // build, and tapping that inferred coordinate opens the wrong surface.
+  if (!hasExplicitShareDmNode) {
+    shareDm = null;
   }
 
   onLog?.(`[reel-icons] result — like:(${like.x},${like.y}) comment:${comment ? `(${comment.x},${comment.y})` : "null"} shareFeed:${shareFeed ? `(${shareFeed.x},${shareFeed.y})` : "null"} shareDm:${shareDm ? `(${shareDm.x},${shareDm.y})` : "null"} save:${save ? `(${save.x},${save.y})${alreadySaved ? " (already saved)" : ""}` : "null"}`);
