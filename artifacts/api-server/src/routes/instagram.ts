@@ -6015,6 +6015,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       metadataCleanup,
       frequencyDisruption,
       detectorPass,
+      disruptionStrategy,
     } = req.body as {
       imageBase64?: string;
       localPath?: string;
@@ -6027,6 +6028,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       metadataCleanup?: boolean;
       frequencyDisruption?: boolean;
       detectorPass?: boolean;
+      disruptionStrategy?: "frequency" | "chroma" | "resample" | "combined";
     };
 
     if (!imageBase64 && !localPath) return res.status(400).json({ error: "No image provided" });
@@ -6144,21 +6146,33 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
 
       if (detectorPass && output.length) {
         processingStage = "detector-oriented scan/map/lift/verify";
+        const strategy = disruptionStrategy ?? "frequency";
         logProcessing("scan — loading pixel buffer and locating high-frequency signal");
         const detectorMeta = await sharp(output).metadata();
         if (detectorMeta.width && detectorMeta.height) {
           logProcessing("map — isolating distributed high-frequency regions");
-          const detectorImage = sharp(output)
-            .resize(detectorMeta.width * 2, detectorMeta.height * 2, {
+          let detectorImage = sharp(output);
+          if (strategy === "chroma") {
+            detectorImage = detectorImage.modulate({ saturation: 1.012, brightness: 1.002 });
+          } else if (strategy === "resample") {
+            detectorImage = detectorImage.resize(detectorMeta.width + 1, detectorMeta.height + 1, { fit: "fill", kernel: "lanczos3" })
+              .resize(detectorMeta.width, detectorMeta.height, { fit: "fill", kernel: "lanczos3" });
+          } else if (strategy === "combined") {
+            detectorImage = detectorImage.modulate({ saturation: 1.008, brightness: 1.001 })
+              .resize(detectorMeta.width + 1, detectorMeta.height + 1, { fit: "fill", kernel: "lanczos3" })
+              .resize(detectorMeta.width, detectorMeta.height, { fit: "fill", kernel: "lanczos3" })
+              .sharpen({ sigma: 0.7, m1: 0.5, m2: 0.8 });
+          } else {
+            detectorImage = detectorImage.resize(detectorMeta.width * 2, detectorMeta.height * 2, {
               fit: "fill",
               kernel: "lanczos3",
-            })
-            .sharpen({ sigma: 1.1, m1: 0.8, m2: 1.2 });
+            }).sharpen({ sigma: 1.1, m1: 0.8, m2: 1.2 });
+          }
           const detectorFormat = detectorMeta.format;
           if (detectorFormat === "png") output = await detectorImage.png({ compressionLevel: 6 }).toBuffer();
           else if (detectorFormat === "webp") output = await detectorImage.webp({ quality: 96 }).toBuffer();
           else output = await detectorImage.jpeg({ quality: 96, mozjpeg: false }).toBuffer();
-          logProcessing(`lift — rewrote mapped regions at ${detectorMeta.width * 2}×${detectorMeta.height * 2}`);
+          logProcessing(`lift — applied ${strategy} whole-image rewrite`);
           const verify = await sharp(output).metadata();
           if (!verify.width || !verify.height) throw new Error("Detector-oriented output failed verification");
           logProcessing("verify — re-checking detector pass completed");

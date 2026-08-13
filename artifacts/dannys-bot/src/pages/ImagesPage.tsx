@@ -74,6 +74,7 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [localMetadataCleanup, setLocalMetadataCleanup] = useState(true);
   const [localFrequencyDisruption, setLocalFrequencyDisruption] = useState(true);
   const [localDetectorPass, setLocalDetectorPass] = useState(true);
+  const [localDisruptionStrategy, setLocalDisruptionStrategy] = useState<"frequency" | "chroma" | "resample" | "combined">("frequency");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -212,6 +213,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                metadataCleanup: localMetadataCleanup,
                frequencyDisruption: localFrequencyDisruption,
                detectorPass: localDetectorPass,
+               disruptionStrategy: localDisruptionStrategy,
             }),
           });
           const result = await response.json().catch(() => null);
@@ -395,6 +397,21 @@ export default function ImagesPage(props: ImagesPageProps) {
                     </div>
                     <Switch checked={localDetectorPass} onCheckedChange={setLocalDetectorPass} className="data-[state=checked]:bg-cyan-500 shrink-0" />
                   </div>
+                  {localDetectorPass && (
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Disruption strategy</Label>
+                      <select
+                        value={localDisruptionStrategy}
+                        onChange={(event) => setLocalDisruptionStrategy(event.target.value as typeof localDisruptionStrategy)}
+                        className="w-full rounded-md border border-border bg-background px-2.5 py-2 text-xs"
+                      >
+                        <option value="frequency">Frequency + pixel micro-jitter</option>
+                        <option value="chroma">Whole-image chroma shift</option>
+                        <option value="resample">Whole-image resample round-trip</option>
+                        <option value="combined">Combined low-strength pass</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
