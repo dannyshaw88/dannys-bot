@@ -6042,6 +6042,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
     let workingPath = sourcePath;
     let processingStage = localPath ? "copying Windows local file" : "decoding image data";
     const processingLog: string[] = [];
+    let originalForRestoration: Buffer | null = null;
     const logProcessing = (message: string) => {
       processingLog.push(message);
       console.log(`[images/process] ${message}`);
@@ -6070,6 +6071,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
         await fs.promises.writeFile(sourcePath, Buffer.from(raw, "base64"));
         logProcessing(`Source decoded from image data: ${safeName}`);
       }
+      originalForRestoration = await fs.promises.readFile(sourcePath);
 
       logProcessing(`Fix AI Slop setting = ${shouldFixAiSlop ? "ON" : "OFF"}`);
       if (shouldFixAiSlop) {
@@ -6205,6 +6207,32 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
           if (!verify.width || !verify.height) throw new Error("Detector-oriented output failed verification");
           logProcessing("verify — re-checking detector pass completed");
         }
+      }
+
+      if (detectorPass && disruptionStrategy === "combined" && originalForRestoration && output.length) {
+        processingStage = "quality restoration";
+        const originalRaw = await sharp(originalForRestoration).raw().toBuffer({ resolveWithObject: true });
+        const disruptedRaw = await sharp(output).resize(originalRaw.info.width, originalRaw.info.height, { fit: "fill", kernel: "lanczos3" })
+          .raw().toBuffer({ resolveWithObject: true });
+        const originalLow = await sharp(originalForRestoration).blur(2).raw().toBuffer();
+        const disruptedLow = await sharp(output).resize(originalRaw.info.width, originalRaw.info.height, { fit: "fill", kernel: "lanczos3" })
+          .blur(2).raw().toBuffer();
+        const channels = Math.min(originalRaw.info.channels, disruptedRaw.info.channels);
+        for (let i = 0; i < disruptedRaw.data.length; i++) {
+          const channel = i % disruptedRaw.info.channels;
+          if (channel >= channels || channel === 3) continue;
+          const originalIndex = Math.min(i, originalLow.length - 1);
+          const highFrequency = disruptedRaw.data[i] - disruptedLow[originalIndex];
+          disruptedRaw.data[i] = Math.max(0, Math.min(255, Math.round(originalLow[originalIndex] + highFrequency * 0.82)));
+        }
+        const restored = sharp(disruptedRaw.data, {
+          raw: { width: originalRaw.info.width, height: originalRaw.info.height, channels: disruptedRaw.info.channels },
+        });
+        const restoredMeta = await sharp(originalForRestoration).metadata();
+        if (restoredMeta.format === "png") output = await restored.png().toBuffer();
+        else if (restoredMeta.format === "webp") output = await restored.webp({ quality: 96 }).toBuffer();
+        else output = await restored.jpeg({ quality: 92, mozjpeg: false }).toBuffer();
+        logProcessing("quality restore — rebuilt low-frequency color from source while retaining disrupted detail");
       }
 
       const isJpeg = output.length >= 2 && output[0] === 0xff && output[1] === 0xd8;
