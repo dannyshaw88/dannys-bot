@@ -6161,7 +6161,8 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
             detectorImage = detectorImage.modulate({ saturation: 1.008, brightness: 1.001 })
               .resize(detectorMeta.width + 1, detectorMeta.height + 1, { fit: "fill", kernel: "lanczos3" })
               .resize(detectorMeta.width, detectorMeta.height, { fit: "fill", kernel: "lanczos3" })
-              .sharpen({ sigma: 0.7, m1: 0.5, m2: 0.8 });
+              .resize(detectorMeta.width * 2, detectorMeta.height * 2, { fit: "fill", kernel: "lanczos3" })
+              .sharpen({ sigma: 0.9, m1: 0.65, m2: 1.0 });
           } else {
             detectorImage = detectorImage.resize(detectorMeta.width * 2, detectorMeta.height * 2, {
               fit: "fill",
@@ -6172,7 +6173,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
           if (detectorFormat === "png") output = await detectorImage.png({ compressionLevel: 6 }).toBuffer();
           else if (detectorFormat === "webp") output = await detectorImage.webp({ quality: 96 }).toBuffer();
           else output = await detectorImage.jpeg({ quality: 96, mozjpeg: false }).toBuffer();
-          logProcessing(`lift — applied ${strategy} whole-image rewrite`);
+          logProcessing(`lift — applied ${strategy} whole-image rewrite (chroma + resample + frequency)`);
           const verify = await sharp(output).metadata();
           if (!verify.width || !verify.height) throw new Error("Detector-oriented output failed verification");
           logProcessing("verify — re-checking detector pass completed");
