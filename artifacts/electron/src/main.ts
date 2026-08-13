@@ -1,6 +1,6 @@
 import { app, BrowserWindow, Menu, Tray, nativeImage, dialog, ipcMain, screen, shell, powerSaveBlocker } from "electron";
 import { autoUpdater } from "electron-updater";
-import { spawn, ChildProcess, exec } from "child_process";
+import { spawn, ChildProcess, exec, execFile } from "child_process";
 import { promisify } from "util";
 import http from "http";
 import net from "net";
