@@ -6014,6 +6014,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       imageSettings,
       metadataCleanup,
       frequencyDisruption,
+      detectorPass,
     } = req.body as {
       imageBase64?: string;
       localPath?: string;
@@ -6025,6 +6026,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       imageSettings?: ImageFilterSettings;
       metadataCleanup?: boolean;
       frequencyDisruption?: boolean;
+      detectorPass?: boolean;
     };
 
     if (!imageBase64 && !localPath) return res.status(400).json({ error: "No image provided" });
@@ -6137,6 +6139,29 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
           else if (stabilizationMeta.format === "gif") output = await stabilized.gif().toBuffer();
           else output = await stabilized.jpeg({ quality: 100, mozjpeg: false }).toBuffer();
           logProcessing(`Cleanup and stabilization verified — ${stabilizationMeta.width}×${stabilizationMeta.height}`);
+        }
+      }
+
+      if (detectorPass && output.length) {
+        processingStage = "detector-oriented scan/map/lift/verify";
+        logProcessing("scan — loading pixel buffer and locating high-frequency signal");
+        const detectorMeta = await sharp(output).metadata();
+        if (detectorMeta.width && detectorMeta.height) {
+          logProcessing("map — isolating distributed high-frequency regions");
+          const detectorImage = sharp(output)
+            .resize(detectorMeta.width * 2, detectorMeta.height * 2, {
+              fit: "fill",
+              kernel: "lanczos3",
+            })
+            .sharpen({ sigma: 1.1, m1: 0.8, m2: 1.2 });
+          const detectorFormat = detectorMeta.format;
+          if (detectorFormat === "png") output = await detectorImage.png({ compressionLevel: 6 }).toBuffer();
+          else if (detectorFormat === "webp") output = await detectorImage.webp({ quality: 96 }).toBuffer();
+          else output = await detectorImage.jpeg({ quality: 96, mozjpeg: false }).toBuffer();
+          logProcessing(`lift — rewrote mapped regions at ${detectorMeta.width * 2}×${detectorMeta.height * 2}`);
+          const verify = await sharp(output).metadata();
+          if (!verify.width || !verify.height) throw new Error("Detector-oriented output failed verification");
+          logProcessing("verify — re-checking detector pass completed");
         }
       }
 

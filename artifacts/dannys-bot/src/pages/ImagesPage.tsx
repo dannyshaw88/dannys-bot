@@ -73,6 +73,7 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [localImgSettings, setLocalImgSettings] = useState<ImageFilterSettings>(DEFAULT_IMAGE_SETTINGS);
   const [localMetadataCleanup, setLocalMetadataCleanup] = useState(true);
   const [localFrequencyDisruption, setLocalFrequencyDisruption] = useState(true);
+  const [localDetectorPass, setLocalDetectorPass] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -210,6 +211,7 @@ export default function ImagesPage(props: ImagesPageProps) {
               imageSettings,
                metadataCleanup: localMetadataCleanup,
                frequencyDisruption: localFrequencyDisruption,
+               detectorPass: localDetectorPass,
             }),
           });
           const result = await response.json().catch(() => null);
@@ -380,6 +382,18 @@ export default function ImagesPage(props: ImagesPageProps) {
                       </p>
                     </div>
                     <Switch checked={localFrequencyDisruption} onCheckedChange={setLocalFrequencyDisruption} className="data-[state=checked]:bg-cyan-500 shrink-0" />
+                  </div>
+
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1 mt-0.5">
+                      <Label className="text-sm font-medium text-foreground cursor-pointer select-none" onClick={() => setLocalDetectorPass(!localDetectorPass)}>
+                        Detector-oriented pass
+                      </Label>
+                      <p className="text-[10px] leading-4 text-muted-foreground max-w-[210px]">
+                        Adds the stronger 2× spectral rewrite pass used for difficult hidden-signal images.
+                      </p>
+                    </div>
+                    <Switch checked={localDetectorPass} onCheckedChange={setLocalDetectorPass} className="data-[state=checked]:bg-cyan-500 shrink-0" />
                   </div>
                 </div>
               </div>
