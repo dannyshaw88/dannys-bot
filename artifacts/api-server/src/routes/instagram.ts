@@ -6120,6 +6120,26 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
         logProcessing("Metadata cleanup setting = OFF");
       }
 
+      if (frequencyDisruption && output.length) {
+        processingStage = "cleanup and stabilization";
+        // Match the public workflow's second, deliberately light pass:
+        // resample to the same dimensions and re-encode without changing
+        // composition. This helps break up residual encoder structure after
+        // the perturbation pass; it is not an upscaler or a blur pass.
+        const stabilizationMeta = await sharp(output).metadata();
+        if (stabilizationMeta.width && stabilizationMeta.height) {
+          const stabilized = sharp(output).resize(stabilizationMeta.width, stabilizationMeta.height, {
+            fit: "fill",
+            kernel: "lanczos3",
+          });
+          if (stabilizationMeta.format === "png") output = await stabilized.png().toBuffer();
+          else if (stabilizationMeta.format === "webp") output = await stabilized.webp({ quality: 100 }).toBuffer();
+          else if (stabilizationMeta.format === "gif") output = await stabilized.gif().toBuffer();
+          else output = await stabilized.jpeg({ quality: 100, mozjpeg: false }).toBuffer();
+          logProcessing(`Cleanup and stabilization verified — ${stabilizationMeta.width}×${stabilizationMeta.height}`);
+        }
+      }
+
       const isJpeg = output.length >= 2 && output[0] === 0xff && output[1] === 0xd8;
       const isPng = output.length >= 8 &&
         output[0] === 0x89 && output[1] === 0x50 && output[2] === 0x4e && output[3] === 0x47;
