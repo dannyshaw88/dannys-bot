@@ -2066,6 +2066,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "makePostAddLocation",
     "postStoryAddLink",
     "postStoryLinkUrl",
+    // Follow Filters are owned by the Human Session Tool slot, not inherited
+    // from the assigned TrustScore template.
+    "followFiltersEnabled",
+    "followFilterPrivateUsers",
+    "followFilterEnglishSpeaking",
+    "followFilterMinFollowers50",
+    "followFilterVerifiedUsers",
+    "followFilterMaxFollowers25k",
+    "followFilterMalesOnly",
+    "followFilterMaleNames",
   ]);
   const TRUST_SCORE_TEMPLATE_LOCKED_FIELDS = new Set(
     [...TRUST_SCORE_SLOT_OWNED_FIELDS].filter(field => ![
