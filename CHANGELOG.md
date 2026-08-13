@@ -1,3 +1,10 @@
+## [1.2.500] — 2026-08-13
+
+### Fixed — Graceful reboot preserves aborted-cycle metrics
+
+- Keep the server-side abort marker alive until the in-flight cycle worker exits,
+  and await partial-stat persistence before completing the aborted-cycle cleanup.
+
 ## [1.2.499] — 2026-08-13
 
 ### Added — Swipe dispatch diagnostics

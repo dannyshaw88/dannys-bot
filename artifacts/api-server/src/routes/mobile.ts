@@ -12509,7 +12509,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // partial counters collected before the abort, including the cycle
         // itself, just as the normal completion path does.
         if (aborted && _slotUsername) {
-          storage.incrementMobileStats(_slotUsername, {
+          await storage.incrementMobileStats(_slotUsername, {
             likes: totalLikes,
             follows: followedCount,
             stories: storiesWatched,
@@ -12521,9 +12521,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             reelScrolls: reelsViewed,
             feedScrolls: feedScrolled,
             exploreScrolls: exploreScrolled,
-          }).catch((statError: any) =>
-            logger.warn({ err: statError }, "[mobile-cycle] aborted stat persist error"),
-          );
+          }).catch((statError: any) => {
+            logger.warn({ err: statError }, "[mobile-cycle] aborted stat persist error");
+          });
         }
         storage.createSessionAction({
           profileId: _mobileProfileId ?? 0,
@@ -13629,9 +13629,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         automationCycleInProgress.delete(serial);
       }
 
-      android.rebootDevice(serial);
-      automationCycleCurrentId.delete(serial);
-      automationCycleAbortedId.delete(serial);
+       android.rebootDevice(serial);
+       // Keep the cycle identity/abort marker until the worker's finally block
+       // clears it. If the worker was blocked on ADB and only reaches its catch
+       // after the reboot, deleting these markers here makes it look like a
+       // generic failure instead of "cycle-aborted", skipping partial metrics.
+       // A subsequent cycle start overwrites/clears stale markers safely.
       res.json({ ok: true, interruptedCycle: Boolean(activeCycleId), forcedCleanup: stillRunning });
     } catch (e: any) {
       res.status(500).json({ error: e?.message ?? "Graceful restart failed" });
