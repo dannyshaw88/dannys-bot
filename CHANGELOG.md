@@ -1,3 +1,9 @@
+## [1.2.496] — 2026-08-13
+
+### Fixed — Reels DM action validation
+
+- Require an explicit semantic Share/DM node before attempting Reel DM sharing.
+
 ## [1.2.495] — 2026-08-13
 
 ### Fixed — Follow search targeting
