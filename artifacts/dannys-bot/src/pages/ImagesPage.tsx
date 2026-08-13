@@ -472,16 +472,14 @@ export default function ImagesPage(props: ImagesPageProps) {
                                  {(item.size / 1024 / 1024).toFixed(2)} MB
                                </div>
                                 {item.processingLog?.length ? (
-                                  <details className="mt-1.5 max-w-[360px]">
-                                    <summary className="cursor-pointer text-[10px] text-cyan-600 dark:text-cyan-400">
-                                      Processing log ({item.processingLog.length})
-                                    </summary>
-                                    <div className="mt-1 rounded border border-border/60 bg-muted/30 p-1.5 font-mono text-[9px] leading-4 text-muted-foreground max-h-24 overflow-y-auto">
-                                      {item.processingLog.map((line, index) => (
-                                        <div key={`${item.id}-log-${index}`}>{line}</div>
-                                      ))}
+                                  <div className="mt-1.5 max-w-[520px] rounded border border-border/60 bg-muted/30 p-1.5 font-mono text-[9px] leading-4 text-muted-foreground max-h-28 overflow-y-auto">
+                                    <div className="mb-0.5 font-sans text-[10px] font-semibold text-cyan-600 dark:text-cyan-400">
+                                      Processing log
                                     </div>
-                                  </details>
+                                    {item.processingLog.map((line, index) => (
+                                      <div key={`${item.id}-log-${index}`}>{line}</div>
+                                    ))}
+                                  </div>
                                 ) : null}
                              </td>
                              <td className="px-4 py-3">

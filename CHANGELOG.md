@@ -1,3 +1,10 @@
+## [1.2.503] — 2026-08-13
+
+### Changed — Always-visible Fix Images log
+
+- Keep each image's processing log expanded in Settings → Fix Images so the
+  actual processing stages are visible without opening a disclosure.
+
 ## [1.2.502] — 2026-08-13
 
 ### Added — Fix Images processing log
