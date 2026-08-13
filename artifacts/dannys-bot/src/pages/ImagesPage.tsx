@@ -74,6 +74,7 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [localMetadataCleanup, setLocalMetadataCleanup] = useState(true);
   const [localFrequencyDisruption, setLocalFrequencyDisruption] = useState(true);
   const [localDetectorPass, setLocalDetectorPass] = useState(true);
+  const [localDisruptionStrength, setLocalDisruptionStrength] = useState<"subtle" | "balanced" | "aggressive" | "extreme">("balanced");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -213,6 +214,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                frequencyDisruption: localFrequencyDisruption,
                detectorPass: localDetectorPass,
                disruptionStrategy: "combined",
+               disruptionStrength: localDisruptionStrength,
             }),
           });
           const result = await response.json().catch(() => null);
@@ -396,6 +398,21 @@ export default function ImagesPage(props: ImagesPageProps) {
                     </div>
                     <Switch checked={localDetectorPass} onCheckedChange={setLocalDetectorPass} className="data-[state=checked]:bg-cyan-500 shrink-0" />
                   </div>
+                  {localDetectorPass && (
+                    <div className="flex items-center justify-between gap-3">
+                      <Label className="text-xs text-muted-foreground">Composite strength</Label>
+                      <select
+                        value={localDisruptionStrength}
+                        onChange={(event) => setLocalDisruptionStrength(event.target.value as typeof localDisruptionStrength)}
+                        className="rounded-md border border-border bg-background px-2 py-1.5 text-xs"
+                      >
+                        <option value="subtle">Subtle</option>
+                        <option value="balanced">Balanced</option>
+                        <option value="aggressive">Aggressive</option>
+                        <option value="extreme">Extreme</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

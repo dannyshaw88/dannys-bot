@@ -6016,6 +6016,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       frequencyDisruption,
       detectorPass,
       disruptionStrategy,
+      disruptionStrength,
     } = req.body as {
       imageBase64?: string;
       localPath?: string;
@@ -6029,6 +6030,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       frequencyDisruption?: boolean;
       detectorPass?: boolean;
       disruptionStrategy?: "frequency" | "chroma" | "resample" | "combined";
+      disruptionStrength?: "subtle" | "balanced" | "aggressive" | "extreme";
     };
 
     if (!imageBase64 && !localPath) return res.status(400).json({ error: "No image provided" });
@@ -6147,6 +6149,13 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       if (detectorPass && output.length) {
         processingStage = "detector-oriented scan/map/lift/verify";
         const strategy = disruptionStrategy ?? "frequency";
+        const strength = disruptionStrength ?? "balanced";
+        const strengthConfig = {
+          subtle: { threshold: 0.55, delta: 1, saturation: 1.004, brightness: 1.0005, step: 1, sharpen: 0.55 },
+          balanced: { threshold: 0.35, delta: 1, saturation: 1.008, brightness: 1.001, step: 1, sharpen: 0.9 },
+          aggressive: { threshold: 0.18, delta: 2, saturation: 1.025, brightness: 1.003, step: 2, sharpen: 1.3 },
+          extreme: { threshold: 0.05, delta: 3, saturation: 1.06, brightness: 1.006, step: 3, sharpen: 1.8 },
+        }[strength];
         logProcessing("scan — loading pixel buffer and locating high-frequency signal");
         const detectorMeta = await sharp(output).metadata();
         if (detectorMeta.width && detectorMeta.height) {
@@ -6158,9 +6167,9 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
             for (let y = 0; y < raw.info.height; y++) {
               for (let x = 0; x < raw.info.width; x++) {
                 const phase = Math.sin(x * 0.37 + y * 0.19) + Math.cos(x * 0.11 - y * 0.29);
-                if (Math.abs(phase) < 0.35) continue;
+                if (Math.abs(phase) < strengthConfig.threshold) continue;
                 const offset = (y * raw.info.width + x) * channels;
-                const delta = phase > 0 ? 1 : -1;
+                const delta = phase > 0 ? strengthConfig.delta : -strengthConfig.delta;
                 for (let channel = 0; channel < Math.min(3, channels); channel++) {
                   raw.data[offset + channel] = Math.max(0, Math.min(255, raw.data[offset + channel] + delta));
                 }
@@ -6176,11 +6185,11 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
             detectorImage = detectorImage.resize(detectorMeta.width + 1, detectorMeta.height + 1, { fit: "fill", kernel: "lanczos3" })
               .resize(detectorMeta.width, detectorMeta.height, { fit: "fill", kernel: "lanczos3" });
           } else if (strategy === "combined") {
-            detectorImage = detectorImage.modulate({ saturation: 1.008, brightness: 1.001 })
-              .resize(detectorMeta.width + 1, detectorMeta.height + 1, { fit: "fill", kernel: "lanczos3" })
+            detectorImage = detectorImage.modulate({ saturation: strengthConfig.saturation, brightness: strengthConfig.brightness })
+              .resize(detectorMeta.width + strengthConfig.step, detectorMeta.height + strengthConfig.step, { fit: "fill", kernel: "lanczos3" })
               .resize(detectorMeta.width, detectorMeta.height, { fit: "fill", kernel: "lanczos3" })
               .resize(detectorMeta.width * 2, detectorMeta.height * 2, { fit: "fill", kernel: "lanczos3" })
-              .sharpen({ sigma: 0.9, m1: 0.65, m2: 1.0 });
+              .sharpen({ sigma: strengthConfig.sharpen, m1: 0.65, m2: 1.0 });
           } else {
             detectorImage = detectorImage.resize(detectorMeta.width * 2, detectorMeta.height * 2, {
               fit: "fill",
@@ -6192,7 +6201,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
           else if (detectorFormat === "webp") output = await detectorImage.webp({ quality: 96 }).toBuffer();
           else output = await detectorImage.jpeg({ quality: 96, mozjpeg: false }).toBuffer();
           logProcessing(strategy === "combined"
-            ? "lift — applied HARSH composite: pixel micro-jitter + chroma + resample + frequency rewrite"
+            ? `lift — applied ${strength} composite: pixel micro-jitter + chroma + resample + frequency rewrite`
             : `lift — applied ${strategy} whole-image rewrite`);
           const verify = await sharp(output).metadata();
           if (!verify.width || !verify.height) throw new Error("Detector-oriented output failed verification");
