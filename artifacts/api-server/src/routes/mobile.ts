@@ -5791,6 +5791,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
     }
 
+    // End the story tool with one downward swipe. Do not inspect foreground
+    // package, validate the viewer, press Back, or perform Home-tab recovery.
+    // If the story viewer is open, this exits it; otherwise Instagram simply
+    // refreshes/scrolls the feed, which is acceptable.
+    const { w: _storyExitW, h: _storyExitH } = getScreenSize(serial);
+    onLog?.("Story exit: swiping down to leave the story viewer");
+    await android.swipe(
+      serial,
+      Math.round(_storyExitW / 2),
+      Math.round(_storyExitH * 0.30),
+      Math.round(_storyExitW / 2),
+      Math.round(_storyExitH * 0.85),
+      500,
+    );
+    await sleepOrAbort(serial, 800);
+    return { storiesWatched, storyLikes };
+
     // ── Ad / deviation recovery ───────────────────────────────────────────
     // A "next story" advance tap that lands on a sponsored post's CTA button
     // (or a swipe Instagram intercepts for a full-screen ad) can open Chrome
