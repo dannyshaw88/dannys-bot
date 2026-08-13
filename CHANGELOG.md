@@ -1,3 +1,9 @@
+## [1.2.497] — 2026-08-13
+
+### Chore — Attached diagnostic asset
+
+- Include the latest uploaded diagnostic asset in the project history.
+
 ## [1.2.496] — 2026-08-13
 
 ### Fixed — Reels DM action validation
