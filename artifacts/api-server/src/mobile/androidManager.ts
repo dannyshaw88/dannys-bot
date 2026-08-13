@@ -9222,8 +9222,35 @@ export async function findInstagramSearchTab(
   if (!xml) return null;
   const byId = _findLiveNodeByResId(xml, ":id/search", ":id/tab_search", ":id/nav_search", ":id/bottom_tab_search");
   if (byId) return byId;
-  const byLabel = _findElem(xml, "Search", "Explore");
-  if (byLabel) return byLabel;
+
+  // Do not use the generic _findElem() fallback here. On Explore, the first
+  // matching "Search" node is commonly the large top EditText search field,
+  // not the bottom navigation tab. Tapping it immediately opens the keyboard
+  // and makes View Explore appear to navigate correctly before entering the
+  // wrong interaction state.
+  const { h: screenH } = getScreenSize(serial);
+  const bottomNavMinY = Math.round(screenH * 0.80);
+  const nodeRe = /<node\b[^>]*>/gi;
+  let nodeMatch: RegExpExecArray | null;
+  while ((nodeMatch = nodeRe.exec(xml)) !== null) {
+    const node = nodeMatch[0];
+    const bounds = node.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+    if (!bounds) continue;
+    const y1 = Number(bounds[2]);
+    const y2 = Number(bounds[4]);
+    if (y2 < bottomNavMinY) continue;
+    const resourceId = node.match(/\bresource-id="([^"]*)"/i)?.[1] ?? "";
+    const contentDesc = node.match(/\bcontent-desc="([^"]*)"/i)?.[1] ?? "";
+    const label = `${resourceId} ${contentDesc}`;
+    if (!/(?:search|explore)/i.test(label)) continue;
+    if (!/(?:search|explore)/i.test(contentDesc) &&
+        !/(?:search|tab_search|nav_search|bottom_tab_search)/i.test(resourceId)) continue;
+    const x1 = Number(bounds[1]);
+    const x2 = Number(bounds[3]);
+    const result = { x: Math.round((x1 + x2) / 2), y: Math.round((y1 + y2) / 2) };
+    onLog?.(`Follow: Search tab bottom-nav node "${resourceId}" "${contentDesc}" at (${result.x}, ${result.y})`);
+    return result;
+  }
 
   // Unlabeled bottom-nav nodes are intentionally not enough. Their horizontal
   // order is not stable: on the failing layout the second node is Reels, not
