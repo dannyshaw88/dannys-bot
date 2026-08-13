@@ -6012,6 +6012,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       alterationLevel,
       imageSettingsEnabled,
       imageSettings,
+      metadataCleanup,
     } = req.body as {
       imageBase64?: string;
       localPath?: string;
@@ -6021,6 +6022,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       alterationLevel?: AlterationLevel;
       imageSettingsEnabled?: boolean;
       imageSettings?: ImageFilterSettings;
+      metadataCleanup?: boolean;
     };
 
     if (!imageBase64 && !localPath) return res.status(400).json({ error: "No image provided" });
@@ -6095,6 +6097,24 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
         logProcessing(`Image alteration verified — processed image is decodable and differs from input`);
       } else {
         logProcessing("Image alteration setting = OFF");
+      }
+
+      if (metadataCleanup) {
+        processingStage = "metadata cleanup";
+        // Sharp omits metadata by default. Re-encoding in the source format
+        // removes EXIF/GPS/software/comment blocks without changing pixels
+        // before the encoder's normal format conversion.
+        const input = output;
+        const meta = await sharp(output).metadata();
+        const image = sharp(output).rotate();
+        if (meta.format === "png") output = await image.png().toBuffer();
+        else if (meta.format === "webp") output = await image.webp().toBuffer();
+        else if (meta.format === "gif") output = await image.gif().toBuffer();
+        else output = await image.jpeg({ quality: 100, mozjpeg: false }).toBuffer();
+        if (!output.length) throw new Error("Metadata cleanup produced an empty image");
+        logProcessing(`Metadata cleanup verified — removed embedded metadata (${meta.format ?? "image"})`);
+      } else {
+        logProcessing("Metadata cleanup setting = OFF");
       }
 
       const isJpeg = output.length >= 2 && output[0] === 0xff && output[1] === 0xd8;

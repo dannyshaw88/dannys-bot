@@ -71,6 +71,7 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [localAltLevel, setLocalAltLevel] = useState<"small" | "medium" | "high">("small");
   const [localImgSettingsEnabled, setLocalImgSettingsEnabled] = useState(true);
   const [localImgSettings, setLocalImgSettings] = useState<ImageFilterSettings>(DEFAULT_IMAGE_SETTINGS);
+  const [localMetadataCleanup, setLocalMetadataCleanup] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -206,6 +207,7 @@ export default function ImagesPage(props: ImagesPageProps) {
               alterationLevel,
               imageSettingsEnabled,
               imageSettings,
+               metadataCleanup: localMetadataCleanup,
             }),
           });
           const result = await response.json().catch(() => null);
@@ -351,6 +353,19 @@ export default function ImagesPage(props: ImagesPageProps) {
                          </Button>
                       </div>
                     )}
+                  </div>
+
+                  {/* Metadata cleanup */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1 mt-0.5">
+                      <Label className="text-sm font-medium text-foreground cursor-pointer select-none" onClick={() => setLocalMetadataCleanup(!localMetadataCleanup)}>
+                        Remove metadata
+                      </Label>
+                      <p className="text-[10px] leading-4 text-muted-foreground max-w-[210px]">
+                        Strip EXIF, GPS, software, and embedded comments on export. Pixels are unchanged.
+                      </p>
+                    </div>
+                    <Switch checked={localMetadataCleanup} onCheckedChange={setLocalMetadataCleanup} className="data-[state=checked]:bg-cyan-500 shrink-0" />
                   </div>
                 </div>
               </div>
