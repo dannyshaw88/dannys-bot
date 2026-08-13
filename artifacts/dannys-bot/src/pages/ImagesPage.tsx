@@ -210,6 +210,13 @@ export default function ImagesPage(props: ImagesPageProps) {
                : current));
              continue;
            }
+           if (wmrRequested) {
+             throw new Error(
+               wmrResult?.error
+                 ? `Detector-oriented WMR processing failed: ${wmrResult.error}`
+                 : "Detector-oriented WMR processing is unavailable. No fallback was used.",
+             );
+           }
            const wmrFallbackLog = wmrRequested
              ? [wmrAttempted
                ? `WMR SynthID regeneration failed — fallback pipeline used: ${wmrResult?.error ?? "no output returned"}`
