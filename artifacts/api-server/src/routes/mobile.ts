@@ -13547,9 +13547,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   });
 
   app.post("/api/mobile/devices/:serial/reboot", async (req: Request, res: Response) => {
+    const serial = p(req, "serial");
     try {
-      android.rebootDevice(p(req, "serial"));
-      res.json({ ok: true });
+      const activeCycleId = automationCycleCurrentId.get(serial);
+      if (activeCycleId) automationCycleAbortedId.set(serial, activeCycleId);
+      // An explicit device reboot is a hard lifecycle boundary. The phone can
+      // disappear before the cycle's normal finally block runs, so do not
+      // leave a serial permanently blocked for the next manual HST trigger.
+      automationCycleInProgress.delete(serial);
+      automationCycleCurrentId.delete(serial);
+      automationCycleAbortedId.delete(serial);
+      android.rebootDevice(serial);
+      res.json({ ok: true, interruptedCycle: Boolean(activeCycleId) });
     } catch (e: any) { res.status(500).json({ error: e?.message }); }
   });
 
@@ -13570,12 +13579,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
       const stillRunning = automationCycleInProgress.has(serial);
       if (stillRunning) {
-        res.status(409).json({ ok: false, error: "Automation cycle did not finish before restart timeout" });
-        return;
+        // The device is being explicitly restarted and the in-flight worker
+        // may be blocked on a vanished ADB session. Release the server-side
+        // lock rather than making every later manual trigger return 409.
+        automationCycleInProgress.delete(serial);
       }
 
       android.rebootDevice(serial);
-      res.json({ ok: true, interruptedCycle: Boolean(activeCycleId) });
+      automationCycleCurrentId.delete(serial);
+      automationCycleAbortedId.delete(serial);
+      res.json({ ok: true, interruptedCycle: Boolean(activeCycleId), forcedCleanup: stillRunning });
     } catch (e: any) {
       res.status(500).json({ error: e?.message ?? "Graceful restart failed" });
     }
