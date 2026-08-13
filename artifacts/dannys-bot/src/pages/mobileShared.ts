@@ -410,11 +410,9 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
 ]);
 
 /** Fields that stay restricted in Settings → TrustScores. Inject Browsing
- * and Follow Filters are intentionally omitted because their controls must
- * remain editable in the TrustScore editor. */
+ * and Follow Filters are Human Session Tool controls, not TrustScore controls. */
 export const TRUST_SCORE_TEMPLATE_LOCKED_FIELDS = new Set(
-  [...TRUST_SCORE_SLOT_OWNED_FIELDS].filter(field => ![
-    "injectBrowsingEnabled",
+  [...TRUST_SCORE_SLOT_OWNED_FIELDS,
     "followFiltersEnabled",
     "followFilterPrivateUsers",
     "followFilterEnglishSpeaking",
@@ -423,12 +421,22 @@ export const TRUST_SCORE_TEMPLATE_LOCKED_FIELDS = new Set(
     "followFilterMaxFollowers25k",
     "followFilterMalesOnly",
     "followFilterMaleNames",
+  ].filter(field => ![
+    "injectBrowsingEnabled",
   ].includes(field)),
 );
 
-/** Account-specific values that may be copied between Human Session Tool slots. */
+/** Values that may be copied between Human Session Tool slots. */
 export const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
   "followSources",
+  "followFiltersEnabled",
+  "followFilterPrivateUsers",
+  "followFilterEnglishSpeaking",
+  "followFilterMinFollowers50",
+  "followFilterVerifiedUsers",
+  "followFilterMaxFollowers25k",
+  "followFilterMalesOnly",
+  "followFilterMaleNames",
   "updateProfilePicActivatePctMin",
   "updateProfilePicActivatePctMax",
   "updateProfilePicFolderPath",

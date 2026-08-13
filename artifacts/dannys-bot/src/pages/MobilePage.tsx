@@ -6557,7 +6557,7 @@ export function AutomationSettingsPanel({
           </>)}
 
           {/* ── Filters — profile-quality gates applied before each follow ── */}
-          {(settings.followEnabled || isTrustScoreTemplateEditor) && <div className="flex items-center gap-3" style={{ paddingTop: "6px" }}>
+          {settings.followEnabled && !isTrustScoreTemplateEditor && <div className="flex items-center gap-3" style={{ paddingTop: "6px" }}>
             <input
               type="checkbox"
               id={`follow-filters-enabled-${slotIdx ?? 0}`}
@@ -6569,7 +6569,7 @@ export function AutomationSettingsPanel({
             <label htmlFor={`follow-filters-enabled-${slotIdx ?? 0}`} className={`text-sm font-semibold cursor-pointer select-none ${settings.followEnabled ? 'text-foreground' : 'text-muted-foreground'}`}>Filters</label>
           </div>}
 
-          {settings.followFiltersEnabled && (
+          {settings.followFiltersEnabled && settings.followEnabled && !isTrustScoreTemplateEditor && (
             <div className="flex items-center gap-6 flex-wrap" style={{ paddingTop: "5px" }}>
               <div className="flex items-center gap-2">
                 <input
