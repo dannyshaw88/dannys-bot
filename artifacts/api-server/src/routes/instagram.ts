@@ -6152,6 +6152,24 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
         if (detectorMeta.width && detectorMeta.height) {
           logProcessing("map — isolating distributed high-frequency regions");
           let detectorImage = sharp(output);
+          if (strategy === "combined") {
+            const raw = await sharp(output).raw().toBuffer({ resolveWithObject: true });
+            const channels = raw.info.channels;
+            for (let y = 0; y < raw.info.height; y++) {
+              for (let x = 0; x < raw.info.width; x++) {
+                const phase = Math.sin(x * 0.37 + y * 0.19) + Math.cos(x * 0.11 - y * 0.29);
+                if (Math.abs(phase) < 0.35) continue;
+                const offset = (y * raw.info.width + x) * channels;
+                const delta = phase > 0 ? 1 : -1;
+                for (let channel = 0; channel < Math.min(3, channels); channel++) {
+                  raw.data[offset + channel] = Math.max(0, Math.min(255, raw.data[offset + channel] + delta));
+                }
+              }
+            }
+            detectorImage = sharp(raw.data, {
+              raw: { width: raw.info.width, height: raw.info.height, channels },
+            });
+          }
           if (strategy === "chroma") {
             detectorImage = detectorImage.modulate({ saturation: 1.012, brightness: 1.002 });
           } else if (strategy === "resample") {
@@ -6173,7 +6191,9 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
           if (detectorFormat === "png") output = await detectorImage.png({ compressionLevel: 6 }).toBuffer();
           else if (detectorFormat === "webp") output = await detectorImage.webp({ quality: 96 }).toBuffer();
           else output = await detectorImage.jpeg({ quality: 96, mozjpeg: false }).toBuffer();
-          logProcessing(`lift — applied ${strategy} whole-image rewrite (chroma + resample + frequency)`);
+          logProcessing(strategy === "combined"
+            ? "lift — applied HARSH composite: pixel micro-jitter + chroma + resample + frequency rewrite"
+            : `lift — applied ${strategy} whole-image rewrite`);
           const verify = await sharp(output).metadata();
           if (!verify.width || !verify.height) throw new Error("Detector-oriented output failed verification");
           logProcessing("verify — re-checking detector pass completed");
