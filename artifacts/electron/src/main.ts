@@ -1,6 +1,6 @@
 import { app, BrowserWindow, Menu, Tray, nativeImage, dialog, ipcMain, screen, shell, powerSaveBlocker } from "electron";
 import { autoUpdater } from "electron-updater";
-import { spawn, ChildProcess, exec, execFile } from "child_process";
+import { spawn, ChildProcess, exec, execFile, execFileSync } from "child_process";
 import { promisify } from "util";
 import http from "http";
 import net from "net";
@@ -52,6 +52,20 @@ process.on("unhandledRejection", (reason: unknown) => {
 });
 
 const execAsync = promisify(exec);
+
+function resolvePathExecutable(binaryName: string): string | null {
+  try {
+    const command = process.platform === "win32" ? "where.exe" : "which";
+    const result = execFileSync(command, [binaryName], {
+      encoding: "utf8",
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return result.split(/\r?\n/)[0]?.trim() || null;
+  } catch {
+    return null;
+  }
+}
 
 let serverPort = 0;
 let serverProc: ChildProcess | null = null;
@@ -1296,11 +1310,12 @@ async function createWindow() {
   // in the app's writable userData/wmr directory (or on PATH).
   ipcMain.handle("wmr-status", async () => {
     const binaryName = process.platform === "win32" ? "wmr.exe" : "wmr";
+    const pathExecutable = resolvePathExecutable(binaryName);
     const candidates = [
       path.join(getUserDataPath(), "wmr", binaryName),
       path.join(app.getPath("appData"), "Aura Farming", "wmr", binaryName),
       path.join(process.resourcesPath, "bin", binaryName),
-      binaryName,
+      ...(pathExecutable ? [pathExecutable] : []),
     ];
     for (const candidate of candidates) {
       if (candidate === "wmr.exe" || candidate === "wmr" || fs.existsSync(candidate)) {
@@ -1314,11 +1329,12 @@ async function createWindow() {
 
   ipcMain.handle("wmr-process", async (_e, args: { filePath: string; filename: string }) => {
     const binaryName = process.platform === "win32" ? "wmr.exe" : "wmr";
+    const pathExecutable = resolvePathExecutable(binaryName);
     const candidates = [
       path.join(getUserDataPath(), "wmr", binaryName),
       path.join(app.getPath("appData"), "Aura Farming", "wmr", binaryName),
       path.join(process.resourcesPath, "bin", binaryName),
-      binaryName,
+      ...(pathExecutable ? [pathExecutable] : []),
     ];
     const executable = candidates.find((candidate) =>
       candidate === "wmr.exe" || candidate === "wmr" || fs.existsSync(candidate),
@@ -1348,11 +1364,9 @@ async function createWindow() {
       const selected = executable === "wmr.exe" || executable === "wmr"
         ? "Windows PATH"
         : executable;
-      const errorMessage = errorCode === "ENOENT" && executable !== "wmr.exe" && executable !== "wmr"
+      const errorMessage = errorCode === "ENOENT"
         ? `WMR was found at ${selected}, but Windows could not load it (ENOENT). The download may be the wrong architecture or missing a required DLL/runtime. Re-download the Windows release and test "${selected}" from Command Prompt.`
-        : errorCode === "ENOENT"
-          ? `WMR executable was not found on Windows PATH. Confirm wmr.exe exists at: ${searched}`
-          : rawMessage;
+        : rawMessage;
       return { ok: false, error: errorMessage };
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
