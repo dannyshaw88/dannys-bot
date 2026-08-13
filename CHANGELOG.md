@@ -1,3 +1,9 @@
+## [1.2.493] — 2026-08-13
+
+### Fixed — Reels exit behavior
+
+- Reels now exits with exactly one Android Back press and performs no follow-up navigation or Home-tab tap.
+
 ## [1.2.492] — 2026-08-13
 
 ### Changed — Follow Filters ownership

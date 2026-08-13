@@ -11774,30 +11774,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             reelsLikes = reelsResult.likes;
             steps.push(`reels(${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes, ${reelsResult.sharesFeed} feed-shares, ${reelsResult.sharesDm} dm-shares, ${reelsResult.saves} saves)`);
             tLog(`▶ View Reels done — ${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes`);
-            // Robust Reels exit — press Back up to 3 times, polling for the
-            // home tab each attempt. The previous single Back+1200ms was
-            // sufficient when Reels always preceded Follow (which navigates
-            // to Search itself). With shuffle any tool may come next, so we
-            // must confirm the full-screen viewer is fully closed first.
-            tLog("▶ View Reels — exiting full-screen viewer…");
-            let _reelsExited = false;
-            let _reHomeTab = null;
-            for (let _re = 0; _re < 3; _re++) {
-              try { await android.pressBack(serial); } catch { /* best effort */ }
-              await sleepOrAbort(serial, 1200);
-              _reHomeTab = await android.findHomeTab(serial).catch(() => null);
-              if (_reHomeTab) {
-                _reelsExited = true;
-                await android.tap(serial, _reHomeTab.x, _reHomeTab.y);
-                tLog(`▶ View Reels — tapped Home tab node at (${_reHomeTab.x},${_reHomeTab.y})`);
-                break;
-              }
-            }
-            if (_reelsExited) {
-              tLog("▶ View Reels — exited full-screen viewer with Back and Home tab node");
-            } else {
-              tLog("▶ View Reels — Back exit completed without confirming Home tab");
-            }
+            // Reels owns one deterministic exit action: leave the full-screen
+            // Reels UI with exactly one Android Back. Do not probe navigation,
+            // press Back again, or tap any bottom-nav button here.
+            tLog("▶ View Reels — exiting full-screen viewer with one Android Back…");
+            try { await android.pressBack(serial); } catch { /* best effort */ }
+            tLog("▶ View Reels — exited full-screen viewer");
           } else if (!viewReelsEnabled) {
             steps.push("reels(skipped — View Reels disabled)");
             tLog("▶ View Reels disabled — skipping reels");
