@@ -8683,6 +8683,29 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
 
   // SIM phone number manual inputs (keyed by slot index)
   const [simPhoneInputs, setSimPhoneInputs] = React.useState<Record<number, string>>({});
+  const [typingSimSlot, setTypingSimSlot] = React.useState<number | null>(null);
+
+  const typeSimPhoneNumber = React.useCallback(async (slot: number) => {
+    if (!serial || typingSimSlot !== null) return;
+    const value = (simPhoneInputs[slot] ?? "").trim();
+    if (!value) return;
+    setTypingSimSlot(slot);
+    try {
+      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/type-calibrated`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: value }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        window.alert(body?.error ?? "Could not type the SIM phone number");
+      }
+    } catch (error: any) {
+      window.alert(error?.message ?? "Could not type the SIM phone number");
+    } finally {
+      setTypingSimSlot(null);
+    }
+  }, [serial, simPhoneInputs, typingSimSlot]);
 
   // App close gesture (dismiss direction)
   const [dismissDir,    setDismissDir]    = React.useState<"auto" | "left" | "up">("auto");
@@ -9190,14 +9213,28 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
                   <p className="text-xs font-semibold text-foreground">
                     SIM {sim.slot + 1}{sim.carrier ? ` · ${sim.carrier}` : ""}
                   </p>
-                  <input
-                    type="tel"
-                    maxLength={15}
-                    className="mt-1 w-36 text-xs rounded border border-border bg-background px-2 py-1 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                    placeholder="Enter phone number"
-                    value={simPhoneInputs[sim.slot] ?? ""}
-                    onChange={e => setSimPhoneInputs(prev => ({ ...prev, [sim.slot]: e.target.value }))}
-                  />
+                  <div className="mt-1 flex flex-col items-start gap-1">
+                    <button
+                      type="button"
+                      title="Type phone number on the device"
+                      aria-label={`Type SIM ${sim.slot + 1} phone number on the device`}
+                      disabled={!serial || typingSimSlot !== null || !(simPhoneInputs[sim.slot] ?? "").trim()}
+                      onClick={() => void typeSimPhoneNumber(sim.slot)}
+                      className="inline-flex h-6 w-6 items-center justify-center rounded border border-border bg-background text-primary hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {typingSimSlot === sim.slot
+                        ? <span className="text-[10px] animate-pulse">…</span>
+                        : <Keyboard className="h-3.5 w-3.5" aria-hidden="true" />}
+                    </button>
+                    <input
+                      type="tel"
+                      maxLength={15}
+                      className="w-36 text-xs rounded border border-border bg-background px-2 py-1 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                      placeholder="Enter phone number"
+                      value={simPhoneInputs[sim.slot] ?? ""}
+                      onChange={e => setSimPhoneInputs(prev => ({ ...prev, [sim.slot]: e.target.value }))}
+                    />
+                  </div>
                 </div>
               </div>
             ))}
