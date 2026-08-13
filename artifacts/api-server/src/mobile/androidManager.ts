@@ -4169,6 +4169,11 @@ export async function findReelActionIcons(serial: string, onLog?: (msg: string) 
     if (!c) continue;
     if (Math.abs(c.x - like!.x) > colTolerance) continue;
     if (c.y <= like!.y + 10) continue; // Like itself, or anything above it (e.g. profile avatar)
+    // The bottom Instagram navigation row can expose another paper-plane/
+    // share node with the same semantic label. It is not part of the Reel
+    // action column and opens DMs globally, so never include the bottom-nav
+    // band when resolving Reel actions.
+    if (c.y >= screenH * 0.86) continue;
     const cdM = attrs.match(/content-desc="([^"]*)"/);
     const cd = cdM ? cdM[1] : "";
     const clsM = attrs.match(/class="([^"]*)"/);
