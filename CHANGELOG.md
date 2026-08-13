@@ -1,3 +1,10 @@
+## [1.2.502] — 2026-08-13
+
+### Added — Fix Images processing log
+
+- Settings → Fix Images now uses the same strict Fix AI Slop pipeline and shows
+  a per-image processing log with each completed stage and any failure reason.
+
 ## [1.2.501] — 2026-08-13
 
 ### Fixed — Do not silently bypass Fix AI Slop pixel processing

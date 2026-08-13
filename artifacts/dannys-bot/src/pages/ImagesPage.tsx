@@ -33,6 +33,7 @@ export interface MediaItem {
   error?: string;
   processedPreviewUrl?: string;
   processedData?: Blob | string;
+  processingLog?: string[];
 }
 
 export interface ImagesPageProps {
@@ -220,11 +221,18 @@ export default function ImagesPage(props: ImagesPageProps) {
               progress: 100,
               processedPreviewUrl: result.dataUrl,
               processedData: result.dataUrl,
+               processingLog: Array.isArray(result.processingLog) ? result.processingLog : [],
             }
             : current));
         } catch (error: any) {
           setLocalItems(prev => prev.map(current => current.id === item.id
-            ? { ...current, status: "error", progress: 0, error: error?.message ?? "Processing failed" }
+            ? {
+                ...current,
+                status: "error",
+                progress: 0,
+                error: error?.message ?? "Processing failed",
+                processingLog: [error?.message ?? "Processing failed"],
+              }
             : current));
         }
       }
@@ -463,6 +471,18 @@ export default function ImagesPage(props: ImagesPageProps) {
                                <div className="text-[11px] text-muted-foreground mt-0.5 font-mono">
                                  {(item.size / 1024 / 1024).toFixed(2)} MB
                                </div>
+                                {item.processingLog?.length ? (
+                                  <details className="mt-1.5 max-w-[360px]">
+                                    <summary className="cursor-pointer text-[10px] text-cyan-600 dark:text-cyan-400">
+                                      Processing log ({item.processingLog.length})
+                                    </summary>
+                                    <div className="mt-1 rounded border border-border/60 bg-muted/30 p-1.5 font-mono text-[9px] leading-4 text-muted-foreground max-h-24 overflow-y-auto">
+                                      {item.processingLog.map((line, index) => (
+                                        <div key={`${item.id}-log-${index}`}>{line}</div>
+                                      ))}
+                                    </div>
+                                  </details>
+                                ) : null}
                              </td>
                              <td className="px-4 py-3">
                                <div className="flex flex-col justify-center h-10">

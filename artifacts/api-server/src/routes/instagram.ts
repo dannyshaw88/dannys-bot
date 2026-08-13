@@ -6031,6 +6031,11 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
     const sourcePath = path.join(tempDir, safeName);
     let workingPath = sourcePath;
     let processingStage = localPath ? "copying Windows local file" : "decoding image data";
+    const processingLog: string[] = [];
+    const logProcessing = (message: string) => {
+      processingLog.push(message);
+      console.log(`[images/process] ${message}`);
+    };
       const verifyProcessedBuffer = async (
         output: Buffer,
         input: Buffer,
@@ -6048,21 +6053,25 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
     try {
       if (localPath) {
         await fs.promises.copyFile(localPath, sourcePath);
+        logProcessing(`Source copied from Windows local file: ${safeName}`);
       } else {
         const match = imageBase64!.match(/^data:image\/[^;]+;base64,(.*)$/);
         const raw = match ? match[1] : imageBase64!;
         await fs.promises.writeFile(sourcePath, Buffer.from(raw, "base64"));
+        logProcessing(`Source decoded from image data: ${safeName}`);
       }
 
+      logProcessing(`Fix AI Slop setting = ${shouldFixAiSlop ? "ON" : "OFF"}`);
       if (shouldFixAiSlop) {
         processingStage = "Fix AI Slop";
         const input = await fs.promises.readFile(workingPath);
-        workingPath = await fixAiSlop(workingPath);
+        workingPath = await fixAiSlop(workingPath, logProcessing);
         if (workingPath === sourcePath) {
           throw new Error("Fix AI Slop returned the original source path");
         }
         const output = await fs.promises.readFile(workingPath);
         await verifyProcessedBuffer(output, input, "Fix AI Slop");
+        logProcessing(`Fix AI Slop verified — processed image is decodable and differs from input`);
         console.log(
           `[images/process] Fix AI Slop output verified — ` +
           `source=${path.basename(sourcePath)} output=${path.basename(workingPath)} ` +
@@ -6075,6 +6084,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
 
       if (alterationEnabled) {
         processingStage = "image alteration";
+        logProcessing(`Image alteration setting = ON (${alterationLevel ?? "small"})`);
         const input = output;
         output = await alterJpegBuffer(
           output,
@@ -6082,6 +6092,9 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
           imageSettingsEnabled ? imageSettings : undefined,
         );
         await verifyProcessedBuffer(output, input, "Image alteration");
+        logProcessing(`Image alteration verified — processed image is decodable and differs from input`);
+      } else {
+        logProcessing("Image alteration setting = OFF");
       }
 
       const isJpeg = output.length >= 2 && output[0] === 0xff && output[1] === 0xd8;
@@ -6106,6 +6119,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
         filename: outputFilename,
         dataUrl: `data:${mime};base64,${output.toString("base64")}`,
         size: output.length,
+        processingLog,
       });
     } catch (e: any) {
       const reason = e?.message ?? "Image processing failed";
@@ -6118,8 +6132,9 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
         `alteration=${!!alterationEnabled}`,
         `error=${reason}`,
       ].join(" ");
+      processingLog.push(`FAILED at ${processingStage}: ${reason}`);
       console.error(diagnostic, e?.stack ?? "");
-      return res.status(500).json({ error: diagnostic });
+      return res.status(500).json({ error: diagnostic, processingLog });
     } finally {
       await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => {});
       if (workingPath !== sourcePath) {
