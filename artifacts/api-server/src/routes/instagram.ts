@@ -6030,7 +6030,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       frequencyDisruption?: boolean;
       detectorPass?: boolean;
       disruptionStrategy?: "frequency" | "chroma" | "resample" | "combined";
-      disruptionStrength?: "subtle" | "balanced" | "aggressive" | "extreme";
+      disruptionStrength?: "high" | "extreme";
     };
 
     if (!imageBase64 && !localPath) return res.status(400).json({ error: "No image provided" });
@@ -6151,9 +6151,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
         const strategy = disruptionStrategy ?? "frequency";
         const strength = disruptionStrength ?? "balanced";
         const strengthConfig = {
-          subtle: { threshold: 0.55, delta: 1, saturation: 1.004, brightness: 1.0005, step: 1, sharpen: 0.55 },
-          balanced: { threshold: 0.35, delta: 1, saturation: 1.008, brightness: 1.001, step: 1, sharpen: 0.9 },
-          aggressive: { threshold: 0.18, delta: 2, saturation: 1.025, brightness: 1.003, step: 2, sharpen: 1.3 },
+          high: { threshold: 0.11, delta: 2, saturation: 1.04, brightness: 1.004, step: 2, sharpen: 1.5 },
           extreme: { threshold: 0.05, delta: 3, saturation: 1.06, brightness: 1.006, step: 3, sharpen: 1.8 },
         }[strength];
         logProcessing("scan — loading pixel buffer and locating high-frequency signal");

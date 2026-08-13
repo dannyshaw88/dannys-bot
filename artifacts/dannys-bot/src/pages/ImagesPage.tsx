@@ -74,7 +74,7 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [localMetadataCleanup, setLocalMetadataCleanup] = useState(true);
   const [localFrequencyDisruption, setLocalFrequencyDisruption] = useState(true);
   const [localDetectorPass, setLocalDetectorPass] = useState(true);
-  const [localDisruptionStrength, setLocalDisruptionStrength] = useState<"subtle" | "balanced" | "aggressive" | "extreme">("balanced");
+  const [localDisruptionStrength, setLocalDisruptionStrength] = useState<"high" | "extreme">("high");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -406,9 +406,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                         onChange={(event) => setLocalDisruptionStrength(event.target.value as typeof localDisruptionStrength)}
                         className="rounded-md border border-border bg-background px-2 py-1.5 text-xs"
                       >
-                        <option value="subtle">Subtle</option>
-                        <option value="balanced">Balanced</option>
-                        <option value="aggressive">Aggressive</option>
+                        <option value="high">High</option>
                         <option value="extreme">Extreme</option>
                       </select>
                     </div>
