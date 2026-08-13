@@ -9336,6 +9336,15 @@ export async function findInstagramSearchBar(
     // search bar while still safely below any Explore-grid content.
     const topLimit = Math.round(screenH * 0.30);
 
+    // Instagram's Explore screen exposes the real top search field with this
+    // stable resource-id. Prefer it before any label/candidate ranking so the
+    // bottom Search tab, profile controls, and child overlays can never win.
+    const exactTopSearch = _findLiveNodeByResId(xml, ":id/action_bar_search_edit_text");
+    if (exactTopSearch && exactTopSearch.y <= topLimit) {
+      onLog?.(`Follow: tapping top search field action_bar_search_edit_text at (${exactTopSearch.x}, ${exactTopSearch.y})`);
+      return exactTopSearch;
+    }
+
     // Scan complete node records and parse attributes independently. Android
     // UIAutomator is free to emit attributes in either order; never depend on
     // resource-id appearing before bounds in the XML.
