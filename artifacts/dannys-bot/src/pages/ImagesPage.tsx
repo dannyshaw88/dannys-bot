@@ -431,7 +431,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                       </label>
                       <label className="block text-[11px] text-muted-foreground">
                         Restoration blur: {(localRestoreBlur / 10).toFixed(1)}
-                        <input type="range" min="0" max="50" value={localRestoreBlur} onChange={(e) => setLocalRestoreBlur(Number(e.target.value))} className="w-full accent-cyan-500" />
+                        <input type="range" min="3" max="50" value={Math.max(3, localRestoreBlur)} onChange={(e) => setLocalRestoreBlur(Number(e.target.value))} className="w-full accent-cyan-500" />
                       </label>
                     </div>
                   )}

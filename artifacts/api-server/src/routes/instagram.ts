@@ -6219,7 +6219,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
         processingStage = "quality restoration";
         const lowBlend = Math.max(0, Math.min(1, restorationLowBlend ?? 1));
         const detailRetention = Math.max(0, Math.min(1.5, restorationDetail ?? 0.82));
-        const blurRadius = Math.max(0, Math.min(5, restorationBlur ?? 2));
+        const blurRadius = Math.max(0.3, Math.min(5, restorationBlur ?? 2));
         const originalRaw = await sharp(originalForRestoration).raw().toBuffer({ resolveWithObject: true });
         const disruptedRaw = await sharp(output).resize(originalRaw.info.width, originalRaw.info.height, { fit: "fill", kernel: "lanczos3" })
           .raw().toBuffer({ resolveWithObject: true });
