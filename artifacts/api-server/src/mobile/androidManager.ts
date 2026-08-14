@@ -10780,10 +10780,9 @@ export async function typeViaCalibrationMap(
  *
  * Instagram's search is a network round-trip — results can take 1–5 s to
  * appear in the accessibility tree even when they are visually visible.
- * The caller already waits for the search interaction to settle before this
- * lookup. Do one live dump only: if the exact username is not exposed now,
- * fail closed immediately instead of spending ~10 seconds repeating the same
- * lookup.
+ * The caller has already typed the username, but Instagram still needs a
+ * short network/render settle. Use one compact settle rather than stacking
+ * several multi-second waits between targets; exact matching remains required.
  */
 export async function findAndTapUserInSearch(
   serial: string,
@@ -10794,9 +10793,10 @@ export async function findAndTapUserInSearch(
   const adb = requireTool(tools.adb, "adb");
   const clean = username.replace(/^@/, "");
 
-  // Initial settle — give Instagram time to fire the search query and begin
-  // rendering results before the first dump.
-  await _sleep(2500);
+  // Compact initial settle. The caller already waited for Search to reopen and
+  // for the keyboard entry to complete; this is only for the result request
+  // and first row render.
+  await _sleep(1000);
 
   {
     const xml = await _uiDump(adb, serial);

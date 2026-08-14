@@ -10595,11 +10595,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           onLog?.("Follow: leaving failed search state without Back because field entry was not confirmed");
           continue;
         }
-        // Small settle before handing off to findAndTapUserInSearch, which
-        // now polls the dump internally (up to 4 attempts × 1.5 s) so the
-        // results have time to load from Instagram's network.
-        await sleepOrAbort(serial, 500);
-
         // Tap the matched user in results
         const searchResult = await android.findAndTapUserInSearch(serial, username, onLog).catch(() => ({ found: false }));
         if (!searchResult.found) {
