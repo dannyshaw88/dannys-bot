@@ -10507,11 +10507,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // Search state must never survive that navigation.
         searchReadyForReuse = false;
 
-        // Tap the search bar — wait longer so the Explore page settles and the
-        // field has time to focus before the keyboard opens.  A 600 ms wait was
-        // too short: on slower devices the bar tap could land below the field
-        // (causing a scroll/pull-to-refresh) or the keyboard didn't animate up
-        // before typeViaOnscreenKeyboard started.
+        // Tap the search bar and allow only a short keyboard/focus settle.
+        // The live focus check below is authoritative; a multi-second random
+        // delay here made every already-cleared search unnecessarily slow.
         // After a profile navigation, never assume the previous Search
         // surface survived. Re-enter Search from the live semantic tab node
         // before looking for the input bar.
@@ -10527,7 +10525,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const searchBar = await android.findInstagramSearchBar(serial, onLog).catch(() => null);
         if (!searchBar) { onLog?.("Follow: search bar accessibility node not found — stopping"); break; }
         await android.tap(serial, searchBar.x, searchBar.y);
-        await sleepOrAbort(serial, 1000 + Math.floor(Math.random() * 4000));
+        await sleepOrAbort(serial, 500 + Math.floor(Math.random() * 500));
         const searchFocused = await android.isInstagramSearchBarFocused(serial).catch(() => false);
         if (!searchFocused) {
           onLog?.("Follow: search bar tap was not confirmed focused — stopping without pressing Back");
