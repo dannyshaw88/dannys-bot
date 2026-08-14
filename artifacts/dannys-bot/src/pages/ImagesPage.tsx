@@ -477,7 +477,11 @@ export default function ImagesPage(props: ImagesPageProps) {
             radial-gradient(circle, rgba(165,243,252,0.95) 0 1px, transparent 1.8px),
             radial-gradient(circle, rgba(255,255,255,0.8) 0 0.8px, transparent 1.6px);
           background-size: 47px 41px, 61px 53px, 73px 59px, 89px 67px;
-          animation: image-processing-pixels 1.1s steps(5, end) var(--pixel-delay, 0s) infinite;
+          animation-name: image-processing-pixels;
+          animation-duration: var(--pixel-duration, 1.1s);
+          animation-timing-function: steps(5, end);
+          animation-delay: var(--pixel-delay, 0s);
+          animation-iteration-count: infinite;
         }
         tr.image-processing-scan > td::after {
           inset: 0 0 auto;
@@ -746,7 +750,8 @@ export default function ImagesPage(props: ImagesPageProps) {
                                className={`hover:bg-muted/30 transition-colors group ${item.status === "processing" ? "image-processing-scan" : ""}`}
                                style={item.status === "processing" ? {
                                  "--scan-duration": `${1.05 + ((item.id.charCodeAt(0) + item.id.charCodeAt(item.id.length - 1)) % 11) * 0.19}s`,
-                                 "--pixel-delay": `-${((item.id.charCodeAt(1) || 0) % 9) * 0.13}s`
+                                 "--pixel-delay": `-${((item.id.charCodeAt(1) || 0) % 17) * 0.11}s`,
+                                 "--pixel-duration": `${0.72 + ((item.id.charCodeAt(2) || 0) % 13) * 0.17}s`
                                } as React.CSSProperties : undefined}
                              >
                               <td className="px-4 py-3">
@@ -764,7 +769,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                                </div>
                              </td>
                              <td className="px-4 py-3 min-w-0">
-                                <div className="font-medium text-foreground break-all" title={item.name}>
+                                <div className="font-medium text-foreground truncate max-w-full" title={item.name}>
                                  {item.name}
                                </div>
                                 {item.processingLog?.length ? (
