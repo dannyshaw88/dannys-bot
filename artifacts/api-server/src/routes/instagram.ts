@@ -6055,7 +6055,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
         method: "POST",
         headers: waveSpeedHeaders(key),
         body: JSON.stringify({
-          prompt: body.prompt,
+          ...(body.prompt.trim() ? { prompt: body.prompt.trim() } : {}),
           image: ticket.data.download_url,
           size: `${width}*${height}`,
           strength: body.strength,

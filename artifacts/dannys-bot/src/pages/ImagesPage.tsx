@@ -315,9 +315,9 @@ export default function ImagesPage(props: ImagesPageProps) {
                  ...(waveHeight ? { height: Number(waveHeight) } : {}),
                }),
              });
-             const waveResult = await waveResponse.json().catch(() => null);
+              const waveResult = await waveResponse.json().catch(() => null);
              if (!waveResponse.ok || !waveResult?.ok || typeof waveResult.dataUrl !== "string") {
-               throw new Error(waveResult?.error ?? `WaveSpeed failed (${waveResponse.status})`);
+                throw new Error(waveResult?.error ?? waveResult?.message ?? `WaveSpeed failed (${waveResponse.status})`);
              }
              imageBase64 = waveResult.dataUrl;
              processFilename = waveResult.filename ?? `${item.name.replace(/\.[^.]+$/, "")}_wavespeed.jpg`;
