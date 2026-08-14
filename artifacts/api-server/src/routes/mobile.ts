@@ -8004,14 +8004,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     onLog?.("Make a Post: locating Instagram Home button…");
     const homeTab = await android.findHomeTab(serial).catch(() => null);
     if (!homeTab) {
-      onLog?.("Make a Post: Instagram Home button not found — aborting before upload");
-      return { posted: false };
-    }
-    const taps = Math.max(1, Math.round(homeTapCount));
-    for (let tapIndex = 0; tapIndex < taps; tapIndex++) {
-      onLog?.(`Make a Post: tapping Instagram Home button (${tapIndex + 1}/${taps})…`);
-      await android.tap(serial, homeTab.x, homeTab.y);
-      if (tapIndex + 1 < taps) await sleepOrAbort(serial, 500);
+      onLog?.("Make a Post: Instagram Home node not exposed — continuing to the \"+\" lookup");
+    } else {
+      const taps = Math.max(1, Math.round(homeTapCount));
+      for (let tapIndex = 0; tapIndex < taps; tapIndex++) {
+        onLog?.(`Make a Post: tapping Instagram Home button (${tapIndex + 1}/${taps})…`);
+        await android.tap(serial, homeTab.x, homeTab.y);
+        if (tapIndex + 1 < taps) await sleepOrAbort(serial, 500);
+      }
     }
     // Do not immediately continue after the tab tap. On slower phones the
     // Home surface remains in its transition state for several seconds; use

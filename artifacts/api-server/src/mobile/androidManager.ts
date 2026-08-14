@@ -6930,32 +6930,10 @@ export async function findHomeTab(serial: string): Promise<{ x: number; y: numbe
   // 2. Known resource-ids.
   const byId = _findByResId(xml, ":id/feed_tab", ":id/home_tab");
   if (byId) return byId;
-  // 3. Positional fallback — use the same validated bottom-nav-row detector
-  //    as Search. The old implementation treated any leftmost clickable node
-  //    below 88% as Home. On the search-results screen that can miss the nav
-  //    row (or select an unrelated node), causing the caller to issue a blind
-  //    second Back and exit Instagram.
-  const { w: xmlW, h: xmlH } = _getScreenSizeFromXml(xml) ?? getScreenSize(serial);
-  const botMin = Math.round(xmlH * 0.84);
-  const raw: { x: number; y: number }[] = [];
-  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
-  let nm: RegExpExecArray | null;
-  while ((nm = nodeRe.exec(xml)) !== null) {
-    const attrs = nm[1];
-    if (!/clickable="true"/.test(attrs)) continue;
-    const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-    if (!bm) continue;
-    const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
-    if (cy < botMin) continue;
-    raw.push({ x: Math.round((Number(bm[1]) + Number(bm[3])) / 2), y: cy });
-  }
-  const deduped = raw.filter((n, i, arr) =>
-    arr.findIndex(o => Math.abs(o.x - n.x) < 40 && Math.abs(o.y - n.y) < 40) === i,
-  );
-  const spanW = deduped.length > 1 ? deduped[deduped.length - 1].x - deduped[0].x : 0;
-  if (deduped.length < 4 || spanW < xmlW * 0.55) return null;
-  deduped.sort((a, b) => a.x - b.x);
-  return deduped[0]; // leftmost = Home
+  // No positional fallback. If Instagram does not expose a semantic Home
+  // node or known Home resource ID, guessing from bottom-nav geometry can tap
+  // Reels, Direct, or another control on a partially rendered screen.
+  return null;
 }
 
 /**
