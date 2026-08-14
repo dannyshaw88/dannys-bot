@@ -731,7 +731,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                  </div>
               ) : (
                   <div className="relative rounded-xl border border-border/60 bg-background shadow-xs overflow-hidden animate-in fade-in duration-300">
-                    <div className="h-[390px] max-h-[390px] overflow-auto">
+                    <div className="h-[270px] max-h-[270px] overflow-auto">
                      <table className="w-full table-fixed text-sm text-left border-collapse">
                        <thead className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider bg-muted/40 border-b border-border/60">
                          <tr>
