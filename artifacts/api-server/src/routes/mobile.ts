@@ -1492,7 +1492,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       const serial = p(req, "serial");
       const devicePath = z.string()
-        .regex(/^\/sdcard\/DCIM\/Camera\/equinox_[a-zA-Z0-9_.-]+$/, "Invalid manual media path")
+        .regex(/^\/sdcard\/DCIM\/Camera\/ig_[a-f0-9]{24}_[a-zA-Z0-9_.-]+$/, "Invalid manual media path")
         .parse(req.body?.devicePath);
       await android.removeDeviceFile(serial, devicePath);
       logger.info({ serial, devicePath }, "[manual-media] deleted image from phone");
@@ -7734,6 +7734,59 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
     }
 
+    // Keep Mobile Make a Post and Random Actions → Update Avatar on the same
+    // whole-image disruption path as Settings → Fix Images. This stage is
+    // intentionally applied after the other edits and uses the same Extreme
+    // composite/pattern amplitude.
+    try {
+      const input = await fsPromises.readFile(pushFilePath);
+      const meta = await sharp(input).metadata();
+      if (!meta.width || !meta.height) throw new Error("missing image dimensions");
+      const raw = await sharp(input).raw().toBuffer({ resolveWithObject: true });
+      const channels = raw.info.channels;
+      const patternScale = 0.75;
+      for (let y = 0; y < raw.info.height; y++) {
+        for (let x = 0; x < raw.info.width; x++) {
+          const phase = Math.sin(x * 0.37 + y * 0.19) + Math.cos(x * 0.11 - y * 0.29);
+          const offset = (y * raw.info.width + x) * channels;
+          const delta = (phase > 0 ? 8 : -8) * patternScale;
+          for (let channel = 0; channel < Math.min(3, channels); channel++) {
+            const channelDelta = delta + (channel === 1 ? Math.sign(phase) * 2 * patternScale : channel === 2 ? -Math.sign(phase) * 2 * patternScale : 0);
+            raw.data[offset + channel] = Math.max(0, Math.min(255, Math.round(raw.data[offset + channel] + channelDelta)));
+          }
+        }
+      }
+      let composite = sharp(raw.data, { raw: { width: raw.info.width, height: raw.info.height, channels } })
+        .modulate({ saturation: 0.9, brightness: 1.015 })
+        .resize(meta.width + 5, meta.height + 5, { fit: "fill", kernel: "lanczos3" })
+        .resize(meta.width, meta.height, { fit: "fill", kernel: "lanczos3" })
+        .resize(meta.width * 2, meta.height * 2, { fit: "fill", kernel: "lanczos3" })
+        .sharpen({ sigma: 2.1, m1: 0.65, m2: 1.0 });
+      const tempDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "equinox-mobile-composite-"));
+      const sourceExt = path.extname(fileName).toLowerCase();
+      const compositeExt = meta.format === "png" ? ".png" : meta.format === "webp" ? ".webp" : ".jpg";
+      const compositePath = path.join(tempDir, `composite${compositeExt}`);
+      if (compositeExt === ".png") await composite.png({ compressionLevel: 6 }).toFile(compositePath);
+      else if (compositeExt === ".webp") await composite.webp({ quality: 96 }).toFile(compositePath);
+      else await composite.jpeg({ quality: 96, mozjpeg: false }).toFile(compositePath);
+      tempDirs.push(tempDir);
+      tempFiles.push(compositePath);
+      const outputBytes = await verifyProcessedImage(compositePath, input, "Structured pixel disruption");
+      const outputAudit = await describeImage(compositePath, outputBytes);
+      pushFilePath = compositePath;
+      if (compositeExt === ".jpg" && sourceExt !== ".jpg" && sourceExt !== ".jpeg") {
+        pushFileName = `${path.basename(fileName, path.extname(fileName))}.jpg`;
+      }
+      onLog?.(`${prefix}: Structured pixel disruption verified — Extreme whole-image composite applied`);
+      onLog?.(`${prefix}: Structured pixel disruption audit — sourceSha256=${sourceAudit.sha256} processedSha256=${outputAudit.sha256} bytes=${outputAudit.bytes} format=${outputAudit.format} dimensions=${outputAudit.width}x${outputAudit.height}`);
+    } catch (e: any) {
+      await Promise.all(tempFiles.map(file => fsPromises.unlink(file).catch(() => {})));
+      tempFiles.length = 0;
+      await Promise.all(tempDirs.map(dir => fsPromises.rm(dir, { recursive: true, force: true }).catch(() => {})));
+      tempDirs.length = 0;
+      throw new Error(`Structured pixel disruption verification failed: ${e?.message ?? "unknown error"}`);
+    }
+
     const processedBytes = await fsPromises.readFile(pushFilePath);
     const processedAudit = await describeImage(pushFilePath, processedBytes);
     return {
@@ -8870,7 +8923,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return;
     }
 
-    // pushFileToDevice builds its own on-device path (equinox_<ts>_<name>) and
+    // pushFileToDevice builds its own unique on-device path (ig_<random-id>_<name>) and
     // returns it — capture the actual path so removeDeviceFile targets the
     // correct file.  Previously the caller constructed a separate devicePath
     // variable and passed it as the fileName argument, which caused the file

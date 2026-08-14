@@ -4,6 +4,7 @@ import path from "path";
 import fs from "fs";
 import os from "os";
 import zlib from "zlib";
+import { randomBytes } from "node:crypto";
 import { logger } from "../lib/logger";
 import * as recorder from "./sessionRecorder";
 
@@ -6875,7 +6876,8 @@ export async function pushFileToDevice(serial: string, localPath: string, fileNa
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const safeName = fileName.replace(/[^a-zA-Z0-9_.\-]/g, "_");
-  const devicePath = `/sdcard/DCIM/Camera/equinox_${Date.now()}_${safeName}`;
+  const uniqueId = randomBytes(12).toString("hex");
+  const devicePath = `/sdcard/DCIM/Camera/ig_${uniqueId}_${safeName}`;
   await runAdbStrict(adb, ["-s", serial, "push", localPath, devicePath], 20000);
   await scanMediaFile(serial, devicePath);
   return devicePath;
