@@ -1,3 +1,10 @@
+## [1.2.514] — 2026-08-14
+
+### Changed — GitHub Actions triggers
+
+- Disabled automatic Windows Installer workflow runs on pushes and tags.
+- Manual `workflow_dispatch` runs remain available when an installer build is needed.
+
 ## [1.2.513] — 2026-08-14
 
 ### Fixed — Follow Search detection
