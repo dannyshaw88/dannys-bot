@@ -22,7 +22,7 @@ import {
   ChevronLeft, ChevronRight, ChevronDown, Home, Power, Trash2,
   FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim,
   Palette, Plus, X, Keyboard,
-  Users, Globe, BarChart2, ClipboardList, Bug, ImagePlus, Tablet, MonitorSmartphone,
+  Users, Globe, BarChart2, ClipboardList, Bug, ImagePlus, Tablet, MonitorSmartphone, Settings2,
 } from "lucide-react";
 
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
