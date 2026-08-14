@@ -235,7 +235,11 @@ export default function ImagesPage(props: ImagesPageProps) {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              ...(item.sourcePath ? { localPath: item.sourcePath } : { imageBase64 }),
+               ...(localWaveSpeed
+                 ? { imageBase64 }
+                 : item.sourcePath
+                   ? { localPath: item.sourcePath }
+                   : { imageBase64 }),
                filename: processFilename,
               fixAiSlop,
               alterationEnabled,
