@@ -438,25 +438,45 @@ export default function ImagesPage(props: ImagesPageProps) {
           82% { opacity: 0.65; }
           100% { transform: translateY(360%); opacity: 0; }
         }
+        @keyframes image-processing-pixels {
+          0%, 100% { opacity: 0.25; background-position: 0 0, 14px 8px, 32px 2px, 51px 13px; }
+          35% { opacity: 0.9; background-position: 5px 3px, 10px 12px, 36px 8px, 47px 9px; }
+          70% { opacity: 0.45; background-position: 1px 10px, 18px 4px, 28px 12px, 55px 5px; }
+        }
         tr.image-processing-scan {
           width: 100%;
           max-width: 100%;
         }
-        tr.image-processing-scan > td {
-          background-color: rgba(34,211,238,0.06);
-          background-image: linear-gradient(
-            to bottom,
-            transparent 0%,
-            transparent 42%,
-            rgba(103,232,249,0.95) 49%,
-            rgba(255,255,255,0.95) 50%,
-            rgba(103,232,249,0.95) 51%,
-            transparent 58%,
-            transparent 100%
-          );
-          background-size: 100% 240%;
-          background-position: 0 -120%;
+        .image-processing-overlay {
+          position: absolute;
+          inset: 0;
+          z-index: 20;
+          pointer-events: none;
+          overflow: hidden;
+          border-radius: inherit;
+        }
+        .image-processing-overlay::before {
+          content: "";
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: 0;
+          height: 3px;
+          background: linear-gradient(90deg, transparent, rgba(103,232,249,0.95) 20%, #fff 50%, rgba(103,232,249,0.95) 80%, transparent);
+          box-shadow: 0 0 10px rgba(34,211,238,0.95), 0 0 24px rgba(34,211,238,0.6);
           animation: image-processing-scan-down 2.4s linear infinite;
+        }
+        .image-processing-overlay::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background-image:
+            radial-gradient(circle, rgba(255,255,255,0.95) 0 1px, transparent 1.8px),
+            radial-gradient(circle, rgba(103,232,249,0.9) 0 1.2px, transparent 2px),
+            radial-gradient(circle, rgba(165,243,252,0.95) 0 1px, transparent 1.8px),
+            radial-gradient(circle, rgba(34,211,238,0.9) 0 1.3px, transparent 2px);
+          background-size: 64px 48px, 71px 57px, 83px 61px, 97px 73px;
+          animation: image-processing-pixels 1.1s steps(5, end) infinite;
         }
       `}</style>
       <div className="p-4 lg:p-6 h-[calc(100vh-3.5rem)] min-h-[600px]">
@@ -698,8 +718,9 @@ export default function ImagesPage(props: ImagesPageProps) {
                    </div>
                  </div>
               ) : (
-                 <div className="rounded-xl border border-border/60 bg-background shadow-xs overflow-hidden animate-in fade-in duration-300">
-                   <div className="overflow-x-auto">
+                  <div className="relative rounded-xl border border-border/60 bg-background shadow-xs overflow-hidden animate-in fade-in duration-300">
+                    {items.some(item => item.status === "processing") && <div className="image-processing-overlay" aria-hidden="true" />}
+                    <div className="overflow-x-auto">
                      <table className="w-full table-fixed text-sm text-left border-collapse">
                        <thead className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider bg-muted/40 border-b border-border/60">
                          <tr>
