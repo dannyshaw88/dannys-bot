@@ -427,19 +427,26 @@ export default function ImagesPage(props: ImagesPageProps) {
                   {localDetectorPass && (
                     <div className="flex items-center justify-between gap-3">
                       <Label className="text-xs text-muted-foreground">Composite strength</Label>
-                      <select
-                        value={localDisruptionStrength}
-                         onChange={() => setLocalDisruptionStrength("extreme")}
-                        className="rounded-md border border-border bg-background px-2 py-1.5 text-xs"
+                      <button
+                        type="button"
+                        aria-pressed="true"
+                        onClick={() => setLocalDisruptionStrength("extreme")}
+                        className="rounded-md border border-cyan-500/60 bg-cyan-500/10 px-2.5 py-1.5 text-xs font-medium text-cyan-700 dark:text-cyan-300"
                       >
-                        <option value="extreme">Extreme</option>
-                      </select>
+                        Extreme
+                      </button>
                     </div>
                   )}
                    {localDetectorPass && (
                      <div className="flex items-center justify-between gap-3">
                        <Label className="text-xs text-muted-foreground">Pattern intensity</Label>
-                       <span className="rounded-md border border-border bg-background px-2 py-1.5 text-xs">Balanced</span>
+                       <button
+                         type="button"
+                         aria-pressed="true"
+                         className="rounded-md border border-cyan-500/60 bg-cyan-500/10 px-2.5 py-1.5 text-xs font-medium text-cyan-700 dark:text-cyan-300"
+                       >
+                         High
+                       </button>
                      </div>
                    )}
                   {localDetectorPass && (
