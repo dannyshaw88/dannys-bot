@@ -9352,8 +9352,9 @@ export async function findInstagramSearchBar(
 
     // The search control can render lower while Explore is transitioning
     // (especially after returning from a spread page). Keep this bounded to
-    // the upper 45% and require a search-labelled resource/text/description,
-    // so this cannot select an arbitrary Explore tile.
+    // the upper 45% and require a search-labelled resource/text/description.
+    // Do not require clickable/focusable: Instagram has exposed the visible
+    // Search node with both flags false on some renders.
     const topLimit = Math.round(screenH * 0.45);
 
     // Instagram's Explore screen exposes the real top search field with this
@@ -9393,10 +9394,6 @@ export async function findInstagramSearchBar(
       const mentionsSearch = /search/i.test(`${resourceId} ${label}`);
       const interactive = /(?:clickable|focusable)="true"/i.test(node);
       const matchedId = searchIds.find(id => resourceId.toLowerCase().includes(id));
-      // Instagram can expose the visible search control as a non-interactive
-      // container while its editable child is temporarily absent. A known
-      // search resource-id remains valid accessibility evidence.
-      if (!interactive && !isEditText && !matchedId) continue;
       // A generic EditText is not enough: Instagram can expose keyboard,
       // hidden form, or login fields in the same top region.
       if (!matchedId && !mentionsSearch) continue;
@@ -9439,9 +9436,6 @@ export async function findInstagramSearchBar(
       if (!bm) continue;
       const centerY = (Number(bm[2]) + Number(bm[4])) / 2;
       if (centerY > topLimit) continue;
-      // Must be interactive (clickable OR focusable). Some Instagram builds
-      // expose the visible Search container as clickable but not focusable.
-      if (!/(?:clickable|focusable)="true"/.test(xmlLine)) continue;
       // "search" must appear inside a text="" or content-desc="" attribute value
       // (not just anywhere in the line, e.g. a resource-id containing "search")
       if (!/(?:text|content-desc|hint)="[^"]*[Ss]earch[^"]*"/.test(xmlLine)) continue;
