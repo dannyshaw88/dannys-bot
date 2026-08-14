@@ -431,12 +431,12 @@ export default function ImagesPage(props: ImagesPageProps) {
   return (
     <PageShell>
       <style>{`
-        @keyframes image-processing-scan {
-          0% { transform: translateX(-115%); opacity: 0; }
+        @keyframes image-processing-scan-down {
+          0% { transform: translateY(-120%); opacity: 0; }
           12% { opacity: 1; }
-          50% { opacity: 0.85; }
-          88% { opacity: 1; }
-          100% { transform: translateX(115%); opacity: 0; }
+          48% { opacity: 0.95; }
+          82% { opacity: 0.65; }
+          100% { transform: translateY(360%); opacity: 0; }
         }
         @keyframes image-processing-glitter {
           0%, 100% { opacity: 0.08; transform: translate3d(0, 0, 0) scale(0.98); }
@@ -450,45 +450,32 @@ export default function ImagesPage(props: ImagesPageProps) {
           width: 100%;
           max-width: 100%;
           isolation: isolate;
-          overflow: hidden;
-          background: linear-gradient(90deg, rgba(34,211,238,0.04), rgba(34,211,238,0.12), rgba(34,211,238,0.04));
+          background-color: rgba(34,211,238,0.05);
+          background-image:
+            radial-gradient(circle at 7% 24%, rgba(165,243,252,0.9) 0 1px, transparent 1.8px),
+            radial-gradient(circle at 18% 72%, rgba(34,211,238,0.85) 0 1.4px, transparent 2px),
+            radial-gradient(circle at 31% 42%, rgba(255,255,255,0.8) 0 1px, transparent 1.7px),
+            radial-gradient(circle at 47% 82%, rgba(103,232,249,0.9) 0 1.5px, transparent 2.2px),
+            radial-gradient(circle at 64% 18%, rgba(165,243,252,0.85) 0 1px, transparent 1.8px),
+            radial-gradient(circle at 78% 60%, rgba(255,255,255,0.85) 0 1.2px, transparent 2px),
+            radial-gradient(circle at 93% 32%, rgba(34,211,238,0.9) 0 1.4px, transparent 2px);
+          background-size: 100% 100%;
+          animation: image-processing-glitter 1.15s steps(7, end) infinite;
         }
         tr.image-processing-scan::after {
           content: "";
           position: absolute;
           z-index: 4;
           pointer-events: none;
-          inset: 0;
-          width: 42%;
-          max-width: 42%;
-          background: linear-gradient(90deg, transparent, rgba(34,211,238,0.08) 25%, rgba(103,232,249,0.72) 50%, rgba(34,211,238,0.08) 75%, transparent);
-          box-shadow: 0 0 18px rgba(34,211,238,0.45), 0 0 42px rgba(34,211,238,0.2);
-          animation: image-processing-scan 1.8s ease-in-out infinite;
-        }
-        tr.image-processing-scan::before {
-          content: "";
-          position: absolute;
-          z-index: 4;
-          pointer-events: none;
-          inset: 0;
-          opacity: 0.5;
-          mix-blend-mode: screen;
-          background-image:
-            radial-gradient(circle at 4% 22%, rgba(165,243,252,0.95) 0 1px, transparent 1.8px),
-            radial-gradient(circle at 11% 76%, rgba(34,211,238,0.9) 0 1.4px, transparent 2px),
-            radial-gradient(circle at 19% 43%, rgba(255,255,255,0.9) 0 1px, transparent 1.7px),
-            radial-gradient(circle at 27% 84%, rgba(103,232,249,0.9) 0 1.6px, transparent 2.2px),
-            radial-gradient(circle at 35% 18%, rgba(165,243,252,0.9) 0 1px, transparent 1.8px),
-            radial-gradient(circle at 44% 61%, rgba(255,255,255,0.85) 0 1.3px, transparent 2px),
-            radial-gradient(circle at 52% 31%, rgba(34,211,238,0.95) 0 1.5px, transparent 2.2px),
-            radial-gradient(circle at 61% 89%, rgba(165,243,252,0.9) 0 1px, transparent 1.8px),
-            radial-gradient(circle at 69% 52%, rgba(255,255,255,0.92) 0 1.2px, transparent 2px),
-            radial-gradient(circle at 77% 14%, rgba(34,211,238,0.9) 0 1.5px, transparent 2.2px),
-            radial-gradient(circle at 84% 71%, rgba(165,243,252,0.95) 0 1px, transparent 1.8px),
-            radial-gradient(circle at 93% 36%, rgba(255,255,255,0.9) 0 1.4px, transparent 2px);
-          background-size: 100% 100%;
-          filter: drop-shadow(0 0 4px rgba(34,211,238,0.85));
-          animation: image-processing-glitter 1.15s steps(7, end) infinite;
+          left: 0;
+          right: 0;
+          top: 0;
+          height: 2px;
+          width: 100%;
+          max-width: 100%;
+          background: linear-gradient(90deg, transparent, rgba(103,232,249,0.95) 18%, rgba(255,255,255,0.95) 50%, rgba(103,232,249,0.95) 82%, transparent);
+          box-shadow: 0 0 10px rgba(34,211,238,0.9), 0 0 24px rgba(34,211,238,0.55);
+          animation: image-processing-scan-down 1.9s steps(9, end) infinite;
         }
         tr.image-processing-scan > td {
           position: relative;
@@ -737,7 +724,7 @@ export default function ImagesPage(props: ImagesPageProps) {
               ) : (
                  <div className="rounded-xl border border-border/60 bg-background shadow-xs overflow-hidden animate-in fade-in duration-300">
                    <div className="overflow-x-auto">
-                     <table className="w-full text-sm text-left border-collapse min-w-[600px]">
+                     <table className="w-full table-fixed text-sm text-left border-collapse min-w-[600px]">
                        <thead className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider bg-muted/40 border-b border-border/60">
                          <tr>
                            <th className="px-4 py-3 w-24 text-center">Original</th>
