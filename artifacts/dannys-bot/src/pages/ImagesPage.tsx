@@ -729,7 +729,7 @@ export default function ImagesPage(props: ImagesPageProps) {
             </div>
 
             {/* List Area */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 flex flex-col justify-end">
               {items.length === 0 ? (
                  <div className="h-full flex items-center justify-center min-h-[300px]">
                    <div className="flex flex-col items-center max-w-[320px] text-center animate-in fade-in zoom-in-95 duration-300">
