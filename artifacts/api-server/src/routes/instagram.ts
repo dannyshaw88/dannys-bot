@@ -6216,8 +6216,8 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
 
       if (detectorPass && disruptionStrategy === "combined" && output.length) {
         processingStage = "quality restoration";
-        const lowBlend = Math.max(0, Math.min(1, restorationLowBlend ?? 1));
-        const detailRetention = Math.max(0, Math.min(1.5, restorationDetail ?? 0.82));
+        const lowBlend = Math.max(0, Math.min(1, restorationLowBlend ?? 0.75));
+        const detailRetention = Math.max(0, Math.min(1.5, restorationDetail ?? 1));
         const blurRadius = Math.max(0.3, Math.min(5, restorationBlur ?? 2));
         // Reopen the encoded disrupted output. Restoration must not receive or
         // reference the original source buffer.
@@ -6226,16 +6226,21 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
         const disruptedRaw = await sharp(output)
           .resize(disruptedMeta.width, disruptedMeta.height, { fit: "fill", kernel: "lanczos3" })
           .raw().toBuffer({ resolveWithObject: true });
-        const disruptedLow = await sharp(output)
+        // Median cleanup removes isolated Extreme-pass speckles before the
+        // low-frequency base is rebuilt. This is intentionally derived only
+        // from the disrupted output, never from the source image.
+        const restorationBase = sharp(output).median(3);
+        const disruptedLow = await restorationBase
           .resize(disruptedMeta.width, disruptedMeta.height, { fit: "fill", kernel: "lanczos3" })
           .blur(blurRadius).raw().toBuffer();
+        const cleanedRaw = await restorationBase.raw().toBuffer({ resolveWithObject: true });
         const channels = disruptedRaw.info.channels;
         for (let i = 0; i < disruptedRaw.data.length; i++) {
           const channel = i % disruptedRaw.info.channels;
           if (channel >= channels || channel === 3) continue;
           const disruptedIndex = Math.min(i, disruptedLow.length - 1);
-          const highFrequency = disruptedRaw.data[i] - disruptedLow[disruptedIndex];
-          const blendedLow = disruptedRaw.data[i] * (1 - lowBlend) + disruptedLow[disruptedIndex] * lowBlend;
+          const highFrequency = cleanedRaw.data[i] - disruptedLow[disruptedIndex];
+          const blendedLow = cleanedRaw.data[i] * (1 - lowBlend) + disruptedLow[disruptedIndex] * lowBlend;
           disruptedRaw.data[i] = Math.max(0, Math.min(255, Math.round(blendedLow + highFrequency * detailRetention)));
         }
         const restored = sharp(disruptedRaw.data, {
@@ -6245,7 +6250,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
         if (restoredMeta.format === "png") output = await restored.png().toBuffer();
         else if (restoredMeta.format === "webp") output = await restored.webp({ quality: 96 }).toBuffer();
         else output = await restored.jpeg({ quality: 92, mozjpeg: false }).toBuffer();
-        logProcessing("quality restore — rebuilt from encoded disrupted output only; original source excluded");
+        logProcessing("quality restore — median denoise + multi-scale reconstruction from encoded disrupted output only");
       }
 
       const isJpeg = output.length >= 2 && output[0] === 0xff && output[1] === 0xd8;
