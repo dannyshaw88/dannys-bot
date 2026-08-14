@@ -6102,13 +6102,6 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       imageSettings,
       metadataCleanup,
       frequencyDisruption,
-      detectorPass,
-      disruptionStrategy,
-      disruptionStrength,
-      restorationLowBlend,
-      restorationDetail,
-      restorationBlur,
-      compositePattern,
     } = req.body as {
       imageBase64?: string;
       localPath?: string;
@@ -6120,13 +6113,6 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       imageSettings?: ImageFilterSettings;
       metadataCleanup?: boolean;
       frequencyDisruption?: boolean;
-      detectorPass?: boolean;
-      disruptionStrategy?: "frequency" | "chroma" | "resample" | "combined";
-      disruptionStrength?: "high" | "extreme";
-      restorationLowBlend?: number;
-      restorationDetail?: number;
-      restorationBlur?: number;
-      compositePattern?: "balanced";
     };
 
     if (!imageBase64 && !localPath) return res.status(400).json({ error: "No image provided" });
@@ -6238,70 +6224,6 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
           else if (stabilizationMeta.format === "gif") output = await stabilized.gif().toBuffer();
           else output = await stabilized.jpeg({ quality: 100, mozjpeg: false }).toBuffer();
           logProcessing(`Cleanup and stabilization verified — ${stabilizationMeta.width}×${stabilizationMeta.height}`);
-        }
-      }
-
-      if (detectorPass && output.length) {
-        processingStage = "detector-oriented scan/map/lift/verify";
-        const strategy = disruptionStrategy ?? "frequency";
-        const strength = disruptionStrength ?? "balanced";
-        const strengthConfig = {
-          extreme: { threshold: 0, delta: 8, saturation: 0.9, brightness: 1.015, step: 5, sharpen: 2.1 },
-        }[strength];
-        logProcessing("scan — loading pixel buffer and locating high-frequency signal");
-        const detectorMeta = await sharp(output).metadata();
-        if (detectorMeta.width && detectorMeta.height) {
-          logProcessing("map — isolating distributed high-frequency regions");
-          let detectorImage = sharp(output);
-          if (strategy === "combined") {
-            const raw = await sharp(output).raw().toBuffer({ resolveWithObject: true });
-            const channels = raw.info.channels;
-            for (let y = 0; y < raw.info.height; y++) {
-              for (let x = 0; x < raw.info.width; x++) {
-                const phase = Math.sin(x * 0.37 + y * 0.19) + Math.cos(x * 0.11 - y * 0.29);
-                if (Math.abs(phase) < strengthConfig.threshold) continue;
-                const offset = (y * raw.info.width + x) * channels;
-                const patternScale = 0.75;
-                const delta = (phase > 0 ? strengthConfig.delta : -strengthConfig.delta) * patternScale;
-                for (let channel = 0; channel < Math.min(3, channels); channel++) {
-                  // Extreme intentionally perturbs every pixel and each color
-                  // channel; it is not a sparse signal-region pass.
-                  const channelDelta = delta + (channel === 1 ? Math.sign(phase) * 2 : channel === 2 ? -Math.sign(phase) * 2 : 0);
-                  raw.data[offset + channel] = Math.max(0, Math.min(255, raw.data[offset + channel] + channelDelta));
-                }
-              }
-            }
-            detectorImage = sharp(raw.data, {
-              raw: { width: raw.info.width, height: raw.info.height, channels },
-            });
-          }
-          if (strategy === "chroma") {
-            detectorImage = detectorImage.modulate({ saturation: 1.012, brightness: 1.002 });
-          } else if (strategy === "resample") {
-            detectorImage = detectorImage.resize(detectorMeta.width + 1, detectorMeta.height + 1, { fit: "fill", kernel: "lanczos3" })
-              .resize(detectorMeta.width, detectorMeta.height, { fit: "fill", kernel: "lanczos3" });
-          } else if (strategy === "combined") {
-            detectorImage = detectorImage.modulate({ saturation: strengthConfig.saturation, brightness: strengthConfig.brightness })
-              .resize(detectorMeta.width + strengthConfig.step, detectorMeta.height + strengthConfig.step, { fit: "fill", kernel: "lanczos3" })
-              .resize(detectorMeta.width, detectorMeta.height, { fit: "fill", kernel: "lanczos3" })
-              .resize(detectorMeta.width * 2, detectorMeta.height * 2, { fit: "fill", kernel: "lanczos3" })
-              .sharpen({ sigma: strengthConfig.sharpen, m1: 0.65, m2: 1.0 });
-          } else {
-            detectorImage = detectorImage.resize(detectorMeta.width * 2, detectorMeta.height * 2, {
-              fit: "fill",
-              kernel: "lanczos3",
-            }).sharpen({ sigma: 1.1, m1: 0.8, m2: 1.2 });
-          }
-          const detectorFormat = detectorMeta.format;
-          if (detectorFormat === "png") output = await detectorImage.png({ compressionLevel: 6 }).toBuffer();
-          else if (detectorFormat === "webp") output = await detectorImage.webp({ quality: 96 }).toBuffer();
-          else output = await detectorImage.jpeg({ quality: 96, mozjpeg: false }).toBuffer();
-          logProcessing(strategy === "combined"
-            ? `lift — applied ${strength} composite: pixel micro-jitter + chroma + resample + frequency rewrite`
-            : `lift — applied ${strategy} whole-image rewrite`);
-          const verify = await sharp(output).metadata();
-          if (!verify.width || !verify.height) throw new Error("Detector-oriented output failed verification");
-          logProcessing("verify — re-checking detector pass completed");
         }
       }
 

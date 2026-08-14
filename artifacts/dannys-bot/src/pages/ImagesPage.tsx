@@ -249,9 +249,6 @@ export default function ImagesPage(props: ImagesPageProps) {
               imageSettings,
                metadataCleanup: localMetadataCleanup,
                frequencyDisruption: localFrequencyDisruption,
-                detectorPass: true,
-               disruptionStrategy: "combined",
-                disruptionStrength: "extreme",
             }),
           });
           const result = await response.json().catch(() => null);
