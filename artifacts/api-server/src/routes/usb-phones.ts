@@ -354,6 +354,14 @@ router.get("/mobile/usb-phones", (_req, res) => {
     });
   }
 
+  if (phones.length === 0) {
+    console.warn(
+      `[device-watchdog] usb-phones returned zero devices ` +
+      `(adbFound=${adbPath !== null}, adbPath=${adbPath ?? "none"}, ` +
+      `rawOutputBytes=${diag.rawOutput.length}, fakeCount=${fakeCount}, fakeList=${fakeList.length})`,
+    );
+  }
+
   res.json({
     // Treat fake phones as "adb found" so the UI doesn't block behind the
     // "ADB not found" gate when testing without real hardware.

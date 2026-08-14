@@ -1020,14 +1020,38 @@ export function MobileDevicesPage() {
   const refreshDevices = useCallback(async () => {
     try {
       const d = await fetchFarmDevices();
-      setDevices(d);
-    } catch { /* ignore */ }
+      setDevices(previous => {
+        if (previous.length > 0 && d.length === 0) {
+          console.error(
+            `[device-watchdog] farm device list dropped from ${previous.length} to 0; ` +
+            "preserving the last known device list",
+          );
+          return previous;
+        }
+        return d;
+      });
+    } catch (error) {
+      console.error("[device-watchdog] farm device refresh failed; preserving last known list", error);
+    }
     finally { setLoadingDb(false); }
   }, []);
 
   const refreshUsb = useCallback(async () => {
-    const p = await fetchUsbPhones().catch(() => []);
-    setUsbPhones(p);
+    try {
+      const p = await fetchUsbPhones();
+      setUsbPhones(previous => {
+        if (previous.length > 0 && p.length === 0) {
+          console.error(
+            `[device-watchdog] USB device list dropped from ${previous.length} to 0; ` +
+            "preserving the last known USB list",
+          );
+          return previous;
+        }
+        return p;
+      });
+    } catch (error) {
+      console.error("[device-watchdog] USB device refresh failed; preserving last known list", error);
+    }
   }, []);
 
   const refreshCycleActive = useCallback(async () => {

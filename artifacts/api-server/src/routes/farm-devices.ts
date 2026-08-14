@@ -47,6 +47,9 @@ router.get("/mobile/farm-devices", (_req, res) => {
   const rows = sqlite
     .prepare("SELECT * FROM phone_farm_devices ORDER BY slot_index ASC")
     .all();
+  if (rows.length === 0) {
+    console.warn("[device-watchdog] farm-devices database query returned zero registered devices");
+  }
   res.json({ devices: rows.map(rowToDevice) });
 });
 
