@@ -41,6 +41,44 @@ type CompiledMalesOnlyName = {
 
 const malesOnlyMatcherCache = new Map<string, CompiledMalesOnlyName[]>();
 
+// Farm thumbnails and inspector screenshots can poll at the same time. Never
+// start two ADB screencap processes for one device: on Windows/USB this can
+// serialize inside ADB and freeze every queued request for ~30 seconds.
+const screencapInFlight = new Map<string, Promise<Buffer>>();
+const SCREENCAP_TIMEOUT_MS = 8_000;
+
+function capturePng(adbPath: string, serial: string): Promise<Buffer> {
+  const existing = screencapInFlight.get(serial);
+  if (existing) return existing;
+
+  const job = new Promise<Buffer>((resolve, reject) => {
+    const child = spawn(adbPath, ["-s", serial, "exec-out", "screencap", "-p"]);
+    const chunks: Buffer[] = [];
+    const timer = setTimeout(() => {
+      try { child.kill(); } catch {}
+      reject(new Error(`screencap timed out after ${SCREENCAP_TIMEOUT_MS}ms`));
+    }, SCREENCAP_TIMEOUT_MS);
+    child.stdout.on("data", (d: Buffer) => chunks.push(d));
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (code !== 0) {
+        reject(new Error(`screencap exited with code ${code ?? "null"}`));
+        return;
+      }
+      resolve(Buffer.concat(chunks));
+    });
+  }).finally(() => {
+    if (screencapInFlight.get(serial) === job) screencapInFlight.delete(serial);
+  });
+
+  screencapInFlight.set(serial, job);
+  return job;
+}
+
 function getCompiledMalesOnlyNames(rawNames: string): CompiledMalesOnlyName[] {
   const cached = malesOnlyMatcherCache.get(rawNames);
   if (cached) return cached;
@@ -13484,22 +13522,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const tools = android.detectToolset();
       if (!tools.adb.found || !tools.adb.path) { res.status(503).json({ ok: false, error: "adb not found" }); return; }
       const adbPath = tools.adb.path;
-      const chunks: Buffer[] = [];
-      let stderrOut = "";
-      await new Promise<void>((resolve, reject) => {
-        const child = spawn(adbPath, ["-s", serial, "exec-out", "screencap", "-p"]);
-        child.stdout.on("data", (d: Buffer) => chunks.push(d));
-        child.stderr?.on("data", (d: Buffer) => { stderrOut += d.toString(); });
-        child.on("error", reject);
-        child.on("close", () => resolve());
-      });
-      let frame = Buffer.concat(chunks);
+       let frame = await capturePng(adbPath, serial);
       // Strip CRLF line endings that some Windows ADB versions inject
       if (frame.length > 8 && !isPng(frame)) {
         frame = stripCrlf(frame);
       }
       if (!isPng(frame)) {
-        res.json({ ok: false, error: `Not a valid PNG (${frame.length} bytes)${stderrOut ? " — " + stderrOut.trim() : ""}` });
+         res.json({ ok: false, error: `Not a valid PNG (${frame.length} bytes)` });
         return;
       }
       res.json({ ok: true, image: "data:image/png;base64," + frame.toString("base64") });
@@ -13518,14 +13547,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const tools = android.detectToolset();
       if (!tools.adb.found || !tools.adb.path) { res.status(503).end(); return; }
       const adbPath = tools.adb.path;
-      const chunks: Buffer[] = [];
-      await new Promise<void>((resolve, reject) => {
-        const child = spawn(adbPath, ["-s", serial, "exec-out", "screencap", "-p"]);
-        child.stdout.on("data", (d: Buffer) => chunks.push(d));
-        child.on("error", reject);
-        child.on("close", () => resolve());
-      });
-      let frame = Buffer.concat(chunks);
+       let frame = await capturePng(adbPath, serial);
       if (frame.length > 8 && !isPng(frame)) frame = stripCrlf(frame);
       if (!isPng(frame)) { res.status(502).end(); return; }
       res.set({
