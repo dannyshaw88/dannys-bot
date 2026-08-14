@@ -478,7 +478,7 @@ export default function ImagesPage(props: ImagesPageProps) {
             radial-gradient(circle, rgba(255,255,255,0.8) 0 0.8px, transparent 1.6px);
           background-size: 47px 41px, 61px 53px, 73px 59px, 89px 67px;
           animation-name: image-processing-pixels;
-          animation-duration: var(--pixel-duration, 1.1s);
+          animation-duration: var(--pixel-duration, 0.65s);
           animation-timing-function: steps(5, end);
           animation-delay: var(--pixel-delay, 0s);
           animation-iteration-count: infinite;
@@ -731,7 +731,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                  </div>
               ) : (
                   <div className="relative rounded-xl border border-border/60 bg-background shadow-xs overflow-hidden animate-in fade-in duration-300">
-                    <div className="overflow-x-auto">
+                    <div className="h-[390px] max-h-[390px] overflow-auto">
                      <table className="w-full table-fixed text-sm text-left border-collapse">
                        <thead className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider bg-muted/40 border-b border-border/60">
                          <tr>
@@ -751,7 +751,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                                style={item.status === "processing" ? {
                                  "--scan-duration": `${1.05 + ((item.id.charCodeAt(0) + item.id.charCodeAt(item.id.length - 1)) % 11) * 0.19}s`,
                                  "--pixel-delay": `-${((item.id.charCodeAt(1) || 0) % 17) * 0.11}s`,
-                                 "--pixel-duration": `${0.72 + ((item.id.charCodeAt(2) || 0) % 13) * 0.17}s`
+                                 "--pixel-duration": `${0.42 + ((item.id.charCodeAt(2) || 0) % 9) * 0.09}s`
                                } as React.CSSProperties : undefined}
                              >
                               <td className="px-4 py-3">
