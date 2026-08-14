@@ -6032,6 +6032,9 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       seed: z.number().int().default(-1),
       outputFormat: z.enum(["jpeg", "png", "webp"]).default("jpeg"),
     }).parse(req.body);
+    if (!body.prompt.trim()) {
+      return res.status(400).json({ error: "Prompt required" });
+    }
     try {
       const raw = Buffer.from(body.imageBase64.replace(/^data:[^;]+;base64,/, ""), "base64");
       if (!raw.length) throw new Error("Image data was empty");
@@ -6055,7 +6058,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
         method: "POST",
         headers: waveSpeedHeaders(key),
         body: JSON.stringify({
-          ...(body.prompt.trim() ? { prompt: body.prompt.trim() } : {}),
+          prompt: body.prompt.trim(),
           image: ticket.data.download_url,
           size: `${width}*${height}`,
           strength: body.strength,

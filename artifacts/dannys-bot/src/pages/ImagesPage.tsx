@@ -447,7 +447,10 @@ export default function ImagesPage(props: ImagesPageProps) {
         }
         tr.image-processing-scan {
           position: relative;
+          width: 100%;
+          max-width: 100%;
           isolation: isolate;
+          overflow: hidden;
           background: linear-gradient(90deg, rgba(34,211,238,0.04), rgba(34,211,238,0.12), rgba(34,211,238,0.04));
         }
         tr.image-processing-scan::after {
@@ -457,6 +460,7 @@ export default function ImagesPage(props: ImagesPageProps) {
           pointer-events: none;
           inset: 0;
           width: 42%;
+          max-width: 42%;
           background: linear-gradient(90deg, transparent, rgba(34,211,238,0.08) 25%, rgba(103,232,249,0.72) 50%, rgba(34,211,238,0.08) 75%, transparent);
           box-shadow: 0 0 18px rgba(34,211,238,0.45), 0 0 42px rgba(34,211,238,0.2);
           animation: image-processing-scan 1.8s ease-in-out infinite;
@@ -489,6 +493,7 @@ export default function ImagesPage(props: ImagesPageProps) {
         tr.image-processing-scan > td {
           position: relative;
           z-index: 5;
+          background-color: transparent;
         }
       `}</style>
       <div className="p-4 lg:p-6 h-[calc(100vh-3.5rem)] min-h-[600px]">
@@ -526,8 +531,8 @@ export default function ImagesPage(props: ImagesPageProps) {
                     {localWaveSpeed && (
                       <div className="space-y-3 rounded-md border border-border/60 bg-background/60 p-3">
                         <label className="block text-[11px] text-muted-foreground">
-                          Prompt
-                          <Input value={wavePrompt} onChange={(e) => setWavePrompt(e.target.value)} className="mt-1 h-8 text-xs" />
+                          Prompt (required)
+                          <Input value={wavePrompt} onChange={(e) => setWavePrompt(e.target.value)} className="mt-1 h-8 text-xs" aria-required="true" />
                         </label>
                         <label className="block text-[11px] text-muted-foreground">
                           Strength: {waveStrength.toFixed(2)}
@@ -702,7 +707,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                       setNotice("Pipeline started");
                       handleStartProcessing();
                     }}
-                    className="shadow-xs h-8 bg-foreground text-background hover:bg-foreground/90 border-0"
+                    className="shadow-xs h-8 bg-cyan-500 text-slate-950 hover:bg-cyan-400 border-0"
                   >
                     <Play className="w-3.5 h-3.5 mr-1.5 fill-current" />
                     Run Pipeline
