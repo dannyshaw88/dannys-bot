@@ -4670,9 +4670,18 @@ function CopySettingsDialog({
     setCopying(true);
     setResult(null);
     const partial: Record<string, unknown> = {};
+    const effectiveSelectedSubKeys = selectedSubKeys.size > 0
+      ? selectedSubKeys
+      : new Set(
+        COPY_SECTIONS.flatMap(section =>
+          section.sub
+            .filter(sub => sub.fields.every(field => COPYABLE_ACCOUNT_SPECIFIC_FIELDS.has(field)))
+            .map(sub => sub.key),
+        ),
+      );
     for (const section of COPY_SECTIONS) {
       for (const sub of section.sub) {
-        if (selectedSubKeys.has(sub.key)) {
+        if (effectiveSelectedSubKeys.has(sub.key)) {
           for (const field of sub.fields) {
             if (COPYABLE_ACCOUNT_SPECIFIC_FIELDS.has(field)) {
               partial[field] = (settings as unknown as Record<string, unknown>)[field];
@@ -4882,7 +4891,7 @@ function CopySettingsDialog({
           )}
           <Button variant="secondary" onClick={onClose} disabled={copying}>Cancel</Button>
           <Button onClick={handleCopy}
-            disabled={copying || selectedTargets.length === 0 || selectedSubKeys.size === 0}
+            disabled={copying || selectedTargets.length === 0}
             style={result === "ok" ? { background: "#16a34a", borderColor: "#16a34a" } : undefined}>
             {result === "ok"
               ? <CheckCircle2 className="w-4 h-4 text-white" />
