@@ -176,15 +176,15 @@ function CopyTrustScoreDialog({
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v && !copying) onOpenChange(v); }}>
-      <DialogContent style={{ maxWidth: "52.8rem", maxHeight: "65vh", display: "flex", flexDirection: "column", padding: 0, overflow: "hidden" }}>
+      <DialogContent style={{ maxWidth: "52.8rem", maxHeight: "75vh", display: "flex", flexDirection: "column", padding: "1.5rem", overflow: "hidden" }}>
         <DialogHeader>
-          <DialogTitle>Copy Settings to Other Tiers</DialogTitle>
+          <DialogTitle>Copy Settings to Other Trustscores</DialogTitle>
         </DialogHeader>
 
-        <div className="flex gap-8 mt-2 flex-1 min-h-0">
+        <div className="flex gap-8 mt-4 flex-1 min-h-0">
 
           {/* LEFT: trust score tier targets */}
-          <div className="w-[22rem] shrink-0 flex flex-col min-h-0">
+          <div className="w-[16.5rem] shrink-0 flex flex-col min-h-0">
             <div className="flex items-center justify-between mb-2 shrink-0">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Copy to</span>
               <div className="flex gap-1">
@@ -310,7 +310,7 @@ function CopyTrustScoreDialog({
 
         </div>
 
-        <div className="flex items-center justify-end gap-3 mt-4 pt-4 border-t border-border shrink-0">
+        <div className="flex items-center justify-end gap-3 mt-6 pt-5 border-t border-border shrink-0">
           {result && result !== "ok" && (
             <span className="text-xs mr-auto text-destructive">{result}</span>
           )}
