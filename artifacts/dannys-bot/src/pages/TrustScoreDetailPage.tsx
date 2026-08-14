@@ -40,6 +40,15 @@ function CopyTrustScoreDialog({
   const allLevels   = getTrustLevels();
   const tierTargets = allLevels.filter(l => l.id !== sourceTrustScoreId);
   const sourceLevel = allLevels.find(l => l.id === sourceTrustScoreId);
+  const displayCopySections = [...COPY_SECTIONS].sort((a, b) => {
+    const order = ["runInterval", "feed", "explore"];
+    const ai = order.indexOf(a.key);
+    const bi = order.indexOf(b.key);
+    if (ai === -1 && bi === -1) return 0;
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
 
   const [selectedTiers,   setSelectedTiers]   = useState<Set<string>>(new Set());
   const [selectedSubKeys, setSelectedSubKeys] = useState<Set<string>>(new Set());
@@ -257,7 +266,7 @@ function CopyTrustScoreDialog({
               </div>
             </div>
             <div className="overflow-y-auto flex-1 space-y-1 pr-1">
-              {COPY_SECTIONS.map(section => {
+              {displayCopySections.map(section => {
                 const state = sectionState(section);
                 const sectionCopyable = section.sub.some(sub =>
                   sub.fields.every(field => !TRUST_SCORE_TEMPLATE_LOCKED_FIELDS.has(field)),
