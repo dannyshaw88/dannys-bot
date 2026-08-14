@@ -55,6 +55,7 @@ const execAsync = promisify(exec);
 
 let serverPort = 0;
 let serverProc: ChildProcess | null = null;
+let databaseDirWatcher: fs.FSWatcher | null = null;
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
@@ -325,11 +326,40 @@ function startServer(port: number, logPath: string, ebIpcPort = 0): void {
   // Open fresh log file (flags:"w") and write a session-start marker so sessions
   // are clearly separated even when multiple log files are present.
   const logStream = fs.createWriteStream(logPath, { flags: "w" });
-  const sessionStart = `[${new Date().toISOString()}] server-start: session started (v${app.getVersion()})\n`;
+  const dbStat = (() => {
+    try {
+      const s = fs.statSync(dbPath);
+      return `exists=true size=${s.size} mtime=${s.mtime.toISOString()}`;
+    } catch {
+      return "exists=false";
+    }
+  })();
+  const sessionStart = `[${new Date().toISOString()}] server-start: session started (v${app.getVersion()}) electronPid=${process.pid} apiDbPath=${dbPath} apiDb=${dbStat}\n`;
   logStream.write(sessionStart);
   serverProc.stdout?.on("data", (d: Buffer) => logStream.write(d));
   serverProc.stderr?.on("data", (d: Buffer) => logStream.write(d));
-  serverProc.on("exit", () => logStream.end());
+  try {
+    databaseDirWatcher?.close();
+    databaseDirWatcher = fs.watch(path.dirname(dbPath), (_eventType, filename) => {
+      if (!filename || !String(filename).toLowerCase().startsWith("database.db")) return;
+      let state = "missing";
+      try {
+        const s = fs.statSync(path.join(path.dirname(dbPath), String(filename)));
+        state = `size=${s.size} mtime=${s.mtime.toISOString()}`;
+      } catch {}
+      const line = `[${new Date().toISOString()}] [DB-WATCH] file=${String(filename)} state=${state} electronPid=${process.pid} apiPid=${serverProc?.pid ?? "none"}\n`;
+      logStream.write(line);
+      appendToMainLog(line.trim());
+    });
+  } catch (error) {
+    logStream.write(`[${new Date().toISOString()}] [DB-WATCH] failed path=${dbPath} error=${String(error)}\n`);
+  }
+  serverProc.on("exit", (code, signal) => {
+    logStream.write(`[${new Date().toISOString()}] server-exit apiPid=${serverProc?.pid ?? "unknown"} code=${code ?? "null"} signal=${signal ?? "null"}\n`);
+    databaseDirWatcher?.close();
+    databaseDirWatcher = null;
+    logStream.end();
+  });
 }
 
 function restartApp(): void {

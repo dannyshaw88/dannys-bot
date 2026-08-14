@@ -6,6 +6,7 @@ import * as schema from "./schema";
 
 const dbPath = process.env.DATABASE_PATH || path.join(process.cwd(), "database.db");
 
+console.log(`[db-debug] opening database path=${dbPath} pid=${process.pid} cwd=${process.cwd()}`);
 const sqlite: DatabaseType = new Database(dbPath);
 sqlite.pragma("journal_mode = WAL");
 sqlite.pragma("foreign_keys = ON");
@@ -291,6 +292,13 @@ sqlite.exec(`
     added_at TEXT NOT NULL
   );
 `);
+
+try {
+  const deviceCount = (sqlite.prepare("SELECT COUNT(*) AS count FROM phone_farm_devices").get() as { count: number }).count;
+  console.log(`[db-debug] phone_farm_devices count=${deviceCount} path=${dbPath}`);
+} catch (error) {
+  console.error(`[db-debug] phone_farm_devices count failed path=${dbPath}`, error);
+}
 
 // Seed owner license account if not already present.
 // Uses INSERT OR IGNORE so the statement is idempotent — safe even when the
