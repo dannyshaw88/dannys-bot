@@ -1591,11 +1591,12 @@ function AdminUsersSection() {
                     </div>
                   </div>
                   <Switch checked={!!u.active} onCheckedChange={() => handleToggleActive(u)} className="scale-75" />
-                  {u.is_admin === 0 && (
-                    <>
+                      <>
+                       {u.is_admin === 0 && (
                       <button onClick={() => { setEditingId(u.id); setEditForm({ tier: u.tier, accountLimit: u.account_limit, expiresAt: u.expires_at ? u.expires_at.split("T")[0] : "", password: "" }); }} className="p-1 hover:bg-muted/50 rounded transition-colors text-muted-foreground hover:text-foreground">
                         <Pencil className="w-3 h-3" />
                       </button>
+                       )}
                       <button
                         type="button"
                         onClick={() => handleDelete(u)}
@@ -1606,8 +1607,7 @@ function AdminUsersSection() {
                         <Trash2 className="w-3 h-3" />
                         Delete
                       </button>
-                    </>
-                  )}
+                      </>
                 </div>
               )}
             </div>
