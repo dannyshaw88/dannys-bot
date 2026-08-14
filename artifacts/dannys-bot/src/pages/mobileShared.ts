@@ -573,7 +573,17 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'jitterVisitSaved',     label: 'Visit Saved %',              fields: ['visitSavedPctMin','visitSavedPctMax'] },
     { key: 'jitterVisitSettings',  label: 'Visit Random Settings %',   fields: ['visitSettingsPctMin','visitSettingsPctMax'] },
     { key: 'jitterAppSwitch',      label: 'App Switch %',              fields: ['appSwitchPctMin','appSwitchPctMax'] },
-    { key: 'jitterUpdateProfilePic', label: 'Update Profile Picture',  fields: ['updateProfilePicActivatePctMin','updateProfilePicActivatePctMax'] },
+    { key: 'jitterUpdateProfilePic', label: 'Update Profile Picture',  fields: [
+      'updateProfilePicActivatePctMin',
+      'updateProfilePicActivatePctMax',
+      'updateProfilePicAlterationEnabled',
+      'updateProfilePicAlterationLevel',
+      'updateProfilePicImageSettingsEnabled',
+      'updateProfilePicImageSettings',
+      'updateProfilePicFixAiSlop',
+      'updateProfilePicMetadataCleanup',
+      'updateProfilePicFrequencyDisruption',
+    ] },
     { key: 'trustScoreUpdateProfilePicDisableAfterUsed', label: 'Update Profile Picture — Disable After Used', fields: ['updateProfilePicDisableAfterUsed'] },
     { key: 'jitterUpdateProfilePicFolder', label: 'Profile-picture directory', fields: ['updateProfilePicFolderPath'] },
     { key: 'jitterUpdateProfilePicImage', label: 'Update Profile Picture image settings', fields: [
