@@ -5141,6 +5141,7 @@ export function AutomationSettingsPanel({
   const [loadingOverspill, setLoadingOverspill] = useState(false);
   // Make a Post UI local state
   const [makePostImageSettingsOpen, setMakePostImageSettingsOpen] = useState(false);
+  const [updateProfilePicImageSettingsOpen, setUpdateProfilePicImageSettingsOpen] = useState(false);
   const [postStoryImageSettingsOpen, setPostStoryImageSettingsOpen] = useState(false);
   const [showPostedMedia, setShowPostedMedia] = useState(false);
   const [postedMediaEntries, setPostedMediaEntries] = useState<{
@@ -6855,7 +6856,19 @@ export function AutomationSettingsPanel({
             {/* ── Update Avatar + Update Bio ── */}
             <div className="flex items-end gap-2 flex-nowrap" style={{ marginTop: "20px" }}>
               <div className="space-y-1.5 shrink-0">
-                <span className="text-sm text-muted-foreground select-none">Update Avatar&nbsp;&nbsp;Activation %</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm text-muted-foreground select-none">Update Avatar&nbsp;&nbsp;Activation %</span>
+                  <button
+                    type="button"
+                    title="Configure Update Avatar image filters"
+                    aria-label="Configure Update Avatar image filters"
+                    disabled={fieldDisabled("updateProfilePicImageSettings")}
+                    onClick={() => setUpdateProfilePicImageSettingsOpen(true)}
+                    className="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-40"
+                  >
+                    <Settings2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
                 <div className="flex items-center gap-2">
                   <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                     value={settings.updateProfilePicActivatePctMin}
@@ -6895,6 +6908,27 @@ export function AutomationSettingsPanel({
                   >
                     Assign
                   </button>
+                  <input
+                    type="checkbox"
+                    checked={settings.updateProfilePicAlterationEnabled}
+                    onChange={e => setSettings(s => ({ ...s, updateProfilePicAlterationEnabled: e.target.checked }))}
+                    disabled={fieldDisabled("updateProfilePicAlterationEnabled")}
+                    className="w-3.5 h-3.5 accent-primary"
+                    aria-label="Enable Update Avatar alteration"
+                  />
+                  <div className="flex gap-1">
+                    {(["small", "medium", "high"] as const).map(level => (
+                      <button
+                        key={level}
+                        type="button"
+                        disabled={fieldDisabled("updateProfilePicAlterationLevel") || !settings.updateProfilePicAlterationEnabled}
+                        onClick={() => setSettings(s => ({ ...s, updateProfilePicAlterationLevel: level }))}
+                        className={`h-7 px-2 text-[11px] rounded border capitalize ${settings.updateProfilePicAlterationLevel === level ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border text-muted-foreground"}`}
+                      >
+                        {level}
+                      </button>
+                    ))}
+                  </div>
                   <div className="flex items-center gap-1.5">
                     <input
                       type="checkbox"
@@ -7227,6 +7261,14 @@ export function AutomationSettingsPanel({
           settings={settings.makePostImageSettings}
           alterationLevel={settings.makePostAlterationLevel}
           onSave={saved => setSettings(s => ({ ...s, makePostImageSettings: saved }))}
+        />
+
+        <ImageSettingsDialog
+          open={updateProfilePicImageSettingsOpen}
+          onClose={() => setUpdateProfilePicImageSettingsOpen(false)}
+          settings={settings.updateProfilePicImageSettings}
+          alterationLevel={settings.updateProfilePicAlterationLevel}
+          onSave={saved => setSettings(s => ({ ...s, updateProfilePicImageSettings: saved }))}
         />
 
         {/* ── Post a Story — standalone Story publisher. The directory is

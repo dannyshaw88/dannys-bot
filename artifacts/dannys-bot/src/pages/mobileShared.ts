@@ -218,6 +218,10 @@ export interface AutomationSettingsData {
   updateProfilePicActivatePctMin: number; updateProfilePicActivatePctMax: number;
   updateProfilePicFolderPath: string;
   updateProfilePicDisableAfterUsed: boolean;
+  updateProfilePicAlterationEnabled: boolean;
+  updateProfilePicAlterationLevel: "small" | "medium" | "high";
+  updateProfilePicImageSettingsEnabled: boolean;
+  updateProfilePicImageSettings: ImageFilterSettings;
   updateBioActivatePctMin: number; updateBioActivatePctMax: number;
   updateBioText: string;
   updateBioDisableAfterUsed: boolean;
@@ -346,6 +350,16 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   updateProfilePicActivatePctMin: 0, updateProfilePicActivatePctMax: 0,
   updateProfilePicFolderPath: "",
   updateProfilePicDisableAfterUsed: false,
+  updateProfilePicAlterationEnabled: true,
+  updateProfilePicAlterationLevel: "small",
+  updateProfilePicImageSettingsEnabled: true,
+  updateProfilePicImageSettings: {
+    contrast: { enabled: true, min: 5, max: 250 },
+    brightness: { enabled: true, min: 5, max: 250 },
+    noise: { enabled: true, min: 5, max: 15 },
+    sharpen: { enabled: true, min: 1.0, max: 2.0 },
+    pixelate: { enabled: true, min: 0.9, max: 2.1 },
+  },
   updateBioActivatePctMin: 0, updateBioActivatePctMax: 0,
   updateBioText: "",
   updateBioDisableAfterUsed: false,
@@ -399,6 +413,10 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
   "updateProfilePicActivatePctMin",
   "updateProfilePicActivatePctMax",
   "updateProfilePicFolderPath",
+  "updateProfilePicAlterationEnabled",
+  "updateProfilePicAlterationLevel",
+  "updateProfilePicImageSettingsEnabled",
+  "updateProfilePicImageSettings",
   "updateBioActivatePctMin",
   "updateBioActivatePctMax",
   "updateBioText",
@@ -431,6 +449,10 @@ export const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
   "updateProfilePicActivatePctMin",
   "updateProfilePicActivatePctMax",
   "updateProfilePicFolderPath",
+  "updateProfilePicAlterationEnabled",
+  "updateProfilePicAlterationLevel",
+  "updateProfilePicImageSettingsEnabled",
+  "updateProfilePicImageSettings",
   "updateBioActivatePctMin",
   "updateBioActivatePctMax",
   "updateBioText",

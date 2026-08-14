@@ -473,6 +473,10 @@ type AutomationSettings = {
   updateProfilePicActivatePctMax?: number;
   updateProfilePicFolderPath?: string;
   updateProfilePicDisableAfterUsed?: boolean;
+  updateProfilePicAlterationEnabled?: boolean;
+  updateProfilePicAlterationLevel?: "small" | "medium" | "high";
+  updateProfilePicImageSettingsEnabled?: boolean;
+  updateProfilePicImageSettings?: ImageFilterSettings;
   updateBioActivatePctMin?: number;
   updateBioActivatePctMax?: number;
   updateBioText?: string;
@@ -1742,6 +1746,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     updateProfilePicActivatePctMax: z.number().min(0).max(100).default(0),
     updateProfilePicFolderPath: z.string().default(""),
     updateProfilePicDisableAfterUsed: z.boolean().default(false),
+    updateProfilePicAlterationEnabled: z.boolean().default(true),
+    updateProfilePicAlterationLevel: z.enum(["small", "medium", "high"]).default("small"),
+    updateProfilePicImageSettingsEnabled: z.boolean().default(true),
+    updateProfilePicImageSettings: z.object({
+      contrast: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
+      brightness: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
+      noise: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
+      sharpen: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
+      pixelate: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
+    }).default({
+      contrast: { enabled: true, min: 5, max: 250 },
+      brightness: { enabled: true, min: 5, max: 250 },
+      noise: { enabled: true, min: 5, max: 15 },
+      sharpen: { enabled: true, min: 1.0, max: 2.0 },
+      pixelate: { enabled: true, min: 0.9, max: 2.1 },
+    }),
     // Update Bio — navigates to own profile → Edit profile → taps bio field → pastes bioText → saves.
     updateBioActivatePctMin: z.number().min(0).max(100).default(0),
     updateBioActivatePctMax: z.number().min(0).max(100).default(0),
@@ -1911,6 +1931,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       appSwitchPctMin: 0, appSwitchPctMax: 0,
       updateProfilePicActivatePctMin: 0, updateProfilePicActivatePctMax: 0,
       updateProfilePicFolderPath: "", updateProfilePicDisableAfterUsed: false,
+      updateProfilePicAlterationEnabled: true, updateProfilePicAlterationLevel: "small",
+      updateProfilePicImageSettingsEnabled: true,
+      updateProfilePicImageSettings: {
+        contrast: { enabled: true, min: 5, max: 250 },
+        brightness: { enabled: true, min: 5, max: 250 },
+        noise: { enabled: true, min: 5, max: 15 },
+        sharpen: { enabled: true, min: 1.0, max: 2.0 },
+        pixelate: { enabled: true, min: 0.9, max: 2.1 },
+      },
       updateBioActivatePctMin: 0, updateBioActivatePctMax: 0,
       updateBioText: "", updateBioDisableAfterUsed: false,
       checkDmEnabled: false,
@@ -2415,6 +2444,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         appSwitchPctMin: 0, appSwitchPctMax: 0,
         updateProfilePicActivatePctMin: 0, updateProfilePicActivatePctMax: 0,
         updateProfilePicFolderPath: "", updateProfilePicDisableAfterUsed: false,
+        updateProfilePicAlterationEnabled: true, updateProfilePicAlterationLevel: "small",
+        updateProfilePicImageSettingsEnabled: true,
+        updateProfilePicImageSettings: {
+          contrast: { enabled: true, min: 5, max: 250 },
+          brightness: { enabled: true, min: 5, max: 250 },
+          noise: { enabled: true, min: 5, max: 15 },
+          sharpen: { enabled: true, min: 1.0, max: 2.0 },
+          pixelate: { enabled: true, min: 0.9, max: 2.1 },
+        },
         updateBioActivatePctMin: 0, updateBioActivatePctMax: 0,
         updateBioText: "", updateBioDisableAfterUsed: false,
         checkDmEnabled: false,
@@ -7326,6 +7364,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     updateProfilePicActivatePctMax: z.number().min(0).max(100).default(0),
     updateProfilePicFolderPath: z.string().default(""),
     updateProfilePicDisableAfterUsed: z.boolean().default(false),
+    updateProfilePicAlterationEnabled: z.boolean().default(true),
+    updateProfilePicAlterationLevel: z.enum(["small", "medium", "high"]).default("small"),
+    updateProfilePicImageSettingsEnabled: z.boolean().default(true),
+    updateProfilePicImageSettings: z.object({
+      contrast: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
+      brightness: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
+      noise: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
+      sharpen: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
+      pixelate: z.object({ enabled: z.boolean(), min: z.number(), max: z.number() }),
+    }).default({
+      contrast: { enabled: true, min: 5, max: 250 },
+      brightness: { enabled: true, min: 5, max: 250 },
+      noise: { enabled: true, min: 5, max: 15 },
+      sharpen: { enabled: true, min: 1.0, max: 2.0 },
+      pixelate: { enabled: true, min: 0.9, max: 2.1 },
+    }),
     // Update Bio
     updateBioActivatePctMin: z.number().min(0).max(100).default(0),
     updateBioActivatePctMax: z.number().min(0).max(100).default(0),
@@ -8889,7 +8943,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // Picks the most recent image from the PC folder, pushes it to the device,
   // navigates: profile tab → Edit profile → Edit pictures → + button →
   // gallery thumbnail → Finished → Back, then deletes from PC and device.
-  async function runUpdateProfilePicture(serial: string, folderPath: string, onLog?: (msg: string) => void): Promise<void> {
+  async function runUpdateProfilePicture(
+    serial: string,
+    folderPath: string,
+    onLog?: (msg: string) => void,
+    imageOptions?: {
+      alterationEnabled?: boolean;
+      alterationLevel?: AlterationLevel;
+      imageSettingsEnabled?: boolean;
+      imageSettings?: ImageFilterSettings;
+    },
+  ): Promise<void> {
     // 1. Pick the most recent image file from the PC folder.
     let files: { name: string; mtime: number }[] = [];
     try {
@@ -8912,8 +8976,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       prepared = await prepareMakePostImage(localPath, localFile, {
         doFixAiSlop: true,
-        alterationEnabled: true,
-        alterationLevel: "small",
+        alterationEnabled: imageOptions?.alterationEnabled ?? true,
+        alterationLevel: imageOptions?.alterationLevel ?? "small",
+        imageSettingsEnabled: imageOptions?.imageSettingsEnabled ?? true,
+        imageSettings: imageOptions?.imageSettings,
       // The preparation pipeline is shared with Make a Post, but this caller
       // is Update Profile Pic. Relabel delegated progress lines so Random
       // Actions cannot misreport an avatar update as a post.
@@ -11221,6 +11287,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         visitSettingsPctMin, visitSettingsPctMax,
         appSwitchPctMin, appSwitchPctMax,
         updateProfilePicActivatePctMin, updateProfilePicActivatePctMax,
+        updateProfilePicAlterationEnabled, updateProfilePicAlterationLevel,
+        updateProfilePicImageSettingsEnabled, updateProfilePicImageSettings,
         updateProfilePicFolderPath: _updateProfilePicFolderPath,
         updateProfilePicDisableAfterUsed,
         updateBioActivatePctMin, updateBioActivatePctMax,
@@ -12310,7 +12378,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             const resolvedPicFolder = getProfilePicFolderPath(serial, slotIdx) || _updateProfilePicFolderPath;
             if (updatePicChance > 0 && Math.random() < updatePicChance && resolvedPicFolder) {
               tLog("▶ Random Actions: updating profile picture…");
-              await runUpdateProfilePicture(serial, resolvedPicFolder, (msg) => tLog(`  ${msg}`));
+              await runUpdateProfilePicture(serial, resolvedPicFolder, (msg) => tLog(`  ${msg}`), {
+                alterationEnabled: updateProfilePicAlterationEnabled,
+                alterationLevel: updateProfilePicAlterationLevel,
+                imageSettingsEnabled: updateProfilePicImageSettingsEnabled,
+                imageSettings: updateProfilePicImageSettings,
+              });
               steps.push("jitter-update-profile-pic");
               _jitterFired = true;
               if (updateProfilePicDisableAfterUsed) {
