@@ -280,7 +280,7 @@ export default function ImagesPage(props: ImagesPageProps) {
     });
   };
 
-  const handleStartProcessing = useCallback(() => {
+  const handleStartProcessing = useCallback((onlyItemId?: string) => {
     if (props.onStartProcessing) return props.onStartProcessing();
 
     setLocalIsProcessing(true);
@@ -288,7 +288,7 @@ export default function ImagesPage(props: ImagesPageProps) {
 
     void (async () => {
       // A completed item can be processed again so restoration settings can be tuned.
-      const queue = localItems;
+      const queue = onlyItemId ? localItems.filter(item => item.id === onlyItemId) : localItems;
       for (const item of queue) {
         if (!processingRef.current) break;
         setLocalItems(prev => prev.map(current => current.id === item.id
@@ -768,7 +768,19 @@ export default function ImagesPage(props: ImagesPageProps) {
                                  )}
                                </div>
                              </td>
-                             <td className="px-4 py-3 text-right">
+                              <td className="px-4 py-3 text-right">
+                                <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-all focus-within:opacity-100">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={isProcessing || item.status === "processing"}
+                                  className="h-8 px-2 text-cyan-600 hover:text-cyan-700 hover:bg-cyan-500/10"
+                                  onClick={() => handleStartProcessing(item.id)}
+                                  title="Process this image only"
+                                >
+                                  <Play className="w-3.5 h-3.5 mr-1 fill-current" />
+                                  Process
+                                </Button>
                                <Button 
                                  variant="ghost" 
                                  size="icon" 
@@ -778,6 +790,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                                >
                                  <X className="w-4 h-4" />
                                </Button>
+                                </div>
                              </td>
                            </tr>
                          ))}
