@@ -763,7 +763,6 @@ export function SettingsPage() {
             </Button>
             {waveSpeedBalance && <span className="text-sm text-muted-foreground">Balance: {waveSpeedBalance}</span>}
           </div>
-          <p className="text-xs text-muted-foreground mt-3">The key is masked in the interface. The configured Replit Secret remains the fallback when this field is empty.</p>
         </div>
 
         {/* Abort after X scrapes — global scrape-session limit applied to every account's Follow Users tool */}

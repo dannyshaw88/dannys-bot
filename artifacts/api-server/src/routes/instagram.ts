@@ -6008,7 +6008,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
   const WAVESPEED_COST_PER_IMAGE = 0.005;
   const getWaveSpeedKey = async () => {
     const settings = await storage.getGlobalSettings();
-    return (settings.waveSpeedApiKey ?? "").trim() || process.env.WAVESPEED_API_KEY?.trim() || "";
+    return (settings.waveSpeedApiKey ?? "").trim();
   };
   const waveSpeedHeaders = (key: string) => ({ Authorization: `Bearer ${key}`, "Content-Type": "application/json" });
 
