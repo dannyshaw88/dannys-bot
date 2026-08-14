@@ -40,15 +40,14 @@ function CopyTrustScoreDialog({
   const allLevels   = getTrustLevels();
   const tierTargets = allLevels.filter(l => l.id !== sourceTrustScoreId);
   const sourceLevel = allLevels.find(l => l.id === sourceTrustScoreId);
-  const displayCopySections = [...COPY_SECTIONS].sort((a, b) => {
-    const order = ["runInterval", "feed", "explore", "follow", "injectBrowsing"];
-    const ai = order.indexOf(a.key);
-    const bi = order.indexOf(b.key);
-    if (ai === -1 && bi === -1) return 0;
-    if (ai === -1) return 1;
-    if (bi === -1) return -1;
-    return ai - bi;
-  });
+  const displayCopySections = (() => {
+    const sections = COPY_SECTIONS.filter(section => section.key !== "injectBrowsing");
+    const injectBrowsing = COPY_SECTIONS.find(section => section.key === "injectBrowsing");
+    const followIndex = sections.findIndex(section => section.key === "follow");
+    if (!injectBrowsing || followIndex < 0) return sections;
+    sections.splice(followIndex + 1, 0, injectBrowsing);
+    return sections;
+  })();
 
   const [selectedTiers,   setSelectedTiers]   = useState<Set<string>>(new Set());
   const [selectedSubKeys, setSelectedSubKeys] = useState<Set<string>>(new Set());
