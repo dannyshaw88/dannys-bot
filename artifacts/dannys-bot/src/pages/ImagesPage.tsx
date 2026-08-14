@@ -672,9 +672,10 @@ export default function ImagesPage(props: ImagesPageProps) {
                      <table className="w-full text-sm text-left border-collapse min-w-[600px]">
                        <thead className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider bg-muted/40 border-b border-border/60">
                          <tr>
-                           <th className="px-4 py-3 w-16 text-center">Orig</th>
-                           <th className="px-4 py-3 w-16 text-center">Proc</th>
-                           <th className="px-4 py-3">File Details</th>
+                           <th className="px-4 py-3 w-24 text-center">Original</th>
+                           <th className="px-4 py-3 w-24 text-center">Processed</th>
+                           <th className="px-4 py-3">Full Name</th>
+                           <th className="px-4 py-3 w-28">Size</th>
                            <th className="px-4 py-3 w-56">Status</th>
                            <th className="px-4 py-3 w-12 text-right"></th>
                          </tr>
@@ -683,12 +684,12 @@ export default function ImagesPage(props: ImagesPageProps) {
                          {items.map(item => (
                            <tr key={item.id} className="hover:bg-muted/30 transition-colors group">
                              <td className="px-4 py-3">
-                               <div className="w-10 h-10 rounded border border-border/60 bg-muted/30 overflow-hidden mx-auto shadow-xs">
+                                <div className="w-20 h-20 rounded border border-border/60 bg-muted/30 overflow-hidden mx-auto shadow-xs">
                                  <img src={item.previewUrl} className="w-full h-full object-cover" alt="" />
                                </div>
                              </td>
                              <td className="px-4 py-3">
-                               <div className="w-10 h-10 rounded border border-border/60 bg-muted/10 overflow-hidden mx-auto flex items-center justify-center shadow-xs">
+                                <div className="w-20 h-20 rounded border border-border/60 bg-muted/10 overflow-hidden mx-auto flex items-center justify-center shadow-xs">
                                  {item.processedPreviewUrl ? (
                                    <img src={item.processedPreviewUrl} className="w-full h-full object-cover" alt="" />
                                  ) : (
@@ -697,11 +698,8 @@ export default function ImagesPage(props: ImagesPageProps) {
                                </div>
                              </td>
                              <td className="px-4 py-3 min-w-0">
-                               <div className="font-medium text-foreground truncate max-w-[280px]" title={item.name}>
+                                <div className="font-medium text-foreground break-all" title={item.name}>
                                  {item.name}
-                               </div>
-                               <div className="text-[11px] text-muted-foreground mt-0.5 font-mono">
-                                 {(item.size / 1024 / 1024).toFixed(2)} MB
                                </div>
                                 {item.processingLog?.length ? (
                                   <div className="mt-1.5 max-w-[520px] rounded border border-border/60 bg-muted/30 p-1.5 font-mono text-[9px] leading-4 text-muted-foreground max-h-28 overflow-y-auto">
@@ -714,8 +712,11 @@ export default function ImagesPage(props: ImagesPageProps) {
                                   </div>
                                 ) : null}
                              </td>
+                              <td className="px-4 py-3 text-[11px] text-muted-foreground font-mono whitespace-nowrap">
+                                {(item.size / 1024 / 1024).toFixed(2)} MB
+                              </td>
                              <td className="px-4 py-3">
-                               <div className="flex flex-col justify-center h-10">
+                                <div className="flex flex-col justify-center min-h-20">
                                  {item.status === 'idle' && (
                                    <span className="text-[11px] text-muted-foreground font-medium">Ready</span>
                                  )}
