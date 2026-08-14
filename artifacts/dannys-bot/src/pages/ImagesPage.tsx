@@ -432,11 +432,11 @@ export default function ImagesPage(props: ImagesPageProps) {
     <PageShell>
       <style>{`
         @keyframes image-processing-scan-down {
-          0% { transform: translateY(-120%); opacity: 0; }
+          0% { top: -2px; opacity: 0; }
           12% { opacity: 1; }
           48% { opacity: 0.95; }
           82% { opacity: 0.65; }
-          100% { transform: translateY(360%); opacity: 0; }
+          100% { top: calc(100% - 1px); opacity: 0; }
         }
         @keyframes image-processing-pixels {
           0%, 100% { opacity: 0.25; background-position: 0 0, 14px 8px, 32px 2px, 51px 13px; }
@@ -732,7 +732,9 @@ export default function ImagesPage(props: ImagesPageProps) {
                              <tr
                                key={item.id}
                                className={`hover:bg-muted/30 transition-colors group ${item.status === "processing" ? "image-processing-scan" : ""}`}
-                               style={item.status === "processing" ? { "--scan-duration": `${1.05 + (item.id.length % 7) * 0.22}s` } as React.CSSProperties : undefined}
+                               style={item.status === "processing" ? {
+                                 "--scan-duration": `${1.05 + ((item.id.charCodeAt(0) + item.id.charCodeAt(item.id.length - 1)) % 11) * 0.19}s`
+                               } as React.CSSProperties : undefined}
                              >
                               <td className="px-4 py-3">
                                 <div className="w-20 h-20 rounded border border-border/60 bg-muted/30 overflow-hidden mx-auto shadow-xs">
