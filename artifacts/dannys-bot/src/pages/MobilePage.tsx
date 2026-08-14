@@ -7012,12 +7012,12 @@ export function AutomationSettingsPanel({
                     <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                       value={settings.makePostActivatePctMin}
                       onChange={e => setSettings(s => ({ ...s, makePostActivatePctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
-                      disabled={loading} />
+                      disabled={fieldDisabled("makePostActivatePctMin")} />
                     <span className="text-muted-foreground text-sm">to</span>
                     <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                       value={settings.makePostActivatePctMax}
                       onChange={e => setSettings(s => ({ ...s, makePostActivatePctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
-                      disabled={loading} />
+                      disabled={fieldDisabled("makePostActivatePctMax")} />
                   </div>
                 </div>
                 <div className="space-y-1.5">
@@ -7026,12 +7026,12 @@ export function AutomationSettingsPanel({
                     <Input type="number" min={1} max={20} maxLength={4} className={NUM_INPUT_CLASS}
                       value={settings.makePostPerSessionMin}
                       onChange={e => setSettings(s => ({ ...s, makePostPerSessionMin: clamp4(Number(e.target.value)) }))}
-                      disabled={loading} />
+                      disabled={fieldDisabled("makePostPerSessionMin")} />
                     <span className="text-muted-foreground text-sm">to</span>
                     <Input type="number" min={1} max={20} maxLength={4} className={NUM_INPUT_CLASS}
                       value={settings.makePostPerSessionMax}
                       onChange={e => setSettings(s => ({ ...s, makePostPerSessionMax: clamp4(Number(e.target.value)) }))}
-                      disabled={loading} />
+                      disabled={fieldDisabled("makePostPerSessionMax")} />
                   </div>
                 </div>
               </div>
@@ -7095,7 +7095,7 @@ export function AutomationSettingsPanel({
                         <input type="checkbox" id={`make-a-post-disable-exhausted-${slotIdx ?? 0}`}
                           checked={settings.makePostDisableWhenExhausted}
                           onChange={e => setSettings(s => ({ ...s, makePostDisableWhenExhausted: e.target.checked }))}
-                          disabled={loading}
+                          disabled={fieldDisabled("makePostDisableWhenExhausted")}
                           className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                         <label htmlFor={`make-a-post-disable-exhausted-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Stop if folders empty</label>
                       </div>
@@ -7172,7 +7172,7 @@ export function AutomationSettingsPanel({
                     <input type="checkbox" id={`make-a-post-use-chatgpt-${slotIdx ?? 0}`}
                       checked={settings.makePostUseChatGpt}
                       onChange={e => setSettings(s => ({ ...s, makePostUseChatGpt: e.target.checked }))}
-                      disabled={loading}
+                      disabled={fieldDisabled("makePostUseChatGpt")}
                       className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                     <label htmlFor={`make-a-post-use-chatgpt-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Use ChatGPT</label>
                   </div>
@@ -7185,7 +7185,7 @@ export function AutomationSettingsPanel({
                   rows={3}
                   value={settings.makePostCaptionText}
                   onChange={e => setSettings(s => ({ ...s, makePostCaptionText: e.target.value }))}
-                  disabled={loading}
+                  disabled={fieldDisabled("makePostCaptionText")}
                 />
                 {/* Image alteration — applies to whichever source produced the image.
                     Each control has its own enable checkbox on the LEFT of its
