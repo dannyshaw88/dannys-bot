@@ -352,11 +352,12 @@ export default function ImagesPage(props: ImagesPageProps) {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-               ...(localWaveSpeed
-                 ? { imageBase64 }
-                 : item.sourcePath
-                   ? { localPath: item.sourcePath }
-                   : { imageBase64 }),
+               // The API process cannot reliably read a browser/Electron
+               // machine's local path after a WaveSpeed pass or workspace
+               // restore. The captured data URL is the portable source for
+               // the local pipeline and preserves the original image when
+               // WaveSpeed is toggled back off.
+               imageBase64,
                filename: processFilename,
               fixAiSlop,
               alterationEnabled,
