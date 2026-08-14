@@ -4169,7 +4169,6 @@ export async function findReelActionIcons(serial: string, onLog?: (msg: string) 
   let nm: RegExpExecArray | null;
   while ((nm = nodeRe2.exec(xml)) !== null) {
     const attrs = nm[1];
-    if (!/clickable="true"/.test(attrs)) continue;
     if (/class="android\.widget\.EditText"/.test(attrs)) continue;
     const bm = attrs.match(/bounds="(\[(\d+),(\d+)\]\[(\d+),(\d+)\])"/);
     if (!bm) continue;
@@ -4188,6 +4187,14 @@ export async function findReelActionIcons(serial: string, onLog?: (msg: string) 
     const cls = clsM ? clsM[1] : "";
     const txtM = attrs.match(/\btext="([^"]*)"/);
     const txt = txtM ? txtM[1] : "";
+    // Instagram frequently exposes the visible Reels action icon as a
+    // non-clickable ImageView while its parent owns the tap. Keep icon-shaped
+    // nodes even when clickable="true" is absent; text/container rows are not
+    // action icons and must not enter the positional column mapping.
+    const iconClass = /(?:ImageView|Button|ViewGroup)$/.test(cls);
+    const nodeW = Number(bm[4]) - Number(bm[2]);
+    const nodeH = Number(bm[5]) - Number(bm[3]);
+    if (!iconClass || nodeW < 24 || nodeH < 24 || nodeW > 260 || nodeH > 260) continue;
     const ridM = attrs.match(/resource-id="([^"]*)"/);
     const rid = ridM ? ridM[1] : "";
     colNodes.push({ x: c.x, y: c.y, cd, rid, cls, txt });
