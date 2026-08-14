@@ -6038,7 +6038,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       restorationLowBlend?: number;
       restorationDetail?: number;
       restorationBlur?: number;
-      compositePattern?: "full" | "reduced" | "off";
+      compositePattern?: "balanced";
     };
 
     if (!imageBase64 && !localPath) return res.status(400).json({ error: "No image provided" });
@@ -6170,11 +6170,10 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
             const channels = raw.info.channels;
             for (let y = 0; y < raw.info.height; y++) {
               for (let x = 0; x < raw.info.width; x++) {
-                if (compositePattern === "off") continue;
                 const phase = Math.sin(x * 0.37 + y * 0.19) + Math.cos(x * 0.11 - y * 0.29);
                 if (Math.abs(phase) < strengthConfig.threshold) continue;
                 const offset = (y * raw.info.width + x) * channels;
-                const patternScale = compositePattern === "reduced" ? 0.5 : 1;
+                const patternScale = 0.75;
                 const delta = (phase > 0 ? strengthConfig.delta : -strengthConfig.delta) * patternScale;
                 for (let channel = 0; channel < Math.min(3, channels); channel++) {
                   // Extreme intentionally perturbs every pixel and each color

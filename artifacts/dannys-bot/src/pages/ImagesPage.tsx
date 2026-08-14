@@ -75,7 +75,7 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [localFrequencyDisruption, setLocalFrequencyDisruption] = useState(true);
   const [localDetectorPass, setLocalDetectorPass] = useState(true);
   const [localDisruptionStrength, setLocalDisruptionStrength] = useState<"extreme">("extreme");
-  const [localPatternIntensity, setLocalPatternIntensity] = useState<"full" | "reduced" | "off">("full");
+  const [localPatternIntensity] = useState<"balanced">("balanced");
   const [localRestoreLowBlend, setLocalRestoreLowBlend] = useState(90);
   const [localRestoreDetail, setLocalRestoreDetail] = useState(35);
   const [localRestoreBlur, setLocalRestoreBlur] = useState(30);
@@ -439,15 +439,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                    {localDetectorPass && (
                      <div className="flex items-center justify-between gap-3">
                        <Label className="text-xs text-muted-foreground">Pattern intensity</Label>
-                       <select
-                         value={localPatternIntensity}
-                         onChange={(event) => setLocalPatternIntensity(event.target.value as typeof localPatternIntensity)}
-                         className="rounded-md border border-border bg-background px-2 py-1.5 text-xs"
-                       >
-                         <option value="full">Full</option>
-                         <option value="reduced">Reduced</option>
-                         <option value="off">Off</option>
-                       </select>
+                       <span className="rounded-md border border-border bg-background px-2 py-1.5 text-xs">Balanced</span>
                      </div>
                    )}
                   {localDetectorPass && (
