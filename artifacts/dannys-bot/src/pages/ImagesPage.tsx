@@ -75,9 +75,9 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [localFrequencyDisruption, setLocalFrequencyDisruption] = useState(true);
   const [localDetectorPass, setLocalDetectorPass] = useState(true);
   const [localDisruptionStrength, setLocalDisruptionStrength] = useState<"extreme">("extreme");
-  const [localRestoreLowBlend, setLocalRestoreLowBlend] = useState(75);
-  const [localRestoreDetail, setLocalRestoreDetail] = useState(100);
-  const [localRestoreBlur, setLocalRestoreBlur] = useState(15);
+  const [localRestoreLowBlend, setLocalRestoreLowBlend] = useState(90);
+  const [localRestoreDetail, setLocalRestoreDetail] = useState(35);
+  const [localRestoreBlur, setLocalRestoreBlur] = useState(30);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 

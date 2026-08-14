@@ -6216,9 +6216,9 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
 
       if (detectorPass && disruptionStrategy === "combined" && output.length) {
         processingStage = "quality restoration";
-        const lowBlend = Math.max(0, Math.min(1, restorationLowBlend ?? 0.75));
-        const detailRetention = Math.max(0, Math.min(1.5, restorationDetail ?? 1));
-        const blurRadius = Math.max(0.3, Math.min(5, restorationBlur ?? 2));
+        const lowBlend = Math.max(0, Math.min(1, restorationLowBlend ?? 0.9));
+        const detailRetention = Math.max(0, Math.min(1.5, restorationDetail ?? 0.35));
+        const blurRadius = Math.max(0.3, Math.min(5, restorationBlur ?? 3));
         logProcessing(`quality restore — settings base=${Math.round(lowBlend * 100)}% detail=${Math.round(detailRetention * 100)}% scale=${blurRadius.toFixed(1)}`);
         // Reopen the encoded disrupted output. Restoration must not receive or
         // reference the original source buffer.
