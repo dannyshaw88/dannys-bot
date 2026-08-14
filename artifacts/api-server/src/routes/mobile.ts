@@ -3950,6 +3950,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         /^(?:repost|repost to your story|share to feed)$/i.test(n.desc);
       const isDm = (n: ViewFeedA11yNode) =>
         /^(?:send|direct|message|share via dm)$/i.test(n.desc);
+      const isFeedSaveRibbon = (n: ViewFeedA11yNode) =>
+        n.clickable &&
+        isSave(n) &&
+        n.x1 >= getScreenSize(serial).w * 0.78 &&
+        n.x2 > n.x1 &&
+        n.y2 > n.y1 &&
+        n.x2 - n.x1 <= 180 &&
+        n.y2 - n.y1 <= 180;
 
       // Pick the row with the strongest complete identity.  A recycled
       // off-screen post may expose another Like node, but it will not have the
@@ -3985,7 +3993,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const like = chosen.like;
       const pos = (n: ViewFeedA11yNode) => ({ x: n.x, y: n.y });
       const clickableRow = row.filter(n => n.clickable);
-      const saveNode = clickableRow.find(isSave) ?? null;
+      // A save resource-id can also appear on a large wrapper around an
+      // embedded Reel/media surface. Only accept a compact, right-edge live
+      // node as the feed ribbon; never tap a large wrapper's centre.
+      const saveNode = clickableRow.find(isFeedSaveRibbon) ?? null;
       const commentNode = clickableRow.find(isComment) ?? null;
       const repostNode = clickableRow.find(isRepost) ?? null;
       const dmNode = clickableRow.find(isDm) ?? null;
@@ -9597,26 +9608,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       onLog?.(`Inject Browsing: dwelling in highlight for ${(dwellMs / 1000).toFixed(1)}s…`);
       await sleepOrAbort(serial, dwellMs);
 
-      // Check whether we are still inside a story/reel viewer.
-      // Fast path: single-story highlights auto-close after the story ends.
-      const afterXml = await android.dumpUi(serial).catch(() => "");
-      const inViewer = afterXml.includes("reel_viewer_root") ||
-                       afterXml.includes("story_media_cell") ||
-                       afterXml.includes("storiesProgressView") ||
-                       afterXml.includes("progress_container") ||
-                       afterXml.includes("reel_progress_container");
-
-      if (inViewer) {
-        // Story/reel viewers can expose different UI trees when a highlight
-        // opens a Reel. Android BACK is independent of that tree, so do not
-        // rely on a swipe-dismiss gesture here.
-        onLog?.("Inject Browsing: still in highlight story — pressing Android Back to close…");
-        await android.pressBack(serial);
-        await sleepOrAbort(serial, 700);
-        onLog?.("Inject Browsing: ✓ highlight viewed and dismissed");
-      } else {
-        onLog?.("Inject Browsing: ✓ highlight viewed — viewer already closed (single-story)");
-      }
+      // Instagram's story viewer dismisses with the inverse of the normal
+      // feed scroll gesture. Do not spend another UIAutomator dump deciding
+      // whether it is open, and never use Android Back here: a Back event can
+      // leave the viewer on an intermediate Instagram screen.
+      onLog?.("Inject Browsing: swiping down to close highlight viewer…");
+      await android.swipeDownToCloseStory(serial);
+      await sleepOrAbort(serial, 700);
+      onLog?.("Inject Browsing: ✓ highlight viewed and dismissed");
     } catch (e: any) {
       if (e?.message === "cycle-aborted") throw e;
       onLog?.(`Inject Browsing: tap highlights error — ${e?.message}`);

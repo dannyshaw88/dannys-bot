@@ -3231,6 +3231,13 @@ export async function swipeUpFromBottom(serial: string): Promise<void> {
   await swipe(serial, x, Math.round(h * 0.92), x, Math.round(h * 0.35), 300);
 }
 
+/** Dismiss an Instagram story/highlight viewer with the inverse gesture. */
+export async function swipeDownToCloseStory(serial: string): Promise<void> {
+  const { w, h } = getScreenSize(serial);
+  const x = Math.round(w / 2);
+  await swipe(serial, x, Math.round(h * 0.35), x, Math.round(h * 0.92), 300);
+}
+
 export function startScrcpy(serial: string, opts: { windowTitle?: string; maxSize?: number } = {}): { pid: number } {
   const tools = detectToolset();
   const scrcpy = requireTool(tools.scrcpy, "scrcpy");
