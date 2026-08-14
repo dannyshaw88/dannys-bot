@@ -446,6 +446,17 @@ export default function ImagesPage(props: ImagesPageProps) {
         tr.image-processing-scan {
           width: 100%;
           max-width: 100%;
+          height: 112px;
+          min-height: 112px;
+        }
+        tbody > tr {
+          height: 112px;
+        }
+        tbody > tr > td {
+          height: 112px;
+          max-height: 112px;
+          overflow: hidden;
+          vertical-align: middle;
         }
         tr.image-processing-scan > td {
           position: relative;
@@ -463,9 +474,10 @@ export default function ImagesPage(props: ImagesPageProps) {
           background-image:
             radial-gradient(circle, rgba(255,255,255,0.95) 0 1px, transparent 1.8px),
             radial-gradient(circle, rgba(103,232,249,0.9) 0 1.2px, transparent 2px),
-            radial-gradient(circle, rgba(165,243,252,0.95) 0 1px, transparent 1.8px);
-          background-size: 47px 41px, 61px 53px, 73px 59px;
-          animation: image-processing-pixels 1.1s steps(5, end) infinite;
+            radial-gradient(circle, rgba(165,243,252,0.95) 0 1px, transparent 1.8px),
+            radial-gradient(circle, rgba(255,255,255,0.8) 0 0.8px, transparent 1.6px);
+          background-size: 47px 41px, 61px 53px, 73px 59px, 89px 67px;
+          animation: image-processing-pixels 1.1s steps(5, end) var(--pixel-delay, 0s) infinite;
         }
         tr.image-processing-scan > td::after {
           inset: 0 0 auto;
@@ -733,7 +745,8 @@ export default function ImagesPage(props: ImagesPageProps) {
                                key={item.id}
                                className={`hover:bg-muted/30 transition-colors group ${item.status === "processing" ? "image-processing-scan" : ""}`}
                                style={item.status === "processing" ? {
-                                 "--scan-duration": `${1.05 + ((item.id.charCodeAt(0) + item.id.charCodeAt(item.id.length - 1)) % 11) * 0.19}s`
+                                 "--scan-duration": `${1.05 + ((item.id.charCodeAt(0) + item.id.charCodeAt(item.id.length - 1)) % 11) * 0.19}s`,
+                                 "--pixel-delay": `-${((item.id.charCodeAt(1) || 0) % 9) * 0.13}s`
                                } as React.CSSProperties : undefined}
                              >
                               <td className="px-4 py-3">
