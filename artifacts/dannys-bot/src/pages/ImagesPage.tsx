@@ -494,23 +494,11 @@ export default function ImagesPage(props: ImagesPageProps) {
           width: 100%;
           table-layout: fixed;
         }
-        .fix-images-table thead,
-        .fix-images-table tbody {
-          display: table;
-          width: 100%;
-          table-layout: fixed;
-        }
-        .fix-images-table tbody {
-          display: block;
-          height: 336px;
-          max-height: 336px;
+        .fix-images-scroll {
+          height: 376px;
+          max-height: 376px;
           overflow-y: auto;
           overflow-x: hidden;
-        }
-        .fix-images-table tbody > tr {
-          display: table;
-          width: 100%;
-          table-layout: fixed;
         }
       `}</style>
       <div className="p-4 lg:p-6 h-[calc(100vh-3.5rem)] min-h-[600px]">
@@ -753,7 +741,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                  </div>
               ) : (
                   <div className="relative rounded-xl border border-border/60 bg-background shadow-xs overflow-hidden animate-in fade-in duration-300">
-                    <div className="overflow-x-auto">
+                    <div className="fix-images-scroll overflow-x-auto">
                      <table className="fix-images-table text-sm text-left border-collapse">
                        <thead className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider bg-muted/40 border-b border-border/60">
                          <tr>
