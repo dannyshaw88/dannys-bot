@@ -1433,10 +1433,20 @@ function AdminUsersSection() {
   const handleDelete = async (u: LicenseUser) => {
     if (!confirm(`Delete user "${u.username}"? This cannot be undone.`)) return;
     try {
-      await fetch(`/api/license/users/${u.id}`, { method: "DELETE", credentials: "include" });
+      const response = await fetch(`/api/license/users/${u.id}`, { method: "DELETE", credentials: "include" });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error || "Could not delete user");
+      }
       toast({ title: "User deleted" });
       fetchUsers();
-    } catch {}
+    } catch (error) {
+      toast({
+        title: "Delete failed",
+        description: error instanceof Error ? error.message : "Could not delete user",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleToggleActive = async (u: LicenseUser) => {
@@ -1586,8 +1596,15 @@ function AdminUsersSection() {
                       <button onClick={() => { setEditingId(u.id); setEditForm({ tier: u.tier, accountLimit: u.account_limit, expiresAt: u.expires_at ? u.expires_at.split("T")[0] : "", password: "" }); }} className="p-1 hover:bg-muted/50 rounded transition-colors text-muted-foreground hover:text-foreground">
                         <Pencil className="w-3 h-3" />
                       </button>
-                      <button onClick={() => handleDelete(u)} className="p-1 hover:bg-muted/50 rounded transition-colors text-muted-foreground hover:text-destructive">
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(u)}
+                        aria-label={`Delete ${u.username}`}
+                        title={`Delete ${u.username}`}
+                        className="inline-flex items-center gap-1 h-6 px-2 rounded border border-destructive/30 text-[10px] font-medium text-destructive hover:bg-destructive/10 transition-colors"
+                      >
                         <Trash2 className="w-3 h-3" />
+                        Delete
                       </button>
                     </>
                   )}
