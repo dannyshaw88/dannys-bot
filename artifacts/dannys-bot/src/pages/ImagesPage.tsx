@@ -124,6 +124,7 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [waveWidth, setWaveWidth] = useState(persisted.waveWidth ?? "");
   const [waveHeight, setWaveHeight] = useState(persisted.waveHeight ?? "");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [imagePage, setImagePage] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
 
   // Determine actual values (props vs local state)
@@ -140,6 +141,9 @@ export default function ImagesPage(props: ImagesPageProps) {
   const imageSettings = props.imageSettings ?? localImgSettings;
   const setImageSettings = props.onImageSettingsChange ?? setLocalImgSettings;
   const PageShell = props.embedded ? React.Fragment : AppLayout;
+  const pageCount = Math.max(1, Math.ceil(items.length / 10));
+  const currentPage = Math.min(imagePage, pageCount - 1);
+  const visibleItems = items.slice(currentPage * 10, currentPage * 10 + 10);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const processingRef = useRef<boolean>(false);
@@ -307,7 +311,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                setLocalItems(prev => prev.map(current => current.id === item.id
                  ? { ...current, progress: waveProgress }
                  : current));
-             }, 1200);
+             }, 850);
              let waveResponse: Response;
              try {
                waveResponse = await fetch("/api/wavespeed/process", {
@@ -444,11 +448,11 @@ export default function ImagesPage(props: ImagesPageProps) {
     <PageShell>
       <style>{`
         @keyframes image-processing-scan-down {
-          0% { transform: translateY(-2px); opacity: 0; }
+          0% { top: -2px; opacity: 0; }
           12% { opacity: 1; }
           48% { opacity: 0.95; }
           82% { opacity: 0.65; }
-          100% { transform: translateY(calc(112px - 1px)); opacity: 0; }
+          100% { top: calc(100% - 1px); opacity: 0; }
         }
         @keyframes image-processing-pixels {
           0%, 100% { opacity: 0.25; background-position: 0 0, 14px 8px, 32px 2px, 51px 13px; }
@@ -500,7 +504,6 @@ export default function ImagesPage(props: ImagesPageProps) {
           height: 2px;
           background: linear-gradient(90deg, transparent, rgba(103,232,249,0.95) 20%, #fff 50%, rgba(103,232,249,0.95) 80%, transparent);
           box-shadow: 0 0 3px rgba(34,211,238,0.8);
-          will-change: transform, opacity;
           animation: image-processing-scan-down var(--scan-duration, 2.4s) linear infinite;
         }
         .fix-images-table {
@@ -512,11 +515,6 @@ export default function ImagesPage(props: ImagesPageProps) {
           height: auto;
           overflow-y: auto;
           overflow-x: hidden;
-          contain: strict;
-        }
-        .fix-images-table tbody > tr {
-          content-visibility: auto;
-          contain-intrinsic-size: 112px;
         }
       `}</style>
       <div className="p-4 lg:p-6 h-[calc(100vh-3.5rem)] min-h-[600px]">
@@ -755,6 +753,32 @@ export default function ImagesPage(props: ImagesPageProps) {
               ) : (
                   <div className="relative flex min-h-0 flex-1 flex-col rounded-xl border border-border/60 bg-background shadow-xs overflow-hidden animate-in fade-in duration-300">
                     <div className="fix-images-scroll min-h-0 flex-1 overflow-x-auto">
+                     {items.length > 0 && (
+                       <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/20 px-4 py-2 text-xs text-muted-foreground">
+                         <span>Images {currentPage * 10 + 1}–{Math.min((currentPage + 1) * 10, items.length)} of {items.length}</span>
+                         <div className="flex items-center gap-1">
+                           <Button
+                             variant="ghost"
+                             size="sm"
+                             className="h-7 px-2"
+                             disabled={currentPage === 0}
+                             onClick={() => setImagePage(page => Math.max(0, page - 1))}
+                           >
+                             Previous
+                           </Button>
+                           <span className="min-w-16 text-center">Page {currentPage + 1} / {pageCount}</span>
+                           <Button
+                             variant="ghost"
+                             size="sm"
+                             className="h-7 px-2"
+                             disabled={currentPage >= pageCount - 1}
+                             onClick={() => setImagePage(page => Math.min(pageCount - 1, page + 1))}
+                           >
+                             Next
+                           </Button>
+                         </div>
+                       </div>
+                     )}
                      <table className="fix-images-table text-sm text-left border-collapse">
                        <thead className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider bg-muted/40 border-b border-border/60">
                          <tr>
@@ -767,7 +791,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                          </tr>
                        </thead>
                        <tbody className="divide-y divide-border/40">
-                         {items.map(item => (
+                         {visibleItems.map(item => (
                              <tr
                                key={item.id}
                                className={`hover:bg-muted/30 transition-colors group ${item.status === "processing" ? "image-processing-scan" : ""}`}
@@ -779,13 +803,13 @@ export default function ImagesPage(props: ImagesPageProps) {
                              >
                               <td className="px-4 py-3">
                                 <div className="w-20 h-20 rounded border border-border/60 bg-muted/30 overflow-hidden mx-auto shadow-xs">
-                                 <img src={item.previewUrl} loading="lazy" decoding="async" className="w-full h-full object-cover" alt="" />
+                                 <img src={item.previewUrl} className="w-full h-full object-cover" alt="" />
                                </div>
                              </td>
                              <td className="px-4 py-3">
                                 <div className="w-20 h-20 rounded border border-border/60 bg-muted/10 overflow-hidden mx-auto flex items-center justify-center shadow-xs">
                                  {item.processedPreviewUrl ? (
-                                   <img src={item.processedPreviewUrl} loading="lazy" decoding="async" className="w-full h-full object-cover" alt="" />
+                                   <img src={item.processedPreviewUrl} className="w-full h-full object-cover" alt="" />
                                  ) : (
                                    <ImageIcon className="w-4 h-4 text-muted-foreground/30" />
                                  )}
