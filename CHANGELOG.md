@@ -1,3 +1,10 @@
+## [1.2.513] — 2026-08-14
+
+### Fixed — Follow Search detection
+
+- Search-bar discovery no longer requires `clickable` or `focusable` accessibility flags.
+- Retained Search identity/label, bounded position, retry, and pre-typing focus validation.
+
 ## [1.2.512] — 2026-08-14
 
 ### Fixed — Follow matching and search timing
