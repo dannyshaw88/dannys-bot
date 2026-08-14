@@ -255,7 +255,23 @@ export default function ImagesPage(props: ImagesPageProps) {
       processingRef.current = false;
       setLocalIsProcessing(false);
     })();
-  }, [alterationEnabled, alterationLevel, fixAiSlop, imageSettings, imageSettingsEnabled, localItems, props, readFileDataUrl]);
+  }, [
+    alterationEnabled,
+    alterationLevel,
+    fixAiSlop,
+    imageSettings,
+    imageSettingsEnabled,
+    localDetectorPass,
+    localDisruptionStrength,
+    localFrequencyDisruption,
+    localItems,
+    localMetadataCleanup,
+    localRestoreBlur,
+    localRestoreDetail,
+    localRestoreLowBlend,
+    props,
+    readFileDataUrl,
+  ]);
 
   const handleCancelProcessing = useCallback(() => {
     if (props.onCancelProcessing) return props.onCancelProcessing();
