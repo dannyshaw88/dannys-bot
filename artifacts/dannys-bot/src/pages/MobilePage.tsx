@@ -7238,6 +7238,22 @@ export function AutomationSettingsPanel({
                       className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                     <label htmlFor={`make-a-post-fix-ai-slop-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Fix AI Slop</label>
                   </div>
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                    <input type="checkbox"
+                      checked={settings.makePostMetadataCleanup}
+                      onChange={e => setSettings(s => ({ ...s, makePostMetadataCleanup: e.target.checked }))}
+                      disabled={fieldDisabled("makePostMetadataCleanup")}
+                      className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                    Remove Metadata
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                    <input type="checkbox"
+                      checked={settings.makePostFrequencyDisruption}
+                      onChange={e => setSettings(s => ({ ...s, makePostFrequencyDisruption: e.target.checked }))}
+                      disabled={fieldDisabled("makePostFrequencyDisruption")}
+                      className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                    Structural Pixel Disruption
+                  </label>
                 </div>
               </div>
             </div>
