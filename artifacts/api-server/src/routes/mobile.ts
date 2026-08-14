@@ -2110,6 +2110,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "makePostLocalFolderEnabled",
     "makePostLocalFolderPath",
     "makePostAddLocation",
+    "makePostAlterationEnabled",
+    "makePostAlterationLevel",
+    "makePostImageSettingsEnabled",
+    "makePostImageSettings",
+    "makePostFixAiSlop",
+    "makePostMetadataCleanup",
+    "makePostFrequencyDisruption",
     "postStoryAddLink",
     "postStoryLinkUrl",
     // Follow Filters are owned by the Human Session Tool slot, not inherited
