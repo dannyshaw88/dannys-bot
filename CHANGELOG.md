@@ -1,3 +1,11 @@
+## [1.2.504] — 2026-08-14
+
+### Added — WaveSpeed image processing workflow
+
+- Added WaveSpeed Z-Image Turbo processing and model controls to Fix Images.
+- Added live processing progress, per-image processing, and export support.
+- Improved the Fix Images workspace layout and processing feedback.
+
 ## [1.2.503] — 2026-08-13
 
 ### Changed — Always-visible Fix Images log
