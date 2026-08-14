@@ -490,6 +490,28 @@ export default function ImagesPage(props: ImagesPageProps) {
           box-shadow: 0 0 10px rgba(34,211,238,0.95), 0 0 24px rgba(34,211,238,0.6);
           animation: image-processing-scan-down var(--scan-duration, 2.4s) linear infinite;
         }
+        .fix-images-table {
+          width: 100%;
+          table-layout: fixed;
+        }
+        .fix-images-table thead,
+        .fix-images-table tbody {
+          display: table;
+          width: 100%;
+          table-layout: fixed;
+        }
+        .fix-images-table tbody {
+          display: block;
+          height: 336px;
+          max-height: 336px;
+          overflow-y: auto;
+          overflow-x: hidden;
+        }
+        .fix-images-table tbody > tr {
+          display: table;
+          width: 100%;
+          table-layout: fixed;
+        }
       `}</style>
       <div className="p-4 lg:p-6 h-[calc(100vh-3.5rem)] min-h-[600px]">
         <Card className="flex flex-col lg:flex-row h-full overflow-hidden border-border/60 shadow-sm bg-background">
@@ -731,8 +753,8 @@ export default function ImagesPage(props: ImagesPageProps) {
                  </div>
               ) : (
                   <div className="relative rounded-xl border border-border/60 bg-background shadow-xs overflow-hidden animate-in fade-in duration-300">
-                    <div className="h-[270px] max-h-[270px] overflow-auto">
-                     <table className="w-full table-fixed text-sm text-left border-collapse">
+                    <div className="overflow-x-auto">
+                     <table className="fix-images-table text-sm text-left border-collapse">
                        <thead className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider bg-muted/40 border-b border-border/60">
                          <tr>
                            <th className="px-4 py-3 w-24 text-center">Original</th>
