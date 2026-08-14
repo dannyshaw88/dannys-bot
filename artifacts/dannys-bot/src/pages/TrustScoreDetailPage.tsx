@@ -41,11 +41,16 @@ function CopyTrustScoreDialog({
   const tierTargets = allLevels.filter(l => l.id !== sourceTrustScoreId);
   const sourceLevel = allLevels.find(l => l.id === sourceTrustScoreId);
   const displayCopySections = (() => {
-    const sections = COPY_SECTIONS.filter(section => section.key !== "injectBrowsing");
-    const injectBrowsing = COPY_SECTIONS.find(section => section.key === "injectBrowsing");
-    const followIndex = sections.findIndex(section => section.key === "follow");
-    if (!injectBrowsing || followIndex < 0) return sections;
-    sections.splice(followIndex + 1, 0, injectBrowsing);
+    const sections = [...COPY_SECTIONS];
+    const moveAfter = (key: string, afterKey: string) => {
+      const itemIndex = sections.findIndex(section => section.key === key);
+      if (itemIndex < 0) return;
+      const [item] = sections.splice(itemIndex, 1);
+      const afterIndex = sections.findIndex(section => section.key === afterKey);
+      sections.splice(afterIndex < 0 ? sections.length : afterIndex + 1, 0, item);
+    };
+    moveAfter("explore", "feed");
+    moveAfter("injectBrowsing", "follow");
     return sections;
   })();
 
