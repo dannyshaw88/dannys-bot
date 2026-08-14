@@ -577,9 +577,6 @@ export default function ImagesPage(props: ImagesPageProps) {
                       <Label className="text-sm font-medium text-foreground cursor-pointer select-none" onClick={() => setLocalFrequencyDisruption(!localFrequencyDisruption)}>
                         Structured pixel disruption
                       </Label>
-                      <p className="text-[10px] leading-4 text-muted-foreground max-w-[210px]">
-                        Applies a subtle distributed pixel pattern to disrupt hidden frequency signals. Results are not guaranteed.
-                      </p>
                     </div>
                     <Switch checked={localFrequencyDisruption} onCheckedChange={setLocalFrequencyDisruption} className="data-[state=checked]:bg-cyan-500 shrink-0" />
                   </div>
