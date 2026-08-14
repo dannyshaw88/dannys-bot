@@ -4947,6 +4947,15 @@ export function AutomationSettingsPanel({
     "checkDmEnabled", "followEnabled", "randomJitterEnabled", "makePostEnabled",
     "postStoryEnabled",
   ]);
+  const MAKE_POST_HST_IMAGE_FIELDS = new Set([
+    "makePostAlterationEnabled",
+    "makePostAlterationLevel",
+    "makePostImageSettingsEnabled",
+    "makePostImageSettings",
+    "makePostFixAiSlop",
+    "makePostMetadataCleanup",
+    "makePostFrequencyDisruption",
+  ]);
   // These are the only settings a physical slot may change while its
   // effective values come from a TrustScore template.  Everything else in
   // the HST form is template-controlled and must stay visibly disabled.
@@ -4972,7 +4981,7 @@ export function AutomationSettingsPanel({
       (trustScoreActive
         ? (settings.trustScoreControlledFields ?? []).filter(field =>
             !TRUST_SCORE_FEATURE_FIELDS.has(field) &&
-            !field.startsWith("makePost"),
+            !MAKE_POST_HST_IMAGE_FIELDS.has(field),
           )
         : []),
     ),
@@ -5041,7 +5050,7 @@ export function AutomationSettingsPanel({
   ]);
   const fieldDisabled = (...fields: string[]) =>
     fields.some(field =>
-      field.startsWith("makePost")
+      MAKE_POST_HST_IMAGE_FIELDS.has(field)
         ? (isTrustScoreTemplateEditor && fieldLocked(field))
         : loadingExternal || FOLLOW_FILTER_FIELDS.has(field)
         ? false
