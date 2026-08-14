@@ -435,6 +435,13 @@ export default function ImagesPage(props: ImagesPageProps) {
           88% { opacity: 1; }
           100% { transform: translateX(115%); opacity: 0; }
         }
+        @keyframes image-processing-glitter {
+          0%, 100% { opacity: 0.08; transform: translate3d(0, 0, 0) scale(0.98); }
+          18% { opacity: 0.72; transform: translate3d(1.5%, -1%, 0) scale(1); }
+          37% { opacity: 0.18; transform: translate3d(-1%, 1.5%, 0) scale(1.02); }
+          61% { opacity: 0.86; transform: translate3d(0.5%, 0.5%, 0) scale(0.99); }
+          79% { opacity: 0.25; transform: translate3d(-1.5%, -0.5%, 0) scale(1.01); }
+        }
         tr.image-processing-scan {
           position: relative;
           isolation: isolate;
@@ -443,7 +450,7 @@ export default function ImagesPage(props: ImagesPageProps) {
         tr.image-processing-scan::after {
           content: "";
           position: absolute;
-          z-index: 2;
+          z-index: 4;
           pointer-events: none;
           inset: 0;
           width: 42%;
@@ -451,9 +458,34 @@ export default function ImagesPage(props: ImagesPageProps) {
           box-shadow: 0 0 18px rgba(34,211,238,0.45), 0 0 42px rgba(34,211,238,0.2);
           animation: image-processing-scan 1.8s ease-in-out infinite;
         }
+        tr.image-processing-scan::before {
+          content: "";
+          position: absolute;
+          z-index: 4;
+          pointer-events: none;
+          inset: 0;
+          opacity: 0.5;
+          mix-blend-mode: screen;
+          background-image:
+            radial-gradient(circle at 4% 22%, rgba(165,243,252,0.95) 0 1px, transparent 1.8px),
+            radial-gradient(circle at 11% 76%, rgba(34,211,238,0.9) 0 1.4px, transparent 2px),
+            radial-gradient(circle at 19% 43%, rgba(255,255,255,0.9) 0 1px, transparent 1.7px),
+            radial-gradient(circle at 27% 84%, rgba(103,232,249,0.9) 0 1.6px, transparent 2.2px),
+            radial-gradient(circle at 35% 18%, rgba(165,243,252,0.9) 0 1px, transparent 1.8px),
+            radial-gradient(circle at 44% 61%, rgba(255,255,255,0.85) 0 1.3px, transparent 2px),
+            radial-gradient(circle at 52% 31%, rgba(34,211,238,0.95) 0 1.5px, transparent 2.2px),
+            radial-gradient(circle at 61% 89%, rgba(165,243,252,0.9) 0 1px, transparent 1.8px),
+            radial-gradient(circle at 69% 52%, rgba(255,255,255,0.92) 0 1.2px, transparent 2px),
+            radial-gradient(circle at 77% 14%, rgba(34,211,238,0.9) 0 1.5px, transparent 2.2px),
+            radial-gradient(circle at 84% 71%, rgba(165,243,252,0.95) 0 1px, transparent 1.8px),
+            radial-gradient(circle at 93% 36%, rgba(255,255,255,0.9) 0 1.4px, transparent 2px);
+          background-size: 100% 100%;
+          filter: drop-shadow(0 0 4px rgba(34,211,238,0.85));
+          animation: image-processing-glitter 1.15s steps(7, end) infinite;
+        }
         tr.image-processing-scan > td {
           position: relative;
-          z-index: 3;
+          z-index: 5;
         }
       `}</style>
       <div className="p-4 lg:p-6 h-[calc(100vh-3.5rem)] min-h-[600px]">
