@@ -6025,7 +6025,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
     const body = z.object({
       imageBase64: z.string().min(1),
       filename: z.string().min(1).max(255),
-      strength: z.number().min(0).max(1).default(0.1),
+      strength: z.number().min(0).max(1).default(0.2),
       prompt: z.string().max(1000).default(""),
       width: z.number().int().min(256).max(2048).optional(),
       height: z.number().int().min(256).max(2048).optional(),

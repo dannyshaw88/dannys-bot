@@ -118,7 +118,7 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [localFrequencyDisruption, setLocalFrequencyDisruption] = useState(persisted.frequencyDisruption ?? true);
   const [localWaveSpeed, setLocalWaveSpeed] = useState(persisted.waveSpeed ?? false);
   const [wavePrompt, setWavePrompt] = useState(persisted.wavePrompt ?? "");
-  const [waveStrength, setWaveStrength] = useState(persisted.waveStrength ?? 0.1);
+  const [waveStrength, setWaveStrength] = useState(persisted.waveStrength === 0.1 ? 0.2 : (persisted.waveStrength ?? 0.2));
   const [waveSeed, setWaveSeed] = useState(persisted.waveSeed ?? -1);
   const [waveOutputFormat, setWaveOutputFormat] = useState<"jpeg" | "png" | "webp">(persisted.waveOutputFormat ?? "jpeg");
   const [waveWidth, setWaveWidth] = useState(persisted.waveWidth ?? "");
