@@ -6048,7 +6048,6 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
     let workingPath = sourcePath;
     let processingStage = localPath ? "copying Windows local file" : "decoding image data";
     const processingLog: string[] = [];
-    let originalForRestoration: Buffer | null = null;
     const logProcessing = (message: string) => {
       processingLog.push(message);
       console.log(`[images/process] ${message}`);
@@ -6077,8 +6076,6 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
         await fs.promises.writeFile(sourcePath, Buffer.from(raw, "base64"));
         logProcessing(`Source decoded from image data: ${safeName}`);
       }
-      originalForRestoration = await fs.promises.readFile(sourcePath);
-
       logProcessing(`Fix AI Slop setting = ${shouldFixAiSlop ? "ON" : "OFF"}`);
       if (shouldFixAiSlop) {
         processingStage = "Fix AI Slop";
@@ -6215,34 +6212,38 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
         }
       }
 
-      if (detectorPass && disruptionStrategy === "combined" && originalForRestoration && output.length) {
+      if (detectorPass && disruptionStrategy === "combined" && output.length) {
         processingStage = "quality restoration";
         const lowBlend = Math.max(0, Math.min(1, restorationLowBlend ?? 1));
         const detailRetention = Math.max(0, Math.min(1.5, restorationDetail ?? 0.82));
         const blurRadius = Math.max(0.3, Math.min(5, restorationBlur ?? 2));
-        const originalRaw = await sharp(originalForRestoration).raw().toBuffer({ resolveWithObject: true });
-        const disruptedRaw = await sharp(output).resize(originalRaw.info.width, originalRaw.info.height, { fit: "fill", kernel: "lanczos3" })
+        // Reopen the encoded disrupted output. Restoration must not receive or
+        // reference the original source buffer.
+        const disruptedMeta = await sharp(output).metadata();
+        if (!disruptedMeta.width || !disruptedMeta.height) throw new Error("Disrupted output has no dimensions");
+        const disruptedRaw = await sharp(output)
+          .resize(disruptedMeta.width, disruptedMeta.height, { fit: "fill", kernel: "lanczos3" })
           .raw().toBuffer({ resolveWithObject: true });
-        const originalLow = await sharp(originalForRestoration).blur(blurRadius).raw().toBuffer();
-        const disruptedLow = await sharp(output).resize(originalRaw.info.width, originalRaw.info.height, { fit: "fill", kernel: "lanczos3" })
+        const disruptedLow = await sharp(output)
+          .resize(disruptedMeta.width, disruptedMeta.height, { fit: "fill", kernel: "lanczos3" })
           .blur(blurRadius).raw().toBuffer();
-        const channels = Math.min(originalRaw.info.channels, disruptedRaw.info.channels);
+        const channels = disruptedRaw.info.channels;
         for (let i = 0; i < disruptedRaw.data.length; i++) {
           const channel = i % disruptedRaw.info.channels;
           if (channel >= channels || channel === 3) continue;
-          const originalIndex = Math.min(i, originalLow.length - 1);
-          const highFrequency = disruptedRaw.data[i] - disruptedLow[originalIndex];
-          const blendedLow = disruptedLow[originalIndex] * (1 - lowBlend) + originalLow[originalIndex] * lowBlend;
+          const disruptedIndex = Math.min(i, disruptedLow.length - 1);
+          const highFrequency = disruptedRaw.data[i] - disruptedLow[disruptedIndex];
+          const blendedLow = disruptedRaw.data[i] * (1 - lowBlend) + disruptedLow[disruptedIndex] * lowBlend;
           disruptedRaw.data[i] = Math.max(0, Math.min(255, Math.round(blendedLow + highFrequency * detailRetention)));
         }
         const restored = sharp(disruptedRaw.data, {
-          raw: { width: originalRaw.info.width, height: originalRaw.info.height, channels: disruptedRaw.info.channels },
+          raw: { width: disruptedRaw.info.width, height: disruptedRaw.info.height, channels: disruptedRaw.info.channels },
         });
-        const restoredMeta = await sharp(originalForRestoration).metadata();
+        const restoredMeta = disruptedMeta;
         if (restoredMeta.format === "png") output = await restored.png().toBuffer();
         else if (restoredMeta.format === "webp") output = await restored.webp({ quality: 96 }).toBuffer();
         else output = await restored.jpeg({ quality: 92, mozjpeg: false }).toBuffer();
-        logProcessing("quality restore — rebuilt low-frequency color from source while retaining disrupted detail");
+        logProcessing("quality restore — rebuilt from encoded disrupted output only; original source excluded");
       }
 
       const isJpeg = output.length >= 2 && output[0] === 0xff && output[1] === 0xd8;

@@ -74,7 +74,7 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [localMetadataCleanup, setLocalMetadataCleanup] = useState(true);
   const [localFrequencyDisruption, setLocalFrequencyDisruption] = useState(true);
   const [localDetectorPass, setLocalDetectorPass] = useState(true);
-  const [localDisruptionStrength, setLocalDisruptionStrength] = useState<"high" | "extreme">("high");
+  const [localDisruptionStrength, setLocalDisruptionStrength] = useState<"extreme">("extreme");
   const [localRestoreLowBlend, setLocalRestoreLowBlend] = useState(100);
   const [localRestoreDetail, setLocalRestoreDetail] = useState(82);
   const [localRestoreBlur, setLocalRestoreBlur] = useState(2);
@@ -410,10 +410,9 @@ export default function ImagesPage(props: ImagesPageProps) {
                       <Label className="text-xs text-muted-foreground">Composite strength</Label>
                       <select
                         value={localDisruptionStrength}
-                        onChange={(event) => setLocalDisruptionStrength(event.target.value as typeof localDisruptionStrength)}
+                         onChange={() => setLocalDisruptionStrength("extreme")}
                         className="rounded-md border border-border bg-background px-2 py-1.5 text-xs"
                       >
-                        <option value="high">High</option>
                         <option value="extreme">Extreme</option>
                       </select>
                     </div>
