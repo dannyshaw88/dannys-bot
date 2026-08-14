@@ -26,6 +26,14 @@ interface Props {
   settings: ImageFilterSettings;
   onSave: (settings: ImageFilterSettings) => void;
   alterationLevel?: string;
+  showPipelineControls?: boolean;
+  alterationEnabled?: boolean;
+  imageSettingsEnabled?: boolean;
+  onPipelineSettingsSave?: (settings: {
+    alterationEnabled: boolean;
+    alterationLevel: "small" | "medium" | "high";
+    imageSettingsEnabled: boolean;
+  }) => void;
 }
 
 const FILTER_DEFS = [
@@ -36,8 +44,19 @@ const FILTER_DEFS = [
   { key: "pixelate",   label: "Pixelate Effect",  step: 0.1 },
 ] as const;
 
-export function ImageSettingsDialog({ open, onClose, settings, onSave, alterationLevel }: Props) {
+export function ImageSettingsDialog({
+  open, onClose, settings, onSave, alterationLevel,
+  showPipelineControls = false,
+  alterationEnabled = true,
+  imageSettingsEnabled = true,
+  onPipelineSettingsSave,
+}: Props) {
   const [local, setLocal] = useState<ImageFilterSettings>(settings);
+  const [localAlterationEnabled, setLocalAlterationEnabled] = useState(alterationEnabled);
+  const [localAlterationLevel, setLocalAlterationLevel] = useState<"small" | "medium" | "high">(
+    alterationLevel === "medium" || alterationLevel === "high" ? alterationLevel : "small",
+  );
+  const [localImageSettingsEnabled, setLocalImageSettingsEnabled] = useState(imageSettingsEnabled);
   const [originalImage, setOriginalImage] = useState<string | null>(null);
   const [previewImage, setPreviewImage]   = useState<string | null>(null);
   const [isPreviewing, setIsPreviewing]   = useState(false);
@@ -46,7 +65,12 @@ export function ImageSettingsDialog({ open, onClose, settings, onSave, alteratio
 
   // Keep local in sync when dialog re-opens with new settings
   const handleOpenChange = (isOpen: boolean) => {
-    if (isOpen) setLocal(settings);
+    if (isOpen) {
+      setLocal(settings);
+      setLocalAlterationEnabled(alterationEnabled);
+      setLocalAlterationLevel(alterationLevel === "medium" || alterationLevel === "high" ? alterationLevel : "small");
+      setLocalImageSettingsEnabled(imageSettingsEnabled);
+    }
     else onClose();
   };
 
@@ -89,7 +113,15 @@ export function ImageSettingsDialog({ open, onClose, settings, onSave, alteratio
     setIsPreviewing(false);
   };
 
-  const handleOk = () => { onSave(local); onClose(); };
+  const handleOk = () => {
+    onSave(local);
+    onPipelineSettingsSave?.({
+      alterationEnabled: localAlterationEnabled,
+      alterationLevel: localAlterationLevel,
+      imageSettingsEnabled: localImageSettingsEnabled,
+    });
+    onClose();
+  };
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -103,6 +135,27 @@ export function ImageSettingsDialog({ open, onClose, settings, onSave, alteratio
         <div className="flex gap-0 divide-x divide-border">
           {/* ── Left: filter controls ────────────────────────────── */}
           <div className="w-64 shrink-0 p-4 space-y-2">
+            {showPipelineControls && (
+              <div className="mb-3 space-y-2 rounded-md border border-border/60 bg-muted/20 p-2.5">
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" checked={localAlterationEnabled} onChange={e => setLocalAlterationEnabled(e.target.checked)} className="w-3.5 h-3.5 accent-primary" />
+                  <span className="text-xs font-medium">Enable alteration</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground">Level</span>
+                  {(["small", "medium", "high"] as const).map(level => (
+                    <button key={level} type="button" disabled={!localAlterationEnabled} onClick={() => setLocalAlterationLevel(level)}
+                      className={`h-6 px-2 text-[10px] rounded border capitalize ${localAlterationLevel === level ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border text-muted-foreground"}`}>
+                      {level}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" checked={localImageSettingsEnabled} onChange={e => setLocalImageSettingsEnabled(e.target.checked)} className="w-3.5 h-3.5 accent-primary" />
+                  <span className="text-xs font-medium">Enable filter settings</span>
+                </div>
+              </div>
+            )}
             {/* Column headers */}
             <div className="grid grid-cols-[18px_1fr_52px_52px] gap-x-2 items-center pb-1.5 border-b border-border/50">
               <span />
@@ -125,13 +178,13 @@ export function ImageSettingsDialog({ open, onClose, settings, onSave, alteratio
                     {label}
                   </span>
                   <input
-                    type="number" step={step} disabled={!f.enabled}
+                    type="number" step={step} disabled={!f.enabled || (showPipelineControls && !localImageSettingsEnabled)}
                     className="w-full h-7 text-xs border border-border rounded px-1.5 bg-background disabled:opacity-30 text-center"
                     value={f.min}
                     onChange={e => setFilter(key, { ...f, min: Number(e.target.value) })}
                   />
                   <input
-                    type="number" step={step} disabled={!f.enabled}
+                    type="number" step={step} disabled={!f.enabled || (showPipelineControls && !localImageSettingsEnabled)}
                     className="w-full h-7 text-xs border border-border rounded px-1.5 bg-background disabled:opacity-30 text-center"
                     value={f.max}
                     onChange={e => setFilter(key, { ...f, max: Number(e.target.value) })}

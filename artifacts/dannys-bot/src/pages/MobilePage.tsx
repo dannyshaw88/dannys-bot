@@ -7268,7 +7268,16 @@ export function AutomationSettingsPanel({
           onClose={() => setUpdateProfilePicImageSettingsOpen(false)}
           settings={settings.updateProfilePicImageSettings}
           alterationLevel={settings.updateProfilePicAlterationLevel}
+          showPipelineControls
+          alterationEnabled={settings.updateProfilePicAlterationEnabled}
+          imageSettingsEnabled={settings.updateProfilePicImageSettingsEnabled}
           onSave={saved => setSettings(s => ({ ...s, updateProfilePicImageSettings: saved }))}
+          onPipelineSettingsSave={saved => setSettings(s => ({
+            ...s,
+            updateProfilePicAlterationEnabled: saved.alterationEnabled,
+            updateProfilePicAlterationLevel: saved.alterationLevel,
+            updateProfilePicImageSettingsEnabled: saved.imageSettingsEnabled,
+          }))}
         />
 
         {/* ── Post a Story — standalone Story publisher. The directory is
