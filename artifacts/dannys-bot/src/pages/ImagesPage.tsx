@@ -495,8 +495,8 @@ export default function ImagesPage(props: ImagesPageProps) {
           table-layout: fixed;
         }
         .fix-images-scroll {
-          height: 376px;
-          max-height: 376px;
+          height: 200px;
+          max-height: 200px;
           overflow-y: auto;
           overflow-x: hidden;
         }
@@ -783,7 +783,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                                  {item.name}
                                </div>
                                 {item.processingLog?.length ? (
-                                  <div className="mt-1.5 max-w-[520px] rounded border border-border/60 bg-muted/30 p-1.5 font-mono text-[9px] leading-4 text-muted-foreground max-h-28 overflow-y-auto">
+                                  <div className="mt-1.5 max-w-[520px] h-[52px] max-h-[52px] rounded border border-border/60 bg-muted/30 p-1.5 font-mono text-[9px] leading-4 text-muted-foreground overflow-y-auto">
                                     <div className="mb-0.5 font-sans text-[10px] font-semibold text-cyan-600 dark:text-cyan-400">
                                       Processing log
                                     </div>
