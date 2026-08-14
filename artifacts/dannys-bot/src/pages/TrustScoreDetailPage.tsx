@@ -41,7 +41,7 @@ function CopyTrustScoreDialog({
   const tierTargets = allLevels.filter(l => l.id !== sourceTrustScoreId);
   const sourceLevel = allLevels.find(l => l.id === sourceTrustScoreId);
   const displayCopySections = [...COPY_SECTIONS].sort((a, b) => {
-    const order = ["runInterval", "feed", "explore"];
+    const order = ["runInterval", "feed", "explore", "follow", "injectBrowsing"];
     const ai = order.indexOf(a.key);
     const bi = order.indexOf(b.key);
     if (ai === -1 && bi === -1) return 0;
