@@ -68,7 +68,10 @@ export default defineConfig({
     },
     proxy: {
       "/api": {
-        target: `http://localhost:${process.env.API_PORT ?? "8082"}`,
+        // The desktop and application workflows run the API on port 3000.
+        // Keep 3000 as the fallback so image processing does not silently
+        // fail when API_PORT is not injected into the frontend build.
+        target: `http://localhost:${process.env.API_PORT ?? "3000"}`,
         changeOrigin: true,
         ws: true,
       },
