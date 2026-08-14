@@ -1,3 +1,11 @@
+## [1.2.511] — 2026-08-14
+
+### Added — Crash and database diagnostics
+
+- Added startup logging for the active database path, process IDs, database size, and registered device count.
+- Added database file-change monitoring for `database.db`, `database.db-wal`, and `database.db-shm`.
+- Added API child-process exit code and signal logging to diagnose crashes and database replacement.
+
 ## [1.2.506] — 2026-08-14
 
 ### Fixed — Fix Images responsiveness
