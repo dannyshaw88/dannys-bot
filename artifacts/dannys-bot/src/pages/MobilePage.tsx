@@ -5037,11 +5037,11 @@ export function AutomationSettingsPanel({
     "followFilterMaleNames",
   ]);
   const fieldDisabled = (...fields: string[]) =>
-    loadingExternal || fields.some(field =>
-      FOLLOW_FILTER_FIELDS.has(field)
-        ? false
-        : field.startsWith("makePost")
+    fields.some(field =>
+      field.startsWith("makePost")
         ? (isTrustScoreTemplateEditor && fieldLocked(field))
+        : loadingExternal || FOLLOW_FILTER_FIELDS.has(field)
+        ? false
         : trustScoreSlotLocked
         ? !TRUST_SCORE_SLOT_EDITABLE_FIELDS.has(field) || templateDisabledTools.has(field)
         : fieldLocked(field),
@@ -7236,7 +7236,7 @@ export function AutomationSettingsPanel({
                     <input type="checkbox" id={`make-a-post-fix-ai-slop-${slotIdx ?? 0}`}
                       checked={settings.makePostFixAiSlop}
                       onChange={e => setSettings(s => ({ ...s, makePostFixAiSlop: e.target.checked }))}
-                      disabled={loadingExternal || (isTrustScoreTemplateEditor && fieldLocked("makePostFixAiSlop"))}
+                      disabled={isTrustScoreTemplateEditor && fieldLocked("makePostFixAiSlop")}
                       className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                     <label htmlFor={`make-a-post-fix-ai-slop-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Fix AI Slop</label>
                   </div>
@@ -7244,7 +7244,7 @@ export function AutomationSettingsPanel({
                     <input type="checkbox"
                       checked={settings.makePostMetadataCleanup}
                       onChange={e => setSettings(s => ({ ...s, makePostMetadataCleanup: e.target.checked }))}
-                      disabled={loadingExternal || (isTrustScoreTemplateEditor && fieldLocked("makePostMetadataCleanup"))}
+                      disabled={isTrustScoreTemplateEditor && fieldLocked("makePostMetadataCleanup")}
                       className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                     Remove Metadata
                   </label>
@@ -7252,7 +7252,7 @@ export function AutomationSettingsPanel({
                     <input type="checkbox"
                       checked={settings.makePostFrequencyDisruption}
                       onChange={e => setSettings(s => ({ ...s, makePostFrequencyDisruption: e.target.checked }))}
-                      disabled={loadingExternal || (isTrustScoreTemplateEditor && fieldLocked("makePostFrequencyDisruption"))}
+                      disabled={isTrustScoreTemplateEditor && fieldLocked("makePostFrequencyDisruption")}
                       className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                     Structural Pixel Disruption
                   </label>
