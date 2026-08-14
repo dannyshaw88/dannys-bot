@@ -1765,9 +1765,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       sharpen: { enabled: true, min: 1.0, max: 2.0 },
       pixelate: { enabled: true, min: 0.9, max: 2.1 },
     }),
-    updateProfilePicFixAiSlop: z.boolean().default(true),
-    updateProfilePicMetadataCleanup: z.boolean().default(true),
-    updateProfilePicFrequencyDisruption: z.boolean().default(false),
+     updateProfilePicFixAiSlop: z.boolean().default(true),
+     updateProfilePicMetadataCleanup: z.boolean().default(true),
+     updateProfilePicFrequencyDisruption: z.boolean().default(false),
     // Update Bio — navigates to own profile → Edit profile → taps bio field → pastes bioText → saves.
     updateBioActivatePctMin: z.number().min(0).max(100).default(0),
     updateBioActivatePctMax: z.number().min(0).max(100).default(0),
