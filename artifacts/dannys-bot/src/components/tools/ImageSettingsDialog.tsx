@@ -33,7 +33,13 @@ interface Props {
     alterationEnabled: boolean;
     alterationLevel: "small" | "medium" | "high";
     imageSettingsEnabled: boolean;
+    fixAiSlop: boolean;
+    metadataCleanup: boolean;
+    frequencyDisruption: boolean;
   }) => void;
+  fixAiSlop?: boolean;
+  metadataCleanup?: boolean;
+  frequencyDisruption?: boolean;
 }
 
 const FILTER_DEFS = [
@@ -50,6 +56,9 @@ export function ImageSettingsDialog({
   alterationEnabled = true,
   imageSettingsEnabled = true,
   onPipelineSettingsSave,
+  fixAiSlop = true,
+  metadataCleanup = true,
+  frequencyDisruption = false,
 }: Props) {
   const [local, setLocal] = useState<ImageFilterSettings>(settings);
   const [localAlterationEnabled, setLocalAlterationEnabled] = useState(alterationEnabled);
@@ -57,6 +66,9 @@ export function ImageSettingsDialog({
     alterationLevel === "medium" || alterationLevel === "high" ? alterationLevel : "small",
   );
   const [localImageSettingsEnabled, setLocalImageSettingsEnabled] = useState(imageSettingsEnabled);
+  const [localFixAiSlop, setLocalFixAiSlop] = useState(fixAiSlop);
+  const [localMetadataCleanup, setLocalMetadataCleanup] = useState(metadataCleanup);
+  const [localFrequencyDisruption, setLocalFrequencyDisruption] = useState(frequencyDisruption);
   const [originalImage, setOriginalImage] = useState<string | null>(null);
   const [previewImage, setPreviewImage]   = useState<string | null>(null);
   const [isPreviewing, setIsPreviewing]   = useState(false);
@@ -70,6 +82,9 @@ export function ImageSettingsDialog({
       setLocalAlterationEnabled(alterationEnabled);
       setLocalAlterationLevel(alterationLevel === "medium" || alterationLevel === "high" ? alterationLevel : "small");
       setLocalImageSettingsEnabled(imageSettingsEnabled);
+      setLocalFixAiSlop(fixAiSlop);
+      setLocalMetadataCleanup(metadataCleanup);
+      setLocalFrequencyDisruption(frequencyDisruption);
     }
     else onClose();
   };
@@ -119,6 +134,9 @@ export function ImageSettingsDialog({
       alterationEnabled: localAlterationEnabled,
       alterationLevel: localAlterationLevel,
       imageSettingsEnabled: localImageSettingsEnabled,
+      fixAiSlop: localFixAiSlop,
+      metadataCleanup: localMetadataCleanup,
+      frequencyDisruption: localFrequencyDisruption,
     });
     onClose();
   };
@@ -153,6 +171,18 @@ export function ImageSettingsDialog({
                 <div className="flex items-center gap-2">
                   <input type="checkbox" checked={localImageSettingsEnabled} onChange={e => setLocalImageSettingsEnabled(e.target.checked)} className="w-3.5 h-3.5 accent-primary" />
                   <span className="text-xs font-medium">Enable filter settings</span>
+                </div>
+                <div className="space-y-1 pt-1 border-t border-border/50">
+                  {[
+                    ["Fix AI Slop", localFixAiSlop, setLocalFixAiSlop],
+                    ["Remove Metadata", localMetadataCleanup, setLocalMetadataCleanup],
+                    ["Structural Pixel Disruption", localFrequencyDisruption, setLocalFrequencyDisruption],
+                  ].map(([label, checked, setter]) => (
+                    <label key={String(label)} className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <input type="checkbox" checked={Boolean(checked)} onChange={e => (setter as (value: boolean) => void)(e.target.checked)} className="w-3.5 h-3.5 accent-primary" />
+                      {label}
+                    </label>
+                  ))}
                 </div>
               </div>
             )}

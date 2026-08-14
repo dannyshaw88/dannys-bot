@@ -222,6 +222,9 @@ export interface AutomationSettingsData {
   updateProfilePicAlterationLevel: "small" | "medium" | "high";
   updateProfilePicImageSettingsEnabled: boolean;
   updateProfilePicImageSettings: ImageFilterSettings;
+  updateProfilePicFixAiSlop: boolean;
+  updateProfilePicMetadataCleanup: boolean;
+  updateProfilePicFrequencyDisruption: boolean;
   updateBioActivatePctMin: number; updateBioActivatePctMax: number;
   updateBioText: string;
   updateBioDisableAfterUsed: boolean;
@@ -360,6 +363,9 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
     sharpen: { enabled: true, min: 1.0, max: 2.0 },
     pixelate: { enabled: true, min: 0.9, max: 2.1 },
   },
+  updateProfilePicFixAiSlop: true,
+  updateProfilePicMetadataCleanup: true,
+  updateProfilePicFrequencyDisruption: false,
   updateBioActivatePctMin: 0, updateBioActivatePctMax: 0,
   updateBioText: "",
   updateBioDisableAfterUsed: false,
@@ -417,6 +423,9 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
   "updateProfilePicAlterationLevel",
   "updateProfilePicImageSettingsEnabled",
   "updateProfilePicImageSettings",
+  "updateProfilePicFixAiSlop",
+  "updateProfilePicMetadataCleanup",
+  "updateProfilePicFrequencyDisruption",
   "updateBioActivatePctMin",
   "updateBioActivatePctMax",
   "updateBioText",
@@ -453,6 +462,9 @@ export const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
   "updateProfilePicAlterationLevel",
   "updateProfilePicImageSettingsEnabled",
   "updateProfilePicImageSettings",
+  "updateProfilePicFixAiSlop",
+  "updateProfilePicMetadataCleanup",
+  "updateProfilePicFrequencyDisruption",
   "updateBioActivatePctMin",
   "updateBioActivatePctMax",
   "updateBioText",

@@ -477,6 +477,9 @@ type AutomationSettings = {
   updateProfilePicAlterationLevel?: "small" | "medium" | "high";
   updateProfilePicImageSettingsEnabled?: boolean;
   updateProfilePicImageSettings?: ImageFilterSettings;
+  updateProfilePicFixAiSlop?: boolean;
+  updateProfilePicMetadataCleanup?: boolean;
+  updateProfilePicFrequencyDisruption?: boolean;
   updateBioActivatePctMin?: number;
   updateBioActivatePctMax?: number;
   updateBioText?: string;
@@ -1762,6 +1765,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       sharpen: { enabled: true, min: 1.0, max: 2.0 },
       pixelate: { enabled: true, min: 0.9, max: 2.1 },
     }),
+    updateProfilePicFixAiSlop: z.boolean().default(true),
+    updateProfilePicMetadataCleanup: z.boolean().default(true),
+    updateProfilePicFrequencyDisruption: z.boolean().default(false),
     // Update Bio — navigates to own profile → Edit profile → taps bio field → pastes bioText → saves.
     updateBioActivatePctMin: z.number().min(0).max(100).default(0),
     updateBioActivatePctMax: z.number().min(0).max(100).default(0),
@@ -7668,6 +7674,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     alterationLevel?: AlterationLevel;
     imageSettingsEnabled?: boolean;
     imageSettings?: ImageFilterSettings;
+    frequencyDisruption?: boolean;
     homeTapCount?: number;
     onLog?: (msg: string) => void;
   };
@@ -7688,7 +7695,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     audit: { sourceSha256: string; processedSha256: string; processedBytes: number; format: string; width: number; height: number };
     cleanup: () => Promise<void>;
   }> {
-    const { doFixAiSlop, alterationEnabled, alterationLevel, imageSettingsEnabled, imageSettings, onLog } = opts;
+    const { doFixAiSlop, alterationEnabled, alterationLevel, imageSettingsEnabled, imageSettings, frequencyDisruption, onLog } = opts;
     const tempFiles: string[] = [];
     const tempDirs: string[] = [];
     const prefix = fileName.includes("/") ? "Make a Post" : "Make a Post";
@@ -7758,7 +7765,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           input,
           level,
           imageSettingsEnabled ? imageSettings : undefined,
-          false,
+          frequencyDisruption ?? false,
         );
         const tempDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "equinox-mobile-alter-"));
         const sourceExt = path.extname(fileName).toLowerCase();
@@ -8952,6 +8959,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       alterationLevel?: AlterationLevel;
       imageSettingsEnabled?: boolean;
       imageSettings?: ImageFilterSettings;
+      fixAiSlop?: boolean;
+      metadataCleanup?: boolean;
+      frequencyDisruption?: boolean;
     },
   ): Promise<void> {
     // 1. Pick the most recent image file from the PC folder.
@@ -8975,11 +8985,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let prepared: Awaited<ReturnType<typeof prepareMakePostImage>>;
     try {
       prepared = await prepareMakePostImage(localPath, localFile, {
-        doFixAiSlop: true,
+        doFixAiSlop: imageOptions?.fixAiSlop ?? true,
         alterationEnabled: imageOptions?.alterationEnabled ?? true,
         alterationLevel: imageOptions?.alterationLevel ?? "small",
         imageSettingsEnabled: imageOptions?.imageSettingsEnabled ?? true,
         imageSettings: imageOptions?.imageSettings,
+        frequencyDisruption: imageOptions?.frequencyDisruption ?? false,
       // The preparation pipeline is shared with Make a Post, but this caller
       // is Update Profile Pic. Relabel delegated progress lines so Random
       // Actions cannot misreport an avatar update as a post.
@@ -11289,6 +11300,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         updateProfilePicActivatePctMin, updateProfilePicActivatePctMax,
         updateProfilePicAlterationEnabled, updateProfilePicAlterationLevel,
         updateProfilePicImageSettingsEnabled, updateProfilePicImageSettings,
+        updateProfilePicFixAiSlop, updateProfilePicMetadataCleanup, updateProfilePicFrequencyDisruption,
         updateProfilePicFolderPath: _updateProfilePicFolderPath,
         updateProfilePicDisableAfterUsed,
         updateBioActivatePctMin, updateBioActivatePctMax,
@@ -12383,6 +12395,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 alterationLevel: updateProfilePicAlterationLevel,
                 imageSettingsEnabled: updateProfilePicImageSettingsEnabled,
                 imageSettings: updateProfilePicImageSettings,
+                fixAiSlop: updateProfilePicFixAiSlop,
+                metadataCleanup: updateProfilePicMetadataCleanup,
+                frequencyDisruption: updateProfilePicFrequencyDisruption,
               });
               steps.push("jitter-update-profile-pic");
               _jitterFired = true;

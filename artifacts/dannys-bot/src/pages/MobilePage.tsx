@@ -7250,12 +7250,18 @@ export function AutomationSettingsPanel({
           showPipelineControls
           alterationEnabled={settings.updateProfilePicAlterationEnabled}
           imageSettingsEnabled={settings.updateProfilePicImageSettingsEnabled}
+          fixAiSlop={settings.updateProfilePicFixAiSlop}
+          metadataCleanup={settings.updateProfilePicMetadataCleanup}
+          frequencyDisruption={settings.updateProfilePicFrequencyDisruption}
           onSave={saved => setSettings(s => ({ ...s, updateProfilePicImageSettings: saved }))}
           onPipelineSettingsSave={saved => setSettings(s => ({
             ...s,
             updateProfilePicAlterationEnabled: saved.alterationEnabled,
             updateProfilePicAlterationLevel: saved.alterationLevel,
             updateProfilePicImageSettingsEnabled: saved.imageSettingsEnabled,
+            updateProfilePicFixAiSlop: saved.fixAiSlop,
+            updateProfilePicMetadataCleanup: saved.metadataCleanup,
+            updateProfilePicFrequencyDisruption: saved.frequencyDisruption,
           }))}
         />
 
