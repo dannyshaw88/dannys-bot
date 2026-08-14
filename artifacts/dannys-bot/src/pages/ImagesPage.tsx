@@ -427,6 +427,35 @@ export default function ImagesPage(props: ImagesPageProps) {
 
   return (
     <PageShell>
+      <style>{`
+        @keyframes image-processing-scan {
+          0% { transform: translateX(-115%); opacity: 0; }
+          12% { opacity: 1; }
+          50% { opacity: 0.85; }
+          88% { opacity: 1; }
+          100% { transform: translateX(115%); opacity: 0; }
+        }
+        tr.image-processing-scan {
+          position: relative;
+          isolation: isolate;
+          background: linear-gradient(90deg, rgba(34,211,238,0.04), rgba(34,211,238,0.12), rgba(34,211,238,0.04));
+        }
+        tr.image-processing-scan::after {
+          content: "";
+          position: absolute;
+          z-index: 2;
+          pointer-events: none;
+          inset: 0;
+          width: 42%;
+          background: linear-gradient(90deg, transparent, rgba(34,211,238,0.08) 25%, rgba(103,232,249,0.72) 50%, rgba(34,211,238,0.08) 75%, transparent);
+          box-shadow: 0 0 18px rgba(34,211,238,0.45), 0 0 42px rgba(34,211,238,0.2);
+          animation: image-processing-scan 1.8s ease-in-out infinite;
+        }
+        tr.image-processing-scan > td {
+          position: relative;
+          z-index: 3;
+        }
+      `}</style>
       <div className="p-4 lg:p-6 h-[calc(100vh-3.5rem)] min-h-[600px]">
         <Card className="flex flex-col lg:flex-row h-full overflow-hidden border-border/60 shadow-sm bg-background">
           
@@ -675,7 +704,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                        </thead>
                        <tbody className="divide-y divide-border/40">
                          {items.map(item => (
-                           <tr key={item.id} className="hover:bg-muted/30 transition-colors group">
+                            <tr key={item.id} className={`hover:bg-muted/30 transition-colors group ${item.status === "processing" ? "image-processing-scan" : ""}`}>
                              <td className="px-4 py-3">
                                 <div className="w-20 h-20 rounded border border-border/60 bg-muted/30 overflow-hidden mx-auto shadow-xs">
                                  <img src={item.previewUrl} className="w-full h-full object-cover" alt="" />
