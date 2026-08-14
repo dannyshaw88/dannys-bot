@@ -1,3 +1,11 @@
+## [1.2.512] — 2026-08-14
+
+### Fixed — Follow matching and search timing
+
+- Reduced redundant waits between Follow Users search targets while retaining exact username matching.
+- Restricted Males Only matching to the username, account full name, and bounded profile biography fields.
+- Prevented post captions, suggested accounts, and hidden accessibility text from being treated as biography.
+
 ## [1.2.511] — 2026-08-14
 
 ### Added — Crash and database diagnostics
