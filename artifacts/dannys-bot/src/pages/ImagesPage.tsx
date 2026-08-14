@@ -307,7 +307,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                setLocalItems(prev => prev.map(current => current.id === item.id
                  ? { ...current, progress: waveProgress }
                  : current));
-             }, 850);
+             }, 1200);
              let waveResponse: Response;
              try {
                waveResponse = await fetch("/api/wavespeed/process", {
@@ -444,11 +444,11 @@ export default function ImagesPage(props: ImagesPageProps) {
     <PageShell>
       <style>{`
         @keyframes image-processing-scan-down {
-          0% { top: -2px; opacity: 0; }
+          0% { transform: translateY(-2px); opacity: 0; }
           12% { opacity: 1; }
           48% { opacity: 0.95; }
           82% { opacity: 0.65; }
-          100% { top: calc(100% - 1px); opacity: 0; }
+          100% { transform: translateY(calc(112px - 1px)); opacity: 0; }
         }
         @keyframes image-processing-pixels {
           0%, 100% { opacity: 0.25; background-position: 0 0, 14px 8px, 32px 2px, 51px 13px; }
@@ -500,6 +500,7 @@ export default function ImagesPage(props: ImagesPageProps) {
           height: 2px;
           background: linear-gradient(90deg, transparent, rgba(103,232,249,0.95) 20%, #fff 50%, rgba(103,232,249,0.95) 80%, transparent);
           box-shadow: 0 0 3px rgba(34,211,238,0.8);
+          will-change: transform, opacity;
           animation: image-processing-scan-down var(--scan-duration, 2.4s) linear infinite;
         }
         .fix-images-table {
@@ -511,6 +512,11 @@ export default function ImagesPage(props: ImagesPageProps) {
           height: auto;
           overflow-y: auto;
           overflow-x: hidden;
+          contain: strict;
+        }
+        .fix-images-table tbody > tr {
+          content-visibility: auto;
+          contain-intrinsic-size: 112px;
         }
       `}</style>
       <div className="p-4 lg:p-6 h-[calc(100vh-3.5rem)] min-h-[600px]">
@@ -773,13 +779,13 @@ export default function ImagesPage(props: ImagesPageProps) {
                              >
                               <td className="px-4 py-3">
                                 <div className="w-20 h-20 rounded border border-border/60 bg-muted/30 overflow-hidden mx-auto shadow-xs">
-                                 <img src={item.previewUrl} className="w-full h-full object-cover" alt="" />
+                                 <img src={item.previewUrl} loading="lazy" decoding="async" className="w-full h-full object-cover" alt="" />
                                </div>
                              </td>
                              <td className="px-4 py-3">
                                 <div className="w-20 h-20 rounded border border-border/60 bg-muted/10 overflow-hidden mx-auto flex items-center justify-center shadow-xs">
                                  {item.processedPreviewUrl ? (
-                                   <img src={item.processedPreviewUrl} className="w-full h-full object-cover" alt="" />
+                                   <img src={item.processedPreviewUrl} loading="lazy" decoding="async" className="w-full h-full object-cover" alt="" />
                                  ) : (
                                    <ImageIcon className="w-4 h-4 text-muted-foreground/30" />
                                  )}
