@@ -485,9 +485,9 @@ export default function ImagesPage(props: ImagesPageProps) {
         }
         tr.image-processing-scan > td::after {
           inset: 0 0 auto;
-          height: 3px;
+          height: 2px;
           background: linear-gradient(90deg, transparent, rgba(103,232,249,0.95) 20%, #fff 50%, rgba(103,232,249,0.95) 80%, transparent);
-          box-shadow: 0 0 10px rgba(34,211,238,0.95), 0 0 24px rgba(34,211,238,0.6);
+          box-shadow: 0 0 3px rgba(34,211,238,0.8);
           animation: image-processing-scan-down var(--scan-duration, 2.4s) linear infinite;
         }
         .fix-images-table {
@@ -673,11 +673,6 @@ export default function ImagesPage(props: ImagesPageProps) {
                 </Button>
                 <input type="file" multiple accept="image/*" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
                 
-               {notice && (
-                 <span className="hidden md:inline text-[11px] text-muted-foreground truncate max-w-[260px]" title={notice}>
-                   {notice}
-                 </span>
-               )}
                {items.length > 0 && !isProcessing && (
                   <>
                     <Button variant="ghost" size="sm" onClick={handleClearAll} className="text-muted-foreground hover:text-foreground h-8 px-3">
