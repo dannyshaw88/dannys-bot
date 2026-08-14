@@ -5400,7 +5400,6 @@ export async function findPostNextButton(serial: string): Promise<{ x: number; y
   let match: RegExpExecArray | null;
   while ((match = nodeRe.exec(xml)) !== null) {
     const attrs = match[1];
-    if (!/clickable="true"|focusable="true"/i.test(attrs)) continue;
     const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
     if (!bounds) continue;
     const x1 = Number(bounds[1]), y1 = Number(bounds[2]);
@@ -6357,7 +6356,6 @@ export async function findExpandPhotoButton(serial: string): Promise<{ x: number
     const bandMaxY = Math.min(container.y2 + Math.round(ch * 0.05), EXPAND_MAX_Y);
     while ((m = nodeRe.exec(xml)) !== null) {
       const attrs = m[1];
-      if (!/clickable="true"|focusable="true"/.test(attrs)) continue;
       const textM = attrs.match(/\btext="([^"]*)"/);
       const cdM = attrs.match(/content-desc="([^"]*)"/);
       const ridM = attrs.match(/resource-id="([^"]*)"/);
@@ -6390,7 +6388,6 @@ export async function findExpandPhotoButton(serial: string): Promise<{ x: number
   const maxX = Math.round(w * 0.22);
   while ((m = nodeRe.exec(xml)) !== null) {
     const attrs = m[1];
-    if (!/clickable="true"|focusable="true"/.test(attrs)) continue;
     const textM = attrs.match(/\btext="([^"]*)"/);
     const cdM = attrs.match(/content-desc="([^"]*)"/);
     const ridM = attrs.match(/resource-id="([^"]*)"/);
