@@ -182,8 +182,26 @@ function findLiveMalesOnlyMatch(
   // Instagram places display name immediately after the handle and biography
   // text immediately after the display name. Keep the fields separate so the
   // matcher can report the real field that caused the decision.
-  const accountName = profileNodes[0]?.text ?? "";
-  const bio = profileNodes.slice(1).map(node => node.text).join("\n");
+  const accountNameNode = profileNodes[0];
+  const accountName = accountNameNode?.text ?? "";
+  // Do not treat every later TextView as biography: after the header, the same
+  // accessibility tree contains post captions, suggested accounts, and hidden
+  // content. The biography is the compact text band immediately below the
+  // account name, before the profile's content tabs/grid begin.
+  const bioBottom = accountNameNode?.bounds
+    ? accountNameNode.bounds.y2 + 500
+    : 0;
+  const bio = accountNameNode?.bounds
+    ? profileNodes
+        .slice(1)
+        .filter(node =>
+          Boolean(node.bounds) &&
+          node.bounds!.y1 >= accountNameNode.bounds!.y1 &&
+          node.bounds!.y2 <= bioBottom,
+        )
+        .map(node => node.text)
+        .join("\n")
+    : "";
   return findMalesOnlyMatch(username, accountName, bio, allowedNames);
 }
 
