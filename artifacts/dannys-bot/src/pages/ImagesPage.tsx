@@ -523,7 +523,6 @@ export default function ImagesPage(props: ImagesPageProps) {
                     
                     {alterationEnabled && (
                       <div className="pt-1 text-left animate-in fade-in slide-in-from-top-1 duration-200">
-                        <Label className="text-[11px] text-muted-foreground mb-1.5 block text-left">Alteration Level</Label>
                         <Select value={alterationLevel} onValueChange={(val) => setAlterationLevel(val as "small" | "medium" | "high")}>
                           <SelectTrigger className="relative h-8 text-xs bg-background shadow-xs [&>span]:absolute [&>span]:inset-x-0 [&>span]:text-center [&>span]:pointer-events-none [&>svg]:relative [&>svg]:z-10 [&>svg]:ml-auto">
                             <SelectValue />
@@ -565,9 +564,6 @@ export default function ImagesPage(props: ImagesPageProps) {
                       <Label className="text-sm font-medium text-foreground cursor-pointer select-none" onClick={() => setLocalMetadataCleanup(!localMetadataCleanup)}>
                         Remove metadata
                       </Label>
-                      <p className="text-[10px] leading-4 text-muted-foreground max-w-[210px]">
-                        Strip EXIF, GPS, software, and embedded comments on export. Pixels are unchanged.
-                      </p>
                     </div>
                     <Switch checked={localMetadataCleanup} onCheckedChange={setLocalMetadataCleanup} className="data-[state=checked]:bg-cyan-500 shrink-0" />
                   </div>
