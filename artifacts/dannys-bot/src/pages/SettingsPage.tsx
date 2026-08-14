@@ -433,6 +433,8 @@ export function SettingsPage() {
   const qc = useQueryClient();
   const [testingHiker, setTestingHiker] = useState(false);
   const [hikerStatus, setHikerStatus] = useState<"idle" | "ok" | "fail">("idle");
+  const [waveSpeedStatus, setWaveSpeedStatus] = useState<"idle" | "loading" | "ok" | "fail">("idle");
+  const [waveSpeedBalance, setWaveSpeedBalance] = useState<string | null>(null);
   const [tokenDraft, setTokenDraft] = useState<string | null>(null);
   const [twoCaptchaKeyDraft, setTwoCaptchaKeyDraft] = useState<string | null>(null);
   const [twoCaptchaKeyInitialized, setTwoCaptchaKeyInitialized] = useState(false);
@@ -550,6 +552,21 @@ export function SettingsPage() {
       toast({ title: "Connection test failed", variant: "destructive" });
     } finally {
       setTestingHiker(false);
+    }
+  };
+
+  const testWaveSpeedConnection = async () => {
+    setWaveSpeedStatus("loading");
+    try {
+      const response = await fetch("/api/wavespeed/status", { credentials: "include" });
+      const data = await response.json();
+      if (!response.ok || !data.connected) throw new Error(data.error ?? "WaveSpeed connection failed");
+      setWaveSpeedBalance(data.balance == null ? "Unknown" : `$${Number(data.balance).toFixed(4)}`);
+      setWaveSpeedStatus("ok");
+      toast({ title: "WaveSpeed connected", description: `Balance ${data.balance == null ? "unknown" : `$${Number(data.balance).toFixed(4)}`}` });
+    } catch (error: any) {
+      setWaveSpeedStatus("fail");
+      toast({ title: "WaveSpeed connection failed", description: error?.message, variant: "destructive" });
     }
   };
 
@@ -707,6 +724,24 @@ export function SettingsPage() {
               </p>
             </div>
           </div>
+        </div>
+
+        <div className="desktop-card p-6" style={{ display: settingsTab !== "scraping" ? "none" : undefined }}>
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2 rounded-lg bg-lime-100 text-lime-700"><Palette className="w-4 h-4" /></div>
+            <h3 className="text-base font-semibold">WaveSpeed Z-Image Turbo</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mb-5">
+            Uses the secure WAVESPEED_API_KEY secret for queued image-to-image enhancement. Cost is approximately $0.005 per image.
+          </p>
+          <div className="flex items-center gap-3">
+            <Button variant="outline" onClick={testWaveSpeedConnection} disabled={waveSpeedStatus === "loading"}>
+              {waveSpeedStatus === "loading" ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : waveSpeedStatus === "ok" ? <CheckCircle2 className="w-4 h-4 mr-2 text-green-500" /> : waveSpeedStatus === "fail" ? <XCircle className="w-4 h-4 mr-2 text-red-500" /> : null}
+              {waveSpeedStatus === "loading" ? "Testing..." : waveSpeedStatus === "ok" ? "Connected" : "Test WaveSpeed"}
+            </Button>
+            {waveSpeedBalance && <span className="text-sm text-muted-foreground">Balance: {waveSpeedBalance}</span>}
+          </div>
+          <p className="text-xs text-muted-foreground mt-3">The API key is managed through Replit Secrets and is never shown in the browser.</p>
         </div>
 
         {/* Abort after X scrapes — global scrape-session limit applied to every account's Follow Users tool */}

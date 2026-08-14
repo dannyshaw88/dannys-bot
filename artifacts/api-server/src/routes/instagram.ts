@@ -6000,6 +6000,91 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
 
   // Local Images workspace processing. The original file never leaves the
   // renderer's request body and is never written back over by this endpoint.
+  const WAVESPEED_MODEL = "wavespeed-ai/z-image-turbo/image-to-image";
+  const WAVESPEED_COST_PER_IMAGE = 0.005;
+  const getWaveSpeedKey = () => process.env.WAVESPEED_API_KEY?.trim() || "";
+  const waveSpeedHeaders = (key: string) => ({ Authorization: `Bearer ${key}`, "Content-Type": "application/json" });
+
+  app.get("/api/wavespeed/status", async (_req, res) => {
+    const key = getWaveSpeedKey();
+    if (!key) return res.json({ configured: false, connected: false, balance: null, model: WAVESPEED_MODEL, costPerImage: WAVESPEED_COST_PER_IMAGE });
+    try {
+      const response = await fetch("https://api.wavespeed.ai/api/v3/balance", { headers: { Authorization: `Bearer ${key}` } });
+      const body: any = await response.json().catch(() => ({}));
+      if (!response.ok) return res.status(502).json({ configured: true, connected: false, error: body?.message ?? `WaveSpeed returned ${response.status}` });
+      const balance = body?.data?.balance ?? body?.data?.credit ?? body?.balance ?? null;
+      res.json({ configured: true, connected: true, balance, model: WAVESPEED_MODEL, costPerImage: WAVESPEED_COST_PER_IMAGE });
+    } catch (error: any) {
+      res.status(502).json({ configured: true, connected: false, error: error?.message ?? "WaveSpeed connection failed" });
+    }
+  });
+
+  app.post("/api/wavespeed/process", async (req, res) => {
+    const key = getWaveSpeedKey();
+    if (!key) return res.status(503).json({ error: "WaveSpeed API key is not configured" });
+    const body = z.object({
+      imageBase64: z.string().min(1),
+      filename: z.string().min(1).max(255),
+      strength: z.number().min(0).max(1).default(0.1),
+      prompt: z.string().min(1).max(1000).default("REMAKE-THIS-IMAGE"),
+      width: z.number().int().min(256).max(2048).optional(),
+      height: z.number().int().min(256).max(2048).optional(),
+    }).parse(req.body);
+    try {
+      const raw = Buffer.from(body.imageBase64.replace(/^data:[^;]+;base64,/, ""), "base64");
+      if (!raw.length) throw new Error("Image data was empty");
+      const contentType = body.filename.toLowerCase().endsWith(".png") ? "image/png" : body.filename.toLowerCase().endsWith(".webp") ? "image/webp" : "image/jpeg";
+      const ticketResponse = await fetch("https://api.wavespeed.ai/api/v3/media/uploads", {
+        method: "POST",
+        headers: waveSpeedHeaders(key),
+        body: JSON.stringify({ filename: body.filename, size: raw.length, content_type: contentType }),
+      });
+      const ticket: any = await ticketResponse.json().catch(() => ({}));
+      if (!ticketResponse.ok || !ticket?.data?.upload?.url || !ticket?.data?.download_url) {
+        throw new Error(ticket?.message ?? "WaveSpeed upload ticket failed");
+      }
+      const uploadHeaders = ticket.data.upload.headers ?? {};
+      const uploadResponse = await fetch(ticket.data.upload.url, { method: "PUT", headers: uploadHeaders, body: raw });
+      if (!uploadResponse.ok) throw new Error(`WaveSpeed media upload failed (${uploadResponse.status})`);
+      const sourceMeta = await sharp(raw).metadata();
+      const width = body.width ?? sourceMeta.width ?? 1024;
+      const height = body.height ?? sourceMeta.height ?? 1024;
+      const taskResponse = await fetch(`https://api.wavespeed.ai/api/v3/${WAVESPEED_MODEL}`, {
+        method: "POST",
+        headers: waveSpeedHeaders(key),
+        body: JSON.stringify({
+          prompt: body.prompt,
+          image: ticket.data.download_url,
+          size: `${width}*${height}`,
+          strength: body.strength,
+          seed: -1,
+          output_format: "jpeg",
+        }),
+      });
+      const task: any = await taskResponse.json().catch(() => ({}));
+      if (!taskResponse.ok || !task?.data?.id) throw new Error(task?.message ?? "WaveSpeed task submission failed");
+      const resultUrl = task?.data?.urls?.get ?? `https://api.wavespeed.ai/api/v3/predictions/${task.data.id}`;
+      let result: any = task;
+      for (let attempt = 0; attempt < 60; attempt++) {
+        const status = String(result?.data?.status ?? "");
+        if (status === "completed") break;
+        if (["failed", "cancelled", "timeout"].includes(status)) throw new Error(result?.data?.error ?? `WaveSpeed task ${status}`);
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        const pollResponse = await fetch(resultUrl, { headers: { Authorization: `Bearer ${key}` } });
+        result = await pollResponse.json().catch(() => ({}));
+      }
+      const outputUrl = result?.data?.outputs?.[0];
+      if (!outputUrl) throw new Error("WaveSpeed task completed without an output");
+      const outputResponse = await fetch(outputUrl);
+      if (!outputResponse.ok) throw new Error(`Could not download WaveSpeed output (${outputResponse.status})`);
+      const outputBuffer = Buffer.from(await outputResponse.arrayBuffer());
+      res.json({ ok: true, filename: `${body.filename.replace(/\.[^.]+$/, "")}_wavespeed.jpg`, dataUrl: `data:image/jpeg;base64,${outputBuffer.toString("base64")}`, taskId: task.data.id, cost: WAVESPEED_COST_PER_IMAGE });
+    } catch (error: any) {
+      req.log.error({ err: error }, "[wavespeed] image processing failed");
+      res.status(502).json({ error: error?.message ?? "WaveSpeed processing failed" });
+    }
+  });
+
   // Each image is processed independently so the UI can report a real result
   // for every imported item and continue when one file fails.
   app.post("/api/images/process", async (req, res) => {

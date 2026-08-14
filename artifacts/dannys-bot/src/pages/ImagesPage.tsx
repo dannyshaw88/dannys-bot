@@ -73,6 +73,7 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [localImgSettings, setLocalImgSettings] = useState<ImageFilterSettings>(DEFAULT_IMAGE_SETTINGS);
   const [localMetadataCleanup, setLocalMetadataCleanup] = useState(true);
   const [localFrequencyDisruption, setLocalFrequencyDisruption] = useState(true);
+  const [localWaveSpeed, setLocalWaveSpeed] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -193,7 +194,24 @@ export default function ImagesPage(props: ImagesPageProps) {
           ? { ...current, status: "processing", progress: 8, error: undefined }
           : current));
         try {
-          const imageBase64 = await readFileDataUrl(item);
+           let imageBase64 = await readFileDataUrl(item);
+           let processFilename = item.name;
+           if (localWaveSpeed) {
+             const waveResponse = await fetch("/api/wavespeed/process", {
+               method: "POST",
+               headers: { "Content-Type": "application/json" },
+               body: JSON.stringify({ imageBase64, filename: item.name, prompt: "REMAKE-THIS-IMAGE", strength: 0.1 }),
+             });
+             const waveResult = await waveResponse.json().catch(() => null);
+             if (!waveResponse.ok || !waveResult?.ok || typeof waveResult.dataUrl !== "string") {
+               throw new Error(waveResult?.error ?? `WaveSpeed failed (${waveResponse.status})`);
+             }
+             imageBase64 = waveResult.dataUrl;
+             processFilename = waveResult.filename ?? `${item.name.replace(/\.[^.]+$/, "")}_wavespeed.jpg`;
+             setLocalItems(prev => prev.map(current => current.id === item.id
+               ? { ...current, name: processFilename, progress: 20, processingLog: [`WaveSpeed Z-Image Turbo completed — cost $${Number(waveResult.cost ?? 0.005).toFixed(3)}`] }
+               : current));
+           }
           if (!processingRef.current) break;
           setLocalItems(prev => prev.map(current => current.id === item.id
             ? { ...current, progress: 28 }
@@ -203,7 +221,7 @@ export default function ImagesPage(props: ImagesPageProps) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               ...(item.sourcePath ? { localPath: item.sourcePath } : { imageBase64 }),
-              filename: item.name,
+               filename: processFilename,
               fixAiSlop,
               alterationEnabled,
               alterationLevel,
@@ -256,6 +274,7 @@ export default function ImagesPage(props: ImagesPageProps) {
     localFrequencyDisruption,
     localItems,
     localMetadataCleanup,
+    localWaveSpeed,
     props,
     readFileDataUrl,
   ]);
@@ -478,6 +497,17 @@ export default function ImagesPage(props: ImagesPageProps) {
                        Browse for Files
                      </Button>
                    </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1 mt-0.5">
+                      <Label className="text-sm font-medium text-foreground cursor-pointer select-none" onClick={() => setLocalWaveSpeed(!localWaveSpeed)}>
+                        Use WaveSpeed Z-Image Turbo
+                      </Label>
+                      <p className="text-[10px] leading-4 text-muted-foreground max-w-[210px]">
+                        Sends each selected image through WaveSpeed first, then continues this pipeline.
+                      </p>
+                    </div>
+                    <Switch checked={localWaveSpeed} onCheckedChange={setLocalWaveSpeed} className="data-[state=checked]:bg-cyan-500 shrink-0" />
+                  </div>
                  </div>
               ) : (
                  <div className="rounded-xl border border-border/60 bg-background shadow-xs overflow-hidden animate-in fade-in duration-300">
