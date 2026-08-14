@@ -7830,6 +7830,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
     }
 
+    // Apply the optional structural pixel disruption setting only when enabled.
+    if (frequencyDisruption) {
     // Keep Mobile Make a Post and Random Actions → Update Avatar on the same
     // whole-image disruption path as Settings → Fix Images. This stage is
     // intentionally applied after the other edits and uses the same Extreme
@@ -7881,6 +7883,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await Promise.all(tempDirs.map(dir => fsPromises.rm(dir, { recursive: true, force: true }).catch(() => {})));
       tempDirs.length = 0;
       throw new Error(`Structured pixel disruption verification failed: ${e?.message ?? "unknown error"}`);
+    }
     }
 
     const processedBytes = await fsPromises.readFile(pushFilePath);
@@ -7972,12 +7975,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     alterationLevel?: AlterationLevel;
     imageSettingsEnabled?: boolean;
     imageSettings?: ImageFilterSettings;
+    frequencyDisruption?: boolean;
     onLog?: (msg: string) => void;
   }): Promise<{ posted: boolean; fileName?: string }> {
     const {
       localFolderPath, localFolderRandom, localFolderNoRepeat, deleteAfterUpload,
       captionText, doFixAiSlop, alterationEnabled, alterationLevel,
-      imageSettingsEnabled, imageSettings, addLocation, accountUsername, slotIdx, onLog,
+      imageSettingsEnabled, imageSettings, frequencyDisruption, addLocation, accountUsername, slotIdx, onLog,
       homeTapCount = 1,
     } = opts;
 
@@ -8018,6 +8022,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       alterationLevel,
       imageSettingsEnabled,
       imageSettings,
+      frequencyDisruption,
       onLog,
     });
 
