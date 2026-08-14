@@ -446,6 +446,8 @@ export function SettingsPage() {
   const [geminiTestResult, setGeminiTestResult] = useState<string>("");
   const [openaiKeyDraft, setOpenaiKeyDraft] = useState<string | null>(null);
   const [openaiKeyInitialized, setOpenaiKeyInitialized] = useState(false);
+  const [waveSpeedKeyDraft, setWaveSpeedKeyDraft] = useState<string | null>(null);
+  const [waveSpeedKeyInitialized, setWaveSpeedKeyInitialized] = useState(false);
   const [settingsTab, setSettingsTab] = useState(() => {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -498,6 +500,10 @@ export function SettingsPage() {
   if (settings && !openaiKeyInitialized) {
     setOpenaiKeyDraft((settings as any).openaiApiKey ?? "");
     setOpenaiKeyInitialized(true);
+  }
+  if (settings && !waveSpeedKeyInitialized) {
+    setWaveSpeedKeyDraft((settings as any).waveSpeedApiKey ?? "");
+    setWaveSpeedKeyInitialized(true);
   }
 
   const mutation = useMutation({
@@ -732,8 +738,24 @@ export function SettingsPage() {
             <h3 className="text-base font-semibold">WaveSpeed Z-Image Turbo</h3>
           </div>
           <p className="text-sm text-muted-foreground mb-5">
-            Uses the secure WAVESPEED_API_KEY secret for queued image-to-image enhancement. Cost is approximately $0.005 per image.
+            Configure the WaveSpeed key used by Fix Images.
           </p>
+          <div className="flex items-center gap-2 mb-4">
+            <Input
+              type="password"
+              placeholder="Enter your WaveSpeed API key"
+              value={waveSpeedKeyDraft ?? ""}
+              onChange={(e) => setWaveSpeedKeyDraft(e.target.value)}
+              onBlur={(e) => {
+                const value = e.target.value;
+                if (value !== ((settings as any)?.waveSpeedApiKey ?? "")) {
+                  mutation.mutate({ waveSpeedApiKey: value } as any);
+                }
+              }}
+              className="font-mono text-sm w-[50ch] max-w-full"
+              disabled={isLoading}
+            />
+          </div>
           <div className="flex items-center gap-3">
             <Button variant="outline" onClick={testWaveSpeedConnection} disabled={waveSpeedStatus === "loading"}>
               {waveSpeedStatus === "loading" ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : waveSpeedStatus === "ok" ? <CheckCircle2 className="w-4 h-4 mr-2 text-green-500" /> : waveSpeedStatus === "fail" ? <XCircle className="w-4 h-4 mr-2 text-red-500" /> : null}
@@ -741,7 +763,7 @@ export function SettingsPage() {
             </Button>
             {waveSpeedBalance && <span className="text-sm text-muted-foreground">Balance: {waveSpeedBalance}</span>}
           </div>
-          <p className="text-xs text-muted-foreground mt-3">The API key is managed through Replit Secrets and is never shown in the browser.</p>
+          <p className="text-xs text-muted-foreground mt-3">The key is masked in the interface. The configured Replit Secret remains the fallback when this field is empty.</p>
         </div>
 
         {/* Abort after X scrapes — global scrape-session limit applied to every account's Follow Users tool */}

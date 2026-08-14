@@ -5600,6 +5600,7 @@ export async function registerInstagramRoutes(
       twoCaptchaApiKey: settings.twoCaptchaApiKey ?? "",
       openaiApiKey: settings.openaiApiKey ?? "",
       geminiApiKey: settings.geminiApiKey ?? "",
+      waveSpeedApiKey: settings.waveSpeedApiKey ?? "",
       verifyDelayMode: settings.verifyDelayMode ?? "general",
       verifyAllDelayMin: parseInt(settings.verifyAllDelayMin ?? "5", 10),
       verifyAllDelayMax: parseInt(settings.verifyAllDelayMax ?? "15", 10),
@@ -5631,7 +5632,7 @@ export async function registerInstagramRoutes(
 
 
   app.put("/api/settings", async (req, res) => {
-    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, scrapeAllIfSkipped, useLocalTime, twoCaptchaApiKey, openaiApiKey, geminiApiKey, verifyDelayMode, verifyAllDelayMin, verifyAllDelayMax, sameProxyDelayMin, sameProxyDelayMax, logMaxRows, backupEnabled, backupIntervalDays, themeColor, themeMode, preFilledPhoneNumber, protectAccountsEnabled, protectAccountsMinMins, protectAccountsMaxMins, hikerFollowHashtag, hikerFollowGetFollowers, hikerFollowByUsername, hikerUnfollowByUsername, hikerContactGetFollowers, hikerContactByUsername, hikerDmByUsername, hikerDmGetFollowers, hikerRepostGetFeed, hikerSyncProfile, hikerGlobalByUsername, followMaxScrapeSessions } = req.body;
+    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, scrapeAllIfSkipped, useLocalTime, twoCaptchaApiKey, openaiApiKey, geminiApiKey, waveSpeedApiKey, verifyDelayMode, verifyAllDelayMin, verifyAllDelayMax, sameProxyDelayMin, sameProxyDelayMax, logMaxRows, backupEnabled, backupIntervalDays, themeColor, themeMode, preFilledPhoneNumber, protectAccountsEnabled, protectAccountsMinMins, protectAccountsMaxMins, hikerFollowHashtag, hikerFollowGetFollowers, hikerFollowByUsername, hikerUnfollowByUsername, hikerContactGetFollowers, hikerContactByUsername, hikerDmByUsername, hikerDmGetFollowers, hikerRepostGetFeed, hikerSyncProfile, hikerGlobalByUsername, followMaxScrapeSessions } = req.body;
     if (typeof skipFollowedUsers === "boolean") {
       await storage.setGlobalSetting("skipFollowedUsers", String(skipFollowedUsers));
     }
@@ -5666,6 +5667,9 @@ export async function registerInstagramRoutes(
     }
     if (typeof geminiApiKey === "string") {
       await storage.setGlobalSetting("geminiApiKey", geminiApiKey);
+    }
+    if (typeof waveSpeedApiKey === "string") {
+      await storage.setGlobalSetting("waveSpeedApiKey", waveSpeedApiKey);
     }
     if (typeof verifyDelayMode === "string" && (verifyDelayMode === "general" || verifyDelayMode === "sameProxy")) {
       await storage.setGlobalSetting("verifyDelayMode", verifyDelayMode);
@@ -6002,11 +6006,14 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
   // renderer's request body and is never written back over by this endpoint.
   const WAVESPEED_MODEL = "wavespeed-ai/z-image-turbo/image-to-image";
   const WAVESPEED_COST_PER_IMAGE = 0.005;
-  const getWaveSpeedKey = () => process.env.WAVESPEED_API_KEY?.trim() || "";
+  const getWaveSpeedKey = async () => {
+    const settings = await storage.getGlobalSettings();
+    return (settings.waveSpeedApiKey ?? "").trim() || process.env.WAVESPEED_API_KEY?.trim() || "";
+  };
   const waveSpeedHeaders = (key: string) => ({ Authorization: `Bearer ${key}`, "Content-Type": "application/json" });
 
   app.get("/api/wavespeed/status", async (_req, res) => {
-    const key = getWaveSpeedKey();
+    const key = await getWaveSpeedKey();
     if (!key) return res.json({ configured: false, connected: false, balance: null, model: WAVESPEED_MODEL, costPerImage: WAVESPEED_COST_PER_IMAGE });
     try {
       const response = await fetch("https://api.wavespeed.ai/api/v3/balance", { headers: { Authorization: `Bearer ${key}` } });
@@ -6020,7 +6027,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
   });
 
   app.post("/api/wavespeed/process", async (req, res) => {
-    const key = getWaveSpeedKey();
+    const key = await getWaveSpeedKey();
     if (!key) return res.status(503).json({ error: "WaveSpeed API key is not configured" });
     const body = z.object({
       imageBase64: z.string().min(1),

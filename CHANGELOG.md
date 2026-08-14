@@ -1,3 +1,11 @@
+## [1.2.505] — 2026-08-14
+
+### Added — WaveSpeed key configuration
+
+- Added a masked WaveSpeed API-key field under Settings → Scraping.
+- WaveSpeed uses the configured setting with the Replit secret as fallback.
+- Removed the per-image cost text from the settings card.
+
 ## [1.2.504] — 2026-08-14
 
 ### Added — WaveSpeed image processing workflow
