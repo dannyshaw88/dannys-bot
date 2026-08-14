@@ -1,9 +1,16 @@
+## [1.2.506] — 2026-08-14
+
+### Fixed — Fix Images responsiveness
+
+- Debounced workspace persistence to avoid blocking the browser during pipeline progress updates.
+- Added 10-image pagination while keeping the full processing queue sequential.
+
 ## [1.2.505] — 2026-08-14
 
 ### Added — WaveSpeed key configuration
 
 - Added a masked WaveSpeed API-key field under Settings → Scraping.
-- WaveSpeed uses the configured setting with the Replit secret as fallback.
+- WaveSpeed uses only the configured Settings → Scraping key.
 - Removed the per-image cost text from the settings card.
 
 ## [1.2.504] — 2026-08-14
