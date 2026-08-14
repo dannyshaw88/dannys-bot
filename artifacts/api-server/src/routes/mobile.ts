@@ -3904,7 +3904,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // tappable parent ViewGroup owns the same bounds. The resource ID is
         // an unambiguous action identity, so accept it using its live bounds.
         // Label-only Like/Unlike matches remain strict and must be clickable.
-        if (!isLike(node) || (!node.clickable && !node.rid.includes("row_feed_button_like"))) continue;
+        if (!isLike(node)) continue;
         const key = `${node.x},${node.y}`;
         const previous = likeByCoord.get(key);
         // Prefer the concrete resource-id node over a same-centre wrapper.
@@ -4053,7 +4053,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const authorNode = authorCandidates[0] ?? null;
 
       const audioCandidates = nodes.filter(n => {
-        if (!n.clickable || n.y >= like.y - 20) return false;
+        if (n.y >= like.y - 20) return false;
         if (/action_bar|like_button|comment_|share_|send_|save_/i.test(n.rid)) return false;
         return /audio|music|sound|song/i.test(n.rid) ||
           /\b(?:audio|music|song|original)\b/i.test(`${n.desc} ${n.text}`);
@@ -4755,7 +4755,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   const _atGXml = await android.dumpUi(serial).catch(() => "");
                   const _atItems: { x: number; y: number }[] = [];
                   for (const _atGSeg of _atGXml.split("<node ")) {
-                    if (!_atGSeg.includes('clickable="true"')) continue;
                     const _atGBb = _atGSeg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
                     if (!_atGBb) continue;
                     const _gX = Math.round((parseInt(_atGBb[1]) + parseInt(_atGBb[3])) / 2);
@@ -6280,7 +6279,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 let _veSmatch2: RegExpExecArray | null;
                 while ((_veSmatch2 = _veSaveRe2.exec(_veXml2)) !== null) {
                   const _veA2 = _veSmatch2[1];
-                  if (!/clickable="true"/.test(_veA2)) continue;
                   const _veB2 = _veA2.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
                   if (!_veB2) continue;
                   const _veCx2 = Math.round((+_veB2[1] + +_veB2[3]) / 2);
@@ -9540,7 +9538,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Strategy 1: resource-id contains "reel_header" (structural code id,
       // not text — works regardless of locale or user-defined title).
       for (const seg of segments) {
-        if (!seg.includes('clickable="true"')) continue;
         const n = parseHLNode(seg); if (!n) continue;
         if (!n.rid.toLowerCase().includes("reel_header")) continue;
         candidates.push({ x: n.cx, y: n.cy, name: n.cd || n.rid });
@@ -9557,7 +9554,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // Must contain "highlight" as a code id but not itself be a
           // clickable circle (those are handled above / below).
           if (!rid.includes("highlight")) continue;
-          if (seg.includes('clickable="true"')) continue; // skip individual items
           const bb = seg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
           if (!bb) continue;
           trayY1 = parseInt(bb[2]); trayY2 = parseInt(bb[4]);
@@ -9567,7 +9563,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           const bandY1 = trayY1 - 20;
           const bandY2 = trayY2 + 20;
           for (const seg of segments) {
-            if (!seg.includes('clickable="true"')) continue;
             const n = parseHLNode(seg); if (!n) continue;
             if (n.cy < bandY1 || n.cy > bandY2) continue;
             // Circle icons are roughly square: AR 0.4-2.5, min 60 px wide.
@@ -9584,7 +9579,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         onLog?.("Inject Browsing: no highlights found on this profile — skipping tap");
         const diagLines: string[] = [];
         for (const seg of segments) {
-          if (!seg.includes('clickable="true"')) continue;
           const n = parseHLNode(seg); if (!n) continue;
           diagLines.push(
             `  rid="${n.rid.slice(0, 70)}" cd="${n.cd.slice(0, 40)}" pos=(${n.cx},${n.cy}) size=${n.w}x${n.h}`,

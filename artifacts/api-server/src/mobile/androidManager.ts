@@ -641,7 +641,6 @@ function _findChromeInternalLink(
   let m: RegExpExecArray | null;
   while ((m = nodeRe.exec(xml)) !== null) {
     const tag = m[0];
-    if (!tag.includes('clickable="true"')) continue;
     // Must have non-empty text — raw links in Chrome WebView carry their
     // anchor text here; buttons and image-only tappables usually don't.
     const textM = tag.match(/\btext="([^"]+)"/);
@@ -670,7 +669,6 @@ function _findChromeFeedCards(
   let m: RegExpExecArray | null;
   while ((m = nodeRe.exec(xml)) !== null) {
     const node = m[0];
-    if (!node.includes('clickable="true"')) continue;
     const bm = node.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
     if (!bm) continue;
     const x1 = parseInt(bm[1], 10), y1 = parseInt(bm[2], 10);
@@ -1354,7 +1352,6 @@ export async function runChromeApp(
       let nodeMatch: RegExpExecArray | null;
       while ((nodeMatch = nodeRe.exec(resultXml)) !== null) {
         const attrs = nodeMatch[1];
-        if (!attrs.includes('clickable="true"')) continue;
         if (/class="android\.widget\.EditText"/i.test(attrs)) continue;
         if (/resource-id="[^"]*com\.android\.chrome/i.test(attrs)) continue;
         const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
@@ -1920,7 +1917,6 @@ function _findYoutubeVideoCards(
   let m: RegExpExecArray | null;
   while ((m = nodeRe.exec(xml)) !== null) {
     const node = m[0];
-    if (!node.includes('clickable="true"')) continue;
     const dm = node.match(/content-desc="([^"]*)"/);
     const desc = dm ? dm[1] : "";
     // "play video" is YouTube's own a11y suffix on every video card.
@@ -3595,7 +3591,6 @@ export async function findFeedActionIcons(
     let dm: RegExpExecArray | null;
     while ((dm = nearCentreRe.exec(xml)) !== null) {
       const a = dm[1];
-      if (!/clickable="true"/.test(a)) continue;
       const bm = a.match(/bounds="(\[\d+,\d+\]\[\d+,\d+\])"/);
       if (!bm) continue;
       const c = _parseCenter(bm[1]);
@@ -3650,7 +3645,6 @@ export async function findFeedActionIcons(
   let nm: RegExpExecArray | null;
   while ((nm = nodeRe.exec(xml)) !== null) {
     const attrs = nm[1];
-    if (!/clickable="true"/.test(attrs)) continue;
     if (/class="android\.widget\.EditText"/.test(attrs)) continue; // message/reply/comment compose field, never an action icon
     const bm = attrs.match(/bounds="(\[(\d+),(\d+)\]\[(\d+),(\d+)\])"/);
     if (!bm) continue;
@@ -4295,7 +4289,6 @@ export async function findReelActionIcons(serial: string, onLog?: (msg: string) 
     let fsm: RegExpExecArray | null;
     while ((fsm = nodeRe3.exec(xml)) !== null) {
       const a3 = fsm[1];
-      if (!/clickable="true"/.test(a3)) continue;
       const cd3 = (a3.match(/content-desc="([^"]*)"/) ?? [])[1] ?? "";
       if (!/^saved?$/i.test(cd3)) continue;
       const bm3 = a3.match(/bounds="(\[\d+,\d+\]\[\d+,\d+\])"/);
@@ -5460,7 +5453,6 @@ export async function findLocationMapPreviewAdd(serial: string): Promise<{ x: nu
   let match: RegExpExecArray | null;
   while ((match = nodeRe.exec(xml)) !== null) {
     const attrs = match[1];
-    if (!/clickable="true"/i.test(attrs)) continue;
     const labelMatch =
       attrs.match(/text="Add"[^>]*bounds="([^"]+)"/i) ??
       attrs.match(/content-desc="Add"[^>]*bounds="([^"]+)"/i);
@@ -5891,7 +5883,6 @@ function _extractShareSheetRecipients(
 
   while ((m = nodeRe.exec(xml)) !== null) {
     const attrs = m[1];
-    if (!/clickable="true"/.test(attrs)) continue;
     const bm = attrs.match(/bounds="(\[(\d+),(\d+)\]\[(\d+),(\d+)\])"/);
     if (!bm) continue;
     const x1 = Number(bm[2]), y1 = Number(bm[3]), x2 = Number(bm[4]), y2 = Number(bm[5]);
@@ -7142,7 +7133,6 @@ export async function findReelsTab(
   let nm: RegExpExecArray | null;
   while ((nm = nodeRe.exec(xml)) !== null) {
     const attrs = nm[1];
-    if (!/clickable="true"/.test(attrs)) continue;
     const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
     if (!bm) continue;
     const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
@@ -8801,7 +8791,6 @@ export async function findInstagramProfileTab(serial: string): Promise<{ x: numb
     let cm: RegExpExecArray | null;
     while ((cm = containerRe.exec(xml)) !== null) {
       const attrs = cm[1];
-      if (!/clickable="true"/i.test(attrs)) continue;
       const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
       if (!bm) continue;
       const x1 = Number(bm[1]), y1 = Number(bm[2]);
@@ -8840,7 +8829,6 @@ export async function findInstagramProfileTab(serial: string): Promise<{ x: numb
   let nm: RegExpExecArray | null;
   while ((nm = nodeRe.exec(xml)) !== null) {
     const attrs = nm[1];
-    if (!/clickable="true"/.test(attrs)) continue;
     const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
     if (!bm) continue;
     const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
@@ -8973,7 +8961,6 @@ export async function findInstagramProfileOptionsButton(serial: string): Promise
   let best: { x: number; y: number } | null = null;
   while ((m = nodeRe.exec(xml)) !== null) {
     const attrs = m[1];
-    if (!/clickable="true"/.test(attrs)) continue;
     const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
     if (!bm) continue;
     const cx = Math.round((Number(bm[1]) + Number(bm[3])) / 2);
@@ -9026,7 +9013,6 @@ export async function findInstagramSettingsRow(
   let match: RegExpExecArray | null;
   while ((match = nodeRe.exec(xml)) !== null) {
     const attrs = match[1];
-    if (!/clickable="true"/.test(attrs)) continue;
     const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
     if (!bounds) continue;
     const x1 = Number(bounds[1]);
@@ -9128,7 +9114,6 @@ export async function findInstagramDmTab(serial: string): Promise<{ x: number; y
   const candidates: { x: number; y: number }[] = [];
   while ((m = nodeRe.exec(xml)) !== null) {
     const attrs = m[1];
-    if (!/clickable="true"/.test(attrs)) continue;
     const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
     if (!bm) continue;
     const cx = Math.round((Number(bm[1]) + Number(bm[3])) / 2);
@@ -9168,7 +9153,6 @@ export async function findDmConversationItem(serial: string): Promise<{ x: numbe
   let m: RegExpExecArray | null;
   while ((m = nodeRe.exec(xml)) !== null) {
     const attrs = m[1];
-    if (!/clickable="true"/.test(attrs)) continue;
     const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
     if (!bm) continue;
     const x1 = Number(bm[1]), y1 = Number(bm[2]), x2 = Number(bm[3]), y2 = Number(bm[4]);
@@ -9223,7 +9207,6 @@ export async function findRandomNotificationItem(serial: string): Promise<{ x: n
   let m: RegExpExecArray | null;
   while ((m = nodeRe.exec(xml)) !== null) {
     const attrs = m[1];
-    if (!/clickable="true"/.test(attrs)) continue;
     const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
     if (!bm) continue;
     const x1 = Number(bm[1]), y1 = Number(bm[2]), x2 = Number(bm[3]), y2 = Number(bm[4]);
@@ -9454,7 +9437,7 @@ export async function findInstagramSearchBar(
       const centerY = (Number(bm[2]) + Number(bm[4])) / 2;
       if (centerY > topLimit) continue;
       // Must be interactive (clickable OR focusable)
-      if (!xmlLine.includes('clickable="true"') && !xmlLine.includes('focusable="true"')) continue;
+      if (!xmlLine.includes('focusable="true"')) continue;
       // "search" must appear inside a text="" or content-desc="" attribute value
       // (not just anywhere in the line, e.g. a resource-id containing "search")
       if (!/(?:text|content-desc|hint)="[^"]*[Ss]earch[^"]*"/.test(xmlLine)) continue;
@@ -9614,7 +9597,6 @@ export async function typeViaOnscreenKeyboard(
     let m: RegExpExecArray | null;
     while ((m = nodeRe.exec(xml)) !== null) {
       const attrs = m[1];
-      if (!/clickable="true"/i.test(attrs)) continue;
       const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
       if (!bounds) continue;
       const x1 = +bounds[1], y1 = +bounds[2], x2 = +bounds[3], y2 = +bounds[4];
