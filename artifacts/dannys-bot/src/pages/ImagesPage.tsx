@@ -74,6 +74,12 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [localMetadataCleanup, setLocalMetadataCleanup] = useState(true);
   const [localFrequencyDisruption, setLocalFrequencyDisruption] = useState(true);
   const [localWaveSpeed, setLocalWaveSpeed] = useState(false);
+  const [wavePrompt, setWavePrompt] = useState("REMAKE-THIS-IMAGE");
+  const [waveStrength, setWaveStrength] = useState(0.1);
+  const [waveSeed, setWaveSeed] = useState(-1);
+  const [waveOutputFormat, setWaveOutputFormat] = useState<"jpeg" | "png" | "webp">("jpeg");
+  const [waveWidth, setWaveWidth] = useState("");
+  const [waveHeight, setWaveHeight] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -200,7 +206,16 @@ export default function ImagesPage(props: ImagesPageProps) {
              const waveResponse = await fetch("/api/wavespeed/process", {
                method: "POST",
                headers: { "Content-Type": "application/json" },
-               body: JSON.stringify({ imageBase64, filename: item.name, prompt: "REMAKE-THIS-IMAGE", strength: 0.1 }),
+               body: JSON.stringify({
+                 imageBase64,
+                 filename: item.name,
+                 prompt: wavePrompt,
+                 strength: waveStrength,
+                 seed: waveSeed,
+                 outputFormat: waveOutputFormat,
+                 ...(waveWidth ? { width: Number(waveWidth) } : {}),
+                 ...(waveHeight ? { height: Number(waveHeight) } : {}),
+               }),
              });
              const waveResult = await waveResponse.json().catch(() => null);
              if (!waveResponse.ok || !waveResult?.ok || typeof waveResult.dataUrl !== "string") {
@@ -275,6 +290,12 @@ export default function ImagesPage(props: ImagesPageProps) {
     localItems,
     localMetadataCleanup,
     localWaveSpeed,
+    waveOutputFormat,
+    wavePrompt,
+    waveSeed,
+    waveStrength,
+    waveWidth,
+    waveHeight,
     props,
     readFileDataUrl,
   ]);
@@ -416,6 +437,57 @@ export default function ImagesPage(props: ImagesPageProps) {
                     <Switch checked={localFrequencyDisruption} onCheckedChange={setLocalFrequencyDisruption} className="data-[state=checked]:bg-cyan-500 shrink-0" />
                   </div>
 
+                  <div className="space-y-3 border-t border-border/50 pt-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1 mt-0.5">
+                        <Label className="text-sm font-medium text-foreground cursor-pointer select-none" onClick={() => setLocalWaveSpeed(!localWaveSpeed)}>
+                          Use WaveSpeed Z-Image Turbo
+                        </Label>
+                        <p className="text-[10px] leading-4 text-muted-foreground">
+                          Generate each image first, then continue the local preparation pipeline.
+                        </p>
+                      </div>
+                      <Switch checked={localWaveSpeed} onCheckedChange={setLocalWaveSpeed} className="data-[state=checked]:bg-cyan-500 shrink-0" />
+                    </div>
+                    {localWaveSpeed && (
+                      <div className="space-y-3 rounded-md border border-border/60 bg-background/60 p-3">
+                        <label className="block text-[11px] text-muted-foreground">
+                          Prompt
+                          <Input value={wavePrompt} onChange={(e) => setWavePrompt(e.target.value)} className="mt-1 h-8 text-xs" />
+                        </label>
+                        <label className="block text-[11px] text-muted-foreground">
+                          Strength: {waveStrength.toFixed(2)}
+                          <input type="range" min="0" max="1" step="0.01" value={waveStrength} onChange={(e) => setWaveStrength(Number(e.target.value))} className="w-full accent-cyan-500" />
+                        </label>
+                        <label className="block text-[11px] text-muted-foreground">
+                          Seed
+                          <Input type="number" value={waveSeed} onChange={(e) => setWaveSeed(Number(e.target.value))} className="mt-1 h-8 text-xs" />
+                        </label>
+                        <label className="block text-[11px] text-muted-foreground">
+                          Output format
+                          <select value={waveOutputFormat} onChange={(e) => setWaveOutputFormat(e.target.value as typeof waveOutputFormat)} className="mt-1 h-8 w-full rounded-md border border-border bg-background px-2 text-xs">
+                            <option value="jpeg">JPEG</option>
+                            <option value="png">PNG</option>
+                            <option value="webp">WebP</option>
+                          </select>
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <label className="block text-[11px] text-muted-foreground">
+                            Width
+                            <Input type="number" min="256" max="2048" placeholder="Source" value={waveWidth} onChange={(e) => setWaveWidth(e.target.value)} className="mt-1 h-8 text-xs" />
+                          </label>
+                          <label className="block text-[11px] text-muted-foreground">
+                            Height
+                            <Input type="number" min="256" max="2048" placeholder="Source" value={waveHeight} onChange={(e) => setWaveHeight(e.target.value)} className="mt-1 h-8 text-xs" />
+                          </label>
+                        </div>
+                        <p className="text-[10px] leading-4 text-muted-foreground">
+                          Model: Z-Image Turbo · input image · size follows source · estimated cost $0.005/image
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
                 </div>
               </div>
             </div>
@@ -497,17 +569,6 @@ export default function ImagesPage(props: ImagesPageProps) {
                        Browse for Files
                      </Button>
                    </div>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1 mt-0.5">
-                      <Label className="text-sm font-medium text-foreground cursor-pointer select-none" onClick={() => setLocalWaveSpeed(!localWaveSpeed)}>
-                        Use WaveSpeed Z-Image Turbo
-                      </Label>
-                      <p className="text-[10px] leading-4 text-muted-foreground max-w-[210px]">
-                        Sends each selected image through WaveSpeed first, then continues this pipeline.
-                      </p>
-                    </div>
-                    <Switch checked={localWaveSpeed} onCheckedChange={setLocalWaveSpeed} className="data-[state=checked]:bg-cyan-500 shrink-0" />
-                  </div>
                  </div>
               ) : (
                  <div className="rounded-xl border border-border/60 bg-background shadow-xs overflow-hidden animate-in fade-in duration-300">

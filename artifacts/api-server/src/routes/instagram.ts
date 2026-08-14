@@ -6029,6 +6029,8 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       prompt: z.string().min(1).max(1000).default("REMAKE-THIS-IMAGE"),
       width: z.number().int().min(256).max(2048).optional(),
       height: z.number().int().min(256).max(2048).optional(),
+      seed: z.number().int().default(-1),
+      outputFormat: z.enum(["jpeg", "png", "webp"]).default("jpeg"),
     }).parse(req.body);
     try {
       const raw = Buffer.from(body.imageBase64.replace(/^data:[^;]+;base64,/, ""), "base64");
@@ -6057,8 +6059,8 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
           image: ticket.data.download_url,
           size: `${width}*${height}`,
           strength: body.strength,
-          seed: -1,
-          output_format: "jpeg",
+          seed: body.seed,
+          output_format: body.outputFormat,
         }),
       });
       const task: any = await taskResponse.json().catch(() => ({}));
@@ -6078,7 +6080,8 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       const outputResponse = await fetch(outputUrl);
       if (!outputResponse.ok) throw new Error(`Could not download WaveSpeed output (${outputResponse.status})`);
       const outputBuffer = Buffer.from(await outputResponse.arrayBuffer());
-      res.json({ ok: true, filename: `${body.filename.replace(/\.[^.]+$/, "")}_wavespeed.jpg`, dataUrl: `data:image/jpeg;base64,${outputBuffer.toString("base64")}`, taskId: task.data.id, cost: WAVESPEED_COST_PER_IMAGE });
+      const mime = body.outputFormat === "png" ? "image/png" : body.outputFormat === "webp" ? "image/webp" : "image/jpeg";
+      res.json({ ok: true, filename: `${body.filename.replace(/\.[^.]+$/, "")}_wavespeed.${body.outputFormat === "jpeg" ? "jpg" : body.outputFormat}`, dataUrl: `data:${mime};base64,${outputBuffer.toString("base64")}`, taskId: task.data.id, cost: WAVESPEED_COST_PER_IMAGE });
     } catch (error: any) {
       req.log.error({ err: error }, "[wavespeed] image processing failed");
       res.status(502).json({ error: error?.message ?? "WaveSpeed processing failed" });
