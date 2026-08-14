@@ -3647,7 +3647,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     const settingsUrl = slotIdx !== undefined
       ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings`
       : `/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings`;
-    fetch(settingsUrl)
+    fetch(settingsUrl, { cache: "no-store" })
       .then(r => r.json())
       .then(d => {
         if (!active) return;
