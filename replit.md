@@ -125,9 +125,13 @@ Some device/IG builds strip both `content-desc` and `resource-id` from every act
 
 ## CI / GitHub Actions
 
+### GitHub Actions workflow policy
+
+**Do not create, add, regenerate, or modify GitHub Actions workflow files as part of a GitHub push.** GitHub pushes must contain application and documentation changes only unless the user explicitly requests a workflow change. Never add a new workflow to make a push trigger a build, release, installer, or other automation.
+
 ### How the build pipeline works
 
-Every push to `main` triggers `.github/workflows/build-windows-installer.yml` (the ONLY canonical workflow — `build.yml`, `build-windows.yml`, `windows-installer.yml`, and `release.yml` are all deprecated inert stubs), which runs two jobs:
+The repository's existing `.github/workflows/build-windows-installer.yml` is the only canonical workflow. Do not create replacement workflows or edit the workflow configuration merely because a push needs to trigger a build. The other workflow files (`build.yml`, `build-windows.yml`, `windows-installer.yml`, and `release.yml`) are deprecated inert stubs. When the existing canonical workflow runs on `main`, it runs two jobs:
 
 1. **`build-web`** (ubuntu-latest) — installs workspace deps with `pnpm install --no-frozen-lockfile --ignore-scripts`, builds the API server and React frontend, uploads them as intermediate Actions artifacts called `api-server-dist` and `dannys-bot-dist`. These are NOT the installer.
 2. **`build-installer`** (windows-latest) — downloads the dist artifacts, installs Electron deps with `npm install --ignore-scripts`, runs `build.mjs` to bundle the app, then runs `electron-builder --win --publish never` to produce the Windows installer. Uploads the installer as an Actions artifact called `Aura-Farming-Windows-Installer`. On tagged releases (`v*`) also publishes to GitHub Releases.
