@@ -6908,27 +6908,6 @@ export function AutomationSettingsPanel({
                   >
                     Assign
                   </button>
-                  <input
-                    type="checkbox"
-                    checked={settings.updateProfilePicAlterationEnabled}
-                    onChange={e => setSettings(s => ({ ...s, updateProfilePicAlterationEnabled: e.target.checked }))}
-                    disabled={fieldDisabled("updateProfilePicAlterationEnabled")}
-                    className="w-3.5 h-3.5 accent-primary"
-                    aria-label="Enable Update Avatar alteration"
-                  />
-                  <div className="flex gap-1">
-                    {(["small", "medium", "high"] as const).map(level => (
-                      <button
-                        key={level}
-                        type="button"
-                        disabled={fieldDisabled("updateProfilePicAlterationLevel") || !settings.updateProfilePicAlterationEnabled}
-                        onClick={() => setSettings(s => ({ ...s, updateProfilePicAlterationLevel: level }))}
-                        className={`h-7 px-2 text-[11px] rounded border capitalize ${settings.updateProfilePicAlterationLevel === level ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border text-muted-foreground"}`}
-                      >
-                        {level}
-                      </button>
-                    ))}
-                  </div>
                   <div className="flex items-center gap-1.5">
                     <input
                       type="checkbox"
