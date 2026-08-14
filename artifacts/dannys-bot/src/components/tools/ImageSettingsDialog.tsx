@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -74,6 +74,20 @@ export function ImageSettingsDialog({
   const [isPreviewing, setIsPreviewing]   = useState(false);
   const [previewError, setPreviewError]   = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setLocal(settings);
+    setLocalAlterationEnabled(alterationEnabled);
+    setLocalAlterationLevel(alterationLevel === "medium" || alterationLevel === "high" ? alterationLevel : "small");
+    setLocalImageSettingsEnabled(imageSettingsEnabled);
+    setLocalFixAiSlop(fixAiSlop);
+    setLocalMetadataCleanup(metadataCleanup);
+    setLocalFrequencyDisruption(frequencyDisruption);
+  }, [
+    open, settings, alterationEnabled, alterationLevel, imageSettingsEnabled,
+    fixAiSlop, metadataCleanup, frequencyDisruption,
+  ]);
 
   // Keep local in sync when dialog re-opens with new settings
   const handleOpenChange = (isOpen: boolean) => {
