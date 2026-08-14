@@ -230,6 +230,8 @@ export interface AutomationSettingsData {
   updateBioDisableAfterUsed: boolean;
   makePostUseChatGpt: boolean;
   makePostFixAiSlop: boolean;
+  makePostMetadataCleanup: boolean;
+  makePostFrequencyDisruption: boolean;
   makePostPostToProfilePctMin: number; makePostPostToProfilePctMax: number;
   makePostPostToStoryPctMin: number; makePostPostToStoryPctMax: number;
   makePostCaptionText: string;
@@ -371,6 +373,8 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   updateBioDisableAfterUsed: false,
   makePostUseChatGpt: false,
   makePostFixAiSlop: true,
+  makePostMetadataCleanup: true,
+  makePostFrequencyDisruption: false,
   makePostPostToProfilePctMin: 100, makePostPostToProfilePctMax: 100,
   makePostPostToStoryPctMin: 0, makePostPostToStoryPctMax: 0,
   makePostCaptionText: "",
@@ -602,7 +606,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'postAddLocation',   label: 'Add location',                   fields: ['makePostAddLocation'] },
     { key: 'postDisableAt',     label: 'Disable when no more posts are found', fields: ['makePostDisableWhenExhausted'] },
     { key: 'postChatGptCaption',label: 'ChatGPT / caption settings',    fields: ['makePostUseChatGpt','makePostCaptionText'] },
-    { key: 'postFixAiSlop',      label: 'Fix AI Slop',                   fields: ['makePostFixAiSlop'] },
+    { key: 'postFixAiSlop',      label: 'Image cleanup',                 fields: ['makePostFixAiSlop','makePostMetadataCleanup','makePostFrequencyDisruption'] },
   ]},
   { key: 'postStory',      label: 'Post a Story', sub: [
     { key: 'storyPostEnabled',   label: 'Enabled',             fields: ['postStoryEnabled'] },

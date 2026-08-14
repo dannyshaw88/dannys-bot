@@ -7249,7 +7249,22 @@ export function AutomationSettingsPanel({
           onClose={() => setMakePostImageSettingsOpen(false)}
           settings={settings.makePostImageSettings}
           alterationLevel={settings.makePostAlterationLevel}
+          showPipelineControls
+          alterationEnabled={settings.makePostAlterationEnabled}
+          imageSettingsEnabled={settings.makePostImageSettingsEnabled}
+          fixAiSlop={settings.makePostFixAiSlop}
+          metadataCleanup={settings.makePostMetadataCleanup}
+          frequencyDisruption={settings.makePostFrequencyDisruption}
           onSave={saved => setSettings(s => ({ ...s, makePostImageSettings: saved }))}
+          onPipelineSettingsSave={saved => setSettings(s => ({
+            ...s,
+            makePostAlterationEnabled: saved.alterationEnabled,
+            makePostAlterationLevel: saved.alterationLevel,
+            makePostImageSettingsEnabled: saved.imageSettingsEnabled,
+            makePostFixAiSlop: saved.fixAiSlop,
+            makePostMetadataCleanup: saved.metadataCleanup,
+            makePostFrequencyDisruption: saved.frequencyDisruption,
+          }))}
         />
 
         <ImageSettingsDialog

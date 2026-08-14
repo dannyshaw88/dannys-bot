@@ -464,6 +464,8 @@ type AutomationSettings = {
   makePostAddLocation?: boolean;
   makePostUseChatGpt?: boolean;
   makePostFixAiSlop?: boolean;
+  makePostMetadataCleanup?: boolean;
+  makePostFrequencyDisruption?: boolean;
   makePostCaptionText?: string;
   makePostPostToProfilePctMin?: number;
   makePostPostToProfilePctMax?: number;
@@ -1817,6 +1819,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostAddLocation: z.boolean().default(false),
     makePostUseChatGpt: z.boolean().default(false),
     makePostFixAiSlop: z.boolean().default(true),
+    makePostMetadataCleanup: z.boolean().default(true),
+    makePostFrequencyDisruption: z.boolean().default(false),
     makePostPostToProfilePctMin: z.number().min(0).max(100).default(100),
     makePostPostToProfilePctMax: z.number().min(0).max(100).default(100),
     makePostPostToStoryPctMin: z.number().min(0).max(100).default(0),
@@ -2158,6 +2162,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "makePostLocalFolderPath",
     "makePostAddLocation",
     "postStoryLinkUrl",
+     "makePostFixAiSlop",
+     "makePostMetadataCleanup",
+     "makePostFrequencyDisruption",
   ]);
   const TRUST_SCORE_TOOL_FIELDS = new Set([
     "feedEnabled",
@@ -7448,11 +7455,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       sharpen: { enabled: true, min: 1.0, max: 2.0 },
       pixelate: { enabled: true, min: 0.9, max: 2.1 },
     }),
-    // Fix AI Slop — strip C2PA / EXIF / XMP / IPTC metadata and apply pixel
+     // Fix AI Slop — strip C2PA / EXIF / XMP / IPTC metadata and apply pixel
     // perturbation before pushing the image to the device.  MUST be in this
     // schema or Zod strips it from the request body and doFixAiSlop is always
     // undefined (falsy) regardless of what the frontend sends.
-    makePostFixAiSlop: z.boolean().default(true),
+     makePostFixAiSlop: z.boolean().default(true),
+     makePostMetadataCleanup: z.boolean().default(true),
+     makePostFrequencyDisruption: z.boolean().default(false),
     // Post destination: probability that a given Make a Post attempt goes to
     // the profile feed vs. to a Story.  Defaults keep existing behaviour
     // (profile=100%, story=0%).  If story is rolled first (random < storyPct),
@@ -11329,7 +11338,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostLocalFolderEnabled, makePostLocalFolderPath,
         makePostLocalFolderNoRepeat, makePostLocalFolderRandom, makePostAddLocation,
         makePostAlterationEnabled, makePostAlterationLevel, makePostImageSettingsEnabled,
-        makePostImageSettings, makePostFixAiSlop, makePostCaptionText,
+        makePostImageSettings, makePostFixAiSlop, makePostMetadataCleanup, makePostFrequencyDisruption, makePostCaptionText,
         postStoryEnabled, postStoryActivatePctMin, postStoryActivatePctMax,
         postStoryLocalFolderPath, postStoryLocalFolderNoRepeat, postStoryLocalFolderRandom,
         postStoryAlterationEnabled, postStoryAlterationLevel, postStoryImageSettingsEnabled,
@@ -12289,6 +12298,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     imageSettingsEnabled: makePostImageSettingsEnabled,
                     imageSettings: makePostImageSettings,
                     doFixAiSlop: makePostFixAiSlop,
+                    frequencyDisruption: makePostFrequencyDisruption,
                     addLocation: makePostAddLocation,
                     captionText: makePostCaptionText,
                     homeTapCount: _viewFeedExecuted ? 2 : 1,
