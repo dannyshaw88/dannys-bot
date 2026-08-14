@@ -150,28 +150,31 @@ export default function ImagesPage(props: ImagesPageProps) {
 
   useEffect(() => {
     if (props.mediaItems || props.fixAiSlop !== undefined) return;
-    const workspace: PersistedImagesWorkspace = {
-      items: localItems.map(({ file: _file, ...item }) => item),
-      fixAiSlop: localFixAiSlop,
-      alterationEnabled: localAltEnabled,
-      alterationLevel: localAltLevel,
-      imageSettingsEnabled: localImgSettingsEnabled,
-      imageSettings: localImgSettings,
-      metadataCleanup: localMetadataCleanup,
-      frequencyDisruption: localFrequencyDisruption,
-      waveSpeed: localWaveSpeed,
-      wavePrompt,
-      waveStrength,
-      waveSeed,
-      waveOutputFormat,
-      waveWidth,
-      waveHeight,
-    };
-    try {
-      window.sessionStorage.setItem(IMAGES_PAGE_STORAGE_KEY, JSON.stringify(workspace));
-    } catch {
-      // A large batch may exceed session storage; the current mounted workspace remains usable.
-    }
+    const persistTimer = window.setTimeout(() => {
+      const workspace: PersistedImagesWorkspace = {
+        items: localItems.map(({ file: _file, ...item }) => item),
+        fixAiSlop: localFixAiSlop,
+        alterationEnabled: localAltEnabled,
+        alterationLevel: localAltLevel,
+        imageSettingsEnabled: localImgSettingsEnabled,
+        imageSettings: localImgSettings,
+        metadataCleanup: localMetadataCleanup,
+        frequencyDisruption: localFrequencyDisruption,
+        waveSpeed: localWaveSpeed,
+        wavePrompt,
+        waveStrength,
+        waveSeed,
+        waveOutputFormat,
+        waveWidth,
+        waveHeight,
+      };
+      try {
+        window.sessionStorage.setItem(IMAGES_PAGE_STORAGE_KEY, JSON.stringify(workspace));
+      } catch {
+        // A large batch may exceed session storage; the current mounted workspace remains usable.
+      }
+    }, 1200);
+    return () => window.clearTimeout(persistTimer);
   }, [
     props.mediaItems,
     props.fixAiSlop,
