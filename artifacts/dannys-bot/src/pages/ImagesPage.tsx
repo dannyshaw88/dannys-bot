@@ -747,8 +747,8 @@ export default function ImagesPage(props: ImagesPageProps) {
                    </div>
                  </div>
               ) : (
-                  <div className="relative rounded-xl border border-border/60 bg-background shadow-xs overflow-hidden animate-in fade-in duration-300">
-                    <div className="fix-images-scroll overflow-x-auto">
+                  <div className="relative flex min-h-0 flex-1 flex-col rounded-xl border border-border/60 bg-background shadow-xs overflow-hidden animate-in fade-in duration-300">
+                    <div className="fix-images-scroll min-h-0 flex-1 overflow-x-auto">
                      <table className="fix-images-table text-sm text-left border-collapse">
                        <thead className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider bg-muted/40 border-b border-border/60">
                          <tr>
