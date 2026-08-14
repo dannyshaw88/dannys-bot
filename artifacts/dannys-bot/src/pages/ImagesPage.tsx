@@ -448,23 +448,31 @@ export default function ImagesPage(props: ImagesPageProps) {
           max-width: 100%;
         }
         tr.image-processing-scan > td {
-          background-color: rgba(34,211,238,0.06);
-          background-image: linear-gradient(
-            to bottom,
-            transparent 0%,
-            transparent 42%,
-            rgba(103,232,249,0.95) 49%,
-            rgba(255,255,255,0.98) 50%,
-            rgba(103,232,249,0.95) 51%,
-            transparent 58%,
-            transparent 100%
-          );
-          background-size: 100% 260%;
-          background-position: 0 -130%;
-          animation-name: image-processing-scan-down;
-          animation-timing-function: linear;
-          animation-iteration-count: infinite;
-          animation-duration: var(--scan-duration, 2.4s);
+          position: relative;
+          overflow: hidden;
+        }
+        tr.image-processing-scan > td::before,
+        tr.image-processing-scan > td::after {
+          content: "";
+          position: absolute;
+          pointer-events: none;
+          inset: 0;
+          z-index: 2;
+        }
+        tr.image-processing-scan > td::before {
+          background-image:
+            radial-gradient(circle, rgba(255,255,255,0.95) 0 1px, transparent 1.8px),
+            radial-gradient(circle, rgba(103,232,249,0.9) 0 1.2px, transparent 2px),
+            radial-gradient(circle, rgba(165,243,252,0.95) 0 1px, transparent 1.8px);
+          background-size: 47px 41px, 61px 53px, 73px 59px;
+          animation: image-processing-pixels 1.1s steps(5, end) infinite;
+        }
+        tr.image-processing-scan > td::after {
+          inset: 0 0 auto;
+          height: 3px;
+          background: linear-gradient(90deg, transparent, rgba(103,232,249,0.95) 20%, #fff 50%, rgba(103,232,249,0.95) 80%, transparent);
+          box-shadow: 0 0 10px rgba(34,211,238,0.95), 0 0 24px rgba(34,211,238,0.6);
+          animation: image-processing-scan-down var(--scan-duration, 2.4s) linear infinite;
         }
       `}</style>
       <div className="p-4 lg:p-6 h-[calc(100vh-3.5rem)] min-h-[600px]">
