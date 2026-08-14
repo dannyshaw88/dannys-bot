@@ -301,20 +301,32 @@ export default function ImagesPage(props: ImagesPageProps) {
            let imageBase64 = await readFileDataUrl(item);
            let processFilename = item.name;
            if (localWaveSpeed) {
-             const waveResponse = await fetch("/api/wavespeed/process", {
-               method: "POST",
-               headers: { "Content-Type": "application/json" },
-               body: JSON.stringify({
-                 imageBase64,
-                 filename: item.name,
-                 prompt: wavePrompt,
-                 strength: waveStrength,
-                 seed: waveSeed,
-                 outputFormat: waveOutputFormat,
-                 ...(waveWidth ? { width: Number(waveWidth) } : {}),
-                 ...(waveHeight ? { height: Number(waveHeight) } : {}),
-               }),
-             });
+             let waveProgress = 8;
+             const waveProgressTimer = window.setInterval(() => {
+               waveProgress = Math.min(88, waveProgress + 2 + Math.random() * 3);
+               setLocalItems(prev => prev.map(current => current.id === item.id
+                 ? { ...current, progress: waveProgress }
+                 : current));
+             }, 850);
+             let waveResponse: Response;
+             try {
+               waveResponse = await fetch("/api/wavespeed/process", {
+                 method: "POST",
+                 headers: { "Content-Type": "application/json" },
+                 body: JSON.stringify({
+                   imageBase64,
+                   filename: item.name,
+                   prompt: wavePrompt,
+                   strength: waveStrength,
+                   seed: waveSeed,
+                   outputFormat: waveOutputFormat,
+                   ...(waveWidth ? { width: Number(waveWidth) } : {}),
+                   ...(waveHeight ? { height: Number(waveHeight) } : {}),
+                 }),
+               });
+             } finally {
+               window.clearInterval(waveProgressTimer);
+             }
               const waveResult = await waveResponse.json().catch(() => null);
              if (!waveResponse.ok || !waveResult?.ok || typeof waveResult.dataUrl !== "string") {
                 throw new Error(waveResult?.error ?? waveResult?.message ?? `WaveSpeed failed (${waveResponse.status})`);
