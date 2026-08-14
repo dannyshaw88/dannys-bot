@@ -4510,6 +4510,19 @@ function CopySettingsDialog({
   const [selectedSubKeys, setSelectedSubKeys] = useState<Set<string>>(new Set());
   const [copying, setCopying] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const displayCopySections = (() => {
+    const sections = [...COPY_SECTIONS];
+    const moveAfter = (key: string, afterKey: string) => {
+      const itemIndex = sections.findIndex(section => section.key === key);
+      if (itemIndex < 0) return;
+      const [item] = sections.splice(itemIndex, 1);
+      const afterIndex = sections.findIndex(section => section.key === afterKey);
+      sections.splice(afterIndex < 0 ? sections.length : afterIndex + 1, 0, item);
+    };
+    moveAfter("explore", "feed");
+    moveAfter("injectBrowsing", "follow");
+    return sections;
+  })();
 
   // Fetch all devices + their slots whenever the dialog opens.
   // Reads sessionStorage to restore the last selection; defaults to all-unticked.
@@ -4829,7 +4842,7 @@ function CopySettingsDialog({
               </div>
             </div>
             <div className="overflow-y-auto flex-1 space-y-1 pr-1">
-              {COPY_SECTIONS.map(section => {
+              {displayCopySections.map(section => {
                 const state = sectionState(section);
                 const allSubs = section.sub;
                 const copyableSubs = section.sub.filter(sub =>
