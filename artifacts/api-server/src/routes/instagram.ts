@@ -6156,8 +6156,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
         const strategy = disruptionStrategy ?? "frequency";
         const strength = disruptionStrength ?? "balanced";
         const strengthConfig = {
-          high: { threshold: 0.07, delta: 3, saturation: 1.05, brightness: 1.005, step: 3, sharpen: 1.65 },
-          extreme: { threshold: 0.05, delta: 3, saturation: 1.06, brightness: 1.006, step: 3, sharpen: 1.8 },
+          extreme: { threshold: 0, delta: 8, saturation: 0.9, brightness: 1.015, step: 5, sharpen: 2.1 },
         }[strength];
         logProcessing("scan — loading pixel buffer and locating high-frequency signal");
         const detectorMeta = await sharp(output).metadata();
@@ -6174,7 +6173,10 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
                 const offset = (y * raw.info.width + x) * channels;
                 const delta = phase > 0 ? strengthConfig.delta : -strengthConfig.delta;
                 for (let channel = 0; channel < Math.min(3, channels); channel++) {
-                  raw.data[offset + channel] = Math.max(0, Math.min(255, raw.data[offset + channel] + delta));
+                  // Extreme intentionally perturbs every pixel and each color
+                  // channel; it is not a sparse signal-region pass.
+                  const channelDelta = delta + (channel === 1 ? Math.sign(phase) * 2 : channel === 2 ? -Math.sign(phase) * 2 : 0);
+                  raw.data[offset + channel] = Math.max(0, Math.min(255, raw.data[offset + channel] + channelDelta));
                 }
               }
             }
