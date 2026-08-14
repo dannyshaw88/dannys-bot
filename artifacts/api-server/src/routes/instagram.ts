@@ -6173,7 +6173,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
                 const phase = Math.sin(x * 0.37 + y * 0.19) + Math.cos(x * 0.11 - y * 0.29);
                 if (Math.abs(phase) < strengthConfig.threshold) continue;
                 const offset = (y * raw.info.width + x) * channels;
-                const patternScale = 0.65;
+                const patternScale = 0.72;
                 const delta = (phase > 0 ? strengthConfig.delta : -strengthConfig.delta) * patternScale;
                 for (let channel = 0; channel < Math.min(3, channels); channel++) {
                   // Extreme intentionally perturbs every pixel and each color
