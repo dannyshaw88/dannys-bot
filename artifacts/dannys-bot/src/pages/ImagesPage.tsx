@@ -75,6 +75,7 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [localFrequencyDisruption, setLocalFrequencyDisruption] = useState(true);
   const [localDetectorPass, setLocalDetectorPass] = useState(true);
   const [localDisruptionStrength, setLocalDisruptionStrength] = useState<"extreme">("extreme");
+  const [localPatternIntensity, setLocalPatternIntensity] = useState<"full" | "reduced" | "off">("full");
   const [localRestoreLowBlend, setLocalRestoreLowBlend] = useState(90);
   const [localRestoreDetail, setLocalRestoreDetail] = useState(35);
   const [localRestoreBlur, setLocalRestoreBlur] = useState(30);
@@ -219,6 +220,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                detectorPass: localDetectorPass,
                disruptionStrategy: "combined",
                disruptionStrength: localDisruptionStrength,
+               compositePattern: localPatternIntensity,
                restorationLowBlend: localRestoreLowBlend / 100,
                restorationDetail: localRestoreDetail / 100,
                restorationBlur: localRestoreBlur / 10,
@@ -265,6 +267,7 @@ export default function ImagesPage(props: ImagesPageProps) {
     localDisruptionStrength,
     localFrequencyDisruption,
     localItems,
+    localPatternIntensity,
     localMetadataCleanup,
     localRestoreBlur,
     localRestoreDetail,
@@ -433,6 +436,20 @@ export default function ImagesPage(props: ImagesPageProps) {
                       </select>
                     </div>
                   )}
+                   {localDetectorPass && (
+                     <div className="flex items-center justify-between gap-3">
+                       <Label className="text-xs text-muted-foreground">Pattern intensity</Label>
+                       <select
+                         value={localPatternIntensity}
+                         onChange={(event) => setLocalPatternIntensity(event.target.value as typeof localPatternIntensity)}
+                         className="rounded-md border border-border bg-background px-2 py-1.5 text-xs"
+                       >
+                         <option value="full">Full</option>
+                         <option value="reduced">Reduced</option>
+                         <option value="off">Off</option>
+                       </select>
+                     </div>
+                   )}
                   {localDetectorPass && (
                     <div className="space-y-3 rounded-md border border-border/60 p-3">
                       <Label className="text-xs font-medium">Restoration editor</Label>
