@@ -11509,6 +11509,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // and profile-tab lookup without doing two more sequential dumps.
       const switchPreloadXml = (!adsChoice.dismissed && !launchPopup) ? launchXml : undefined;
       if (resolvedSlotUsername) {
+         automationCurrentTool.set(serial, "ACCOUNT SWITCHING");
          tLog(`▶ Switching to Instagram account: @${resolvedSlotUsername}…`);
          const switched = await android.switchToInstagramAccount(
            serial,
@@ -12561,6 +12562,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       tLog("  ✓ Airplane mode off — network reconnecting");
       steps.push("airplane-mode-off");
 
+      // 7. Finalise the cycle: close Instagram, recycle the network, then
+      // lock the phone ready for the next cycle.
+      automationCurrentTool.set(serial, "FINALISING");
+      tLog("▶ Finalising — closing Instagram and recycling network…");
       // 7. Swipe up, then press power again to lock the phone — ready for
       // the next cycle to start from a clean, screen-off state.
       await sleepOrAbort(serial, 1500); // let the radios reconnect before touching the screen
