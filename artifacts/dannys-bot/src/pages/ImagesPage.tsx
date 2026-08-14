@@ -73,21 +73,6 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [localImgSettings, setLocalImgSettings] = useState<ImageFilterSettings>(DEFAULT_IMAGE_SETTINGS);
   const [localMetadataCleanup, setLocalMetadataCleanup] = useState(true);
   const [localFrequencyDisruption, setLocalFrequencyDisruption] = useState(true);
-  const [localDetectorPass, setLocalDetectorPass] = useState(true);
-  const [localDisruptionStrength, setLocalDisruptionStrength] = useState<"extreme">("extreme");
-  const [localPatternIntensity] = useState<"balanced">("balanced");
-  const restorationPresets = {
-    "1": { low: 0, detail: 100, blur: 3, label: "Level 1 — Minimal" },
-    "2": { low: 50, detail: 75, blur: 8, label: "Level 2 — Light" },
-    "3": { low: 75, detail: 100, blur: 15, label: "Level 3 — Moderate" },
-    "4": { low: 90, detail: 50, blur: 25, label: "Level 4 — Strong" },
-    "5": { low: 100, detail: 25, blur: 35, label: "Level 5 — Maximum" },
-  } as const;
-  const [localRestorePreset, setLocalRestorePreset] = useState<keyof typeof restorationPresets>("3");
-  const activeRestorePreset = restorationPresets[localRestorePreset];
-  const localRestoreLowBlend = activeRestorePreset.low;
-  const localRestoreDetail = activeRestorePreset.detail;
-  const localRestoreBlur = activeRestorePreset.blur;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -226,13 +211,9 @@ export default function ImagesPage(props: ImagesPageProps) {
               imageSettings,
                metadataCleanup: localMetadataCleanup,
                frequencyDisruption: localFrequencyDisruption,
-               detectorPass: localDetectorPass,
+                detectorPass: true,
                disruptionStrategy: "combined",
-               disruptionStrength: localDisruptionStrength,
-               compositePattern: localPatternIntensity,
-               restorationLowBlend: localRestoreLowBlend / 100,
-               restorationDetail: localRestoreDetail / 100,
-               restorationBlur: localRestoreBlur / 10,
+                disruptionStrength: "extreme",
             }),
           });
           const result = await response.json().catch(() => null);
@@ -272,15 +253,9 @@ export default function ImagesPage(props: ImagesPageProps) {
     fixAiSlop,
     imageSettings,
     imageSettingsEnabled,
-    localDetectorPass,
-    localDisruptionStrength,
     localFrequencyDisruption,
     localItems,
-    localPatternIntensity,
     localMetadataCleanup,
-    localRestoreBlur,
-    localRestoreDetail,
-    localRestoreLowBlend,
     props,
     readFileDataUrl,
   ]);
@@ -422,46 +397,6 @@ export default function ImagesPage(props: ImagesPageProps) {
                     <Switch checked={localFrequencyDisruption} onCheckedChange={setLocalFrequencyDisruption} className="data-[state=checked]:bg-cyan-500 shrink-0" />
                   </div>
 
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1 mt-0.5">
-                      <Label className="text-sm font-medium text-foreground cursor-pointer select-none" onClick={() => setLocalDetectorPass(!localDetectorPass)}>
-                        Combined harsh pass
-                      </Label>
-                      <p className="text-[10px] leading-4 text-muted-foreground max-w-[210px]">
-                        Applies pixel micro-jitter, chroma shift, resampling, and frequency rewrite together.
-                      </p>
-                    </div>
-                    <Switch checked={localDetectorPass} onCheckedChange={setLocalDetectorPass} className="data-[state=checked]:bg-cyan-500 shrink-0" />
-                  </div>
-                  {localDetectorPass && (
-                    <div className="flex items-center justify-between gap-3">
-                      <Label className="text-xs text-muted-foreground">Composite strength: Extreme</Label>
-                      <Switch checked={true} onCheckedChange={() => setLocalDisruptionStrength("extreme")} className="data-[state=checked]:bg-cyan-500 shrink-0" />
-                    </div>
-                  )}
-                   {localDetectorPass && (
-                     <div className="flex items-center justify-between gap-3">
-                       <Label className="text-xs text-muted-foreground">Pattern intensity: High</Label>
-                       <Switch checked={true} onCheckedChange={() => undefined} className="data-[state=checked]:bg-cyan-500 shrink-0" />
-                     </div>
-                   )}
-                  {localDetectorPass && (
-                    <div className="space-y-3 rounded-md border border-border/60 p-3">
-                      <Label className="text-xs font-medium">Restoration quality level</Label>
-                      <select
-                        value={localRestorePreset}
-                        onChange={(event) => setLocalRestorePreset(event.target.value as keyof typeof restorationPresets)}
-                        className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs"
-                      >
-                        {Object.entries(restorationPresets).map(([value, preset]) => (
-                          <option key={value} value={value}>{preset.label}</option>
-                        ))}
-                      </select>
-                      <p className="text-[10px] leading-4 text-muted-foreground">
-                        Base {localRestoreLowBlend}% · Detail {localRestoreDetail}% · Scale {(localRestoreBlur / 10).toFixed(1)}
-                      </p>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>

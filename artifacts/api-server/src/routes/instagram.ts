@@ -6217,49 +6217,6 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
         }
       }
 
-      if (detectorPass && disruptionStrategy === "combined" && output.length) {
-        processingStage = "quality restoration";
-        const lowBlend = Math.max(0, Math.min(1, restorationLowBlend ?? 0.9));
-        const detailRetention = Math.max(0, Math.min(1.5, restorationDetail ?? 0.35));
-        const blurRadius = Math.max(0.3, Math.min(5, restorationBlur ?? 3));
-        logProcessing(`quality restore — settings base=${Math.round(lowBlend * 100)}% detail=${Math.round(detailRetention * 100)}% scale=${blurRadius.toFixed(1)}`);
-        // Reopen the encoded disrupted output. Restoration must not receive or
-        // reference the original source buffer.
-        const disruptedMeta = await sharp(output).metadata();
-        if (!disruptedMeta.width || !disruptedMeta.height) throw new Error("Disrupted output has no dimensions");
-        const disruptedRaw = await sharp(output)
-          .resize(disruptedMeta.width, disruptedMeta.height, { fit: "fill", kernel: "lanczos3" })
-          .raw().toBuffer({ resolveWithObject: true });
-        // Median cleanup removes isolated Extreme-pass speckles before the
-        // low-frequency base is rebuilt. This is intentionally derived only
-        // from the disrupted output, never from the source image.
-        const restorationBase = sharp(output).median(3);
-        const disruptedLow = await restorationBase
-          .resize(disruptedMeta.width, disruptedMeta.height, { fit: "fill", kernel: "lanczos3" })
-          .blur(blurRadius).raw().toBuffer();
-        const cleanedRaw = await restorationBase.raw().toBuffer({ resolveWithObject: true });
-        const channels = disruptedRaw.info.channels;
-        let changedChannels = 0;
-        for (let i = 0; i < disruptedRaw.data.length; i++) {
-          const channel = i % disruptedRaw.info.channels;
-          if (channel >= channels || channel === 3) continue;
-          const disruptedIndex = Math.min(i, disruptedLow.length - 1);
-          const highFrequency = cleanedRaw.data[i] - disruptedLow[disruptedIndex];
-          const blendedLow = cleanedRaw.data[i] * (1 - lowBlend) + disruptedLow[disruptedIndex] * lowBlend;
-          const restoredValue = Math.max(0, Math.min(255, Math.round(blendedLow + highFrequency * detailRetention)));
-          if (restoredValue !== disruptedRaw.data[i]) changedChannels++;
-          disruptedRaw.data[i] = restoredValue;
-        }
-        const restored = sharp(disruptedRaw.data, {
-          raw: { width: disruptedRaw.info.width, height: disruptedRaw.info.height, channels: disruptedRaw.info.channels },
-        });
-        const restoredMeta = disruptedMeta;
-        if (restoredMeta.format === "png") output = await restored.png().toBuffer();
-        else if (restoredMeta.format === "webp") output = await restored.webp({ quality: 96 }).toBuffer();
-        else output = await restored.jpeg({ quality: 92, mozjpeg: false }).toBuffer();
-        logProcessing(`quality restore — median denoise + multi-scale reconstruction from encoded disrupted output only; changed ${changedChannels}/${disruptedRaw.data.length} channels`);
-      }
-
       const isJpeg = output.length >= 2 && output[0] === 0xff && output[1] === 0xd8;
       const isPng = output.length >= 8 &&
         output[0] === 0x89 && output[1] === 0x50 && output[2] === 0x4e && output[3] === 0x47;
