@@ -9319,10 +9319,11 @@ export async function findInstagramSearchTab(
  * Find the Instagram search input bar (after tapping the Search tab).
  * Returns the tap coordinates or null if not found.
  *
- * Fixed: the old 30%-height limit and the unconstrained `_findElem` fallback
+ * Fixed: the old narrow height limit and the unconstrained `_findElem` fallback
  * could match elements deep in the Explore grid (causing a tap below the bar
- * that looked like a swipe/pull-to-refresh).  Now strictly constrained to the
- * top 30 % of the screen with retries so the Explore page has time to settle.
+ * that looked like a swipe/pull-to-refresh). The detector still requires a
+ * search-labelled node, but accepts the clickable container Instagram exposes
+ * on some renders and uses a bounded top-region search with retries.
  */
 export async function findInstagramSearchBar(
   serial: string,
@@ -9349,9 +9350,11 @@ export async function findInstagramSearchBar(
       return { found: false };
     }
 
-    // 30 % gives up to 720 px on a 2400 px screen — comfortably above the
-    // search bar while still safely below any Explore-grid content.
-    const topLimit = Math.round(screenH * 0.30);
+    // The search control can render lower while Explore is transitioning
+    // (especially after returning from a spread page). Keep this bounded to
+    // the upper 45% and require a search-labelled resource/text/description,
+    // so this cannot select an arbitrary Explore tile.
+    const topLimit = Math.round(screenH * 0.45);
 
     // Instagram's Explore screen exposes the real top search field with this
     // stable resource-id. Prefer it before any label/candidate ranking so the
@@ -9436,8 +9439,9 @@ export async function findInstagramSearchBar(
       if (!bm) continue;
       const centerY = (Number(bm[2]) + Number(bm[4])) / 2;
       if (centerY > topLimit) continue;
-      // Must be interactive (clickable OR focusable)
-      if (!xmlLine.includes('focusable="true"')) continue;
+      // Must be interactive (clickable OR focusable). Some Instagram builds
+      // expose the visible Search container as clickable but not focusable.
+      if (!/(?:clickable|focusable)="true"/.test(xmlLine)) continue;
       // "search" must appear inside a text="" or content-desc="" attribute value
       // (not just anywhere in the line, e.g. a resource-id containing "search")
       if (!/(?:text|content-desc|hint)="[^"]*[Ss]earch[^"]*"/.test(xmlLine)) continue;

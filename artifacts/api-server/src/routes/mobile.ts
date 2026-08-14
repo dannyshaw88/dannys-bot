@@ -10435,7 +10435,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // candidates reuse the confirmed cleared/focused Search field left by the
     // previous rejected candidate.
     if (!params.searchAlreadyReady) {
-      await sleepOrAbort(serial, 1500);
+      // Returning from Explore can leave the Search surface visually present
+      // before its accessibility nodes are republished.
+      await sleepOrAbort(serial, 2500);
 
     // Floating-window guard (MIUI "Floating windows" feature, confirmed 15 Jul
     // 2026 from live log + screenshot evidence). When Instagram is running in a
