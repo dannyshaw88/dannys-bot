@@ -692,10 +692,16 @@ export default function ImagesPage(props: ImagesPageProps) {
                   </Button>
                 ) : (
                   <Button 
+                    type="button"
                     variant="secondary" 
                     size="sm" 
                     disabled={items.length === 0}
-                    onClick={handleStartProcessing}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setNotice("Pipeline started");
+                      handleStartProcessing();
+                    }}
                     className="shadow-xs h-8 bg-foreground text-background hover:bg-foreground/90 border-0"
                   >
                     <Play className="w-3.5 h-3.5 mr-1.5 fill-current" />
