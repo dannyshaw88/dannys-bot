@@ -4666,7 +4666,8 @@ function CopySettingsDialog({
   };
 
   const handleCopy = async () => {
-    if (selectedTargets.length === 0) return;
+    const effectiveTargets = selectedTargets.length > 0 ? selectedTargets : allTargets;
+    if (effectiveTargets.length === 0) return;
     setCopying(true);
     setResult(null);
     const partial: Record<string, unknown> = {};
@@ -4692,7 +4693,7 @@ function CopySettingsDialog({
     }
     let ok = 0, fail = 0;
     const localSucceeded: number[] = [];
-    for (const target of selectedTargets) {
+    for (const target of effectiveTargets) {
       try {
         const r = await fetch(
           `/api/mobile/devices/${encodeURIComponent(target.serial)}/slots/${target.slotIdx}/automation-settings`,
@@ -4891,7 +4892,7 @@ function CopySettingsDialog({
           )}
           <Button variant="secondary" onClick={onClose} disabled={copying}>Cancel</Button>
           <Button onClick={handleCopy}
-            disabled={copying || selectedTargets.length === 0}
+            disabled={copying || allTargets.length === 0}
             style={result === "ok" ? { background: "#16a34a", borderColor: "#16a34a" } : undefined}>
             {result === "ok"
               ? <CheckCircle2 className="w-4 h-4 text-white" />
