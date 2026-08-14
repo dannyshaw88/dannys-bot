@@ -4970,7 +4970,10 @@ export function AutomationSettingsPanel({
     () => new Set(
       templateLockedFields ??
       (trustScoreActive
-        ? (settings.trustScoreControlledFields ?? []).filter(field => !TRUST_SCORE_FEATURE_FIELDS.has(field))
+        ? (settings.trustScoreControlledFields ?? []).filter(field =>
+            !TRUST_SCORE_FEATURE_FIELDS.has(field) &&
+            !field.startsWith("makePost"),
+          )
         : []),
     ),
     [templateLockedFields, trustScoreActive, settings.trustScoreControlledFields],
