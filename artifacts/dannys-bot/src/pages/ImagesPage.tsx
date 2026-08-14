@@ -495,8 +495,8 @@ export default function ImagesPage(props: ImagesPageProps) {
           table-layout: fixed;
         }
         .fix-images-scroll {
-          height: 200px;
           max-height: 200px;
+          height: auto;
           overflow-y: auto;
           overflow-x: hidden;
         }
