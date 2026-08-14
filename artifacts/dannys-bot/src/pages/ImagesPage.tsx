@@ -288,9 +288,10 @@ export default function ImagesPage(props: ImagesPageProps) {
 
     void (async () => {
       // A completed item can be processed again so restoration settings can be tuned.
+      const pendingItems = localItems.filter(item => item.status !== "success");
       const queue = onlyItemId
         ? localItems.filter(item => item.id === onlyItemId)
-        : localItems.filter(item => item.status !== "success");
+        : (pendingItems.length ? pendingItems : localItems);
       for (const item of queue) {
         if (!processingRef.current) break;
         setLocalItems(prev => prev.map(current => current.id === item.id
