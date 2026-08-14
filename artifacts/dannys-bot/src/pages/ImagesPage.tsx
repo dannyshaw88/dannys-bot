@@ -447,36 +447,24 @@ export default function ImagesPage(props: ImagesPageProps) {
           width: 100%;
           max-width: 100%;
         }
-        .image-processing-overlay {
-          position: absolute;
-          inset: 0;
-          z-index: 20;
-          pointer-events: none;
-          overflow: hidden;
-          border-radius: inherit;
-        }
-        .image-processing-overlay::before {
-          content: "";
-          position: absolute;
-          left: 0;
-          right: 0;
-          top: 0;
-          height: 3px;
-          background: linear-gradient(90deg, transparent, rgba(103,232,249,0.95) 20%, #fff 50%, rgba(103,232,249,0.95) 80%, transparent);
-          box-shadow: 0 0 10px rgba(34,211,238,0.95), 0 0 24px rgba(34,211,238,0.6);
-          animation: image-processing-scan-down 2.4s linear infinite;
-        }
-        .image-processing-overlay::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          background-image:
-            radial-gradient(circle, rgba(255,255,255,0.95) 0 1px, transparent 1.8px),
-            radial-gradient(circle, rgba(103,232,249,0.9) 0 1.2px, transparent 2px),
-            radial-gradient(circle, rgba(165,243,252,0.95) 0 1px, transparent 1.8px),
-            radial-gradient(circle, rgba(34,211,238,0.9) 0 1.3px, transparent 2px);
-          background-size: 64px 48px, 71px 57px, 83px 61px, 97px 73px;
-          animation: image-processing-pixels 1.1s steps(5, end) infinite;
+        tr.image-processing-scan > td {
+          background-color: rgba(34,211,238,0.06);
+          background-image: linear-gradient(
+            to bottom,
+            transparent 0%,
+            transparent 42%,
+            rgba(103,232,249,0.95) 49%,
+            rgba(255,255,255,0.98) 50%,
+            rgba(103,232,249,0.95) 51%,
+            transparent 58%,
+            transparent 100%
+          );
+          background-size: 100% 260%;
+          background-position: 0 -130%;
+          animation-name: image-processing-scan-down;
+          animation-timing-function: linear;
+          animation-iteration-count: infinite;
+          animation-duration: var(--scan-duration, 2.4s);
         }
       `}</style>
       <div className="p-4 lg:p-6 h-[calc(100vh-3.5rem)] min-h-[600px]">
@@ -719,7 +707,6 @@ export default function ImagesPage(props: ImagesPageProps) {
                  </div>
               ) : (
                   <div className="relative rounded-xl border border-border/60 bg-background shadow-xs overflow-hidden animate-in fade-in duration-300">
-                    {items.some(item => item.status === "processing") && <div className="image-processing-overlay" aria-hidden="true" />}
                     <div className="overflow-x-auto">
                      <table className="w-full table-fixed text-sm text-left border-collapse">
                        <thead className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider bg-muted/40 border-b border-border/60">
@@ -734,8 +721,12 @@ export default function ImagesPage(props: ImagesPageProps) {
                        </thead>
                        <tbody className="divide-y divide-border/40">
                          {items.map(item => (
-                            <tr key={item.id} className={`hover:bg-muted/30 transition-colors group ${item.status === "processing" ? "image-processing-scan" : ""}`}>
-                             <td className="px-4 py-3">
+                             <tr
+                               key={item.id}
+                               className={`hover:bg-muted/30 transition-colors group ${item.status === "processing" ? "image-processing-scan" : ""}`}
+                               style={item.status === "processing" ? { "--scan-duration": `${1.05 + (item.id.length % 7) * 0.22}s` } as React.CSSProperties : undefined}
+                             >
+                              <td className="px-4 py-3">
                                 <div className="w-20 h-20 rounded border border-border/60 bg-muted/30 overflow-hidden mx-auto shadow-xs">
                                  <img src={item.previewUrl} className="w-full h-full object-cover" alt="" />
                                </div>
