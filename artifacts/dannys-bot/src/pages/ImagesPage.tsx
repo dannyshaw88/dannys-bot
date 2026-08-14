@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,43 @@ const DEFAULT_IMAGE_SETTINGS: ImageFilterSettings = {
   sharpen:   { enabled: true, min: 1.0, max: 2.0 },
   pixelate:  { enabled: true, min: 0.9, max: 2.1 },
 };
+
+const IMAGES_PAGE_STORAGE_KEY = "dannys-bot.fix-images.workspace.v1";
+type PersistedImagesWorkspace = {
+  items?: Array<Partial<MediaItem>>;
+  fixAiSlop?: boolean;
+  alterationEnabled?: boolean;
+  alterationLevel?: "small" | "medium" | "high";
+  imageSettingsEnabled?: boolean;
+  imageSettings?: ImageFilterSettings;
+  metadataCleanup?: boolean;
+  frequencyDisruption?: boolean;
+  waveSpeed?: boolean;
+  wavePrompt?: string;
+  waveStrength?: number;
+  waveSeed?: number;
+  waveOutputFormat?: "jpeg" | "png" | "webp";
+  waveWidth?: string;
+  waveHeight?: string;
+};
+
+function readPersistedWorkspace(): PersistedImagesWorkspace {
+  if (typeof window === "undefined") return {};
+  try {
+    return JSON.parse(window.sessionStorage.getItem(IMAGES_PAGE_STORAGE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not read the selected image"));
+    reader.onload = () => resolve(String(reader.result));
+    reader.readAsDataURL(file);
+  });
+}
 
 export interface MediaItem {
   id: string;
@@ -65,22 +102,27 @@ export interface ImagesPageProps {
 }
 
 export default function ImagesPage(props: ImagesPageProps) {
-  const [localItems, setLocalItems] = useState<MediaItem[]>([]);
+  const persisted = readPersistedWorkspace();
+  const [localItems, setLocalItems] = useState<MediaItem[]>(() => (persisted.items ?? []).map(item => ({
+    ...(item as MediaItem),
+    status: item.status === "success" ? "success" : "idle",
+    progress: item.status === "success" ? 100 : 0,
+  })));
   const [localIsProcessing, setLocalIsProcessing] = useState(false);
-  const [localFixAiSlop, setLocalFixAiSlop] = useState(true);
-  const [localAltEnabled, setLocalAltEnabled] = useState(true);
-  const [localAltLevel, setLocalAltLevel] = useState<"small" | "medium" | "high">("small");
-  const [localImgSettingsEnabled, setLocalImgSettingsEnabled] = useState(true);
-  const [localImgSettings, setLocalImgSettings] = useState<ImageFilterSettings>(DEFAULT_IMAGE_SETTINGS);
-  const [localMetadataCleanup, setLocalMetadataCleanup] = useState(true);
-  const [localFrequencyDisruption, setLocalFrequencyDisruption] = useState(true);
-  const [localWaveSpeed, setLocalWaveSpeed] = useState(false);
-  const [wavePrompt, setWavePrompt] = useState("REMAKE-THIS-IMAGE");
-  const [waveStrength, setWaveStrength] = useState(0.1);
-  const [waveSeed, setWaveSeed] = useState(-1);
-  const [waveOutputFormat, setWaveOutputFormat] = useState<"jpeg" | "png" | "webp">("jpeg");
-  const [waveWidth, setWaveWidth] = useState("");
-  const [waveHeight, setWaveHeight] = useState("");
+  const [localFixAiSlop, setLocalFixAiSlop] = useState(persisted.fixAiSlop ?? true);
+  const [localAltEnabled, setLocalAltEnabled] = useState(persisted.alterationEnabled ?? true);
+  const [localAltLevel, setLocalAltLevel] = useState<"small" | "medium" | "high">(persisted.alterationLevel ?? "small");
+  const [localImgSettingsEnabled, setLocalImgSettingsEnabled] = useState(persisted.imageSettingsEnabled ?? true);
+  const [localImgSettings, setLocalImgSettings] = useState<ImageFilterSettings>(persisted.imageSettings ?? DEFAULT_IMAGE_SETTINGS);
+  const [localMetadataCleanup, setLocalMetadataCleanup] = useState(persisted.metadataCleanup ?? true);
+  const [localFrequencyDisruption, setLocalFrequencyDisruption] = useState(persisted.frequencyDisruption ?? true);
+  const [localWaveSpeed, setLocalWaveSpeed] = useState(persisted.waveSpeed ?? false);
+  const [wavePrompt, setWavePrompt] = useState(persisted.wavePrompt ?? "");
+  const [waveStrength, setWaveStrength] = useState(persisted.waveStrength ?? 0.1);
+  const [waveSeed, setWaveSeed] = useState(persisted.waveSeed ?? -1);
+  const [waveOutputFormat, setWaveOutputFormat] = useState<"jpeg" | "png" | "webp">(persisted.waveOutputFormat ?? "jpeg");
+  const [waveWidth, setWaveWidth] = useState(persisted.waveWidth ?? "");
+  const [waveHeight, setWaveHeight] = useState(persisted.waveHeight ?? "");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -102,19 +144,68 @@ export default function ImagesPage(props: ImagesPageProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const processingRef = useRef<boolean>(false);
 
-  const handleAddFiles = useCallback((files: File[]) => {
+  useEffect(() => {
+    if (props.mediaItems || props.fixAiSlop !== undefined) return;
+    const workspace: PersistedImagesWorkspace = {
+      items: localItems.map(({ file: _file, ...item }) => item),
+      fixAiSlop: localFixAiSlop,
+      alterationEnabled: localAltEnabled,
+      alterationLevel: localAltLevel,
+      imageSettingsEnabled: localImgSettingsEnabled,
+      imageSettings: localImgSettings,
+      metadataCleanup: localMetadataCleanup,
+      frequencyDisruption: localFrequencyDisruption,
+      waveSpeed: localWaveSpeed,
+      wavePrompt,
+      waveStrength,
+      waveSeed,
+      waveOutputFormat,
+      waveWidth,
+      waveHeight,
+    };
+    try {
+      window.sessionStorage.setItem(IMAGES_PAGE_STORAGE_KEY, JSON.stringify(workspace));
+    } catch {
+      // A large batch may exceed session storage; the current mounted workspace remains usable.
+    }
+  }, [
+    props.mediaItems,
+    props.fixAiSlop,
+    localItems,
+    localFixAiSlop,
+    localAltEnabled,
+    localAltLevel,
+    localImgSettingsEnabled,
+    localImgSettings,
+    localMetadataCleanup,
+    localFrequencyDisruption,
+    localWaveSpeed,
+    wavePrompt,
+    waveStrength,
+    waveSeed,
+    waveOutputFormat,
+    waveWidth,
+    waveHeight,
+  ]);
+
+  const handleAddFiles = useCallback(async (files: File[]) => {
     if (props.onAddFiles) {
       props.onAddFiles(files);
       return;
     }
-    const newItems = files.filter(file => file.type.startsWith("image/") || /\.(jpe?g|png|webp|gif|bmp|avif|heic|heif)$/i.test(file.name)).map(f => ({
-      id: Math.random().toString(36).substring(2, 9),
-      file: f,
-      name: f.name,
-      size: f.size,
-      previewUrl: URL.createObjectURL(f),
-      status: "idle" as const,
-      progress: 0,
+    const validFiles = files.filter(file => file.type.startsWith("image/") || /\.(jpe?g|png|webp|gif|bmp|avif|heic|heif)$/i.test(file.name));
+    const newItems = await Promise.all(validFiles.map(async f => {
+      const dataUrl = await fileToDataUrl(f);
+      return {
+        id: Math.random().toString(36).substring(2, 9),
+        file: f,
+        sourceDataUrl: dataUrl,
+        name: f.name,
+        size: f.size,
+        previewUrl: dataUrl,
+        status: "idle" as const,
+        progress: 0,
+      };
     }));
     setLocalItems(prev => [...prev, ...newItems]);
     setNotice(newItems.length ? `${newItems.length} image${newItems.length === 1 ? "" : "s"} imported` : "No supported image files were selected");
@@ -173,6 +264,9 @@ export default function ImagesPage(props: ImagesPageProps) {
       if (i.processedPreviewUrl) URL.revokeObjectURL(i.processedPreviewUrl);
     });
     setLocalItems([]);
+    try {
+      window.sessionStorage.removeItem(IMAGES_PAGE_STORAGE_KEY);
+    } catch {}
   }, [props, localItems]);
 
   const readFileDataUrl = async (item: MediaItem): Promise<string> => {
