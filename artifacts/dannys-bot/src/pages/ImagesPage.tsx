@@ -76,9 +76,18 @@ export default function ImagesPage(props: ImagesPageProps) {
   const [localDetectorPass, setLocalDetectorPass] = useState(true);
   const [localDisruptionStrength, setLocalDisruptionStrength] = useState<"extreme">("extreme");
   const [localPatternIntensity] = useState<"balanced">("balanced");
-  const [localRestoreLowBlend, setLocalRestoreLowBlend] = useState(90);
-  const [localRestoreDetail, setLocalRestoreDetail] = useState(35);
-  const [localRestoreBlur, setLocalRestoreBlur] = useState(30);
+  const restorationPresets = {
+    "1": { low: 0, detail: 100, blur: 3, label: "Level 1 — Minimal" },
+    "2": { low: 50, detail: 75, blur: 8, label: "Level 2 — Light" },
+    "3": { low: 75, detail: 100, blur: 15, label: "Level 3 — Moderate" },
+    "4": { low: 90, detail: 50, blur: 25, label: "Level 4 — Strong" },
+    "5": { low: 100, detail: 25, blur: 35, label: "Level 5 — Maximum" },
+  } as const;
+  const [localRestorePreset, setLocalRestorePreset] = useState<keyof typeof restorationPresets>("3");
+  const activeRestorePreset = restorationPresets[localRestorePreset];
+  const localRestoreLowBlend = activeRestorePreset.low;
+  const localRestoreDetail = activeRestorePreset.detail;
+  const localRestoreBlur = activeRestorePreset.blur;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -438,19 +447,19 @@ export default function ImagesPage(props: ImagesPageProps) {
                    )}
                   {localDetectorPass && (
                     <div className="space-y-3 rounded-md border border-border/60 p-3">
-                      <Label className="text-xs font-medium">Restoration editor</Label>
-                      <label className="block text-[11px] text-muted-foreground">
-                        Base smoothing: {localRestoreLowBlend}%
-                        <input type="range" min="0" max="100" value={localRestoreLowBlend} onChange={(e) => setLocalRestoreLowBlend(Number(e.target.value))} className="w-full accent-cyan-500" />
-                      </label>
-                      <label className="block text-[11px] text-muted-foreground">
-                        Detail retention: {localRestoreDetail}%
-                        <input type="range" min="0" max="150" value={localRestoreDetail} onChange={(e) => setLocalRestoreDetail(Number(e.target.value))} className="w-full accent-cyan-500" />
-                      </label>
-                      <label className="block text-[11px] text-muted-foreground">
-                        Restoration scale: {(localRestoreBlur / 10).toFixed(1)}
-                        <input type="range" min="3" max="50" value={Math.max(3, localRestoreBlur)} onChange={(e) => setLocalRestoreBlur(Number(e.target.value))} className="w-full accent-cyan-500" />
-                      </label>
+                      <Label className="text-xs font-medium">Restoration quality level</Label>
+                      <select
+                        value={localRestorePreset}
+                        onChange={(event) => setLocalRestorePreset(event.target.value as keyof typeof restorationPresets)}
+                        className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs"
+                      >
+                        {Object.entries(restorationPresets).map(([value, preset]) => (
+                          <option key={value} value={value}>{preset.label}</option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] leading-4 text-muted-foreground">
+                        Base {localRestoreLowBlend}% · Detail {localRestoreDetail}% · Scale {(localRestoreBlur / 10).toFixed(1)}
+                      </p>
                     </div>
                   )}
                 </div>
