@@ -436,6 +436,13 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
   "makePostLocalFolderEnabled",
   "makePostLocalFolderPath",
   "makePostAddLocation",
+  "makePostAlterationEnabled",
+  "makePostAlterationLevel",
+  "makePostImageSettingsEnabled",
+  "makePostImageSettings",
+  "makePostFixAiSlop",
+  "makePostMetadataCleanup",
+  "makePostFrequencyDisruption",
   "postStoryAddLink",
   "postStoryLinkUrl",
 ]);
