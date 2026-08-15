@@ -8076,16 +8076,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       homeTapCount = 1,
     } = opts;
 
-    // Make a Post always starts from Instagram's normal Home feed.  This
-    // tool can follow Feed, Stories, Reels, Explore, or Follow in the same
-    // shuffled cycle, so relying on the previous tool's exit screen can leave
-    // the compose lookup on the wrong Instagram surface.  Use the live
-    // accessibility Home node; never invent a bottom-left coordinate here.
+    // Make a Post always starts from Instagram's normal Home feed.  Do not use
+    // the screenshot heuristic for this tap: a bright pixel in the navigation
+    // strip can be a different icon or an animation frame, and tapping it can
+    // leave Instagram/kill the desktop cycle before image preparation starts.
+    // The accessibility detector has the account of the live screen and its
+    // known fallbacks, so keep this navigation step on that path.
     onLog?.("Make a Post: locating Instagram Home button…");
-    const homeTab = await findVisualPostControl(serial, "home", onLog);
+    const homeTab = await android.findHomeTab(serial).catch(() => null);
     if (!homeTab) {
-      onLog?.("Make a Post: Instagram Home node not exposed — continuing to the \"+\" lookup");
+      onLog?.("Make a Post: validated Instagram Home node not exposed — aborting before any tap");
+      return { posted: false };
     } else {
+      if (
+        !Number.isFinite(homeTab.x) ||
+        !Number.isFinite(homeTab.y) ||
+        homeTab.x < 0 ||
+        homeTab.y < 0
+      ) {
+        onLog?.(`Make a Post: invalid Home coordinates (${homeTab.x}, ${homeTab.y}) — aborting before any tap`);
+        return { posted: false };
+      }
       const taps = Math.max(1, Math.round(homeTapCount));
       for (let tapIndex = 0; tapIndex < taps; tapIndex++) {
         onLog?.(`Make a Post: tapping Instagram Home button (${tapIndex + 1}/${taps})…`);
