@@ -6977,6 +6977,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
         onLog?.(`Reel ${i + 1}/${totalReels}: scanning right-side action column…`);
         const icons = await android.findReelActionIcons(serial, (msg) => onLog?.(`  ${msg}`)).catch(() => null);
+        const visualLike = wantLike
+          ? await android.findReelLikeByPixels(serial, (msg) => onLog?.(`  ${msg}`)).catch(() => null)
+          : null;
+        if (visualLike && icons) {
+          // Use the rendered heart for Like; keep the accessibility scan only
+          // for the other action icons. No post-tap verification is performed.
+          icons.like = visualLike;
+        }
 
         // ── Like — require validated live action-node evidence ─────────────
         // Never guess a video coordinate when the action-column scan found no

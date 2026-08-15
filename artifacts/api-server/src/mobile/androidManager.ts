@@ -4013,6 +4013,82 @@ export interface ReelActionIcons {
 }
 
 /**
+ * Locate the visible Reel heart from the current screenshot.
+ *
+ * This is intentionally independent of UIAutomator bounds. Some Instagram /
+ * Xiaomi builds expose the action-column nodes in a coordinate space that
+ * does not line up with `adb shell input tap`; the rendered heart is the
+ * authoritative Like target.
+ */
+export async function findReelLikeByPixels(
+  serial: string,
+  onLog?: (msg: string) => void,
+): Promise<{ x: number; y: number } | null> {
+  const img = await _captureScreenPixels(serial);
+  if (!img) return null;
+  const { width, height, channels, pixels } = img;
+  if (!width || !height) return null;
+
+  const luminance = (x: number, y: number) => {
+    const i = (y * width + x) * channels;
+    return (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3;
+  };
+  const isBright = (x: number, y: number) => {
+    const i = (y * width + x) * channels;
+    const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2];
+    return Math.min(r, g, b) > 155 && Math.max(r, g, b) - Math.min(r, g, b) < 75;
+  };
+
+  type Candidate = { x: number; y: number; score: number };
+  const candidates: Candidate[] = [];
+  const box = Math.max(28, Math.round(Math.min(width, height) * 0.055));
+  const half = Math.floor(box / 2);
+  const xStart = Math.round(width * 0.74);
+  const xEnd = Math.round(width * 0.98);
+  const yStart = Math.round(height * 0.18);
+  const yEnd = Math.round(height * 0.80);
+
+  for (let cy = yStart; cy <= yEnd; cy += 4) {
+    for (let cx = xStart; cx <= xEnd; cx += 4) {
+      const rows: number[] = [];
+      let total = 0;
+      for (let y = cy - half; y <= cy + half; y++) {
+        if (y < 0 || y >= height) continue;
+        let row = 0;
+        for (let x = cx - half; x <= cx + half; x++) {
+          if (x >= 0 && x < width && isBright(x, y)) row++;
+        }
+        rows.push(row);
+        total += row;
+      }
+      if (total < 16 || total > box * box * 0.30) continue;
+
+      const mid = Math.floor(rows.length / 2);
+      const top = rows.slice(0, Math.max(1, Math.floor(mid * 0.55)));
+      const lower = rows.slice(Math.floor(mid * 0.65));
+      const topPeak = Math.max(...top, 0);
+      const lowerPeak = Math.max(...lower, 0);
+      const lowerTotal = lower.reduce((sum, n) => sum + n, 0);
+      const topTotal = top.reduce((sum, n) => sum + n, 0);
+      // A heart has two bright upper lobes and a narrowing lower point:
+      // substantial upper detail, followed by a smaller lower footprint.
+      if (topPeak < 3 || topTotal < lowerTotal * 0.75 || lowerPeak > topPeak * 1.15) continue;
+      const score = topTotal * 2 - lowerTotal + Math.abs(topPeak - lowerPeak);
+      candidates.push({ x: cx, y: cy, score });
+    }
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+  const best = candidates[0];
+  if (!best) {
+    onLog?.(`[reel-pixels] Like heart not found in right action band (${width}x${height})`);
+    return null;
+  }
+  onLog?.(`[reel-pixels] Like heart found at (${best.x},${best.y}) from screenshot (${width}x${height})`);
+  return { x: best.x, y: best.y };
+}
+
+/**
  * Locates Instagram's Reels viewer action-icon COLUMN (Like, Comment,
  * Repost/Share, Send) — for Reels these render VERTICALLY down the right
  * edge of the screen, unlike a normal feed post's horizontal bottom action
