@@ -7673,7 +7673,46 @@ export async function switchToInstagramAccount(
     }
   }
   if (!profileTab) {
-    onLog?.("  ⚠ Profile tab node not found in accessibility — refusing coordinate fallback");
+    // Capture a compact, serial-specific explanation instead of leaving the
+    // operator with only "not found". This distinguishes a missing/stale
+    // accessibility tree from a profile node that exists but is outside the
+    // bottom-nav bounds used by the detector.
+    const failureXml = await _uiDump(adbPath, serial).catch(() => "");
+    const failureBounds = failureXml.match(/<hierarchy[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+    const failureW = failureBounds ? Number(failureBounds[3]) : 0;
+    const failureH = failureBounds ? Number(failureBounds[4]) : 0;
+    const bottomMin = failureH ? Math.round(failureH * 0.82) : 0;
+    const nodeMatches = [...failureXml.matchAll(/<node\b([^>]*)>/gi)];
+    let bottomNodes = 0;
+    let profileLabels = 0;
+    let profileResourceIds = 0;
+    for (const match of nodeMatches) {
+      const attrs = match[1];
+      const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (!bm) continue;
+      const cy = (Number(bm[2]) + Number(bm[4])) / 2;
+      if (cy >= bottomMin) bottomNodes++;
+      const label = attrs.match(/(?:content-desc|text)="([^"]*)"/i)?.[1] ?? "";
+      if (/^profil(e|o)?$/i.test(label.trim())) profileLabels++;
+      const resourceId = attrs.match(/resource-id="([^"]*)"/i)?.[1] ?? "";
+      if (/(?:profile_tab|tab_profile|nav_profile|avatar_tab)/i.test(resourceId)) profileResourceIds++;
+    }
+    const reason = !failureXml
+      ? "UIAutomator dump was empty"
+      : nodeMatches.length === 0
+        ? "UIAutomator dump contained no node records"
+        : bottomNodes === 0
+          ? `no nodes in bottom navigation band (y >= ${bottomMin})`
+          : profileLabels === 0 && profileResourceIds === 0
+            ? "bottom nodes existed, but none had Profile/Profil text or a recognized profile resource ID"
+            : "profile evidence existed but did not produce a valid candidate after bounds/shape guards";
+    onLog?.(
+      `  ⚠ Profile tab not found [serial=${serial}] — ${reason}; ` +
+      `xmlLength=${failureXml.length}, screen=${failureW}x${failureH}, ` +
+      `nodes=${nodeMatches.length}, bottomNodes=${bottomNodes}, ` +
+      `profileLabels=${profileLabels}, profileResourceIds=${profileResourceIds}. ` +
+      "Refusing coordinate fallback",
+    );
     return false;
   }
 
