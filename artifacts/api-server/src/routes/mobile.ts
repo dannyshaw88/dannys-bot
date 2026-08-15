@@ -6055,13 +6055,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // refreshes/scrolls the feed, which is acceptable.
     const { w: _storyExitW, h: _storyExitH } = getScreenSize(serial);
     onLog?.("Story exit: swiping down to leave the story viewer");
-    await android.swipe(
+    await deviceProfileSwipe(
       serial,
-      Math.round(_storyExitW / 2),
-      Math.round(_storyExitH * 0.30),
-      Math.round(_storyExitW / 2),
-      Math.round(_storyExitH * 0.85),
-      500,
+      {
+        x1: Math.round(_storyExitW / 2),
+        y1: Math.round(_storyExitH * 0.30),
+        x2: Math.round(_storyExitW / 2),
+        y2: Math.round(_storyExitH * 0.85),
+        durationMs: 500,
+      },
+      "story-exit",
+      "back",
     );
     await sleepOrAbort(serial, 800);
     return { storiesWatched, storyLikes };
