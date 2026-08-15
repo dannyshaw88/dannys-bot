@@ -161,7 +161,16 @@ function HstAutoRestart() {
         if (!r.ok || cancelled) return;
         const { slots } = await r.json() as { slots: { serial: string; slotIdx: number }[] };
         if (!Array.isArray(slots)) return;
-        slots.forEach(({ serial, slotIdx }, i) => {
+        // Never start recovery with an incomplete slot record. A null slot
+        // produces `/slots/null/...`, which the API correctly rejects and can
+        // crash the desktop client during startup recovery.
+        const validSlots = slots.filter(({ serial, slotIdx }) =>
+          typeof serial === "string" &&
+          serial.length > 0 &&
+          Number.isInteger(slotIdx) &&
+          slotIdx >= 0,
+        );
+        validSlots.forEach(({ serial, slotIdx }, i) => {
           setTimeout(() => {
             if (!cancelled) startHstLoop(serial, slotIdx, { immediate: false });
           }, i * 5_000); // 5-second stagger — avoids burst of simultaneous cycles
