@@ -1109,11 +1109,11 @@ async function createWindow() {
     }
   });
 
-  // Place the log file next to the exe in the installation directory so it is
-  // easy to find (e.g. C:\Program Files\Aura Farming\logs.log).
-  // path.dirname(app.getPath("exe")) always resolves to the correct install
-  // folder regardless of whether the user customised the install location.
-  const logPath = path.join(path.dirname(app.getPath("exe")), "logs.log");
+  // Keep crash diagnostics in Electron's writable per-user data directory.
+  // The install directory is commonly C:\Program Files\Aura Farming, which is
+  // not reliably writable by a normal Windows user. Writing there caused the
+  // main-process crash log to disappear exactly when it was needed.
+  const logPath = path.join(getUserDataPath(), "logs.log");
 
   // Wire crash capture to the log file so main-process errors appear in logs.log
   _mainLogPath = logPath;
