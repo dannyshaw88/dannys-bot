@@ -1,0 +1,44 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "UuYe0SuhXpmpgHsQkAkb-"
+uri = "file://screenshots/dashboard-metric-alignment-test.jpg"
+type = "image"
+title = "Dashboard metric alignment test"
+description = "Temporary dashboard test showing 25 likes done, 3 follows done, and 5 reels watched centered in the top activity ticker."
+
+[[outputs]]
+id = "Yi2iute4SEYkG68PSkJRf"
+uri = "file://attached_assets/alterego_fitness_hks_redacted.eqx"
+type = "unspecified"
+title = "Redacted EQX export"
+description = "Valid EQX export with the account username preserved and credential, 2FA, token, cookie, and session fields redacted."
+
+[[outputs]]
+id = "EVTNAHNDGP6BVwaTh1FOi"
+uri = "file://attached_assets/alterego_fitness_hks_decoded.json"
+type = "unspecified"
+title = "Decoded EQX account export"
+description = "Original EQX export decrypted with the project’s built-in decoder and saved as local JSON. Contains the original account fields and values."
+
+[[outputs]]
+id = "Fb-haYAB8he9qlCWxj3eJ"
+uri = "file://attached_assets/AlterEgo_Fitness_IQQ_1786468586556_decoded.json"
+type = "unspecified"
+title = "Decoded IQQ EQX export"
+description = "Full locally decoded JSON export from the uploaded IQQ EQX file."
+
+[[outputs]]
+id = "GuScSigG1_fDoc_JtaEI0"
+uri = "file://attached_assets/AlterEgo_Fitness_WRE_1786468586557_decoded.json"
+type = "unspecified"
+title = "Decoded WRE EQX export"
+description = "Full locally decoded JSON export from the uploaded WRE EQX file."
+
+[[outputs]]
+id = "RZG0ZPgK1_k9jKonI0zBl"
+uri = "file://attached_assets/AlterEgo_Fitness_WRE_imported-account.json"
+type = "unspecified"
+title = "AlterEgo Fitness WRE — Corrected Full Export"
+description = "Corrected export: email is cdgfswetuobf@outlook.com, email password is preserved as the literal [] value, and the unknown Instagram password is left null."

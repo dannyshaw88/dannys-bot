@@ -1,0 +1,75 @@
+import type { ComponentType, ReactNode } from "react";
+import {
+  BarChart2,
+  BookOpen,
+  Clapperboard,
+  Activity,
+  Heart,
+  ImagePlus,
+  Mail,
+  Bookmark,
+  UserPlus,
+  Send,
+  Eye,
+} from "lucide-react";
+import { compactCycleMetrics } from "./activityDetailUtils";
+
+type ActivityMetric = {
+  pattern: RegExp;
+  icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  color: string;
+  filled?: boolean;
+};
+
+const ACTIVITY_METRICS: ActivityMetric[] = [
+  { pattern: /^\d+\s+cycles?$/i, icon: Activity, color: "text-cyan-500" },
+  { pattern: /^\d+\s+follows?(?:\s+done)?$/i, icon: UserPlus, color: "text-blue-500" },
+  { pattern: /^\d+\s+likes?(?:\s+done)?$/i, icon: Heart, color: "text-red-500", filled: true },
+  { pattern: /^\d+\s+DMs$/i, icon: Mail, color: "text-violet-500" },
+  { pattern: /^\d+\s+posts?\s+uploaded$/i, icon: ImagePlus, color: "text-fuchsia-500" },
+  { pattern: /^\d+\s+shares$/i, icon: Send, color: "text-amber-500" },
+  { pattern: /^\d+\s+saved$/i, icon: Bookmark, color: "text-black", filled: true },
+  { pattern: /^\d+\s+stories?\s+watched$/i, icon: BookOpen, color: "text-indigo-500" },
+  { pattern: /^\d+\s+reels?\s+watched$/i, icon: Clapperboard, color: "text-sky-500" },
+  { pattern: /^\d+\s+reels?\s+scrolled$/i, icon: Clapperboard, color: "text-purple-500" },
+  { pattern: /^\d+\s+posts?\s+scrolled$/i, icon: BarChart2, color: "text-teal-500" },
+  { pattern: /^\d+\s+Explore\s+scrolls?$/i, icon: Activity, color: "text-orange-500" },
+];
+
+function renderMetricPart(part: string, index: number): ReactNode {
+  const metric = ACTIVITY_METRICS.find(candidate => candidate.pattern.test(part.trim()));
+  if (!metric) return <span key={`detail-${index}`}>{part}</span>;
+
+  const Icon = metric.icon;
+  return (
+    <span key={`detail-${index}`} className="inline-flex items-center whitespace-nowrap">
+      <Icon className={`w-3.5 h-3.5 shrink-0 ${metric.color} ${metric.filled ? "fill-current" : ""}`} aria-hidden />
+      <span className="ml-1">{part}</span>
+    </span>
+  );
+}
+
+export function ActivityDetailOverview({
+  detail,
+  className = "",
+}: {
+  detail?: string;
+  className?: string;
+}) {
+  const normalized = compactCycleMetrics(detail);
+  if (!normalized) return null;
+
+  const parts = normalized
+    .split(/,\s*|\s+—\s+|--+/)
+    .map(part => part.trim())
+    .filter(Boolean);
+  return (
+    <span className={`inline-flex flex-wrap items-center gap-x-2 gap-y-1 ${className}`}>
+      {parts.map((part, index) => (
+        <span key={`part-${index}`} className="inline-flex items-center">
+          {renderMetricPart(part, index)}
+        </span>
+      ))}
+    </span>
+  );
+}
