@@ -4139,12 +4139,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const mediaCandidates = nodes.filter(n =>
         /(?:carousel_)?media_group/.test(n.rid) &&
         n.y2 < like.y &&
+        n.y2 > 0 &&
         n.x2 > n.x1 && n.y2 > n.y1,
       );
       mediaCandidates.sort((a, b) =>
         (b.x2 - b.x1) * (b.y2 - b.y1) - (a.x2 - a.x1) * (a.y2 - a.y1),
       );
       const media = mediaCandidates[0];
+      const { h: actionScreenH } = getScreenSize(serial);
+      const mediaToActionGap = media ? like.y - media.y2 : Number.POSITIVE_INFINITY;
+      // The action row must belong to a currently visible post. A recycled
+      // Like node from the previous post can remain at the top of the dump
+      // while the current post's media/action row is below the viewport. If
+      // there is no media immediately above this Like node, or the gap is
+      // implausibly large, fail closed instead of tapping stale coordinates.
+      if (!media || mediaToActionGap > actionScreenH * 0.12) {
+        onLog?.(
+          `View Feed a11y scan: Like node has no adjacent visible media ` +
+          `(likeY=${like.y}, mediaBottom=${media?.y2 ?? "none"}, gap=${Number.isFinite(mediaToActionGap) ? mediaToActionGap : "n/a"}) — skipping`,
+        );
+        return null;
+      }
 
       // The author must belong to the current post, not merely be any
       // clickable row_feed_photo_profile_name node above the action row.
