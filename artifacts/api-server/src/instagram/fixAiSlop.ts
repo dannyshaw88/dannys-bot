@@ -48,7 +48,6 @@ import { randomBytes } from "crypto";
 import { readFile, unlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
-import { makeUniqueImage } from "./makeUnique";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -284,11 +283,8 @@ function detectFormat(buf: Buffer): ImageFormat {
  * The caller MUST call cleanupAiSlopTemp() after using the returned path.
  *
  * Pipeline:
- *   Step 1 (always) — Binary strip: C2PA, EXIF, XMP, IPTC removed at byte
- *                     level.  Works on all platforms without any native deps.
- *   Step 2 (if Sharp available) — Pixel perturbation: 7-layer makeUniqueImage
- *                     pass to defeat SynthID pixel-level watermarks and CNN-
- *                     based perceptual hash detectors.
+ *   Binary strip: C2PA, EXIF, XMP, IPTC removed at byte level, followed by a
+ *   metadata-free JPEG re-encode. No pixel perturbation is performed here.
  */
 export async function fixAiSlop(
   inputPath: string,
@@ -329,23 +325,16 @@ export async function fixAiSlop(
     );
     onLog?.(`Fix AI Slop: binary strip complete — format=${fmt}, removed ${removedCount} metadata block(s)`);
 
-    // ── Step 2: Sharp pixel perturbation (optional, defeats SynthID) ──────
-    // If Sharp is unavailable (e.g. Electron on Windows without native binary)
-    // we still write the binary-stripped file, which covers C2PA, EXIF, and
-    // XMP — the primary triggers for Instagram's "Made with AI" label.
+    // ── Step 2: Metadata-free JPEG re-encode ────────────────────────────────
     let sharp: any;
     try {
       sharp = (await import("sharp")).default;
     } catch (err) {
-      // Metadata stripping alone is not sufficient protection for this
-      // workflow. Never return a partially protected image: callers must
-      // abort before pushing or uploading when the pixel-perturbation stage
-      // cannot run in the packaged runtime.
       await unlink(tmp).catch(() => {});
       const detail = err instanceof Error ? `: ${err.message}` : "";
       console.error(`[fixAiSlop] Sharp unavailable — refusing to continue${detail}`);
-      onLog?.(`Fix AI Slop: FAILED — Sharp unavailable; refusing to push an unprotected image`);
-      throw new Error(`Fix AI Slop requires Sharp pixel processing, but Sharp is unavailable${detail}`);
+      onLog?.(`Fix AI Slop: FAILED — Sharp unavailable; refusing to re-encode image`);
+      throw new Error(`Fix AI Slop requires Sharp for metadata-free re-encoding${detail}`);
     }
 
     // 2a: Re-encode via Sharp to strip any remaining metadata (ICC profiles,
@@ -357,19 +346,12 @@ export async function fixAiSlop(
       .jpeg({ quality, chromaSubsampling: "4:2:0", force: true })
       .toBuffer();
 
-    // 2b: 7-layer pixel-perturbation — defeats SynthID and CNN-based perceptual
-    //     hash detectors.  Imperceptible to the human eye.
-    // Fix AI Slop must never accept makeUniqueImage's normal COM-only fallback.
-    // That fallback is appropriate for ordinary image alteration, but would
-    // make this function falsely report "pixel perturbation applied" after a
-    // Sharp failure in a packaged Windows/Electron runtime.
-    const finalBuf = await makeUniqueImage(reencoded, { requireSharp: true });
-    await writeFile(tmp, finalBuf);
+    await writeFile(tmp, reencoded);
 
     console.log(
-      `[fixAiSlop] done — format=${fmt}, quality=${quality}, binary-stripped ${removedCount} block(s), pixel-perturbed`,
+      `[fixAiSlop] done — format=${fmt}, quality=${quality}, binary-stripped ${removedCount} block(s), no pixel perturbation`,
     );
-    onLog?.(`Fix AI Slop: full processing complete — JPEG quality ${quality}, pixel perturbation applied`);
+    onLog?.(`Fix AI Slop: full processing complete — JPEG quality ${quality}, no pixel perturbation`);
     return tmp;
   } catch (err) {
     console.error("[fixAiSlop] failed:", err);
