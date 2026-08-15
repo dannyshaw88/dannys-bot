@@ -98,8 +98,12 @@ async function findVisualPostControl(
     const decoded = await sharp(png).raw().toBuffer({ resolveWithObject: true });
     const { data, info } = decoded;
     const regions: Record<typeof kind, [number, number, number, number]> = {
-      home: [0, 0, 0.24, 1],
-      compose: [0, 0, 0.30, 0.28],
+      // Instagram Home is in the bottom navigation row. The old full-height
+      // region selected bright profile/status pixels (and sometimes returned
+      // the screenshot corner) instead of the Home icon.
+      home: [0.02, 0.82, 0.22, 0.98],
+      // Compose "+" is in the top app header, below the Android status bar.
+      compose: [0.02, 0.07, 0.30, 0.25],
       post: [0.25, 0, 0.75, 0.28],
       expand: [0, 0.30, 0.28, 0.60],
       next: [0.76, 0, 1, 0.16],
@@ -130,7 +134,10 @@ async function findVisualPostControl(
         }
         const score = (kind === "next" || kind === "post" || kind === "share") ? coloured * 3 + bright : bright;
         if (score < (kind === "next" ? 6 : 5)) continue;
-        if (!best || score > best.score) {
+         // Never accept a tile touching the screenshot edge. Those pixels are
+         // frequently bright system/status-bar background, not a control.
+         if (x < 8 || y < 8 || x + tile >= info.width - 8 || y + tile >= info.height - 8) continue;
+         if (!best || score > best.score) {
           best = { x: Math.round(x + tile / 2), y: Math.round(y + tile / 2), score };
         }
       }
