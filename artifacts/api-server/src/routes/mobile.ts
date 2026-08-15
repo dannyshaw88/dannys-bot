@@ -12814,6 +12814,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         postsUploaded,
         strayNavRecoveries,
         steps,
+        executionTrace,
       });
     } catch (e: any) {
       const aborted = (e?.message === "cycle-aborted");
@@ -12890,6 +12891,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         aborted,
         error: aborted ? undefined : (e?.message ?? "Automation cycle failed"),
         steps,
+        executionTrace,
       });
     } finally {
       automationCycleInProgress.delete(serial);
