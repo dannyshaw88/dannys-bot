@@ -11297,6 +11297,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     automationCycleActiveSlot.set(serial, incomingSlotIdx);
     checkFeedInProgress.add(serial); // also blocks a concurrent manual Check Feed call
     const steps: string[] = [];
+    // Diagnostic-only execution trace. This records the shared dispatcher
+    // path without changing any Android action, timing, or tool settings.
+    // It lets us compare the underlying route across devices/cycles.
+    const executionTrace: string[] = [];
     let storiesWatched = 0;
     let storyLikes = 0;
     let followedCount = 0;
@@ -11673,6 +11677,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         postStory: postStoryEnabled && rollActivate(postStoryActivatePctMin, postStoryActivatePctMax),
         'Random Actions':  randomJitterEnabled && rollActivate(randomJitterActivatePctMin, randomJitterActivatePctMax),
       };
+      const trace = (msg: string) => {
+        const totalSec = ((Date.now() - cycleStart) / 1000).toFixed(1);
+        const entry = `${totalSec}s ${msg}`;
+        executionTrace.push(entry);
+        tLog(`[TRACE] ${entry}`);
+      };
 
       // Build the sequence from only the tools that passed their activate gate.
       const _toolSeq = ['feed', 'stories', 'explore', 'reels', 'checkDm', 'follow', 'post', 'postStory', 'Random Actions']
@@ -11927,6 +11937,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       for (const [_toolIndex, _tool] of _toolSeq.entries()) {
         if (isCycleAborted(serial)) break;
         const _isFirst = _toolsRan === 0;
+        trace(`tool-start index=${_toolIndex + 1}/${_toolSeq.length} tool=${_tool.startsWith("follow_spread:") ? "follow" : _tool} first=${_isFirst}`);
         const _currentToolLabels: Record<string, string> = {
           feed: "View Feed",
           stories: "Stories",
@@ -12626,6 +12637,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         tLog(`  Spread Follows: flushed ${_sfBackupQueue.length} unused backup candidate(s) to Surplus`);
         _sfBackupQueue = [];
       }
+      trace(`cycle-tools-complete count=${_toolSeq.length}`);
 
       // 5. Close Instagram completely — recents switcher + swipe away, not a
       // force-stop, so the device behaves like a person put it down.
