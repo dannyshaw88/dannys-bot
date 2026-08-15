@@ -5071,7 +5071,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               onLog?.(`View Feed ${i + 1}/${count}: click-author — tap did not open a profile (feed still visible) — skipping`);
             } else {
               // Confirmed on profile — scroll it.
-              const _caScrolls = 1 + Math.floor(Math.random() * 10);
+              const _caScrolls = 1 + Math.floor(Math.random() * 3);
               onLog?.(`View Feed ${i + 1}/${count}: on author profile "${_caNode.name}" — scrolling ${_caScrolls}x…`);
               const { w: _caW, h: _caH } = getScreenSize(serial);
               for (let _caS = 0; _caS < _caScrolls; _caS++) {
