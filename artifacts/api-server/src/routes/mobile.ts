@@ -6778,12 +6778,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Navigate back to the home feed — Explore has its own distinct UI so
     // tapping Home is the cleanest exit (same pattern as after View Reels).
     onLog?.("View Explore Page: navigating back to home feed…");
-    const homeTab = await findVisualPostControl(serial, "home", onLog);
-    if (homeTab) {
-      await android.tap(serial, homeTab.x, homeTab.y);
-    } else {
-      await android.tap(serial, Math.round(w * 0.10), Math.round(h * 0.975));
+    // Use the live accessibility tree for the exit tap. The screenshot-based
+    // brightness scan is unsafe here: Home and Reels are adjacent, and the
+    // brightest tile in the bottom-nav region is not necessarily Home.
+    const homeTab = await android.findHomeTab(serial).catch(() => null);
+    if (!homeTab) {
+      onLog?.("View Explore Page: Home tab was not semantically detected — refusing an unsafe guessed tap");
+      logger.warn({ serial }, "[view-explore] Home tab not found at exit; skipping guessed tap");
+      return { postsScrolled, postsClicked, likes, sharesFeed, sharesDm, saves, authorVisits };
     }
+    onLog?.(`View Explore Page: tapping semantic Home tab at (${homeTab.x}, ${homeTab.y})`);
+    await android.tap(serial, homeTab.x, homeTab.y);
     await sleepOrAbort(serial, 1000);
 
     return { postsScrolled, postsClicked, likes, sharesFeed, sharesDm, saves, authorVisits };
