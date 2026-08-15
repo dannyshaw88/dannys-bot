@@ -2916,6 +2916,12 @@ export function getScreenSize(serial: string): { w: number; h: number } {
   return { w, h };
 }
 
+/** Center of Instagram's leftmost bottom-navigation Home cell. */
+export async function getBottomLeftHomeFallback(serial: string): Promise<{ x: number; y: number }> {
+  const { w, h } = getScreenSize(serial);
+  return { x: Math.round(w * 0.10), y: Math.round(h * 0.993) };
+}
+
 // A raw KEYCODE_POWER (26) is a *toggle* — if the screen happened to already
 // be on when a cycle starts, "pressing power to wake it" would instead turn
 // it off, and every step after that runs blind against a black screen. Using

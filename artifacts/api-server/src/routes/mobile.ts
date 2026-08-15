@@ -12027,12 +12027,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             tLog("▶ View Reels — exiting full-screen viewer via Home tab…");
             try {
               const homeTab = await android.findHomeTab(serial).catch(() => null);
-              if (homeTab) {
-                await android.tap(serial, homeTab.x, homeTab.y);
-                tLog(`▶ View Reels — tapped Home tab at (${homeTab.x},${homeTab.y})`);
-              } else {
-                tLog("▶ View Reels — Home tab not found; leaving viewer unchanged");
-              }
+              // Reel viewer builds can render the bottom-left Home control
+              // without the normal semantic node. The live dump places that
+              // tab in the leftmost bottom-nav cell, so always tap its center
+              // as the Reel-specific fallback instead of leaving the viewer.
+              const resolvedHome = homeTab ?? await android.getBottomLeftHomeFallback(serial);
+              await android.tap(serial, resolvedHome.x, resolvedHome.y);
+              tLog(`▶ View Reels — tapped Home tab at (${resolvedHome.x},${resolvedHome.y})${homeTab ? "" : " (Reel viewer fallback)"}`);
             } catch {
               tLog("▶ View Reels — Home tab tap failed; leaving viewer unchanged");
             }
