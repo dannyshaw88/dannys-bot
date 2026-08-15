@@ -8338,13 +8338,19 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
     setTotpError(e => [...e, null]);
   };
 
-  const removeSlot = (i: number) => {
+  const removeSlot = async (i: number) => {
     const serial = phone?.serial;
     if (serial) {
       const deletedSlotId = slots[i]?.slotId;
-      // The account save below is also server-side cleanup guarded, but keep
-      // the explicit delete for immediate removal of the old slot's state.
-      fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/slots/${i}`, { method: "DELETE" }).catch(() => {});
+      // Clear server-side slot-owned state before the shortened account list
+      // can be persisted. Otherwise the save can race the cleanup and leave
+      // TrustScore/HST settings available to the replacement slot.
+      try {
+        const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/slots/${i}`, { method: "DELETE" });
+        if (!response.ok) throw new Error(`slot cleanup failed (${response.status})`);
+      } catch (error) {
+        console.error("Failed to clear deleted mobile account slot state", error);
+      }
       localStorage.removeItem(slotTrustScoreKey(serial, i));
       localStorage.removeItem(`mobile_ts_timer_${serial}_index-${i}`);
       if (deletedSlotId) localStorage.removeItem(`mobile_ts_timer_${serial}_${deletedSlotId}`);
@@ -8745,7 +8751,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction
                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  onClick={() => { if (confirmDeleteSlot !== null) { removeSlot(confirmDeleteSlot); setConfirmDeleteSlot(null); } }}
+                  onClick={async () => { if (confirmDeleteSlot !== null) { await removeSlot(confirmDeleteSlot); setConfirmDeleteSlot(null); } }}
                 >
                   Delete Slot
                 </AlertDialogAction>
