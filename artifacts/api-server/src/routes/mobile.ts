@@ -12428,6 +12428,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // ── Make a Post ─────────────────────────────────────────────────
         } else if (_tool === 'post') {
           if (_toolActivated[_tool]) { // pre-rolled above
+            tLog("[TRACE] make-a-post: start");
             // The frontend sends makePostLocalFolderPath from its React state.
             // If that state was stale/empty for any reason (hydration glitch,
             // settings loaded before the dedicated file was ready, etc.) fall
@@ -12444,6 +12445,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               let posted = 0;
               for (let i = 0; i < postCount; i++) {
                 try {
+                  tLog(`[TRACE] make-a-post: attempt ${i + 1}/${postCount}`);
                   // Make a Post is feed-only. The preserved Story routine is
                   // dispatched by the standalone Post a Story tool below.
                   tLog("  Make a Post: destination → normal feed");
@@ -12487,6 +12489,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // ── Post a Story ──────────────────────────────────────────────────
         } else if (_tool === 'postStory') {
           if (_toolActivated[_tool]) {
+            tLog("[TRACE] post-a-story: start");
             const resolvedStoryFolderPath =
               postStoryLocalFolderPath || getPostStoryFolderPath(serial, slotIdx);
             if (!resolvedStoryFolderPath) {
@@ -12528,9 +12531,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // ── Random Jitter ───────────────────────────────────────────────
         } else if (_tool === 'Random Actions') {
           if (_toolActivated[_tool]) { // pre-rolled above
+            tLog("[TRACE] random-actions: start");
             let _jitterFired = false;
             const notifChance = rollRange(checkNotificationsPctMin, checkNotificationsPctMax) / 100;
             if (notifChance > 0 && Math.random() < notifChance) {
+              tLog("[TRACE] random-actions: notifications");
               tLog("▶ Random Actions: checking notifications…");
               await runCheckNotifications(serial, {
                 scrollsMin: checkNotificationsScrollsMin,
@@ -12544,6 +12549,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             }
             const profileChance = rollRange(visitProfilePctMin, visitProfilePctMax) / 100;
             if (profileChance > 0 && Math.random() < profileChance) {
+              tLog("[TRACE] random-actions: profile");
               tLog("▶ Random Actions: visiting own profile…");
               await runVisitOwnProfile(serial, (msg) => tLog(`  ${msg}`));
               steps.push("jitter-visit-profile");
@@ -12551,6 +12557,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             }
             const savedChance = rollRange(visitSavedPctMin, visitSavedPctMax) / 100;
             if (savedChance > 0 && Math.random() < savedChance) {
+              tLog("[TRACE] random-actions: saved");
               tLog("▶ Random Actions: visiting saved posts…");
               await runVisitSaved(serial, (msg) => tLog(`  ${msg}`));
               steps.push("jitter-visit-saved");
@@ -12558,6 +12565,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             }
             const settingsChance = rollRange(visitSettingsPctMin, visitSettingsPctMax) / 100;
             if (settingsChance > 0 && Math.random() < settingsChance) {
+              tLog("[TRACE] random-actions: settings");
               tLog("▶ Random Actions: visiting random settings…");
               await runVisitSettings(serial, (msg) => tLog(`  ${msg}`));
               steps.push("jitter-visit-settings");
@@ -12565,6 +12573,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             }
             const appSwitchChance = rollRange(appSwitchPctMin, appSwitchPctMax) / 100;
             if (appSwitchChance > 0 && Math.random() < appSwitchChance) {
+              tLog("[TRACE] random-actions: app-switch");
               tLog("▶ Random Actions: app switch (SMS)…");
               await runAppSwitch(serial, (msg) => tLog(`  ${msg}`));
               steps.push("jitter-app-switch");
@@ -12573,6 +12582,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             const updatePicChance = rollRange(updateProfilePicActivatePctMin, updateProfilePicActivatePctMax) / 100;
             const resolvedPicFolder = getProfilePicFolderPath(serial, slotIdx) || _updateProfilePicFolderPath;
             if (updatePicChance > 0 && Math.random() < updatePicChance && resolvedPicFolder) {
+              tLog("[TRACE] random-actions: profile-picture");
               tLog("▶ Random Actions: updating profile picture…");
               await runUpdateProfilePicture(serial, resolvedPicFolder, (msg) => tLog(`  ${msg}`), {
                 alterationEnabled: updateProfilePicAlterationEnabled,
@@ -12605,6 +12615,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             }
             const updateBioChance = rollRange(updateBioActivatePctMin, updateBioActivatePctMax) / 100;
             if (updateBioChance > 0 && Math.random() < updateBioChance && updateBioText.trim()) {
+              tLog("[TRACE] random-actions: bio");
               tLog("▶ Random Actions: updating profile bio…");
               await runUpdateBio(serial, updateBioText, (msg) => tLog(`  ${msg}`));
               steps.push("jitter-update-bio");
