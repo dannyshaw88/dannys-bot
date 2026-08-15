@@ -44,12 +44,23 @@ function appendToMainLog(msg: string): void {
 process.on("uncaughtException", (err: Error) => {
   const msg = `UNCAUGHT EXCEPTION: ${err?.stack || err?.message || String(err)}`;
   appendToMainLog(msg);
+  try { fs.appendFileSync(_mainLogPath || path.join(process.cwd(), "logs.log"), `[${new Date().toISOString()}] [MAIN] process will exit after uncaught exception\n`); } catch {}
 });
 
 process.on("unhandledRejection", (reason: unknown) => {
   const msg = `UNHANDLED REJECTION: ${(reason as any)?.stack || (reason as any)?.message || String(reason)}`;
   appendToMainLog(msg);
 });
+
+process.on("exit", (code) => {
+  try {
+    fs.appendFileSync(_mainLogPath || path.join(process.cwd(), "logs.log"),
+      `[${new Date().toISOString()}] [MAIN] PROCESS EXIT code=${code} pid=${process.pid}\n`);
+  } catch {}
+});
+
+process.on("SIGTERM", () => appendToMainLog(`PROCESS SIGNAL SIGTERM pid=${process.pid}`));
+process.on("SIGINT", () => appendToMainLog(`PROCESS SIGNAL SIGINT pid=${process.pid}`));
 
 const execAsync = promisify(exec);
 
@@ -338,6 +349,11 @@ function startServer(port: number, logPath: string, ebIpcPort = 0): void {
   logStream.write(sessionStart);
   serverProc.stdout?.on("data", (d: Buffer) => logStream.write(d));
   serverProc.stderr?.on("data", (d: Buffer) => logStream.write(d));
+  serverProc.on("error", (error) => {
+    const line = `[${new Date().toISOString()}] server-error apiPid=${serverProc?.pid ?? "unknown"} error=${error.stack || error.message}\n`;
+    try { logStream.write(line); } catch {}
+    appendToMainLog(line.trim());
+  });
   try {
     databaseDirWatcher?.close();
     databaseDirWatcher = fs.watch(path.dirname(dbPath), (_eventType, filename) => {
@@ -359,6 +375,9 @@ function startServer(port: number, logPath: string, ebIpcPort = 0): void {
     databaseDirWatcher?.close();
     databaseDirWatcher = null;
     logStream.end();
+  });
+  serverProc.on("close", (code, signal) => {
+    appendToMainLog(`API CHILD CLOSED apiPid=${serverProc?.pid ?? "unknown"} code=${code ?? "null"} signal=${signal ?? "null"}`);
   });
 }
 

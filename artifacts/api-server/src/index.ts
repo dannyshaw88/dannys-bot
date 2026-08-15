@@ -81,6 +81,34 @@ const _origStderrWrite = process.stderr.write.bind(process.stderr);
 
 console.log(`[server] Log file: ${SERVER_LOG_PATH}`);
 
+// These handlers deliberately write synchronously and do not depend on the
+// stdout tee above. If the process is about to die, the normal logger/pipe may
+// never flush, which otherwise leaves the debug log ending at an innocent line.
+function writeFatalLog(label: string, value: unknown): void {
+  const detail = value instanceof Error
+    ? (value.stack || `${value.name}: ${value.message}`)
+    : typeof value === "string" ? value : JSON.stringify(value);
+  const line = `${_formatLogTs()}[FATAL] ${label}: ${detail}\n`;
+  try {
+    fs.appendFileSync(SERVER_LOG_PATH, line, "utf8");
+    if (_logFd !== null) fs.fsyncSync(_logFd);
+  } catch {}
+}
+
+process.on("uncaughtExceptionMonitor", (error, origin) => {
+  writeFatalLog(`uncaughtExceptionMonitor origin=${origin}`, error);
+});
+process.on("uncaughtException", (error, origin) => {
+  writeFatalLog(`uncaughtException origin=${origin}`, error);
+  process.exitCode = 1;
+});
+process.on("unhandledRejection", (reason) => {
+  writeFatalLog("unhandledRejection", reason);
+});
+process.on("SIGTERM", () => writeFatalLog("signal", "SIGTERM"));
+process.on("SIGINT", () => writeFatalLog("signal", "SIGINT"));
+process.on("exit", (code) => writeFatalLog("process exit", `code=${code}`));
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 const httpServer = createServer(app);
