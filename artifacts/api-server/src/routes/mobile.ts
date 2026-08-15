@@ -11621,8 +11621,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // (screen unchanged) so the switcher can reuse the dump for its pre-check
       // and profile-tab lookup without doing two more sequential dumps.
       const switchPreloadXml = (!adsChoice.dismissed && !launchPopup) ? launchXml : undefined;
+      tLog("[TRACE] step-1 account-switch: begin");
       if (resolvedSlotUsername) {
          automationCurrentTool.set(serial, "ACCOUNT SWITCHING");
+          tLog(`[TRACE] step-1 account-switch: target=@${resolvedSlotUsername}`);
          tLog(`▶ Switching to Instagram account: @${resolvedSlotUsername}…`);
          const switched = await android.switchToInstagramAccount(
            serial,
@@ -11632,6 +11634,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
            loadInstanceConfigs()[serial]?.devicePrefs?.swipeGesture,
          );
          if (switched) {
+            tLog("[TRACE] step-1 account-switch: confirmed");
            steps.push(`account-switch(@${resolvedSlotUsername})`);
            automationLastActiveUsername.set(serial, resolvedSlotUsername);
            // Brief extra settle after switching — Instagram reloads the new
@@ -11644,9 +11647,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
              await sleepOrAbort(serial, 500);
           }
          } else {
+            tLog("[TRACE] step-1 account-switch: failed");
            tLog(`✗ Account switch to @${resolvedSlotUsername} failed — continuing with tools`);
            steps.push("account-switch(attempted — continuing)");
         }
+      } else {
+        tLog("[TRACE] step-1 account-switch: skipped-no-slot-username");
       }
 
       // ── Step 2: Shuffleable tool dispatcher ──────────────────────────────
