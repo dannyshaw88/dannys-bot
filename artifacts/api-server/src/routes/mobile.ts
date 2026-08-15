@@ -3836,6 +3836,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     clickAuthorPercentMin?: number; clickAuthorPercentMax?: number;
     onLog?: (msg: string) => void;
   }): Promise<{ count: number; likes: number; likeFailures: number; sharesFeed: number; sharesDm: number; saves: number; captionExpands: number; strayNavRecoveries: number; audioTaps: number; hashtagTaps: number; authorVisits: number }> {
+    params.onLog?.("[TRACE] feed: start");
     const {
       count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
       shareFeedPercentMin = 0, shareFeedPercentMax = 0,
@@ -3854,12 +3855,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // search, Reels, or another nested screen; scanning that tree as if it
     // were the feed causes every downstream action to target the wrong UI.
     if (!homeAlreadyEstablished) {
+      onLog?.("[TRACE] feed: find-home");
       const homeTab = await android.findHomeTab(serial).catch(() => null);
       if (!homeTab) {
         throw new Error("View Feed cannot start: Instagram Home tab was not found");
       }
       onLog?.(`View Feed: tapping Home tab before execution at (${homeTab.x}, ${homeTab.y})`);
       await android.tap(serial, homeTab.x, homeTab.y, "bot");
+      onLog?.("[TRACE] feed: tap-home");
       await new Promise(resolve => setTimeout(resolve, 500));
     } else {
       onLog?.("View Feed: Home feed already established — skipping duplicate Home tap");
@@ -5368,6 +5371,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     alreadyInStoryViewer?: boolean;
     onLog?: (msg: string) => void;
   }): Promise<{ storiesWatched: number; storyLikes: number }> {
+    params.onLog?.("[TRACE] stories: start");
     const {
       slidesMin, slidesMax,
       slideWatchPctMin, slideWatchPctMax,
@@ -6201,6 +6205,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       onLog,
     } = params;
 
+    onLog?.("[TRACE] explore: start");
     const { w, h } = getScreenSize(serial);
     onLog?.(`Explore loop: device resolution ${w}×${h}`);
 
@@ -6211,6 +6216,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       logger.warn({ serial }, "[view-explore] Search tab not found");
       return { postsScrolled: 0, postsClicked: 0, likes: 0, sharesFeed: 0, sharesDm: 0, saves: 0, authorVisits: 0 };
     }
+    onLog?.("[TRACE] explore: tap-search-tab");
     await android.tap(serial, searchTab.x, searchTab.y);
     // Same 2500ms settle used by Follow — enough for the Explore grid to render.
     await sleepOrAbort(serial, 2500);
