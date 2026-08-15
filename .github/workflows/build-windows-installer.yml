@@ -115,7 +115,7 @@ jobs:
           "npm_config_msvs_version=2022" >> $env:GITHUB_ENV
       - name: Build Windows installer
         working-directory: artifacts/electron
-        run: npx electron-builder --win --publish never --debug
+        run: npx electron-builder --win --publish never
         env:
           DANNY_BOT_UPDATER_TOKEN: ${{ secrets.UPDATER_TOKEN }}
       - name: Upload installer to Actions artifacts
