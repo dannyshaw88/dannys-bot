@@ -2,6 +2,8 @@
 
 This is an Instagram automation tool using real mobile phone devices connected via USB on Windows Electron — **not Replit's Linux environment**. Replit is used for code changes only. The built app runs entirely on the user's Windows PC, controlling physical Android phones over ADB.
 
+**Agent communication preference:** Reply in simple, concise sentences by default. Do not overwhelm the user with advanced explanations or long technical detail. The user will ask when they want a deeper explanation.
+
 **This tool cannot rely on coordinate pin-pointing for clicking and tapping anywhere. Instagram's UI constantly changes — layout shifts based on post type, account settings, and app version. All detection must rely on visual/accessibility elements (accessibility tree labels, `content-desc`, `resource-id`, `text` attributes) read live from the device at the time of action. Hardcoded pixel percentages or fixed coordinates are forbidden.**
 
 ---
