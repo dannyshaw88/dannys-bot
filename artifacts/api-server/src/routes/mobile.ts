@@ -8213,8 +8213,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // not found in the accessibility tree (some IG builds don't expose it),
     // the image is still selected — IG's auto-selection is unconditional.
     onLog?.("Make a Post: IG auto-selects newest photo — checking for expand/fit toggle…");
-    const visualExpand = await findVisualPostControl(serial, "expand", onLog);
-    const expandToggle = visualExpand ?? await android.findExpandPhotoButton(serial).catch(() => null);
+    let expandToggle: { x: number; y: number } | null = null;
+    for (let expandScan = 0; expandScan < 4 && !expandToggle; expandScan++) {
+      expandToggle = await findVisualPostControl(serial, "expand", onLog);
+      if (!expandToggle && expandScan < 3) await sleepOrAbort(serial, 400);
+    }
 
     // Confirm the picker is actually open before tapping Next. Check for any
     // recognizable picker signal: the expand toggle (only visible when a photo
@@ -8222,8 +8225,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Tap the expand/fit toggle (two-arrow icon, bottom-left of preview) to
     // switch from IG's default centre-crop to the full original photo before
     // advancing to the filter/edit screen.
-    onLog?.(`Make a Post: tapping expand/fit toggle at (${expandToggle?.x ?? "fallback"}, ${expandToggle?.y ?? "fallback"})…`);
-    await android.tap(serial, expandToggle?.x ?? 0, expandToggle?.y ?? 0);
+    if (!expandToggle) {
+      onLog?.("Make a Post: visual resize control not found after retries — aborting without a blind tap");
+      await android.pressBack(serial);
+      await android.removeDeviceFile(serial, devicePath).catch(() => {});
+      return { posted: false };
+    }
+    onLog?.(`Make a Post: tapping visually detected expand/fit toggle at (${expandToggle.x}, ${expandToggle.y})…`);
+    await android.tap(serial, expandToggle.x, expandToggle.y);
     await sleepOrAbort(serial, 500);
 
     // The expand/fit tap can animate the preview and temporarily place the
@@ -8235,12 +8244,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     onLog?.("Make a Post: re-scanning settled picker for live \"Next\" button…");
     let nextBtn1: { x: number; y: number } | null = await findVisualPostControl(serial, "next", onLog);
     for (let nextScan = 0; nextScan < 4 && !nextBtn1; nextScan++) {
-      nextBtn1 = await findVisualPostControl(serial, "next", onLog)
-        ?? await android.findPostNextButton(serial).catch(() => null);
+      nextBtn1 = await findVisualPostControl(serial, "next", onLog);
       if (!nextBtn1 && nextScan < 3) await sleepOrAbort(serial, 500);
     }
     if (!nextBtn1) {
-      onLog?.("Make a Post: live \"Next\" accessibility node not found after retries — aborting");
+      onLog?.("Make a Post: visual Next control not found after retries — aborting without a blind tap");
       await android.pressBack(serial);
       await android.removeDeviceFile(serial, devicePath).catch(() => {});
       return { posted: false };
