@@ -4179,6 +4179,11 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           }),
         });
         const body = await r.json().catch(() => null);
+        if (Array.isArray(body?.executionTrace)) {
+          for (const entry of body.executionTrace) {
+            onLog?.(`[EXECUTION TRACE] ${entry}`);
+          }
+        }
         if (!r.ok || !body?.ok) {
           if (r.status === 409) {
             // Server already has a cycle running (e.g. we just remounted while
