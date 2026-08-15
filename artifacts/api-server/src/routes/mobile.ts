@@ -88,7 +88,7 @@ type VisualPostControl = { x: number; y: number; score: number } | null;
  */
 async function findVisualPostControl(
   serial: string,
-  kind: "expand" | "next",
+  kind: "home" | "compose" | "post" | "expand" | "next" | "caption" | "share",
   onLog?: (msg: string) => void,
 ): Promise<VisualPostControl> {
   const adb = android.detectToolset().adb.path;
@@ -97,10 +97,20 @@ async function findVisualPostControl(
     const png = await capturePng(adb, serial);
     const decoded = await sharp(png).raw().toBuffer({ resolveWithObject: true });
     const { data, info } = decoded;
-    const x0 = kind === "expand" ? 0 : Math.floor(info.width * 0.76);
-    const x1 = kind === "expand" ? Math.floor(info.width * 0.28) : info.width;
-    const y0 = kind === "expand" ? Math.floor(info.height * 0.30) : 0;
-    const y1 = kind === "expand" ? Math.floor(info.height * 0.60) : Math.floor(info.height * 0.16);
+    const regions: Record<typeof kind, [number, number, number, number]> = {
+      home: [0, 0, 0.24, 1],
+      compose: [0, 0, 0.30, 0.28],
+      post: [0.25, 0, 0.75, 0.28],
+      expand: [0, 0.30, 0.28, 0.60],
+      next: [0.76, 0, 1, 0.16],
+      caption: [0, 0.35, 0.85, 0.85],
+      share: [0.60, 0.80, 1, 1],
+    };
+    const [rx0, ry0, rx1, ry1] = regions[kind];
+    const x0 = Math.floor(info.width * rx0);
+    const x1 = Math.floor(info.width * rx1);
+    const y0 = Math.floor(info.height * ry0);
+    const y1 = Math.floor(info.height * ry1);
     const tile = 12;
     let best: VisualPostControl = null;
     for (let y = y0; y < y1; y += tile) {
@@ -114,11 +124,11 @@ async function findVisualPostControl(
             const r = data[i] ?? 0, g = data[i + 1] ?? 0, b = data[i + 2] ?? 0;
             const max = Math.max(r, g, b), min = Math.min(r, g, b);
             if (max > 205 && max - min < 45) bright++;
-            if (kind === "next" && b > 145 && b > r * 1.15) coloured++;
+            if ((kind === "next" || kind === "post" || kind === "share") && b > 145 && b > r * 1.15) coloured++;
             count++;
           }
         }
-        const score = kind === "next" ? coloured * 3 + bright : bright;
+        const score = (kind === "next" || kind === "post" || kind === "share") ? coloured * 3 + bright : bright;
         if (score < (kind === "next" ? 6 : 5)) continue;
         if (!best || score > best.score) {
           best = { x: Math.round(x + tile / 2), y: Math.round(y + tile / 2), score };
@@ -6761,7 +6771,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Navigate back to the home feed — Explore has its own distinct UI so
     // tapping Home is the cleanest exit (same pattern as after View Reels).
     onLog?.("View Explore Page: navigating back to home feed…");
-    const homeTab = await android.findHomeTab(serial).catch(() => null);
+    const homeTab = await findVisualPostControl(serial, "home", onLog);
     if (homeTab) {
       await android.tap(serial, homeTab.x, homeTab.y);
     } else {
@@ -8065,7 +8075,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // the compose lookup on the wrong Instagram surface.  Use the live
     // accessibility Home node; never invent a bottom-left coordinate here.
     onLog?.("Make a Post: locating Instagram Home button…");
-    const homeTab = await android.findHomeTab(serial).catch(() => null);
+    const homeTab = await findVisualPostControl(serial, "home", onLog);
     if (!homeTab) {
       onLog?.("Make a Post: Instagram Home node not exposed — continuing to the \"+\" lookup");
     } else {
@@ -8114,7 +8124,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     await sleepOrAbort(serial, 1200); // let the scanner index the file before we open the picker
 
     onLog?.("Make a Post: looking for the \"+\" compose icon…");
-    const composeBtn = await android.findComposeButton(serial).catch(() => null);
+    const composeBtn = await findVisualPostControl(serial, "compose", onLog);
     if (!composeBtn) {
       onLog?.("Make a Post: compose \"+\" icon not found — skipping (selector likely needs real-device tuning)");
       return { posted: false };
@@ -8165,8 +8175,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // gallery/picker. When the sheet already opened on POST mode this tab
     // isn't present, so this is a no-op in that case.
     onLog?.("Make a Post: checking for POST mode tab…");
-    const postTab = await android.findButtonByLabel(serial, "POST").catch(() => null)
-      ?? await android.findButtonByLabel(serial, "Post").catch(() => null);
+    const postTab = await findVisualPostControl(serial, "post", onLog);
     if (postTab) {
       onLog?.("Make a Post: tapping POST tab…");
       await android.tap(serial, postTab.x, postTab.y);
@@ -8269,9 +8278,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let stillOnPicker: { x: number; y: number } | null = null;
     for (let advanceScan = 0; advanceScan < 10; advanceScan++) {
       await sleepOrAbort(serial, advanceScan === 0 ? 700 : 500);
-      editorNext = await android.findButtonByLabel(serial, "Next").catch(() => null);
+      editorNext = await findVisualPostControl(serial, "next", onLog);
       if (editorNext) break;
-      stillOnPicker = await android.findExpandPhotoButton(serial).catch(() => null);
+      stillOnPicker = await findVisualPostControl(serial, "expand", onLog);
       if (!stillOnPicker) break;
     }
     if (!editorNext && stillOnPicker) {
@@ -8285,7 +8294,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // filter strip, ratio controls) shows a labelled "Next" in the app bar —
     // give it extra time to settle before looking, since the audio-suggestion
     // overlay animation can delay accessibility-tree population.
-    const nextBtn2 = editorNext ?? await android.findButtonByLabel(serial, "Next").catch(() => null);
+    const nextBtn2 = editorNext ?? await findVisualPostControl(serial, "next", onLog);
     if (nextBtn2) {
       onLog?.(`Make a Post: tapping filter/edit "Next" at (${nextBtn2.x}, ${nextBtn2.y})…`);
       await android.tap(serial, nextBtn2.x, nextBtn2.y);
@@ -8293,7 +8302,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
 
     // Edit/adjustments screen → Next (only present on some builds).
-    const nextBtn3 = await android.findButtonByLabel(serial, "Next").catch(() => null);
+    const nextBtn3 = await findVisualPostControl(serial, "next", onLog);
     if (nextBtn3) {
       onLog?.(`Make a Post: tapping edit "Next" at (${nextBtn3.x}, ${nextBtn3.y})…`);
       await android.tap(serial, nextBtn3.x, nextBtn3.y);
@@ -8301,7 +8310,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
 
     // Caption screen — verify we're actually there before typing/sharing.
-    const shareBtn = await android.findShareFooterButton(serial).catch(() => null);
+    const shareBtn = await findVisualPostControl(serial, "share", onLog);
     if (!shareBtn) {
       onLog?.("Make a Post: caption/share screen not confirmed (no \"Share\" control found) — aborting this attempt");
       await android.removeDeviceFile(serial, devicePath).catch(() => {});
@@ -8309,7 +8318,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     const caption = captionText.trim();
     if (caption) {
-      const captionField = await android.findButtonByLabel(serial, "Write a caption").catch(() => null);
+      const captionField = await findVisualPostControl(serial, "caption", onLog);
       if (captionField) {
         await android.tap(serial, captionField.x, captionField.y);
         await sleepOrAbort(serial, 500);
@@ -8337,7 +8346,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // earlier Share lookup may be stale after caption entry or an editor
     // transition, so require a fresh live Share node immediately before
     // opening the location picker. Never fall back to the older coordinate.
-    let finalShareBtn = await android.findShareFooterButton(serial).catch(() => null);
+    let finalShareBtn = await findVisualPostControl(serial, "share", onLog);
     if (!finalShareBtn) {
       onLog?.("Make a Post: final caption/share page not confirmed immediately before location — aborting safely");
       await android.removeDeviceFile(serial, devicePath).catch(() => {});
@@ -8345,7 +8354,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
 
     if (addLocation) {
-      const addLocationBtn = await android.findButtonByLabel(serial, "Add location").catch(() => null);
+      const addLocationBtn = await findVisualPostControl(serial, "caption", onLog);
       if (addLocationBtn) {
         onLog?.("Make a Post: tapping Add location…");
         await android.tap(serial, addLocationBtn.x, addLocationBtn.y);
@@ -8356,7 +8365,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         onLog?.("Make a Post: waiting 12s for location picker/search box to load…");
         await sleepOrAbort(serial, 12000);
 
-        const locationSearch = await android.findLocationSearchField(serial).catch(() => null);
+        const locationSearch = await findVisualPostControl(serial, "caption", onLog);
         if (!locationSearch) {
           onLog?.("Make a Post: location search field not found — continuing without location");
         } else {
@@ -8387,7 +8396,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           await sleepOrAbort(serial, 1200);
 
           const matchingLocation = typedLocation.ok
-            ? await android.findButtonByLabel(serial, "Manchester, United Kingdom").catch(() => null)
+            ? await findVisualPostControl(serial, "caption", onLog)
             : null;
           if (matchingLocation) {
             onLog?.("Make a Post: selecting location \"Manchester, United Kingdom\"…");
@@ -8398,7 +8407,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // confirmation after the location result is selected. It is
             // conditional, so never guess a coordinate or tap an underlying
             // control: only tap a live accessibility node labelled "Add".
-            const mapPreviewAdd = await android.findLocationMapPreviewAdd(serial).catch(() => null);
+            const mapPreviewAdd = await findVisualPostControl(serial, "share", onLog);
             if (mapPreviewAdd) {
               onLog?.("Make a Post: map preview confirmation shown — tapping Add…");
               await android.tap(serial, mapPreviewAdd.x, mapPreviewAdd.y);
@@ -8416,7 +8425,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
 
     // Re-find Share (screen may have re-rendered after the caption/advanced steps).
-    finalShareBtn = await android.findShareFooterButton(serial).catch(() => null);
+    finalShareBtn = await findVisualPostControl(serial, "share", onLog);
     if (!finalShareBtn) {
       onLog?.("Make a Post: Share control not found after returning from location — aborting safely");
       await android.removeDeviceFile(serial, devicePath).catch(() => {});
