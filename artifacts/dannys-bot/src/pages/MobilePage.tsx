@@ -3431,6 +3431,11 @@ function resolveSpinSyntax(text: string): string {
 // HTML `maxLength` isn't reliably enforced on type="number" inputs, so clamp
 // values to 4 digits (0-9999) in code as well.
 const clamp4 = (n: number) => Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.trunc(Number.isFinite(n) ? n : 0)));
+// Account slots are zero-based and the device automation API supports the
+// ten physical account positions 0..9. Keep rendering any server-provided
+// account data intact, but never let a corrupt legacy index become an HST/API
+// scheduler identity.
+const MAX_HST_ACCOUNT_SLOTS = 10;
 
 // ── Module-level HST timer registry ─────────────────────────────────────────
 // Timers live here, OUTSIDE React, so component cleanup, dep changes, and
@@ -3534,6 +3539,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // Human Session Tool toggle: the scheduler will resume after the same serial
   // returns to the ready "device" state.
   const deviceUnavailable = !phone || phone.state !== "device";
+  const invalidHstSlot = slotIdx === undefined
+    || !Number.isInteger(slotIdx)
+    || slotIdx < 0
+    || slotIdx >= MAX_HST_ACCOUNT_SLOTS;
 
   const setEnabledByUser = useCallback((enabled: boolean) => {
     if (enabled) {
@@ -3632,6 +3641,13 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     // (null→newSerial), connectedKey increments, this effect re-runs with a
     // non-null phone, and the normal fetch → setHydrated(true) path executes.
     if (!phone) { return; }
+    // Preserve the account row in the UI, but do not hydrate or schedule an
+    // impossible slot index from a corrupt legacy payload.
+    if (invalidHstSlot) {
+      setHydrated(true);
+      setLoading(false);
+      return;
+    }
     let active = true;
     setLoading(true);
     const serial = phone.serial; // capture at effect-run time
@@ -3677,7 +3693,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       .finally(() => { if (active) { setLoading(false); } });
     return () => { active = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectedKey, slotIdx, refreshKey]);
+  }, [connectedKey, slotIdx, refreshKey, invalidHstSlot]);
 
   // Pause every slot immediately when the live ADB state becomes offline (or
   // unauthorized). This is separate from the scheduling effect because that
@@ -3828,7 +3844,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     // and then the clamp effect fires seconds later when real settings arrive —
     // causing a spurious reschedule on every app launch.
     const _phone = phoneRef.current;
-    if (deviceUnavailable || !settings.enabled || !hydrated) { setRunning(false); return; }
+    if (invalidHstSlot || deviceUnavailable || !settings.enabled || !hydrated) { setRunning(false); return; }
     const serial = _phone.serial;
     const key = `${serial}:${slotIdx ?? 0}`;
 
