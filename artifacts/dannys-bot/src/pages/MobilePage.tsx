@@ -3921,6 +3921,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       let collisionPrevented = false;
       if (requestSlot && slotIdx !== undefined) {
         onLog?.(`[HST-DBG] ${_dbgTag} — awaiting collision-preventer slot…`);
+        srvLog(`${_dbgTag} — requesting collision-preventer slot (slotIdx=${slotIdx})`);
         // onQueued fires immediately when the device is busy so the dashboard
         // "COLLISION PREVENTED" timestamp reflects the moment of the collision,
         // not the moment the rest period ends and the slot finally gets its turn.
@@ -3934,6 +3935,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           onLog?.(`[HST-DBG] ${_dbgTag} — collision detected; queued, waiting for rest window`);
         };
         collisionPrevented = await requestSlot(slotIdx, hstTurnAt, onQueued);
+        srvLog(`${_dbgTag} — collision-preventer request resolved (collisionPrevented=${collisionPrevented})`);
         if (_hstStop.has(key)) {
           onLog?.(`[HST-DBG] ${_dbgTag} — stopped while waiting for collision-preventer; releasing slot`);
           releaseSlot?.(slotIdx, true); return;
