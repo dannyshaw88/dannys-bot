@@ -3639,7 +3639,11 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     // record and does not resolve TrustScore templates, so the account cards
     // reflect the real enabled/disabled state immediately while the detailed
     // settings request continues in parallel.
-    const stateUrl = `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx ?? 0}/automation-state`;
+    // Some desktop/browser sessions return a bodyless 304 for this request.
+    // Hydration requires the JSON body; a cache-busting query prevents a 304
+    // from silently leaving `hydrated` false and permanently disabling HST.
+    const hydrateCacheKey = `hstHydrate=${Date.now()}`;
+    const stateUrl = `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx ?? 0}/automation-state?${hydrateCacheKey}`;
     fetch(stateUrl, { cache: "no-store" })
       .then(r => r.ok ? r.json() : null)
       .then(d => {
@@ -3649,8 +3653,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       })
       .catch(() => {});
     const settingsUrl = slotIdx !== undefined
-      ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings`
-      : `/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings`;
+      ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings?${hydrateCacheKey}`
+      : `/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings?${hydrateCacheKey}`;
     fetch(settingsUrl, { cache: "no-store" })
       .then(r => r.json())
       .then(d => {
