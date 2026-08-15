@@ -4244,7 +4244,11 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     return () => {
       // ── DIAGNOSTIC ─────────────────────────────────────────────────────────
       const _cleanTag = slotUsername ? `@${slotUsername}` : `slot${slotIdx ?? 0}`;
-      const shouldStop = explicitToggleOffRef.current;
+      // A cleanup can run after a rapid off→on transition. The ref is only a
+      // hint from the user action; the cleanup must also observe the state
+      // captured by this effect as disabled. Otherwise a stale off marker can
+      // kill the freshly-started timer even though the slot is enabled=true.
+      const shouldStop = explicitToggleOffRef.current && !settings.enabled;
       explicitToggleOffRef.current = false;
       srvLog(`${_cleanTag} — effect cleanup (serial=${serial}, enabled=${settings.enabled}, explicit=${shouldStop})`);
       onLog?.(`[HST-DBG] ${_cleanTag} — effect cleanup (serial=${serial}, enabled=${settings.enabled}, explicit=${shouldStop})`);
