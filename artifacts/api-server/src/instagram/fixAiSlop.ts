@@ -45,9 +45,28 @@
  */
 
 import { randomBytes } from "crypto";
+import { appendFileSync } from "fs";
 import { readFile, unlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
-import { join } from "path";
+import { dirname, join } from "path";
+
+// This is deliberately synchronous and separate from the normal logger. A
+// Windows native access violation can terminate the API child before buffered
+// stdout/stderr or async log transports flush.
+function nativeCrashBreadcrumb(stage: string, details = ""): void {
+  const logFile = process.env.LOG_FILE;
+  if (!logFile) return;
+  try {
+    appendFileSync(
+      join(tmpdir(), "equinox-last-native-operation.log"),
+      `[${new Date().toISOString()}] pid=${process.pid} operation=fixAiSlop stage=${stage}${details ? ` ${details}` : ""}\n`,
+    );
+    appendFileSync(
+      join(dirname(logFile), "last-native-operation.log"),
+      `[${new Date().toISOString()}] pid=${process.pid} operation=fixAiSlop stage=${stage}${details ? ` ${details}` : ""}\n`,
+    );
+  } catch {}
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -290,12 +309,14 @@ export async function fixAiSlop(
   inputPath: string,
   onLog?: (message: string) => void,
 ): Promise<string> {
+  nativeCrashBreadcrumb("start", `input=${inputPath}`);
   const tmp = join(
     tmpdir(),
     `equinox_fixaislop_${randomBytes(8).toString("hex")}.jpg`,
   );
 
   try {
+    nativeCrashBreadcrumb("read-input");
     const raw = await readFile(inputPath);
     const fmt = detectFormat(raw);
 
@@ -328,6 +349,7 @@ export async function fixAiSlop(
     // ── Step 2: Metadata-free JPEG re-encode ────────────────────────────────
     let sharp: any;
     try {
+      nativeCrashBreadcrumb("sharp-import");
       sharp = (await import("sharp")).default;
     } catch (err) {
       await unlink(tmp).catch(() => {});
@@ -341,11 +363,13 @@ export async function fixAiSlop(
     //     residual EXIF that the binary pass may have missed in edge cases)
     //     and normalise to JPEG for the pixel-perturbation step.
     const quality = 85 + Math.floor(Math.random() * 8); // 85–92
+    nativeCrashBreadcrumb("sharp-pipeline", `format=${fmt} bytes=${stripped.length} quality=${quality}`);
     const reencoded: Buffer = await sharp(stripped)
       .withMetadata(false)
       .jpeg({ quality, chromaSubsampling: "4:2:0", force: true })
       .toBuffer();
 
+    nativeCrashBreadcrumb("sharp-complete", `outputBytes=${reencoded.length}`);
     await writeFile(tmp, reencoded);
 
     console.log(

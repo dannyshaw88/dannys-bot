@@ -372,6 +372,15 @@ function startServer(port: number, logPath: string, ebIpcPort = 0): void {
   }
   serverProc.on("exit", (code, signal) => {
     logStream.write(`[${new Date().toISOString()}] server-exit apiPid=${serverProc?.pid ?? "unknown"} code=${code ?? "null"} signal=${signal ?? "null"}\n`);
+    // Preserve the last synchronous native-operation breadcrumb when the API
+    // child dies outside JavaScript exception handling (e.g. 0xC0000005).
+    try {
+      const breadcrumbPath = path.join(getUserDataPath(), "last-native-operation.log");
+      if (fs.existsSync(breadcrumbPath)) {
+        const breadcrumb = fs.readFileSync(breadcrumbPath, "utf8").trimEnd();
+        appendToMainLog(`API CHILD EXIT NATIVE CONTEXT code=${code ?? "null"} signal=${signal ?? "null"} last=${breadcrumb}`);
+      }
+    } catch {}
     databaseDirWatcher?.close();
     databaseDirWatcher = null;
     logStream.end();
