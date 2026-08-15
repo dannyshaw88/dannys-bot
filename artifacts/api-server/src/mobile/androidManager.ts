@@ -3862,6 +3862,15 @@ export async function findFeedActionIcons(
   // scanning for its well-known resource-id and content-desc labels rather
   // than any positional assumption.
   let save: { x: number; y: number } | null = null;
+  // A partially visible in-feed Reel can expose a row_feed_button_save node
+  // even though the feed post's own action row is not fully rendered. That
+  // node's coordinate is inside the Reel media; tapping it opens the Reel
+  // viewer instead of saving the feed post. View Feed must fail closed for
+  // these surfaces rather than treating node presence as visible confirmation.
+  const hasEmbeddedReelMarker =
+    xml.includes("reels_feed_media_view") ||
+    xml.includes("clips_media") ||
+    /(?:text|content-desc)="[^"]*\bReel\s+by\b[^"]*"/i.test(xml);
   {
     // Primary: resource-id match (most reliable — IG has kept this stable).
     const ridSaveRe = /resource-id="[^"]*row_feed_button_save"[^>]*bounds="(\[\d+,\d+\]\[\d+,\d+\])"/;
@@ -3884,6 +3893,10 @@ export async function findFeedActionIcons(
     // a completely different Y position. If the detected save button is more
     // than 80 px away from the Like button's Y, it belongs to a different
     // card and must be rejected — tapping it navigates into the Reel viewer.
+    if (save && hasEmbeddedReelMarker) {
+      onLog?.(`[feed-icons] save button at (${save.x},${save.y}) rejected — embedded Reel/video surface is present; action row is not safely confirmed`);
+      save = null;
+    }
     if (save && Math.abs(save.y - like.y) > 80) {
       onLog?.(`[feed-icons] save button at (${save.x},${save.y}) rejected — y=${save.y} is ${Math.abs(save.y - like.y)}px from Like row (y=${like.y}); likely belongs to an embedded Reel card`);
       save = null;
@@ -3910,9 +3923,7 @@ export async function findFeedActionIcons(
     // resource-id in the Feed hierarchy. Their accessibility text/resource
     // markers are still enough to prove that a media double-tap would open
     // the full-screen Reel viewer instead of liking the Feed post.
-    /(?:text|content-desc)="[^"]*\bReel\s+by\b[^"]*"/i.test(xml) ||
-    xml.includes("reels_feed_media_view") ||
-    xml.includes("clips_media");
+    hasEmbeddedReelMarker;
   const hasInteractiveMediaOverlay =
     /(?:text|content-desc)="[^"]*(?:ask me anything|why pick a|poll|quiz|question sticker|add yours|link sticker|shop now|learn more)[^"]*"/i.test(xml) ||
     /resource-id="[^"]*(?:question|poll|quiz|sticker|link_sticker|interactive)[^"]*"/i.test(xml);
