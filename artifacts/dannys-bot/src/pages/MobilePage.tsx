@@ -3962,10 +3962,16 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       const min = Math.max(1, Math.min(s.feedScrollMin, s.feedScrollMax));
       const max = Math.max(s.feedScrollMin, s.feedScrollMax);
       const count = Math.floor(Math.random() * (max - min + 1)) + min;
-      // Start every scheduled account cycle with a clean in-memory device log.
-      // Server-side/downloaded debug logs remain independent.
-      clearLogLines();
-      clearActionLogLines();
+      // Do not make the automation request depend on UI log cleanup. These
+      // context callbacks are presentation-only and can be stale during a
+      // remount; a throw here used to abort the cycle after the collision lock
+      // was acquired but before /automation-cycle was sent.
+      try {
+        clearLogLines();
+        clearActionLogLines();
+      } catch {
+        // The device cycle must continue even if the log panel is unavailable.
+      }
       setRunning(true);
       onLog?.(`Cycle starting → power on, open Instagram, ${count} downward scrolls`);
       // Generate a unique ID for this cycle.  Both the cycle POST and the abort
