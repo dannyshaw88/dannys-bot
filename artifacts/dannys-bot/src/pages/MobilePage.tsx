@@ -3644,11 +3644,19 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     // Preserve the account row in the UI, but do not hydrate or schedule an
     // impossible slot index from a corrupt legacy payload.
     if (invalidHstSlot) {
+      hydratedRef.current = false;
       setHydrated(true);
       setLoading(false);
       return;
     }
     let active = true;
+    // A stable slot component can move to a new visible index after an
+    // account is deleted. Treat that as a new persistence boundary: while
+    // the new slot's settings are loading, block autosave so the previous
+    // account's enabled=false (or other settings) cannot be written into
+    // the account that moved into this position.
+    hydratedRef.current = false;
+    setHydrated(false);
     setLoading(true);
     const serial = phone.serial; // capture at effect-run time
     // Load only the master toggle first. This endpoint reads the raw slot
@@ -3693,7 +3701,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       .finally(() => { if (active) { setLoading(false); } });
     return () => { active = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectedKey, slotIdx, refreshKey, invalidHstSlot]);
+  }, [connectedKey, phone?.serial, slotIdx, refreshKey, invalidHstSlot]);
 
   // Pause every slot immediately when the live ADB state becomes offline (or
   // unauthorized). This is separate from the scheduling effect because that
@@ -3818,7 +3826,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         .catch((e: any) => setSaveError(e?.message ?? "Couldn't reach the server"));
     }, 500);
     return () => clearTimeout(t);
-  }, [settings, phone?.serial]);
+  }, [settings, phone?.serial, slotIdx]);
 
   // While the master toggle is on, repeatedly run the full automation
   // cycle (power on → open Instagram → scroll/like with the configured
