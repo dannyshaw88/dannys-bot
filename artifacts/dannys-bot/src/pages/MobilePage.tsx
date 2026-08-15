@@ -3537,6 +3537,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
 
   const setEnabledByUser = useCallback((enabled: boolean) => {
     if (enabled) {
+      // A rapid off→on toggle can run the old effect cleanup after the new
+      // enabled state has already rendered. Clear the stale explicit-stop
+      // marker so that cleanup cannot kill the newly restarted HST loop.
+      explicitToggleOffRef.current = false;
       manualToggleOnRef.current = true;
     } else {
       explicitToggleOffRef.current = true; // explicit user action — cleanup should abort
