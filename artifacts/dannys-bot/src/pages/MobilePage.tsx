@@ -8194,9 +8194,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
         if (d && Array.isArray(d.slots) && d.slots.length > 0) {
           // Use the exact count the server stored — do NOT pad to ACCT_SLOT_COUNT.
           // Padding caused deleted slots to reappear every time the panel reloaded.
-          // A legacy/corrupt account payload can contain hundreds of entries;
-          // never turn those into valid-looking HST/API slot indexes.
-          loaded = d.slots.slice(0, TOTAL_SLOTS).map((s: any) => ({
+          loaded = d.slots.map((s: any) => ({
             slotId: typeof s?.slotId === "string" && s.slotId.length >= 8 ? s.slotId : crypto.randomUUID(),
             username: s?.username ?? "",
             password: s?.password ?? "",
