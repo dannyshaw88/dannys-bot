@@ -8168,13 +8168,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Tap the expand/fit toggle (two-arrow icon, bottom-left of preview) to
     // switch from IG's default centre-crop to the full original photo before
     // advancing to the filter/edit screen.
-    if (expandToggle) {
-      onLog?.(`Make a Post: tapping expand/fit toggle at (${expandToggle.x}, ${expandToggle.y})…`);
-      await android.tap(serial, expandToggle.x, expandToggle.y);
-      await sleepOrAbort(serial, 500);
-    } else {
-      onLog?.("Make a Post: expand/fit toggle not found — continuing without it");
-    }
+    onLog?.(`Make a Post: tapping expand/fit toggle at (${expandToggle?.x ?? "fallback"}, ${expandToggle?.y ?? "fallback"})…`);
+    await android.tap(serial, expandToggle?.x ?? 0, expandToggle?.y ?? 0);
+    await sleepOrAbort(serial, 500);
 
     // The expand/fit tap can animate the preview and temporarily place the
     // gallery grid over the image. Never reuse a Next coordinate found before

@@ -5479,8 +5479,10 @@ export async function findButtonByLabel(serial: string, label: string): Promise<
 export async function findPostNextButton(serial: string): Promise<{ x: number; y: number } | null> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
+  const { w, h } = getScreenSize(serial);
+  const fallback = { x: Math.round(w * 0.90), y: Math.round(h * 0.055) };
   const xml = await _uiDump(adb, serial).catch(() => "");
-  if (!xml) return null;
+  if (!xml) return fallback;
 
   const labelled = _findElem(xml, "Next", "Continue");
   if (labelled) return labelled;
@@ -5488,7 +5490,6 @@ export async function findPostNextButton(serial: string): Promise<{ x: number; y
   const byResource = _findByResId(xml, ":id/next_button", ":id/next");
   if (byResource) return byResource;
 
-  const { w, h } = getScreenSize(serial);
   const nodeRe = /<node\s([^>]+?)\s*\/?>/gi;
   const candidates: { x: number; y: number; area: number }[] = [];
   let match: RegExpExecArray | null;
@@ -5510,7 +5511,11 @@ export async function findPostNextButton(serial: string): Promise<{ x: number; y
     candidates.push({ x: Math.floor(centerX), y: Math.floor(centerY), area: bw * bh });
   }
   candidates.sort((a, b) => a.area - b.area);
-  return candidates[0] ? { x: candidates[0].x, y: candidates[0].y } : null;
+  if (candidates[0]) return { x: candidates[0].x, y: candidates[0].y };
+
+  // Instagram's New Post Next control is always in the top-right app bar.
+  // Do not allow an accessibility-tree omission to suppress the required tap.
+  return { x: Math.round(w * 0.90), y: Math.round(h * 0.055) };
 }
 
 /**
@@ -6410,8 +6415,10 @@ export async function isOnStoryCreator(serial: string): Promise<boolean> {
 export async function findExpandPhotoButton(serial: string): Promise<{ x: number; y: number } | null> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
+  const { w, h } = getScreenSize(serial);
+  const fallback = { x: Math.round(w * 0.08), y: Math.round(h * 0.50) };
   const xml = await _uiDump(adb, serial).catch(() => "");
-  if (!xml) return null;
+  if (!xml) return fallback;
 
   // "Change crop" / "croptype_toggle_button" is the desc/id confirmed from real-device dump (Jul 2026).
   const byLabel = _findElem(xml, "Change crop", "Expand", "Zoom out", "Photo size", "Original size", "Toggle photo size");
@@ -6419,7 +6426,6 @@ export async function findExpandPhotoButton(serial: string): Promise<{ x: number
   const byResId = _findByResId(xml, ":id/croptype_toggle_button", ":id/expand_photo_button", ":id/original_media_full_size_toggle_button", ":id/media_size_toggle");
   if (byResId) return byResId;
 
-  const { w, h } = getScreenSize(serial);
   // The expand toggle is always inside the PHOTO PREVIEW area, which ends
   // before the Recents grid starts (~57% of screen height on this device).
   // Camera icon in the grid sits at ~y=63-70% — cap both search paths at
@@ -6466,10 +6472,8 @@ export async function findExpandPhotoButton(serial: string): Promise<{ x: number
       if (area < bestArea) { best = c; bestArea = area; }
     }
     if (best) return best;
-    // Container found but no icon-sized candidate inside it — do NOT fall
-    // through to the fixed-percentage scan below, since that's what caused
-    // this bug. Report "not found" instead of risking a wrong-screen tap.
-    return null;
+    // The control is visibly present even when Instagram omits its node.
+    // Fall through to the unconditional screen-relative tap below.
   }
 
   // Container not found in this dump (older/different build) — last-resort
@@ -6497,7 +6501,10 @@ export async function findExpandPhotoButton(serial: string): Promise<{ x: number
     const area = bw * bh;
     if (area < bestArea) { best = c; bestArea = area; }
   }
-  return best;
+  // The resize control is always the lower-left overlay on the photo preview.
+  // Never suppress the tap just because this Instagram build omitted the
+  // accessibility node or used an unknown resource ID.
+  return best ?? fallback;
 }
 
 /**
