@@ -79,6 +79,59 @@ function capturePng(adbPath: string, serial: string): Promise<Buffer> {
   return job;
 }
 
+type VisualPostControl = { x: number; y: number; score: number } | null;
+
+/**
+ * Locate the two post-picker controls from the rendered phone image.
+ * Accessibility metadata is not required here: Instagram can render the
+ * control while omitting its UIAutomator node.
+ */
+async function findVisualPostControl(
+  serial: string,
+  kind: "expand" | "next",
+  onLog?: (msg: string) => void,
+): Promise<VisualPostControl> {
+  const adb = android.detectToolset().adb.path;
+  if (!adb) return null;
+  try {
+    const png = await capturePng(adb, serial);
+    const decoded = await sharp(png).raw().toBuffer({ resolveWithObject: true });
+    const { data, info } = decoded;
+    const x0 = kind === "expand" ? 0 : Math.floor(info.width * 0.76);
+    const x1 = kind === "expand" ? Math.floor(info.width * 0.28) : info.width;
+    const y0 = kind === "expand" ? Math.floor(info.height * 0.30) : 0;
+    const y1 = kind === "expand" ? Math.floor(info.height * 0.60) : Math.floor(info.height * 0.16);
+    const tile = 12;
+    let best: VisualPostControl = null;
+    for (let y = y0; y < y1; y += tile) {
+      for (let x = x0; x < x1; x += tile) {
+        let bright = 0;
+        let coloured = 0;
+        let count = 0;
+        for (let py = y; py < Math.min(y + tile, y1); py += 2) {
+          for (let px = x; px < Math.min(x + tile, x1); px += 2) {
+            const i = (py * info.width + px) * info.channels;
+            const r = data[i] ?? 0, g = data[i + 1] ?? 0, b = data[i + 2] ?? 0;
+            const max = Math.max(r, g, b), min = Math.min(r, g, b);
+            if (max > 205 && max - min < 45) bright++;
+            if (kind === "next" && b > 145 && b > r * 1.15) coloured++;
+            count++;
+          }
+        }
+        const score = kind === "next" ? coloured * 3 + bright : bright;
+        if (score < (kind === "next" ? 6 : 5)) continue;
+        if (!best || score > best.score) {
+          best = { x: Math.round(x + tile / 2), y: Math.round(y + tile / 2), score };
+        }
+      }
+    }
+    if (best) onLog?.(`Make a Post: visual ${kind} control found at (${best.x}, ${best.y}), score=${best.score}`);
+    return best;
+  } catch {
+    return null;
+  }
+}
+
 function getCompiledMalesOnlyNames(rawNames: string): CompiledMalesOnlyName[] {
   const cached = malesOnlyMatcherCache.get(rawNames);
   if (cached) return cached;
@@ -8160,7 +8213,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // not found in the accessibility tree (some IG builds don't expose it),
     // the image is still selected — IG's auto-selection is unconditional.
     onLog?.("Make a Post: IG auto-selects newest photo — checking for expand/fit toggle…");
-    const expandToggle = await android.findExpandPhotoButton(serial).catch(() => null);
+    const visualExpand = await findVisualPostControl(serial, "expand", onLog);
+    const expandToggle = visualExpand ?? await android.findExpandPhotoButton(serial).catch(() => null);
 
     // Confirm the picker is actually open before tapping Next. Check for any
     // recognizable picker signal: the expand toggle (only visible when a photo
@@ -8179,9 +8233,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // control only after the picker has settled.
     await sleepOrAbort(serial, 700);
     onLog?.("Make a Post: re-scanning settled picker for live \"Next\" button…");
-    let nextBtn1: { x: number; y: number } | null = null;
+    let nextBtn1: { x: number; y: number } | null = await findVisualPostControl(serial, "next", onLog);
     for (let nextScan = 0; nextScan < 4 && !nextBtn1; nextScan++) {
-      nextBtn1 = await android.findPostNextButton(serial).catch(() => null);
+      nextBtn1 = await findVisualPostControl(serial, "next", onLog)
+        ?? await android.findPostNextButton(serial).catch(() => null);
       if (!nextBtn1 && nextScan < 3) await sleepOrAbort(serial, 500);
     }
     if (!nextBtn1) {
