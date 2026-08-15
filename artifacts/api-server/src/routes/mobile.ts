@@ -10493,6 +10493,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // candidates reuse the confirmed cleared/focused Search field left by the
     // previous rejected candidate.
     if (!params.searchAlreadyReady) {
+      onLog?.("[TRACE] follow: prepare-search");
       // Returning from Explore can leave the Search surface visually present
       // before its accessibility nodes are republished.
       await sleepOrAbort(serial, 2500);
@@ -10532,6 +10533,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         return 0;
       }
       await android.tap(serial, searchTab.x, searchTab.y);
+      onLog?.("[TRACE] follow: tap-search-tab");
       await sleepOrAbort(serial, 2500);
     } else {
       onLog?.("Follow: reusing confirmed cleared Search field for next spread candidate");
@@ -10624,6 +10626,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // surface survived. Re-enter Search from the live semantic tab node
         // before looking for the input bar.
         if (_fi > 1 && !searchReadyForReuse) {
+          onLog?.("[TRACE] follow: re-enter-search-after-profile");
           const recoverySearchTab = await android.findInstagramSearchTab(serial, onLog).catch(() => null);
           if (!recoverySearchTab) {
             onLog?.("Follow: Search tab not confirmed after profile navigation — stopping");
@@ -10634,6 +10637,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
         const searchBar = await android.findInstagramSearchBar(serial, onLog).catch(() => null);
         if (!searchBar) { onLog?.("Follow: search bar accessibility node not found — stopping"); break; }
+        onLog?.("[TRACE] follow: tap-search-field");
         await android.tap(serial, searchBar.x, searchBar.y);
         await sleepOrAbort(serial, 500 + Math.floor(Math.random() * 500));
         const searchFocused = await android.isInstagramSearchBarFocused(serial).catch(() => false);
@@ -10661,6 +10665,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           );
         }
         searchReadyForReuse = false;
+        onLog?.("[TRACE] follow: type-username");
         // Use only real taps on the saved Android keyboard calibration map.
         const typed = await android.typeViaSavedCalibrationMap(serial, username.replace(/^@+/, ""), loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile, message => {
           onLog?.(`  ${message}`);
@@ -10674,6 +10679,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           continue;
         }
         // Tap the matched user in results
+        onLog?.("[TRACE] follow: open-search-result");
         const searchResult = await android.findAndTapUserInSearch(serial, username, onLog).catch(() => ({ found: false }));
         if (!searchResult.found) {
           onLog?.(`Follow: @${username} not found in results — skipping`);
@@ -10985,6 +10991,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // Tap Follow on the profile page. Only logs success when the button
         // is confirmed to have changed to "Following" or "Requested".
         const didFollow = await android.tapFollowButtonOnProfilePage(serial).catch(() => false);
+        onLog?.(`[TRACE] follow: follow-result=${didFollow ? "confirmed" : "not-confirmed"}`);
         if (didFollow) {
           followed++;
           recordFollow?.(username, candidateSource.get(username) ?? "unknown");
