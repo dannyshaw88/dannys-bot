@@ -11776,7 +11776,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       `${postsUploaded} posts uploaded`,
       `${sharesFeed + sharesDm} shares`,
       `${saves} saved`,
-      `${reelsViewed} reels scrolled`,
       `${feedScrolled} posts scrolled`,
       `${exploreScrolled} Explore scrolls`,
     ].join(", ");
@@ -11796,7 +11795,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (postsUploaded) parts.push(`${postsUploaded} posts uploaded`);
       if (sharesFeed + sharesDm) parts.push(`${sharesFeed + sharesDm} shares`);
       if (saves) parts.push(`${saves} saved`);
-      if (reelsViewed) parts.push(`${reelsViewed} reels scrolled`);
       if (feedScrolled) parts.push(`${feedScrolled} posts scrolled`);
       if (exploreScrolled) parts.push(`${exploreScrolled} Explore scrolls`);
       return parts.join(", ") || "No metrics recorded";
@@ -12246,7 +12244,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               feedShares: Math.max(0, preSwitchStatsDelta.feedShares),
               saves: Math.max(0, preSwitchStatsDelta.saves),
               cycles: 0,
-              reelScrolls: Math.max(0, preSwitchStatsDelta.reels),
               feedScrolls: Math.max(0, preSwitchStatsDelta.feedScrolled),
               exploreScrolls: Math.max(0, preSwitchStatsDelta.exploreScrolled),
             }).catch(() => {});
@@ -13391,7 +13388,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           feedShares: sharesFeed + sharesDm,
           saves,
           cycles: 1,
-          reelScrolls: reelsViewed,
           feedScrolls: feedScrolled,
           exploreScrolls: exploreScrolled,
         }).catch((e: any) => logger.warn({ err: e }, "[mobile-cycle] stat persist error"));
@@ -13480,7 +13476,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             feedShares: sharesFeed + sharesDm,
             saves,
             cycles: 1,
-            reelScrolls: reelsViewed,
             feedScrolls: feedScrolled,
             exploreScrolls: exploreScrolled,
           }).catch((statError: any) => {
