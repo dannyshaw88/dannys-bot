@@ -113,6 +113,16 @@ jobs:
         run: |
           "GYP_MSVS_VERSION=2022" >> $env:GITHUB_ENV
           "npm_config_msvs_version=2022" >> $env:GITHUB_ENV
+      - name: Rebuild Sharp for Electron 33
+        working-directory: artifacts/electron
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          # The API child runs under Electron's Node ABI
+          # (ELECTRON_RUN_AS_NODE=1), not the system Node ABI. Rebuild Sharp
+          # explicitly so its native module cannot load the wrong ABI and
+          # terminate the API with STATUS_ACCESS_VIOLATION (0xC0000005).
+          npx --yes @electron/rebuild@3.6.1 -f -w sharp
       - name: Build Windows installer
         working-directory: artifacts/electron
         run: npx electron-builder --win --publish never --debug
