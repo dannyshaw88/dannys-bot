@@ -7858,14 +7858,47 @@ export async function switchToInstagramAccount(
           : profileLabels === 0 && profileResourceIds === 0
             ? "bottom nodes existed, but none had Profile/Profil text or a recognized profile resource ID"
             : "profile evidence existed but did not produce a valid candidate after bounds/shape guards";
+    // The profile control is a fixed rightmost slot in Instagram's bottom
+    // navigation. A missing/variant accessibility ID must not prevent the
+    // account switch: use the rightmost live bottom-band node when available,
+    // otherwise tap the rightmost bottom-nav slot from the live screen size.
+    const fallbackNodes: { x: number; y: number }[] = [];
+    for (const match of nodeMatches) {
+      const attrs = match[1];
+      const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (!bm) continue;
+      const x1 = Number(bm[1]), y1 = Number(bm[2]);
+      const x2 = Number(bm[3]), y2 = Number(bm[4]);
+      const x = Math.round((x1 + x2) / 2);
+      const y = Math.round((y1 + y2) / 2);
+      if (failureH > 0 && y >= Math.round(failureH * 0.82)) {
+        fallbackNodes.push({ x, y });
+      }
+    }
+    if (fallbackNodes.length > 0) {
+      fallbackNodes.sort((a, b) => a.x - b.x || a.y - b.y);
+      profileTab = fallbackNodes[fallbackNodes.length - 1];
+      profileTabSource = "rightmost live bottom-nav node fallback";
+    } else if (failureW > 0 && failureH > 0) {
+      profileTab = {
+        x: Math.round(failureW * 0.90),
+        y: Math.round(failureH * 0.94),
+      };
+      profileTabSource = "rightmost bottom-nav coordinate fallback";
+    } else {
+      onLog?.(
+        `  ⚠ Profile tab unavailable [serial=${serial}] — ${reason}; ` +
+        `xmlLength=${failureXml.length}, screen=${failureW}x${failureH}, ` +
+        `nodes=${nodeMatches.length}, bottomNodes=${bottomNodes}, ` +
+        `profileLabels=${profileLabels}, profileResourceIds=${profileResourceIds}; ` +
+        "no live screen dimensions available for fallback tap",
+      );
+      return false;
+    }
     onLog?.(
-      `  ⚠ Profile tab not found [serial=${serial}] — ${reason}; ` +
-      `xmlLength=${failureXml.length}, screen=${failureW}x${failureH}, ` +
-      `nodes=${nodeMatches.length}, bottomNodes=${bottomNodes}, ` +
-      `profileLabels=${profileLabels}, profileResourceIds=${profileResourceIds}. ` +
-      "Refusing coordinate fallback",
+      `  ↳ Profile tab selector fallback: tapping (${profileTab.x},${profileTab.y}) via ${profileTabSource}; ` +
+      `${reason}`,
     );
-    return false;
   }
 
   // The profile tab can appear in the accessibility tree before Instagram has
