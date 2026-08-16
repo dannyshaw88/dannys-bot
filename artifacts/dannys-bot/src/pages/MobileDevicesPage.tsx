@@ -18,7 +18,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, X, ImagePlus, Heart, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2 } from "lucide-react";
+import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, Heart, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2 } from "lucide-react";
 import { pickLocalWallpaper } from "@/pages/mobileShared";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -818,6 +818,8 @@ function DeviceCard({
   isStreaming,
   currentTool,
   onClick,
+  onPower,
+  powered,
   onRemove,
   custom,
   onCustomize,
@@ -829,6 +831,8 @@ function DeviceCard({
   isStreaming: boolean;
   currentTool: string | null;
   onClick:     () => void;
+  onPower:     () => void;
+  powered:     boolean;
   onRemove:    () => void;
   custom:      SlotCustomization;
   onCustomize: (c: SlotCustomization) => void;
@@ -954,6 +958,16 @@ function DeviceCard({
         </div>
       </button>
 
+      {/* Power button — appears beside the wallpaper button on hover */}
+      <button
+        onClick={e => { e.stopPropagation(); onPower(); }}
+        title={powered ? "Power off phone" : "Power on phone"}
+        aria-label={powered ? "Power off phone" : "Power on phone"}
+        className={`absolute top-2 right-18 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary/10 hover:border-primary/40 ${powered ? "text-emerald-500" : "text-muted-foreground hover:text-primary"}`}
+      >
+        <Power className="w-3 h-3" />
+      </button>
+
       {/* Palette button — appears on hover */}
       <button
         onClick={e => { e.stopPropagation(); setPanelOpen(true); }}
@@ -1033,6 +1047,7 @@ export function MobileDevicesPage() {
 
   // Serials where the phone mirror is powered on — polled every 2 s.
   const [streamingSerials, setStreamingSerials] = useState<Set<string>>(new Set());
+  const [manualPowerSerials, setManualPowerSerials] = useState<Set<string>>(new Set());
   const [currentTools, setCurrentTools] = useState<Map<string, string>>(new Map());
 
   const refreshDevices = useCallback(async () => {
@@ -1091,6 +1106,29 @@ export function MobileDevicesPage() {
       }
     } catch { /* ignore */ }
   }, []);
+
+  const toggleDevicePower = useCallback(async (serial: string) => {
+    const powerOn = !manualPowerSerials.has(serial);
+    setManualPowerSerials(previous => {
+      const next = new Set(previous);
+      if (powerOn) next.add(serial); else next.delete(serial);
+      return next;
+    });
+    try {
+      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/key`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: powerOn ? 224 : 223 }),
+      });
+      if (!response.ok) throw new Error("Power command failed");
+    } catch {
+      setManualPowerSerials(previous => {
+        const next = new Set(previous);
+        if (powerOn) next.delete(serial); else next.add(serial);
+        return next;
+      });
+    }
+  }, [manualPowerSerials]);
 
   const refreshCurrentTools = useCallback(async () => {
     const entries = await Promise.all([...activeCycleSerials].map(async serial => {
@@ -1206,6 +1244,8 @@ export function MobileDevicesPage() {
                         sessionStorage.setItem("mobile_autopower_serial", device.serial);
                         setLocation(`/mobile/farm/${encodeURIComponent(device.serial)}?autopower=1`);
                       }}
+                       powered={manualPowerSerials.has(device.serial) || streamingSerials.has(device.serial)}
+                       onPower={() => void toggleDevicePower(device.serial)}
                       onRemove={() => handleRemove(device.slotIndex)}
                       custom={slotCustom[device.slotIndex] ?? DEFAULT_SLOT_CUSTOM}
                       onCustomize={c => setSlotCustom(prev => ({ ...prev, [device.slotIndex]: c }))}
