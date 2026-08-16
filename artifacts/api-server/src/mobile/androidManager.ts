@@ -3132,6 +3132,34 @@ export async function closeInstagramViaRecents(
     if (settleMax > 0) await new Promise(resolve => setTimeout(resolve, Math.round(settleMin + Math.random() * (settleMax - settleMin))));
     return { toX, durationMs };
   };
+  const profileVerticalDismiss = async (): Promise<{ from: [number, number]; to: [number, number]; durationMs: number }> => {
+    if (!swipeGesture) throw new Error("Swipe Gesture Profile is required for vertical app close");
+    const clamp = (value: number, max: number) => Math.max(0, Math.min(max - 1, Math.round(value)));
+    const minDuration = Math.max(1, Math.min(swipeGesture.durationMinMs, swipeGesture.durationMaxMs));
+    const maxDuration = Math.max(minDuration, Math.max(swipeGesture.durationMinMs, swipeGesture.durationMaxMs));
+    const durationMs = Math.round(minDuration + Math.random() * (maxDuration - minDuration));
+    const dx = Math.round((Math.random() * 2 - 1) * (Number.isFinite(swipeGesture.jitterX) ? swipeGesture.jitterX : 0));
+    const startJitterMin = swipeGesture.startJitterMinY ?? 0;
+    const startJitterMax = Math.max(startJitterMin, swipeGesture.startJitterMaxY ?? startJitterMin);
+    const startJitter = Math.round(startJitterMin + Math.random() * (startJitterMax - startJitterMin));
+    const endJitter = Math.round((Math.random() * 2 - 1) * (Number.isFinite(swipeGesture.jitterY) ? swipeGesture.jitterY : 0));
+    const from: [number, number] = [
+      clamp(swipeGesture.x1 + dx, w),
+      clamp(swipeGesture.y1 + startJitter, h),
+    ];
+    const to: [number, number] = [
+      clamp(swipeGesture.x2 + dx, w),
+      clamp(swipeGesture.y2 + endJitter, h),
+    ];
+    const pauseMin = Math.max(0, Math.min(swipeGesture.pauseMinMs ?? 0, swipeGesture.pauseMaxMs ?? 0));
+    const pauseMax = Math.max(pauseMin, swipeGesture.pauseMaxMs ?? pauseMin);
+    const settleMin = Math.max(0, Math.min(swipeGesture.settleMinMs ?? 0, swipeGesture.settleMaxMs ?? 0));
+    const settleMax = Math.max(settleMin, swipeGesture.settleMaxMs ?? settleMin);
+    if (pauseMax > 0) await new Promise(resolve => setTimeout(resolve, Math.round(pauseMin + Math.random() * (pauseMax - pauseMin))));
+    await swipe(serial, from[0], from[1], to[0], to[1], durationMs, false);
+    if (settleMax > 0) await new Promise(resolve => setTimeout(resolve, Math.round(settleMin + Math.random() * (settleMax - settleMin))));
+    return { from, to, durationMs };
+  };
   const pidof = () => {
     const r = spawnSync(adb, ["-s", serial, "shell", "pidof", "com.instagram.android"], { encoding: "utf8", timeout: 3000 });
     return (r.stdout ?? "").trim().length > 0;
@@ -3191,27 +3219,8 @@ export async function closeInstagramViaRecents(
 
     if (card) {
       if (dismissDirection === "up") {
-        // Standard Android upward-swipe dismiss (e.g. Redmi A5 / stock
-        // Android recents). Drag the card off the TOP of the screen.
-        //
-        // On tall screens (Redmi A5: h=1650) the old formula
-        //   dragToY = max(h*0.02, card.y − h*0.6)
-        // could produce card.y − h*0.6 < 0, clamping dragToY to h*0.02=33
-        // while the swipe STARTED at card.y ≈ 769. That gave only 45%
-        // screen travel — not enough for MIUI to register a dismiss.
-        //
-        // Fix: start the drag below the card centre (15% of screen height
-        // below, capped at 80% screen height) so the gesture always travels
-        // at least 78% of the screen even when the card is detected in the
-        // upper half. End point is always the very top of the visible area.
-        const startY  = Math.min(Math.round(card.y + h * 0.15), Math.round(h * 0.80));
-        const dragToY = 0;
-        // Duration reduced 400 → 150 ms: MIUI's card-dismiss gesture requires
-        // a fast flick, not a slow drag. At 400 ms the velocity was too low for
-        // the launcher to register it as a dismiss; 150 ms matches a natural
-        // thumb-flick and reliably triggers the dismiss animation.
-        await swipe(serial, card.x, startY, card.x, dragToY, 150);
-        method = `attempt ${attempt}: swiped card at (${card.x},${card.y}) from start (${card.x},${startY}) up to (${card.x},${dragToY})`;
+        const vertical = await profileVerticalDismiss();
+        method = `attempt ${attempt}: applied vertical Swipe Gesture Profile from (${vertical.from[0]},${vertical.from[1]}) to (${vertical.to[0]},${vertical.to[1]}) in ${vertical.durationMs}ms`;
       } else {
         const horizontal = await profileHorizontalDismiss(card.x, card.y);
         method = `attempt ${attempt}: applied horizontal Swipe Gesture Profile to card at (${card.x},${card.y}) left to (${horizontal.toX},${card.y}) in ${horizontal.durationMs}ms`;
@@ -3222,12 +3231,8 @@ export async function closeInstagramViaRecents(
       const cardX = Math.round(w * 0.5);
       const cardY = Math.round(h * 0.45);
       if (dismissDirection === "up") {
-        // Start at 65% screen height (not the mid-point 45%) so the drag
-        // always travels ~63% of the screen regardless of screen size.
-        const noLabelStartY = Math.round(h * 0.65);
-        // Same 150 ms fast-flick as the labelled-card path above.
-        await swipe(serial, cardX, noLabelStartY, cardX, 0, 150);
-        method = `attempt ${attempt}: no label found — fell back to swipe-up from (${cardX},${noLabelStartY})`;
+        const vertical = await profileVerticalDismiss();
+        method = `attempt ${attempt}: no label found — applied vertical Swipe Gesture Profile from (${vertical.from[0]},${vertical.from[1]}) to (${vertical.to[0]},${vertical.to[1]}) in ${vertical.durationMs}ms`;
       } else {
         const horizontal = await profileHorizontalDismiss(cardX, cardY);
         method = `attempt ${attempt}: no label found — applied horizontal Swipe Gesture Profile from (${cardX},${cardY}) to (${horizontal.toX},${cardY}) in ${horizontal.durationMs}ms`;
