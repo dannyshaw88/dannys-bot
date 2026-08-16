@@ -6977,9 +6977,17 @@ export async function captureDebugScreenshot(serial: string, ts: number, label: 
 export async function pushFileToDevice(serial: string, localPath: string, fileName: string, scan = true): Promise<string> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  const safeName = fileName.replace(/[^a-zA-Z0-9_.\-]/g, "_");
   const uniqueId = randomBytes(12).toString("hex");
-  const devicePath = `/sdcard/DCIM/Camera/ig_${uniqueId}_${safeName}`;
+  const requestedExt = path.extname(fileName).toLowerCase();
+  const safeExt = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".heif", ".avif", ".bmp"].includes(requestedExt)
+    ? requestedExt
+    : ".jpg";
+  // Never preserve the PC source basename on the phone. Source names can
+  // contain provider/folder markers (for example "wavespeed") that become
+  // visible to gallery/media-picker consumers. The extension is retained
+  // only so Android can identify the media type.
+  const deviceFileName = `IMG_${randomBytes(12).toString("hex")}${safeExt}`;
+  const devicePath = `/sdcard/DCIM/Camera/ig_${uniqueId}_${deviceFileName}`;
   await runAdbStrict(adb, ["-s", serial, "push", localPath, devicePath], 20000);
   if (scan) await scanMediaFile(serial, devicePath);
   return devicePath;
