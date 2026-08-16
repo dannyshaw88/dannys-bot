@@ -184,6 +184,7 @@ function DeviceQuickControls({ serial }: { serial: string | null | undefined }) 
   const handleReboot = useCallback(async () => {
     if (!serial || rebooting) return;
     setRebooting(true);
+    sessionStorage.setItem("mobile-device-restart-requested", serial);
     window.dispatchEvent(new CustomEvent("mobile-device-graceful-restart", { detail: { serial } }));
     const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/graceful-reboot`, { method: "POST" }).catch(() => null);
     if (!response?.ok) {

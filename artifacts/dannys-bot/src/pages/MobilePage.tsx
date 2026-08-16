@@ -20,7 +20,7 @@ import {
   Smartphone, RefreshCw, CheckCircle2, AlertTriangle,
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
   ChevronLeft, ChevronRight, ChevronDown, Home, Power, Trash2,
-  FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim,
+  FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim, RotateCcw,
   Palette, Plus, X, Keyboard,
   Users, Globe, BarChart2, ClipboardList, Bug, ImagePlus, Tablet, MonitorSmartphone, Settings2, ScanSearch,
 } from "lucide-react";
@@ -3433,7 +3433,26 @@ function NoAdbPanel({ onSaved }: { onSaved: () => void }) {
   );
 }
 
-function NoPhonesPanel({ rawOutput }: { rawOutput?: string | null }) {
+function NoPhonesPanel({ rawOutput, restarting = false }: { rawOutput?: string | null; restarting?: boolean }) {
+  if (restarting) {
+    return (
+      <div className="max-w-xl mx-auto mt-20 px-4">
+        <div className="rounded-2xl border border-primary/20 bg-card p-10 text-center shadow-sm">
+          <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <RotateCcw className="h-10 w-10 animate-spin" aria-hidden="true" />
+          </div>
+          <h2 className="text-xl font-bold text-foreground">Restarting device</h2>
+          <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
+            The phone is rebooting and will reappear here automatically when the USB connection returns.
+          </p>
+          <div className="mt-6 flex items-center justify-center gap-2 text-xs font-medium text-primary">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
+            Waiting for device…
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="max-w-xl mx-auto mt-12 space-y-6 px-4">
       <div className="text-center">
@@ -10726,6 +10745,17 @@ export function MobilePage() {
   // AccountSettingsPanel via onPhoneAppsRunning. Activates the mirror alongside
   // hstEnabled and liveOn.
   const [phoneAppsRunning, setPhoneAppsRunning] = useState(false);
+  const [restartRequested, setRestartRequested] = useState(() =>
+    targetSerial !== null && sessionStorage.getItem("mobile-device-restart-requested") === targetSerial
+  );
+  useEffect(() => {
+    const onRestart = (event: Event) => {
+      const serial = (event as CustomEvent<{ serial?: string }>).detail?.serial;
+      if (!serial || serial === targetSerial) setRestartRequested(true);
+    };
+    window.addEventListener("mobile-device-graceful-restart", onRestart);
+    return () => window.removeEventListener("mobile-device-graceful-restart", onRestart);
+  }, [targetSerial]);
 
   // Drop any previously-learned aspect ratio when the connected device
   // changes (or disconnects) — otherwise a stale ratio from the last phone
@@ -10754,6 +10784,12 @@ export function MobilePage() {
   // always starts idle again instead of resuming a stream on its own.
   useEffect(() => {
     const connected = new Set(phones.map(p => p.serial));
+    if (targetSerial && connected.has(targetSerial) && restartRequested) {
+      setRestartRequested(false);
+      if (sessionStorage.getItem("mobile-device-restart-requested") === targetSerial) {
+        sessionStorage.removeItem("mobile-device-restart-requested");
+      }
+    }
     setLiveOn(prev => {
       const next: Record<string, boolean> = {};
       let changed = false;
@@ -10763,7 +10799,7 @@ export function MobilePage() {
       return changed ? next : prev;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phones.map(p => p.serial).join(",")]);
+  }, [phones.map(p => p.serial).join(","), targetSerial, restartRequested]);
 
   // Only true once we have real data AND either a phone is connected or one
   // of the setup panels needs to take over the whole content area.
@@ -10829,7 +10865,7 @@ export function MobilePage() {
             {data && !data.adbFound && !error && <NoAdbPanel onSaved={() => refresh(true)} />}
 
             {data && data.adbFound && phones.length === 0 && !loading && !error && (
-              <NoPhonesPanel rawOutput={data.rawOutput} />
+              <NoPhonesPanel rawOutput={data.rawOutput} restarting={restartRequested} />
             )}
           </div>
         )}
