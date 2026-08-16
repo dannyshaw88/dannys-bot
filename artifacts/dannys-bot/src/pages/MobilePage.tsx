@@ -2414,8 +2414,7 @@ type PhoneSlotHandle = { getVideoSize: () => { w: number; h: number } | null };
 
 function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: string; onLog?: (msg: string) => void; open: boolean; onClose: () => void }) {
   const storageKey = `mobile-manual-media:${serial}`;
-  const [selectedPath, setSelectedPath] = useState("");
-  const [selectedFileName, setSelectedFileName] = useState("");
+  const [selectedFiles, setSelectedFiles] = useState<Array<{ path?: string; name: string; file?: File }>>([]);
   const [loadedMedia, setLoadedMedia] = useState<Array<{ devicePath: string; fileName: string }>>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -2449,55 +2448,53 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
     if (api?.openMediaFileDialog) {
       const result = await api.openMediaFileDialog().catch((e: any) => ({ error: e?.message ?? "Picker failed" }));
       if (result?.error) { setMessage(result.error); return; }
-      if (result?.canceled || !result?.filePath) return;
-      setSelectedPath(String(result.filePath));
-      setSelectedFileName(String(result.fileName ?? result.filePath.split(/[\\/]/).pop() ?? "image"));
-      onLog?.(`Manual media: selected ${result.fileName ?? result.filePath}`);
+      if (result?.canceled) return;
+      const files = Array.isArray(result?.files) ? result.files : (result?.filePath ? [result] : []);
+      setSelectedFiles(files.map((file: any) => ({
+        path: String(file.filePath),
+        name: String(file.fileName ?? file.filePath.split(/[\\/]/).pop() ?? "image"),
+      })));
+      onLog?.(`Manual media: selected ${files.length} image${files.length === 1 ? "" : "s"}`);
       return;
     }
     browserFileRef.current?.click();
   };
 
-  const onBrowserFile = (file: File | undefined) => {
-    if (!file) return;
-    setSelectedPath("");
-    setSelectedFileName(file.name);
+  const onBrowserFile = (fileList: FileList | null) => {
+    const files = fileList ? Array.from(fileList) : [];
+    if (!files.length) return;
+    setSelectedFiles(files.map(file => ({ name: file.name, file })));
     setMessage(null);
-    onLog?.(`Manual media: selected ${file.name}`);
+    onLog?.(`Manual media: selected ${files.length} image${files.length === 1 ? "" : "s"}`);
   };
 
   const loadToPhone = async () => {
-    if (!selectedFileName) return;
+    if (!selectedFiles.length) return;
     setBusy(true);
     setMessage(null);
     try {
-      const body: Record<string, string> = { fileName: selectedFileName };
-      if (selectedPath) {
-        body.localPath = selectedPath;
-      } else {
-        const file = browserFileRef.current?.files?.[0];
-        if (!file) throw new Error("Choose an image first");
-        const data = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onerror = () => reject(new Error("Could not read the selected image"));
-          reader.onload = () => resolve(String(reader.result));
-          reader.readAsDataURL(file);
+      for (const selected of selectedFiles) {
+        const body: Record<string, string> = { fileName: selected.name };
+        if (selected.path) body.localPath = selected.path;
+        else if (selected.file) {
+          body.fileData = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onerror = () => reject(new Error(`Could not read ${selected.name}`));
+            reader.onload = () => resolve(String(reader.result));
+            reader.readAsDataURL(selected.file!);
+          });
+        }
+        const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/manual-media/load`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
         });
-        body.fileData = data;
+        const result = await r.json().catch(() => null);
+        if (!r.ok || !result?.ok) throw new Error(result?.error ?? `Load failed (${r.status})`);
+        rememberLoaded(result.devicePath, result.fileName ?? selected.name);
+        onLog?.(`Manual media: loaded ${result.fileName ?? selected.name} → ${result.devicePath}`);
       }
-      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/manual-media/load`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const result = await r.json().catch(() => null);
-      if (!r.ok || !result?.ok) throw new Error(result?.error ?? `Load failed (${r.status})`);
-       rememberLoaded(result.devicePath, result.fileName ?? selectedFileName);
-      setSelectedPath("");
-      setSelectedFileName("");
-       if (browserFileRef.current) browserFileRef.current.value = "";
-      setMessage("Loaded onto phone. Finish the post manually in Instagram, then delete it here.");
-      onLog?.(`Manual media: loaded ${result.fileName ?? selectedFileName} → ${result.devicePath}`);
+      setSelectedFiles([]);
+      if (browserFileRef.current) browserFileRef.current.value = "";
+      setMessage(`Loaded ${selectedFiles.length} image${selectedFiles.length === 1 ? "" : "s"} onto phone.`);
     } catch (e: any) {
       setMessage(e?.message ?? "Could not load image onto phone");
       onLog?.(`Manual media: load failed — ${e?.message ?? "unknown error"}`);
@@ -2541,8 +2538,9 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
         ref={browserFileRef}
         type="file"
         accept="image/*"
+        multiple
         className="hidden"
-        onChange={e => onBrowserFile(e.target.files?.[0])}
+        onChange={e => onBrowserFile(e.target.files)}
       />
       <div className="flex items-center justify-between gap-2 mb-1.5">
         <span className="text-[10px] font-semibold text-white/70 flex items-center gap-1.5">
@@ -2571,15 +2569,15 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
         <button
           type="button"
           onClick={loadToPhone}
-          disabled={busy || !selectedFileName}
+          disabled={busy || selectedFiles.length === 0}
           className="inline-flex items-center gap-1.5 rounded border border-emerald-400/30 bg-emerald-400/10 px-2 py-1 text-[10px] font-semibold text-emerald-200 hover:bg-emerald-400/20 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
           Load to phone
         </button>
-        {selectedFileName && (
-          <span className="text-[10px] text-white/55 truncate max-w-[260px]" title={selectedPath || selectedFileName}>
-            Selected: {selectedFileName}
+        {selectedFiles.length > 0 && (
+          <span className="text-[10px] text-white/55 truncate max-w-[260px]">
+            Selected: {selectedFiles.length} image{selectedFiles.length === 1 ? "" : "s"}
           </span>
         )}
       </div>
