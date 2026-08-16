@@ -1,3 +1,9 @@
+## [1.2.517] — 2026-08-16
+
+### Fixed — Windows installer checkout hygiene
+
+- Ignore uploaded image attachments and generated Electron release output so the installer sync guard only blocks real local source changes.
+
 ## [1.2.516] — 2026-08-16
 
 ### Fixed — TrustScore pre-switch settings
