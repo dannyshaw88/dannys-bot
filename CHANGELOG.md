@@ -1,3 +1,9 @@
+## [1.2.530] — 2026-08-16
+
+### Fixed — View Reels Home Exit
+
+- Resolve the leftmost bottom-navigation icon from rendered geometry without requiring Instagram to expose the icon as clickable.
+
 ## [1.2.529] — 2026-08-16
 
 ### Fixed — Account Switch Profile Tap

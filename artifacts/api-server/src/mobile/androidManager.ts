@@ -2934,13 +2934,13 @@ export async function getBottomLeftHomeFallback(serial: string): Promise<{ x: nu
     const width = x2 - x1, height = y2 - y1;
     const x = Math.round((x1 + x2) / 2);
     const y = Math.round((y1 + y2) / 2);
-    // Use the rendered node geometry, not a fixed screen percentage. The
-    // leftmost icon-sized clickable node in the bottom navigation is Home.
+    // Use the rendered node geometry, not a fixed screen percentage. Instagram
+    // does not consistently expose the icon itself as clickable; its parent
+    // may own the action. Therefore this path deliberately uses geometry only.
     if (y < h * 0.84 || y > h * 0.98) continue;
     if (width < w * 0.025 || height < h * 0.015) continue;
     if (width > w * 0.20 || height > h * 0.12) continue;
     if (width / Math.max(1, height) > 3 || height / Math.max(1, width) > 3) continue;
-    if (!/clickable="true"/i.test(attrs)) continue;
     candidates.push({ x, y, width, height });
   }
   if (candidates.length === 0) {

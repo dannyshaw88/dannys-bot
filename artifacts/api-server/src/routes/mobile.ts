@@ -6549,6 +6549,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     savePercentMin: number; savePercentMax: number;
     clickAuthorPctMin: number; clickAuthorPctMax: number;
     onLog?: (msg: string) => void;
+    onProgress?: (progress: { postsScrolled: number; postsClicked: number; likes: number; sharesFeed: number; sharesDm: number; saves: number; authorVisits: number }) => void;
   }): Promise<{ postsScrolled: number; postsClicked: number; likes: number; sharesFeed: number; sharesDm: number; saves: number; authorVisits: number }> {
     const {
       scrollCount, delayMinSec, delayMaxSec,
@@ -6558,7 +6559,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       shareDmPercentMin, shareDmPercentMax,
       savePercentMin, savePercentMax,
       clickAuthorPctMin, clickAuthorPctMax,
-      onLog,
+      onLog, onProgress,
     } = params;
 
     onLog?.("[TRACE] explore: start");
@@ -7127,6 +7128,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
 
       postsScrolled++;
+      onProgress?.({ postsScrolled, postsClicked, likes, sharesFeed, sharesDm, saves, authorVisits });
 
       if (i < scrollCount - 1) {
         // Delay between scrolls.
@@ -7189,6 +7191,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     savePercentMin: number; savePercentMax: number;
     clickAuthorPctMin: number; clickAuthorPctMax: number;
     onLog?: (msg: string) => void;
+    onProgress?: (progress: { reelsViewed: number; likes: number; sharesFeed: number; sharesDm: number; saves: number }) => void;
   }): Promise<{ reelsViewed: number; likes: number; sharesFeed: number; sharesDm: number; saves: number }> {
     const {
       scrollMin, scrollMax,
@@ -7198,7 +7201,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       shareDmPercentMin, shareDmPercentMax,
       savePercentMin, savePercentMax,
       clickAuthorPctMin, clickAuthorPctMax,
-      onLog,
+      onLog, onProgress,
     } = params;
 
     const totalReels = Math.floor(rollRange(scrollMin, scrollMax));
@@ -7718,6 +7721,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       reelTimingAfterActions = Date.now();
 
       reelsViewed++;
+      onProgress?.({ reelsViewed, likes, sharesFeed, sharesDm, saves });
       onLog?.(
         `Reel ${i + 1}/${totalReels} timing — ` +
         `watch-wait=${((reelTimingAfterWatch - reelTimingStartedAt) / 1000).toFixed(1)}s, ` +
@@ -12768,6 +12772,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               clickAuthorPctMin: viewExploreClickAuthorPercentMin ?? 0,
               clickAuthorPctMax: viewExploreClickAuthorPercentMax ?? 0,
               onLog: (msg) => tLog(`  ${msg}`),
+              onProgress: (progress) => {
+                exploreScrolled = progress.postsScrolled;
+                exploreLikes = progress.likes;
+                sharesFeed = progress.sharesFeed;
+                sharesDm = progress.sharesDm;
+                saves = progress.saves;
+                authorVisits = progress.authorVisits;
+              },
             });
             exploreScrolled = exploreResult.postsScrolled;
             exploreLikes = exploreResult.likes;
@@ -12795,6 +12807,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               savePercentMin: viewReelsSavePercentMin ?? 0, savePercentMax: viewReelsSavePercentMax ?? 0,
               clickAuthorPctMin: viewReelsClickAuthorPercentMin ?? 0, clickAuthorPctMax: viewReelsClickAuthorPercentMax ?? 0,
               onLog: (msg) => tLog(`  ${msg}`),
+              onProgress: (progress) => {
+                reelsViewed = progress.reelsViewed;
+                reelsLikes = progress.likes;
+                sharesFeed = progress.sharesFeed;
+                sharesDm = progress.sharesDm;
+                saves = progress.saves;
+              },
             });
             reelsViewed = reelsResult.reelsViewed;
             reelsLikes = reelsResult.likes;
