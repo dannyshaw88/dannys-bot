@@ -5421,6 +5421,46 @@ export function AutomationSettingsPanel({
         </div>
       </div>
 
+      {/* Step 1 pre-switch controls belong directly under the Step 1
+          description so they are visible before the tool settings begin. */}
+      <div className="bg-card border border-border rounded-xl p-5">
+        <p className="text-sm font-semibold text-foreground">Pre-switch actions</p>
+        <p className="text-xs text-muted-foreground mt-1 mb-3">
+          Before switching accounts, optionally run actions on the account that was already active.
+          Follow Users is excluded and completed metrics are recorded to that account.
+        </p>
+        <div className="flex items-start gap-6 flex-wrap">
+          <div className="space-y-1.5">
+            <Label className="text-sm text-muted-foreground block text-center">Chance to run %</Label>
+            <div className="flex items-center gap-2">
+              <Input type="number" min={0} max={100} className={NUM_INPUT_CLASS}
+                value={settings.preSwitchEnabledMin}
+                onChange={e => setSettings(s => ({ ...s, preSwitchEnabledMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} className={NUM_INPUT_CLASS}
+                value={settings.preSwitchEnabledMax}
+                onChange={e => setSettings(s => ({ ...s, preSwitchEnabledMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm text-muted-foreground block text-center">Actions to perform %</Label>
+            <div className="flex items-center gap-2">
+              <Input type="number" min={0} max={100} className={NUM_INPUT_CLASS}
+                value={settings.preSwitchActionPercentMin}
+                onChange={e => setSettings(s => ({ ...s, preSwitchActionPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} className={NUM_INPUT_CLASS}
+                value={settings.preSwitchActionPercentMax}
+                onChange={e => setSettings(s => ({ ...s, preSwitchActionPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="bg-card border border-border rounded-xl p-5 space-y-5">
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -6940,36 +6980,6 @@ export function AutomationSettingsPanel({
                     disabled={loading} />
                 </div>
               </div>
-
-          <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground block text-center">Pre-switch chance %</Label>
-            <div className="flex items-center gap-3">
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                value={settings.preSwitchEnabledMin}
-                onChange={e => setSettings(s => ({ ...s, preSwitchEnabledMin: Math.min(100, clamp4(Number(e.target.value))) }))}
-                disabled={loading} />
-              <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                value={settings.preSwitchEnabledMax}
-                onChange={e => setSettings(s => ({ ...s, preSwitchEnabledMax: Math.min(100, clamp4(Number(e.target.value))) }))}
-                disabled={loading} />
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground block text-center">Pre-switch tool %</Label>
-            <div className="flex items-center gap-3">
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                value={settings.preSwitchActionPercentMin}
-                onChange={e => setSettings(s => ({ ...s, preSwitchActionPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
-                disabled={loading} />
-              <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                value={settings.preSwitchActionPercentMax}
-                onChange={e => setSettings(s => ({ ...s, preSwitchActionPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
-                disabled={loading} />
-            </div>
-          </div>
 
             </div>
 
