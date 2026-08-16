@@ -1,3 +1,9 @@
+## [1.2.528] — 2026-08-16
+
+### Fixed — Windows Startup Crash
+
+- Import the missing `ScanSearch` icon used by the Mobile page so the packaged app no longer fails during startup.
+
 ## [1.2.527] — 2026-08-16
 
 ### Fixed — Neutral Phone Transfer Names
