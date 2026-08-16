@@ -5378,7 +5378,7 @@ export function AutomationSettingsPanel({
       </div>
 
       {/* Master toggle — turns the whole tool on/off. */}
-      <div className="inline-flex self-start bg-card border border-border rounded-xl p-5">
+      <div className="self-start bg-card border border-border rounded-xl p-5 space-y-4">
         {/* Single row: (STEP1) toggle status | Run every X to Y minutes */}
         <div className="flex items-center gap-3 flex-wrap">
           <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">(STEP1)</span>
@@ -5419,15 +5419,12 @@ export function AutomationSettingsPanel({
           />
           <Label className="text-sm text-muted-foreground whitespace-nowrap">minutes</Label>
         </div>
-      </div>
-
       {/* Step 1 pre-switch controls belong directly under the Step 1
           description so they are visible before the tool settings begin. */}
-      <div className="bg-card border border-border rounded-xl p-5">
+      <div>
         <p className="text-sm font-semibold text-foreground">Pre-switch actions</p>
         <p className="text-xs text-muted-foreground mt-1 mb-3">
           Before switching accounts, optionally run actions on the account that was already active.
-          Follow Users is excluded and completed metrics are recorded to that account.
         </p>
         <div className="flex items-start gap-6 flex-wrap">
           <div className="space-y-1.5">
@@ -5459,6 +5456,7 @@ export function AutomationSettingsPanel({
             </div>
           </div>
         </div>
+      </div>
       </div>
 
       <div className="bg-card border border-border rounded-xl p-5 space-y-5">
