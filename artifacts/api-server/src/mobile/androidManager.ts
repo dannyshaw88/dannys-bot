@@ -2919,7 +2919,10 @@ export function getScreenSize(serial: string): { w: number; h: number } {
 /** Center of Instagram's leftmost bottom-navigation Home cell. */
 export async function getBottomLeftHomeFallback(serial: string): Promise<{ x: number; y: number }> {
   const { w, h } = getScreenSize(serial);
-  return { x: Math.round(w * 0.10), y: Math.round(h * 0.993) };
+  // Instagram's Home control is the leftmost icon in its bottom navigation,
+  // immediately above Android's system navigation bar. Use one deterministic
+  // geometry path for Reel exit; do not resolve labels or resource IDs.
+  return { x: Math.round(w * 0.10), y: Math.round(h * 0.93) };
 }
 
 // A raw KEYCODE_POWER (26) is a *toggle* — if the screen happened to already

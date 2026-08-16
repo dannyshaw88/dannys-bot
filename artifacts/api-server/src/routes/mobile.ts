@@ -12800,23 +12800,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             reelsLikes = reelsResult.likes;
             steps.push(`reels(${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes, ${reelsResult.sharesFeed} feed-shares, ${reelsResult.sharesDm} dm-shares, ${reelsResult.saves} saves)`);
             tLog(`▶ View Reels done — ${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes`);
-            // Reels owns one deterministic exit action: tap Instagram's
-            // live-resolved Home tab in the bottom-left. Do not use Android
-            // Back here; Back can return to a prior surface instead of the
-            // Home feed when the viewer was entered from another route.
+            // Reels owns one deterministic exit action: tap the leftmost
+            // Instagram bottom-navigation slot. Do not resolve labels or
+            // resource IDs; those can identify the wrong node on variant
+            // accessibility trees.
             tLog("▶ View Reels — exiting full-screen viewer via Home tab…");
-            try {
-              const homeTab = await android.findHomeTab(serial).catch(() => null);
-              // Reel viewer builds can render the bottom-left Home control
-              // without the normal semantic node. The live dump places that
-              // tab in the leftmost bottom-nav cell, so always tap its center
-              // as the Reel-specific fallback instead of leaving the viewer.
-              const resolvedHome = homeTab ?? await android.getBottomLeftHomeFallback(serial);
-              await android.tap(serial, resolvedHome.x, resolvedHome.y);
-              tLog(`▶ View Reels — tapped Home tab at (${resolvedHome.x},${resolvedHome.y})${homeTab ? "" : " (Reel viewer fallback)"}`);
-            } catch {
-              tLog("▶ View Reels — Home tab tap failed; leaving viewer unchanged");
-            }
+            const homeTab = await android.getBottomLeftHomeFallback(serial);
+            await android.tap(serial, homeTab.x, homeTab.y);
+            tLog(`▶ View Reels — tapped Home tab at (${homeTab.x},${homeTab.y})`);
           } else if (!viewReelsEnabled) {
             steps.push("reels(skipped — View Reels disabled)");
             tLog("▶ View Reels disabled — skipping reels");
