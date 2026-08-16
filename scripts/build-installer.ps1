@@ -19,8 +19,34 @@ function Invoke-Step {
 Set-Location $ProjectRoot
 Write-Host "Building from: $ProjectRoot" -ForegroundColor Green
 
+function Get-GitRemote {
+  $remotes = @(git remote)
+  if ($remotes -contains "github") { return "github" }
+  if ($remotes -contains "origin") { return "origin" }
+  throw "No GitHub remote found. Configure a remote named 'github' or 'origin' before building."
+}
+
+$GitRemote = Get-GitRemote
+$GitStatus = @(git status --porcelain)
+if ($GitStatus.Count -gt 0) {
+  Write-Host "The checkout contains local changes or untracked files:" -ForegroundColor Yellow
+  $GitStatus | ForEach-Object { Write-Host "  $_" -ForegroundColor Yellow }
+  throw "Refusing to pull/build from a dirty checkout. Commit, stash, or remove these files first."
+}
+
+if (@(git diff --name-only --diff-filter=U).Count -gt 0) {
+  throw "Unresolved merge conflicts detected. Resolve them and verify 'git status' is clean before building."
+}
+
 Invoke-Step "Pull latest GitHub changes" {
-  git pull origin main
+  git fetch $GitRemote main
+  if ($LASTEXITCODE -ne 0) {
+    throw "Fetching latest GitHub changes failed."
+  }
+  git merge --ff-only "$GitRemote/main"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Local branch cannot be fast-forwarded from $GitRemote/main. Resolve the divergence manually; no merge was created."
+  }
 }
 
 Invoke-Step "Install workspace dependencies" {
