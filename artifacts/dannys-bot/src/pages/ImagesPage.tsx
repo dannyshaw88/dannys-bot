@@ -428,9 +428,16 @@ export default function ImagesPage(props: ImagesPageProps) {
 
   const handleExportAll = useCallback(() => {
     if (props.onExportAll) return props.onExportAll();
+    const neutralName = (name: string) => {
+      const ext = (name.match(/\.[a-z0-9]+$/i)?.[0] ?? ".jpg").toLowerCase();
+      const bytes = new Uint8Array(12);
+      crypto.getRandomValues(bytes);
+      const id = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+      return `IMG_${id}${ext}`;
+    };
     const ready = localItems
       .filter(item => item.status === "success" && typeof item.processedData === "string")
-      .map(item => ({ filename: item.name, dataUrl: String(item.processedData) }));
+      .map(item => ({ filename: neutralName(item.name), dataUrl: String(item.processedData) }));
     if (!ready.length) return;
     const electronApi = (window as any).electronAPI;
     if (electronApi?.saveProcessedImages) {
