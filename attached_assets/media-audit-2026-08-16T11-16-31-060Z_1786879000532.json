@@ -1,0 +1,344 @@
+{
+  "exportedAt": "2026-08-16T11:16:31.055Z",
+  "tool": "Aura Farming Media Transfer Forensic Audit",
+  "instagramOpened": false,
+  "sourceFile": "05670afd-14f5-4d89-b571-dec17635fd70_wavespeed.jpg",
+  "devices": [
+    {
+      "serial": "863d0058304830363451146f8f3e8c",
+      "name": "Redmi A5",
+      "ok": true,
+      "message": "Device copy matches processed image",
+      "result": {
+        "ok": true,
+        "instagramOpened": false,
+        "devicePath": "/sdcard/DCIM/Camera/ig_6bcb71733db6157feb317afb_05670afd-14f5-4d89-b571-dec17635fd70_wavespeed.jpg",
+        "source": {
+          "sourceSha256": "33e5bf53b2bf11b4b0415feee3f89dc520c026613f2ebf6f047ef5cb3154333f",
+          "processedSha256": "fc90430a7530cbdbf3b160588392b6c83ed4af1b94ec53003e0ed7d61d60bd4e",
+          "processedBytes": 251409,
+          "format": "jpeg",
+          "width": 816,
+          "height": 1024
+        },
+        "forensic": {
+          "original": {
+            "label": "original Windows source",
+            "sha256": "33e5bf53b2bf11b4b0415feee3f89dc520c026613f2ebf6f047ef5cb3154333f",
+            "bytes": 246401,
+            "format": "jpeg",
+            "width": 816,
+            "height": 1024,
+            "space": "srgb",
+            "channels": 3,
+            "depth": "uchar",
+            "density": 72,
+            "chromaSubsampling": "4:2:0",
+            "isProgressive": false,
+            "orientation": null,
+            "hasAlpha": false,
+            "embedded": {
+              "exif": null,
+              "exifBytes": 0,
+              "icc": null,
+              "iccBytes": 0,
+              "iptc": null,
+              "iptcBytes": 0,
+              "xmp": null,
+              "xmpBytes": 0
+            }
+          },
+          "processed": {
+            "label": "processed Make a Post output",
+            "sha256": "fc90430a7530cbdbf3b160588392b6c83ed4af1b94ec53003e0ed7d61d60bd4e",
+            "bytes": 251409,
+            "format": "jpeg",
+            "width": 816,
+            "height": 1024,
+            "space": "srgb",
+            "channels": 3,
+            "depth": "uchar",
+            "density": 72,
+            "chromaSubsampling": "4:2:0",
+            "isProgressive": false,
+            "orientation": null,
+            "hasAlpha": false,
+            "embedded": {
+              "exif": null,
+              "exifBytes": 0,
+              "icc": null,
+              "iccBytes": 0,
+              "iptc": null,
+              "iptcBytes": 0,
+              "xmp": null,
+              "xmpBytes": 0
+            }
+          },
+          "device": {
+            "label": "device pullback",
+            "sha256": "fc90430a7530cbdbf3b160588392b6c83ed4af1b94ec53003e0ed7d61d60bd4e",
+            "bytes": 251409,
+            "format": "jpeg",
+            "width": 816,
+            "height": 1024,
+            "space": "srgb",
+            "channels": 3,
+            "depth": "uchar",
+            "density": 72,
+            "chromaSubsampling": "4:2:0",
+            "isProgressive": false,
+            "orientation": null,
+            "hasAlpha": false,
+            "embedded": {
+              "exif": null,
+              "exifBytes": 0,
+              "icc": null,
+              "iccBytes": 0,
+              "iptc": null,
+              "iptcBytes": 0,
+              "xmp": null,
+              "xmpBytes": 0
+            }
+          },
+          "comparisons": {
+            "originalToProcessedByteIdentical": false,
+            "processedToDeviceByteIdentical": true,
+            "processedToDeviceMetadataIdentical": true
+          }
+        },
+        "device": {
+          "sha256": "fc90430a7530cbdbf3b160588392b6c83ed4af1b94ec53003e0ed7d61d60bd4e",
+          "bytes": 251409,
+          "format": "jpeg",
+          "width": 816,
+          "height": 1024
+        },
+        "matchesProcessed": true
+      }
+    },
+    {
+      "serial": "PFMZ9PQO5XJVE6V4",
+      "name": "Redmi A2",
+      "ok": true,
+      "message": "Device copy matches processed image",
+      "result": {
+        "ok": true,
+        "instagramOpened": false,
+        "devicePath": "/sdcard/DCIM/Camera/ig_04ae3a2b385a97e38d18f2d6_05670afd-14f5-4d89-b571-dec17635fd70_wavespeed.jpg",
+        "source": {
+          "sourceSha256": "33e5bf53b2bf11b4b0415feee3f89dc520c026613f2ebf6f047ef5cb3154333f",
+          "processedSha256": "91b90d5a8af5e2a3059a347d2a4c588921a8dea51f90c5dbc43d886dab3a3544",
+          "processedBytes": 246959,
+          "format": "jpeg",
+          "width": 816,
+          "height": 1024
+        },
+        "forensic": {
+          "original": {
+            "label": "original Windows source",
+            "sha256": "33e5bf53b2bf11b4b0415feee3f89dc520c026613f2ebf6f047ef5cb3154333f",
+            "bytes": 246401,
+            "format": "jpeg",
+            "width": 816,
+            "height": 1024,
+            "space": "srgb",
+            "channels": 3,
+            "depth": "uchar",
+            "density": 72,
+            "chromaSubsampling": "4:2:0",
+            "isProgressive": false,
+            "orientation": null,
+            "hasAlpha": false,
+            "embedded": {
+              "exif": null,
+              "exifBytes": 0,
+              "icc": null,
+              "iccBytes": 0,
+              "iptc": null,
+              "iptcBytes": 0,
+              "xmp": null,
+              "xmpBytes": 0
+            }
+          },
+          "processed": {
+            "label": "processed Make a Post output",
+            "sha256": "91b90d5a8af5e2a3059a347d2a4c588921a8dea51f90c5dbc43d886dab3a3544",
+            "bytes": 246959,
+            "format": "jpeg",
+            "width": 816,
+            "height": 1024,
+            "space": "srgb",
+            "channels": 3,
+            "depth": "uchar",
+            "density": 72,
+            "chromaSubsampling": "4:2:0",
+            "isProgressive": false,
+            "orientation": null,
+            "hasAlpha": false,
+            "embedded": {
+              "exif": null,
+              "exifBytes": 0,
+              "icc": null,
+              "iccBytes": 0,
+              "iptc": null,
+              "iptcBytes": 0,
+              "xmp": null,
+              "xmpBytes": 0
+            }
+          },
+          "device": {
+            "label": "device pullback",
+            "sha256": "91b90d5a8af5e2a3059a347d2a4c588921a8dea51f90c5dbc43d886dab3a3544",
+            "bytes": 246959,
+            "format": "jpeg",
+            "width": 816,
+            "height": 1024,
+            "space": "srgb",
+            "channels": 3,
+            "depth": "uchar",
+            "density": 72,
+            "chromaSubsampling": "4:2:0",
+            "isProgressive": false,
+            "orientation": null,
+            "hasAlpha": false,
+            "embedded": {
+              "exif": null,
+              "exifBytes": 0,
+              "icc": null,
+              "iccBytes": 0,
+              "iptc": null,
+              "iptcBytes": 0,
+              "xmp": null,
+              "xmpBytes": 0
+            }
+          },
+          "comparisons": {
+            "originalToProcessedByteIdentical": false,
+            "processedToDeviceByteIdentical": true,
+            "processedToDeviceMetadataIdentical": true
+          }
+        },
+        "device": {
+          "sha256": "91b90d5a8af5e2a3059a347d2a4c588921a8dea51f90c5dbc43d886dab3a3544",
+          "bytes": 246959,
+          "format": "jpeg",
+          "width": 816,
+          "height": 1024
+        },
+        "matchesProcessed": true
+      }
+    },
+    {
+      "serial": "e38a197f3d22",
+      "name": "Redmi 12 5G",
+      "ok": true,
+      "message": "Device copy matches processed image",
+      "result": {
+        "ok": true,
+        "instagramOpened": false,
+        "devicePath": "/sdcard/DCIM/Camera/ig_d25b4f2f4c3ae9abaab1518a_05670afd-14f5-4d89-b571-dec17635fd70_wavespeed.jpg",
+        "source": {
+          "sourceSha256": "33e5bf53b2bf11b4b0415feee3f89dc520c026613f2ebf6f047ef5cb3154333f",
+          "processedSha256": "4688a0386eef337cb9116ceddc0632a975161a062fc012ed2be50e64492ee182",
+          "processedBytes": 272222,
+          "format": "jpeg",
+          "width": 816,
+          "height": 1024
+        },
+        "forensic": {
+          "original": {
+            "label": "original Windows source",
+            "sha256": "33e5bf53b2bf11b4b0415feee3f89dc520c026613f2ebf6f047ef5cb3154333f",
+            "bytes": 246401,
+            "format": "jpeg",
+            "width": 816,
+            "height": 1024,
+            "space": "srgb",
+            "channels": 3,
+            "depth": "uchar",
+            "density": 72,
+            "chromaSubsampling": "4:2:0",
+            "isProgressive": false,
+            "orientation": null,
+            "hasAlpha": false,
+            "embedded": {
+              "exif": null,
+              "exifBytes": 0,
+              "icc": null,
+              "iccBytes": 0,
+              "iptc": null,
+              "iptcBytes": 0,
+              "xmp": null,
+              "xmpBytes": 0
+            }
+          },
+          "processed": {
+            "label": "processed Make a Post output",
+            "sha256": "4688a0386eef337cb9116ceddc0632a975161a062fc012ed2be50e64492ee182",
+            "bytes": 272222,
+            "format": "jpeg",
+            "width": 816,
+            "height": 1024,
+            "space": "srgb",
+            "channels": 3,
+            "depth": "uchar",
+            "density": 72,
+            "chromaSubsampling": "4:2:0",
+            "isProgressive": false,
+            "orientation": null,
+            "hasAlpha": false,
+            "embedded": {
+              "exif": null,
+              "exifBytes": 0,
+              "icc": null,
+              "iccBytes": 0,
+              "iptc": null,
+              "iptcBytes": 0,
+              "xmp": null,
+              "xmpBytes": 0
+            }
+          },
+          "device": {
+            "label": "device pullback",
+            "sha256": "4688a0386eef337cb9116ceddc0632a975161a062fc012ed2be50e64492ee182",
+            "bytes": 272222,
+            "format": "jpeg",
+            "width": 816,
+            "height": 1024,
+            "space": "srgb",
+            "channels": 3,
+            "depth": "uchar",
+            "density": 72,
+            "chromaSubsampling": "4:2:0",
+            "isProgressive": false,
+            "orientation": null,
+            "hasAlpha": false,
+            "embedded": {
+              "exif": null,
+              "exifBytes": 0,
+              "icc": null,
+              "iccBytes": 0,
+              "iptc": null,
+              "iptcBytes": 0,
+              "xmp": null,
+              "xmpBytes": 0
+            }
+          },
+          "comparisons": {
+            "originalToProcessedByteIdentical": false,
+            "processedToDeviceByteIdentical": true,
+            "processedToDeviceMetadataIdentical": true
+          }
+        },
+        "device": {
+          "sha256": "4688a0386eef337cb9116ceddc0632a975161a062fc012ed2be50e64492ee182",
+          "bytes": 272222,
+          "format": "jpeg",
+          "width": 816,
+          "height": 1024
+        },
+        "matchesProcessed": true
+      }
+    }
+  ]
+}
