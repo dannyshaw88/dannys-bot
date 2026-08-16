@@ -2373,10 +2373,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const raw = all[trustScoreAutomationKey(scoreId)];
     if (raw) {
       try {
+        const rawTemplate = JSON.parse(raw);
         template = automationSchema.parse({
           ...trustScoreAutomationDefaults(),
-          ...JSON.parse(raw),
+          ...rawTemplate,
         });
+        // Preserve TrustScore-owned pre-switch values explicitly. These are
+        // present in the stored template but can be omitted by the large
+        // automation schema's effective-settings projection.
+        for (const field of [
+          "preSwitchEnabledMin",
+          "preSwitchEnabledMax",
+          "preSwitchActionPercentMin",
+          "preSwitchActionPercentMax",
+        ] as const) {
+          const value = rawTemplate?.[field];
+          if (typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100) {
+            template[field] = value;
+          }
+        }
       } catch {
         template = {};
       }
