@@ -30,7 +30,8 @@ $GitRemote = Get-GitRemote
 $GitStatus = @(git status --porcelain | Where-Object {
   # Electron Builder creates this output locally; it is never source input
   # and must not make an otherwise clean checkout fail the sync guard.
-  $_ -notmatch '^\?\?\s+artifacts[\\/]+electron[\\/]+release(?:[\\/]|$)'
+  $_ -notmatch '^\?\?\s+artifacts[\\/]+electron[\\/]+release(?:[\\/]|$)' -and
+  $_ -notmatch '^\?\?\s+artifacts[\\/]+electron[\\/]+package-lock\.json$'
 })
 if ($GitStatus.Count -gt 0) {
   Write-Host "The checkout contains local changes or untracked files:" -ForegroundColor Yellow
