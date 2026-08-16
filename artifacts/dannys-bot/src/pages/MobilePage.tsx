@@ -5423,7 +5423,7 @@ export function AutomationSettingsPanel({
           description so they are visible before the tool settings begin. */}
       <div>
         <p className="text-sm font-semibold text-foreground">
-          Pre-switch actions: <span className="font-normal">Before switching accounts, optionally run actions on the account that was already active.</span>
+          Pre-switch actions: <span className="font-normal">Before switching accounts, optionally run actions on the account that was already active.</span><br />
         </p>
         <div className="flex items-start gap-6 flex-wrap">
           <div className="space-y-1.5">
