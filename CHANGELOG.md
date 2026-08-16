@@ -1,3 +1,9 @@
+## [1.2.520] — 2026-08-16
+
+### Fixed — Human Session Tool execution
+
+- Included TrustScore pre-switch settings in the automation-cycle execution scope.
+
 ## [1.2.519] — 2026-08-16
 
 ### Fixed — Windows installer generated files
