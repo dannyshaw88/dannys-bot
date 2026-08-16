@@ -124,6 +124,7 @@ export function Sidebar() {
     { name: "Phone Farm",      shortLabel: "PHONE FARM",     path: "/mobile",       icon: FilledFarmIcon        },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon },
     { name: "Settings",        shortLabel: "SETTINGS",       path: "/settings",     icon: FilledSettingsIcon  },
+    { name: "Ghost Browser",   shortLabel: "GHOST BROWSER",  path: "/settings?tab=ghost%20browser", icon: Globe },
   ];
 
   return (
@@ -147,6 +148,7 @@ export function Sidebar() {
             if (item.path === "/mobile") return location === "/mobile" || location.startsWith("/mobile/");
              if (item.path === "/stats") return location === "/stats";
              if (item.path === "/settings/jarvee-binary") return location === "/settings/jarvee-binary" || location === "/settings/jarvee-binary-viewer";
+             if (item.path === "/settings?tab=ghost%20browser") return location === "/settings" && new URLSearchParams(window.location.search).get("tab") === "ghost browser";
             return location.startsWith(item.path);
           })();
           const Icon = item.icon;
@@ -178,20 +180,6 @@ export function Sidebar() {
                   {item.shortLabel}
                 </span>
                 </button>
-                {item.path === "/settings" && location.startsWith("/settings") && (
-                  <button
-                    onClick={() => setLocation("/settings?tab=ghost%20browser")}
-                    className={cn(
-                      "flex w-full items-center gap-2 py-2 pl-7 pr-2 text-left text-[10px] font-semibold transition-colors",
-                      new URLSearchParams(window.location.search).get("tab") === "ghost browser"
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                    )}
-                  >
-                    <Globe className="h-4 w-4 shrink-0" />
-                    <span>Ghost Browser</span>
-                  </button>
-                )}
             </div>
           );
           })}
