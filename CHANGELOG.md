@@ -1,3 +1,9 @@
+## [1.2.524] — 2026-08-16
+
+### Added — Android MediaProvider Audit Stage
+
+- Query Android MediaStore after media scanning and include raw and parsed metadata in exported audit reports.
+
 ## [1.2.523] — 2026-08-16
 
 ### Fixed — Batch Media Audit
