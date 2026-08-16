@@ -452,6 +452,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
   // Device
   const [selectedUA, setSelectedUA] = useState<UaEntry>(() => randomUA());
   const [activeUA, setActiveUA]     = useState<UaEntry>(selectedUA);
+  const [embeddedUA, setEmbeddedUA] = useState(() => selectedUA.embedded);
 
   // Browser
   const [browserState, setBrowserState]         = useState<BrowserState>("closed");
@@ -710,14 +711,17 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
   const handleOpen = async () => {
     if (!manualValid) return;
     setBrowserState("opening");
-    setActiveUA(selectedUA);
+    const effectiveEmbeddedUA = embeddedUA.trim() || selectedUA.embedded;
+    setActiveUA({ ...selectedUA, embedded: effectiveEmbeddedUA });
     setActiveProxyLabel(resolvedProxy ? `${resolvedProxy.host}:${resolvedProxy.port}` : "Direct (no proxy)");
     await fetch("/api/signup/browser/open", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         slot,
-        userAgent: selectedUA.api,
+        // Ghost Browser must expose the embedded/browser UA, not Jarvee's
+        // API-device UA string.
+        userAgent: effectiveEmbeddedUA,
         proxyHost: resolvedProxy?.host,
         proxyPort: resolvedProxy?.port,
         proxyUsername: resolvedProxy?.username,
@@ -1038,7 +1042,21 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                 <Cpu className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Device Identity</p>
               </div>
-              <UaPickerDropdown value={selectedUA.api} onSelect={setSelectedUA} fullWidth />
+              <UaPickerDropdown
+                value={selectedUA.api}
+                onSelect={(ua) => {
+                  setSelectedUA(ua);
+                  setEmbeddedUA(ua.embedded);
+                }}
+                fullWidth
+              />
+              <Input
+                value={embeddedUA}
+                onChange={e => setEmbeddedUA(e.target.value)}
+                placeholder="Embedded browser User-Agent"
+                className="h-7 text-[10px] font-mono"
+                aria-label="Embedded browser User-Agent"
+              />
             </div>
 
             {/* Fingerprint */}
