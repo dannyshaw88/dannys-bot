@@ -1,0 +1,138 @@
+{
+  "exportedAt": "2026-08-16T11:58:15.886Z",
+  "tool": "Aura Farming PC-to-Phone Transfer Inspector",
+  "instagramOpened": false,
+  "inspection": "pc-to-phone-transfer-channel",
+  "sourceFile": "eaf875c2-1913-49f7-9927-044499c4f8e6_wavespeed.jpg",
+  "devices": [
+    {
+      "serial": "863d0058304830363451146f8f3e8c",
+      "name": "Redmi A5",
+      "ok": true,
+      "message": "Exact shared processed bytes verified",
+      "result": {
+        "serial": "863d0058304830363451146f8f3e8c",
+        "ok": true,
+        "transfer": {
+          "sourcePath": "E:\\FanVue-Models\\imlisaberry\\eaf875c2-1913-49f7-9927-044499c4f8e6_wavespeed.jpg",
+          "sourceFileName": "eaf875c2-1913-49f7-9927-044499c4f8e6_wavespeed.jpg",
+          "preparedFilePath": "C:\\Users\\GAMERC~1\\AppData\\Local\\Temp\\equinox-mobile-alter-2Nm3x4\\altered.jpg",
+          "pushedFileName": "eaf875c2-1913-49f7-9927-044499c4f8e6_wavespeed.jpg",
+          "devicePath": "/sdcard/DCIM/Camera/ig_64bdd169c323b6da8af6cc5c_eaf875c2-1913-49f7-9927-044499c4f8e6_wavespeed.jpg",
+          "stages": [
+            "host source selected",
+            "Make a Post preparation completed",
+            "adb push completed",
+            "device filesystem pullback before scan",
+            "media scan broadcast sent",
+            "device filesystem pullback after scan",
+            "temporary device file removed"
+          ]
+        },
+        "preScan": {
+          "sha256": "eee627181b5e3b0e6bf2e315aca70249304da8aa66a772f498f1f7369419e07b",
+          "bytes": 294330
+        },
+        "postScan": {
+          "sha256": "eee627181b5e3b0e6bf2e315aca70249304da8aa66a772f498f1f7369419e07b",
+          "bytes": 294330
+        },
+        "matchesSharedProcessed": true,
+        "transferChangedFile": false,
+        "matchesOtherDevices": true,
+        "crossDevice": {
+          "allSuccessful": true,
+          "allDevicesReceivedSameBytes": true,
+          "deviceCount": 3,
+          "successfulCount": 3
+        }
+      }
+    },
+    {
+      "serial": "PFMZ9PQO5XJVE6V4",
+      "name": "Redmi A2",
+      "ok": true,
+      "message": "Exact shared processed bytes verified",
+      "result": {
+        "serial": "PFMZ9PQO5XJVE6V4",
+        "ok": true,
+        "transfer": {
+          "sourcePath": "E:\\FanVue-Models\\imlisaberry\\eaf875c2-1913-49f7-9927-044499c4f8e6_wavespeed.jpg",
+          "sourceFileName": "eaf875c2-1913-49f7-9927-044499c4f8e6_wavespeed.jpg",
+          "preparedFilePath": "C:\\Users\\GAMERC~1\\AppData\\Local\\Temp\\equinox-mobile-alter-2Nm3x4\\altered.jpg",
+          "pushedFileName": "eaf875c2-1913-49f7-9927-044499c4f8e6_wavespeed.jpg",
+          "devicePath": "/sdcard/DCIM/Camera/ig_f4df46e7ef2f886500334b11_eaf875c2-1913-49f7-9927-044499c4f8e6_wavespeed.jpg",
+          "stages": [
+            "host source selected",
+            "Make a Post preparation completed",
+            "adb push completed",
+            "device filesystem pullback before scan",
+            "media scan broadcast sent",
+            "device filesystem pullback after scan",
+            "temporary device file removed"
+          ]
+        },
+        "preScan": {
+          "sha256": "eee627181b5e3b0e6bf2e315aca70249304da8aa66a772f498f1f7369419e07b",
+          "bytes": 294330
+        },
+        "postScan": {
+          "sha256": "eee627181b5e3b0e6bf2e315aca70249304da8aa66a772f498f1f7369419e07b",
+          "bytes": 294330
+        },
+        "matchesSharedProcessed": true,
+        "transferChangedFile": false,
+        "matchesOtherDevices": true,
+        "crossDevice": {
+          "allSuccessful": true,
+          "allDevicesReceivedSameBytes": true,
+          "deviceCount": 3,
+          "successfulCount": 3
+        }
+      }
+    },
+    {
+      "serial": "e38a197f3d22",
+      "name": "Redmi 12 5G",
+      "ok": true,
+      "message": "Exact shared processed bytes verified",
+      "result": {
+        "serial": "e38a197f3d22",
+        "ok": true,
+        "transfer": {
+          "sourcePath": "E:\\FanVue-Models\\imlisaberry\\eaf875c2-1913-49f7-9927-044499c4f8e6_wavespeed.jpg",
+          "sourceFileName": "eaf875c2-1913-49f7-9927-044499c4f8e6_wavespeed.jpg",
+          "preparedFilePath": "C:\\Users\\GAMERC~1\\AppData\\Local\\Temp\\equinox-mobile-alter-2Nm3x4\\altered.jpg",
+          "pushedFileName": "eaf875c2-1913-49f7-9927-044499c4f8e6_wavespeed.jpg",
+          "devicePath": "/sdcard/DCIM/Camera/ig_a07347d6b1a151bacdd30bf2_eaf875c2-1913-49f7-9927-044499c4f8e6_wavespeed.jpg",
+          "stages": [
+            "host source selected",
+            "Make a Post preparation completed",
+            "adb push completed",
+            "device filesystem pullback before scan",
+            "media scan broadcast sent",
+            "device filesystem pullback after scan",
+            "temporary device file removed"
+          ]
+        },
+        "preScan": {
+          "sha256": "eee627181b5e3b0e6bf2e315aca70249304da8aa66a772f498f1f7369419e07b",
+          "bytes": 294330
+        },
+        "postScan": {
+          "sha256": "eee627181b5e3b0e6bf2e315aca70249304da8aa66a772f498f1f7369419e07b",
+          "bytes": 294330
+        },
+        "matchesSharedProcessed": true,
+        "transferChangedFile": false,
+        "matchesOtherDevices": true,
+        "crossDevice": {
+          "allSuccessful": true,
+          "allDevicesReceivedSameBytes": true,
+          "deviceCount": 3,
+          "successfulCount": 3
+        }
+      }
+    }
+  ]
+}
