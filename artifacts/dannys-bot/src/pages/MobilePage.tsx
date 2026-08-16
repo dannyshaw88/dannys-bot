@@ -10460,7 +10460,8 @@ export function MobilePage() {
     const s = new URLSearchParams(search).get("slot");
     return s !== null ? Number(s) : null;
   })();
-  const autoPowerOn = new URLSearchParams(search).get("autopower") === "1";
+  const autoPowerOn = new URLSearchParams(search).get("autopower") === "1"
+    || (targetSerial !== null && sessionStorage.getItem("mobile_autopower_serial") === targetSerial);
 
   const [data,    setData]    = useState<PhonesResponse | null>(null);
   const [error,   setError]   = useState<string | null>(null);
@@ -10603,9 +10604,11 @@ export function MobilePage() {
   ));
   useEffect(() => {
     if (!targetSerial) return;
-    setLiveOn(previous => autoPowerOn
-      ? { ...previous, [targetSerial]: true }
-      : previous);
+    if (!autoPowerOn) return;
+    setLiveOn(previous => ({ ...previous, [targetSerial]: true }));
+    if (sessionStorage.getItem("mobile_autopower_serial") === targetSerial) {
+      sessionStorage.removeItem("mobile_autopower_serial");
+    }
   }, [targetSerial, autoPowerOn]);
 
   // ── Slot customizations (wallpaper + text layers) — persisted to localStorage
