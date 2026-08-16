@@ -10460,6 +10460,7 @@ export function MobilePage() {
     const s = new URLSearchParams(search).get("slot");
     return s !== null ? Number(s) : null;
   })();
+  const autoPowerOn = new URLSearchParams(search).get("autopower") === "1";
 
   const [data,    setData]    = useState<PhonesResponse | null>(null);
   const [error,   setError]   = useState<string | null>(null);
@@ -10597,7 +10598,15 @@ export function MobilePage() {
   // Mobile tab, or a phone simply being connected, must never by itself
   // start streaming/waking the device — only pressing Power (below) or the
   // automation toggle being enabled does.
-  const [liveOn, setLiveOn] = useState<Record<string, boolean>>({});
+  const [liveOn, setLiveOn] = useState<Record<string, boolean>>(() => (
+    targetSerial && autoPowerOn ? { [targetSerial]: true } : {}
+  ));
+  useEffect(() => {
+    if (!targetSerial) return;
+    setLiveOn(previous => autoPowerOn
+      ? { ...previous, [targetSerial]: true }
+      : previous);
+  }, [targetSerial, autoPowerOn]);
 
   // ── Slot customizations (wallpaper + text layers) — persisted to localStorage
   const [slotCustom, setSlotCustom] = useState<Record<number, SlotCustomization>>(() => {

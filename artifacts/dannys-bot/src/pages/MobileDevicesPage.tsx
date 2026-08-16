@@ -1203,7 +1203,7 @@ export function MobileDevicesPage() {
                           startedAt: new Date().toISOString(),
                         });
                         sessionStorage.setItem("mobile_device_nav_started_at", String(started));
-                        setLocation(`/mobile/farm/${encodeURIComponent(device.serial)}`);
+                        setLocation(`/mobile/farm/${encodeURIComponent(device.serial)}?autopower=1`);
                       }}
                       onRemove={() => handleRemove(device.slotIndex)}
                       custom={slotCustom[device.slotIndex] ?? DEFAULT_SLOT_CUSTOM}
