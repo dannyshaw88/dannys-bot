@@ -2731,12 +2731,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // wipe, etc.).  Stripping the empty value here means the existing saved
       // path in `base` (from mobile-instances.json) is preserved instead.
       const body = { ...req.body };
-      console.log("[trust-score-template-save-request]", trustScoreId, {
-        preSwitchEnabledMin: body.preSwitchEnabledMin,
-        preSwitchEnabledMax: body.preSwitchEnabledMax,
-        preSwitchActionPercentMin: body.preSwitchActionPercentMin,
-        preSwitchActionPercentMax: body.preSwitchActionPercentMax,
-      });
       if (body.makePostLocalFolderPath === "") delete body.makePostLocalFolderPath;
       if (body.postStoryLocalFolderPath === "") delete body.postStoryLocalFolderPath;
       const assignment = await loadTrustScoreAssignment(serial, slotIdx);
@@ -2832,6 +2826,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // template by accident.
       const body = { ...req.body };
       for (const field of TRUST_SCORE_TEMPLATE_LOCKED_FIELDS) delete body[field];
+      console.log("[trust-score-template-save-request]", trustScoreId, {
+        preSwitchEnabledMin: body.preSwitchEnabledMin,
+        preSwitchEnabledMax: body.preSwitchEnabledMax,
+        preSwitchActionPercentMin: body.preSwitchActionPercentMin,
+        preSwitchActionPercentMax: body.preSwitchActionPercentMax,
+      });
       // Autosaves can arrive with a partial/effective settings object while
       // another control is still settling. Merge the existing template first
       // so a missing pre-switch field can never be replaced by schema default 0.
