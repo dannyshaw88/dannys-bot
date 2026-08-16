@@ -1,3 +1,10 @@
+## [1.2.516] — 2026-08-16
+
+### Fixed — TrustScore pre-switch settings
+
+- Persisted TrustScore pre-switch settings through template parsing and slot inheritance.
+- Kept pre-switch settings visible but greyed out in Phone Farm Copy Settings.
+
 ## [1.2.515] — 2026-08-16
 
 ### Fixed — Windows image processing stability
