@@ -2976,9 +2976,18 @@ export async function openEbWindow(opts: {
   // HTTP Accept-Language header Chrome sends is determined by the process locale,
   // not the JS override.  This webRequest hook keeps them consistent so
   // Instagram never sees a mismatch between the HTTP header and navigator.languages.
+  // Pin User-Agent here as well. Packaged Windows Electron builds can otherwise
+  // fall back to the host Windows UA if the CDP override races the first request.
+  const _networkBrowserUA = userAgent
+    ? (isApiFormatUA(userAgent) ? apiUAToBrowserUA(userAgent).browserUA : userAgent)
+    : "";
+  if (_networkBrowserUA) {
+    _ebCrashLog(profileId, `STEP-7b: network User-Agent pinned (${_networkBrowserUA.slice(0, 100)})`);
+  }
   ses.webRequest.onBeforeSendHeaders((details, callback) => {
     const headers = details.requestHeaders;
     headers["Accept-Language"] = "en-US,en;q=0.9";
+    if (_networkBrowserUA) headers["User-Agent"] = _networkBrowserUA;
     callback({ requestHeaders: headers });
   });
 
