@@ -727,7 +727,6 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
         proxyUsername: resolvedProxy?.username,
         proxyPassword: resolvedProxy?.password,
         proxyType: resolvedProxy?.proxyType,
-        fingerprint,
       }),
     }).catch(() => {});
     setBrowserState("open");
@@ -858,7 +857,6 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
             proxyUsername: resolvedProxy?.username,
             proxyPassword: resolvedProxy?.password,
             proxyType: resolvedProxy?.proxyType,
-            fingerprint,
           }),
         });
       } catch {
@@ -973,7 +971,6 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
           userAgentEmbedded:        activeUA.embedded,
           // DOB, fingerprint, IMAP email validation
           dateOfBirth:              dob.trim() || undefined,
-          ebFingerprint:            JSON.stringify(fingerprint),
           emailValidationUsername:  emailAddr.trim() || undefined,
           emailValidationPassword:  emailPass.trim() || undefined,
           emailValidationPop3Server: imapHost.trim() || undefined,
@@ -1003,7 +1000,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
             Ghost Browser
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Isolated embedded browser with a clean, detection-hardened environment for creating fresh Instagram accounts.
+             Isolated embedded browser with configurable proxy, device identity, and embedded User-Agent.
           </p>
         </div>
         <StatusChip state={browserState} />
@@ -1059,8 +1056,8 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
               />
             </div>
 
-            {/* Fingerprint */}
-            <div className="desktop-card p-2.5 space-y-1 flex-1 min-w-[180px]">
+             {/* Fingerprint removed from Ghost Browser controls */}
+             <div className="hidden">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <ShieldCheck className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
@@ -1103,7 +1100,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
           </div>
 
           {/* ── ROW 1b: Scheduler ── */}
-          <div className="desktop-card p-2.5 space-y-2">
+           <div className="hidden">
             <div className="flex items-center gap-1.5">
               <svg className="w-3.5 h-3.5 text-cyan-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Scheduler</p>
@@ -1126,7 +1123,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
           {!skipWarmup && (
             <>
           {/* ── ROW 3b: YouTube warm-up ── */}
-          <div className="desktop-card p-2.5 flex items-center">
+           <div className="hidden">
             <div className="flex gap-4 flex-wrap items-center w-full">
               <div className="flex items-center gap-1.5 shrink-0 self-center">
                 <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="currentColor" style={{ color: "#FF0000" }}>
@@ -1142,8 +1139,8 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
             </>
           )}
 
-          {/* ── ROW 4: Username | Password | DOB | Bio Spin ── */}
-          <div className="desktop-card p-2.5">
+           {/* Signup fields removed from Ghost Browser controls */}
+           <div className="hidden">
             <div className="grid grid-cols-2 gap-2">
 
               {/* Username Spin */}
@@ -1203,8 +1200,8 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
             </div>
           </div>
 
-          {/* ── ROW 5: Email | Email Password | IMAP | Port ── */}
-          <div className="desktop-card p-2.5">
+           {/* Signup email/IMAP fields removed */}
+           <div className="hidden">
             <div className="flex items-center gap-1.5 mb-2">
               <Mail className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Email / IMAP</p>
@@ -1253,8 +1250,8 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
             </div>
           </div>
 
-          {/* ── ROW 6: Verification Code ── */}
-          <div className="desktop-card p-2.5">
+           {/* Signup verification controls removed */}
+           <div className="hidden">
             <div className="flex gap-2 items-end">
               <div className="space-y-1">
                 <div className="flex items-center gap-1.5">
@@ -1288,8 +1285,8 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
             )}
           </div>
 
-          {/* ── ROW 7: Action Buttons ── */}
-          <div className="desktop-card p-2.5">
+           {/* Signup action buttons removed */}
+           <div className="hidden">
             <div className="flex gap-2 justify-start">
               <Button
                 className={cn(
@@ -1356,7 +1353,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
               youtubeMax: parseInt(youtubeVideosMax, 10) || 0,
             };
             return (
-            <div className="desktop-card border border-border">
+            <div className="hidden">
               <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-border bg-muted/30">
                 <div className="flex items-center gap-1.5">
                   {signupRunning && <Loader2 className="w-3 h-3 animate-spin text-cyan-500" />}
