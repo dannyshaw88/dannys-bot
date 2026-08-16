@@ -371,7 +371,15 @@ function startServer(port: number, logPath: string, ebIpcPort = 0): void {
     logStream.write(`[${new Date().toISOString()}] [DB-WATCH] failed path=${dbPath} error=${String(error)}\n`);
   }
   serverProc.on("exit", (code, signal) => {
-    logStream.write(`[${new Date().toISOString()}] server-exit apiPid=${serverProc?.pid ?? "unknown"} code=${code ?? "null"} signal=${signal ?? "null"}\n`);
+    const codeHex = typeof code === "number" ? `0x${(code >>> 0).toString(16).toUpperCase().padStart(8, "0")}` : "n/a";
+    const exitMeaning = code === 0xC0000005
+      ? "STATUS_ACCESS_VIOLATION/native access violation"
+      : code === 0xC0000409
+        ? "STATUS_STACK_BUFFER_OVERRUN"
+        : code === 0xC000001D
+          ? "STATUS_ILLEGAL_INSTRUCTION"
+          : "";
+    logStream.write(`[${new Date().toISOString()}] server-exit apiPid=${serverProc?.pid ?? "unknown"} code=${code ?? "null"} codeHex=${codeHex} signal=${signal ?? "null"}${exitMeaning ? ` meaning=${exitMeaning}` : ""}\n`);
     // Preserve the last synchronous native-operation breadcrumb when the API
     // child dies outside JavaScript exception handling (e.g. 0xC0000005).
     try {
