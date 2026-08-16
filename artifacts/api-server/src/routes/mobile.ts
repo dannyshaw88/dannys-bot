@@ -8206,6 +8206,38 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     };
   }
 
+  async function auditDeviceMediaCopy(
+    serial: string,
+    devicePath: string,
+    expected: { sha256: string; bytes: number; format: string; width: number; height: number },
+    onLog?: (msg: string) => void,
+  ): Promise<void> {
+    let pulledPath = "";
+    try {
+      pulledPath = await android.pullFileFromDevice(serial, devicePath);
+      const bytes = await fsPromises.readFile(pulledPath);
+      const metadata = await sharp(bytes).metadata();
+      const sha256 = createHash("sha256").update(bytes).digest("hex");
+      const matchesShape =
+        bytes.length === expected.bytes &&
+        (metadata.format ?? "unknown") === expected.format &&
+        (metadata.width ?? 0) === expected.width &&
+        (metadata.height ?? 0) === expected.height;
+      onLog?.(
+        `Media audit before Instagram: deviceSha256=${sha256} ` +
+        `matchesProcessed=${sha256 === expected.sha256} bytes=${bytes.length} ` +
+        `format=${metadata.format ?? "unknown"} dimensions=${metadata.width ?? 0}x${metadata.height ?? 0} ` +
+        `matchesShape=${matchesShape}`,
+      );
+    } catch (error: any) {
+      onLog?.(`Media audit before Instagram: unavailable — ${error?.message ?? error}`);
+    } finally {
+      if (pulledPath) {
+        await fsPromises.rm(path.dirname(pulledPath), { recursive: true, force: true }).catch(() => {});
+      }
+    }
+  }
+
   /**
    * Picks the next image to post from `folderPath` per the user's Local
    * Folder settings (random vs. alphabetical order, no-repeat). Returns
@@ -8343,6 +8375,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return { posted: false };
     }
     await prepared.cleanup();
+    await auditDeviceMediaCopy(serial, devicePath, prepared.audit, onLog);
     onLog?.(`Make a Post: ✓ pushed to ${devicePath}, media-scanner notified — processedSha256=${prepared.audit.processedSha256} filename=${prepared.pushFileName} bytes=${prepared.audit.processedBytes}`);
     await sleepOrAbort(serial, 1200); // let the scanner index the file before we open the picker
 
@@ -8765,6 +8798,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return { posted: false };
     }
     await prepared.cleanup();
+    await auditDeviceMediaCopy(serial, devicePath, prepared.audit, onLog);
     onLog?.(`Make a Post (Story): ✓ pushed to ${devicePath} — processedSha256=${prepared.audit.processedSha256} filename=${prepared.pushFileName} bytes=${prepared.audit.processedBytes}`);
     await sleepOrAbort(serial, 1200);
 
@@ -9368,6 +9402,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await prepared.cleanup();
       return;
     }
+    await auditDeviceMediaCopy(serial, actualDevicePath, prepared.audit, onLog);
     await sleepOrAbort(serial, 1000);
 
     // Steps 3–10: navigation.  Wrapped in try-finally so the device file is

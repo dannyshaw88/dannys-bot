@@ -6985,6 +6985,21 @@ export async function pushFileToDevice(serial: string, localPath: string, fileNa
   return devicePath;
 }
 
+/** Pulls a device media copy to a temporary host path for byte-level diagnostics. */
+export async function pullFileFromDevice(serial: string, devicePath: string): Promise<string> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "android-media-audit-"));
+  const localPath = path.join(tempDir, path.basename(devicePath) || "media.bin");
+  try {
+    await runAdbStrict(adb, ["-s", serial, "pull", devicePath, localPath], 20000);
+    return localPath;
+  } catch (error) {
+    await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    throw error;
+  }
+}
+
 /**
  * Tells Android's media scanner about a newly-pushed file so it appears in
  * the gallery/media-picker immediately. `adb push` alone only writes bytes
