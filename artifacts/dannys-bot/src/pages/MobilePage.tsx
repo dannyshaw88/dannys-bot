@@ -2679,6 +2679,12 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
   const [showCalibration, setShowCalibration] = useState(false);
   const [calibrationPosition, setCalibrationPosition] = useState<CalibrationPosition>(null);
   const [showManualMedia, setShowManualMedia] = useState(false);
+  const toggleManualPower = useCallback(() => {
+    if (!phone) return;
+    liveCanvasRef.current?.clearToBlack();
+    onPower();
+    sendKey(phone.serial, manualLive ? 223 : 224, manualLive ? "Sleep" : "Wake", onLog);
+  }, [manualLive, onLog, onPower, phone]);
 
   // ── Element tree inspector ─────────────────────────────────────────────────
   // Full UIAutomator node tree shown below the mirror when inspect mode is on.
@@ -2920,6 +2926,17 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
           >
             <Palette className="w-3 h-3" />
           </button>
+           {isReady && phone && (
+             <button
+               type="button"
+               onClick={toggleManualPower}
+               title={manualLive ? "Power off phone mirror" : "Power on phone mirror"}
+               aria-label={manualLive ? "Power off phone mirror" : "Power on phone mirror"}
+               className={`transition-colors shrink-0 ${manualLive ? "text-emerald-400 hover:text-emerald-300" : "text-white/20 hover:text-white/60"}`}
+             >
+               <Power className="w-3 h-3" />
+             </button>
+           )}
           {isReady        && <span className="flex items-center gap-1 text-[9px] font-bold text-green-400 shrink-0"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />Live</span>}
           {isUnauthorized && <span className="text-[9px] font-semibold text-yellow-500 shrink-0">Auth needed</span>}
           {isOffline      && <span className="text-[9px] font-semibold text-red-500 shrink-0">Offline</span>}
@@ -3307,7 +3324,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
           <NavBtn icon={<ImagePlus className="w-3.5 h-3.5" />} label="Image" onClick={() => setShowManualMedia(v => !v)} />
           <NavBtn icon={<Home        className="w-3.5 h-3.5" />} label="Home"   onClick={() => sendKey(phone.serial, 3,   "Home",   onLog)} />
           <div className="w-px h-4 bg-white/10" />
-          <NavBtn icon={<Power       className="w-3 h-3" />}     label={manualLive ? "Power off" : "Power on"}  onClick={() => { liveCanvasRef.current?.clearToBlack(); onPower(); sendKey(phone.serial, manualLive ? 223 : 224, manualLive ? "Sleep" : "Wake", onLog); }} />
+           <NavBtn icon={<Power       className="w-3 h-3" />}     label={manualLive ? "Power off" : "Power on"}  onClick={toggleManualPower} />
           <div className="w-px h-4 bg-white/10" />
           <NavBtn icon={<Keyboard    className="w-3 h-3" />}     label="Keyboard" onClick={() => setShowCalibration(true)} />
         </div>
