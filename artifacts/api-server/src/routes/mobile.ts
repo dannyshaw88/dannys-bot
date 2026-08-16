@@ -13410,7 +13410,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         executionTrace,
       });
     } catch (e: any) {
-      const aborted = (e?.message === "cycle-aborted");
+      // A device restart can make an in-flight ADB request throw a generic
+      // "device offline"/transport error before the next abort checkpoint is
+      // reached. The matching abort marker is authoritative for an explicit
+      // cycle stop (including the green Restart action), so preserve the
+      // partial metrics and Dashboard COMPLETE stamp in that case too.
+      const abortRequested =
+        automationCycleCurrentId.get(serial) !== undefined &&
+        automationCycleAbortedId.get(serial) === automationCycleCurrentId.get(serial);
+      const aborted = e?.message === "cycle-aborted" || abortRequested;
       // Emit a log-stream message so the Action Log tab always gets an entry,
       // even when the cycle errors or is aborted before reaching the end.
       {
