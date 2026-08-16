@@ -2838,12 +2838,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       for (const field of TRUST_SCORE_TEMPLATE_LOCKED_FIELDS) {
         if (!TRUST_SCORE_TEMPLATE_VALUE_FIELDS.has(field)) delete body[field];
       }
-      console.log("[trust-score-template-save-request]", trustScoreId, {
-        preSwitchEnabledMin: body.preSwitchEnabledMin,
-        preSwitchEnabledMax: body.preSwitchEnabledMax,
-        preSwitchActionPercentMin: body.preSwitchActionPercentMin,
-        preSwitchActionPercentMax: body.preSwitchActionPercentMax,
-      });
       // Autosaves can arrive with a partial/effective settings object while
       // another control is still settling. Merge the existing template first
       // so a missing pre-switch field can never be replaced by schema default 0.
@@ -2857,15 +2851,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         } catch {}
       }
       const input = automationSchema.parse({ ...existing, ...body });
+      for (const field of [
+        "preSwitchEnabledMin",
+        "preSwitchEnabledMax",
+        "preSwitchActionPercentMin",
+        "preSwitchActionPercentMax",
+      ] as const) {
+        const value = body[field];
+        if (typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100) {
+          input[field] = value;
+        }
+      }
       for (const field of TRUST_SCORE_TEMPLATE_LOCKED_FIELDS) {
         if (!TRUST_SCORE_TEMPLATE_VALUE_FIELDS.has(field)) delete input[field];
       }
-      console.log("[trust-score-template-save]", trustScoreId, {
-        preSwitchEnabledMin: input.preSwitchEnabledMin,
-        preSwitchEnabledMax: input.preSwitchEnabledMax,
-        preSwitchActionPercentMin: input.preSwitchActionPercentMin,
-        preSwitchActionPercentMax: input.preSwitchActionPercentMax,
-      });
       await storage.setGlobalSetting(
         trustScoreAutomationKey(trustScoreId),
         JSON.stringify(input),
