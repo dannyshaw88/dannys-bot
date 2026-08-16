@@ -2416,8 +2416,7 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
   const storageKey = `mobile-manual-media:${serial}`;
   const [selectedPath, setSelectedPath] = useState("");
   const [selectedFileName, setSelectedFileName] = useState("");
-  const [devicePath, setDevicePath] = useState("");
-  const [loadedFileName, setLoadedFileName] = useState("");
+  const [loadedMedia, setLoadedMedia] = useState<Array<{ devicePath: string; fileName: string }>>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const browserFileRef = useRef<HTMLInputElement>(null);
@@ -2425,17 +2424,23 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey) ?? "null");
-      if (saved?.devicePath) {
-        setDevicePath(String(saved.devicePath));
-        setLoadedFileName(String(saved.fileName ?? "image"));
+      if (Array.isArray(saved?.media)) {
+        setLoadedMedia(saved.media.filter((item: any) => item?.devicePath).map((item: any) => ({
+          devicePath: String(item.devicePath),
+          fileName: String(item.fileName ?? "image"),
+        })));
+      } else if (saved?.devicePath) {
+        setLoadedMedia([{ devicePath: String(saved.devicePath), fileName: String(saved.fileName ?? "image") }]);
       }
     } catch {}
   }, [storageKey]);
 
   const rememberLoaded = (nextDevicePath: string, fileName: string) => {
-    setDevicePath(nextDevicePath);
-    setLoadedFileName(fileName);
-    try { localStorage.setItem(storageKey, JSON.stringify({ devicePath: nextDevicePath, fileName })); } catch {}
+    setLoadedMedia(current => {
+      const next = [...current, { devicePath: nextDevicePath, fileName }];
+      try { localStorage.setItem(storageKey, JSON.stringify({ media: next })); } catch {}
+      return next;
+    });
   };
 
   const selectFromPc = async () => {
@@ -2462,7 +2467,7 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
   };
 
   const loadToPhone = async () => {
-    if (!selectedFileName || devicePath) return;
+    if (!selectedFileName) return;
     setBusy(true);
     setMessage(null);
     try {
@@ -2487,9 +2492,10 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
       });
       const result = await r.json().catch(() => null);
       if (!r.ok || !result?.ok) throw new Error(result?.error ?? `Load failed (${r.status})`);
-      rememberLoaded(result.devicePath, result.fileName ?? selectedFileName);
+       rememberLoaded(result.devicePath, result.fileName ?? selectedFileName);
       setSelectedPath("");
       setSelectedFileName("");
+       if (browserFileRef.current) browserFileRef.current.value = "";
       setMessage("Loaded onto phone. Finish the post manually in Instagram, then delete it here.");
       onLog?.(`Manual media: loaded ${result.fileName ?? selectedFileName} → ${result.devicePath}`);
     } catch (e: any) {
@@ -2500,26 +2506,27 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
     }
   };
 
-  const deleteFromPhone = async () => {
-    if (!devicePath) return;
+  const deleteFromPhone = async (media: { devicePath: string; fileName: string }) => {
     setBusy(true);
     setMessage(null);
     try {
       const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/manual-media`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ devicePath }),
+        body: JSON.stringify({ devicePath: media.devicePath }),
       });
       const result = await r.json().catch(() => null);
       if (!r.ok || !result?.ok) throw new Error(result?.error ?? `Delete failed (${r.status})`);
-      onLog?.(`Manual media: deleted ${loadedFileName} from phone`);
-      setDevicePath("");
-      setLoadedFileName("");
-      setSelectedPath("");
-      setSelectedFileName("");
-      if (browserFileRef.current) browserFileRef.current.value = "";
-      try { localStorage.removeItem(storageKey); } catch {}
-      setMessage("Deleted from phone.");
+       onLog?.(`Manual media: deleted ${media.fileName} from phone`);
+       setLoadedMedia(current => {
+         const next = current.filter(item => item.devicePath !== media.devicePath);
+         try {
+           if (next.length) localStorage.setItem(storageKey, JSON.stringify({ media: next }));
+           else localStorage.removeItem(storageKey);
+         } catch {}
+         return next;
+       });
+       setMessage(`Deleted ${media.fileName} from phone.`);
     } catch (e: any) {
       setMessage(e?.message ?? "Could not delete image from phone");
       onLog?.(`Manual media: delete failed — ${e?.message ?? "unknown error"}`);
@@ -2555,44 +2562,43 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
         <button
           type="button"
           onClick={selectFromPc}
-          disabled={busy || !!devicePath}
+          disabled={busy}
           className="inline-flex items-center gap-1.5 rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[10px] font-semibold text-cyan-200 hover:bg-cyan-400/20 disabled:opacity-40 disabled:cursor-not-allowed"
-          title={devicePath ? "Delete the current phone copy before selecting another image" : "Choose one image from the Windows PC"}
+          title="Choose another image from the Windows PC"
         >
           <FolderOpen className="w-3 h-3" /> Select from PC
         </button>
         <button
           type="button"
           onClick={loadToPhone}
-          disabled={busy || !selectedFileName || !!devicePath}
+          disabled={busy || !selectedFileName}
           className="inline-flex items-center gap-1.5 rounded border border-emerald-400/30 bg-emerald-400/10 px-2 py-1 text-[10px] font-semibold text-emerald-200 hover:bg-emerald-400/20 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {busy && !devicePath ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+          {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
           Load to phone
         </button>
-        <button
-          type="button"
-          onClick={deleteFromPhone}
-          disabled={busy || !devicePath}
-          className="inline-flex items-center gap-1.5 rounded border border-red-400/30 bg-red-400/10 px-2 py-1 text-[10px] font-semibold text-red-200 hover:bg-red-400/20 disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {busy && devicePath ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-          Delete from phone
-        </button>
-        {selectedFileName && !devicePath && (
+        {selectedFileName && (
           <span className="text-[10px] text-white/55 truncate max-w-[260px]" title={selectedPath || selectedFileName}>
             Selected: {selectedFileName}
           </span>
         )}
-        {devicePath && (
-          <span className="text-[10px] text-emerald-300/80 truncate max-w-[330px]" title={devicePath}>
-            On phone: {loadedFileName}
-          </span>
-        )}
       </div>
       <p className="mt-1 text-[9px] text-white/35">
-        Select one image, load it into Instagram’s gallery, post manually, then delete the phone copy here.
+        Select and load as many images as needed. They remain in Instagram’s gallery until you delete them individually.
       </p>
+      {loadedMedia.length > 0 && (
+        <div className="mt-1.5 space-y-1 border-t border-white/10 pt-1.5">
+          {loadedMedia.map(media => (
+            <div key={media.devicePath} className="flex items-center gap-2 text-[9px] text-emerald-300/80">
+              <span className="min-w-0 flex-1 truncate" title={media.devicePath}>On phone: {media.fileName}</span>
+              <button type="button" onClick={() => deleteFromPhone(media)} disabled={busy}
+                className="inline-flex shrink-0 items-center gap-1 rounded border border-red-400/30 bg-red-400/10 px-1.5 py-0.5 text-red-200 hover:bg-red-400/20 disabled:opacity-40">
+                <Trash2 className="w-3 h-3" /> Delete
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       {message && <p className={`mt-1 text-[9px] ${message.startsWith("Deleted") || message.startsWith("Loaded") ? "text-emerald-300" : "text-red-300"}`}>{message}</p>}
     </div>
   );
