@@ -2218,6 +2218,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "trustScoreDisabledTools",
     "trustScoreToolOverrides",
     "followSources",
+    "preSwitchEnabledMin",
+    "preSwitchEnabledMax",
+    "preSwitchActionPercentMin",
+    "preSwitchActionPercentMax",
     "updateProfilePicActivatePctMin",
     "updateProfilePicActivatePctMax",
     "updateProfilePicFolderPath",
@@ -2271,6 +2275,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   );
   const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
     "followSources",
+    "preSwitchEnabledMin",
+    "preSwitchEnabledMax",
+    "preSwitchActionPercentMin",
+    "preSwitchActionPercentMax",
     "followFiltersEnabled",
     "followFilterPrivateUsers",
     "followFilterEnglishSpeaking",
