@@ -83,3 +83,6 @@ artifacts/api-server/platform-tools/
 
 # Generated mockup preview state
 artifacts/mockup-sandbox/.vite/
+
+# Generated Electron installer output
+artifacts/electron/release/
