@@ -4,7 +4,7 @@ import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
 import { useNavigationHistory } from "@/contexts/NavigationHistoryContext";
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, FileSearch } from "lucide-react";
+import { Globe, Loader2, FileSearch } from "lucide-react";
 
 function FilledDashboardIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
@@ -177,7 +177,21 @@ export function Sidebar() {
                 <span className="text-[9px] font-bold tracking-wide leading-tight text-center text-foreground [hyphens:none]">
                   {item.shortLabel}
                 </span>
-               </button>
+                </button>
+                {item.path === "/settings" && location.startsWith("/settings") && (
+                  <button
+                    onClick={() => setLocation("/settings?tab=ghost%20browser")}
+                    className={cn(
+                      "flex w-full items-center gap-2 py-2 pl-7 pr-2 text-left text-[10px] font-semibold transition-colors",
+                      new URLSearchParams(window.location.search).get("tab") === "ghost browser"
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    )}
+                  >
+                    <Globe className="h-4 w-4 shrink-0" />
+                    <span>Ghost Browser</span>
+                  </button>
+                )}
             </div>
           );
           })}
