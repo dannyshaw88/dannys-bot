@@ -1,3 +1,10 @@
+## [1.2.527] — 2026-08-16
+
+### Fixed — Neutral Phone Transfer Names
+
+- Use a single generated `IMG_<random-id>.<extension>` filename for every PC-to-phone image transfer.
+- Remove the `ig_` prefix and all preserved source basenames from device paths.
+
 ## [1.2.526] — 2026-08-16
 
 ### Changed — PC-to-Phone Transfer Inspector
