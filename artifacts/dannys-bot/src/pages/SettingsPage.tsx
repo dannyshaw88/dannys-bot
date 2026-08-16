@@ -25,7 +25,7 @@ const SETTINGS_TABS = [
   { label: "General", icon: Settings },
   { label: "Trust Scores", icon: Shield },
   { label: "Fix Images", icon: Palette },
-  { label: "Media Audit", icon: ScanSearch },
+  { label: "Transfer Inspector", icon: ScanSearch },
   { label: "Import", icon: Upload },
   { label: "Jarvee Import", icon: Upload },
   { label: "Scraping", icon: Database },
@@ -180,8 +180,9 @@ function MediaAuditTabContent() {
     if (!auditLog.length) return;
     const report = {
       exportedAt: new Date().toISOString(),
-      tool: "Aura Farming Media Transfer Forensic Audit",
+      tool: "Aura Farming PC-to-Phone Transfer Inspector",
       instagramOpened: false,
+      inspection: "pc-to-phone-transfer-channel",
       sourceFile: selected?.name ?? null,
       devices: auditLog,
     };
@@ -189,21 +190,21 @@ function MediaAuditTabContent() {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `media-audit-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+    anchor.download = `pc-phone-transfer-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
   };
 
   return (
-    <div className="desktop-card p-6 space-y-5">
+      <div className="desktop-card p-6 space-y-5">
       <div>
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-amber-100 text-amber-700"><ScanSearch className="w-4 h-4" /></div>
-          <h2 className="text-lg font-semibold">Media Transfer Audit</h2>
+          <h2 className="text-lg font-semibold">PC → Phone Transfer Inspector</h2>
         </div>
         <p className="text-sm text-muted-foreground mt-2">
-          Process one PC image, copy it to an Android device, verify the exact device copy, and remove it again.
-          Instagram is never opened and no account is used.
+          Inspect the complete PC-to-phone transfer channel. This does not inspect Instagram or image metadata;
+          it records the exact host path, pushed filename, Android destination, ADB stages, and scan stages.
         </p>
       </div>
       <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={e => {
@@ -235,7 +236,7 @@ function MediaAuditTabContent() {
       {selected && <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm truncate">Selected: {selected.name}</div>}
       <Button onClick={() => void runAudit()} disabled={busy || !selectedSerials.length || !selected} className="bg-amber-600 hover:bg-amber-700">
         {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ScanSearch className="w-4 h-4 mr-2" />}
-        {busy ? `Auditing ${selectedSerials.length} device${selectedSerials.length === 1 ? "" : "s"}…` : `Audit ${selectedSerials.length || "all"} device${selectedSerials.length === 1 ? "" : "s"} without Instagram`}
+        {busy ? `Inspecting ${selectedSerials.length} device${selectedSerials.length === 1 ? "" : "s"}…` : `Inspect PC → phone transfer (${selectedSerials.length || "all"} device${selectedSerials.length === 1 ? "" : "s"})`}
       </Button>
       {error && <div className="text-sm text-destructive">{error}</div>}
       {auditLog.length > 0 && (
@@ -251,7 +252,7 @@ function MediaAuditTabContent() {
                   {entry.ok ? "✓" : "✕"} {entry.name} <span className="font-normal text-xs text-muted-foreground">({entry.serial})</span>
                 </div>
                 <div className="text-xs mt-1">{entry.message}</div>
-                {entry.result && <div className="font-mono text-[10px] text-muted-foreground mt-1 break-all">processed={entry.result.source?.processedSha256} · device={entry.result.device?.sha256} · {entry.result.device?.bytes} bytes</div>}
+                {entry.result && <div className="font-mono text-[10px] text-muted-foreground mt-1 break-all">prepared={entry.result.transfer?.preparedFilePath} · preScan={entry.result.preScan?.sha256} · postScan={entry.result.postScan?.sha256} · changed={entry.result.transferChangedFile ? "YES" : "NO"}</div>}
               </div>
             ))}
           </div>
@@ -785,7 +786,7 @@ export function SettingsPage() {
         <ImagesPage embedded />
       )}
 
-      {settingsTab === "media audit" && (
+      {settingsTab === "transfer inspector" && (
         <MediaAuditTabContent />
       )}
 
@@ -797,7 +798,7 @@ export function SettingsPage() {
 
       {settingsTab === "jarvee import" && <JarveeBinaryViewerContent />}
 
-      <div className={`space-y-4 w-full ${["my account", "trust scores", "fix images", "media audit", "import", "jarvee import"].includes(settingsTab) ? "hidden" : ""}`}>
+      <div className={`space-y-4 w-full ${["my account", "trust scores", "fix images", "transfer inspector", "import", "jarvee import"].includes(settingsTab) ? "hidden" : ""}`}>
 
         {/* Talk to Equinox Bot shortcut */}
         <button

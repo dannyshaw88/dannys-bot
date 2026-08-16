@@ -1753,29 +1753,35 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         doFixAiSlop: body.fixAiSlop, alterationEnabled: body.alterationEnabled,
         alterationLevel: body.alterationLevel, frequencyDisruption: body.frequencyDisruption,
       });
-      const original = await forensicImageReport("original Windows source", await fsPromises.readFile(sourcePath));
       const processedBytes = await fsPromises.readFile(prepared.pushFilePath);
-      const processed = await forensicImageReport("shared processed Make a Post output", processedBytes);
+      const processedSha256 = createHash("sha256").update(processedBytes).digest("hex");
       const results = await Promise.all(body.serials.map(async serial => {
         try {
           const devicePath = await android.pushFileToDevice(serial, prepared!.pushFilePath, prepared!.pushFileName, false);
           devicePaths.set(serial, devicePath);
+          const transfer = {
+            sourcePath,
+            sourceFileName: body.fileName,
+            preparedFilePath: prepared!.pushFilePath,
+            pushedFileName: prepared!.pushFileName,
+            devicePath,
+            stages: ["host source selected", "Make a Post preparation completed", "adb push completed", "device filesystem pullback before scan", "media scan broadcast sent", "device filesystem pullback after scan", "temporary device file removed"],
+          };
           const preScanPath = await android.pullFileFromDevice(serial, devicePath);
           const preScanBytes = await fsPromises.readFile(preScanPath);
+          const preScanSha256 = createHash("sha256").update(preScanBytes).digest("hex");
           await fsPromises.rm(path.dirname(preScanPath), { recursive: true, force: true }).catch(() => {});
-          const mediaStoreBefore = await android.queryMediaStoreFile(serial, devicePath);
           await android.scanMediaFile(serial, devicePath);
-          await new Promise(resolve => setTimeout(resolve, 1500));
-          const mediaStore = await android.queryMediaStoreFile(serial, devicePath);
           const pulledPath = await android.pullFileFromDevice(serial, devicePath);
           const pulledBytes = await fsPromises.readFile(pulledPath);
+          const postScanSha256 = createHash("sha256").update(pulledBytes).digest("hex");
           await fsPromises.rm(path.dirname(pulledPath), { recursive: true, force: true }).catch(() => {});
-          const device = await forensicImageReport("device pullback", pulledBytes);
           return {
-            serial, ok: true, device,
-            preScan: await forensicImageReport("device pullback before media scan", preScanBytes),
-            mediaStoreBefore, mediaStore,
-            matchesSharedProcessed: device.sha256 === processed.sha256,
+            serial, ok: true, transfer,
+            preScan: { sha256: preScanSha256, bytes: preScanBytes.length },
+            postScan: { sha256: postScanSha256, bytes: pulledBytes.length },
+            matchesSharedProcessed: postScanSha256 === processedSha256,
+            transferChangedFile: preScanSha256 !== postScanSha256,
             matchesOtherDevices: true,
           };
         } catch (error: any) {
@@ -1783,12 +1789,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
       }));
       const successful = results.filter(item => item.ok);
-      const hashes = successful.map(item => item.device?.sha256);
+       const hashes = successful.map(item => item.postScan?.sha256);
       const sharedHash = hashes[0] ?? null;
-      for (const item of results) if (item.ok) item.matchesOtherDevices = item.device?.sha256 === sharedHash;
+       for (const item of results) if (item.ok) item.matchesOtherDevices = item.postScan?.sha256 === sharedHash;
       res.json({
-        ok: true, instagramOpened: false, preparedOnce: true,
-        sharedProcessed: processed, original,
+         ok: true, instagramOpened: false, preparedOnce: true, inspection: "pc-to-phone-transfer-channel",
+         transfer: {
+           sourcePath,
+           sourceFileName: body.fileName,
+           preparedFilePath: prepared.pushFilePath,
+           pushedFileName: prepared.pushFileName,
+           preparedSha256: processedSha256,
+           stages: ["host source selected", "Make a Post preparation completed", "same prepared file transferred to every selected device"],
+         },
         results,
         crossDevice: {
           allSuccessful: successful.length === results.length,
