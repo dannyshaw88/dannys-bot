@@ -2929,7 +2929,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const allowed = z.object({
         dismissDirection: z.enum(["auto", "left", "up"]).optional(),
         typingSpeedProfile: z.object({
-          profile: z.enum(["fast", "moderate", "slow"]).optional(),
           minMs: z.number().finite().min(0),
           maxMs: z.number().finite().min(0),
           errorPercentMin: z.number().finite().min(0).max(100),
