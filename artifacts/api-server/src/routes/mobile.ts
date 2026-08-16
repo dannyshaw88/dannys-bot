@@ -2269,6 +2269,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       "updateBioDisableAfterUsed",
     ].includes(field)),
   );
+  // These values are controlled by the TrustScore template and must survive
+  // the physical-slot exclusion cleanup above.
+  const TRUST_SCORE_TEMPLATE_VALUE_FIELDS = new Set([
+    "preSwitchEnabledMin",
+    "preSwitchEnabledMax",
+    "preSwitchActionPercentMin",
+    "preSwitchActionPercentMax",
+  ]);
   const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
     "followSources",
     "preSwitchEnabledMin",
@@ -2810,7 +2818,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const savedRaw = all[trustScoreAutomationKey(trustScoreId)];
       const saved = savedRaw ? JSON.parse(savedRaw) : {};
       const settings = { ...trustScoreAutomationDefaults(), ...saved };
-      for (const field of TRUST_SCORE_TEMPLATE_LOCKED_FIELDS) delete settings[field];
+      for (const field of TRUST_SCORE_TEMPLATE_LOCKED_FIELDS) {
+        if (!TRUST_SCORE_TEMPLATE_VALUE_FIELDS.has(field)) delete settings[field];
+      }
       res.json(settings);
     } catch (e: any) {
       res.status(400).json({ error: e?.message ?? "Failed to load Trust Score settings" });
@@ -2825,7 +2835,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // persistence boundary instead of allowing them to become part of the
       // template by accident.
       const body = { ...req.body };
-      for (const field of TRUST_SCORE_TEMPLATE_LOCKED_FIELDS) delete body[field];
+      for (const field of TRUST_SCORE_TEMPLATE_LOCKED_FIELDS) {
+        if (!TRUST_SCORE_TEMPLATE_VALUE_FIELDS.has(field)) delete body[field];
+      }
       console.log("[trust-score-template-save-request]", trustScoreId, {
         preSwitchEnabledMin: body.preSwitchEnabledMin,
         preSwitchEnabledMax: body.preSwitchEnabledMax,
@@ -2845,7 +2857,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         } catch {}
       }
       const input = automationSchema.parse({ ...existing, ...body });
-      for (const field of TRUST_SCORE_TEMPLATE_LOCKED_FIELDS) delete input[field];
+      for (const field of TRUST_SCORE_TEMPLATE_LOCKED_FIELDS) {
+        if (!TRUST_SCORE_TEMPLATE_VALUE_FIELDS.has(field)) delete input[field];
+      }
       console.log("[trust-score-template-save]", trustScoreId, {
         preSwitchEnabledMin: input.preSwitchEnabledMin,
         preSwitchEnabledMax: input.preSwitchEnabledMax,
