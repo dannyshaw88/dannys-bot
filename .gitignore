@@ -69,6 +69,10 @@ server/server/db.sqlite
 
 # Sensitive files that should never be committed
 attached_assets/*.txt
+attached_assets/*.png
+attached_assets/*.jpg
+attached_assets/*.jpeg
+attached_assets/*.webp
 
 # Local mobile-device runtime state — may contain account credentials or
 # emulator-specific configuration and is not part of the application source.
