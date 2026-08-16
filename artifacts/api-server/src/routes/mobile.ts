@@ -1643,21 +1643,33 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.post("/api/mobile/devices/:serial/media-audit", async (req: Request, res: Response) => {
     let prepared: Awaited<ReturnType<typeof prepareMakePostImage>> | null = null;
     let devicePath: string | null = null;
+    let tempPath: string | null = null;
     try {
       const serial = p(req, "serial");
       const body = z.object({
-        localPath: z.string().trim().min(1),
+        localPath: z.string().trim().min(1).optional(),
         fileName: z.string().trim().min(1).max(255),
+        fileData: z.string().min(1).optional(),
         fixAiSlop: z.boolean().default(true),
         alterationEnabled: z.boolean().default(true),
         alterationLevel: z.enum(["small", "medium", "large"]).default("small"),
         frequencyDisruption: z.boolean().default(false),
-      }).parse(req.body);
-      const stat = await fsPromises.stat(body.localPath);
+      }).refine(v => !!v.localPath || !!v.fileData, { message: "localPath or fileData is required" }).parse(req.body);
+      let sourcePath = body.localPath;
+      if (body.fileData) {
+        const safeName = body.fileName.replace(/[^a-zA-Z0-9_.-]/g, "_");
+        tempPath = path.join(os.tmpdir(), `equinox-media-audit-${Date.now()}-${safeName}`);
+        const buffer = Buffer.from(body.fileData.replace(/^data:[^;]+;base64,/, ""), "base64");
+        if (!buffer.length) throw new Error("Selected image data was empty");
+        await fsPromises.writeFile(tempPath, buffer);
+        sourcePath = tempPath;
+      }
+      if (!sourcePath) throw new Error("No image source was provided");
+      const stat = await fsPromises.stat(sourcePath);
       if (!stat.isFile()) throw new Error("localPath is not a file");
       if (stat.size > 100 * 1024 * 1024) throw new Error("Image is larger than 100 MB");
 
-      prepared = await prepareMakePostImage(body.localPath, body.fileName, {
+      prepared = await prepareMakePostImage(sourcePath, body.fileName, {
         doFixAiSlop: body.fixAiSlop,
         alterationEnabled: body.alterationEnabled,
         alterationLevel: body.alterationLevel,
@@ -1690,6 +1702,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } finally {
       if (devicePath) await android.removeDeviceFile(p(req, "serial"), devicePath).catch(() => {});
       if (prepared) await prepared.cleanup().catch(() => {});
+      if (tempPath) await fsPromises.unlink(tempPath).catch(() => {});
     }
   });
 
