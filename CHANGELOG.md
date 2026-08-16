@@ -1,3 +1,10 @@
+## [1.2.523] — 2026-08-16
+
+### Fixed — Batch Media Audit
+
+- Process the image once per audit run and transfer identical processed bytes to every selected device.
+- Add cross-device equality reporting to prevent randomized per-device processing from invalidating comparisons.
+
 ## [1.2.522] — 2026-08-16
 
 ### Added — Forensic Media Audit Export
