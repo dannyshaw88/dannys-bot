@@ -4812,6 +4812,10 @@ export async function registerInstagramRoutes(
             profileId: -slot,
             username: `ghost-${slot}`,
             proxy,
+            // Direct Ghost Browser sessions are intentional. Without this
+            // explicit flag, Electron's IP-leak guard rejects the window
+            // before it can be shown even though /eb/open returns 200.
+            useHomeIp: !proxy,
             userAgent,
             ebFingerprint: fingerprint ?? null,
             initialUrl: initialUrl ?? "about:blank",
