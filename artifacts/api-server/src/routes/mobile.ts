@@ -2826,8 +2826,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // template by accident.
       const body = { ...req.body };
       for (const field of TRUST_SCORE_TEMPLATE_LOCKED_FIELDS) delete body[field];
-      const input = automationSchema.parse(body);
+      // Autosaves can arrive with a partial/effective settings object while
+      // another control is still settling. Merge the existing template first
+      // so a missing pre-switch field can never be replaced by schema default 0.
+      const all = await storage.getGlobalSettings();
+      const existingRaw = all[trustScoreAutomationKey(trustScoreId)];
+      let existing: Record<string, unknown> = {};
+      if (existingRaw) {
+        try {
+          const parsed = JSON.parse(existingRaw);
+          if (parsed && typeof parsed === "object") existing = parsed;
+        } catch {}
+      }
+      const input = automationSchema.parse({ ...existing, ...body });
       for (const field of TRUST_SCORE_TEMPLATE_LOCKED_FIELDS) delete input[field];
+      console.log("[trust-score-template-save]", trustScoreId, {
+        preSwitchEnabledMin: input.preSwitchEnabledMin,
+        preSwitchEnabledMax: input.preSwitchEnabledMax,
+        preSwitchActionPercentMin: input.preSwitchActionPercentMin,
+        preSwitchActionPercentMax: input.preSwitchActionPercentMax,
+      });
       await storage.setGlobalSetting(
         trustScoreAutomationKey(trustScoreId),
         JSON.stringify(input),
