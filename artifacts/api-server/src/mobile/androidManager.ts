@@ -6974,14 +6974,14 @@ export async function captureDebugScreenshot(serial: string, ts: number, label: 
  *
  * Returns the on-device path so the caller can log it / clean it up later.
  */
-export async function pushFileToDevice(serial: string, localPath: string, fileName: string): Promise<string> {
+export async function pushFileToDevice(serial: string, localPath: string, fileName: string, scan = true): Promise<string> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const safeName = fileName.replace(/[^a-zA-Z0-9_.\-]/g, "_");
   const uniqueId = randomBytes(12).toString("hex");
   const devicePath = `/sdcard/DCIM/Camera/ig_${uniqueId}_${safeName}`;
   await runAdbStrict(adb, ["-s", serial, "push", localPath, devicePath], 20000);
-  await scanMediaFile(serial, devicePath);
+  if (scan) await scanMediaFile(serial, devicePath);
   return devicePath;
 }
 
@@ -7024,12 +7024,20 @@ export async function queryMediaStoreFile(serial: string, devicePath: string): P
 }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  const raw = await runAdb(adb, [
-    "-s", serial, "shell", "content", "query",
-    "--uri", "content://media/external/images/media",
-    "--projection", "_id:_data:_display_name:mime_type:size:width:height:date_added:date_modified:orientation",
-    "--where", `_data='${devicePath.replace(/'/g, "''")}'`,
-  ], 8000);
+  const projection = "_id:_data:_display_name:mime_type:size:width:height:date_added:date_modified:orientation:relative_path";
+  const where = `_data='${devicePath.replace(/'/g, "''")}'`;
+  const candidates = [
+    "content://media/external_primary/images/media",
+    "content://media/external/images/media",
+    "content://media/external_primary/file",
+    "content://media/external/file",
+  ];
+  const outputs: string[] = [];
+  for (const uri of candidates) {
+    const result = await runAdb(adb, ["-s", serial, "shell", "content", "query", "--uri", uri, "--projection", projection, "--where", where], 8000).catch(() => "");
+    if (result.trim()) outputs.push(`[${uri}] ${result.trim()}`);
+  }
+  const raw = outputs.join("\n");
   const row = raw.split(/\r?\n/).find(line => line.includes("_data=")) ?? "";
   const fields: Record<string, string> = {};
   for (const match of row.matchAll(/(\w+)=([^,\s]+(?:\s[^,]*?)?)(?=,\s+\w+=|$)/g)) {

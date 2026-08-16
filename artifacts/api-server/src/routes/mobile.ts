@@ -1758,15 +1758,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const processed = await forensicImageReport("shared processed Make a Post output", processedBytes);
       const results = await Promise.all(body.serials.map(async serial => {
         try {
-          const devicePath = await android.pushFileToDevice(serial, prepared!.pushFilePath, prepared!.pushFileName);
+          const devicePath = await android.pushFileToDevice(serial, prepared!.pushFilePath, prepared!.pushFileName, false);
           devicePaths.set(serial, devicePath);
+          const preScanPath = await android.pullFileFromDevice(serial, devicePath);
+          const preScanBytes = await fsPromises.readFile(preScanPath);
+          await fsPromises.rm(path.dirname(preScanPath), { recursive: true, force: true }).catch(() => {});
+          const mediaStoreBefore = await android.queryMediaStoreFile(serial, devicePath);
+          await android.scanMediaFile(serial, devicePath);
+          await new Promise(resolve => setTimeout(resolve, 1500));
           const mediaStore = await android.queryMediaStoreFile(serial, devicePath);
           const pulledPath = await android.pullFileFromDevice(serial, devicePath);
           const pulledBytes = await fsPromises.readFile(pulledPath);
           await fsPromises.rm(path.dirname(pulledPath), { recursive: true, force: true }).catch(() => {});
           const device = await forensicImageReport("device pullback", pulledBytes);
           return {
-            serial, ok: true, device, mediaStore,
+            serial, ok: true, device,
+            preScan: await forensicImageReport("device pullback before media scan", preScanBytes),
+            mediaStoreBefore, mediaStore,
             matchesSharedProcessed: device.sha256 === processed.sha256,
             matchesOtherDevices: true,
           };
