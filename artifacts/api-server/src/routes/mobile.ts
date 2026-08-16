@@ -12129,7 +12129,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 rerunChanceMin: 0,
                 rerunChanceMax: 0,
                 onLog: (msg) => tLog(`  ${msg}`),
-              }).catch((e: any) => { if (e?.message !== "cycle-aborted") throw e; });
+              }).catch((e: any) => {
+                if (e?.message === "cycle-aborted") throw e;
+                tLog(`  ⚠ Pre-switch View Feed skipped: ${e?.message ?? "unknown error"}`);
+              });
             } else if (preTool === "stories") {
               await runViewStoriesFromFeedLoop(serial, {
                 slidesMin: viewStoriesSlidesMin,
@@ -12145,7 +12148,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 clickAuthorPercentMin: viewStoriesClickAuthorPercentMin,
                 clickAuthorPercentMax: viewStoriesClickAuthorPercentMax,
                 onLog: (msg) => tLog(`  ${msg}`),
-              }).catch((e: any) => { if (e?.message !== "cycle-aborted") throw e; });
+              }).catch((e: any) => {
+                if (e?.message === "cycle-aborted") throw e;
+                tLog(`  ⚠ Pre-switch Stories skipped: ${e?.message ?? "unknown error"}`);
+              });
             } else if (preTool === "reels") {
               await runViewReelsLoop(serial, {
                 scrollMin: viewReelsScrollMin,
@@ -12163,7 +12169,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 clickAuthorPercentMin: viewReelsClickAuthorPercentMin,
                 clickAuthorPercentMax: viewReelsClickAuthorPercentMax,
                 onLog: (msg) => tLog(`  ${msg}`),
-              }).catch((e: any) => { if (e?.message !== "cycle-aborted") throw e; });
+              }).catch((e: any) => {
+                if (e?.message === "cycle-aborted") throw e;
+                tLog(`  ⚠ Pre-switch View Reels skipped: ${e?.message ?? "unknown error"}`);
+              });
             } else if (preTool === "checkDm") {
               await runCheckDmLoop(serial, {
                 scrollMin: checkDmScrollMin,
@@ -12171,7 +12180,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 clickPctMin: checkDmClickPctMin,
                 clickPctMax: checkDmClickPctMax,
                 onLog: (msg) => tLog(`  ${msg}`),
-              }).catch((e: any) => { if (e?.message !== "cycle-aborted") throw e; });
+              }).catch((e: any) => {
+                if (e?.message === "cycle-aborted") throw e;
+                tLog(`  ⚠ Pre-switch Direct Messaging skipped: ${e?.message ?? "unknown error"}`);
+              });
             } else if (preTool === "post") {
               await runMakePostStep(serial, {
                 perSessionMin: Math.max(1, Math.round(makePostPerSessionMin * preSwitchToolPercent)),
@@ -12192,7 +12204,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 localFolderDeleteAfterUpload: false,
                 useChatGpt: false,
                 onLog: (msg) => tLog(`  ${msg}`),
-              }).catch((e: any) => { if (e?.message !== "cycle-aborted") throw e; });
+              }).catch((e: any) => {
+                if (e?.message === "cycle-aborted") throw e;
+                tLog(`  ⚠ Pre-switch Make a Post skipped: ${e?.message ?? "unknown error"}`);
+              });
             } else if (preTool === "postStory") {
               await runMakePostStoryStep(serial, {
                 localFolderPath: postStoryLocalFolderPath,
@@ -12206,7 +12221,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 addLink: postStoryAddLink,
                 linkUrl: postStoryLinkUrl,
                 onLog: (msg) => tLog(`  ${msg}`),
-              }).catch((e: any) => { if (e?.message !== "cycle-aborted") throw e; });
+              }).catch((e: any) => {
+                if (e?.message === "cycle-aborted") throw e;
+                tLog(`  ⚠ Pre-switch Post a Story skipped: ${e?.message ?? "unknown error"}`);
+              });
             } else if (preTool === "Random Actions") {
               await runRandomActionsStep(serial, (msg) => tLog(`  ${msg}`), {
                 checkNotificationsPctMin,
