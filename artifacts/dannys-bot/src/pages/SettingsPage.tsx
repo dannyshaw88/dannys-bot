@@ -146,26 +146,29 @@ function MediaAuditTabContent() {
           reader.readAsDataURL(selected.file!);
         });
       }
-      const results = await Promise.all(selectedSerials.map(async serial => {
-        const phone = phones.find(item => item.serial === serial);
-        try {
-          const body: Record<string, unknown> = {
-            fileName: selected.name, fixAiSlop: true, alterationEnabled: true,
-            alterationLevel: "small", frequencyDisruption: false,
-          };
-          if (selected.path) body.localPath = selected.path;
-          else if (fileData) body.fileData = fileData;
-          const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/media-audit`, {
-            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-          });
-          const data = await response.json().catch(() => null);
-          if (!response.ok || !data?.ok) throw new Error(data?.error ?? `Audit failed (${response.status})`);
-          return { serial, name: phone?.marketName ?? phone?.model ?? serial, ok: true, message: data.matchesProcessed ? "Device copy matches processed image" : "Device copy differs from processed image", result: data };
-        } catch (e: any) {
-          return { serial, name: phone?.marketName ?? phone?.model ?? serial, ok: false, message: e?.message ?? "Media audit failed" };
-        }
+      const body: Record<string, unknown> = {
+        serials: selectedSerials, fileName: selected.name, fixAiSlop: true,
+        alterationEnabled: true, alterationLevel: "small", frequencyDisruption: false,
+      };
+      if (selected.path) body.localPath = selected.path;
+      else if (fileData) body.fileData = fileData;
+      const response = await fetch("/api/mobile/media-audit-batch", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.ok) throw new Error(data?.error ?? `Audit failed (${response.status})`);
+      setAuditLog(data.results.map((entry: any) => {
+        const phone = phones.find(item => item.serial === entry.serial);
+        return {
+          serial: entry.serial,
+          name: phone?.marketName ?? phone?.model ?? entry.serial,
+          ok: entry.ok && entry.matchesSharedProcessed,
+          message: !entry.ok ? entry.error : entry.matchesSharedProcessed
+            ? (entry.matchesOtherDevices ? "Exact shared processed bytes verified" : "Matches processed bytes but differs from another device")
+            : "Device copy differs from shared processed bytes",
+          result: { ...entry, sharedProcessed: data.sharedProcessed, crossDevice: data.crossDevice },
+        };
       }));
-      setAuditLog(results);
     } catch (e: any) {
       setError(e?.message ?? "Media audit failed");
     } finally {

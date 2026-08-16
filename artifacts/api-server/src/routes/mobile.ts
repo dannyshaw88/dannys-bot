@@ -1722,6 +1722,81 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
   });
 
+  // Batch audit: prepare exactly once, then transfer the identical bytes to
+  // every selected device. This is the authoritative cross-device test.
+  app.post("/api/mobile/media-audit-batch", async (req: Request, res: Response) => {
+    let prepared: Awaited<ReturnType<typeof prepareMakePostImage>> | null = null;
+    let tempPath: string | null = null;
+    const devicePaths = new Map<string, string>();
+    try {
+      const body = z.object({
+        serials: z.array(z.string().min(1)).min(1),
+        localPath: z.string().trim().min(1).optional(),
+        fileName: z.string().trim().min(1).max(255),
+        fileData: z.string().min(1).optional(),
+        fixAiSlop: z.boolean().default(true),
+        alterationEnabled: z.boolean().default(true),
+        alterationLevel: z.enum(["small", "medium", "large"]).default("small"),
+        frequencyDisruption: z.boolean().default(false),
+      }).refine(v => !!v.localPath || !!v.fileData, { message: "localPath or fileData is required" }).parse(req.body);
+      let sourcePath = body.localPath;
+      if (body.fileData) {
+        const safeName = body.fileName.replace(/[^a-zA-Z0-9_.-]/g, "_");
+        tempPath = path.join(os.tmpdir(), `equinox-media-audit-batch-${Date.now()}-${safeName}`);
+        await fsPromises.writeFile(tempPath, Buffer.from(body.fileData.replace(/^data:[^;]+;base64,/, ""), "base64"));
+        sourcePath = tempPath;
+      }
+      if (!sourcePath) throw new Error("No image source was provided");
+      const stat = await fsPromises.stat(sourcePath);
+      if (!stat.isFile() || stat.size > 100 * 1024 * 1024) throw new Error("Invalid image source");
+      prepared = await prepareMakePostImage(sourcePath, body.fileName, {
+        doFixAiSlop: body.fixAiSlop, alterationEnabled: body.alterationEnabled,
+        alterationLevel: body.alterationLevel, frequencyDisruption: body.frequencyDisruption,
+      });
+      const original = await forensicImageReport("original Windows source", await fsPromises.readFile(sourcePath));
+      const processedBytes = await fsPromises.readFile(prepared.pushFilePath);
+      const processed = await forensicImageReport("shared processed Make a Post output", processedBytes);
+      const results = await Promise.all(body.serials.map(async serial => {
+        try {
+          const devicePath = await android.pushFileToDevice(serial, prepared!.pushFilePath, prepared!.pushFileName);
+          devicePaths.set(serial, devicePath);
+          const pulledPath = await android.pullFileFromDevice(serial, devicePath);
+          const pulledBytes = await fsPromises.readFile(pulledPath);
+          await fsPromises.rm(path.dirname(pulledPath), { recursive: true, force: true }).catch(() => {});
+          const device = await forensicImageReport("device pullback", pulledBytes);
+          return {
+            serial, ok: true, device,
+            matchesSharedProcessed: device.sha256 === processed.sha256,
+            matchesOtherDevices: true,
+          };
+        } catch (error: any) {
+          return { serial, ok: false, error: error?.message ?? "Device audit failed", matchesSharedProcessed: false, matchesOtherDevices: false };
+        }
+      }));
+      const successful = results.filter(item => item.ok);
+      const hashes = successful.map(item => item.device?.sha256);
+      const sharedHash = hashes[0] ?? null;
+      for (const item of results) if (item.ok) item.matchesOtherDevices = item.device?.sha256 === sharedHash;
+      res.json({
+        ok: true, instagramOpened: false, preparedOnce: true,
+        sharedProcessed: processed, original,
+        results,
+        crossDevice: {
+          allSuccessful: successful.length === results.length,
+          allDevicesReceivedSameBytes: successful.length > 0 && hashes.every(hash => hash === sharedHash),
+          deviceCount: results.length,
+          successfulCount: successful.length,
+        },
+      });
+    } catch (error: any) {
+      res.status(400).json({ ok: false, instagramOpened: false, error: error?.message ?? "Batch media audit failed" });
+    } finally {
+      await Promise.all([...devicePaths.entries()].map(([serial, devicePath]) => android.removeDeviceFile(serial, devicePath).catch(() => {})));
+      if (prepared) await prepared.cleanup().catch(() => {});
+      if (tempPath) await fsPromises.unlink(tempPath).catch(() => {});
+    }
+  });
+
   // BANNED: `adb shell wm size reset` (and any command that changes phone display settings)
   // is permanently removed. The code handles coordinate differences in software via
   // rescaleForDevice() — the phone's display settings must never be touched by this app.
