@@ -12051,6 +12051,34 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const hi = Math.max(preSwitchActionPercentMin, preSwitchActionPercentMax);
         return (lo === hi ? lo : Math.round(lo + Math.random() * (hi - lo))) / 100;
       })();
+      // These values must exist before pre-switch dispatch. Previously they
+      // were declared below this branch, causing a TDZ failure whenever
+      // pre-switch ran: "Cannot access '_toolActivated' before initialization".
+      const _toolActivated: Record<string, boolean> = {
+        feed: feedEnabled && rollActivate(feedActivatePctMin, feedActivatePctMax),
+        stories: storiesEnabled && viewStoriesSlidesMax > 0 && rollActivate(viewStoriesActivatePctMin ?? 100, viewStoriesActivatePctMax ?? 100),
+        explore: (viewExploreEnabled ?? false) && (viewExploreScrollMax ?? 0) > 0 && rollActivate(viewExploreActivatePctMin ?? 100, viewExploreActivatePctMax ?? 100),
+        reels: (viewReelsEnabled ?? false) && (viewReelsScrollMax ?? 0) > 0 && rollActivate(viewReelsActivatePctMin ?? 100, viewReelsActivatePctMax ?? 100),
+        checkDm: (checkDmEnabled ?? false) && rollActivate(checkDmActivatePctMin ?? 100, checkDmActivatePctMax ?? 100),
+        follow: followEnabled && rollActivate(followActivatePctMin, followActivatePctMax),
+        post: makePostEnabled && rollActivate(makePostActivatePctMin, makePostActivatePctMax),
+        postStory: postStoryEnabled && rollActivate(postStoryActivatePctMin, postStoryActivatePctMax),
+        "Random Actions": randomJitterEnabled && rollActivate(randomJitterActivatePctMin, randomJitterActivatePctMax),
+      };
+      const _toolOrderLabels: Record<string, string> = {
+        feed: "VIEW FEED", stories: "VIEW STORIES", explore: "VIEW EXPLORE",
+        reels: "VIEW REELS", checkDm: "DIRECT MESSAGING", follow: "FOLLOW USERS",
+        post: "MAKE A POST", postStory: "POST A STORY", "Random Actions": "RANDOM ACTIONS",
+      };
+      const _toolSeq = ["feed", "stories", "explore", "reels", "checkDm", "follow", "post", "postStory", "Random Actions"]
+        .filter(t => _toolActivated[t]);
+      if (shuffleToolOrder) {
+        for (let _si = _toolSeq.length - 1; _si > 0; _si--) {
+          const _sj = Math.floor(Math.random() * (_si + 1));
+          [_toolSeq[_si], _toolSeq[_sj]] = [_toolSeq[_sj], _toolSeq[_si]];
+        }
+        tLog(`▶ Tool order shuffled: ${_toolSeq.length ? _toolSeq.map(name => _toolOrderLabels[name] ?? name).join(" → ") : "(no tools active this execution)"}`);
+      }
       if (preSwitchLastUsername && preSwitchLastUsername !== resolvedSlotUsername && preSwitchRoll > 0 && Math.random() < preSwitchRoll) {
         automationPreSwitchInProgress.set(serial, true);
         try {
@@ -12329,54 +12357,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       //     (Search tab, Home tab, compose "+") so they work from any screen.
       // (likes, sharesFeed, etc. already hoisted before try — no re-declaration needed)
 
-      // Pre-roll every tool's Activate Percentage gate BEFORE building the order.
-      // This means the logged sequence only contains tools that will actually
-      // execute — a tool whose activate roll misses is excluded from the list
-      // entirely rather than appearing first and then being silently skipped,
-      // which made the order look wrong (e.g. "shuffled: reels → stories" when
-      // reels missed its roll and stories appeared to run "first").
-      // The pre-rolled result is also used as the condition inside the loop so
-      // rollActivate() is never called twice for the same tool.
-      const _toolActivated: Record<string, boolean> = {
-        feed:    feedEnabled && rollActivate(feedActivatePctMin, feedActivatePctMax),
-        stories: storiesEnabled && viewStoriesSlidesMax > 0 && rollActivate(viewStoriesActivatePctMin ?? 100, viewStoriesActivatePctMax ?? 100),
-        explore: (viewExploreEnabled ?? false) && (viewExploreScrollMax ?? 0) > 0 && rollActivate(viewExploreActivatePctMin ?? 100, viewExploreActivatePctMax ?? 100),
-        reels:   (viewReelsEnabled ?? false) && (viewReelsScrollMax ?? 0) > 0 && rollActivate(viewReelsActivatePctMin ?? 100, viewReelsActivatePctMax ?? 100),
-        checkDm: (checkDmEnabled ?? false) && rollActivate(checkDmActivatePctMin ?? 100, checkDmActivatePctMax ?? 100),
-        follow:  followEnabled && rollActivate(followActivatePctMin, followActivatePctMax),
-        post:    makePostEnabled && rollActivate(makePostActivatePctMin, makePostActivatePctMax),
-        postStory: postStoryEnabled && rollActivate(postStoryActivatePctMin, postStoryActivatePctMax),
-        'Random Actions':  randomJitterEnabled && rollActivate(randomJitterActivatePctMin, randomJitterActivatePctMax),
-      };
       const trace = (msg: string) => {
         const totalSec = ((Date.now() - cycleStart) / 1000).toFixed(1);
         const entry = `${totalSec}s ${msg}`;
         executionTrace.push(entry);
         tLog(`[TRACE] ${entry}`);
       };
-
-      // Build the sequence from only the tools that passed their activate gate.
-      const _toolSeq = ['feed', 'stories', 'explore', 'reels', 'checkDm', 'follow', 'post', 'postStory', 'Random Actions']
-        .filter(t => _toolActivated[t]);
-      const _toolOrderLabels: Record<string, string> = {
-        feed: "VIEW FEED",
-        stories: "VIEW STORIES",
-        explore: "VIEW EXPLORE",
-        reels: "VIEW REELS",
-        checkDm: "DIRECT MESSAGING",
-        follow: "FOLLOW USERS",
-        post: "MAKE A POST",
-        postStory: "POST A STORY",
-        "Random Actions": "RANDOM ACTIONS",
-      };
-      if (shuffleToolOrder) {
-        for (let _si = _toolSeq.length - 1; _si > 0; _si--) {
-          const _sj = Math.floor(Math.random() * (_si + 1));
-          [_toolSeq[_si], _toolSeq[_sj]] = [_toolSeq[_sj], _toolSeq[_si]];
-        }
-        const _debugToolOrder = _toolSeq.map(_name => _toolOrderLabels[_name] ?? _name);
-        tLog(`▶ Tool order shuffled: ${_debugToolOrder.length > 0 ? _debugToolOrder.join(' → ') : '(no tools active this execution)'}`);
-      }
 
       // ── Spread Follows mode ───────────────────────────────────────────────
       // When enabled and follow is activated with targetCount ≥ 2, pre-fetches
