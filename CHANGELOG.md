@@ -1,3 +1,10 @@
+## [1.2.521] — 2026-08-16
+
+### Added — Multi-device Media Audit
+
+- Added Settings → Media Audit for testing the PC-to-phone image transfer across selected devices without opening Instagram or using an account.
+- Added concurrent per-device results with source/device hashes and cleanup confirmation.
+
 ## [1.2.520] — 2026-08-16
 
 ### Fixed — Human Session Tool execution
