@@ -3577,6 +3577,125 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // each device. Used to skip the account-switcher tap sequence when the same
   // slot runs back-to-back — avoids a visually-identical long-press every cycle.
   const automationLastActiveUsername = new Map<string, string>(); // serial → last active username
+  const automationPreSwitchInProgress = new Map<string, boolean>();
+  const runRandomActionsStep = async (
+    serial: string,
+    onLog: (msg: string) => void,
+    opts: {
+      checkNotificationsPctMin: number;
+      checkNotificationsPctMax: number;
+      checkNotificationsScrollsMin: number;
+      checkNotificationsScrollsMax: number;
+      checkNotificationsClickPctMin: number;
+      checkNotificationsClickPctMax: number;
+      visitProfilePctMin: number;
+      visitProfilePctMax: number;
+      visitSavedPctMin: number;
+      visitSavedPctMax: number;
+      visitSettingsPctMin: number;
+      visitSettingsPctMax: number;
+      appSwitchPctMin: number;
+      appSwitchPctMax: number;
+      updateProfilePicEnabled?: boolean;
+      updateProfilePicFolderPath?: string;
+      updateProfilePicAlterationEnabled?: boolean;
+      updateProfilePicAlterationLevel?: "small" | "medium" | "high";
+      updateProfilePicImageSettingsEnabled?: boolean;
+      updateProfilePicImageSettings?: any;
+      updateProfilePicFixAiSlop?: boolean;
+      updateProfilePicMetadataCleanup?: boolean;
+      updateProfilePicFrequencyDisruption?: boolean;
+      updateProfilePicDisableAfterUsed?: boolean;
+      updateBioActivatePctMin?: number;
+      updateBioActivatePctMax?: number;
+      updateBioText?: string;
+      updateBioDisableAfterUsed?: boolean;
+      slotIdx?: number;
+      slotAutomationKey?: string;
+    },
+    mutateAfter?: (kind: "profile" | "bio") => Promise<void>,
+  ) => {
+    let _jitterFired = false;
+    const notifChance = rollRange(opts.checkNotificationsPctMin, opts.checkNotificationsPctMax) / 100;
+    if (notifChance > 0 && Math.random() < notifChance) {
+      onLog("Random Actions: checking notifications…");
+      await runCheckNotifications(serial, {
+        scrollsMin: opts.checkNotificationsScrollsMin,
+        scrollsMax: opts.checkNotificationsScrollsMax,
+        clickPctMin: opts.checkNotificationsClickPctMin,
+        clickPctMax: opts.checkNotificationsClickPctMax,
+        onLog: (msg) => onLog(`  ${msg}`),
+      });
+      _jitterFired = true;
+    }
+    const profileChance = rollRange(opts.visitProfilePctMin, opts.visitProfilePctMax) / 100;
+    if (profileChance > 0 && Math.random() < profileChance) {
+      onLog("Random Actions: visiting own profile…");
+      await runVisitOwnProfile(serial, (msg) => onLog(`  ${msg}`));
+      _jitterFired = true;
+      await mutateAfter?.("profile");
+    }
+    const savedChance = rollRange(opts.visitSavedPctMin, opts.visitSavedPctMax) / 100;
+    if (savedChance > 0 && Math.random() < savedChance) {
+      onLog("Random Actions: visiting saved posts…");
+      await runVisitSaved(serial, (msg) => onLog(`  ${msg}`));
+      _jitterFired = true;
+    }
+    const settingsChance = rollRange(opts.visitSettingsPctMin, opts.visitSettingsPctMax) / 100;
+    if (settingsChance > 0 && Math.random() < settingsChance) {
+      onLog("Random Actions: visiting random settings…");
+      await runVisitSettings(serial, (msg) => onLog(`  ${msg}`));
+      _jitterFired = true;
+    }
+    const appSwitchChance = rollRange(opts.appSwitchPctMin, opts.appSwitchPctMax) / 100;
+    if (appSwitchChance > 0 && Math.random() < appSwitchChance) {
+      onLog("Random Actions: app switch (SMS)…");
+      await runAppSwitch(serial, (msg) => onLog(`  ${msg}`));
+      _jitterFired = true;
+    }
+    const profilePicChance = rollRange(opts.updateProfilePicEnabled ? 100 : 0, opts.updateProfilePicEnabled ? 100 : 0) / 100;
+    if (profilePicChance > 0 && Math.random() < profilePicChance && opts.updateProfilePicEnabled) {
+      onLog("Random Actions: updating profile picture…");
+      await runUpdateProfilePicture(serial, opts.updateProfilePicFolderPath ?? "", (msg) => onLog(`  ${msg}`), {
+        alterationEnabled: opts.updateProfilePicAlterationEnabled ?? true,
+        alterationLevel: opts.updateProfilePicAlterationLevel ?? "small",
+        imageSettingsEnabled: opts.updateProfilePicImageSettingsEnabled ?? true,
+        imageSettings: opts.updateProfilePicImageSettings,
+        doFixAiSlop: opts.updateProfilePicFixAiSlop ?? true,
+        metadataCleanup: opts.updateProfilePicMetadataCleanup ?? true,
+        frequencyDisruption: opts.updateProfilePicFrequencyDisruption ?? false,
+      });
+      if (opts.updateProfilePicDisableAfterUsed) {
+        await mutateAfter?.("profile");
+      }
+      _jitterFired = true;
+    }
+    const bioChance = rollRange(opts.updateBioActivatePctMin ?? 0, opts.updateBioActivatePctMax ?? 0) / 100;
+    if (bioChance > 0 && Math.random() < bioChance && opts.updateBioText?.trim()) {
+      onLog("Random Actions: updating profile bio…");
+      await runUpdateBio(serial, opts.updateBioText, (msg) => onLog(`  ${msg}`));
+      if (opts.updateBioDisableAfterUsed) {
+        await mutateAfter?.("bio");
+      }
+      _jitterFired = true;
+    }
+    return _jitterFired;
+  };
+  const pushRandomActionStep = (steps: string[], key: string) => {
+    steps.push(key);
+  };
+  const preSwitchToolNames = new Set([
+    "Feed",
+    "View Stories",
+    "View Reels",
+    "Direct Messaging",
+    "Inject Browsing",
+    "Random Actions",
+    "Make a Post",
+    "Update Profile Picture",
+    "Update Bio",
+    "Post a Story",
+  ]);
 
   const isCycleAborted = (serial: string) =>
     automationCycleAbortedId.get(serial) !== undefined &&
@@ -7497,6 +7616,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     followUsersMax: z.number().min(0).max(9999).default(3),
     followSpreadFollows: z.boolean().default(false),
     followSources: z.array(z.object({ type: z.string(), value: z.string() })).default([]),
+    preSwitchEnabledMin: z.number().min(0).max(100).default(0),
+    preSwitchEnabledMax: z.number().min(0).max(100).default(0),
+    preSwitchActionPercentMin: z.number().min(0).max(100).default(0),
+    preSwitchActionPercentMax: z.number().min(0).max(100).default(0),
     followMaxScrapeSessions: z.number().min(0).max(999).default(0),
     // Inject Browsing — per-user profile-browsing behaviour woven into the
     // Follow Users flow itself (12 Jul 2026 rework). There is no per-item
@@ -11607,6 +11730,220 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await sleepOrAbort(serial, 3000);
       tLog("  ✓ Instagram open");
 
+      const preSwitchLastUsername = automationLastActiveUsername.get(serial) || "";
+      const preSwitchRoll = (() => {
+        const lo = Math.min(preSwitchEnabledMin, preSwitchEnabledMax);
+        const hi = Math.max(preSwitchEnabledMin, preSwitchEnabledMax);
+        return (lo === hi ? lo : Math.round(lo + Math.random() * (hi - lo))) / 100;
+      })();
+      const preSwitchToolPercent = (() => {
+        const lo = Math.min(preSwitchActionPercentMin, preSwitchActionPercentMax);
+        const hi = Math.max(preSwitchActionPercentMin, preSwitchActionPercentMax);
+        return (lo === hi ? lo : Math.round(lo + Math.random() * (hi - lo))) / 100;
+      })();
+      if (preSwitchLastUsername && preSwitchLastUsername !== resolvedSlotUsername && preSwitchRoll > 0 && Math.random() < preSwitchRoll) {
+        automationPreSwitchInProgress.set(serial, true);
+        try {
+          tLog(`▶ Pre-switch actions on @${preSwitchLastUsername} before switching to @${resolvedSlotUsername || preSwitchLastUsername}…`);
+          const preSwitchStatsStart = {
+            likes,
+            storyLikes,
+            exploreLikes,
+            reelsLikes,
+            injectBrowsingLikes,
+            followedCount,
+            storiesWatched,
+            reelsViewed,
+            sharesDm,
+            sharesFeed,
+            saves,
+            postsUploaded,
+            feedScrolled,
+            exploreScrolled,
+          };
+          const preSwitchToolSeq = _toolSeq.filter(tool => tool !== "follow" && !String(tool).startsWith("follow_spread:"));
+          for (const preTool of preSwitchToolSeq) {
+            if (isCycleAborted(serial)) break;
+            if (preTool === "follow" || String(preTool).startsWith("follow_spread:")) continue;
+            if (!_toolActivated[preTool]) continue;
+            automationCurrentTool.set(serial, preTool === "Random Actions" ? "Random Actions" : ({
+              feed: "View Feed",
+              stories: "Stories",
+              explore: "Explore",
+              reels: "Reel Viewer",
+              checkDm: "Direct Messaging",
+              post: "Make a Post",
+              postStory: "Post a Story",
+              "Random Actions": "Random Actions",
+            } as Record<string, string>)[preTool] ?? preTool);
+            tLog(`▶ Pre-switch dispatch: ${_toolOrderLabels[preTool] ?? preTool}`);
+            const scaled = (n: number) => Math.max(1, Math.round(n * preSwitchToolPercent));
+            if (preTool === "feed") {
+              await runCheckFeedLoop(serial, {
+                count: scaled(Math.max(feedScrollMin, 1)),
+                likesMin: likePercentMin,
+                likesMax: likePercentMax,
+                shareFeedPercentMin,
+                shareFeedPercentMax,
+                shareDmPercentMin,
+                shareDmPercentMax,
+                savePercentMin,
+                savePercentMax,
+                expandCaptionPercentMin,
+                expandCaptionPercentMax,
+                tapAudioPercentMin,
+                tapAudioPercentMax,
+                clickHashtagPercentMin,
+                clickHashtagPercentMax,
+                clickAuthorPercentMin,
+                clickAuthorPercentMax,
+                rerunChanceMin: 0,
+                rerunChanceMax: 0,
+                onLog: (msg) => tLog(`  ${msg}`),
+              }).catch((e: any) => { if (e?.message !== "cycle-aborted") throw e; });
+            } else if (preTool === "stories") {
+              await runViewStoriesFromFeedLoop(serial, {
+                slidesMin: viewStoriesSlidesMin,
+                slidesMax: viewStoriesSlidesMax,
+                slideWatchPctMin: viewStoriesSlideWatchPctMin,
+                slideWatchPctMax: viewStoriesSlideWatchPctMax,
+                likePercentMin: viewStoriesLikePercentMin,
+                likePercentMax: viewStoriesLikePercentMax,
+                shareDmPercentMin: viewStoriesShareDmPercentMin,
+                shareDmPercentMax: viewStoriesShareDmPercentMax,
+                commentPercentMin: viewStoriesCommentPercentMin,
+                commentPercentMax: viewStoriesCommentPercentMax,
+                clickAuthorPercentMin: viewStoriesClickAuthorPercentMin,
+                clickAuthorPercentMax: viewStoriesClickAuthorPercentMax,
+                onLog: (msg) => tLog(`  ${msg}`),
+              }).catch((e: any) => { if (e?.message !== "cycle-aborted") throw e; });
+            } else if (preTool === "reels") {
+              await runViewReelsLoop(serial, {
+                scrollMin: viewReelsScrollMin,
+                scrollMax: viewReelsScrollMax,
+                watchPctMin: viewReelsWatchPctMin,
+                watchPctMax: viewReelsWatchPctMax,
+                likePercentMin: viewReelsLikePercentMin,
+                likePercentMax: viewReelsLikePercentMax,
+                shareFeedPercentMin: viewReelsShareFeedPercentMin,
+                shareFeedPercentMax: viewReelsShareFeedPercentMax,
+                shareDmPercentMin: viewReelsShareDmPercentMin,
+                shareDmPercentMax: viewReelsShareDmPercentMax,
+                savePercentMin: viewReelsSavePercentMin,
+                savePercentMax: viewReelsSavePercentMax,
+                clickAuthorPercentMin: viewReelsClickAuthorPercentMin,
+                clickAuthorPercentMax: viewReelsClickAuthorPercentMax,
+                onLog: (msg) => tLog(`  ${msg}`),
+              }).catch((e: any) => { if (e?.message !== "cycle-aborted") throw e; });
+            } else if (preTool === "checkDm") {
+              await runCheckDmLoop(serial, {
+                scrollMin: checkDmScrollMin,
+                scrollMax: checkDmScrollMax,
+                clickPctMin: checkDmClickPctMin,
+                clickPctMax: checkDmClickPctMax,
+                onLog: (msg) => tLog(`  ${msg}`),
+              }).catch((e: any) => { if (e?.message !== "cycle-aborted") throw e; });
+            } else if (preTool === "post") {
+              await runMakePostStep(serial, {
+                perSessionMin: Math.max(1, Math.round(makePostPerSessionMin * preSwitchToolPercent)),
+                perSessionMax: Math.max(1, Math.round(makePostPerSessionMax * preSwitchToolPercent)),
+                addLocation: makePostAddLocation,
+                alterationEnabled: makePostAlterationEnabled,
+                alterationLevel: makePostAlterationLevel,
+                imageSettingsEnabled: makePostImageSettingsEnabled,
+                imageSettings: makePostImageSettings,
+                fixAiSlop: makePostFixAiSlop,
+                metadataCleanup: makePostMetadataCleanup,
+                frequencyDisruption: makePostFrequencyDisruption,
+                captionText: makePostCaptionText,
+                localFolderEnabled: makePostLocalFolderEnabled,
+                localFolderPath: makePostLocalFolderPath,
+                localFolderNoRepeat: makePostLocalFolderNoRepeat,
+                localFolderRandom: makePostLocalFolderRandom,
+                localFolderDeleteAfterUpload: false,
+                useChatGpt: false,
+                onLog: (msg) => tLog(`  ${msg}`),
+              }).catch((e: any) => { if (e?.message !== "cycle-aborted") throw e; });
+            } else if (preTool === "postStory") {
+              await runMakePostStoryStep(serial, {
+                localFolderPath: postStoryLocalFolderPath,
+                localFolderNoRepeat: postStoryLocalFolderNoRepeat,
+                localFolderRandom: postStoryLocalFolderRandom,
+                alterationEnabled: postStoryAlterationEnabled,
+                alterationLevel: postStoryAlterationLevel,
+                imageSettingsEnabled: postStoryImageSettingsEnabled,
+                imageSettings: postStoryImageSettings,
+                fixAiSlop: postStoryFixAiSlop,
+                addLink: postStoryAddLink,
+                linkUrl: postStoryLinkUrl,
+                onLog: (msg) => tLog(`  ${msg}`),
+              }).catch((e: any) => { if (e?.message !== "cycle-aborted") throw e; });
+            } else if (preTool === "Random Actions") {
+              await runRandomActionsStep(serial, (msg) => tLog(`  ${msg}`), {
+                checkNotificationsPctMin,
+                checkNotificationsPctMax,
+                checkNotificationsScrollsMin,
+                checkNotificationsScrollsMax,
+                checkNotificationsClickPctMin,
+                checkNotificationsClickPctMax,
+                visitProfilePctMin,
+                visitProfilePctMax,
+                visitSavedPctMin,
+                visitSavedPctMax,
+                visitSettingsPctMin,
+                visitSettingsPctMax,
+                appSwitchPctMin,
+                appSwitchPctMax,
+                updateProfilePicEnabled: updateProfilePicActivatePctMax > 0,
+                updateProfilePicFolderPath: _updateProfilePicFolderPath,
+                updateProfilePicAlterationEnabled,
+                updateProfilePicAlterationLevel,
+                updateProfilePicImageSettingsEnabled,
+                updateProfilePicImageSettings,
+                updateProfilePicFixAiSlop,
+                updateProfilePicMetadataCleanup,
+                updateProfilePicFrequencyDisruption,
+                updateProfilePicDisableAfterUsed,
+                updateBioActivatePctMin,
+                updateBioActivatePctMax,
+                updateBioText,
+                updateBioDisableAfterUsed,
+                slotIdx,
+              });
+            }
+          }
+          const preSwitchStatsDelta = {
+            likes: (likes + storyLikes + exploreLikes + reelsLikes + injectBrowsingLikes) - (preSwitchStatsStart.likes + preSwitchStatsStart.storyLikes + preSwitchStatsStart.exploreLikes + preSwitchStatsStart.reelsLikes + preSwitchStatsStart.injectBrowsingLikes),
+            follows: followedCount - preSwitchStatsStart.followedCount,
+            stories: storiesWatched - preSwitchStatsStart.storiesWatched,
+            reels: reelsViewed - preSwitchStatsStart.reelsViewed,
+            dms: sharesDm - preSwitchStatsStart.sharesDm,
+            feedShares: (sharesFeed + sharesDm) - (preSwitchStatsStart.sharesFeed + preSwitchStatsStart.sharesDm),
+            saves: saves - preSwitchStatsStart.saves,
+            postsUploaded: postsUploaded - preSwitchStatsStart.postsUploaded,
+            feedScrolled: feedScrolled - preSwitchStatsStart.feedScrolled,
+            exploreScrolled: exploreScrolled - preSwitchStatsStart.exploreScrolled,
+          };
+          if (preSwitchLastUsername) {
+            storage.incrementMobileStats(preSwitchLastUsername, {
+              likes: Math.max(0, preSwitchStatsDelta.likes),
+              follows: Math.max(0, preSwitchStatsDelta.follows),
+              stories: Math.max(0, preSwitchStatsDelta.stories),
+              reels: Math.max(0, preSwitchStatsDelta.reels),
+              dms: Math.max(0, preSwitchStatsDelta.dms),
+              feedShares: Math.max(0, preSwitchStatsDelta.feedShares),
+              saves: Math.max(0, preSwitchStatsDelta.saves),
+              cycles: 0,
+              reelScrolls: Math.max(0, preSwitchStatsDelta.reels),
+              feedScrolls: Math.max(0, preSwitchStatsDelta.feedScrolled),
+              exploreScrolls: Math.max(0, preSwitchStatsDelta.exploreScrolled),
+            }).catch(() => {});
+          }
+        } finally {
+          automationPreSwitchInProgress.delete(serial);
+        }
+      }
+
       // ═════════════════════════════════════════════════════════════════════
       // ACCOUNT SWITCH
       // Functions: android.switchToInstagramAccount() [in androidManager.ts]
@@ -11664,6 +12001,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       } else {
         tLog("[TRACE] step-1 account-switch: skipped-no-slot-username");
       }
+
+      automationLastActiveUsername.set(serial, resolvedSlotUsername || automationLastActiveUsername.get(serial) || "");
 
       // ── Step 2: Shuffleable tool dispatcher ──────────────────────────────
       // When shuffleToolOrder is on the six tools are Fisher-Yates shuffled
@@ -12536,71 +12875,38 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         } else if (_tool === 'Random Actions') {
           if (_toolActivated[_tool]) { // pre-rolled above
             tLog("[TRACE] random-actions: start");
-            let _jitterFired = false;
-            const notifChance = rollRange(checkNotificationsPctMin, checkNotificationsPctMax) / 100;
-            if (notifChance > 0 && Math.random() < notifChance) {
-              tLog("[TRACE] random-actions: notifications");
-              tLog("▶ Random Actions: checking notifications…");
-              await runCheckNotifications(serial, {
-                scrollsMin: checkNotificationsScrollsMin,
-                scrollsMax: checkNotificationsScrollsMax,
-                clickPctMin: checkNotificationsClickPctMin,
-                clickPctMax: checkNotificationsClickPctMax,
-                onLog: (msg) => tLog(`  ${msg}`),
-              });
-              steps.push("jitter-check-notifications");
-              _jitterFired = true;
-            }
-            const profileChance = rollRange(visitProfilePctMin, visitProfilePctMax) / 100;
-            if (profileChance > 0 && Math.random() < profileChance) {
-              tLog("[TRACE] random-actions: profile");
-              tLog("▶ Random Actions: visiting own profile…");
-              await runVisitOwnProfile(serial, (msg) => tLog(`  ${msg}`));
-              steps.push("jitter-visit-profile");
-              _jitterFired = true;
-            }
-            const savedChance = rollRange(visitSavedPctMin, visitSavedPctMax) / 100;
-            if (savedChance > 0 && Math.random() < savedChance) {
-              tLog("[TRACE] random-actions: saved");
-              tLog("▶ Random Actions: visiting saved posts…");
-              await runVisitSaved(serial, (msg) => tLog(`  ${msg}`));
-              steps.push("jitter-visit-saved");
-              _jitterFired = true;
-            }
-            const settingsChance = rollRange(visitSettingsPctMin, visitSettingsPctMax) / 100;
-            if (settingsChance > 0 && Math.random() < settingsChance) {
-              tLog("[TRACE] random-actions: settings");
-              tLog("▶ Random Actions: visiting random settings…");
-              await runVisitSettings(serial, (msg) => tLog(`  ${msg}`));
-              steps.push("jitter-visit-settings");
-              _jitterFired = true;
-            }
-            const appSwitchChance = rollRange(appSwitchPctMin, appSwitchPctMax) / 100;
-            if (appSwitchChance > 0 && Math.random() < appSwitchChance) {
-              tLog("[TRACE] random-actions: app-switch");
-              tLog("▶ Random Actions: app switch (SMS)…");
-              await runAppSwitch(serial, (msg) => tLog(`  ${msg}`));
-              steps.push("jitter-app-switch");
-              _jitterFired = true;
-            }
-            const updatePicChance = rollRange(updateProfilePicActivatePctMin, updateProfilePicActivatePctMax) / 100;
-            const resolvedPicFolder = getProfilePicFolderPath(serial, slotIdx) || _updateProfilePicFolderPath;
-            if (updatePicChance > 0 && Math.random() < updatePicChance && resolvedPicFolder) {
-              tLog("[TRACE] random-actions: profile-picture");
-              tLog("▶ Random Actions: updating profile picture…");
-              await runUpdateProfilePicture(serial, resolvedPicFolder, (msg) => tLog(`  ${msg}`), {
-                alterationEnabled: updateProfilePicAlterationEnabled,
-                alterationLevel: updateProfilePicAlterationLevel,
-                imageSettingsEnabled: updateProfilePicImageSettingsEnabled,
-                imageSettings: updateProfilePicImageSettings,
-                fixAiSlop: updateProfilePicFixAiSlop,
-                metadataCleanup: updateProfilePicMetadataCleanup,
-                frequencyDisruption: updateProfilePicFrequencyDisruption,
-              });
-              steps.push("jitter-update-profile-pic");
-              _jitterFired = true;
-              if (updateProfilePicDisableAfterUsed) {
-                // Write 0/0 back to the saved slot so it won't fire again next cycle.
+            const _jitterFired = await runRandomActionsStep(serial, (msg) => tLog(`  ${msg}`), {
+              checkNotificationsPctMin,
+              checkNotificationsPctMax,
+              checkNotificationsScrollsMin,
+              checkNotificationsScrollsMax,
+              checkNotificationsClickPctMin,
+              checkNotificationsClickPctMax,
+              visitProfilePctMin,
+              visitProfilePctMax,
+              visitSavedPctMin,
+              visitSavedPctMax,
+              visitSettingsPctMin,
+              visitSettingsPctMax,
+              appSwitchPctMin,
+              appSwitchPctMax,
+              updateProfilePicEnabled: updateProfilePicActivatePctMax > 0 || updateProfilePicActivatePctMin > 0,
+              updateProfilePicFolderPath: _updateProfilePicFolderPath,
+              updateProfilePicAlterationEnabled,
+              updateProfilePicAlterationLevel,
+              updateProfilePicImageSettingsEnabled,
+              updateProfilePicImageSettings,
+              updateProfilePicFixAiSlop,
+              updateProfilePicMetadataCleanup,
+              updateProfilePicFrequencyDisruption,
+              updateProfilePicDisableAfterUsed,
+              updateBioActivatePctMin,
+              updateBioActivatePctMax,
+              updateBioText,
+              updateBioDisableAfterUsed,
+              slotIdx,
+            }, async (kind) => {
+              if (kind === "profile" && updateProfilePicDisableAfterUsed) {
                 try {
                   const _cfg = loadInstanceConfigs();
                   const _slotKey = slotAutomationKey(serial, slotIdx);
@@ -12616,16 +12922,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   saveInstanceConfigs(_cfg);
                 } catch { /* best effort */ }
               }
-            }
-            const updateBioChance = rollRange(updateBioActivatePctMin, updateBioActivatePctMax) / 100;
-            if (updateBioChance > 0 && Math.random() < updateBioChance && updateBioText.trim()) {
-              tLog("[TRACE] random-actions: bio");
-              tLog("▶ Random Actions: updating profile bio…");
-              await runUpdateBio(serial, updateBioText, (msg) => tLog(`  ${msg}`));
-              steps.push("jitter-update-bio");
-              _jitterFired = true;
-              if (updateBioDisableAfterUsed) {
-                // Write 0/0 back to the saved slot so it won't fire again next cycle.
+              if (kind === "bio" && updateBioDisableAfterUsed) {
                 try {
                   const _cfg = loadInstanceConfigs();
                   const _slotKey = slotAutomationKey(serial, slotIdx);
@@ -12641,7 +12938,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   saveInstanceConfigs(_cfg);
                 } catch { /* best effort */ }
               }
-            }
+            });
             if (!_jitterFired) {
               tLog("▶ Random Actions: activated — both action rolls missed this cycle");
               steps.push("jitter(activated,no-actions-rolled)");

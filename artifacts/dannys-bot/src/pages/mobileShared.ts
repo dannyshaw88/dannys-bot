@@ -170,6 +170,10 @@ export interface AutomationSettingsData {
   followUsersMax: number;
   followSpreadFollows: boolean;
   followSources: { type: string; value: string }[];
+  preSwitchEnabledMin: number;
+  preSwitchEnabledMax: number;
+  preSwitchActionPercentMin: number;
+  preSwitchActionPercentMax: number;
   injectBrowsingEnabled: boolean;
   injectBrowsingActivatePctMin: number; injectBrowsingActivatePctMax: number;
   injectBrowsingBeforeFollowPctMin: number; injectBrowsingBeforeFollowPctMax: number;
@@ -308,6 +312,8 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   followUsersMin: 1, followUsersMax: 3,
   followSpreadFollows: false,
   followSources: [],
+  preSwitchEnabledMin: 0, preSwitchEnabledMax: 0,
+  preSwitchActionPercentMin: 0, preSwitchActionPercentMax: 0,
   injectBrowsingEnabled: false,
   injectBrowsingActivatePctMin: 0, injectBrowsingActivatePctMax: 0,
   injectBrowsingBeforeFollowPctMin: 0, injectBrowsingBeforeFollowPctMax: 0,
@@ -470,6 +476,10 @@ export const TRUST_SCORE_TEMPLATE_LOCKED_FIELDS = new Set(
 /** Values that may be copied between Human Session Tool slots. */
 export const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
   "followSources",
+  "preSwitchEnabledMin",
+  "preSwitchEnabledMax",
+  "preSwitchActionPercentMin",
+  "preSwitchActionPercentMax",
   "followFiltersEnabled",
   "followFilterPrivateUsers",
   "followFilterEnglishSpeaking",

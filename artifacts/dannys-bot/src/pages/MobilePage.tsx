@@ -6941,6 +6941,36 @@ export function AutomationSettingsPanel({
                 </div>
               </div>
 
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground block text-center">Pre-switch chance %</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.preSwitchEnabledMin}
+                onChange={e => setSettings(s => ({ ...s, preSwitchEnabledMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.preSwitchEnabledMax}
+                onChange={e => setSettings(s => ({ ...s, preSwitchEnabledMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground block text-center">Pre-switch tool %</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.preSwitchActionPercentMin}
+                onChange={e => setSettings(s => ({ ...s, preSwitchActionPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.preSwitchActionPercentMax}
+                onChange={e => setSettings(s => ({ ...s, preSwitchActionPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+            </div>
+          </div>
+
             </div>
 
             {/* ── Update Avatar + Update Bio ── */}
