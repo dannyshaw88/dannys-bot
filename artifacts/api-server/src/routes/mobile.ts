@@ -13813,9 +13813,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const input = inputTextSchema.parse(req.body);
       const serial = p(req, "serial");
       req.log.info({ serial, characterCount: input.text.length }, "[mirror-calibrated-type] starting");
-      const result = await android.typeViaSavedCalibrationMap(serial, input.text, loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile, message => {
-        req.log.info({ serial, message }, "[mirror-calibrated-type]");
-      });
+      const result = await android.typeViaSavedCalibrationMap(
+        serial,
+        input.text,
+        loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile,
+        message => {
+          req.log.info({ serial, message }, "[mirror-calibrated-type]");
+        },
+        // Manual mirror input must be deterministic. Human-error simulation
+        // belongs to automated sessions; a random typo adds an extra ADB tap
+        // and correction path that can stall the whole request on a busy device.
+        { disableHumanErrors: true, debugLabel: "mirror-calibrated-type" },
+      );
       if (!result.ok) {
         return void res.status(422).json({
           ok: false,
