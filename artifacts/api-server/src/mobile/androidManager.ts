@@ -9028,6 +9028,19 @@ export async function findInstagramNotificationsIcon(serial: string): Promise<{ 
  * Tries resource IDs and the "Profile" content-desc label.
  */
 export async function findInstagramProfileTab(serial: string): Promise<{ x: number; y: number } | null> {
+  // Instagram's profile control is the fixed rightmost slot in the bottom
+  // navigation. Do not depend on Instagram exposing an accessibility node:
+  // Xiaomi/Instagram builds can visibly render the icon while omitting it
+  // from UIAutomator entirely. All callers use this function for a profile
+  // button action, so the live logical display size is the only coordinate
+  // source needed here.
+  const { w, h } = getScreenSize(serial);
+  if (!w || !h) return null;
+  return {
+    x: Math.round(w * 0.90),
+    y: Math.round(h * 0.94),
+  };
+  /*
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial).catch(() => "");
@@ -9159,6 +9172,7 @@ export async function findInstagramProfileTab(serial: string): Promise<{ x: numb
   const spanW = deduped[deduped.length - 1].x - deduped[0].x;
   if (spanW < xmlW * 0.55) return null; // guard (b): too narrow → action-icon cluster, not nav bar
   return deduped[deduped.length - 1]; // rightmost = Profile tab
+  */
 }
 
 /**

@@ -12042,6 +12042,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const hi = Math.max(preSwitchActionPercentMin, preSwitchActionPercentMax);
         return (lo === hi ? lo : Math.round(lo + Math.random() * (hi - lo))) / 100;
       })();
+      if (preSwitchEnabledMin <= 0 && preSwitchEnabledMax <= 0) {
+        tLog("▶ Pre-switch activation disabled at 0% — skipping all pre-switch actions");
+      } else if (preSwitchActionPercentMin <= 0 && preSwitchActionPercentMax <= 0) {
+        tLog("▶ Pre-switch action percentage is 0% — skipping all pre-switch actions");
+      }
       // These values must exist before pre-switch dispatch. Previously they
       // were declared below this branch, causing a TDZ failure whenever
       // pre-switch ran: "Cannot access '_toolActivated' before initialization".
@@ -12070,7 +12075,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
         tLog(`▶ Tool order shuffled: ${_toolSeq.length ? _toolSeq.map(name => _toolOrderLabels[name] ?? name).join(" → ") : "(no tools active this execution)"}`);
       }
-      if (preSwitchLastUsername && preSwitchLastUsername !== resolvedSlotUsername && preSwitchRoll > 0 && Math.random() < preSwitchRoll) {
+      if (
+        preSwitchLastUsername &&
+        preSwitchLastUsername !== resolvedSlotUsername &&
+        preSwitchRoll > 0 &&
+        preSwitchToolPercent > 0 &&
+        Math.random() < preSwitchRoll
+      ) {
         automationPreSwitchInProgress.set(serial, true);
         try {
           tLog(`▶ Pre-switch actions on @${preSwitchLastUsername} before switching to @${resolvedSlotUsername || preSwitchLastUsername}…`);
