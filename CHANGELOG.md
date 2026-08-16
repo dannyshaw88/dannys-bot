@@ -1,3 +1,9 @@
+## [1.2.529] — 2026-08-16
+
+### Fixed — Account Switch Profile Tap
+
+- Continue the account-switch flow with a live bottom-navigation fallback tap when Instagram does not expose the Profile resource ID.
+
 ## [1.2.528] — 2026-08-16
 
 ### Fixed — Windows Startup Crash
