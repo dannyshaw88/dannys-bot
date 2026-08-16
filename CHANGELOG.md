@@ -1,3 +1,11 @@
+## [1.2.515] — 2026-08-16
+
+### Fixed — Windows image processing stability
+
+- Kept Sharp enabled for Fix AI Slop image processing.
+- Rebuilds Sharp for the Electron runtime so its native module uses the correct ABI and avoids Windows access-violation crashes.
+- Removed the unused pixel-perturbation/SynthID processing.
+
 ## [1.2.514] — 2026-08-14
 
 ### Changed — GitHub Actions triggers
