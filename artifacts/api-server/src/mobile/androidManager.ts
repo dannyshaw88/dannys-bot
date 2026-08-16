@@ -2918,11 +2918,37 @@ export function getScreenSize(serial: string): { w: number; h: number } {
 
 /** Center of Instagram's leftmost bottom-navigation Home cell. */
 export async function getBottomLeftHomeFallback(serial: string): Promise<{ x: number; y: number }> {
-  const { w, h } = getScreenSize(serial);
-  // Instagram's Home control is the leftmost icon in its bottom navigation,
-  // immediately above Android's system navigation bar. Use one deterministic
-  // geometry path for Reel exit; do not resolve labels or resource IDs.
-  return { x: Math.round(w * 0.10), y: Math.round(h * 0.93) };
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial);
+  if (!xml) throw new Error("Unable to read the live Instagram bottom navigation");
+
+  const { w, h } = _getScreenSize(xml);
+  const candidates: { x: number; y: number; width: number; height: number }[] = [];
+  for (const match of xml.matchAll(/<node\b([^>]*)>/gi)) {
+    const attrs = match[1];
+    const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+    if (!bounds) continue;
+    const x1 = Number(bounds[1]), y1 = Number(bounds[2]);
+    const x2 = Number(bounds[3]), y2 = Number(bounds[4]);
+    const width = x2 - x1, height = y2 - y1;
+    const x = Math.round((x1 + x2) / 2);
+    const y = Math.round((y1 + y2) / 2);
+    // Use the rendered node geometry, not a fixed screen percentage. The
+    // leftmost icon-sized clickable node in the bottom navigation is Home.
+    if (y < h * 0.84 || y > h * 0.98) continue;
+    if (width < w * 0.025 || height < h * 0.015) continue;
+    if (width > w * 0.20 || height > h * 0.12) continue;
+    if (width / Math.max(1, height) > 3 || height / Math.max(1, width) > 3) continue;
+    if (!/clickable="true"/i.test(attrs)) continue;
+    candidates.push({ x, y, width, height });
+  }
+  if (candidates.length === 0) {
+    throw new Error("No rendered bottom-navigation icon node was found");
+  }
+  candidates.sort((a, b) => a.x - b.x || a.y - b.y);
+  const home = candidates[0];
+  return { x: home.x, y: home.y };
 }
 
 // A raw KEYCODE_POWER (26) is a *toggle* — if the screen happened to already
