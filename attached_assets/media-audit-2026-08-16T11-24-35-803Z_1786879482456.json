@@ -1,0 +1,218 @@
+{
+  "exportedAt": "2026-08-16T11:24:35.798Z",
+  "tool": "Aura Farming Media Transfer Forensic Audit",
+  "instagramOpened": false,
+  "sourceFile": "ae391656-32af-4e6f-af12-3d66b0790567_wavespeed.jpg",
+  "devices": [
+    {
+      "serial": "863d0058304830363451146f8f3e8c",
+      "name": "Redmi A5",
+      "ok": true,
+      "message": "Exact shared processed bytes verified",
+      "result": {
+        "serial": "863d0058304830363451146f8f3e8c",
+        "ok": true,
+        "device": {
+          "label": "device pullback",
+          "sha256": "7ce81fd66e35bd4865040da44114c5bbebf65f203f440e97a0c48e70f14d79c1",
+          "bytes": 270615,
+          "format": "jpeg",
+          "width": 816,
+          "height": 1024,
+          "space": "srgb",
+          "channels": 3,
+          "depth": "uchar",
+          "density": 72,
+          "chromaSubsampling": "4:2:0",
+          "isProgressive": false,
+          "orientation": null,
+          "hasAlpha": false,
+          "embedded": {
+            "exif": null,
+            "exifBytes": 0,
+            "icc": null,
+            "iccBytes": 0,
+            "iptc": null,
+            "iptcBytes": 0,
+            "xmp": null,
+            "xmpBytes": 0
+          }
+        },
+        "matchesSharedProcessed": true,
+        "matchesOtherDevices": true,
+        "sharedProcessed": {
+          "label": "shared processed Make a Post output",
+          "sha256": "7ce81fd66e35bd4865040da44114c5bbebf65f203f440e97a0c48e70f14d79c1",
+          "bytes": 270615,
+          "format": "jpeg",
+          "width": 816,
+          "height": 1024,
+          "space": "srgb",
+          "channels": 3,
+          "depth": "uchar",
+          "density": 72,
+          "chromaSubsampling": "4:2:0",
+          "isProgressive": false,
+          "orientation": null,
+          "hasAlpha": false,
+          "embedded": {
+            "exif": null,
+            "exifBytes": 0,
+            "icc": null,
+            "iccBytes": 0,
+            "iptc": null,
+            "iptcBytes": 0,
+            "xmp": null,
+            "xmpBytes": 0
+          }
+        },
+        "crossDevice": {
+          "allSuccessful": true,
+          "allDevicesReceivedSameBytes": true,
+          "deviceCount": 3,
+          "successfulCount": 3
+        }
+      }
+    },
+    {
+      "serial": "PFMZ9PQO5XJVE6V4",
+      "name": "Redmi A2",
+      "ok": true,
+      "message": "Exact shared processed bytes verified",
+      "result": {
+        "serial": "PFMZ9PQO5XJVE6V4",
+        "ok": true,
+        "device": {
+          "label": "device pullback",
+          "sha256": "7ce81fd66e35bd4865040da44114c5bbebf65f203f440e97a0c48e70f14d79c1",
+          "bytes": 270615,
+          "format": "jpeg",
+          "width": 816,
+          "height": 1024,
+          "space": "srgb",
+          "channels": 3,
+          "depth": "uchar",
+          "density": 72,
+          "chromaSubsampling": "4:2:0",
+          "isProgressive": false,
+          "orientation": null,
+          "hasAlpha": false,
+          "embedded": {
+            "exif": null,
+            "exifBytes": 0,
+            "icc": null,
+            "iccBytes": 0,
+            "iptc": null,
+            "iptcBytes": 0,
+            "xmp": null,
+            "xmpBytes": 0
+          }
+        },
+        "matchesSharedProcessed": true,
+        "matchesOtherDevices": true,
+        "sharedProcessed": {
+          "label": "shared processed Make a Post output",
+          "sha256": "7ce81fd66e35bd4865040da44114c5bbebf65f203f440e97a0c48e70f14d79c1",
+          "bytes": 270615,
+          "format": "jpeg",
+          "width": 816,
+          "height": 1024,
+          "space": "srgb",
+          "channels": 3,
+          "depth": "uchar",
+          "density": 72,
+          "chromaSubsampling": "4:2:0",
+          "isProgressive": false,
+          "orientation": null,
+          "hasAlpha": false,
+          "embedded": {
+            "exif": null,
+            "exifBytes": 0,
+            "icc": null,
+            "iccBytes": 0,
+            "iptc": null,
+            "iptcBytes": 0,
+            "xmp": null,
+            "xmpBytes": 0
+          }
+        },
+        "crossDevice": {
+          "allSuccessful": true,
+          "allDevicesReceivedSameBytes": true,
+          "deviceCount": 3,
+          "successfulCount": 3
+        }
+      }
+    },
+    {
+      "serial": "e38a197f3d22",
+      "name": "Redmi 12 5G",
+      "ok": true,
+      "message": "Exact shared processed bytes verified",
+      "result": {
+        "serial": "e38a197f3d22",
+        "ok": true,
+        "device": {
+          "label": "device pullback",
+          "sha256": "7ce81fd66e35bd4865040da44114c5bbebf65f203f440e97a0c48e70f14d79c1",
+          "bytes": 270615,
+          "format": "jpeg",
+          "width": 816,
+          "height": 1024,
+          "space": "srgb",
+          "channels": 3,
+          "depth": "uchar",
+          "density": 72,
+          "chromaSubsampling": "4:2:0",
+          "isProgressive": false,
+          "orientation": null,
+          "hasAlpha": false,
+          "embedded": {
+            "exif": null,
+            "exifBytes": 0,
+            "icc": null,
+            "iccBytes": 0,
+            "iptc": null,
+            "iptcBytes": 0,
+            "xmp": null,
+            "xmpBytes": 0
+          }
+        },
+        "matchesSharedProcessed": true,
+        "matchesOtherDevices": true,
+        "sharedProcessed": {
+          "label": "shared processed Make a Post output",
+          "sha256": "7ce81fd66e35bd4865040da44114c5bbebf65f203f440e97a0c48e70f14d79c1",
+          "bytes": 270615,
+          "format": "jpeg",
+          "width": 816,
+          "height": 1024,
+          "space": "srgb",
+          "channels": 3,
+          "depth": "uchar",
+          "density": 72,
+          "chromaSubsampling": "4:2:0",
+          "isProgressive": false,
+          "orientation": null,
+          "hasAlpha": false,
+          "embedded": {
+            "exif": null,
+            "exifBytes": 0,
+            "icc": null,
+            "iccBytes": 0,
+            "iptc": null,
+            "iptcBytes": 0,
+            "xmp": null,
+            "xmpBytes": 0
+          }
+        },
+        "crossDevice": {
+          "allSuccessful": true,
+          "allDevicesReceivedSameBytes": true,
+          "deviceCount": 3,
+          "successfulCount": 3
+        }
+      }
+    }
+  ]
+}
