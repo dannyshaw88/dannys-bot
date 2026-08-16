@@ -378,6 +378,14 @@ function TrustScoreAutomationEditor({
   const [saveError, setSaveError] = useState<string | null>(null);
   const hydratedRef = useRef(false);
   const lastSavedRef = useRef(JSON.stringify(AUTOMATION_DEFAULTS));
+  const updateSettings = (update: React.SetStateAction<AutomationSettingsData>) => {
+    setSettings(previous => {
+      const proposed = typeof update === "function" ? update(previous) : update;
+      // Keep every schema field in the autosave object. In particular, the
+      // pre-switch controls must never disappear from a partial child update.
+      return { ...AUTOMATION_DEFAULTS, ...previous, ...proposed };
+    });
+  };
 
   useEffect(() => {
     let active = true;
@@ -500,8 +508,8 @@ function TrustScoreAutomationEditor({
           <AutomationSettingsPanel
             phone={phone}
             settings={settings}
-            setSettings={setSettings}
-            setEnabledByUser={(enabled) => setSettings(current => ({ ...current, enabled }))}
+             setSettings={updateSettings}
+             setEnabledByUser={(enabled) => updateSettings(current => ({ ...current, enabled }))}
             loading={loading}
             saveError={saveError}
             running={false}
