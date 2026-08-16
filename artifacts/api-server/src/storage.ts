@@ -183,6 +183,11 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  // Many UI surfaces poll settings for every device slot at once. Keep the
+  // immutable read result briefly so those identical requests do not all scan
+  // the entire global_settings table and contend with automation writes.
+  private globalSettingsCache: { value: Record<string, string>; expiresAt: number } | null = null;
+
   async getProxies(): Promise<Proxy[]> {
     return await db.select().from(proxies);
   }
@@ -897,19 +902,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getGlobalSettings(): Promise<Record<string, string>> {
+    const cached = this.globalSettingsCache;
+    if (cached && cached.expiresAt > Date.now()) return { ...cached.value };
     const rows = await db.select().from(globalSettings);
     const out: Record<string, string> = {};
     for (const row of rows) out[row.key] = row.value;
+    this.globalSettingsCache = { value: out, expiresAt: Date.now() + 1_000 };
     return out;
   }
 
   async setGlobalSetting(key: string, value: string): Promise<void> {
     await db.insert(globalSettings).values({ key, value })
       .onConflictDoUpdate({ target: globalSettings.key, set: { value } });
+    this.globalSettingsCache = null;
   }
 
   async deleteGlobalSetting(key: string): Promise<void> {
     await db.delete(globalSettings).where(eq(globalSettings.key, key));
+    this.globalSettingsCache = null;
   }
 
   getLicenseByUsername(username: string): { id: number; username: string; password_hash: string; tier: string; account_limit: number; active: number; is_admin: number; expires_at: string | null } | undefined {
