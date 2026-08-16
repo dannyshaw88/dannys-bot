@@ -7972,7 +7972,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           input,
           level,
           imageSettingsEnabled ? imageSettings : undefined,
-          false,
+          frequencyDisruption === true,
         );
         const tempDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "equinox-mobile-alter-"));
         const sourceExt = path.extname(fileName).toLowerCase();

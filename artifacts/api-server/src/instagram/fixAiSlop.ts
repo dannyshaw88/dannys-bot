@@ -369,13 +369,35 @@ export async function fixAiSlop(
       .jpeg({ quality, chromaSubsampling: "4:2:0", force: true })
       .toBuffer();
 
-    nativeCrashBreadcrumb("sharp-complete", `outputBytes=${reencoded.length}`);
-    await writeFile(tmp, reencoded);
+    // Apply a very small, non-SynthID pixel perturbation after the metadata
+    // pass. It changes pixel statistics by at most one channel value and does
+    // not encode a recognizable watermark or alter image dimensions.
+    const { data: pixels, info } = await sharp(reencoded)
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const channels = info.channels as number;
+    for (let i = 0; i < pixels.length; i++) {
+      if (channels === 4 && i % 4 === 3) continue;
+      const pixel = Math.floor(i / channels);
+      const x = pixel % info.width;
+      const y = Math.floor(pixel / info.width);
+      const delta = ((x * 31 + y * 17) & 3) === 0 ? 1 : 0;
+      if (delta) pixels[i] = Math.min(255, pixels[i] + delta);
+    }
+    const perturbed = await sharp(pixels, {
+      raw: { width: info.width, height: info.height, channels: channels as 1 | 2 | 3 | 4 },
+    })
+      .withMetadata(false)
+      .jpeg({ quality, chromaSubsampling: "4:2:0", force: true })
+      .toBuffer();
+
+    nativeCrashBreadcrumb("sharp-complete", `outputBytes=${perturbed.length}`);
+    await writeFile(tmp, perturbed);
 
     console.log(
-      `[fixAiSlop] done — format=${fmt}, quality=${quality}, binary-stripped ${removedCount} block(s), no pixel perturbation`,
+      `[fixAiSlop] done — format=${fmt}, quality=${quality}, binary-stripped ${removedCount} block(s), pixel perturbation applied`,
     );
-    onLog?.(`Fix AI Slop: full processing complete — JPEG quality ${quality}, no pixel perturbation`);
+    onLog?.(`Fix AI Slop: full processing complete — JPEG quality ${quality}, pixel perturbation applied`);
     return tmp;
   } catch (err) {
     console.error("[fixAiSlop] failed:", err);

@@ -123,6 +123,7 @@ export async function alterJpegBuffer(
   input: Buffer,
   level: AlterationLevel,
   customSettings?: ImageFilterSettings,
+  frequencyDisruption = false,
 ): Promise<Buffer> {
   const cfg = buildConfig(level, customSettings);
   const comLen = level === "small" ? 8 : level === "medium" ? 32 : 64;
@@ -150,6 +151,23 @@ export async function alterJpegBuffer(
         const v = Math.max(1e-10, Math.random());
         const gauss = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
         rawPixels[i] = Math.max(0, Math.min(255, rawPixels[i] + gauss * noiseMag)) | 0;
+      }
+    }
+
+    // A light, content-preserving frequency pass. Alternating neighbouring
+    // pixels by a sub-byte amount changes encoder/frequency structure without
+    // introducing a visible watermark pattern or relying on SynthID.
+    if (frequencyDisruption) {
+      const channels = info.channels as number;
+      const stride = Math.max(1, channels);
+      for (let y = 0; y < info.height; y++) {
+        for (let x = 0; x < info.width; x++) {
+          const delta = ((x + y) & 1) === 0 ? 1 : -1;
+          const base = (y * info.width + x) * stride;
+          for (let c = 0; c < Math.min(3, channels); c++) {
+            rawPixels[base + c] = Math.max(0, Math.min(255, rawPixels[base + c] + delta));
+          }
+        }
       }
     }
 
