@@ -1,3 +1,10 @@
+## [1.2.522] — 2026-08-16
+
+### Added — Forensic Media Audit Export
+
+- Expanded Media Audit with staged image metadata and embedded-metadata comparisons.
+- Added downloadable JSON reports for multi-device audit results.
+
 ## [1.2.521] — 2026-08-16
 
 ### Added — Multi-device Media Audit
