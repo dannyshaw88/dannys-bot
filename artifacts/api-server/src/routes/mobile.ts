@@ -12110,6 +12110,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             if (preTool === "feed") {
               await runCheckFeedLoop(serial, {
                 count: scaled(Math.max(feedScrollMin, 1)),
+                // Instagram was launched, popup-checked, and given its
+                // post-launch settle window immediately above. Pre-switch
+                // actions run on that already-established feed surface; do
+                // not perform a second strict Home-icon accessibility lookup
+                // here. Xiaomi/Instagram builds can visibly render the nav
+                // bar while exposing icon geometry that the fallback rejects.
+                homeAlreadyEstablished: true,
                 likesMin: likePercentMin,
                 likesMax: likePercentMax,
                 shareFeedPercentMin,
