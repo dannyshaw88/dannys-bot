@@ -1,3 +1,9 @@
+## [1.2.526] — 2026-08-16
+
+### Changed — PC-to-Phone Transfer Inspector
+
+- Replaced the primary Media Audit presentation with transfer-channel inspection focused on host paths, pushed filenames, device destinations, transfer stages, and pre/post transfer identity.
+
 ## [1.2.525] — 2026-08-16
 
 ### Added — Complete Staged Media Audit
