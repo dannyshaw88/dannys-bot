@@ -173,6 +173,24 @@ function MediaAuditTabContent() {
     }
   };
 
+  const exportAudit = () => {
+    if (!auditLog.length) return;
+    const report = {
+      exportedAt: new Date().toISOString(),
+      tool: "Aura Farming Media Transfer Forensic Audit",
+      instagramOpened: false,
+      sourceFile: selected?.name ?? null,
+      devices: auditLog,
+    };
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `media-audit-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="desktop-card p-6 space-y-5">
       <div>
@@ -219,7 +237,10 @@ function MediaAuditTabContent() {
       {error && <div className="text-sm text-destructive">{error}</div>}
       {auditLog.length > 0 && (
         <div className="rounded-md border border-border overflow-hidden">
-          <div className="px-4 py-2 bg-muted/40 text-sm font-semibold">Audit log</div>
+          <div className="px-4 py-2 bg-muted/40 flex items-center justify-between gap-3">
+            <span className="text-sm font-semibold">Audit log</span>
+            <Button variant="outline" size="sm" onClick={exportAudit}><Download className="w-3.5 h-3.5 mr-1.5" />Export report</Button>
+          </div>
           <div className="divide-y divide-border">
             {auditLog.map(entry => (
               <div key={entry.serial} className="px-4 py-3 text-sm">

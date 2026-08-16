@@ -1675,6 +1675,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         alterationLevel: body.alterationLevel,
         frequencyDisruption: body.frequencyDisruption,
       });
+      const originalReport = await forensicImageReport("original Windows source", await fsPromises.readFile(sourcePath));
+      const processedReport = await forensicImageReport("processed Make a Post output", await fsPromises.readFile(prepared.pushFilePath));
       devicePath = await android.pushFileToDevice(serial, prepared.pushFilePath, prepared.pushFileName);
       await auditDeviceMediaCopy(serial, devicePath, prepared.audit);
       const pulledPath = await android.pullFileFromDevice(serial, devicePath);
@@ -1688,6 +1690,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         instagramOpened: false,
         devicePath,
         source: prepared.audit,
+        forensic: {
+          original: originalReport,
+          processed: processedReport,
+          device: await forensicImageReport("device pullback", pulledBytes),
+          comparisons: {
+            originalToProcessedByteIdentical: originalReport.sha256 === processedReport.sha256,
+            processedToDeviceByteIdentical: processedReport.sha256 === deviceSha256,
+            processedToDeviceMetadataIdentical:
+              processedReport.format === (deviceMetadata.format ?? "unknown") &&
+              processedReport.width === (deviceMetadata.width ?? 0) &&
+              processedReport.height === (deviceMetadata.height ?? 0) &&
+              processedReport.bytes === pulledBytes.length,
+          },
+        },
         device: {
           sha256: deviceSha256,
           bytes: pulledBytes.length,
@@ -8304,6 +8320,37 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         await fsPromises.rm(path.dirname(pulledPath), { recursive: true, force: true }).catch(() => {});
       }
     }
+  }
+
+  async function forensicImageReport(label: string, bytes: Buffer) {
+    const metadata = await sharp(bytes).metadata();
+    const hashBuffer = (value?: Buffer) => value ? createHash("sha256").update(value).digest("hex") : null;
+    return {
+      label,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+      bytes: bytes.length,
+      format: metadata.format ?? "unknown",
+      width: metadata.width ?? 0,
+      height: metadata.height ?? 0,
+      space: metadata.space ?? null,
+      channels: metadata.channels ?? null,
+      depth: metadata.depth ?? null,
+      density: metadata.density ?? null,
+      chromaSubsampling: metadata.chromaSubsampling ?? null,
+      isProgressive: metadata.isProgressive ?? null,
+      orientation: metadata.orientation ?? null,
+      hasAlpha: metadata.hasAlpha ?? null,
+      embedded: {
+        exif: hashBuffer(metadata.exif),
+        exifBytes: metadata.exif?.length ?? 0,
+        icc: hashBuffer(metadata.icc),
+        iccBytes: metadata.icc?.length ?? 0,
+        iptc: hashBuffer(metadata.iptc),
+        iptcBytes: metadata.iptc?.length ?? 0,
+        xmp: hashBuffer(metadata.xmp),
+        xmpBytes: metadata.xmp?.length ?? 0,
+      },
+    };
   }
 
   /**
