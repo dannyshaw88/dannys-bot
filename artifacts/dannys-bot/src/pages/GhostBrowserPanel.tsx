@@ -1047,11 +1047,19 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                 }}
                 fullWidth
               />
+            </div>
+
+            {/* Embedded Browser User-Agent */}
+            <div className="desktop-card p-2.5 space-y-1.5" style={{ width: 247 }}>
+              <div className="flex items-center gap-1.5">
+                <Globe className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Embedded Browser User-Agent</p>
+              </div>
               <Input
                 value={embeddedUA}
                 onChange={e => setEmbeddedUA(e.target.value)}
                 placeholder="Embedded browser User-Agent"
-                className="h-7 text-[10px] font-mono"
+                className="h-9 text-[10px] font-mono"
                 aria-label="Embedded browser User-Agent"
               />
             </div>
