@@ -1,3 +1,10 @@
+## [1.2.525] — 2026-08-16
+
+### Added — Complete Staged Media Audit
+
+- Capture filesystem and MediaProvider state before and after Android media scanning.
+- Query all relevant external MediaStore volumes and include raw provider responses in exported reports.
+
 ## [1.2.524] — 2026-08-16
 
 ### Added — Android MediaProvider Audit Stage
