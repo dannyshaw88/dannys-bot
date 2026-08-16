@@ -1760,12 +1760,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         try {
           const devicePath = await android.pushFileToDevice(serial, prepared!.pushFilePath, prepared!.pushFileName);
           devicePaths.set(serial, devicePath);
+          const mediaStore = await android.queryMediaStoreFile(serial, devicePath);
           const pulledPath = await android.pullFileFromDevice(serial, devicePath);
           const pulledBytes = await fsPromises.readFile(pulledPath);
           await fsPromises.rm(path.dirname(pulledPath), { recursive: true, force: true }).catch(() => {});
           const device = await forensicImageReport("device pullback", pulledBytes);
           return {
-            serial, ok: true, device,
+            serial, ok: true, device, mediaStore,
             matchesSharedProcessed: device.sha256 === processed.sha256,
             matchesOtherDevices: true,
           };

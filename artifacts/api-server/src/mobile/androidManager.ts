@@ -7016,6 +7016,28 @@ export async function scanMediaFile(serial: string, devicePath: string): Promise
   ], 6000);
 }
 
+/** Reads the MediaStore row created by the media scanner for a device file. */
+export async function queryMediaStoreFile(serial: string, devicePath: string): Promise<{
+  found: boolean;
+  raw: string;
+  fields: Record<string, string>;
+}> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const raw = await runAdb(adb, [
+    "-s", serial, "shell", "content", "query",
+    "--uri", "content://media/external/images/media",
+    "--projection", "_id:_data:_display_name:mime_type:size:width:height:date_added:date_modified:orientation",
+    "--where", `_data='${devicePath.replace(/'/g, "''")}'`,
+  ], 8000);
+  const row = raw.split(/\r?\n/).find(line => line.includes("_data=")) ?? "";
+  const fields: Record<string, string> = {};
+  for (const match of row.matchAll(/(\w+)=([^,\s]+(?:\s[^,]*?)?)(?=,\s+\w+=|$)/g)) {
+    fields[match[1]] = match[2].trim();
+  }
+  return { found: Boolean(row), raw: raw.trim(), fields };
+}
+
 /**
  * Removes a file previously pushed to the device (e.g. via pushFileToDevice)
  * and re-triggers the media scanner so it also disappears from Instagram's
