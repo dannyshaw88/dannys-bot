@@ -18,7 +18,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, X, ImagePlus } from "lucide-react";
+import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, X, ImagePlus, Heart, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2 } from "lucide-react";
 import { pickLocalWallpaper } from "@/pages/mobileShared";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -31,6 +31,20 @@ interface FarmDevice {
   manufacturer:   string;
   androidVersion: string;
   addedAt:        string;
+}
+
+function toolVisual(tool: string): { label: string; icon: React.ReactNode } {
+  const iconClass = "w-3.5 h-3.5 shrink-0";
+  if (tool === "FINALISING") return { label: "Finishing", icon: <CheckCircle2 className={iconClass} /> };
+  if (tool === "Random Actions") return { label: "Random Actions", icon: <Shuffle className={iconClass} /> };
+  if (/Reel/i.test(tool)) return { label: tool, icon: <Clapperboard className={iconClass} /> };
+  if (/Story/i.test(tool)) return { label: tool, icon: <BookOpen className={iconClass} /> };
+  if (/Explore/i.test(tool)) return { label: tool, icon: <Activity className={iconClass} /> };
+  if (/Feed/i.test(tool)) return { label: tool, icon: <BarChart2 className={iconClass} /> };
+  if (/Direct|DM|Messaging/i.test(tool)) return { label: tool, icon: <MessageCircle className={iconClass} /> };
+  if (/Follow/i.test(tool)) return { label: tool, icon: <Heart className={iconClass} /> };
+  if (/Post|Avatar|Profile/i.test(tool)) return { label: tool, icon: <Upload className={iconClass} /> };
+  return { label: tool, icon: <Activity className={iconClass} /> };
 }
 
 interface UsbPhone {
@@ -904,11 +918,15 @@ function DeviceCard({
         />
 
         <div className="h-5 shrink-0 flex items-center justify-center">
-          {currentTool && (
-            <span className="text-[11px] font-bold uppercase tracking-wide text-primary">
-              {currentTool}
-            </span>
-          )}
+          {currentTool && (() => {
+            const visual = toolVisual(currentTool);
+            return (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-primary">
+                {visual.icon}
+                {visual.label}
+              </span>
+            );
+          })()}
         </div>
         <div className="shrink-0 text-center space-y-0.5">
           <p className="text-base font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
