@@ -2,6 +2,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { TrustScoresTabContent, BulkImportTabContent } from "@/pages/ToolsPage";
 import ImagesPage from "@/pages/ImagesPage";
 import { JarveeBinaryViewerContent } from "@/pages/JarveeBinaryViewerPage";
+import { GhostBrowserTabContent } from "@/pages/CreateGhostPage";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -11,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
-import { Users, Ban, Shield, ShieldAlert, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power, Terminal, Download, Pencil, X, Crown, LogOut, UserCircle, Camera, Upload, Plus, Settings, ScanSearch, Activity } from "lucide-react";
+import { Users, Ban, Shield, ShieldAlert, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power, Terminal, Download, Pencil, X, Crown, LogOut, UserCircle, Camera, Upload, Plus, Settings, ScanSearch, Activity, Globe } from "lucide-react";
 import type { GlobalSettings } from "@shared/schema";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTheme, THEME_COLORS } from "@/hooks/use-theme";
@@ -30,6 +31,7 @@ const SETTINGS_TABS = [
   { label: "Jarvee Import", icon: Upload },
   { label: "Scraping", icon: Database },
   { label: "Automation", icon: Timer },
+  { label: "Ghost Browser", icon: Globe },
   { label: "Security", icon: ShieldAlert },
   { label: "Data", icon: HardDrive },
 ] as const;
@@ -820,7 +822,9 @@ export function SettingsPage() {
 
       {settingsTab === "jarvee import" && <JarveeBinaryViewerContent />}
 
-      <div className={`space-y-4 w-full ${["my account", "trust scores", "fix images", "transfer inspector", "import", "jarvee import"].includes(settingsTab) ? "hidden" : ""}`}>
+      {settingsTab === "ghost browser" && <GhostBrowserTabContent />}
+
+      <div className={`space-y-4 w-full ${["my account", "trust scores", "fix images", "transfer inspector", "import", "jarvee import", "ghost browser"].includes(settingsTab) ? "hidden" : ""}`}>
 
         {/* Talk to Equinox Bot shortcut */}
         <button
