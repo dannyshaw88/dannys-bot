@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
-import { Users, Ban, Shield, ShieldAlert, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power, Terminal, Download, Pencil, X, Crown, LogOut, UserCircle, Camera, Upload, Plus, Settings, ScanSearch } from "lucide-react";
+import { Users, Ban, Shield, ShieldAlert, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power, Terminal, Download, Pencil, X, Crown, LogOut, UserCircle, Camera, Upload, Plus, Settings, ScanSearch, Activity } from "lucide-react";
 import type { GlobalSettings } from "@shared/schema";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTheme, THEME_COLORS } from "@/hooks/use-theme";
@@ -641,6 +641,7 @@ export function SettingsPage() {
   const [backupCreating, setBackupCreating] = useState(false);
   const [backupRestoring, setBackupRestoring] = useState<string | null>(null);
   const [backupDeleting, setBackupDeleting] = useState<string | null>(null);
+  const [snapshotCreating, setSnapshotCreating] = useState(false);
 
   const refreshBackupList = async () => {
     if (!isElectron) return;
@@ -650,6 +651,27 @@ export function SettingsPage() {
       setBackupList(list);
     } catch {}
     setBackupListLoading(false);
+  };
+
+  const createDiagnosticSnapshot = async () => {
+    setSnapshotCreating(true);
+    try {
+      const response = await fetch("/api/diagnostics/snapshot", { credentials: "include" });
+      const data = await response.json();
+      if (!response.ok || !data?.ok) throw new Error(data?.error ?? "Snapshot failed");
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `aura-diagnostic-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "Diagnostic snapshot created", description: "Runtime data was downloaded as a JSON file." });
+    } catch (error: any) {
+      toast({ title: "Snapshot failed", description: error?.message ?? "Could not create snapshot", variant: "destructive" });
+    } finally {
+      setSnapshotCreating(false);
+    }
   };
 
   useEffect(() => { refreshBackupList(); }, []);
@@ -1335,6 +1357,20 @@ export function SettingsPage() {
 
         {/* Backup & Restore */}
         {isElectron && settingsTab === "data" && (
+          <div className="space-y-6">
+          <div className="desktop-card p-6">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="p-2 rounded-lg bg-blue-100 text-blue-600"><Activity className="w-4 h-4" /></div>
+              <h3 className="text-base font-semibold">Diagnostics</h3>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Download a runtime snapshot when the app starts lagging. This captures the current process, memory, platform, and runtime state without including credentials or database contents.
+            </p>
+            <Button variant="outline" disabled={snapshotCreating} onClick={createDiagnosticSnapshot}>
+              {snapshotCreating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+              {snapshotCreating ? "Creating Snapshot…" : "Create Diagnostic Snapshot"}
+            </Button>
+          </div>
           <div className="desktop-card p-6">
             <div className="flex items-center gap-3 mb-1">
               <div className="p-2 rounded-lg bg-emerald-100 text-emerald-600">
@@ -1521,6 +1557,7 @@ export function SettingsPage() {
                 <p className="text-xs text-muted-foreground pt-1">No backups yet create one above.</p>
               )}
             </div>
+          </div>
           </div>
         )}
 

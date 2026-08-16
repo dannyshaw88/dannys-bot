@@ -938,6 +938,28 @@ function isPng(buf: Buffer): boolean {
 }
 
 export function registerMobileRoutes(httpServer: http.Server, app: Express) {
+  app.get("/api/diagnostics/snapshot", (_req: Request, res: Response) => {
+    const memory = process.memoryUsage();
+    res.json({
+      ok: true,
+      generatedAt: new Date().toISOString(),
+      windowSeconds: 300,
+      note: "Runtime baseline captured at snapshot time; rolling telemetry will be added to subsequent snapshots.",
+      runtime: {
+        pid: process.pid,
+        uptimeSeconds: Math.round(process.uptime()),
+        nodeVersion: process.version,
+        platform: process.platform,
+        arch: process.arch,
+        memory: {
+          rssBytes: memory.rss,
+          heapUsedBytes: memory.heapUsed,
+          heapTotalBytes: memory.heapTotal,
+          externalBytes: memory.external,
+        },
+      },
+    });
+  });
   // ── Screen mirror WebSocket stream ─────────────────────────────────────────
   const screenWss = new WebSocketServer({ noServer: true });
 
