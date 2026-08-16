@@ -518,6 +518,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'masterEnabled',      label: 'Enabled',                       fields: ['enabled'] },
     { key: 'cycleInterval',     label: 'Run every X - Y minutes',      fields: ['cycleIntervalMin','cycleIntervalMax'] },
     { key: 'shuffleToolOrder',  label: 'Shuffle tool order',           fields: ['shuffleToolOrder'] },
+    { key: 'preSwitch',          label: 'Pre-switch actions',             fields: ['preSwitchEnabledMin','preSwitchEnabledMax','preSwitchActionPercentMin','preSwitchActionPercentMax'] },
   ]},
   { key: 'feed',          label: 'View Feed', sub: [
     { key: 'feedEnabled',       label: 'Enabled',                       fields: ['feedEnabled'] },
