@@ -1107,6 +1107,40 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
 
           </div>
 
+           {/* Standalone browser control — signup actions remain removed */}
+           <div className="desktop-card p-2.5">
+             <div className="flex items-center gap-2">
+               <Button
+                 size="sm"
+                 className={cn(
+                   "h-8 gap-1.5 text-xs font-semibold",
+                   isOpen
+                     ? "bg-red-500 hover:bg-red-600 text-white"
+                     : "bg-cyan-500 hover:bg-cyan-600 text-white"
+                 )}
+                 onClick={() => { void (isOpen ? handleClose() : handleOpen()); }}
+                 disabled={browserState === "opening" || browserState === "resetting" || !manualValid}
+               >
+                 {browserState === "opening" || browserState === "resetting"
+                   ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Opening…</>
+                   : isOpen
+                   ? <><WifiOff className="h-3.5 w-3.5" />Close Browser</>
+                   : <><Wifi className="h-3.5 w-3.5" />Launch Browser</>}
+               </Button>
+               <Button
+                 size="sm"
+                 variant="outline"
+                 className="h-8 gap-1.5 text-xs font-semibold border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
+                 onClick={() => { void handleFresh(); }}
+                 disabled={browserState === "opening" || browserState === "resetting"}
+               >
+                 {browserState === "resetting"
+                   ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Nuking…</>
+                   : <><NukeIcon className="h-3.5 w-3.5" />Nuke Environment</>}
+               </Button>
+             </div>
+           </div>
+
           {/* ── ROW 1b: Scheduler ── */}
            <div className="hidden">
             <div className="flex items-center gap-1.5">
