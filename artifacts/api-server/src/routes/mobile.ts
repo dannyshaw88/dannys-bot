@@ -1627,7 +1627,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       const serial = p(req, "serial");
       const devicePath = z.string()
-        .regex(/^\/sdcard\/DCIM\/Camera\/ig_[a-f0-9]{24}_[a-zA-Z0-9_.-]+$/, "Invalid manual media path")
+        .regex(/^\/sdcard\/DCIM\/Camera\/IMG_[a-f0-9]{24}\.(jpg|jpeg|png|webp|gif|heic|heif|avif|bmp)$/, "Invalid manual media path")
         .parse(req.body?.devicePath);
       await android.removeDeviceFile(serial, devicePath);
       logger.info({ serial, devicePath }, "[manual-media] deleted image from phone");

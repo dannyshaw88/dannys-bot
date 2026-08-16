@@ -6977,7 +6977,6 @@ export async function captureDebugScreenshot(serial: string, ts: number, label: 
 export async function pushFileToDevice(serial: string, localPath: string, fileName: string, scan = true): Promise<string> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  const uniqueId = randomBytes(12).toString("hex");
   const requestedExt = path.extname(fileName).toLowerCase();
   const safeExt = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".heif", ".avif", ".bmp"].includes(requestedExt)
     ? requestedExt
@@ -6987,7 +6986,7 @@ export async function pushFileToDevice(serial: string, localPath: string, fileNa
   // visible to gallery/media-picker consumers. The extension is retained
   // only so Android can identify the media type.
   const deviceFileName = `IMG_${randomBytes(12).toString("hex")}${safeExt}`;
-  const devicePath = `/sdcard/DCIM/Camera/ig_${uniqueId}_${deviceFileName}`;
+  const devicePath = `/sdcard/DCIM/Camera/${deviceFileName}`;
   await runAdbStrict(adb, ["-s", serial, "push", localPath, devicePath], 20000);
   if (scan) await scanMediaFile(serial, devicePath);
   return devicePath;
