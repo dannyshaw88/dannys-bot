@@ -8890,8 +8890,15 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const [dismissSaving, setDismissSaving] = React.useState(false);
   type SwipeGesture = { x1: number; y1: number; x2: number; y2: number; durationMinMs: number; durationMaxMs: number; jitterX: number; jitterY: number; startJitterMinY: number; startJitterMaxY: number; pauseMinMs: number; pauseMaxMs: number; settleMinMs: number; settleMaxMs: number };
   const [swipeGesture, setSwipeGesture] = React.useState<SwipeGesture>({ x1: 540, y1: 2100, x2: 540, y2: 500, durationMinMs: 400, durationMaxMs: 150, jitterX: 0, jitterY: 0, startJitterMinY: 0, startJitterMaxY: 0, pauseMinMs: 150, pauseMaxMs: 600, settleMinMs: 100, settleMaxMs: 350 });
-  type TypingSpeedProfile = { minMs: number; maxMs: number; errorPercentMin: number; errorPercentMax: number; dwellMinMs: number; dwellMaxMs: number; hesitationMinMs: number; hesitationMaxMs: number };
-  const [typingSpeedProfile, setTypingSpeedProfile] = React.useState<TypingSpeedProfile>({ minMs: 80, maxMs: 220, errorPercentMin: 0, errorPercentMax: 0, dwellMinMs: 40, dwellMaxMs: 80, hesitationMinMs: 250, hesitationMaxMs: 650 });
+  type TypingProfileName = "fast" | "moderate" | "slow";
+  type TypingSpeedProfile = { profile: TypingProfileName; minMs: number; maxMs: number; errorPercentMin: number; errorPercentMax: number; dwellMinMs: number; dwellMaxMs: number; hesitationMinMs: number; hesitationMaxMs: number };
+  const typingPresets: Record<TypingProfileName, Omit<TypingSpeedProfile, "profile">> = {
+    fast: { minMs: 55, maxMs: 120, errorPercentMin: 1, errorPercentMax: 3, dwellMinMs: 25, dwellMaxMs: 55, hesitationMinMs: 150, hesitationMaxMs: 400 },
+    moderate: { minMs: 80, maxMs: 220, errorPercentMin: 2, errorPercentMax: 5, dwellMinMs: 40, dwellMaxMs: 80, hesitationMinMs: 250, hesitationMaxMs: 650 },
+    slow: { minMs: 150, maxMs: 360, errorPercentMin: 3, errorPercentMax: 8, dwellMinMs: 60, dwellMaxMs: 120, hesitationMinMs: 450, hesitationMaxMs: 1000 },
+  };
+  const defaultTypingProfile: TypingSpeedProfile = { profile: "moderate", ...typingPresets.moderate };
+  const [typingSpeedProfile, setTypingSpeedProfile] = React.useState<TypingSpeedProfile>(defaultTypingProfile);
   const [swipeResolution, setSwipeResolution] = React.useState({ w: 1080, h: 2400 });
   const [swipeSaving, setSwipeSaving] = React.useState(false);
   const [swipeTesting, setSwipeTesting] = React.useState(false);
@@ -8913,7 +8920,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
           durationMinMs: 500, jitterX: 0, jitterY: 0, startJitterMinY: 0, startJitterMaxY: 0, pauseMinMs: 150, pauseMaxMs: 600, settleMinMs: 100, settleMaxMs: 350, ...d.swipeGesture,
           durationMaxMs: Math.min(150, Number(d.swipeGesture.durationMaxMs ?? 150)),
         });
-        if (d.typingSpeedProfile) setTypingSpeedProfile({ minMs: 80, maxMs: 220, errorPercentMin: 0, errorPercentMax: 0, dwellMinMs: 40, dwellMaxMs: 80, hesitationMinMs: 250, hesitationMaxMs: 650, ...d.typingSpeedProfile });
+        if (d.typingSpeedProfile) setTypingSpeedProfile({ ...defaultTypingProfile, ...d.typingSpeedProfile, profile: d.typingSpeedProfile.profile ?? "moderate" });
       })
       .catch(() => {});
     fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-spec`)
@@ -9256,7 +9263,21 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
           <p className="text-sm font-semibold text-foreground">Typing Speed Profile</p>
           <p className="text-xs text-muted-foreground">Per-device typing timing and human-error simulation. Values are applied to every calibrated keyboard entry.</p>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+           {([
+             ["fast", "Fast typer", "55–120 ms between keys"],
+             ["moderate", "Moderate-speed typer", "80–220 ms between keys"],
+             ["slow", "Slow typer", "150–360 ms between keys"],
+           ] as const).map(([value, label, detail]) => (
+             <button key={value} type="button"
+               onClick={() => saveTypingSpeedProfile({ profile: value, ...typingPresets[value] })}
+               className={`rounded-lg border px-3 py-2 text-left transition-colors ${typingSpeedProfile.profile === value ? "border-primary bg-primary/15 text-primary" : "border-border bg-background text-muted-foreground hover:bg-muted/40"}`}>
+               <span className="block text-xs font-semibold">{label}</span>
+               <span className="block text-[10px] mt-0.5 opacity-75">{detail}</span>
+             </button>
+           ))}
+         </div>
+         <div className="grid grid-cols-2 gap-3">
           {([
             ["minMs", "Typing speed: X min (ms)"],
             ["maxMs", "Typing speed: Y max (ms)"],
