@@ -124,7 +124,7 @@ export function Sidebar() {
     { name: "Phone Farm",      shortLabel: "PHONE FARM",     path: "/mobile",       icon: FilledFarmIcon        },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon },
     { name: "Settings",        shortLabel: "SETTINGS",       path: "/settings",     icon: FilledSettingsIcon  },
-    { name: "Ghost Browser",   shortLabel: "GHOST BROWSER",  path: "/settings?tab=ghost%20browser", icon: Globe },
+    { name: "Ghost Browser",   shortLabel: "GHOST BROWSER",  path: "/create-ghost", icon: Globe },
   ];
 
   return (
@@ -148,7 +148,6 @@ export function Sidebar() {
             if (item.path === "/mobile") return location === "/mobile" || location.startsWith("/mobile/");
              if (item.path === "/stats") return location === "/stats";
              if (item.path === "/settings/jarvee-binary") return location === "/settings/jarvee-binary" || location === "/settings/jarvee-binary-viewer";
-             if (item.path === "/settings?tab=ghost%20browser") return location === "/settings" && new URLSearchParams(window.location.search).get("tab") === "ghost browser";
             return location.startsWith(item.path);
           })();
           const Icon = item.icon;
