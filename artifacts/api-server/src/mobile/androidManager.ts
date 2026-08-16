@@ -4061,10 +4061,9 @@ export interface ReelActionIcons {
 /**
  * Locate the visible Reel heart from the current screenshot.
  *
- * This is intentionally independent of UIAutomator bounds. Some Instagram /
- * Xiaomi builds expose the action-column nodes in a coordinate space that
- * does not line up with `adb shell input tap`; the rendered heart is the
- * authoritative Like target.
+ * Deprecated: Reel action taps now use the top icon in the validated vertical
+ * action column. Kept temporarily for compatibility with any external callers;
+ * View Reels does not call this pixel heuristic.
  */
 export async function findReelLikeByPixels(
   serial: string,
@@ -4239,6 +4238,34 @@ export async function findReelActionIcons(serial: string, onLog?: (msg: string) 
         onLog?.(`[reel-icons] Like found via broadened cd match: cd="${cd}" at (${c.x},${c.y})`);
         break;
       }
+    }
+  }
+
+  if (!like) {
+    // Some builds expose the vertical action icons without semantic labels.
+    // In that case the top icon in the right-side column is Like. Use the
+    // accessibility node geometry, not a screenshot-shape guess: the icon
+    // ordering is Like, Comment, Repost/Share, Send, Save.
+    const unlabeled: Array<{ x: number; y: number; cls: string }> = [];
+    const topNodeRe = /<node\s([^>]+?)\s*\/?>/g;
+    let topMatch: RegExpExecArray | null;
+    while ((topMatch = topNodeRe.exec(xml)) !== null) {
+      const attrs = topMatch[1];
+      const bm = attrs.match(/bounds="(\[(\d+),(\d+)\]\[(\d+),(\d+)\])"/);
+      if (!bm) continue;
+      const c = _parseCenter(bm[1]);
+      if (!c || c.x < rightBand || c.y < screenH * 0.15 || c.y >= screenH * 0.86) continue;
+      const cls = (attrs.match(/class="([^"]*)"/) ?? [])[1] ?? "";
+      const nodeW = Number(bm[4]) - Number(bm[2]);
+      const nodeH = Number(bm[5]) - Number(bm[3]);
+      if (!/(?:ImageView|Button|ViewGroup)$/.test(cls)) continue;
+      if (nodeW < 24 || nodeH < 24 || nodeW > 260 || nodeH > 260) continue;
+      unlabeled.push({ x: c.x, y: c.y, cls });
+    }
+    unlabeled.sort((a, b) => a.y - b.y);
+    if (unlabeled.length >= 2) {
+      like = { x: unlabeled[0].x, y: unlabeled[0].y };
+      onLog?.(`[reel-icons] Like inferred as top icon in vertical right column at (${like.x},${like.y}); ${unlabeled.length} icons present`);
     }
   }
 
