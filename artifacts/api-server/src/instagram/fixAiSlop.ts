@@ -37,11 +37,7 @@
  * This means it works on every platform — Windows/Electron included — even if
  * Sharp's native binary is unavailable.
  *
- * If Sharp IS available an additional pixel-perturbation pass (makeUniqueImage)
- * is applied to defeat SynthID pixel-level watermarks (Google Imagen, ChatGPT
- * DALL-E) which are embedded in the pixel data and survive metadata stripping.
- * The perturbation is imperceptible but shifts spatial frequencies and pixel
- * statistics enough to break the watermark signal.
+ * Sharp is used only for the metadata-free JPEG re-encode.
  */
 
 import { randomBytes } from "crypto";
@@ -347,9 +343,7 @@ export async function fixAiSlop(
     onLog?.(`Fix AI Slop: binary strip complete — format=${fmt}, removed ${removedCount} metadata block(s)`);
 
     // ── Step 2: Metadata-free JPEG re-encode ────────────────────────────────
-    // Sharp is intentionally used here. The Windows installer rebuilds its
-    // native module for Electron's ABI before packaging; bypassing Sharp would
-    // silently remove the pixel-level AI-slop correction feature.
+    // Sharp is used for the metadata-free JPEG re-encode.
     let sharp: any;
     try {
       nativeCrashBreadcrumb("sharp-import");
@@ -369,32 +363,13 @@ export async function fixAiSlop(
       .jpeg({ quality, chromaSubsampling: "4:2:0", force: true })
       .toBuffer();
 
-    const { data: pixels, info } = await sharp(reencoded)
-      .raw()
-      .toBuffer({ resolveWithObject: true });
-    const channels = info.channels as number;
-    for (let i = 0; i < pixels.length; i++) {
-      if (channels === 4 && i % 4 === 3) continue;
-      const pixel = Math.floor(i / channels);
-      const x = pixel % info.width;
-      const y = Math.floor(pixel / info.width);
-      const delta = ((x * 31 + y * 17) & 3) === 0 ? 1 : 0;
-      if (delta) pixels[i] = Math.min(255, pixels[i] + delta);
-    }
-    const perturbed = await sharp(pixels, {
-      raw: { width: info.width, height: info.height, channels: channels as 1 | 2 | 3 | 4 },
-    })
-      .withMetadata(false)
-      .jpeg({ quality, chromaSubsampling: "4:2:0", force: true })
-      .toBuffer();
-
-    nativeCrashBreadcrumb("sharp-complete", `outputBytes=${perturbed.length}`);
-    await writeFile(tmp, perturbed);
+    nativeCrashBreadcrumb("sharp-complete", `outputBytes=${reencoded.length}`);
+    await writeFile(tmp, reencoded);
 
     console.log(
-      `[fixAiSlop] done — format=${fmt}, quality=${quality}, binary-stripped ${removedCount} block(s), pixel perturbation applied`,
+      `[fixAiSlop] done — format=${fmt}, quality=${quality}, binary-stripped ${removedCount} block(s)`,
     );
-    onLog?.(`Fix AI Slop: full processing complete — JPEG quality ${quality}, pixel perturbation applied`);
+    onLog?.(`Fix AI Slop: full processing complete — JPEG quality ${quality}`);
     return tmp;
   } catch (err) {
     console.error("[fixAiSlop] failed:", err);
