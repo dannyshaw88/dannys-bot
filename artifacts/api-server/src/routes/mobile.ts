@@ -13284,7 +13284,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         ? effectiveDismiss
         : android.getModelDismissDirection(_rawModel);
       tLog(`  dismiss direction: ${resolvedDismissDir} (slot: ${dismissDirection}, device-pref: ${devicePrefsForDismiss.dismissDirection ?? "none"}, model: "${_rawModel}"`);
-      await android.closeInstagramViaRecents(serial, resolvedDismissDir, (msg) => tLog(`  ${msg}`));
+      await android.closeInstagramViaRecents(
+        serial,
+        resolvedDismissDir,
+        (msg) => tLog(`  ${msg}`),
+        devicePrefsForDismiss.swipeGesture,
+      );
       steps.push("closed-instagram");
       tLog("  ✓ Instagram closed");
 
