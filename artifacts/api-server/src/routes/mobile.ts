@@ -1638,6 +1638,61 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
   });
 
+  // Diagnostic-only PC -> phone transfer. This never opens Instagram, selects
+  // an account, or leaves the test image on the device.
+  app.post("/api/mobile/devices/:serial/media-audit", async (req: Request, res: Response) => {
+    let prepared: Awaited<ReturnType<typeof prepareMakePostImage>> | null = null;
+    let devicePath: string | null = null;
+    try {
+      const serial = p(req, "serial");
+      const body = z.object({
+        localPath: z.string().trim().min(1),
+        fileName: z.string().trim().min(1).max(255),
+        fixAiSlop: z.boolean().default(true),
+        alterationEnabled: z.boolean().default(true),
+        alterationLevel: z.enum(["small", "medium", "large"]).default("small"),
+        frequencyDisruption: z.boolean().default(false),
+      }).parse(req.body);
+      const stat = await fsPromises.stat(body.localPath);
+      if (!stat.isFile()) throw new Error("localPath is not a file");
+      if (stat.size > 100 * 1024 * 1024) throw new Error("Image is larger than 100 MB");
+
+      prepared = await prepareMakePostImage(body.localPath, body.fileName, {
+        doFixAiSlop: body.fixAiSlop,
+        alterationEnabled: body.alterationEnabled,
+        alterationLevel: body.alterationLevel,
+        frequencyDisruption: body.frequencyDisruption,
+      });
+      devicePath = await android.pushFileToDevice(serial, prepared.pushFilePath, prepared.pushFileName);
+      await auditDeviceMediaCopy(serial, devicePath, prepared.audit);
+      const pulledPath = await android.pullFileFromDevice(serial, devicePath);
+      const pulledBytes = await fsPromises.readFile(pulledPath);
+      const deviceSha256 = createHash("sha256").update(pulledBytes).digest("hex");
+      const deviceMetadata = await sharp(pulledBytes).metadata();
+      await fsPromises.rm(path.dirname(pulledPath), { recursive: true, force: true }).catch(() => {});
+
+      res.json({
+        ok: true,
+        instagramOpened: false,
+        devicePath,
+        source: prepared.audit,
+        device: {
+          sha256: deviceSha256,
+          bytes: pulledBytes.length,
+          format: deviceMetadata.format ?? "unknown",
+          width: deviceMetadata.width ?? 0,
+          height: deviceMetadata.height ?? 0,
+        },
+        matchesProcessed: deviceSha256 === prepared.audit.processedSha256,
+      });
+    } catch (e: any) {
+      res.status(400).json({ ok: false, instagramOpened: false, error: e?.message ?? "Media audit failed" });
+    } finally {
+      if (devicePath) await android.removeDeviceFile(p(req, "serial"), devicePath).catch(() => {});
+      if (prepared) await prepared.cleanup().catch(() => {});
+    }
+  });
+
   // BANNED: `adb shell wm size reset` (and any command that changes phone display settings)
   // is permanently removed. The code handles coordinate differences in software via
   // rescaleForDevice() — the phone's display settings must never be touched by this app.
