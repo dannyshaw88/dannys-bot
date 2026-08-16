@@ -11615,6 +11615,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         followFiltersEnabled, followFilterVerifiedUsers, followFilterMaxFollowers25k,
         followFilterPrivateUsers, followFilterEnglishSpeaking, followFilterMinFollowers50,
         followFilterMalesOnly, followFilterMaleNames,
+         preSwitchEnabledMin, preSwitchEnabledMax,
+         preSwitchActionPercentMin, preSwitchActionPercentMax,
         injectBrowsingEnabled,
         injectBrowsingActivatePctMin, injectBrowsingActivatePctMax,
         injectBrowsingBeforeFollowPctMin, injectBrowsingBeforeFollowPctMax,
