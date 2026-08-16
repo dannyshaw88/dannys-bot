@@ -476,10 +476,6 @@ export const TRUST_SCORE_TEMPLATE_LOCKED_FIELDS = new Set(
 /** Values that may be copied between Human Session Tool slots. */
 export const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
   "followSources",
-  "preSwitchEnabledMin",
-  "preSwitchEnabledMax",
-  "preSwitchActionPercentMin",
-  "preSwitchActionPercentMax",
   "followFiltersEnabled",
   "followFilterPrivateUsers",
   "followFilterEnglishSpeaking",
@@ -518,7 +514,6 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'masterEnabled',      label: 'Enabled',                       fields: ['enabled'] },
     { key: 'cycleInterval',     label: 'Run every X - Y minutes',      fields: ['cycleIntervalMin','cycleIntervalMax'] },
     { key: 'shuffleToolOrder',  label: 'Shuffle tool order',           fields: ['shuffleToolOrder'] },
-    { key: 'preSwitch',          label: 'Pre-switch actions',             fields: ['preSwitchEnabledMin','preSwitchEnabledMax','preSwitchActionPercentMin','preSwitchActionPercentMax'] },
   ]},
   { key: 'feed',          label: 'View Feed', sub: [
     { key: 'feedEnabled',       label: 'Enabled',                       fields: ['feedEnabled'] },
