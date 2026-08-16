@@ -1,3 +1,9 @@
+## [1.2.518] — 2026-08-16
+
+### Fixed — Windows installer release output
+
+- Explicitly exclude generated `artifacts/electron/release` files from the installer dirty-checkout guard.
+
 ## [1.2.517] — 2026-08-16
 
 ### Fixed — Windows installer checkout hygiene

@@ -27,7 +27,11 @@ function Get-GitRemote {
 }
 
 $GitRemote = Get-GitRemote
-$GitStatus = @(git status --porcelain)
+$GitStatus = @(git status --porcelain | Where-Object {
+  # Electron Builder creates this output locally; it is never source input
+  # and must not make an otherwise clean checkout fail the sync guard.
+  $_ -notmatch '^\?\?\s+artifacts[\\/]+electron[\\/]+release(?:[\\/]|$)'
+})
 if ($GitStatus.Count -gt 0) {
   Write-Host "The checkout contains local changes or untracked files:" -ForegroundColor Yellow
   $GitStatus | ForEach-Object { Write-Host "  $_" -ForegroundColor Yellow }
