@@ -4222,7 +4222,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       onLog?.(`View Feed: tapping Home tab before execution at (${homeTab.x}, ${homeTab.y})`);
       await android.tap(serial, homeTab.x, homeTab.y, "bot");
       onLog?.("[TRACE] feed: tap-home");
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 150 + Math.floor(Math.random() * 351)));
     } else {
       onLog?.("View Feed: Home feed already established — skipping duplicate Home tap");
     }
