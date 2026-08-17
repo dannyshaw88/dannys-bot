@@ -7705,7 +7705,11 @@ export function closeBlueStacks(): void {
 }
 
 function _sleep(ms: number): Promise<void> {
-  return new Promise(r => setTimeout(r, ms));
+  if (!Number.isFinite(ms) || ms <= 0) return new Promise(r => setTimeout(r, Math.max(0, ms)));
+  const low = ms >= 5000 ? Math.max(1, Math.round(ms * 0.5)) : Math.round(ms);
+  const high = ms >= 5000 ? Math.round(ms) : 5000;
+  const sampled = low + Math.floor(Math.random() * (high - low + 1));
+  return new Promise(r => setTimeout(r, sampled));
 }
 
 /** Dump current UI to XML and return its content. */

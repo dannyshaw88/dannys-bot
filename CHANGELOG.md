@@ -1,3 +1,9 @@
+## [1.2.534] — 2026-08-17
+
+### Changed — Shared Mobile Dwell Randomization
+
+- Enforce randomized timing at the shared mobile dwell helpers so every positive wait is sampled instead of relying only on individual call-site edits.
+
 ## [1.2.533] — 2026-08-17
 
 ### Fixed — Account-Switch Profile Timing

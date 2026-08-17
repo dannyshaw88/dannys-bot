@@ -3941,17 +3941,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     automationCycleAbortedId.get(serial) !== undefined &&
     automationCycleAbortedId.get(serial) === automationCycleCurrentId.get(serial);
 
-  // Helper: sleep with abort-check. Throws "cycle-aborted" if the abort flag
-  // for this specific cycle has been set.
-  const sleepOrAbort = (serial: string, ms: number) =>
-    new Promise<void>((resolve, reject) => {
+  // Helper: every mobile dwell is sampled at the point of execution. Keeping
+  // this at the shared boundary prevents a newly added action from silently
+  // reintroducing a fixed timing signature.
+  const randomizedDwellMs = (ms: number): number => {
+    if (!Number.isFinite(ms) || ms <= 0) return Math.max(0, ms);
+    const low = ms >= 5000 ? Math.max(1, Math.round(ms * 0.5)) : Math.max(1, Math.round(ms));
+    const high = ms >= 5000 ? Math.round(ms) : 5000;
+    return low + Math.floor(Math.random() * (high - low + 1));
+  };
+  const sleepOrAbort = (serial: string, ms: number) => {
+    const dwellMs = randomizedDwellMs(ms);
+    return new Promise<void>((resolve, reject) => {
       const t = setTimeout(() => {
         if (isCycleAborted(serial)) reject(new Error("cycle-aborted"));
         else resolve();
-      }, ms);
+      }, dwellMs);
       // Also check immediately for zero-ms waits
-      if (ms <= 0) { clearTimeout(t); isCycleAborted(serial) ? reject(new Error("cycle-aborted")) : resolve(); }
+      if (dwellMs <= 0) { clearTimeout(t); isCycleAborted(serial) ? reject(new Error("cycle-aborted")) : resolve(); }
     });
+  };
 
   const hstRandomDelay = (serial: string, minMs: number, maxMs: number) =>
     sleepOrAbort(serial, minMs + Math.floor(Math.random() * (maxMs - minMs + 1)));
