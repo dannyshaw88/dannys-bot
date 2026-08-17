@@ -783,6 +783,7 @@ export function StatsPage() {
         value: mobileSlotStats?.daily?.[metric.key] ?? 0,
         color: metric.pieColor,
       }))
+      .sort((a, b) => b.value - a.value)
       ,
   [mobileSlotStats]);
 
@@ -793,6 +794,7 @@ export function StatsPage() {
         value: mobileSlotStats?.lifetime?.[metric.key] ?? 0,
         color: metric.pieColor,
       }))
+      .sort((a, b) => b.value - a.value)
       ,
   [mobileSlotStats]);
 
