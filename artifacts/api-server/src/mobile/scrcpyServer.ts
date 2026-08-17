@@ -452,10 +452,15 @@ async function startScrcpySessionInner(serial: string, opts: { maxSize?: number;
       // A real tap is DOWN then UP a beat later — matches how touchscreens
       // actually report events and avoids some apps ignoring a 0-duration press.
       sendTouch(ACTION_DOWN, x, y, frameW, frameH, 1.0);
-      setTimeout(() => sendTouch(ACTION_UP, x, y, frameW, frameH, 0.0), 40);
+      // Avoid giving every mirror tap the same fixed press duration.
+      const tapDurationMs = 25 + Math.floor(Math.random() * 156);
+      setTimeout(() => sendTouch(ACTION_UP, x, y, frameW, frameH, 0.0), tapDurationMs);
     },
-    swipe(x1, y1, x2, y2, frameW, frameH, durationMs = 300) {
-      const steps = Math.max(2, Math.round(durationMs / 16));
+    swipe(x1, y1, x2, y2, frameW, frameH, durationMs) {
+      // Only mirror gestures without an explicitly supplied duration use this
+      // fallback. Calibrated automation durations remain untouched.
+      const effectiveDurationMs = durationMs ?? (200 + Math.floor(Math.random() * 301));
+      const steps = Math.max(2, Math.round(effectiveDurationMs / 16));
       sendTouch(ACTION_DOWN, x1, y1, frameW, frameH, 1.0);
       for (let i = 1; i <= steps; i++) {
         const t = i / steps;
@@ -463,7 +468,7 @@ async function startScrcpySessionInner(serial: string, opts: { maxSize?: number;
           const x = x1 + (x2 - x1) * t;
           const y = y1 + (y2 - y1) * t;
           sendTouch(i === steps ? ACTION_UP : ACTION_MOVE, x, y, frameW, frameH, i === steps ? 0.0 : 1.0);
-        }, (durationMs * i) / steps);
+        }, (effectiveDurationMs * i) / steps);
       }
     },
     keycode(code) {
