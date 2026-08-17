@@ -42,3 +42,10 @@ uri = "file://attached_assets/AlterEgo_Fitness_WRE_imported-account.json"
 type = "unspecified"
 title = "AlterEgo Fitness WRE — Corrected Full Export"
 description = "Corrected export: email is cdgfswetuobf@outlook.com, email password is preserved as the literal [] value, and the unknown Instagram password is left null."
+
+[[outputs]]
+id = "_z86nWfhRgPGSPL8QzX9I"
+uri = "file://attached_assets/spy-icon-options.html"
+type = "text"
+title = "Ghost Browser icon options"
+description = "Visual comparison sheet for five spy-themed sidebar icon directions."
