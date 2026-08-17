@@ -874,7 +874,7 @@ export function StatsPage() {
                 <SelectTrigger className="w-72">
                   <SelectValue placeholder="Select account…" />
                 </SelectTrigger>
-                <SelectContent className="max-h-[calc(30*2rem)] overflow-y-auto">
+                <SelectContent className="max-h-[20rem] overflow-y-auto">
                   {deviceGroups.length > 0 ? (
                     <>
                       {deviceGroups.map(group => (
