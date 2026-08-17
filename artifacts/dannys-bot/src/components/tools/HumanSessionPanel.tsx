@@ -1506,7 +1506,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               </div>
             </div>
 
-            {/* ── Check Direct Messages ── */}
+            {/* ── Check Inbox ── */}
             <div className="px-4 py-3 space-y-2">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
@@ -1517,7 +1517,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   />
                   <label htmlFor="checkDmEnabled" className="font-semibold text-sm flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap shrink-0">
                     <MessageSquare className="w-4 h-4 text-teal-500 shrink-0" />
-                    Check Direct Messages
+                    Check Inbox
                   </label>
                 </div>
                 <div className={`flex flex-col gap-1.5 shrink-0 transition-opacity ${!settings.checkDmEnabled ? 'opacity-40 pointer-events-none' : ''}`}>

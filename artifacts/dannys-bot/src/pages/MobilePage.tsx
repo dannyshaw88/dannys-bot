@@ -6310,7 +6310,7 @@ export function AutomationSettingsPanel({
           </div>
         </div>}
 
-        {/* ── Direct Messaging — between View Reels and Follow Users ── */}
+        {/* ── Check Inbox — between View Reels and Follow Users ── */}
         <div className="border-t border-border" />
 
         <div className="space-y-1">
@@ -6323,7 +6323,7 @@ export function AutomationSettingsPanel({
               disabled={fieldDisabled("checkDmEnabled")}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
-            <label htmlFor={`checkdm-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">Direct Messaging</label>
+            <label htmlFor={`checkdm-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">Check Inbox</label>
           </div>
         </div>
 
