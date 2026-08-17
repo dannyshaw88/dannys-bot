@@ -7877,7 +7877,8 @@ export async function switchToInstagramAccount(
     if (profileTab) profileTabSource = "preloaded accessibility tree";
   }
   if (!profileTab) {
-    const PROFILE_TAB_POLL_MS  = 1500;
+    const PROFILE_TAB_POLL_MIN_MS = 1500;
+    const PROFILE_TAB_POLL_MAX_MS = 5000;
     // Some Instagram/Xiaomi builds expose the bottom-nav container later than
     // its child icon. Keep this short, then inspect the live tree again using
     // node bounds only; never synthesize a screen coordinate.
@@ -7893,8 +7894,9 @@ export async function switchToInstagramAccount(
       // take 18–20 seconds, so the old "1.5 s" retry actually stacked two
       // blocking dumps and made the result depend on transient ADB load.
       if (pt < PROFILE_TAB_MAX_POLL - 1) {
-        onLog?.(`  ↳ Profile tab not yet visible — waiting ${PROFILE_TAB_POLL_MS / 1000}s for nav bar to render (accessibility poll ${pt + 1}/${PROFILE_TAB_MAX_POLL})…`);
-        await _sleep(PROFILE_TAB_POLL_MS);
+        const pollWaitMs = PROFILE_TAB_POLL_MIN_MS + Math.floor(Math.random() * (PROFILE_TAB_POLL_MAX_MS - PROFILE_TAB_POLL_MIN_MS + 1));
+        onLog?.(`  ↳ Profile tab not yet visible — waiting ${pollWaitMs}ms for nav bar to render (accessibility poll ${pt + 1}/${PROFILE_TAB_MAX_POLL})…`);
+        await _sleep(pollWaitMs);
       }
     }
   }
@@ -7982,8 +7984,8 @@ export async function switchToInstagramAccount(
   // of opening the account switcher.  Give the surface one short, bounded
   // settle window after the tab is detected; this is deliberately a wait, not
   // a second gesture or a retry.
-  const PROFILE_TAB_SETTLE_MS = 1500;
-  onLog?.(`  ↳ Profile tab found at (${profileTab.x},${profileTab.y}) via ${profileTabSource} — waiting ${PROFILE_TAB_SETTLE_MS / 1000}s for Instagram to finish rendering…`);
+  const PROFILE_TAB_SETTLE_MS = 1500 + Math.floor(Math.random() * 3501);
+  onLog?.(`  ↳ Profile tab found at (${profileTab.x},${profileTab.y}) via ${profileTabSource} — waiting ${PROFILE_TAB_SETTLE_MS}ms for Instagram to finish rendering…`);
   await _sleep(PROFILE_TAB_SETTLE_MS);
 
   // 2. Open the active account profile with a single tap. Instagram's newer
@@ -7991,10 +7993,10 @@ export async function switchToInstagramAccount(
   const profileBeforeTapXml = preloadedXml || "";
   onLog?.(`  ↳ Tapping profile tab at (${profileTab.x},${profileTab.y}) to open the active account profile…`);
   await _adbTapAsync(adbPath, serial, profileTab.x, profileTab.y);
-  await _sleep(450);
+  await _sleep(450 + Math.floor(Math.random() * 4551));
   const profileAfterTabTapXml = await _uiDump(adbPath, serial).catch(() => "");
   onLog?.(`  ↳ Profile-tab tap result: xmlLength=${profileAfterTabTapXml.length}, changed=${profileBeforeTapXml ? profileAfterTabTapXml !== profileBeforeTapXml : "not-comparable"}, hasProfileHeader=${/action_bar_username_container/i.test(profileAfterTabTapXml)}, hasBottomNav=${/bottom_nav|tab_bar|profile_tab/i.test(profileAfterTabTapXml)}`);
-  const PROFILE_SCREEN_SETTLE_MS = 1000 + Math.floor(Math.random() * 1501);
+  const PROFILE_SCREEN_SETTLE_MS = 5000;
   onLog?.(`  ↳ Waiting ${PROFILE_SCREEN_SETTLE_MS}ms for the profile header to settle…`);
   await _sleep(PROFILE_SCREEN_SETTLE_MS);
 
@@ -8069,7 +8071,7 @@ export async function switchToInstagramAccount(
   onLog?.(`  ↳ Account-header tap target: (${profileHeaderUsername.x},${profileHeaderUsername.y}) node=${JSON.stringify(headerNode)}`);
   onLog?.(`  ↳ Tapping profile header username @${clean} to open account list…`);
   await _adbTapAsync(adbPath, serial, profileHeaderUsername.x, profileHeaderUsername.y);
-  await _sleep(700);
+  await _sleep(700 + Math.floor(Math.random() * 4301));
   const postHeaderTapXml = await _uiDump(adbPath, serial).catch(() => "");
   const postHeaderState = {
     hasUsernameContainer: /action_bar_username_container/.test(postHeaderTapXml),
@@ -8102,15 +8104,17 @@ export async function switchToInstagramAccount(
   const escapedUsername = clean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const usernameRowPattern = new RegExp(`(?:^|,\\s*)@?${escapedUsername}(?:,|$)`, "i");
   const switcherScreenHeight = getScreenSize(serial).h;
-  const SWITCHER_POLL_MS  = 1500;
+  const SWITCHER_POLL_MIN_MS = 1500;
+  const SWITCHER_POLL_MAX_MS = 5000;
   const SWITCHER_MAX_POLL = 2;
   for (let p = 0; p < SWITCHER_MAX_POLL; p++) {
     xml = await _uiDump(adbPath, serial).catch(() => "");
     coords = _findVisibleAccountRow(xml, switcherScreenHeight, clean, `@${clean}`);
     if (coords) break; // found — proceed to tap
     if (p < SWITCHER_MAX_POLL - 1) {
-      onLog?.(`  ↳ Switcher not fully populated yet — retrying in ${SWITCHER_POLL_MS / 1000}s (poll ${p + 1}/${SWITCHER_MAX_POLL})`);
-      await _sleep(SWITCHER_POLL_MS);
+      const pollWaitMs = SWITCHER_POLL_MIN_MS + Math.floor(Math.random() * (SWITCHER_POLL_MAX_MS - SWITCHER_POLL_MIN_MS + 1));
+      onLog?.(`  ↳ Switcher not fully populated yet — retrying in ${pollWaitMs}ms (poll ${p + 1}/${SWITCHER_MAX_POLL})`);
+      await _sleep(pollWaitMs);
     }
   }
 
@@ -8181,7 +8185,7 @@ export async function switchToInstagramAccount(
           "-s", serial, "shell", "input", "swipe",
           String(midX), String(fromY), String(midX), String(toY), String(duration),
         ], 4000).catch(() => {});
-        await _sleep(400);
+         await _sleep(400 + Math.floor(Math.random() * 4601));
         xml = await _uiDump(adbPath, serial).catch(() => "");
         coords = _findVisibleAccountRow(
           xml,
@@ -8210,7 +8214,7 @@ export async function switchToInstagramAccount(
   // logs in naturally, so no Back is needed. When the tapped row is the
   // already-active account, Instagram can leave the account sheet open; in
   // that one case, dismiss it with exactly one Android Back. Never retry Back.
-  await _sleep(1500);
+   await _sleep(1500 + Math.floor(Math.random() * 3501));
   const postTapXml = await _uiDump(adbPath, serial).catch(() => "");
   if (postTapXml) {
     const homeFeedVisible =
@@ -8228,7 +8232,7 @@ export async function switchToInstagramAccount(
       }
       onLog?.(`  ↳ @${clean} was already active and its selected row remains open — pressing Android Back once`);
       await pressBack(serial).catch(() => {});
-      await _sleep(700);
+       await _sleep(700 + Math.floor(Math.random() * 4301));
       const afterBackXml = await _uiDump(adbPath, serial).catch(() => "");
       const stillNotHome =
         !!afterBackXml &&
@@ -8241,7 +8245,7 @@ export async function switchToInstagramAccount(
   }
 
   // 7. Give Instagram time to finish loading the feed.
-  await _sleep(1500);
+   await _sleep(700 + Math.floor(Math.random() * 4301));
   return true;
 }
 
