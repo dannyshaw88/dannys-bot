@@ -657,6 +657,7 @@ type DevicePrefs = {
     perTool?: Record<string, { minMs: number; maxMs: number }>;
   };
   swipePersonalityOverrides?: Record<string, { weightMin: number; weightMax: number; durationMinMs: number; durationMaxMs: number }>;
+  navigationOverrides?: { homeTabPct: number; backPct: number };
   typingSpeedProfile?: { minMs: number; maxMs: number; errorPercentMin: number; errorPercentMax: number; dwellMinMs: number; dwellMaxMs: number; hesitationMinMs: number; hesitationMaxMs: number };
   swipeGesture?: { x1: number; y1: number; x2: number; y2: number; durationMinMs: number; durationMaxMs: number; jitterX: number; jitterY: number; startJitterMinY?: number; startJitterMaxY?: number; pauseMinMs?: number; pauseMaxMs?: number; settleMinMs?: number; settleMaxMs?: number };
 };
@@ -3189,6 +3190,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           durationMinMs: z.number().finite().min(1).max(30000),
           durationMaxMs: z.number().finite().min(1).max(30000),
         })).optional(),
+        navigationOverrides: z.object({
+          homeTabPct: z.number().finite().min(0).max(100),
+          backPct: z.number().finite().min(0).max(100),
+        }).optional(),
         typingSpeedProfile: z.object({
           minMs: z.number().finite().min(0),
           maxMs: z.number().finite().min(0),
@@ -4028,6 +4033,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Also check immediately for zero-ms waits
       if (dwellMs <= 0) { clearTimeout(t); isCycleAborted(serial) ? reject(new Error("cycle-aborted")) : resolve(); }
     });
+  };
+  const returnToHomeSafely = async (serial: string): Promise<boolean> => {
+    const nav = loadInstanceConfigs()[serial]?.devicePrefs?.navigationOverrides ?? { homeTabPct: 100, backPct: 0 };
+    const roll = Math.random() * Math.max(1, nav.homeTabPct + nav.backPct);
+    if (roll >= nav.homeTabPct && nav.backPct > 0) {
+      await android.pressBack(serial);
+      await sleepOrAbort(serial, 500, "navigation");
+      const confirmed = await android.findHomeTab(serial).catch(() => null);
+      if (confirmed) { await android.tap(serial, confirmed.x, confirmed.y); return true; }
+    }
+    const home = await android.findHomeTab(serial).catch(() => null);
+    if (!home) return false;
+    await android.tap(serial, home.x, home.y);
+    return true;
   };
 
   const hstRandomDelay = (serial: string, minMs: number, maxMs: number) =>
@@ -9463,8 +9482,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       onLog?.("Visit Saved: Options button not found — skipping");
       logger.warn({ serial }, "[jitter-visit-saved] Options/hamburger button not found");
       // Return to home and bail.
-      const ht = await android.findHomeTab(serial).catch(() => null);
-      ht ? await android.tap(serial, ht.x, ht.y) : await android.pressBack(serial);
+      await returnToHomeSafely(serial);
       await sleepOrAbort(serial, 600);
       return;
     }
@@ -9480,8 +9498,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Back out: Settings and activity → profile → home.
       await android.pressBack(serial);
       await sleepOrAbort(serial, 600);
-      const ht = await android.findHomeTab(serial).catch(() => null);
-      ht ? await android.tap(serial, ht.x, ht.y) : await android.pressBack(serial);
+      await returnToHomeSafely(serial);
       await sleepOrAbort(serial, 600);
       return;
     }
@@ -9513,12 +9530,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     await sleepOrAbort(serial, 600);
     await android.pressBack(serial);
     await sleepOrAbort(serial, 600);
-    const homeTab = await android.findHomeTab(serial).catch(() => null);
-    if (homeTab) {
-      await android.tap(serial, homeTab.x, homeTab.y);
-    } else {
-      await android.pressBack(serial);
-    }
+    await returnToHomeSafely(serial);
     await sleepOrAbort(serial, 600);
     onLog?.("Visit Saved: ✓ done, returned to home feed");
   }
@@ -9551,8 +9563,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (!optionsBtn) {
       onLog?.("Visit Settings: Options button not found — skipping");
       logger.warn({ serial }, "[jitter-visit-settings] Options/hamburger button not found");
-      const ht = await android.findHomeTab(serial).catch(() => null);
-      ht ? await android.tap(serial, ht.x, ht.y) : await android.pressBack(serial);
+      await returnToHomeSafely(serial);
       await sleepOrAbort(serial, 600);
       return;
     }

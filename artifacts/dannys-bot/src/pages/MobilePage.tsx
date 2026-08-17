@@ -9022,6 +9022,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     perTool: {},
   };
   const [motherOverrides, setMotherOverrides] = React.useState<MotherOverrides>(defaultMotherOverrides);
+  const [navigationOverrides, setNavigationOverrides] = React.useState({ homeTabPct: 100, backPct: 0 });
   const motherOverridesRef = React.useRef(motherOverrides);
   React.useEffect(() => { motherOverridesRef.current = motherOverrides; }, [motherOverrides]);
   const [swipeResolution, setSwipeResolution] = React.useState({ w: 1080, h: 2400 });
@@ -9068,6 +9069,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
           globalDwell: d.motherCodeOverrides.globalDwell ?? defaultMotherOverrides.globalDwell,
           perTool: d.motherCodeOverrides.perTool ?? defaultMotherOverrides.perTool,
         });
+        if (d.navigationOverrides) setNavigationOverrides({ homeTabPct: 100, backPct: 0, ...d.navigationOverrides });
       })
       .catch(() => {});
     fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-spec`)
@@ -9081,6 +9083,14 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-prefs`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ motherCodeOverrides: next }),
+    }).catch(() => {});
+  };
+  const saveNavigationOverrides = async (next: { homeTabPct: number; backPct: number }) => {
+    if (!serial) return;
+    setNavigationOverrides(next);
+    await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-prefs`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ navigationOverrides: next }),
     }).catch(() => {});
   };
 
@@ -9453,6 +9463,19 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
               </label>
             ))}
           </div>
+        </div>
+      </div>
+      <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+        <p className="text-sm font-semibold text-foreground">Home Navigation Override</p>
+        <p className="text-xs text-muted-foreground">Choose how this device returns to Home using existing validated routes. Home is always checked before continuing.</p>
+        <div className="grid grid-cols-2 gap-2">
+          {(["homeTabPct", "backPct"] as const).map(key => (
+            <label key={key} className="text-xs text-muted-foreground">{key === "homeTabPct" ? "Home tab route (%)" : "Back route (%)"}
+              <input type="number" min={0} max={100} value={navigationOverrides[key]}
+                onChange={e => saveNavigationOverrides({ ...navigationOverrides, [key]: Math.max(0, Math.min(100, Number(e.target.value))) })}
+                className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
+            </label>
+          ))}
         </div>
       </div>
 
