@@ -3941,17 +3941,59 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     automationCycleAbortedId.get(serial) !== undefined &&
     automationCycleAbortedId.get(serial) === automationCycleCurrentId.get(serial);
 
+  // Shared mother-code timing with a stable, serial-specific accent. The
+  // per-action random sample below still prevents repetitive sequences.
+  const devicePersonality = (serial: string) => {
+    let h = 2166136261;
+    for (let i = 0; i < serial.length; i++) {
+      h ^= serial.charCodeAt(i);
+      h = Math.imul(h, 16777619) >>> 0;
+    }
+    const unit = (salt: number) => {
+      let n = (h ^ Math.imul(salt, 2246822519)) >>> 0;
+      n ^= n >>> 15; n = Math.imul(n, 2246822519) >>> 0;
+      n ^= n >>> 13; n = Math.imul(n, 3266489917) >>> 0;
+      return ((n ^ (n >>> 16)) >>> 0) / 0x100000000;
+    };
+    return {
+      dwellScale: 0.86 + unit(1) * 0.30,
+      pauseScale: 0.82 + unit(2) * 0.36,
+      settleScale: 0.82 + unit(3) * 0.36,
+      gestureScale: 0.92 + unit(4) * 0.16,
+      xBias: Math.round((unit(5) - 0.5) * 18),
+      yBias: Math.round((unit(6) - 0.5) * 24),
+    };
+  };
+  const effectiveTypingProfile = (serial: string) => {
+    const profile = loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile;
+    if (!profile) return undefined;
+    const scale = devicePersonality(serial).dwellScale;
+    const range = (minMs: number, maxMs: number) => ({
+      minMs: Math.max(0, Math.round(minMs * scale)),
+      maxMs: Math.max(0, Math.round(maxMs * scale)),
+    });
+    return {
+      ...profile,
+      ...range(profile.minMs, profile.maxMs),
+      dwellMinMs: Math.max(1, Math.round(profile.dwellMinMs * scale)),
+      dwellMaxMs: Math.max(1, Math.round(profile.dwellMaxMs * scale)),
+      hesitationMinMs: Math.max(0, Math.round(profile.hesitationMinMs * scale)),
+      hesitationMaxMs: Math.max(0, Math.round(profile.hesitationMaxMs * scale)),
+    };
+  };
+
   // Helper: every mobile dwell is sampled at the point of execution. Keeping
   // this at the shared boundary prevents a newly added action from silently
   // reintroducing a fixed timing signature.
-  const randomizedDwellMs = (ms: number): number => {
+  const randomizedDwellMs = (serial: string, ms: number): number => {
     if (!Number.isFinite(ms) || ms <= 0) return Math.max(0, ms);
-    const low = ms >= 5000 ? Math.max(1, Math.round(ms * 0.5)) : Math.max(1, Math.round(ms));
-    const high = ms >= 5000 ? Math.round(ms) : 5000;
+    const scaled = ms * devicePersonality(serial).dwellScale;
+    const low = scaled >= 5000 ? Math.max(1, Math.round(scaled * 0.5)) : Math.max(1, Math.round(scaled));
+    const high = scaled >= 5000 ? Math.round(scaled) : 5000;
     return low + Math.floor(Math.random() * (high - low + 1));
   };
   const sleepOrAbort = (serial: string, ms: number) => {
-    const dwellMs = randomizedDwellMs(ms);
+    const dwellMs = randomizedDwellMs(serial, ms);
     return new Promise<void>((resolve, reject) => {
       const t = setTimeout(() => {
         if (isCycleAborted(serial)) reject(new Error("cycle-aborted"));
@@ -4116,22 +4158,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       back: [0.05, 0.10],
     };
     const [bandStart, bandEnd] = personality ? durationBand[personality] : [0, 1];
+    const personalityProfile = devicePersonality(serial);
     const durationMs = Math.max(1, Math.round(
-      minDuration + span * (bandStart + Math.random() * (bandEnd - bandStart)),
+      (minDuration + span * (bandStart + Math.random() * (bandEnd - bandStart))) *
+      personalityProfile.gestureScale,
     ));
     const pauseMin = Math.max(0, Math.min(configured.pauseMinMs ?? 0, configured.pauseMaxMs ?? 0));
     const pauseMax = Math.max(pauseMin, configured.pauseMaxMs ?? pauseMin);
     const settleMin = Math.max(0, Math.min(configured.settleMinMs ?? 0, configured.settleMaxMs ?? 0));
     const settleMax = Math.max(settleMin, configured.settleMaxMs ?? settleMin);
-    const pauseMs = Math.round(pauseMin + Math.random() * (pauseMax - pauseMin));
-    const settleMs = Math.round(settleMin + Math.random() * (settleMax - settleMin));
+    const pauseMs = Math.round((pauseMin + Math.random() * (pauseMax - pauseMin)) * personalityProfile.pauseScale);
+    const settleMs = Math.round((settleMin + Math.random() * (settleMax - settleMin)) * personalityProfile.settleScale);
     if (pauseMs > 0) await new Promise(resolve => setTimeout(resolve, pauseMs));
     const reversed = personality === "back";
     let path = {
-      x1: clamp((reversed ? configured.x2 : configured.x1) + dx, size.w),
-      y1: clamp((reversed ? configured.y2 : configured.y1) + (reversed ? endDy : startDy), size.h),
-      x2: clamp((reversed ? configured.x1 : configured.x2) + dx, size.w),
-      y2: clamp((reversed ? configured.y1 : configured.y2) + (reversed ? startDy : endDy), size.h),
+      x1: clamp((reversed ? configured.x2 : configured.x1) + dx + personalityProfile.xBias, size.w),
+      y1: clamp((reversed ? configured.y2 : configured.y1) + (reversed ? endDy : startDy) + personalityProfile.yBias, size.h),
+      x2: clamp((reversed ? configured.x1 : configured.x2) + dx + personalityProfile.xBias, size.w),
+      y2: clamp((reversed ? configured.y1 : configured.y2) + (reversed ? startDy : endDy) + personalityProfile.yBias, size.h),
       durationMs,
     };
     // The Reels caller already captures one live accessibility dump before and
@@ -8860,7 +8904,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           const typedLocation = await android.typeViaSavedCalibrationMap(
             serial,
             locationText,
-            loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile,
+            effectiveTypingProfile(serial),
             message => onLog?.(`Make a Post: ${message}`),
           );
           if (!typedLocation.ok) {
@@ -9888,7 +9932,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const typed = await android.typeViaSavedCalibrationMap(
         serial,
         bioText,
-        loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile,
+        effectiveTypingProfile(serial),
         message => onLog?.(`Update Bio: ${message}`),
         // Bio text must be entered exactly as generated. Human-error
         // simulation types a random character and then presses Backspace;
@@ -11123,7 +11167,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         searchReadyForReuse = false;
         onLog?.("[TRACE] follow: type-username");
         // Use only real taps on the saved Android keyboard calibration map.
-        const typed = await android.typeViaSavedCalibrationMap(serial, username.replace(/^@+/, ""), loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile, message => {
+        const typed = await android.typeViaSavedCalibrationMap(serial, username.replace(/^@+/, ""), effectiveTypingProfile(serial), message => {
           onLog?.(`  ${message}`);
         }, { debugLabel: "Follow" });
         if (!typed.ok) {
@@ -13863,7 +13907,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const input = inputTextSchema.parse(req.body);
       const serial = p(req, "serial");
       req.log.info({ serial, characterCount: input.text.length }, "[mirror-calibrated-type] starting");
-      const result = await android.typeViaSavedCalibrationMap(serial, input.text, loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile, message => {
+      const result = await android.typeViaSavedCalibrationMap(serial, input.text, effectiveTypingProfile(serial), message => {
         req.log.info({ serial, message }, "[mirror-calibrated-type]");
       });
       if (!result.ok) {
@@ -13884,7 +13928,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       const input = inputTextSchema.parse(req.body);
       const serial = p(req, "serial");
-      const result = await android.typeViaSaved2faKeypad(serial, input.text, loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile, message => {
+      const result = await android.typeViaSaved2faKeypad(serial, input.text, effectiveTypingProfile(serial), message => {
         req.log.info({ serial, message }, "[mirror-2fa-keypad]");
       });
       if (!result.ok) return void res.status(422).json({
@@ -15447,7 +15491,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           error: "No saved keyboard calibration map for this device",
         });
       }
-      const typingProfile = loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile;
+      const typingProfile = effectiveTypingProfile(serial);
       const result = await android.typeViaCalibrationMap(serial, text, map, message => {
         req.log.info({ serial, message }, "[keyboard-calibration]");
       }, typingProfile);
