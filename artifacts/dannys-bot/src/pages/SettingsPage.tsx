@@ -657,28 +657,35 @@ export function SettingsPage() {
     setSnapshotCreating(true);
     try {
       const response = await fetch("/api/diagnostics/snapshot", { credentials: "include" });
-      const data = await response.json();
+      const data = await response.json().catch(() => null);
       if (!response.ok || !data?.ok) throw new Error(data?.error ?? "Snapshot failed");
       const filename = `aura-diagnostic-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
       const content = JSON.stringify(data, null, 2);
       const electron = eAPI();
       if (electron?.saveDiagnosticSnapshot) {
-        const result = await electron.saveDiagnosticSnapshot({ filename, content });
-        if (result?.saved) {
-          toast({ title: "Diagnostic snapshot saved", description: result.filePath });
-        } else {
-          toast({ title: "Snapshot cancelled", description: "No file was saved." });
+        try {
+          const result = await electron.saveDiagnosticSnapshot({ filename, content });
+          if (result?.saved) {
+            toast({ title: "Diagnostic snapshot saved", description: result.filePath });
+            return;
+          }
+          // A cancelled/stale Electron dialog should not prevent exporting the
+          // already-created snapshot through the browser download path.
+        } catch (electronError) {
+          console.warn("[diagnostics] Electron save failed; falling back to browser download", electronError);
         }
-      } else {
-        const blob = new Blob([content], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement("a");
-        anchor.href = url;
-        anchor.download = filename;
-        anchor.click();
-        URL.revokeObjectURL(url);
-        toast({ title: "Diagnostic snapshot created", description: "Runtime data was downloaded as a JSON file." });
       }
+      const blob = new Blob([content], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.style.display = "none";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast({ title: "Diagnostic snapshot downloaded", description: "Runtime data was saved through the browser download." });
     } catch (error: any) {
       toast({ title: "Snapshot failed", description: error?.message ?? "Could not create snapshot", variant: "destructive" });
     } finally {
