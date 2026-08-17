@@ -62,11 +62,12 @@ function FilledGhostIcon({ className, style }: { className?: string; style?: Rea
 function HackerIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <path fill="currentColor" d="M12 2c-3.8 0-6.8 2.7-7.6 7.2L3 14h3.2c.2 2.4 1.2 4.3 2.8 5.5L7.4 22h9.2l-1.6-2.5c1.6-1.2 2.6-3.1 2.8-5.5H21l-1.4-4.8C18.8 4.7 15.8 2 12 2Z" />
-      <path fill="white" d="M8.1 10.4c1.1-1.6 2.4-2.4 3.9-2.4s2.8.8 3.9 2.4c-1.1 1.1-2.4 1.7-3.9 1.7s-2.8-.6-3.9-1.7Z" />
-      <circle fill="currentColor" cx="10.5" cy="10.3" r=".65" />
-      <circle fill="currentColor" cx="13.5" cy="10.3" r=".65" />
-      <path fill="currentColor" d="M4 15.2h16l-1.2 1.5H5.2L4 15.2Z" />
+      <path fill="currentColor" d="M12 2.1c-4.4 0-7.8 3.3-8.6 8.4L2.3 15h3.5c.4 2.1 1.3 3.7 2.7 4.8H6.2L5 21.7h14L17.8 19h-2.3c1.4-1.1 2.3-2.7 2.7-4.8h3.5l-1.1-4.5C19.8 5.4 16.4 2.1 12 2.1Z" />
+      <path fill="#f1c7a8" d="M8.6 10.9c.6-1.8 1.8-2.8 3.4-2.8s2.8 1 3.4 2.8c-.4 2.2-1.5 3.5-3.4 3.5s-3-1.3-3.4-3.5Z" />
+      <path fill="#111827" d="M9.2 10.7c.8-.7 1.7-1 2.8-1s2 .3 2.8 1l-.2 1H9.4l-.2-1Z" />
+      <path fill="currentColor" d="M5.2 16.1h13.6l3.1 4.3H2.1l3.1-4.3Z" />
+      <rect fill="#94a3b8" x="7.2" y="16.7" width="9.6" height="2.5" rx=".25" />
+      <path fill="#334155" d="M6 20.4h12l1.6 1.3H4.4L6 20.4Z" />
     </svg>
   );
 }
