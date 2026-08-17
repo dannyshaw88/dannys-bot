@@ -1,3 +1,9 @@
+## [1.2.535] — 2026-08-17
+
+### Fixed — Visual Follow Search Field Detection
+
+- Follow Users now targets Instagram's live search field from normalized visual references across its normal, tapped, and target-present states instead of relying on unstable accessibility coordinates.
+
 ## [1.2.534] — 2026-08-17
 
 ### Changed — Shared Mobile Dwell Randomization

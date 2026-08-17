@@ -4,6 +4,7 @@ import path from "path";
 import fs from "fs";
 import os from "os";
 import zlib from "zlib";
+import sharp from "sharp";
 import { randomBytes } from "node:crypto";
 import { logger } from "../lib/logger";
 import * as recorder from "./sessionRecorder";
@@ -5721,6 +5722,91 @@ export async function clearInstagramSearchBar(
   await _sleep(200);
 }
 
+type SearchFieldVisualMatch = { x: number; y: number; score: number; template: string };
+
+/**
+ * Match Instagram's actual search-field artwork rather than depending on the
+ * accessibility tree.  Instagram has two themes/copy variants and three
+ * states (normal, tapped-empty, target-present); all six references are tried.
+ * Matching uses normalized luminance, so light/dark colour inversion does not
+ * change the result.  Size is a search dimension, never a fixed coordinate.
+ */
+async function findInstagramSearchFieldByPixels(
+  serial: string,
+  onLog?: (msg: string) => void,
+): Promise<SearchFieldVisualMatch | null> {
+  const screen = await _captureScreenPixels(serial);
+  if (!screen || screen.channels < 3) return null;
+  const names = [
+    "V1_1787004021661.jpg", "V2_1787004021661.jpg",
+    "V1_1787004422194.jpg", "V1-TAPPED-FIELD_1787004428397.jpg",
+    "V1-WITH-TARGET_1787004431727.jpg", "V2_1787004435387.jpg",
+    "V2-TAPPED-FIELD_1787004440073.jpg", "V2-WITH-TARGET_1787004444586.jpg",
+  ];
+  const root = path.resolve(process.cwd(), "attached_assets");
+  const refs: Array<{ name: string; width: number; height: number; gray: Buffer }> = [];
+  for (const name of names) {
+    try {
+      const { data, info } = await sharp(path.join(root, name))
+        .greyscale().raw().toBuffer({ resolveWithObject: true });
+      refs.push({ name, width: info.width, height: info.height, gray: data });
+    } catch {
+      // A missing optional reference must not turn into a guessed tap.
+    }
+  }
+  if (!refs.length) return null;
+
+  const px = (x: number, y: number): number => {
+    const i = (y * screen.width + x) * screen.channels;
+    return (screen.pixels[i] + screen.pixels[i + 1] + screen.pixels[i + 2]) / 3;
+  };
+  let best: SearchFieldVisualMatch | null = null;
+  // The field is in the top region, but its exact width varies by device and
+  // state.  Search a broad scale range instead of deriving one fixed scale.
+  for (const ref of refs) {
+    for (const scale of [0.50, 0.65, 0.80, 1.00, 1.25, 1.50, 1.80, 2.10, 2.50, 3.00]) {
+      const tw = Math.round(ref.width * scale), th = Math.round(ref.height * scale);
+      if (tw < 100 || th < 25 || tw >= screen.width || th >= Math.round(screen.height * 0.45)) continue;
+      const step = Math.max(1, Math.round(scale));
+      for (let y = 0; y <= Math.round(screen.height * 0.40) - th; y += 6) {
+        for (let x = 0; x <= screen.width - tw; x += 6) {
+          let sum = 0, sum2 = 0, count = 0, error = 0;
+          for (let ty = 0; ty < ref.height; ty += step) {
+            const sy = y + Math.min(th - 1, Math.round(ty * scale));
+            for (let tx = 0; tx < ref.width; tx += step) {
+              const sx = x + Math.min(tw - 1, Math.round(tx * scale));
+              const v = px(sx, sy);
+              const t = ref.gray[ty * ref.width + tx];
+              sum += v; sum2 += v * v; count++;
+            }
+          }
+          if (count < 100) continue;
+          const mean = sum / count;
+          const variance = Math.max(1, sum2 / count - mean * mean);
+          // Compare local contrast rather than polarity: the same artwork
+          // matches whether it is dark-on-light or light-on-dark.
+          for (let ty = 0; ty < ref.height; ty += step) {
+            const sy = y + Math.min(th - 1, Math.round(ty * scale));
+            for (let tx = 0; tx < ref.width; tx += step) {
+              const sx = x + Math.min(tw - 1, Math.round(tx * scale));
+              const v = (px(sx, sy) - mean) / Math.sqrt(variance);
+              const t = (ref.gray[ty * ref.width + tx] - 200) / 55;
+              error += Math.min(4, Math.abs(Math.abs(v) - Math.abs(t)));
+            }
+          }
+          const score = 1 - error / Math.max(1, count * 2);
+          if (score > (best?.score ?? 0.78)) {
+            best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), score, template: ref.name };
+          }
+        }
+      }
+    }
+  }
+  if (best) onLog?.(`Follow: visual search field matched ${best.template} at (${best.x}, ${best.y}) score=${best.score.toFixed(3)}`);
+  else onLog?.("Follow: visual search field not matched — refusing coordinate fallback");
+  return best;
+}
+
 /**
  * Finds the Share footer button on Instagram's "New post" caption screen.
  *
@@ -9651,6 +9737,13 @@ export async function findInstagramSearchBar(
   serial: string,
   onLog?: (msg: string) => void,
 ): Promise<{ x: number; y: number } | null> {
+  // The live visual reference is authoritative. Do not silently fall through
+  // to an accessibility/coordinate guess when Instagram omits the field node.
+  const visual = await findInstagramSearchFieldByPixels(serial, onLog);
+  if (!visual) return null;
+  return { x: visual.x, y: visual.y };
+
+  /*
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
 
@@ -9796,6 +9889,7 @@ export async function findInstagramSearchBar(
   // search field as an accessibility node, the caller must skip this user.
   onLog?.("Follow: search bar node not found — refusing coordinate fallback");
   return null;
+  */
 }
 
 /** Confirm that Instagram's live search field owns focus before typing or
