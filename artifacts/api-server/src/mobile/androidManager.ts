@@ -3276,7 +3276,8 @@ export async function setAirplaneMode(serial: string, enable: boolean): Promise<
 export async function swipeUpFromBottom(serial: string): Promise<void> {
   const { w, h } = getScreenSize(serial);
   const x = Math.round(w / 2);
-  await swipe(serial, x, Math.round(h * 0.92), x, Math.round(h * 0.35), 300);
+  const durationMs = 200 + Math.round(Math.random() * 300);
+  await swipe(serial, x, Math.round(h * 0.92), x, Math.round(h * 0.35), durationMs);
 }
 
 /** Dismiss an Instagram story/highlight viewer with the inverse gesture. */
@@ -8173,7 +8174,7 @@ export async function switchToInstagramAccount(
            throw new Error("Swipe Gesture Profile duration is invalid for account-list scrolling");
          }
          const durationMin = Math.min(profile.durationMinMs, profile.durationMaxMs);
-         const durationMax = Math.min(150, Math.max(profile.durationMinMs, profile.durationMaxMs));
+         const durationMax = Math.min(500, Math.max(profile.durationMinMs, profile.durationMaxMs));
         const duration = Math.max(1, Math.round(durationMin + Math.random() * (durationMax - durationMin)));
         onLog?.(`  ↳ Account-list swipe mapped to sheet bounds: (${midX}, ${fromY}) → (${midX}, ${toY}) over ${duration}ms`);
         await runAdb(adbPath, [
