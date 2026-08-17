@@ -46,6 +46,10 @@ import { readFile, unlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
 
+const MAX_AI_SLOP_INPUT_BYTES = 50 * 1024 * 1024;
+const MAX_AI_SLOP_PIXELS = 100_000_000;
+let sharpConfigured = false;
+
 // This is deliberately synchronous and separate from the normal logger. A
 // Windows native access violation can terminate the API child before buffered
 // stdout/stderr or async log transports flush.
@@ -314,6 +318,12 @@ export async function fixAiSlop(
   try {
     nativeCrashBreadcrumb("read-input");
     const raw = await readFile(inputPath);
+    if (raw.length === 0) {
+      throw new Error("input image is empty");
+    }
+    if (raw.length > MAX_AI_SLOP_INPUT_BYTES) {
+      throw new Error(`input image is too large (${raw.length} bytes; maximum is ${MAX_AI_SLOP_INPUT_BYTES})`);
+    }
     const fmt = detectFormat(raw);
 
     // ── Step 1: Binary metadata strip (platform-independent) ──────────────
@@ -348,6 +358,14 @@ export async function fixAiSlop(
     try {
       nativeCrashBreadcrumb("sharp-import");
       sharp = (await import("sharp")).default;
+      // Make the native image operation conservative. A single malformed or
+      // unusually large upload must fail this post attempt, not exhaust the
+      // API process with libvips worker threads or an unbounded decode.
+      if (!sharpConfigured) {
+        sharp.concurrency(1);
+        sharp.cache(false);
+        sharpConfigured = true;
+      }
     } catch (err) {
       await unlink(tmp).catch(() => {});
       const detail = err instanceof Error ? `: ${err.message}` : "";
@@ -358,7 +376,11 @@ export async function fixAiSlop(
 
     const quality = 85 + Math.floor(Math.random() * 8);
     nativeCrashBreadcrumb("sharp-pipeline", `format=${fmt} bytes=${stripped.length} quality=${quality}`);
-    const reencoded: Buffer = await sharp(stripped)
+    const reencoded: Buffer = await sharp(stripped, {
+      limitInputPixels: MAX_AI_SLOP_PIXELS,
+      sequentialRead: true,
+      failOn: "error",
+    })
       .withMetadata(false)
       .jpeg({ quality, chromaSubsampling: "4:2:0", force: true })
       .toBuffer();
