@@ -18,7 +18,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, Heart, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2 } from "lucide-react";
+import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus } from "lucide-react";
 import { pickLocalWallpaper } from "@/pages/mobileShared";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -42,7 +42,7 @@ function toolVisual(tool: string): { label: string; icon: React.ReactNode } {
   if (/Explore/i.test(tool)) return { label: tool, icon: <Activity className={iconClass} /> };
   if (/Feed/i.test(tool)) return { label: tool, icon: <BarChart2 className={iconClass} /> };
   if (/Direct|DM|Messaging/i.test(tool)) return { label: tool, icon: <MessageCircle className={iconClass} /> };
-  if (/Follow/i.test(tool)) return { label: tool, icon: <Heart className={iconClass} /> };
+  if (/Follow/i.test(tool)) return { label: tool, icon: <UserPlus className={iconClass} /> };
   if (/Post|Avatar|Profile/i.test(tool)) return { label: tool, icon: <Upload className={iconClass} /> };
   return { label: tool, icon: <Activity className={iconClass} /> };
 }
