@@ -657,7 +657,6 @@ type DevicePrefs = {
     perTool?: Record<string, { minMs: number; maxMs: number }>;
   };
   swipePersonalityOverrides?: Record<string, { weightMin: number; weightMax: number; durationMinMs: number; durationMaxMs: number }>;
-  navigationOverrides?: { homeTabPct: number; backPct: number };
   typingSpeedProfile?: { minMs: number; maxMs: number; errorPercentMin: number; errorPercentMax: number; dwellMinMs: number; dwellMaxMs: number; hesitationMinMs: number; hesitationMaxMs: number };
   swipeGesture?: { x1: number; y1: number; x2: number; y2: number; durationMinMs: number; durationMaxMs: number; jitterX: number; jitterY: number; startJitterMinY?: number; startJitterMaxY?: number; pauseMinMs?: number; pauseMaxMs?: number; settleMinMs?: number; settleMaxMs?: number };
 };
@@ -3190,10 +3189,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           durationMinMs: z.number().finite().min(1).max(30000),
           durationMaxMs: z.number().finite().min(1).max(30000),
         })).optional(),
-        navigationOverrides: z.object({
-          homeTabPct: z.number().finite().min(0).max(100),
-          backPct: z.number().finite().min(0).max(100),
-        }).optional(),
         typingSpeedProfile: z.object({
           minMs: z.number().finite().min(0),
           maxMs: z.number().finite().min(0),
@@ -4035,14 +4030,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     });
   };
   const returnToHomeSafely = async (serial: string): Promise<boolean> => {
-    const nav = loadInstanceConfigs()[serial]?.devicePrefs?.navigationOverrides ?? { homeTabPct: 100, backPct: 0 };
-    const roll = Math.random() * Math.max(1, nav.homeTabPct + nav.backPct);
-    if (roll >= nav.homeTabPct && nav.backPct > 0) {
-      await android.pressBack(serial);
-      await sleepOrAbort(serial, 500, "navigation");
-      const confirmed = await android.findHomeTab(serial).catch(() => null);
-      if (confirmed) { await android.tap(serial, confirmed.x, confirmed.y); return true; }
-    }
+    // Android Back is deliberately not a Home route: it only reverses the
+    // current navigation stack and can leave the device inside a feed viewer.
+    // The only safe route currently available here is the validated Home tab.
     const home = await android.findHomeTab(serial).catch(() => null);
     if (!home) return false;
     await android.tap(serial, home.x, home.y);
