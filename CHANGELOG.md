@@ -1,3 +1,9 @@
+## [1.2.531] — 2026-08-17
+
+### Changed — HST Account-Switch Timing
+
+- Increase and randomize the waits between account-switch detection, profile navigation, account selection, scrolling, dismissal, and final feed loading.
+
 ## [1.2.530] — 2026-08-16
 
 ### Fixed — View Reels Home Exit
