@@ -9014,6 +9014,18 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const [swipeGesture, setSwipeGesture] = React.useState<SwipeGesture>({ x1: 540, y1: 2100, x2: 540, y2: 500, durationMinMs: 400, durationMaxMs: 150, jitterX: 0, jitterY: 0, startJitterMinY: 0, startJitterMaxY: 0, pauseMinMs: 150, pauseMaxMs: 600, settleMinMs: 100, settleMaxMs: 350 });
   type TypingSpeedProfile = { minMs: number; maxMs: number; errorPercentMin: number; errorPercentMax: number; dwellMinMs: number; dwellMaxMs: number; hesitationMinMs: number; hesitationMaxMs: number };
   const [typingSpeedProfile, setTypingSpeedProfile] = React.useState<TypingSpeedProfile>({ minMs: 80, maxMs: 220, errorPercentMin: 0, errorPercentMax: 0, dwellMinMs: 40, dwellMaxMs: 80, hesitationMinMs: 250, hesitationMaxMs: 650 });
+  type MotherRange = { minMs: number; maxMs: number };
+  type MotherOverrides = { globalDwell: MotherRange; accountSwitching: MotherRange; navigation: MotherRange; actionPacing: MotherRange; perTool: Record<string, MotherRange> };
+  const defaultMotherOverrides: MotherOverrides = {
+    globalDwell: { minMs: 500, maxMs: 5000 },
+    accountSwitching: { minMs: 500, maxMs: 5000 },
+    navigation: { minMs: 500, maxMs: 5000 },
+    actionPacing: { minMs: 500, maxMs: 5000 },
+    perTool: {},
+  };
+  const [motherOverrides, setMotherOverrides] = React.useState<MotherOverrides>(defaultMotherOverrides);
+  const motherOverridesRef = React.useRef(motherOverrides);
+  React.useEffect(() => { motherOverridesRef.current = motherOverrides; }, [motherOverrides]);
   const [swipeResolution, setSwipeResolution] = React.useState({ w: 1080, h: 2400 });
   const [swipeSaving, setSwipeSaving] = React.useState(false);
   const [swipeTesting, setSwipeTesting] = React.useState(false);
@@ -9036,6 +9048,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
           durationMaxMs: Math.min(150, Number(d.swipeGesture.durationMaxMs ?? 150)),
         });
         if (d.typingSpeedProfile) setTypingSpeedProfile({ minMs: 80, maxMs: 220, errorPercentMin: 0, errorPercentMax: 0, dwellMinMs: 40, dwellMaxMs: 80, hesitationMinMs: 250, hesitationMaxMs: 650, ...d.typingSpeedProfile });
+        if (d.motherCodeOverrides) setMotherOverrides({ ...defaultMotherOverrides, ...d.motherCodeOverrides });
       })
       .catch(() => {});
     fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-spec`)
@@ -9043,6 +9056,14 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
       .then(d => { if (d.resolution?.w && d.resolution?.h) setSwipeResolution(d.resolution); })
       .catch(() => {});
   }, [serial]);
+  const saveMotherOverrides = async (next: MotherOverrides) => {
+    if (!serial) return;
+    setMotherOverrides(next);
+    await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-prefs`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ motherCodeOverrides: next }),
+    }).catch(() => {});
+  };
 
   const saveSwipeGesture = async (next: SwipeGesture) => {
     if (!serial) return;
@@ -9371,6 +9392,65 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
 
   return (
     <div className="h-full overflow-y-auto p-6 space-y-6">
+
+      {/* ── Typing Speed Profile ─────────────────────────────────────── */}
+      <div className="bg-card border border-primary/30 rounded-xl p-5 space-y-3">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Mother Code — This Device Overrides</p>
+          <p className="text-xs text-muted-foreground">These ranges are saved only for serial {serial ?? "this device"}. The shared Mother Code is not changed.</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {([
+            ["globalDwell", "Global dwell timing"],
+            ["accountSwitching", "Account switching steps"],
+            ["navigation", "Navigation / screen-load waits"],
+            ["actionPacing", "Pacing between taps, checks and actions"],
+          ] as const).map(([key, label]) => (
+            <div key={key} className="rounded-lg border border-border p-3">
+              <p className="text-xs font-medium text-foreground">{label}</p>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                {(["minMs", "maxMs"] as const).map(part => (
+                  <label key={part} className="text-[11px] text-muted-foreground">{part === "minMs" ? "Minimum (ms)" : "Maximum (ms)"}
+                    <input type="number" min={0} value={motherOverrides[key][part]}
+                      onChange={e => saveMotherOverrides({ ...motherOverrides, [key]: { ...motherOverrides[key], [part]: Math.max(0, Number(e.target.value)) } })}
+                      className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="rounded-lg border border-border p-3">
+          <p className="text-xs font-medium text-foreground">Per-tool overrides</p>
+          <p className="text-[11px] text-muted-foreground mt-1">Add a tool only when it needs a different base range. Leave empty to use the Mother Code category above.</p>
+          <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 mt-2 items-end">
+            <label className="text-[11px] text-muted-foreground">Tool name
+              <input id="mother-tool-name" placeholder="e.g. Feed" className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
+            </label>
+            {(["minMs", "maxMs"] as const).map(part => (
+              <label key={part} className="text-[11px] text-muted-foreground">{part === "minMs" ? "Minimum" : "Maximum"}
+                <input id={`mother-tool-${part}`} type="number" min={0} placeholder="ms" className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
+              </label>
+            ))}
+            <Button type="button" size="sm" variant="outline" onClick={() => {
+              const name = (document.getElementById("mother-tool-name") as HTMLInputElement)?.value.trim();
+              const min = Number((document.getElementById("mother-tool-minMs") as HTMLInputElement)?.value);
+              const max = Number((document.getElementById("mother-tool-maxMs") as HTMLInputElement)?.value);
+              if (!name || !Number.isFinite(min) || !Number.isFinite(max)) return;
+              saveMotherOverrides({ ...motherOverrides, perTool: { ...motherOverrides.perTool, [name]: { minMs: Math.max(0, min), maxMs: Math.max(0, max) } } });
+            }}>Add</Button>
+          </div>
+          {Object.entries(motherOverrides.perTool).map(([name, range]) => (
+            <div key={name} className="flex items-center justify-between mt-2 rounded bg-muted/40 px-2 py-1.5 text-xs">
+              <span>{name}: {range.minMs}–{range.maxMs} ms</span>
+              <button type="button" className="text-destructive" onClick={() => {
+                const next = { ...motherOverrides.perTool }; delete next[name];
+                saveMotherOverrides({ ...motherOverrides, perTool: next });
+              }}>Remove</button>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* ── Typing Speed Profile ─────────────────────────────────────── */}
       <div className="bg-card border border-border rounded-xl p-5 space-y-3">

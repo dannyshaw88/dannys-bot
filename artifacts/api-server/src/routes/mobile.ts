@@ -649,6 +649,13 @@ type DeviceAccount = { slots: DeviceSlot[] };
 type DeviceSettings = { googlePlayEmail?: string; googlePlayPassword?: string; selectedSimSlot?: number };
 type DevicePrefs = {
   dismissDirection?: "auto" | "left" | "up";
+  motherCodeOverrides?: {
+    globalDwell?: { minMs: number; maxMs: number };
+    accountSwitching?: { minMs: number; maxMs: number };
+    navigation?: { minMs: number; maxMs: number };
+    actionPacing?: { minMs: number; maxMs: number };
+    perTool?: Record<string, { minMs: number; maxMs: number }>;
+  };
   typingSpeedProfile?: { minMs: number; maxMs: number; errorPercentMin: number; errorPercentMax: number; dwellMinMs: number; dwellMaxMs: number; hesitationMinMs: number; hesitationMaxMs: number };
   swipeGesture?: { x1: number; y1: number; x2: number; y2: number; durationMinMs: number; durationMaxMs: number; jitterX: number; jitterY: number; startJitterMinY?: number; startJitterMaxY?: number; pauseMinMs?: number; pauseMaxMs?: number; settleMinMs?: number; settleMaxMs?: number };
 };
@@ -3168,6 +3175,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const serial = p(req, "serial");
       const allowed = z.object({
         dismissDirection: z.enum(["auto", "left", "up"]).optional(),
+        motherCodeOverrides: z.object({
+          globalDwell: z.object({ minMs: z.number().finite().min(0), maxMs: z.number().finite().min(0) }).optional(),
+          accountSwitching: z.object({ minMs: z.number().finite().min(0), maxMs: z.number().finite().min(0) }).optional(),
+          navigation: z.object({ minMs: z.number().finite().min(0), maxMs: z.number().finite().min(0) }).optional(),
+          actionPacing: z.object({ minMs: z.number().finite().min(0), maxMs: z.number().finite().min(0) }).optional(),
+          perTool: z.record(z.string(), z.object({ minMs: z.number().finite().min(0), maxMs: z.number().finite().min(0) })).optional(),
+        }).optional(),
         typingSpeedProfile: z.object({
           minMs: z.number().finite().min(0),
           maxMs: z.number().finite().min(0),
@@ -3985,15 +3999,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // Helper: every mobile dwell is sampled at the point of execution. Keeping
   // this at the shared boundary prevents a newly added action from silently
   // reintroducing a fixed timing signature.
-  const randomizedDwellMs = (serial: string, ms: number): number => {
+  const randomizedDwellMs = (serial: string, ms: number, category: "globalDwell" | "accountSwitching" | "navigation" | "actionPacing" = "globalDwell"): number => {
     if (!Number.isFinite(ms) || ms <= 0) return Math.max(0, ms);
     const scaled = ms * devicePersonality(serial).dwellScale;
     const low = scaled >= 5000 ? Math.max(1, Math.round(scaled * 0.5)) : Math.max(1, Math.round(scaled));
     const high = scaled >= 5000 ? Math.round(scaled) : 5000;
-    return low + Math.floor(Math.random() * (high - low + 1));
+    const override = loadInstanceConfigs()[serial]?.devicePrefs?.motherCodeOverrides?.[category];
+    if (!override) return low + Math.floor(Math.random() * (high - low + 1));
+    const min = Math.min(override.minMs, override.maxMs);
+    const max = Math.max(override.minMs, override.maxMs);
+    return Math.round(min + Math.random() * (max - min));
   };
-  const sleepOrAbort = (serial: string, ms: number) => {
-    const dwellMs = randomizedDwellMs(serial, ms);
+  const sleepOrAbort = (serial: string, ms: number, category: "globalDwell" | "accountSwitching" | "navigation" | "actionPacing" = "globalDwell") => {
+    const dwellMs = randomizedDwellMs(serial, ms, category);
     return new Promise<void>((resolve, reject) => {
       const t = setTimeout(() => {
         if (isCycleAborted(serial)) reject(new Error("cycle-aborted"));
