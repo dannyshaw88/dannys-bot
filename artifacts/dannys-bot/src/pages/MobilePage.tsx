@@ -6374,7 +6374,7 @@ export function AutomationSettingsPanel({
           </div>
         </div>}
 
-        {/* Border separator between Direct Messaging above and the Follow Users
+        {/* Border separator between Check Inbox above and the Follow Users
             feature below — same card/step (STEP2). */}
         <div className="border-t border-border" />
 
@@ -10268,7 +10268,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
               if      (/▶ View Explore/.test(msg))    currentTool = 'explore';
               else if (/▶ View Feed/.test(msg))       currentTool = 'feed';
               else if (/▶ View Reels/.test(msg))      currentTool = 'reels';
-              else if (/▶ Direct Messaging/.test(msg)) currentTool = 'directmessaging';
+              else if (/▶ (?:Direct Messaging|Check Inbox)/.test(msg)) currentTool = 'directmessaging';
               else if (/▶.*[Ss]tories/.test(msg))     currentTool = 'stories';
               else if (/▶ Make a Post/.test(msg))     currentTool = 'makepost';
               else if (/▶ Follow Users/.test(msg))    currentTool = 'follow';
@@ -10289,7 +10289,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                    /\b(?:Story|Stories|story|stories)\b/i.test(msg) ||
                    /waiting for (?:the )?story feed/i.test(msg);
                  const isDirectMessagingMessage = currentTool === 'directmessaging' ||
-                   /▶\s*Direct Messaging\b|\bDirect Messaging\b/i.test(msg);
+                   /▶\s*(?:Direct Messaging|Check Inbox)\b|\b(?:Direct Messaging|Check Inbox)\b/i.test(msg);
                  const isReelsMessage = !isFeedMessage &&
                    (/\b(?:Reel|Reels)\b/i.test(msg) || /▶\s*View Reels\b/i.test(msg));
                 const activeToolClass =

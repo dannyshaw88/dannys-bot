@@ -3928,7 +3928,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "Feed",
     "View Stories",
     "View Reels",
-    "Direct Messaging",
+    "Check Inbox",
     "Inject Browsing",
     "Random Actions",
     "Make a Post",
@@ -9249,7 +9249,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Tap the DM paper-plane icon (top-right header area of the home feed).
     const dmTab = await android.findInstagramDmTab(serial).catch(() => null);
     if (!dmTab) {
-      onLog?.("Direct Messaging: DM icon not found — skipping");
+      onLog?.("Check Inbox: DM icon not found — skipping");
       logger.warn({ serial }, "[check-dm] DM icon not found by scan");
       return;
     }
@@ -9258,10 +9258,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Dismiss any "Not now" popup (e.g. "Turn on notifications for Direct").
     const dismissed = await android.dismissInstagramInterstitials(serial).catch(() => null);
     if (dismissed) {
-      onLog?.(`Direct Messaging: dismissed popup ("${dismissed}")`);
+      onLog?.(`Check Inbox: dismissed popup ("${dismissed}")`);
       await sleepOrAbort(serial, 600);
     }
-    onLog?.("Direct Messaging: ✓ opened DM inbox");
+    onLog?.("Check Inbox: ✓ opened DM inbox");
     // Scroll through inbox N times.
     const scrollCount = rollRange(scrollsMin, scrollsMax);
     const { w, h } = getScreenSize(serial);
@@ -9284,20 +9284,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const item = await android.findDmConversationItem(serial).catch(() => null);
       if (item) {
         await android.tap(serial, item.x, item.y);
-        onLog?.("Direct Messaging: ✓ opened conversation thread");
+        onLog?.("Check Inbox: ✓ opened conversation thread");
         await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 1500));
         await android.pressBack(serial);
         await sleepOrAbort(serial, 600);
       } else {
-        onLog?.("Direct Messaging: no conversation thread found — skipping tap");
+        onLog?.("Check Inbox: no conversation thread found — skipping tap");
       }
     } else {
-      onLog?.("Direct Messaging: click-thread roll missed — skipping");
+      onLog?.("Check Inbox: click-thread roll missed — skipping");
     }
     // Return to home feed.
     await android.pressBack(serial);
     await sleepOrAbort(serial, 800);
-    onLog?.("Direct Messaging: ✓ DM inbox check done");
+    onLog?.("Check Inbox: ✓ DM inbox check done");
   }
 
   /** Visit own profile: tap profile icon in bottom nav, dwell briefly, return to home. */
@@ -12063,7 +12063,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       };
       const _toolOrderLabels: Record<string, string> = {
         feed: "VIEW FEED", stories: "VIEW STORIES", explore: "VIEW EXPLORE",
-        reels: "VIEW REELS", checkDm: "DIRECT MESSAGING", follow: "FOLLOW USERS",
+        reels: "VIEW REELS", checkDm: "CHECK INBOX", follow: "FOLLOW USERS",
         post: "MAKE A POST", postStory: "POST A STORY", "Random Actions": "RANDOM ACTIONS",
       };
       const _toolSeq = ["feed", "stories", "explore", "reels", "checkDm", "follow", "post", "postStory", "Random Actions"]
@@ -12111,7 +12111,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               stories: "Stories",
               explore: "Explore",
               reels: "Reel Viewer",
-              checkDm: "Direct Messaging",
+              checkDm: "Check Inbox",
               post: "Make a Post",
               postStory: "Post a Story",
               "Random Actions": "Random Actions",
@@ -12200,7 +12200,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 onLog: (msg) => tLog(`  ${msg}`),
               }).catch((e: any) => {
                 if (e?.message === "cycle-aborted") throw e;
-                tLog(`  ⚠ Pre-switch Direct Messaging skipped: ${e?.message ?? "unknown error"}`);
+                tLog(`  ⚠ Pre-switch Check Inbox skipped: ${e?.message ?? "unknown error"}`);
               });
             } else if (preTool === "post") {
               await runMakePostStep(serial, {
@@ -12627,7 +12627,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           stories: "Stories",
           explore: "Explore",
           reels: "Reel Viewer",
-          checkDm: "Direct Messaging",
+          checkDm: "Check Inbox",
           follow: "Follow Users",
           post: "Make a Post",
           postStory: "Post a Story",
@@ -12855,7 +12855,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // ── Check DMs ───────────────────────────────────────────────────
         } else if (_tool === 'checkDm') {
           if (_toolActivated[_tool]) {
-            tLog("▶ Direct Messaging — opening DM inbox…");
+            tLog("▶ Check Inbox — opening DM inbox…");
             try {
               await runCheckDmLoop(serial, {
                 scrollsMin: checkDmScrollMin,
@@ -12865,17 +12865,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 onLog: (msg) => tLog(`  ${msg}`),
               });
               steps.push("checkDm(done)");
-              tLog("▶ Direct Messaging done");
+            tLog("▶ Check Inbox done");
             } catch (e: any) {
               if (e?.message === "cycle-aborted") throw e;
-              tLog(`▶ Direct Messaging error — ${e?.message}`);
+            tLog(`▶ Check Inbox error — ${e?.message}`);
               steps.push("checkDm(error)");
             }
           } else if (!checkDmEnabled) {
-            // no-op — Direct Messaging disabled is the common/default state
+            // no-op — Check Inbox disabled is the common/default state
           } else {
             steps.push("checkDm(skipped — Activate Percentage roll missed this execution)");
-            tLog("▶ Direct Messaging Activate Percentage roll missed — skipping this execution");
+            tLog("▶ Check Inbox Activate Percentage roll missed — skipping this execution");
           }
 
         // ── Follow Users ────────────────────────────────────────────────
