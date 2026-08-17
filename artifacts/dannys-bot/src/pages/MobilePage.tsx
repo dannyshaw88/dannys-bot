@@ -9015,12 +9015,9 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   type TypingSpeedProfile = { minMs: number; maxMs: number; errorPercentMin: number; errorPercentMax: number; dwellMinMs: number; dwellMaxMs: number; hesitationMinMs: number; hesitationMaxMs: number };
   const [typingSpeedProfile, setTypingSpeedProfile] = React.useState<TypingSpeedProfile>({ minMs: 80, maxMs: 220, errorPercentMin: 0, errorPercentMax: 0, dwellMinMs: 40, dwellMaxMs: 80, hesitationMinMs: 250, hesitationMaxMs: 650 });
   type MotherRange = { minMs: number; maxMs: number };
-  type MotherOverrides = { globalDwell: MotherRange; accountSwitching: MotherRange; navigation: MotherRange; actionPacing: MotherRange; perTool: Record<string, MotherRange> };
+  type MotherOverrides = { globalDwell: MotherRange; perTool: Record<string, MotherRange> };
   const defaultMotherOverrides: MotherOverrides = {
     globalDwell: { minMs: 500, maxMs: 5000 },
-    accountSwitching: { minMs: 500, maxMs: 5000 },
-    navigation: { minMs: 500, maxMs: 5000 },
-    actionPacing: { minMs: 500, maxMs: 5000 },
     perTool: {},
   };
   const [motherOverrides, setMotherOverrides] = React.useState<MotherOverrides>(defaultMotherOverrides);
@@ -9048,7 +9045,10 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
           durationMaxMs: Math.min(150, Number(d.swipeGesture.durationMaxMs ?? 150)),
         });
         if (d.typingSpeedProfile) setTypingSpeedProfile({ minMs: 80, maxMs: 220, errorPercentMin: 0, errorPercentMax: 0, dwellMinMs: 40, dwellMaxMs: 80, hesitationMinMs: 250, hesitationMaxMs: 650, ...d.typingSpeedProfile });
-        if (d.motherCodeOverrides) setMotherOverrides({ ...defaultMotherOverrides, ...d.motherCodeOverrides });
+        if (d.motherCodeOverrides) setMotherOverrides({
+          globalDwell: d.motherCodeOverrides.globalDwell ?? defaultMotherOverrides.globalDwell,
+          perTool: d.motherCodeOverrides.perTool ?? defaultMotherOverrides.perTool,
+        });
       })
       .catch(() => {});
     fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-spec`)
@@ -9396,33 +9396,25 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
       {/* ── Typing Speed Profile ─────────────────────────────────────── */}
       <div className="bg-card border border-primary/30 rounded-xl p-5 space-y-3">
         <div>
-          <p className="text-sm font-semibold text-foreground">Mother Code — This Device Overrides</p>
-          <p className="text-xs text-muted-foreground">These ranges are saved only for serial {serial ?? "this device"}. The shared Mother Code is not changed.</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {([
-            ["globalDwell", "Global dwell timing"],
-            ["accountSwitching", "Account switching steps"],
-            ["navigation", "Navigation / screen-load waits"],
-            ["actionPacing", "Pacing between taps, checks and actions"],
-          ] as const).map(([key, label]) => (
-            <div key={key} className="rounded-lg border border-border p-3">
-              <p className="text-xs font-medium text-foreground">{label}</p>
-              <div className="grid grid-cols-2 gap-2 mt-2">
-                {(["minMs", "maxMs"] as const).map(part => (
-                  <label key={part} className="text-[11px] text-muted-foreground">{part === "minMs" ? "Minimum (ms)" : "Maximum (ms)"}
-                    <input type="number" min={0} value={motherOverrides[key][part]}
-                      onChange={e => saveMotherOverrides({ ...motherOverrides, [key]: { ...motherOverrides[key], [part]: Math.max(0, Number(e.target.value)) } })}
-                      className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
-                  </label>
-                ))}
-              </div>
-            </div>
-          ))}
+          <p className="text-sm font-semibold text-foreground">Mother Code — This Device Override</p>
+          <p className="text-xs text-muted-foreground">This range is saved only for serial {serial ?? "this device"} and changes shared Mother Code dwell timing without changing the Mother Code itself.</p>
         </div>
         <div className="rounded-lg border border-border p-3">
-          <p className="text-xs font-medium text-foreground">Per-tool overrides</p>
-          <p className="text-[11px] text-muted-foreground mt-1">Add a tool only when it needs a different base range. Leave empty to use the Mother Code category above.</p>
+          <p className="text-xs font-medium text-foreground">Global dwell timing</p>
+          <p className="text-[11px] text-muted-foreground mt-1">Used for shared waits throughout the Mother Code, including navigation, screen loading, account switching, checks, and waits after operations.</p>
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            {(["minMs", "maxMs"] as const).map(part => (
+              <label key={part} className="text-[11px] text-muted-foreground">{part === "minMs" ? "Minimum (ms)" : "Maximum (ms)"}
+                <input type="number" min={0} value={motherOverrides.globalDwell[part]}
+                  onChange={e => saveMotherOverrides({ ...motherOverrides, globalDwell: { ...motherOverrides.globalDwell, [part]: Math.max(0, Number(e.target.value)) } })}
+                  className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-lg border border-border p-3">
+          <p className="text-xs font-medium text-foreground">Optional per-tool overrides</p>
+          <p className="text-[11px] text-muted-foreground mt-1">Only add a tool when this device needs different dwell timing for that tool. Otherwise it uses the global range above.</p>
           <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 mt-2 items-end">
             <label className="text-[11px] text-muted-foreground">Tool name
               <input id="mother-tool-name" placeholder="e.g. Feed" className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
