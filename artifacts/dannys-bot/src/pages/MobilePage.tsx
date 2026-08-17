@@ -9039,7 +9039,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     normal: { weightMin: 60, weightMax: 95, durationMinMs: 1500, durationMaxMs: 2500 },
     slow: { weightMin: 75, weightMax: 95, durationMinMs: 2000, durationMaxMs: 3500 },
     focused: { weightMin: 75, weightMax: 100, durationMinMs: 2500, durationMaxMs: 5000 },
-    tapDragRelease: { weightMin: 1, weightMax: 5, durationMinMs: 350, durationMaxMs: 600 },
+    tapDragRelease: { weightMin: 1, weightMax: 5, durationMinMs: 5000, durationMaxMs: 10000 },
     back: { weightMin: 0, weightMax: 5, durationMinMs: 350, durationMaxMs: 600 },
   };
   const defaultSwipePersonalityOverrides: Record<string, SwipePersonalityOverride> = Object.fromEntries(

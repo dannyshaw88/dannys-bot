@@ -4167,7 +4167,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     cum += focused;
     if (roll < cum) return { mode: "focused", duration: duration("focused", 2500, 5000), fromY: Math.round(h * Math.min(0.58, safeStartFrac)), toY: Math.round(h * 0.48) };
     cum += tapDragRelease;
-    if (roll < cum) return { mode: "tapDragRelease", duration: duration("tapDragRelease", 350, 600), fromY: Math.round(h * safeStartFrac), toY: Math.round(h * 0.35) };
+    if (roll < cum) return { mode: "tapDragRelease", duration: duration("tapDragRelease", 5000, 10000), fromY: Math.round(h * safeStartFrac), toY: Math.round(h * 0.35) };
     return {
       mode: "back",
       duration: duration("back", 350, 600),
