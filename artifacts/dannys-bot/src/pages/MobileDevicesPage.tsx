@@ -981,7 +981,7 @@ function DeviceCard({
         disabled={rebooting}
         title="Restart device"
         aria-label="Restart device"
-        className="absolute top-2 right-26 w-6 h-6 rounded-full bg-background text-green-500 border border-green-500/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-green-500/10 hover:border-green-500 disabled:cursor-not-allowed"
+        className="absolute top-2 right-26 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-green-500/10 hover:border-green-500 hover:text-green-500 text-muted-foreground disabled:cursor-not-allowed"
       >
         <RotateCcw className={`w-3 h-3 ${rebooting ? "animate-spin" : ""}`} />
       </button>
