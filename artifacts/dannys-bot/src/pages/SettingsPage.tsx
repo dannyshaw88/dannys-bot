@@ -659,14 +659,22 @@ export function SettingsPage() {
       const response = await fetch("/api/diagnostics/snapshot", { credentials: "include" });
       const data = await response.json();
       if (!response.ok || !data?.ok) throw new Error(data?.error ?? "Snapshot failed");
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `aura-diagnostic-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-      toast({ title: "Diagnostic snapshot created", description: "Runtime data was downloaded as a JSON file." });
+      const filename = `aura-diagnostic-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+      const content = JSON.stringify(data, null, 2);
+      const electron = eAPI();
+      if (electron?.writeDiagnosticSnapshot) {
+        const result = await electron.writeDiagnosticSnapshot({ filename, content });
+        toast({ title: "Diagnostic snapshot saved", description: result?.filePath ?? filename });
+      } else {
+        const blob = new Blob([content], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = filename;
+        anchor.click();
+        URL.revokeObjectURL(url);
+        toast({ title: "Diagnostic snapshot created", description: "Runtime data was downloaded as a JSON file." });
+      }
     } catch (error: any) {
       toast({ title: "Snapshot failed", description: error?.message ?? "Could not create snapshot", variant: "destructive" });
     } finally {

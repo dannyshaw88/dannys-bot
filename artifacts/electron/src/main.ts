@@ -1256,6 +1256,14 @@ async function createWindow() {
     }
   });
 
+  ipcMain.handle("write-diagnostic-snapshot", async (_e, { filename, content }: { filename: string; content: string }) => {
+    const downloadsDir = app.getPath("downloads");
+    const destPath = path.join(downloadsDir, filename);
+    appendToMainLog(`[diagnostics] writing runtime snapshot to ${destPath}`);
+    fs.writeFileSync(destPath, content, "utf8");
+    return { saved: true, filePath: destPath };
+  });
+
   ipcMain.handle("save-csv-dialog", async (_e, { content, filename }: { content: string; filename: string }) => {
     appendToMainLog(`[export-api-calls] save-csv-dialog IPC received — filename=${filename} contentLength=${content?.length ?? 0}`);
     try {
