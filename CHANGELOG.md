@@ -1,3 +1,9 @@
+## [1.2.533] — 2026-08-17
+
+### Fixed — Account-Switch Profile Timing
+
+- Randomize the profile-screen settle wait between 1500 and 5000 milliseconds instead of using a fixed 5000-millisecond delay.
+
 ## [1.2.532] — 2026-08-17
 
 ### Changed — Mobile Action Timing

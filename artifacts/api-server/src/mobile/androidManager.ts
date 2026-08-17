@@ -7996,7 +7996,7 @@ export async function switchToInstagramAccount(
   await _sleep(450 + Math.floor(Math.random() * 4551));
   const profileAfterTabTapXml = await _uiDump(adbPath, serial).catch(() => "");
   onLog?.(`  ↳ Profile-tab tap result: xmlLength=${profileAfterTabTapXml.length}, changed=${profileBeforeTapXml ? profileAfterTabTapXml !== profileBeforeTapXml : "not-comparable"}, hasProfileHeader=${/action_bar_username_container/i.test(profileAfterTabTapXml)}, hasBottomNav=${/bottom_nav|tab_bar|profile_tab/i.test(profileAfterTabTapXml)}`);
-  const PROFILE_SCREEN_SETTLE_MS = 5000;
+  const PROFILE_SCREEN_SETTLE_MS = 1500 + Math.floor(Math.random() * 3501);
   onLog?.(`  ↳ Waiting ${PROFILE_SCREEN_SETTLE_MS}ms for the profile header to settle…`);
   await _sleep(PROFILE_SCREEN_SETTLE_MS);
 
