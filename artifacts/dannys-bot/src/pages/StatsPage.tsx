@@ -198,7 +198,6 @@ const MOBILE_METRIC_DEFS: {
   { key: "dms",              label: "DMs Sent",        icon: <Mail className="w-3.5 h-3.5" />,     color: "text-violet-500", pieColor: "#8b5cf6" },
   { key: "feed_shares",      label: "Shares",          icon: <Send className="w-3.5 h-3.5" />,     color: "text-amber-500",  pieColor: "#f59e0b" },
   { key: "saves",            label: "Saves",           icon: <Bookmark className="w-3.5 h-3.5 fill-current" />, color: "text-black",      pieColor: "#000000" },
-  { key: "reel_scrolls",     label: "Reel",            icon: <Clapperboard className="w-3.5 h-3.5" />, color: "text-purple-500", pieColor: "#a855f7" },
   { key: "feed_scrolls",     label: "Feed",            icon: <BarChart2 className="w-3.5 h-3.5" />, color: "text-teal-500",  pieColor: "#14b8a6" },
   { key: "explore_scrolls",  label: "Explore",         icon: <Activity className="w-3.5 h-3.5" />, color: "text-orange-500", pieColor: "#f97316" },
 ];
