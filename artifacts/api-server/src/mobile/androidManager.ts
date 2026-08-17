@@ -7706,8 +7706,10 @@ export function closeBlueStacks(): void {
 
 function _sleep(ms: number): Promise<void> {
   if (!Number.isFinite(ms) || ms <= 0) return new Promise(r => setTimeout(r, Math.max(0, ms)));
+  // Short waits are explicit pacing values (especially calibrated typing
+  // delays). Never expand them into a hidden 0–5 second random wait.
   const low = ms >= 5000 ? Math.max(1, Math.round(ms * 0.5)) : Math.round(ms);
-  const high = ms >= 5000 ? Math.round(ms) : 5000;
+  const high = ms >= 5000 ? Math.round(ms) : Math.round(ms);
   const sampled = low + Math.floor(Math.random() * (high - low + 1));
   return new Promise(r => setTimeout(r, sampled));
 }
