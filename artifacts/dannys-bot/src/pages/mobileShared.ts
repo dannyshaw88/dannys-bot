@@ -564,7 +564,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'reelsShareDm',      label: 'Share via DM %',                fields: ['viewReelsShareDmPercentMin','viewReelsShareDmPercentMax'] },
     { key: 'reelsClickAuthor',  label: 'Click Author %',                fields: ['viewReelsClickAuthorPercentMin','viewReelsClickAuthorPercentMax'] },
   ]},
-  { key: 'checkDm',       label: 'Direct Messaging', sub: [
+  { key: 'checkDm',       label: 'Check Inbox', sub: [
     { key: 'checkDmEnabled',    label: 'Enabled',                       fields: ['checkDmEnabled'] },
     { key: 'checkDmActivate',   label: 'Activate Percentage',           fields: ['checkDmActivatePctMin','checkDmActivatePctMax'] },
     { key: 'checkDmScroll',     label: 'Scroll amount',                 fields: ['checkDmScrollMin','checkDmScrollMax'] },
