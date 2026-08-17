@@ -4006,6 +4006,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // Helper: every mobile dwell is sampled at the point of execution. Keeping
   // this at the shared boundary prevents a newly added action from silently
   // reintroducing a fixed timing signature.
+  const dwellDiagnosticAt = new Map<string, number>();
   const randomizedDwellMs = (serial: string, ms: number, category: "globalDwell" | "accountSwitching" | "navigation" | "actionPacing" = "actionPacing"): number => {
     if (!Number.isFinite(ms) || ms <= 0) return Math.max(0, ms);
     const scaled = ms * devicePersonality(serial).dwellScale;
@@ -4016,7 +4017,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (!override) return low + Math.floor(Math.random() * (high - low + 1));
     const min = Math.min(override.minMs, override.maxMs);
     const max = Math.max(override.minMs, override.maxMs);
-    return Math.round(min + Math.random() * (max - min));
+    const actual = Math.round(min + Math.random() * (max - min));
+    const diagnosticKey = `${serial}:${category}`;
+    const now = Date.now();
+    if ((dwellDiagnosticAt.get(diagnosticKey) ?? 0) + 5000 <= now) {
+      dwellDiagnosticAt.set(diagnosticKey, now);
+      logger.info({ serial, category, requestedMs: ms, overrideMinMs: min, overrideMaxMs: max, actualMs: actual },
+        "[mobile-override] global dwell applied");
+    }
+    return actual;
   };
   const sleepOrAbort = (serial: string, ms: number, category: "globalDwell" | "accountSwitching" | "navigation" | "actionPacing" = "actionPacing") => {
     const dwellMs = randomizedDwellMs(serial, ms, category);
@@ -4706,6 +4715,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // personality would have nothing meaningful to revisit. Keep the
       // session personality distribution for later scrolls.
       const sv = rollScrollVelocity(h, feedScrollWeights, /*allowBack=*/i > 0, /*safeStartFrac=*/0.88, feedPersonalityHistory, serial);
+      const feedOverride = serial ? loadInstanceConfigs()[serial]?.devicePrefs?.swipePersonalityOverrides?.[sv.mode] : undefined;
+      onLog?.(`[Override] Feed swipe: mode=${sv.mode}, duration=${sv.duration}ms${feedOverride ? `, weight=${feedOverride.weightMin}-${feedOverride.weightMax}, durationRange=${feedOverride.durationMinMs}-${feedOverride.durationMaxMs}ms` : ", Mother Code default"}`);
       feedPersonalityHistory.streak = feedPersonalityHistory.lastMode === sv.mode ? feedPersonalityHistory.streak + 1 : 1;
       feedPersonalityHistory.lastMode = sv.mode;
       const feedModeLabel = sv.mode === "superSkim" ? "super skim" : sv.mode;
@@ -7251,6 +7262,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // The first Explore advance is the first opportunity to reveal more
         // content; there is no prior grid position to revisit yet.
         const esv = rollScrollVelocity(h, exploreScrollWeights, /*allowBack=*/i > 0, /*safeStartFrac=*/0.80, explorePersonalityHistory, serial);
+        const exploreOverride = serial ? loadInstanceConfigs()[serial]?.devicePrefs?.swipePersonalityOverrides?.[esv.mode] : undefined;
+        onLog?.(`[Override] Explore swipe: mode=${esv.mode}, duration=${esv.duration}ms${exploreOverride ? `, weight=${exploreOverride.weightMin}-${exploreOverride.weightMax}, durationRange=${exploreOverride.durationMinMs}-${exploreOverride.durationMaxMs}ms` : ", Mother Code default"}`);
         explorePersonalityHistory.streak = explorePersonalityHistory.lastMode === esv.mode ? explorePersonalityHistory.streak + 1 : 1;
         explorePersonalityHistory.lastMode = esv.mode;
         const exploreModeLabel = esv.mode === "superSkim" ? "super skim" : esv.mode;
@@ -7375,6 +7388,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Android recognizes the movement, opening the keyboard instead of
       // advancing the reel. Keep the touch-down clearly above the composer.
       const rsv = rollScrollVelocity(h, reelsScrollWeights, /*allowBack=*/false, /*safeStartFrac=*/0.68, reelsPersonalityHistory, serial);
+      const reelsOverride = serial ? loadInstanceConfigs()[serial]?.devicePrefs?.swipePersonalityOverrides?.[rsv.mode] : undefined;
+      onLog?.(`[Override] Reels swipe: mode=${rsv.mode}, duration=${rsv.duration}ms${reelsOverride ? `, weight=${reelsOverride.weightMin}-${reelsOverride.weightMax}, durationRange=${reelsOverride.durationMinMs}-${reelsOverride.durationMaxMs}ms` : ", Mother Code default"}, backAllowed=false`);
       reelsPersonalityHistory.streak = reelsPersonalityHistory.lastMode === rsv.mode ? reelsPersonalityHistory.streak + 1 : 1;
       reelsPersonalityHistory.lastMode = rsv.mode;
       const beforeXml = await android.dumpUi(serial).catch(() => "");
