@@ -646,7 +646,7 @@ type AutomationSettings = {
 };
 type DeviceSlot = { slotId?: string; username: string; password: string; totpSecret?: string; emailAddress?: string; emailPassword?: string; phoneNumber?: string };
 type DeviceAccount = { slots: DeviceSlot[] };
-type DeviceSettings = { googlePlayEmail?: string; googlePlayPassword?: string; selectedSimSlot?: number };
+type DeviceSettings = { googlePlayEmail?: string; googlePlayPassword?: string; selectedSimSlot?: number; simPhoneNumbers?: Record<string, string> };
 type DevicePrefs = {
   dismissDirection?: "auto" | "left" | "up";
   motherCodeOverrides?: {
@@ -656,7 +656,7 @@ type DevicePrefs = {
     actionPacing?: { minMs: number; maxMs: number };
     perTool?: Record<string, { minMs: number; maxMs: number }>;
   };
-  swipePersonalityOverrides?: Record<string, { weight: number; durationMinMs: number; durationMaxMs: number }>;
+  swipePersonalityOverrides?: Record<string, { weightMin: number; weightMax: number; durationMinMs: number; durationMaxMs: number }>;
   typingSpeedProfile?: { minMs: number; maxMs: number; errorPercentMin: number; errorPercentMax: number; dwellMinMs: number; dwellMaxMs: number; hesitationMinMs: number; hesitationMaxMs: number };
   swipeGesture?: { x1: number; y1: number; x2: number; y2: number; durationMinMs: number; durationMaxMs: number; jitterX: number; jitterY: number; startJitterMinY?: number; startJitterMaxY?: number; pauseMinMs?: number; pauseMaxMs?: number; settleMinMs?: number; settleMaxMs?: number };
 };
@@ -3184,7 +3184,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           perTool: z.record(z.string(), z.object({ minMs: z.number().finite().min(0), maxMs: z.number().finite().min(0) })).optional(),
         }).optional(),
         swipePersonalityOverrides: z.record(z.string(), z.object({
-          weight: z.number().finite().min(0).max(1000),
+          weightMin: z.number().finite().min(0).max(1000),
+          weightMax: z.number().finite().min(0).max(1000),
           durationMinMs: z.number().finite().min(1).max(30000),
           durationMaxMs: z.number().finite().min(1).max(30000),
         })).optional(),
@@ -3703,9 +3704,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.post("/api/mobile/devices/:serial/device-settings", (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
-      const { googlePlayEmail, googlePlayPassword, selectedSimSlot } = req.body as DeviceSettings;
+       const { googlePlayEmail, googlePlayPassword, selectedSimSlot, simPhoneNumbers } = req.body as DeviceSettings;
       const cfg = loadInstanceConfigs();
-      cfg[serial] = { ...cfg[serial], deviceSettings: { googlePlayEmail, googlePlayPassword, selectedSimSlot } };
+       cfg[serial] = { ...cfg[serial], deviceSettings: { googlePlayEmail, googlePlayPassword, selectedSimSlot, simPhoneNumbers } };
       saveInstanceConfigs(cfg);
       res.json({ ok: true });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
@@ -4098,7 +4099,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // UI uses weight 0 as "follow Mother Code defaults", not "disable this
       // personality". A deliberate zero-weight override can be added later
       // with an explicit enabled flag without changing this compatibility rule.
-      if (configured && configured.weight > 0) effectiveWeights[mode] = configured.weight;
+      if (configured && (configured.weightMin > 0 || configured.weightMax > 0)) {
+        const min = Math.min(configured.weightMin, configured.weightMax);
+        const max = Math.max(configured.weightMin, configured.weightMax);
+        effectiveWeights[mode] = min + Math.random() * (max - min);
+      }
     }
     const effectiveBack = allowBack ? weights.back : 0;
     // Roll independently for every scroll, but avoid visibly artificial runs.
@@ -4117,7 +4122,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const focused = blocked.has("focused") ? 0 : effectiveWeights.focused;
     const back = blocked.has("back") ? 0 : (allowBack ? effectiveWeights.back : 0);
     const duration = (mode: keyof typeof effectiveWeights, fallbackMin: number, fallbackMax: number) => {
-      const configured = personalityOverrides?.[mode]?.weight > 0 ? personalityOverrides[mode] : undefined;
+      const configured = personalityOverrides?.[mode]?.weightMin > 0 || personalityOverrides?.[mode]?.weightMax > 0
+        ? personalityOverrides[mode] : undefined;
       const min = Math.max(1, Math.round(configured?.durationMinMs ?? fallbackMin));
       const max = Math.max(min, Math.round(configured?.durationMaxMs ?? fallbackMax));
       return min + Math.round(Math.random() * (max - min));

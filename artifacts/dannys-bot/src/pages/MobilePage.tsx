@@ -8983,6 +8983,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
 
   // SIM phone number manual inputs (keyed by slot index)
   const [simPhoneInputs, setSimPhoneInputs] = React.useState<Record<number, string>>({});
+  const simHydratedSerialRef = React.useRef<string | null>(null);
   const [typingSimSlot, setTypingSimSlot] = React.useState<number | null>(null);
 
   const typeSimPhoneNumber = React.useCallback(async (slot: number) => {
@@ -9029,9 +9030,19 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const [swipeProgress, setSwipeProgress] = React.useState<number | null>(null);
   const [swipeTestPath, setSwipeTestPath] = React.useState<SwipeGesture | null>(null);
   const swipeModes = ["superSkim", "skim", "fast", "quick", "normal", "slow", "focused", "back"] as const;
-  type SwipePersonalityOverride = { weight: number; durationMinMs: number; durationMaxMs: number };
+  type SwipePersonalityOverride = { weightMin: number; weightMax: number; durationMinMs: number; durationMaxMs: number };
+  const motherSwipeDefaults: Record<string, SwipePersonalityOverride> = {
+    superSkim: { weightMin: 1, weightMax: 5, durationMinMs: 150, durationMaxMs: 350 },
+    skim: { weightMin: 10, weightMax: 25, durationMinMs: 450, durationMaxMs: 800 },
+    fast: { weightMin: 40, weightMax: 75, durationMinMs: 900, durationMaxMs: 1500 },
+    quick: { weightMin: 50, weightMax: 95, durationMinMs: 1250, durationMaxMs: 2000 },
+    normal: { weightMin: 60, weightMax: 95, durationMinMs: 1500, durationMaxMs: 2500 },
+    slow: { weightMin: 75, weightMax: 95, durationMinMs: 2000, durationMaxMs: 3500 },
+    focused: { weightMin: 75, weightMax: 100, durationMinMs: 2500, durationMaxMs: 5000 },
+    back: { weightMin: 0, weightMax: 5, durationMinMs: 350, durationMaxMs: 600 },
+  };
   const defaultSwipePersonalityOverrides: Record<string, SwipePersonalityOverride> = Object.fromEntries(
-    swipeModes.map(mode => [mode, { weight: 0, durationMinMs: 1, durationMaxMs: 30000 }]),
+    swipeModes.map(mode => [mode, motherSwipeDefaults[mode]]),
   );
   const [swipePersonalityOverrides, setSwipePersonalityOverrides] = React.useState<Record<string, SwipePersonalityOverride>>(defaultSwipePersonalityOverrides);
   const [swipeOpen, setSwipeOpen] = React.useState(false);
@@ -9041,6 +9052,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   React.useEffect(() => { swipeGestureRef.current = swipeGesture; }, [swipeGesture]);
 
   React.useEffect(() => {
+    simHydratedSerialRef.current = null;
     if (!serial) return;
     fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-prefs`)
       .then(r => r.json())
@@ -9240,8 +9252,23 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
       .then(r => r.json()).then(d => {
         setGpEmail(d.googlePlayEmail ?? "");
         setGpPassword(d.googlePlayPassword ?? "");
+        setSimPhoneInputs(d.simPhoneNumbers ?? {});
+        simHydratedSerialRef.current = serial;
       }).catch(() => {});
   }, [serial]);
+  const simSaveRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  React.useEffect(() => {
+    if (!serial) return;
+    if (simHydratedSerialRef.current !== serial) return;
+    if (simSaveRef.current) clearTimeout(simSaveRef.current);
+    simSaveRef.current = setTimeout(() => {
+      fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-settings`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ simPhoneNumbers: simPhoneInputs }),
+      }).catch(() => {});
+    }, 600);
+    return () => { if (simSaveRef.current) clearTimeout(simSaveRef.current); };
+  }, [serial, simPhoneInputs]);
 
   // Load device spec
   const loadDeviceSpec = React.useCallback(() => {
@@ -9432,7 +9459,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
       <div className="bg-card border border-border rounded-xl p-5 space-y-3">
         <div>
           <p className="text-sm font-semibold text-foreground">Swipe Personality Overrides</p>
-          <p className="text-xs text-muted-foreground">Adjust the existing swipe personalities for this device. Weight controls how often each mode is selected; duration controls how quickly it runs. Leave weight at 0 to use the Mother Code default.</p>
+          <p className="text-xs text-muted-foreground">These are the Mother Code defaults. Change any range to create a device-specific swipe personality.</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           {swipeModes.map(mode => {
@@ -9440,16 +9467,16 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
             return (
               <div key={mode} className="rounded-lg border border-border p-3">
                 <p className="text-xs font-medium text-foreground capitalize">{mode.replace(/([A-Z])/g, " $1")}</p>
-                <div className="grid grid-cols-3 gap-2 mt-2">
-                  {(["weight", "durationMinMs", "durationMaxMs"] as const).map(key => (
-                    <label key={key} className="text-[11px] text-muted-foreground">{key === "weight" ? "Weight" : key === "durationMinMs" ? "Min ms" : "Max ms"}
-                      <input type="number" min={key === "weight" ? 0 : 1} max={key === "weight" ? 1000 : 30000}
+                <div className="grid grid-cols-4 gap-1.5 mt-2">
+                  {(["weightMin", "weightMax", "durationMinMs", "durationMaxMs"] as const).map(key => (
+                    <label key={key} className="text-[11px] text-muted-foreground">{key === "weightMin" ? "Weight min" : key === "weightMax" ? "Weight max" : key === "durationMinMs" ? "Min ms" : "Max ms"}
+                      <input type="number" min={key.startsWith("weight") ? 0 : 1} max={key.startsWith("weight") ? 1000 : 30000}
                         value={value[key]}
                         onChange={e => saveSwipePersonalityOverrides({
                           ...swipePersonalityOverrides,
-                          [mode]: { ...value, [key]: Math.max(key === "weight" ? 0 : 1, Math.min(key === "weight" ? 1000 : 30000, Number(e.target.value))) },
+                          [mode]: { ...value, [key]: Math.max(key.startsWith("weight") ? 0 : 1, Math.min(key.startsWith("weight") ? 1000 : 30000, Number(e.target.value))) },
                         })}
-                        className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
+                        className="mt-1 w-full min-w-0 rounded border border-border bg-background px-1.5 py-1 text-xs text-foreground" />
                     </label>
                   ))}
                 </div>
