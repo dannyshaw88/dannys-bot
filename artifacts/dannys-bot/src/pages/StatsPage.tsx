@@ -195,7 +195,7 @@ const MOBILE_METRIC_DEFS: {
   { key: "follows",         label: "Follows",         icon: <UserPlus className="w-3.5 h-3.5" />, color: "text-blue-500",   pieColor: "#3b82f6" },
   { key: "stories",         label: "Story Views",     icon: <BookOpen className="w-3.5 h-3.5" />, color: "text-indigo-500", pieColor: "#6366f1" },
   { key: "reels",            label: "Reels Viewed",    icon: <Clapperboard className="w-3.5 h-3.5" />, color: "text-sky-500", pieColor: "#0ea5e9" },
-  { key: "dms",              label: "DMs Sent",        icon: <Mail className="w-3.5 h-3.5" />,     color: "text-violet-500", pieColor: "#8b5cf6" },
+  { key: "dms",              label: "Check Inbox",    icon: <Mail className="w-3.5 h-3.5" />,     color: "text-violet-500", pieColor: "#8b5cf6" },
   { key: "feed_shares",      label: "Shares",          icon: <Send className="w-3.5 h-3.5" />,     color: "text-amber-500",  pieColor: "#f59e0b" },
   { key: "saves",            label: "Saves",           icon: <Bookmark className="w-3.5 h-3.5 fill-current" />, color: "text-black",      pieColor: "#000000" },
   { key: "feed_scrolls",     label: "Feed",            icon: <BarChart2 className="w-3.5 h-3.5" />, color: "text-teal-500",  pieColor: "#14b8a6" },
