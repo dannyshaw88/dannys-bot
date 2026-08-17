@@ -4,7 +4,7 @@ import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
 import { useNavigationHistory } from "@/contexts/NavigationHistoryContext";
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { VenetianMask, Loader2, FileSearch } from "lucide-react";
+import { Loader2, FileSearch } from "lucide-react";
 
 function FilledDashboardIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
@@ -55,6 +55,18 @@ function FilledGhostIcon({ className, style }: { className?: string; style?: Rea
       <path fill="currentColor" stroke="none" d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z"/>
       <circle fill="white" cx="9" cy="10" r="1.5"/>
       <circle fill="white" cx="15" cy="10" r="1.5"/>
+    </svg>
+  );
+}
+
+function SpyIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path fill="currentColor" d="M4 8.5h16v2H4zM6.2 8.2 8.3 3h7.4l2.1 5.2H6.2Z" />
+      <path fill="currentColor" d="M6 11h12v2.1a6 6 0 0 1-12 0V11Z" />
+      <rect fill="white" x="7.1" y="11.2" width="4.1" height="2.1" rx=".7" />
+      <rect fill="white" x="12.8" y="11.2" width="4.1" height="2.1" rx=".7" />
+      <path stroke="currentColor" strokeWidth="1" d="M11.2 12.2h1.6" />
     </svg>
   );
 }
@@ -124,7 +136,7 @@ export function Sidebar() {
     { name: "Phone Farm",      shortLabel: "PHONE FARM",     path: "/mobile",       icon: FilledFarmIcon        },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon },
     { name: "Settings",        shortLabel: "SETTINGS",       path: "/settings",     icon: FilledSettingsIcon  },
-    { name: "Ghost Browser",   shortLabel: "GHOST BROWSER",  path: "/create-ghost", icon: VenetianMask },
+    { name: "Ghost Browser",   shortLabel: "GHOST BROWSER",  path: "/create-ghost", icon: SpyIcon },
   ];
 
   return (
