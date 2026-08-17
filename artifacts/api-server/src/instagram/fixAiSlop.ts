@@ -384,24 +384,28 @@ export async function fixAiSlop(
 function runSharpWorker(inputPath: string, outputPath: string, quality: number): Promise<void> {
   const workerPath = join(dirname(__filename), "fixAiSlopWorker.mjs");
   return new Promise((resolve, reject) => {
+    nativeCrashBreadcrumb("worker-spawn", `worker=${workerPath} input=${inputPath} output=${outputPath} quality=${quality}`);
     const child = spawn(process.execPath, [workerPath, inputPath, outputPath], {
       stdio: ["ignore", "ignore", "pipe"],
       env: { ...process.env, FIX_AI_SLOP_QUALITY: String(quality) },
     });
     let stderr = "";
     const timer = setTimeout(() => {
+      nativeCrashBreadcrumb("worker-timeout", "timeoutMs=30000");
       child.kill("SIGKILL");
       reject(new Error("Sharp worker timed out after 30 seconds"));
     }, 30_000);
     child.stderr.on("data", chunk => { stderr += String(chunk).slice(-4000); });
     child.once("error", error => {
       clearTimeout(timer);
+      nativeCrashBreadcrumb("worker-error", error.message);
       reject(error);
     });
-    child.once("close", code => {
+    child.once("close", (code, signal) => {
       clearTimeout(timer);
+      nativeCrashBreadcrumb("worker-close", `code=${code ?? "null"} signal=${signal ?? "none"} stderr=${stderr.trim().slice(-1000)}`);
       if (code === 0) resolve();
-      else reject(new Error(`Sharp worker exited with code ${code}${stderr ? `: ${stderr.trim()}` : ""}`));
+      else reject(new Error(`Sharp worker exited with code ${code ?? "null"}${signal ? ` signal ${signal}` : ""}${stderr ? `: ${stderr.trim()}` : ""}`));
     });
   });
 }
