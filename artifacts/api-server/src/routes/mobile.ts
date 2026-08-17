@@ -10160,7 +10160,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // whether it is open, and never use Android Back here: a Back event can
       // leave the viewer on an intermediate Instagram screen.
       onLog?.("Inject Browsing: swiping down to close highlight viewer…");
-      await android.swipeDownToCloseStory(serial);
+      // Close the Story using this device's calibrated Swipe Gesture Profile,
+      // reversed from its normal direction.  This keeps the exact physical
+      // start/end geometry and timing learned from the device instead of
+      // falling back to the old shared center-line 300 ms gesture.
+      await deviceProfileSwipe(
+        serial,
+        {
+          x1: Math.round(getScreenSize(serial).w / 2),
+          y1: Math.round(getScreenSize(serial).h * 0.35),
+          x2: Math.round(getScreenSize(serial).w / 2),
+          y2: Math.round(getScreenSize(serial).h * 0.92),
+          durationMs: 300,
+        },
+        "story-close",
+        "back",
+      );
       await sleepOrAbort(serial, 700);
       onLog?.("Inject Browsing: ✓ highlight viewed and dismissed");
     } catch (e: any) {
