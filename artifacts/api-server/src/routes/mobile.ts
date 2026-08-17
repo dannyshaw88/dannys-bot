@@ -3999,18 +3999,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // Helper: every mobile dwell is sampled at the point of execution. Keeping
   // this at the shared boundary prevents a newly added action from silently
   // reintroducing a fixed timing signature.
-  const randomizedDwellMs = (serial: string, ms: number, category: "globalDwell" | "accountSwitching" | "navigation" | "actionPacing" = "globalDwell"): number => {
+  const randomizedDwellMs = (serial: string, ms: number, category: "globalDwell" | "accountSwitching" | "navigation" | "actionPacing" = "actionPacing"): number => {
     if (!Number.isFinite(ms) || ms <= 0) return Math.max(0, ms);
     const scaled = ms * devicePersonality(serial).dwellScale;
     const low = scaled >= 5000 ? Math.max(1, Math.round(scaled * 0.5)) : Math.max(1, Math.round(scaled));
     const high = scaled >= 5000 ? Math.round(scaled) : 5000;
-    const override = loadInstanceConfigs()[serial]?.devicePrefs?.motherCodeOverrides?.[category];
+    const overrides = loadInstanceConfigs()[serial]?.devicePrefs?.motherCodeOverrides;
+    const activeTool = automationCurrentTool.get(serial);
+    const override = (activeTool && overrides?.perTool?.[activeTool]) || overrides?.[category] || overrides?.globalDwell;
     if (!override) return low + Math.floor(Math.random() * (high - low + 1));
     const min = Math.min(override.minMs, override.maxMs);
     const max = Math.max(override.minMs, override.maxMs);
     return Math.round(min + Math.random() * (max - min));
   };
-  const sleepOrAbort = (serial: string, ms: number, category: "globalDwell" | "accountSwitching" | "navigation" | "actionPacing" = "globalDwell") => {
+  const sleepOrAbort = (serial: string, ms: number, category: "globalDwell" | "accountSwitching" | "navigation" | "actionPacing" = "actionPacing") => {
     const dwellMs = randomizedDwellMs(serial, ms, category);
     return new Promise<void>((resolve, reject) => {
       const t = setTimeout(() => {
@@ -5399,7 +5401,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             const _chPick = _chHashtags[Math.floor(Math.random() * _chHashtags.length)];
             onLog?.(`View Feed ${i + 1}/${count}: tapping hashtag "${_chPick.tag}" at (${_chPick.x},${_chPick.y})…`);
             await android.tap(serial, _chPick.x, _chPick.y);
-            await sleepOrAbort(serial, 1500);
+            await sleepOrAbort(serial, 1500, "accountSwitching");
             await verifyStillInInstagram();
 
             // Confirm we arrived at the hashtag grid — look for the grid card layout.
@@ -13095,7 +13097,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             try {
               await android.clearInstagramSearchBar(serial, (msg) => tLog(`  Spread Follow: final cleanup — ${msg}`));
               await android.pressBack(serial);
-              await sleepOrAbort(serial, 500);
+              await sleepOrAbort(serial, 500, "accountSwitching");
               await android.pressBack(serial);
               await sleepOrAbort(serial, 500);
               tLog("  Spread Follow: final cleanup — pressed Back twice to restore normal UI");
