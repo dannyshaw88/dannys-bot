@@ -9397,7 +9397,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
       <div className="bg-card border border-primary/30 rounded-xl p-5 space-y-3">
         <div>
           <p className="text-sm font-semibold text-foreground">Mother Code Device Override</p>
-          <p className="text-xs text-muted-foreground">This range is saved only for serial {serial ?? "this device"} and changes shared Mother Code dwell timing without changing the Mother Code itself.</p>
+          <p className="text-xs text-muted-foreground">This range is saved only for serial {serial ?? "this device"}.</p>
         </div>
         <div className="rounded-lg border border-border p-3">
           <p className="text-xs font-medium text-foreground">Global dwell timing</p>
