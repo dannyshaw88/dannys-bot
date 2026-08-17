@@ -3953,6 +3953,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (ms <= 0) { clearTimeout(t); isCycleAborted(serial) ? reject(new Error("cycle-aborted")) : resolve(); }
     });
 
+  const hstRandomDelay = (serial: string, minMs: number, maxMs: number) =>
+    sleepOrAbort(serial, minMs + Math.floor(Math.random() * (maxMs - minMs + 1)));
+
   // Helper: get screen dimensions via adb wm size.
   function getScreenSize(serial: string): { w: number; h: number } {
     let w = 1080, h = 2400;
@@ -7175,7 +7178,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     onLog?.(`View Explore Page: tapping semantic Home tab at (${homeTab.x}, ${homeTab.y})`);
     await android.tap(serial, homeTab.x, homeTab.y);
-    await sleepOrAbort(serial, 1000);
+      await sleepOrAbort(serial, 1000);
 
     return { postsScrolled, postsClicked, likes, sharesFeed, sharesDm, saves, authorVisits };
   }
@@ -9187,7 +9190,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return;
     }
     await android.tap(serial, icon.x, icon.y);
-    await sleepOrAbort(serial, 1800);
+    await hstRandomDelay(serial, 1500, 10000);
     onLog?.("Random Actions: ✓ opened notifications");
     // Scroll down x–y times to browse through them.
     const scrollCount = rollRange(scrollsMin, scrollsMax);
@@ -9214,7 +9217,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         onLog?.("Random Actions: ✓ tapped notification item");
         await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 1500));
         await android.pressBack(serial);
-        await sleepOrAbort(serial, 600);
+        await hstRandomDelay(serial, 2500, 10000);
       } else {
         onLog?.("Random Actions: no clickable notification row found — skipping click");
       }
@@ -9223,7 +9226,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     // Return to home feed.
     await android.pressBack(serial);
-    await sleepOrAbort(serial, 800);
+    await hstRandomDelay(serial, 2500, 10000);
     onLog?.("Random Actions: ✓ notifications check done");
   }
 
@@ -9311,7 +9314,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return;
     }
     await android.tap(serial, profileTab.x, profileTab.y);
-    await sleepOrAbort(serial, 1800 + Math.round(Math.random() * 1000));
+    await hstRandomDelay(serial, 1500, 10000);
 
     // The profile / "Discover people" page sometimes triggers an
     // "Allow Instagram to access your contacts?" system dialog.
@@ -9319,7 +9322,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const dismissed = await android.dismissInstagramInterstitials(serial).catch(() => null);
     if (dismissed) {
       onLog?.(`Random Jitter: dismissed contacts popup ("${dismissed}")`);
-      await sleepOrAbort(serial, 600);
+      await hstRandomDelay(serial, 2500, 10000);
     }
 
     onLog?.("Random Actions: ✓ visited own profile");
@@ -9330,7 +9333,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } else {
       await android.pressBack(serial);
     }
-    await sleepOrAbort(serial, 600);
+    await hstRandomDelay(serial, 250, 10000);
   }
 
   /**
