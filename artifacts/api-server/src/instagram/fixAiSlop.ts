@@ -42,13 +42,13 @@
 
 import { randomBytes } from "crypto";
 import { appendFileSync } from "fs";
+import { spawn } from "child_process";
 import { readFile, unlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
 
 const MAX_AI_SLOP_INPUT_BYTES = 50 * 1024 * 1024;
 const MAX_AI_SLOP_PIXELS = 100_000_000;
-let sharpConfigured = false;
 
 // This is deliberately synchronous and separate from the normal logger. A
 // Windows native access violation can terminate the API child before buffered
@@ -354,36 +354,17 @@ export async function fixAiSlop(
 
     // ── Step 2: Metadata-free JPEG re-encode ────────────────────────────────
     // Sharp is used for the metadata-free JPEG re-encode.
-    let sharp: any;
-    try {
-      nativeCrashBreadcrumb("sharp-import");
-      sharp = (await import("sharp")).default;
-      // Make the native image operation conservative. A single malformed or
-      // unusually large upload must fail this post attempt, not exhaust the
-      // API process with libvips worker threads or an unbounded decode.
-      if (!sharpConfigured) {
-        sharp.concurrency(1);
-        sharp.cache(false);
-        sharpConfigured = true;
-      }
-    } catch (err) {
-      await unlink(tmp).catch(() => {});
-      const detail = err instanceof Error ? `: ${err.message}` : "";
-      console.error(`[fixAiSlop] Sharp unavailable — refusing to continue${detail}`);
-      onLog?.(`Fix AI Slop: FAILED — Sharp unavailable; refusing to re-encode image`);
-      throw new Error(`Fix AI Slop requires Sharp for metadata-free re-encoding${detail}`);
-    }
-
     const quality = 85 + Math.floor(Math.random() * 8);
     nativeCrashBreadcrumb("sharp-pipeline", `format=${fmt} bytes=${stripped.length} quality=${quality}`);
-    const reencoded: Buffer = await sharp(stripped, {
-      limitInputPixels: MAX_AI_SLOP_PIXELS,
-      sequentialRead: true,
-      failOn: "error",
-    })
-      .withMetadata(false)
-      .jpeg({ quality, chromaSubsampling: "4:2:0", force: true })
-      .toBuffer();
+    const strippedPath = `${tmp}.input`;
+    await writeFile(strippedPath, stripped);
+    let reencoded: Buffer;
+    try {
+      await runSharpWorker(strippedPath, tmp, quality);
+      reencoded = await readFile(tmp);
+    } finally {
+      await unlink(strippedPath).catch(() => {});
+    }
 
     nativeCrashBreadcrumb("sharp-complete", `outputBytes=${reencoded.length}`);
     await writeFile(tmp, reencoded);
@@ -398,6 +379,31 @@ export async function fixAiSlop(
     await unlink(tmp).catch(() => {});
     throw new Error(`Fix AI Slop processing failed: ${(err as Error)?.message ?? String(err)}`);
   }
+}
+
+function runSharpWorker(inputPath: string, outputPath: string, quality: number): Promise<void> {
+  const workerPath = join(dirname(__filename), "fixAiSlopWorker.mjs");
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [workerPath, inputPath, outputPath], {
+      stdio: ["ignore", "ignore", "pipe"],
+      env: { ...process.env, FIX_AI_SLOP_QUALITY: String(quality) },
+    });
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error("Sharp worker timed out after 30 seconds"));
+    }, 30_000);
+    child.stderr.on("data", chunk => { stderr += String(chunk).slice(-4000); });
+    child.once("error", error => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.once("close", code => {
+      clearTimeout(timer);
+      if (code === 0) resolve();
+      else reject(new Error(`Sharp worker exited with code ${code}${stderr ? `: ${stderr.trim()}` : ""}`));
+    });
+  });
 }
 
 /**

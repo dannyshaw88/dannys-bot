@@ -121,6 +121,15 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
     `,
     },
   });
+  await esbuild({
+    entryPoints: [path.resolve(artifactDir, "src/instagram/fixAiSlopWorker.ts")],
+    platform: "node",
+    bundle: true,
+    format: "esm",
+    outfile: path.resolve(distDir, "fixAiSlopWorker.mjs"),
+    logLevel: "info",
+    external: ["sharp"],
+  });
 }
 
 async function copyVendorAssets() {
