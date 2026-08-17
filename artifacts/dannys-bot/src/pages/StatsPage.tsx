@@ -997,21 +997,6 @@ export function StatsPage() {
                           ))}
                         </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                          {MOBILE_METRIC_DEFS.map(metric => (
-                            <div key={metric.key} className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
-                              <span className={`text-[10px] font-bold uppercase tracking-wide flex items-center gap-1 ${metric.color}`}>
-                                {metric.icon}{metric.label}
-                              </span>
-                              <span className="text-2xl font-bold tabular-nums text-foreground">
-                                {getMobileStat(metric.key, "daily").toLocaleString()}
-                              </span>
-                              <span className="text-[10px] text-muted-foreground">
-                                today · {getMobileStat(metric.key, "lifetime").toLocaleString()} lifetime
-                              </span>
-                            </div>
-                          ))}
-                        </div>
                       </>
                     )}
                   </CardContent>
