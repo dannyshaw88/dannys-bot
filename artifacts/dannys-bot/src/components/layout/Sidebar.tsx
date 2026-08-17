@@ -62,11 +62,9 @@ function FilledGhostIcon({ className, style }: { className?: string; style?: Rea
 function HackerIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
-      <path d="M6.2 21.5c.5-3.3 2.4-5.4 5.8-5.4s5.3 2.1 5.8 5.4" />
-      <path d="M8.2 10.1c.3 3 1.5 4.7 3.8 4.7s3.5-1.7 3.8-4.7" />
-      <path d="M8.2 10.3h3.4l.4 1.4H8.7l-.5-1.4ZM12.4 10.3h3.4l-.5 1.4h-3.3l.4-1.4Z" />
-      <path d="M5.1 8.1h13.8M6.2 7.9 8 3.5c2.6-1.7 5.4-1.7 8 0l1.8 4.4" />
-      <path d="M9.2 15.5c.9.6 1.8.9 2.8.9s1.9-.3 2.8-.9" />
+      <circle cx="12" cy="12" r="9.5" />
+      <path d="M2.5 12h19" />
+      <path d="M12 2.5c2.7 2.6 4.2 5.8 4.2 9.5S14.7 18.9 12 21.5c-2.7-2.6-4.2-5.8-4.2-9.5S9.3 5.1 12 2.5Z" />
     </svg>
   );
 }
