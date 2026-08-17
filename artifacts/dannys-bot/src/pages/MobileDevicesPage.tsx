@@ -965,12 +965,6 @@ function DeviceCard({
                 <span className="text-sm text-muted-foreground">Offline</span>
               </>
             )}
-            <span className="text-sm text-muted-foreground/30 select-none">|</span>
-            {active ? (
-              <span className="text-sm font-semibold text-green-400">Active</span>
-            ) : (
-              <span className="text-sm font-semibold text-red-600 dark:text-red-500">Not Active</span>
-            )}
           </div>
         </div>
       </button>
