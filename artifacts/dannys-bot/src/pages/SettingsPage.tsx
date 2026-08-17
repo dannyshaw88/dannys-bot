@@ -663,29 +663,15 @@ export function SettingsPage() {
       const content = JSON.stringify(data, null, 2);
       const electron = eAPI();
       if (electron?.saveDiagnosticSnapshot) {
-        try {
-          const result = await electron.saveDiagnosticSnapshot({ filename, content });
-          if (result?.saved) {
-            toast({ title: "Diagnostic snapshot saved", description: result.filePath });
-            return;
-          }
-          // A cancelled/stale Electron dialog should not prevent exporting the
-          // already-created snapshot through the browser download path.
-        } catch (electronError) {
-          console.warn("[diagnostics] Electron save failed; falling back to browser download", electronError);
+        const result = await electron.saveDiagnosticSnapshot({ filename, content });
+        if (result?.saved) {
+          toast({ title: "Diagnostic snapshot saved", description: result.filePath });
+          return;
         }
+        toast({ title: "Snapshot cancelled", description: "No file was saved." });
+        return;
       }
-      const blob = new Blob([content], { type: "application/json;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = filename;
-      anchor.style.display = "none";
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      toast({ title: "Diagnostic snapshot downloaded", description: "Runtime data was saved through the browser download." });
+      throw new Error("The desktop save service is unavailable. Restart the desktop app and try again.");
     } catch (error: any) {
       toast({ title: "Snapshot failed", description: error?.message ?? "Could not create snapshot", variant: "destructive" });
     } finally {

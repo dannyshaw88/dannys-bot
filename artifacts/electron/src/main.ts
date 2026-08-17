@@ -1259,19 +1259,28 @@ async function createWindow() {
   ipcMain.handle("save-diagnostic-snapshot", async (_e, { filename, content }: { filename: string; content: string }) => {
     const defaultPath = path.join(app.getPath("downloads"), filename);
     appendToMainLog(`[diagnostics] showing Save As dialog — defaultPath=${defaultPath}`);
-    const result = await dialog.showSaveDialog(win!, {
-      title: "Save Aura runtime snapshot",
-      defaultPath,
-      filters: [
-        { name: "JSON Files", extensions: ["json"] },
-        { name: "All Files", extensions: ["*"] },
-      ],
-    });
-    appendToMainLog(`[diagnostics] Save As result — canceled=${result.canceled} filePath=${result.filePath ?? "none"}`);
-    if (result.canceled || !result.filePath) return { saved: false };
-    fs.writeFileSync(result.filePath, content, "utf8");
-    appendToMainLog(`[diagnostics] snapshot saved to ${result.filePath}`);
-    return { saved: true, filePath: result.filePath };
+    try {
+      if (!win || win.isDestroyed()) throw new Error("main window is unavailable");
+      const result = await dialog.showSaveDialog(win, {
+        title: "Save Aura runtime snapshot",
+        defaultPath,
+        filters: [
+          { name: "JSON Files", extensions: ["json"] },
+          { name: "All Files", extensions: ["*"] },
+        ],
+      });
+      appendToMainLog(`[diagnostics] Save As result — canceled=${result.canceled} filePath=${result.filePath ?? "none"}`);
+      if (result.canceled || !result.filePath) return { saved: false };
+      fs.writeFileSync(result.filePath, content, "utf8");
+      appendToMainLog(`[diagnostics] snapshot saved to ${result.filePath}`);
+      return { saved: true, filePath: result.filePath };
+    } catch (error: any) {
+      // A crashed/recreated BrowserWindow can leave the dialog unable to open.
+      // Save directly to Downloads so the snapshot is still recoverable.
+      fs.writeFileSync(defaultPath, content, "utf8");
+      appendToMainLog(`[diagnostics] Save As failed; wrote directly to Downloads: ${defaultPath} — ${error?.stack ?? error?.message ?? String(error)}`);
+      return { saved: true, filePath: defaultPath, fallback: "downloads" };
+    }
   });
 
   ipcMain.handle("save-csv-dialog", async (_e, { content, filename }: { content: string; filename: string }) => {
