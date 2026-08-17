@@ -4005,8 +4005,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const low = scaled >= 5000 ? Math.max(1, Math.round(scaled * 0.5)) : Math.max(1, Math.round(scaled));
     const high = scaled >= 5000 ? Math.round(scaled) : 5000;
     const overrides = loadInstanceConfigs()[serial]?.devicePrefs?.motherCodeOverrides;
-    const activeTool = automationCurrentTool.get(serial);
-    const override = (activeTool && overrides?.perTool?.[activeTool]) || overrides?.[category] || overrides?.globalDwell;
+    const override = overrides?.globalDwell;
     if (!override) return low + Math.floor(Math.random() * (high - low + 1));
     const min = Math.min(override.minMs, override.maxMs);
     const max = Math.max(override.minMs, override.maxMs);

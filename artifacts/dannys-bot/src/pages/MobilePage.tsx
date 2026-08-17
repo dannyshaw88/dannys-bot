@@ -9412,36 +9412,6 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
             ))}
           </div>
         </div>
-        <div className="rounded-lg border border-border p-3">
-          <p className="text-xs font-medium text-foreground">Optional per-tool overrides</p>
-          <p className="text-[11px] text-muted-foreground mt-1">Only add a tool when this device needs different dwell timing for that tool. Otherwise it uses the global range above.</p>
-          <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 mt-2 items-end">
-            <label className="text-[11px] text-muted-foreground">Tool name
-              <input id="mother-tool-name" placeholder="e.g. Feed" className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
-            </label>
-            {(["minMs", "maxMs"] as const).map(part => (
-              <label key={part} className="text-[11px] text-muted-foreground">{part === "minMs" ? "Minimum" : "Maximum"}
-                <input id={`mother-tool-${part}`} type="number" min={0} placeholder="ms" className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
-              </label>
-            ))}
-            <Button type="button" size="sm" variant="outline" onClick={() => {
-              const name = (document.getElementById("mother-tool-name") as HTMLInputElement)?.value.trim();
-              const min = Number((document.getElementById("mother-tool-minMs") as HTMLInputElement)?.value);
-              const max = Number((document.getElementById("mother-tool-maxMs") as HTMLInputElement)?.value);
-              if (!name || !Number.isFinite(min) || !Number.isFinite(max)) return;
-              saveMotherOverrides({ ...motherOverrides, perTool: { ...motherOverrides.perTool, [name]: { minMs: Math.max(0, min), maxMs: Math.max(0, max) } } });
-            }}>Add</Button>
-          </div>
-          {Object.entries(motherOverrides.perTool).map(([name, range]) => (
-            <div key={name} className="flex items-center justify-between mt-2 rounded bg-muted/40 px-2 py-1.5 text-xs">
-              <span>{name}: {range.minMs}–{range.maxMs} ms</span>
-              <button type="button" className="text-destructive" onClick={() => {
-                const next = { ...motherOverrides.perTool }; delete next[name];
-                saveMotherOverrides({ ...motherOverrides, perTool: next });
-              }}>Remove</button>
-            </div>
-          ))}
-        </div>
       </div>
 
       {/* ── Typing Speed Profile ─────────────────────────────────────── */}
