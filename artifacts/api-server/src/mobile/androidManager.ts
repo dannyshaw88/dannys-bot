@@ -3799,6 +3799,14 @@ export async function findFeedActionIcons(
   comment   = commentNode  ? pos(commentNode)  : null;
   shareFeed = repostNode   ? pos(repostNode)   : null;
   shareDm   = sendNode     ? pos(sendNode)     : null;
+  const visualShareFeed = await findFeedRepostIconByPixels(serial, like.y, onLog);
+  if (visualShareFeed) {
+    shareFeed = visualShareFeed;
+  } else {
+    // A missing visual match means Share to Feed is not confirmed. Do not
+    // retain a label-derived coordinate that may point at a different icon.
+    shareFeed = null;
+  }
 
   // Whether Repost is available at all is genuinely account/post-specific
   // (Instagram lets an account or a specific post disable resharing to
@@ -3862,7 +3870,7 @@ export async function findFeedActionIcons(
   // fewer than 3) is genuinely ambiguous with no label to confirm which
   // slot is missing or spurious, so it's left null rather than guessed —
   // same safety contract as the rest of this function.
-  if (!comment && !shareFeed && !shareDm) {
+  if (!visualShareFeed && !comment && !shareDm) {
     // ── Structural fallback A: ViewGroup icon pattern ──
     // Confirmed 14 Jul 2026: content-desc-less, text-less ViewGroup nodes are
     // the tappable icon glyphs on some device/build combos.  Exactly 3 required.
@@ -5805,6 +5813,62 @@ async function findInstagramSearchFieldByPixels(
   if (best) onLog?.(`Follow: visual search field matched ${best.template} at (${best.x}, ${best.y}) score=${best.score.toFixed(3)}`);
   else onLog?.("Follow: visual search field not matched — refusing coordinate fallback");
   return best;
+}
+
+async function findFeedRepostIconByPixels(
+  serial: string,
+  rowY: number,
+  onLog?: (msg: string) => void,
+): Promise<{ x: number; y: number } | null> {
+  const screen = await _captureScreenPixels(serial);
+  if (!screen) return null;
+  try {
+    const refPath = path.resolve(process.cwd(), "attached_assets/Untitled-1_1787002318765.png");
+    const { data, info } = await sharp(refPath).greyscale().raw().toBuffer({ resolveWithObject: true });
+    const luminance = (x: number, y: number) => {
+      const i = (y * screen.width + x) * screen.channels;
+      return (screen.pixels[i] + screen.pixels[i + 1] + screen.pixels[i + 2]) / 3;
+    };
+    let best: { x: number; y: number; score: number } | null = null;
+    // The reference is a small crop of the glyph. Search several scales
+    // around the current action row; no absolute size or icon ordering is used.
+    for (const scale of [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3]) {
+      const tw = Math.max(8, Math.round(info.width * scale));
+      const th = Math.max(8, Math.round(info.height * scale));
+      const y0 = Math.max(0, Math.round(rowY - th * 2));
+      const y1 = Math.min(screen.height - th, Math.round(rowY + th * 2));
+      for (let y = y0; y <= y1; y += 3) {
+        for (let x = 0; x <= screen.width - tw; x += 3) {
+          let score = 0, count = 0;
+          for (let ty = 0; ty < info.height; ty += 2) {
+            for (let tx = 0; tx < info.width; tx += 2) {
+              const sx = x + Math.min(tw - 1, Math.round(tx * scale));
+              const sy = y + Math.min(th - 1, Math.round(ty * scale));
+              const tv = data[ty * info.width + tx];
+              const sv = luminance(sx, sy);
+              // Compare contrast polarity-insensitively so black/white icons
+              // both match against Instagram's light/dark surfaces.
+              score += Math.abs(Math.abs(sv - 128) - Math.abs(tv - 128));
+              count++;
+            }
+          }
+          const confidence = 1 - score / Math.max(1, count * 128);
+          if (confidence > (best?.score ?? 0.84)) {
+            best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), score: confidence };
+          }
+        }
+      }
+    }
+    if (!best) {
+      onLog?.(`[feed-icons] Repost visual reference not matched near action row y=${rowY}`);
+      return null;
+    }
+    onLog?.(`[feed-icons] Repost visual reference matched at (${best.x},${best.y}) score=${best.score.toFixed(3)}`);
+    return { x: best.x, y: best.y };
+  } catch {
+    onLog?.("[feed-icons] Repost visual reference unavailable — skipping Share to Feed");
+    return null;
+  }
 }
 
 /**

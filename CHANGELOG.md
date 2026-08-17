@@ -1,3 +1,9 @@
+## [1.2.536] — 2026-08-17
+
+### Fixed — Visual Share-to-Feed Detection
+
+- View Feed now targets the Repost icon from its visual reference instead of relying on action-icon ordering or an unverified accessibility coordinate.
+
 ## [1.2.535] — 2026-08-17
 
 ### Fixed — Visual Follow Search Field Detection
