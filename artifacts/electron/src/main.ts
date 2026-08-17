@@ -1256,12 +1256,22 @@ async function createWindow() {
     }
   });
 
-  ipcMain.handle("write-diagnostic-snapshot", async (_e, { filename, content }: { filename: string; content: string }) => {
-    const downloadsDir = app.getPath("downloads");
-    const destPath = path.join(downloadsDir, filename);
-    appendToMainLog(`[diagnostics] writing runtime snapshot to ${destPath}`);
-    fs.writeFileSync(destPath, content, "utf8");
-    return { saved: true, filePath: destPath };
+  ipcMain.handle("save-diagnostic-snapshot", async (_e, { filename, content }: { filename: string; content: string }) => {
+    const defaultPath = path.join(app.getPath("downloads"), filename);
+    appendToMainLog(`[diagnostics] showing Save As dialog — defaultPath=${defaultPath}`);
+    const result = await dialog.showSaveDialog(win!, {
+      title: "Save Aura runtime snapshot",
+      defaultPath,
+      filters: [
+        { name: "JSON Files", extensions: ["json"] },
+        { name: "All Files", extensions: ["*"] },
+      ],
+    });
+    appendToMainLog(`[diagnostics] Save As result — canceled=${result.canceled} filePath=${result.filePath ?? "none"}`);
+    if (result.canceled || !result.filePath) return { saved: false };
+    fs.writeFileSync(result.filePath, content, "utf8");
+    appendToMainLog(`[diagnostics] snapshot saved to ${result.filePath}`);
+    return { saved: true, filePath: result.filePath };
   });
 
   ipcMain.handle("save-csv-dialog", async (_e, { content, filename }: { content: string; filename: string }) => {

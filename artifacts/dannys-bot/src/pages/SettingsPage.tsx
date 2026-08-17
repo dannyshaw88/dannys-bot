@@ -662,9 +662,13 @@ export function SettingsPage() {
       const filename = `aura-diagnostic-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
       const content = JSON.stringify(data, null, 2);
       const electron = eAPI();
-      if (electron?.writeDiagnosticSnapshot) {
-        const result = await electron.writeDiagnosticSnapshot({ filename, content });
-        toast({ title: "Diagnostic snapshot saved", description: result?.filePath ?? filename });
+      if (electron?.saveDiagnosticSnapshot) {
+        const result = await electron.saveDiagnosticSnapshot({ filename, content });
+        if (result?.saved) {
+          toast({ title: "Diagnostic snapshot saved", description: result.filePath });
+        } else {
+          toast({ title: "Snapshot cancelled", description: "No file was saved." });
+        }
       } else {
         const blob = new Blob([content], { type: "application/json" });
         const url = URL.createObjectURL(blob);
