@@ -656,6 +656,7 @@ type DevicePrefs = {
     actionPacing?: { minMs: number; maxMs: number };
     perTool?: Record<string, { minMs: number; maxMs: number }>;
   };
+  swipePersonalityOverrides?: Record<string, { weight: number; durationMinMs: number; durationMaxMs: number }>;
   typingSpeedProfile?: { minMs: number; maxMs: number; errorPercentMin: number; errorPercentMax: number; dwellMinMs: number; dwellMaxMs: number; hesitationMinMs: number; hesitationMaxMs: number };
   swipeGesture?: { x1: number; y1: number; x2: number; y2: number; durationMinMs: number; durationMaxMs: number; jitterX: number; jitterY: number; startJitterMinY?: number; startJitterMaxY?: number; pauseMinMs?: number; pauseMaxMs?: number; settleMinMs?: number; settleMaxMs?: number };
 };
@@ -3182,6 +3183,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           actionPacing: z.object({ minMs: z.number().finite().min(0), maxMs: z.number().finite().min(0) }).optional(),
           perTool: z.record(z.string(), z.object({ minMs: z.number().finite().min(0), maxMs: z.number().finite().min(0) })).optional(),
         }).optional(),
+        swipePersonalityOverrides: z.record(z.string(), z.object({
+          weight: z.number().finite().min(0).max(1000),
+          durationMinMs: z.number().finite().min(1).max(30000),
+          durationMaxMs: z.number().finite().min(1).max(30000),
+        })).optional(),
         typingSpeedProfile: z.object({
           minMs: z.number().finite().min(0),
           maxMs: z.number().finite().min(0),
@@ -4083,7 +4089,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     allowBack = true,
     safeStartFrac = 0.80,
     history?: { lastMode?: string; streak: number },
+    serial?: string,
   ): { duration: number; fromY: number; toY: number; mode: string } {
+    const personalityOverrides = serial ? loadInstanceConfigs()[serial]?.devicePrefs?.swipePersonalityOverrides : undefined;
+    const effectiveWeights = { ...weights };
+    for (const mode of Object.keys(effectiveWeights) as Array<keyof typeof effectiveWeights>) {
+      const configured = personalityOverrides?.[mode];
+      // UI uses weight 0 as "follow Mother Code defaults", not "disable this
+      // personality". A deliberate zero-weight override can be added later
+      // with an explicit enabled flag without changing this compatibility rule.
+      if (configured && configured.weight > 0) effectiveWeights[mode] = configured.weight;
+    }
     const effectiveBack = allowBack ? weights.back : 0;
     // Roll independently for every scroll, but avoid visibly artificial runs.
     // Repeats remain possible; after three of the same mode, force the next
@@ -4092,37 +4108,43 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const blocked = new Set<string>();
     if (history?.lastMode && history.streak >= 3) blocked.add(history.lastMode);
     if (history?.lastMode === "back" && history.streak >= 2) blocked.add("back");
-    const superSkim = blocked.has("superSkim") ? 0 : weights.superSkim;
-    const skim = blocked.has("skim") ? 0 : weights.skim;
-    const fast = blocked.has("fast") ? 0 : weights.fast;
-    const quick = blocked.has("quick") ? 0 : weights.quick;
-    const normal = blocked.has("normal") ? 0 : weights.normal;
-    const slow = blocked.has("slow") ? 0 : weights.slow;
-    const focused = blocked.has("focused") ? 0 : weights.focused;
-    const back = blocked.has("back") ? 0 : effectiveBack;
+    const superSkim = blocked.has("superSkim") ? 0 : effectiveWeights.superSkim;
+    const skim = blocked.has("skim") ? 0 : effectiveWeights.skim;
+    const fast = blocked.has("fast") ? 0 : effectiveWeights.fast;
+    const quick = blocked.has("quick") ? 0 : effectiveWeights.quick;
+    const normal = blocked.has("normal") ? 0 : effectiveWeights.normal;
+    const slow = blocked.has("slow") ? 0 : effectiveWeights.slow;
+    const focused = blocked.has("focused") ? 0 : effectiveWeights.focused;
+    const back = blocked.has("back") ? 0 : (allowBack ? effectiveWeights.back : 0);
+    const duration = (mode: keyof typeof effectiveWeights, fallbackMin: number, fallbackMax: number) => {
+      const configured = personalityOverrides?.[mode]?.weight > 0 ? personalityOverrides[mode] : undefined;
+      const min = Math.max(1, Math.round(configured?.durationMinMs ?? fallbackMin));
+      const max = Math.max(min, Math.round(configured?.durationMaxMs ?? fallbackMax));
+      return min + Math.round(Math.random() * (max - min));
+    };
     const total = superSkim + skim + fast + quick + normal + slow + focused + back;
     const roll = Math.random() * total;
     let cum = 0;
 
     cum += superSkim;
-    if (roll < cum) return { mode: "superSkim", duration: 150 + Math.round(Math.random() * 200), fromY: Math.round(h * safeStartFrac), toY: Math.round(h * 0.08) };
+    if (roll < cum) return { mode: "superSkim", duration: duration("superSkim", 150, 350), fromY: Math.round(h * safeStartFrac), toY: Math.round(h * 0.08) };
     cum += skim;
     if (roll < cum) {
-      return { mode: "skim", duration: 450 + Math.round(Math.random() * 350), fromY: Math.round(h * safeStartFrac), toY: Math.round(h * 0.22) };
+      return { mode: "skim", duration: duration("skim", 450, 800), fromY: Math.round(h * safeStartFrac), toY: Math.round(h * 0.22) };
     }
     cum += fast;
-    if (roll < cum) return { mode: "fast", duration: 900 + Math.round(Math.random() * 600), fromY: Math.round(h * safeStartFrac), toY: Math.round(h * 0.30) };
+    if (roll < cum) return { mode: "fast", duration: duration("fast", 900, 1500), fromY: Math.round(h * safeStartFrac), toY: Math.round(h * 0.30) };
     cum += quick;
-    if (roll < cum) return { mode: "quick", duration: 1250 + Math.round(Math.random() * 750), fromY: Math.round(h * Math.min(0.65, safeStartFrac)), toY: Math.round(h * 0.38) };
+    if (roll < cum) return { mode: "quick", duration: duration("quick", 1250, 2000), fromY: Math.round(h * Math.min(0.65, safeStartFrac)), toY: Math.round(h * 0.38) };
     cum += normal;
-    if (roll < cum) return { mode: "normal", duration: 1500 + Math.round(Math.random() * 1000), fromY: Math.round(h * Math.min(0.65, safeStartFrac)), toY: Math.round(h * 0.42) };
+    if (roll < cum) return { mode: "normal", duration: duration("normal", 1500, 2500), fromY: Math.round(h * Math.min(0.65, safeStartFrac)), toY: Math.round(h * 0.42) };
     cum += slow;
-    if (roll < cum) return { mode: "slow", duration: 2000 + Math.round(Math.random() * 1500), fromY: Math.round(h * Math.min(0.62, safeStartFrac)), toY: Math.round(h * 0.45) };
+    if (roll < cum) return { mode: "slow", duration: duration("slow", 2000, 3500), fromY: Math.round(h * Math.min(0.62, safeStartFrac)), toY: Math.round(h * 0.45) };
     cum += focused;
-    if (roll < cum) return { mode: "focused", duration: 2500 + Math.round(Math.random() * 2500), fromY: Math.round(h * Math.min(0.58, safeStartFrac)), toY: Math.round(h * 0.48) };
+    if (roll < cum) return { mode: "focused", duration: duration("focused", 2500, 5000), fromY: Math.round(h * Math.min(0.58, safeStartFrac)), toY: Math.round(h * 0.48) };
     return {
       mode: "back",
-      duration: 350 + Math.round(Math.random() * 250),
+      duration: duration("back", 350, 600),
       fromY: Math.round(h * 0.28),
       toY:   Math.round(h * 0.52),
     };
@@ -4668,7 +4690,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // There is no previous content on the first scroll, so a backward
       // personality would have nothing meaningful to revisit. Keep the
       // session personality distribution for later scrolls.
-      const sv = rollScrollVelocity(h, feedScrollWeights, /*allowBack=*/i > 0, /*safeStartFrac=*/0.88, feedPersonalityHistory);
+      const sv = rollScrollVelocity(h, feedScrollWeights, /*allowBack=*/i > 0, /*safeStartFrac=*/0.88, feedPersonalityHistory, serial);
       feedPersonalityHistory.streak = feedPersonalityHistory.lastMode === sv.mode ? feedPersonalityHistory.streak + 1 : 1;
       feedPersonalityHistory.lastMode = sv.mode;
       const feedModeLabel = sv.mode === "superSkim" ? "super skim" : sv.mode;
@@ -7213,7 +7235,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // Swipe up to reveal more Explore posts.
         // The first Explore advance is the first opportunity to reveal more
         // content; there is no prior grid position to revisit yet.
-        const esv = rollScrollVelocity(h, exploreScrollWeights, /*allowBack=*/i > 0, /*safeStartFrac=*/0.80, explorePersonalityHistory);
+        const esv = rollScrollVelocity(h, exploreScrollWeights, /*allowBack=*/i > 0, /*safeStartFrac=*/0.80, explorePersonalityHistory, serial);
         explorePersonalityHistory.streak = explorePersonalityHistory.lastMode === esv.mode ? explorePersonalityHistory.streak + 1 : 1;
         explorePersonalityHistory.lastMode = esv.mode;
         const exploreModeLabel = esv.mode === "superSkim" ? "super skim" : esv.mode;
@@ -7337,7 +7359,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // composer. Starting a swipe at 80% can press/focus that field before
       // Android recognizes the movement, opening the keyboard instead of
       // advancing the reel. Keep the touch-down clearly above the composer.
-      const rsv = rollScrollVelocity(h, reelsScrollWeights, /*allowBack=*/false, /*safeStartFrac=*/0.68, reelsPersonalityHistory);
+      const rsv = rollScrollVelocity(h, reelsScrollWeights, /*allowBack=*/false, /*safeStartFrac=*/0.68, reelsPersonalityHistory, serial);
       reelsPersonalityHistory.streak = reelsPersonalityHistory.lastMode === rsv.mode ? reelsPersonalityHistory.streak + 1 : 1;
       reelsPersonalityHistory.lastMode = rsv.mode;
       const beforeXml = await android.dumpUi(serial).catch(() => "");

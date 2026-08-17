@@ -9028,6 +9028,12 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const [swipeTesting, setSwipeTesting] = React.useState(false);
   const [swipeProgress, setSwipeProgress] = React.useState<number | null>(null);
   const [swipeTestPath, setSwipeTestPath] = React.useState<SwipeGesture | null>(null);
+  const swipeModes = ["superSkim", "skim", "fast", "quick", "normal", "slow", "focused", "back"] as const;
+  type SwipePersonalityOverride = { weight: number; durationMinMs: number; durationMaxMs: number };
+  const defaultSwipePersonalityOverrides: Record<string, SwipePersonalityOverride> = Object.fromEntries(
+    swipeModes.map(mode => [mode, { weight: 0, durationMinMs: 1, durationMaxMs: 30000 }]),
+  );
+  const [swipePersonalityOverrides, setSwipePersonalityOverrides] = React.useState<Record<string, SwipePersonalityOverride>>(defaultSwipePersonalityOverrides);
   const [swipeOpen, setSwipeOpen] = React.useState(false);
   const swipeCanvasRef = React.useRef<SVGSVGElement | null>(null);
   const swipeDragRef = React.useRef<{ kind: "start" | "end" | "line"; dx: number; dy: number; base: SwipeGesture } | null>(null);
@@ -9045,6 +9051,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
           durationMaxMs: Math.min(150, Number(d.swipeGesture.durationMaxMs ?? 150)),
         });
         if (d.typingSpeedProfile) setTypingSpeedProfile({ minMs: 80, maxMs: 220, errorPercentMin: 0, errorPercentMax: 0, dwellMinMs: 40, dwellMaxMs: 80, hesitationMinMs: 250, hesitationMaxMs: 650, ...d.typingSpeedProfile });
+        if (d.swipePersonalityOverrides) setSwipePersonalityOverrides({ ...defaultSwipePersonalityOverrides, ...d.swipePersonalityOverrides });
         if (d.motherCodeOverrides) setMotherOverrides({
           globalDwell: d.motherCodeOverrides.globalDwell ?? defaultMotherOverrides.globalDwell,
           perTool: d.motherCodeOverrides.perTool ?? defaultMotherOverrides.perTool,
@@ -9083,6 +9090,14 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-prefs`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ typingSpeedProfile: next }),
+    }).catch(() => {});
+  };
+  const saveSwipePersonalityOverrides = async (next: Record<string, SwipePersonalityOverride>) => {
+    if (!serial) return;
+    setSwipePersonalityOverrides(next);
+    await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-prefs`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ swipePersonalityOverrides: next }),
     }).catch(() => {});
   };
 
@@ -9411,6 +9426,36 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
               </label>
             ))}
           </div>
+        </div>
+      </div>
+
+      <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Swipe Personality Overrides</p>
+          <p className="text-xs text-muted-foreground">Adjust the existing swipe personalities for this device. Weight controls how often each mode is selected; duration controls how quickly it runs. Leave weight at 0 to use the Mother Code default.</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {swipeModes.map(mode => {
+            const value = swipePersonalityOverrides[mode];
+            return (
+              <div key={mode} className="rounded-lg border border-border p-3">
+                <p className="text-xs font-medium text-foreground capitalize">{mode.replace(/([A-Z])/g, " $1")}</p>
+                <div className="grid grid-cols-3 gap-2 mt-2">
+                  {(["weight", "durationMinMs", "durationMaxMs"] as const).map(key => (
+                    <label key={key} className="text-[11px] text-muted-foreground">{key === "weight" ? "Weight" : key === "durationMinMs" ? "Min ms" : "Max ms"}
+                      <input type="number" min={key === "weight" ? 0 : 1} max={key === "weight" ? 1000 : 30000}
+                        value={value[key]}
+                        onChange={e => saveSwipePersonalityOverrides({
+                          ...swipePersonalityOverrides,
+                          [mode]: { ...value, [key]: Math.max(key === "weight" ? 0 : 1, Math.min(key === "weight" ? 1000 : 30000, Number(e.target.value))) },
+                        })}
+                        className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground" />
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
