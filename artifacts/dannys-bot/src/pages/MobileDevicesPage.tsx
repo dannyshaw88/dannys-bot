@@ -18,7 +18,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus } from "lucide-react";
+import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, RotateCcw } from "lucide-react";
 import { pickLocalWallpaper } from "@/pages/mobileShared";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -838,6 +838,23 @@ function DeviceCard({
   onCustomize: (c: SlotCustomization) => void;
 }) {
   const [panelOpen, setPanelOpen] = useState(false);
+  const [rebooting, setRebooting] = useState(false);
+
+  const handleRestart = useCallback(async (event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (!device.serial || rebooting) return;
+    setRebooting(true);
+    sessionStorage.setItem("mobile-device-restart-requested", device.serial);
+    window.dispatchEvent(new CustomEvent("mobile-device-graceful-restart", { detail: { serial: device.serial } }));
+    const response = await fetch(`/api/mobile/devices/${encodeURIComponent(device.serial)}/graceful-reboot`, { method: "POST" }).catch(() => null);
+    if (!response?.ok) {
+      setRebooting(false);
+      const result = await response?.json().catch(() => null);
+      console.error("[PhoneFarm] device restart failed", result?.error ?? "Device restart failed");
+      return;
+    }
+    setTimeout(() => setRebooting(false), 15000);
+  }, [device.serial, rebooting]);
 
   // ── Live mirror thumbnail ─────────────────────────────────────────────────
   // When the mirror is powered on (isStreaming), poll screencap.png every
@@ -959,6 +976,15 @@ function DeviceCard({
       </button>
 
       {/* Power button — appears beside the wallpaper button on hover */}
+      <button
+        onClick={handleRestart}
+        disabled={rebooting}
+        title="Restart device"
+        aria-label="Restart device"
+        className="absolute top-2 right-26 w-6 h-6 rounded-full bg-green-500 text-white border border-green-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-green-600 disabled:cursor-not-allowed"
+      >
+        <RotateCcw className={`w-3 h-3 ${rebooting ? "animate-spin" : ""}`} />
+      </button>
       <button
         onClick={e => { e.stopPropagation(); onPower(); }}
         title={powered ? "Power off phone" : "Power on phone"}
