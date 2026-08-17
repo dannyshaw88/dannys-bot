@@ -9029,7 +9029,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const [swipeTesting, setSwipeTesting] = React.useState(false);
   const [swipeProgress, setSwipeProgress] = React.useState<number | null>(null);
   const [swipeTestPath, setSwipeTestPath] = React.useState<SwipeGesture | null>(null);
-  const swipeModes = ["superSkim", "skim", "fast", "quick", "normal", "slow", "focused", "back"] as const;
+  const swipeModes = ["superSkim", "skim", "fast", "quick", "normal", "slow", "focused", "tapDragRelease", "back"] as const;
   type SwipePersonalityOverride = { weightMin: number; weightMax: number; durationMinMs: number; durationMaxMs: number };
   const motherSwipeDefaults: Record<string, SwipePersonalityOverride> = {
     superSkim: { weightMin: 1, weightMax: 5, durationMinMs: 150, durationMaxMs: 350 },
@@ -9039,6 +9039,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     normal: { weightMin: 60, weightMax: 95, durationMinMs: 1500, durationMaxMs: 2500 },
     slow: { weightMin: 75, weightMax: 95, durationMinMs: 2000, durationMaxMs: 3500 },
     focused: { weightMin: 75, weightMax: 100, durationMinMs: 2500, durationMaxMs: 5000 },
+    tapDragRelease: { weightMin: 1, weightMax: 5, durationMinMs: 350, durationMaxMs: 600 },
     back: { weightMin: 0, weightMax: 5, durationMinMs: 350, durationMaxMs: 600 },
   };
   const defaultSwipePersonalityOverrides: Record<string, SwipePersonalityOverride> = Object.fromEntries(

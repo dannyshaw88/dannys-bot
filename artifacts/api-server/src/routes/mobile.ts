@@ -4104,7 +4104,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
    */
   function rollScrollVelocity(
     h: number,
-    weights: { superSkim: number; skim: number; fast: number; quick: number; normal: number; slow: number; focused: number; back: number },
+    weights: { superSkim: number; skim: number; fast: number; quick: number; normal: number; slow: number; focused: number; tapDragRelease: number; back: number },
     allowBack = true,
     safeStartFrac = 0.80,
     history?: { lastMode?: string; streak: number },
@@ -4123,7 +4123,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         effectiveWeights[mode] = min + Math.random() * (max - min);
       }
     }
-    const effectiveBack = allowBack ? weights.back : 0;
     // Roll independently for every scroll, but avoid visibly artificial runs.
     // Repeats remain possible; after three of the same mode, force the next
     // roll to choose another mode. Back-scrolls are rarer and are capped at
@@ -4138,6 +4137,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const normal = blocked.has("normal") ? 0 : effectiveWeights.normal;
     const slow = blocked.has("slow") ? 0 : effectiveWeights.slow;
     const focused = blocked.has("focused") ? 0 : effectiveWeights.focused;
+    const tapDragRelease = blocked.has("tapDragRelease") ? 0 : effectiveWeights.tapDragRelease;
     const back = blocked.has("back") ? 0 : (allowBack ? effectiveWeights.back : 0);
     const duration = (mode: keyof typeof effectiveWeights, fallbackMin: number, fallbackMax: number) => {
       const configured = personalityOverrides?.[mode]?.weightMin > 0 || personalityOverrides?.[mode]?.weightMax > 0
@@ -4146,7 +4146,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const max = Math.max(min, Math.round(configured?.durationMaxMs ?? fallbackMax));
       return min + Math.round(Math.random() * (max - min));
     };
-    const total = superSkim + skim + fast + quick + normal + slow + focused + back;
+    const total = superSkim + skim + fast + quick + normal + slow + focused + tapDragRelease + back;
     const roll = Math.random() * total;
     let cum = 0;
 
@@ -4166,6 +4166,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (roll < cum) return { mode: "slow", duration: duration("slow", 2000, 3500), fromY: Math.round(h * Math.min(0.62, safeStartFrac)), toY: Math.round(h * 0.45) };
     cum += focused;
     if (roll < cum) return { mode: "focused", duration: duration("focused", 2500, 5000), fromY: Math.round(h * Math.min(0.58, safeStartFrac)), toY: Math.round(h * 0.48) };
+    cum += tapDragRelease;
+    if (roll < cum) return { mode: "tapDragRelease", duration: duration("tapDragRelease", 350, 600), fromY: Math.round(h * safeStartFrac), toY: Math.round(h * 0.35) };
     return {
       mode: "back",
       duration: duration("back", 350, 600),
@@ -4184,7 +4186,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     serial: string,
     fallback: { x1: number; y1: number; x2: number; y2: number; durationMs: number },
     source: string,
-    personality?: "superSkim" | "skim" | "fast" | "quick" | "normal" | "slow" | "focused" | "back",
+    personality?: "superSkim" | "skim" | "fast" | "quick" | "normal" | "slow" | "focused" | "tapDragRelease" | "back",
   ): Promise<{ x1: number; y1: number; x2: number; y2: number; durationMs: number; profile: boolean }> {
     let configured: DevicePrefs["swipeGesture"] | undefined;
     try { configured = loadInstanceConfigs()[serial]?.devicePrefs?.swipeGesture; } catch { configured = undefined; }
@@ -4212,7 +4214,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // The saved profile owns the physical gesture. Personality only changes
     // how quickly it is performed, so calibrated coordinates remain stable.
     const span = maxDuration - minDuration;
-    const durationBand: Record<"superSkim" | "skim" | "fast" | "quick" | "normal" | "slow" | "focused" | "back", [number, number]> = {
+    const durationBand: Record<"superSkim" | "skim" | "fast" | "quick" | "normal" | "slow" | "focused" | "tapDragRelease" | "back", [number, number]> = {
       superSkim: [0, 0.20],
       skim: [0.20, 0.45],
       fast: [0.45, 0.70],
@@ -4220,6 +4222,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       normal: [0.90, 1],
       slow: [0.90, 1],
       focused: [0.90, 1],
+      tapDragRelease: [0.05, 0.10],
       back: [0.05, 0.10],
     };
     const [bandStart, bandEnd] = personality ? durationBand[personality] : [0, 1];
@@ -4700,9 +4703,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       fast: 40 + Math.floor(Math.random() * 36), quick: 50 + Math.floor(Math.random() * 46),
       normal: 60 + Math.floor(Math.random() * 36), slow: 75 + Math.floor(Math.random() * 21),
       focused: 75 + Math.floor(Math.random() * 26),
+      tapDragRelease: 1 + Math.floor(Math.random() * 5),
       back:       Math.floor(Math.random() * 6),       // 0–5
     };
-    onLog?.(`Feed scroll personality — super skim:${feedScrollWeights.superSkim} skim:${feedScrollWeights.skim} fast:${feedScrollWeights.fast} quick:${feedScrollWeights.quick} normal:${feedScrollWeights.normal} slow:${feedScrollWeights.slow} focused:${feedScrollWeights.focused} back:${feedScrollWeights.back}`);
+    onLog?.(`Feed scroll personality — super skim:${feedScrollWeights.superSkim} skim:${feedScrollWeights.skim} fast:${feedScrollWeights.fast} quick:${feedScrollWeights.quick} normal:${feedScrollWeights.normal} slow:${feedScrollWeights.slow} focused:${feedScrollWeights.focused} tap-drag-release:${feedScrollWeights.tapDragRelease} back:${feedScrollWeights.back}`);
     const feedPersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
 
     for (let i = 0; i < count; i++) {
@@ -6733,9 +6737,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       fast: 40 + Math.floor(Math.random() * 36), quick: 50 + Math.floor(Math.random() * 46),
       normal: 60 + Math.floor(Math.random() * 36), slow: 75 + Math.floor(Math.random() * 21),
       focused: 75 + Math.floor(Math.random() * 26),
+      tapDragRelease: 1 + Math.floor(Math.random() * 5),
       back:       Math.floor(Math.random() * 6),       // 0–5
     };
-    onLog?.(`Explore scroll personality — super skim:${exploreScrollWeights.superSkim} skim:${exploreScrollWeights.skim} fast:${exploreScrollWeights.fast} quick:${exploreScrollWeights.quick} normal:${exploreScrollWeights.normal} slow:${exploreScrollWeights.slow} focused:${exploreScrollWeights.focused} back:${exploreScrollWeights.back}`);
+    onLog?.(`Explore scroll personality — super skim:${exploreScrollWeights.superSkim} skim:${exploreScrollWeights.skim} fast:${exploreScrollWeights.fast} quick:${exploreScrollWeights.quick} normal:${exploreScrollWeights.normal} slow:${exploreScrollWeights.slow} focused:${exploreScrollWeights.focused} tap-drag-release:${exploreScrollWeights.tapDragRelease} back:${exploreScrollWeights.back}`);
     const explorePersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
 
     for (let i = 0; i < scrollCount; i++) {
@@ -7357,9 +7362,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       fast: 40 + Math.floor(Math.random() * 36), quick: 50 + Math.floor(Math.random() * 46),
       normal: 60 + Math.floor(Math.random() * 36), slow: 75 + Math.floor(Math.random() * 21),
       focused: 75 + Math.floor(Math.random() * 26),
+      tapDragRelease: 1 + Math.floor(Math.random() * 5),
       back:       Math.floor(Math.random() * 6),       // 0–5
     };
-    onLog?.(`Reels scroll personality — super skim:${reelsScrollWeights.superSkim} skim:${reelsScrollWeights.skim} fast:${reelsScrollWeights.fast} quick:${reelsScrollWeights.quick} normal:${reelsScrollWeights.normal} slow:${reelsScrollWeights.slow} focused:${reelsScrollWeights.focused} back:${reelsScrollWeights.back}`);
+    onLog?.(`Reels scroll personality — super skim:${reelsScrollWeights.superSkim} skim:${reelsScrollWeights.skim} fast:${reelsScrollWeights.fast} quick:${reelsScrollWeights.quick} normal:${reelsScrollWeights.normal} slow:${reelsScrollWeights.slow} focused:${reelsScrollWeights.focused} tap-drag-release:${reelsScrollWeights.tapDragRelease} back:${reelsScrollWeights.back}`);
     const reelsPersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
 
     // Reels snap fully to the next clip on a swipe — unlike the feed's
