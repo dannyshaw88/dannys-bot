@@ -10932,7 +10932,7 @@ export async function typeViaCalibrationMap(
     try {
       await deleteOneCharacterForTyping(serial);
       backspaceSent = true;
-      await _sleep(35);
+      await _sleep(35 + Math.round(Math.random() * 65));
     } catch {
       backspaceSent = false;
     }
@@ -10960,13 +10960,13 @@ export async function typeViaCalibrationMap(
       if (layer === "moreSymbols") {
         const returnedToSymbols = await tapMapped("abc", "ABC (back to symbols)");
         if (!returnedToSymbols) return false;
-        await _sleep(120);
+        await _sleep(120 + Math.round(Math.random() * 380));
         layer = "symbols";
         _calKeyboardLayer.set(serial, layer);
       }
       const switched = await tapMapped("abc", "ABC");
       if (switched) {
-        await _sleep(120);
+        await _sleep(120 + Math.round(Math.random() * 380));
         layer = "letters";
         _calKeyboardLayer.set(serial, layer);
       }
@@ -10981,7 +10981,7 @@ export async function typeViaCalibrationMap(
       }
       const switched = await tapMapped("symbols", "?123");
       if (switched) {
-        await _sleep(120);
+        await _sleep(120 + Math.round(Math.random() * 380));
         layer = "symbols";
         _calKeyboardLayer.set(serial, layer);
       }
@@ -10995,7 +10995,7 @@ export async function typeViaCalibrationMap(
     }
     const switched = await tapMapped("moreSymbols", "more symbols");
     if (switched) {
-      await _sleep(120);
+      await _sleep(120 + Math.round(Math.random() * 380));
       layer = "moreSymbols";
       _calKeyboardLayer.set(serial, layer);
     }
