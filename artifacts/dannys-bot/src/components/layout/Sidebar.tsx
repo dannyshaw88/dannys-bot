@@ -59,14 +59,14 @@ function FilledGhostIcon({ className, style }: { className?: string; style?: Rea
   );
 }
 
-function SpyIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+function HackerIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <path fill="currentColor" d="M4 8.5h16v2H4zM6.2 8.2 8.3 3h7.4l2.1 5.2H6.2Z" />
-      <path fill="currentColor" d="M6 11h12v2.1a6 6 0 0 1-12 0V11Z" />
-      <rect fill="white" x="7.1" y="11.2" width="4.1" height="2.1" rx=".7" />
-      <rect fill="white" x="12.8" y="11.2" width="4.1" height="2.1" rx=".7" />
-      <path stroke="currentColor" strokeWidth="1" d="M11.2 12.2h1.6" />
+      <path fill="currentColor" d="M12 2c-3.8 0-6.8 2.7-7.6 7.2L3 14h3.2c.2 2.4 1.2 4.3 2.8 5.5L7.4 22h9.2l-1.6-2.5c1.6-1.2 2.6-3.1 2.8-5.5H21l-1.4-4.8C18.8 4.7 15.8 2 12 2Z" />
+      <path fill="white" d="M8.1 10.4c1.1-1.6 2.4-2.4 3.9-2.4s2.8.8 3.9 2.4c-1.1 1.1-2.4 1.7-3.9 1.7s-2.8-.6-3.9-1.7Z" />
+      <circle fill="currentColor" cx="10.5" cy="10.3" r=".65" />
+      <circle fill="currentColor" cx="13.5" cy="10.3" r=".65" />
+      <path fill="currentColor" d="M4 15.2h16l-1.2 1.5H5.2L4 15.2Z" />
     </svg>
   );
 }
@@ -136,7 +136,7 @@ export function Sidebar() {
     { name: "Phone Farm",      shortLabel: "PHONE FARM",     path: "/mobile",       icon: FilledFarmIcon        },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon },
     { name: "Settings",        shortLabel: "SETTINGS",       path: "/settings",     icon: FilledSettingsIcon  },
-    { name: "Ghost Browser",   shortLabel: "GHOST BROWSER",  path: "/create-ghost", icon: SpyIcon },
+    { name: "Ghost Browser",   shortLabel: "GHOST BROWSER",  path: "/create-ghost", icon: HackerIcon },
   ];
 
   return (
