@@ -4009,7 +4009,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
    */
   function rollScrollVelocity(
     h: number,
-    weights: { skim: number; normal: number; interested: number; back: number },
+    weights: { superSkim: number; skim: number; fast: number; quick: number; normal: number; slow: number; focused: number; back: number },
     allowBack = true,
     safeStartFrac = 0.80,
     history?: { lastMode?: string; streak: number },
@@ -4022,48 +4022,34 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const blocked = new Set<string>();
     if (history?.lastMode && history.streak >= 3) blocked.add(history.lastMode);
     if (history?.lastMode === "back" && history.streak >= 2) blocked.add("back");
+    const superSkim = blocked.has("superSkim") ? 0 : weights.superSkim;
     const skim = blocked.has("skim") ? 0 : weights.skim;
+    const fast = blocked.has("fast") ? 0 : weights.fast;
+    const quick = blocked.has("quick") ? 0 : weights.quick;
     const normal = blocked.has("normal") ? 0 : weights.normal;
-    const interested = blocked.has("interested") ? 0 : weights.interested;
+    const slow = blocked.has("slow") ? 0 : weights.slow;
+    const focused = blocked.has("focused") ? 0 : weights.focused;
     const back = blocked.has("back") ? 0 : effectiveBack;
-    const total = skim + normal + interested + back;
+    const total = superSkim + skim + fast + quick + normal + slow + focused + back;
     const roll = Math.random() * total;
     let cum = 0;
 
+    cum += superSkim;
+    if (roll < cum) return { mode: "superSkim", duration: 150 + Math.round(Math.random() * 200), fromY: Math.round(h * safeStartFrac), toY: Math.round(h * 0.08) };
     cum += skim;
     if (roll < cum) {
-      // Super Skim: fast, full-height flick
-      return {
-        mode: "skim",
-        duration: 150 + Math.round(Math.random() * 200),
-        fromY: Math.round(h * safeStartFrac),
-        toY:   Math.round(h * 0.08),
-      };
+      return { mode: "skim", duration: 450 + Math.round(Math.random() * 350), fromY: Math.round(h * safeStartFrac), toY: Math.round(h * 0.22) };
     }
-
+    cum += fast;
+    if (roll < cum) return { mode: "fast", duration: 900 + Math.round(Math.random() * 600), fromY: Math.round(h * safeStartFrac), toY: Math.round(h * 0.30) };
+    cum += quick;
+    if (roll < cum) return { mode: "quick", duration: 1250 + Math.round(Math.random() * 750), fromY: Math.round(h * Math.min(0.65, safeStartFrac)), toY: Math.round(h * 0.38) };
     cum += normal;
-    if (roll < cum) {
-      // Fast: comfortable mid-speed scroll
-      return {
-        mode: "normal",
-        duration: 450 + Math.round(Math.random() * 350),
-        fromY: Math.round(h * safeStartFrac),
-        toY:   Math.round(h * 0.22),
-      };
-    }
-
-    cum += interested;
-    if (roll < cum) {
-      // Normal: slow nudge — something caught the eye
-      return {
-        mode: "interested",
-        duration: 900 + Math.round(Math.random() * 600),
-        fromY: Math.round(h * Math.min(0.65, safeStartFrac)),
-        toY:   Math.round(h * 0.38),
-      };
-    }
-
-    // Back-scroll: short reversed swipe (scroll up to re-examine)
+    if (roll < cum) return { mode: "normal", duration: 1500 + Math.round(Math.random() * 1000), fromY: Math.round(h * Math.min(0.65, safeStartFrac)), toY: Math.round(h * 0.42) };
+    cum += slow;
+    if (roll < cum) return { mode: "slow", duration: 2000 + Math.round(Math.random() * 1500), fromY: Math.round(h * Math.min(0.62, safeStartFrac)), toY: Math.round(h * 0.45) };
+    cum += focused;
+    if (roll < cum) return { mode: "focused", duration: 2500 + Math.round(Math.random() * 2500), fromY: Math.round(h * Math.min(0.58, safeStartFrac)), toY: Math.round(h * 0.48) };
     return {
       mode: "back",
       duration: 350 + Math.round(Math.random() * 250),
@@ -4082,7 +4068,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     serial: string,
     fallback: { x1: number; y1: number; x2: number; y2: number; durationMs: number },
     source: string,
-    personality?: "skim" | "normal" | "interested" | "back",
+    personality?: "superSkim" | "skim" | "fast" | "quick" | "normal" | "slow" | "focused" | "back",
   ): Promise<{ x1: number; y1: number; x2: number; y2: number; durationMs: number; profile: boolean }> {
     let configured: DevicePrefs["swipeGesture"] | undefined;
     try { configured = loadInstanceConfigs()[serial]?.devicePrefs?.swipeGesture; } catch { configured = undefined; }
@@ -4110,10 +4096,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // The saved profile owns the physical gesture. Personality only changes
     // how quickly it is performed, so calibrated coordinates remain stable.
     const span = maxDuration - minDuration;
-    const durationBand: Record<"skim" | "normal" | "interested" | "back", [number, number]> = {
-      skim: [0, 0.35],
-      normal: [0.25, 0.75],
-      interested: [0.90, 1],
+    const durationBand: Record<"superSkim" | "skim" | "fast" | "quick" | "normal" | "slow" | "focused" | "back", [number, number]> = {
+      superSkim: [0, 0.20],
+      skim: [0.20, 0.45],
+      fast: [0.45, 0.70],
+      quick: [0.70, 0.90],
+      normal: [0.90, 1],
+      slow: [0.90, 1],
+      focused: [0.90, 1],
       back: [0.05, 0.10],
     };
     const [bandStart, bandEnd] = personality ? durationBand[personality] : [0, 1];
@@ -4588,12 +4578,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // its own mix so the distribution never converges to a fixed signature
     // over many sessions. Weights are relative (don't need to sum to 100).
     const feedScrollWeights = {
-      skim:      1 + Math.floor(Math.random() * 5),  // 1–5 (Super skim)
-      normal:    10 + Math.floor(Math.random() * 16), // 10–25 (Fast label)
-      interested: 40 + Math.floor(Math.random() * 36), // 40–75 (Normal label)
+      superSkim: 1 + Math.floor(Math.random() * 5), skim: 10 + Math.floor(Math.random() * 16),
+      fast: 40 + Math.floor(Math.random() * 36), quick: 50 + Math.floor(Math.random() * 46),
+      normal: 60 + Math.floor(Math.random() * 36), slow: 75 + Math.floor(Math.random() * 21),
+      focused: 75 + Math.floor(Math.random() * 26),
       back:       Math.floor(Math.random() * 6),       // 0–5
     };
-    onLog?.(`Feed scroll personality — super skim:${feedScrollWeights.skim} fast:${feedScrollWeights.normal} normal:${feedScrollWeights.interested} back:${feedScrollWeights.back}`);
+    onLog?.(`Feed scroll personality — super skim:${feedScrollWeights.superSkim} skim:${feedScrollWeights.skim} fast:${feedScrollWeights.fast} quick:${feedScrollWeights.quick} normal:${feedScrollWeights.normal} slow:${feedScrollWeights.slow} focused:${feedScrollWeights.focused} back:${feedScrollWeights.back}`);
     const feedPersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
 
     for (let i = 0; i < count; i++) {
@@ -4608,10 +4599,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const sv = rollScrollVelocity(h, feedScrollWeights, /*allowBack=*/i > 0, /*safeStartFrac=*/0.88, feedPersonalityHistory);
       feedPersonalityHistory.streak = feedPersonalityHistory.lastMode === sv.mode ? feedPersonalityHistory.streak + 1 : 1;
       feedPersonalityHistory.lastMode = sv.mode;
-      const feedModeLabel = sv.mode === "interested" ? "normal" : sv.mode === "skim" ? "super skim" : sv.mode;
+      const feedModeLabel = sv.mode === "superSkim" ? "super skim" : sv.mode;
       onLog?.(`View Feed ${i + 1}/${count} [${feedModeLabel}]`);
       logger.info({ serial, target: "feed-scroll", mode: sv.mode, from: [x, sv.fromY], to: [x, sv.toY], durationMs: sv.duration }, "[check-feed] swipe");
-      await deviceProfileSwipe(serial, { x1: x, y1: sv.fromY, x2: x, y2: sv.toY, durationMs: sv.duration }, "feed-scroll", sv.mode as "skim" | "normal" | "interested" | "back");
+      await deviceProfileSwipe(serial, { x1: x, y1: sv.fromY, x2: x, y2: sv.toY, durationMs: sv.duration }, "feed-scroll", sv.mode as any);
       await sleepOrAbort(serial, 180);
       await verifyStillInInstagram();
 
@@ -6616,12 +6607,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
     // Session scroll personality — same approach as runCheckFeedLoop.
     const exploreScrollWeights = {
-      skim:      1 + Math.floor(Math.random() * 5),  // 1–5 (Super skim)
-      normal:    10 + Math.floor(Math.random() * 16), // 10–25 (Fast label)
-      interested: 40 + Math.floor(Math.random() * 36), // 40–75 (Normal label)
+      superSkim: 1 + Math.floor(Math.random() * 5), skim: 10 + Math.floor(Math.random() * 16),
+      fast: 40 + Math.floor(Math.random() * 36), quick: 50 + Math.floor(Math.random() * 46),
+      normal: 60 + Math.floor(Math.random() * 36), slow: 75 + Math.floor(Math.random() * 21),
+      focused: 75 + Math.floor(Math.random() * 26),
       back:       Math.floor(Math.random() * 6),       // 0–5
     };
-    onLog?.(`Explore scroll personality — super skim:${exploreScrollWeights.skim} fast:${exploreScrollWeights.normal} normal:${exploreScrollWeights.interested} back:${exploreScrollWeights.back}`);
+    onLog?.(`Explore scroll personality — super skim:${exploreScrollWeights.superSkim} skim:${exploreScrollWeights.skim} fast:${exploreScrollWeights.fast} quick:${exploreScrollWeights.quick} normal:${exploreScrollWeights.normal} slow:${exploreScrollWeights.slow} focused:${exploreScrollWeights.focused} back:${exploreScrollWeights.back}`);
     const explorePersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
 
     for (let i = 0; i < scrollCount; i++) {
@@ -7150,10 +7142,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const esv = rollScrollVelocity(h, exploreScrollWeights, /*allowBack=*/i > 0, /*safeStartFrac=*/0.80, explorePersonalityHistory);
         explorePersonalityHistory.streak = explorePersonalityHistory.lastMode === esv.mode ? explorePersonalityHistory.streak + 1 : 1;
         explorePersonalityHistory.lastMode = esv.mode;
-        const exploreModeLabel = esv.mode === "interested" ? "normal" : esv.mode === "skim" ? "super skim" : esv.mode;
+        const exploreModeLabel = esv.mode === "superSkim" ? "super skim" : esv.mode;
         onLog?.(`View Explore ${i + 1}/${scrollCount}: next swipe [${exploreModeLabel}]`);
         logger.info({ serial, source: "explore-scroll", mode: esv.mode, from: [x, esv.fromY], to: [x, esv.toY], durationMs: esv.duration }, "[mobile-input] swipe");
-        await deviceProfileSwipe(serial, { x1: x, y1: esv.fromY, x2: x, y2: esv.toY, durationMs: esv.duration }, "explore-scroll", esv.mode as "skim" | "normal" | "interested" | "back");
+        await deviceProfileSwipe(serial, { x1: x, y1: esv.fromY, x2: x, y2: esv.toY, durationMs: esv.duration }, "explore-scroll", esv.mode as any);
         // Explore-only render dwell: the grid often needs a few seconds after
         // the gesture before its media cells are actually populated. Keep this
         // hardcoded and isolated here; it must not alter Feed, Reels, Stories,
@@ -7237,12 +7229,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // per clip, unlike the feed's partial nudge), which just means occasionally
     // rewatching a reel — a normal human behaviour kept at a low weight.
     const reelsScrollWeights = {
-      skim:      1 + Math.floor(Math.random() * 5),  // 1–5 (Super skim)
-      normal:    10 + Math.floor(Math.random() * 16), // 10–25 (Fast label)
-      interested: 40 + Math.floor(Math.random() * 36), // 40–75 (Normal label)
+      superSkim: 1 + Math.floor(Math.random() * 5), skim: 10 + Math.floor(Math.random() * 16),
+      fast: 40 + Math.floor(Math.random() * 36), quick: 50 + Math.floor(Math.random() * 46),
+      normal: 60 + Math.floor(Math.random() * 36), slow: 75 + Math.floor(Math.random() * 21),
+      focused: 75 + Math.floor(Math.random() * 26),
       back:       Math.floor(Math.random() * 6),       // 0–5
     };
-    onLog?.(`Reels scroll personality — super skim:${reelsScrollWeights.skim} fast:${reelsScrollWeights.normal} normal:${reelsScrollWeights.interested} back:${reelsScrollWeights.back}`);
+    onLog?.(`Reels scroll personality — super skim:${reelsScrollWeights.superSkim} skim:${reelsScrollWeights.skim} fast:${reelsScrollWeights.fast} quick:${reelsScrollWeights.quick} normal:${reelsScrollWeights.normal} slow:${reelsScrollWeights.slow} focused:${reelsScrollWeights.focused} back:${reelsScrollWeights.back}`);
     const reelsPersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
 
     // Reels snap fully to the next clip on a swipe — unlike the feed's
@@ -7275,10 +7268,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       reelsPersonalityHistory.lastMode = rsv.mode;
       const beforeXml = await android.dumpUi(serial).catch(() => "");
       onLog?.(`${reelLabel}: swipe screen BEFORE — ${summarizeReelsSwipeScreen(beforeXml)}`);
-      const reelsModeLabel = rsv.mode === "interested" ? "normal" : rsv.mode === "skim" ? "super skim" : rsv.mode;
+      const reelsModeLabel = rsv.mode === "superSkim" ? "super skim" : rsv.mode;
       onLog?.(`${reelLabel}: advance swipe [${reelsModeLabel}]`);
       logger.info({ serial, source: "reels-advance", mode: rsv.mode, from: [rx, rsv.fromY], to: [rx, rsv.toY], durationMs: rsv.duration }, "[mobile-input] swipe");
-      const actualPath = await deviceProfileSwipe(serial, { x1: rx, y1: rsv.fromY, x2: rx, y2: rsv.toY, durationMs: rsv.duration }, "reels-advance", rsv.mode as "skim" | "normal" | "interested" | "back");
+      const actualPath = await deviceProfileSwipe(serial, { x1: rx, y1: rsv.fromY, x2: rx, y2: rsv.toY, durationMs: rsv.duration }, "reels-advance", rsv.mode as any);
       const afterXml = await android.dumpUi(serial).catch(() => "");
       onLog?.(
         `${reelLabel}: swipe screen AFTER — ${summarizeReelsSwipeScreen(afterXml)}` +
