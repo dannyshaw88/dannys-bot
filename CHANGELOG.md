@@ -1,3 +1,9 @@
+## [1.2.532] — 2026-08-17
+
+### Changed — Mobile Action Timing
+
+- Randomize fixed waits between Feed, Story, share-sheet, and navigation actions while preserving each existing minimum wait.
+
 ## [1.2.531] — 2026-08-17
 
 ### Changed — HST Account-Switch Timing

@@ -4781,7 +4781,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   likeFailures++;
                   onLog?.(`View Feed ${i + 1}/${count}: ✗ like threw an error`);
                 }
-                await sleepOrAbort(serial, 300);
+           await sleepOrAbort(serial, 300 + Math.floor(Math.random() * 4701));
                 const _likeStayedInInstagram = await verifyStillInInstagram();
                  if (_likeActionSucceeded && _likeStayedInInstagram) {
                   likes++;
@@ -4847,7 +4847,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   onLog?.(`View Feed ${i + 1}/${count}: Repost sheet opened — tapping Repost at (${repostBtn.x},${repostBtn.y})…`);
                   await android.tap(serial, repostBtn.x, repostBtn.y);
                   logger.info({ serial }, "[check-feed] tapped Repost in sheet");
-                  await sleepOrAbort(serial, 300);
+           await sleepOrAbort(serial, 300 + Math.floor(Math.random() * 4701));
                   // "You reposted X's post" popup appears after the first
                   // repost — find its blue "Close" button via accessibility
                   // tree and tap it.
@@ -4908,7 +4908,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 } else {
                 onLog?.(`${_cfPfx}: tapping share-via-DM icon at (${dmNode.x},${dmNode.y})…`);
                 await android.tap(serial, dmNode.x, dmNode.y);
-                await sleepOrAbort(serial, 1500);
+             await sleepOrAbort(serial, 1500 + Math.floor(Math.random() * 3501));
                 onLog?.(`${_cfPfx}: confirming share sheet opened and picking DM recipient…`);
                 let _cfScan = await android.confirmAndScanShareSheet(serial, onLog).catch(() => null);
                 if (!_cfScan?.sheetOpen) {
@@ -5021,7 +5021,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   if (isCycleAborted(serial)) throw new Error("cycle-aborted");
                   onLog?.(`View Feed ${i + 1}/${count}: tapping save (ribbon) icon at (${_saveBtn.x},${_saveBtn.y})…`);
                   await android.tap(serial, _saveBtn.x, _saveBtn.y);
-                  await sleepOrAbort(serial, 600);
+                 await sleepOrAbort(serial, 600 + Math.floor(Math.random() * 4401));
                   // Instagram may show a "Collect the posts you love" bottom
                   // sheet on accounts with no existing collections.  Detect it
                   // with a fresh dump and dismiss it by tapping the transparent
@@ -5169,7 +5169,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           } else {
             onLog?.(`View Feed ${i + 1}/${count}: tapping audio affordance at (${_atNode.x},${_atNode.y})…`);
             await android.tap(serial, _atNode.x, _atNode.y);
-            await sleepOrAbort(serial, 1000);
+             await sleepOrAbort(serial, 1000 + Math.floor(Math.random() * 4001));
             await verifyStillInInstagram();
 
             const _atXml2 = await android.dumpUi(serial).catch(() => "");
@@ -5179,15 +5179,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               // Meta Edits promotional popup — dismiss and try once more.
               onLog?.(`View Feed ${i + 1}/${count}: Meta Edits popup detected — dismissing and retrying…`);
               await android.pressBack(serial);
-              await sleepOrAbort(serial, 600);
+               await sleepOrAbort(serial, 600 + Math.floor(Math.random() * 4401));
               await android.tap(serial, _atNode.x, _atNode.y);
-              await sleepOrAbort(serial, 1000);
+               await sleepOrAbort(serial, 1000 + Math.floor(Math.random() * 4001));
               await verifyStillInInstagram();
               const _atXml3 = await android.dumpUi(serial).catch(() => "");
               if (_atXml3.toLowerCase().includes("level up")) {
                 onLog?.(`View Feed ${i + 1}/${count}: Meta Edits popup still showing after retry — aborting audio tap`);
                 await android.pressBack(serial);
-                await sleepOrAbort(serial, 400);
+                 await sleepOrAbort(serial, 400 + Math.floor(Math.random() * 4601));
               } else {
                 _atOnSongPage = true;
               }
@@ -5205,7 +5205,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 const _atY2 = Math.round((parseInt(_atBb2[2]) + parseInt(_atBb2[4])) / 2);
                 onLog?.(`View Feed ${i + 1}/${count}: tapping "View song details" at (${_atX2},${_atY2})…`);
                 await android.tap(serial, _atX2, _atY2);
-                await sleepOrAbort(serial, 1200);
+                 await sleepOrAbort(serial, 1200 + Math.floor(Math.random() * 3801));
                 await verifyStillInInstagram();
                 _atOnSongPage = true;
                 _atSheetTapped = true;
@@ -5215,7 +5215,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 // Sheet visible but couldn't resolve the node — press Back.
                 onLog?.(`View Feed ${i + 1}/${count}: "View song details" node not found in sheet — pressing Back`);
                 await android.pressBack(serial);
-                await sleepOrAbort(serial, 400);
+                   await sleepOrAbort(serial, 400 + Math.floor(Math.random() * 4601));
               }
             } else {
               // Navigated directly to the song/audio page.
@@ -5246,7 +5246,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 const _atSX  = Math.round(_atW / 2);
                 const _atDur = 300 + Math.round(Math.random() * 400);
                 await deviceProfileSwipe(serial, { x1: _atSX, y1: _atSY1, x2: _atSX, y2: _atSY2, durationMs: _atDur }, "feed-audio-profile-scroll");
-                await sleepOrAbort(serial, 280);
+                 await sleepOrAbort(serial, 280 + Math.floor(Math.random() * 4721));
                 if (!_atDidTap && Math.random() < _atTapChance) {
                   // Tap a random clickable item in the content area.
                   const _atGXml = await android.dumpUi(serial).catch(() => "");
@@ -5263,11 +5263,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     const _atPicked = _atItems[Math.floor(Math.random() * _atItems.length)];
                     onLog?.(`View Feed ${i + 1}/${count}: song-page tap at (${_atPicked.x},${_atPicked.y})…`);
                     await android.tap(serial, _atPicked.x, _atPicked.y);
-                    await sleepOrAbort(serial, 1000);
+                     await sleepOrAbort(serial, 1000 + Math.floor(Math.random() * 4001));
                     await verifyStillInInstagram();
                     // Press Back once to return from the post (or wherever the tap landed).
                     await android.pressBack(serial);
-                    await sleepOrAbort(serial, 600);
+                     await sleepOrAbort(serial, 600 + Math.floor(Math.random() * 4401));
                     await verifyStillInInstagram();
                     _atDidTap = true;
                     break; // stop scrolling after a tap
@@ -5277,7 +5277,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               // Return to the feed — one Back press from the song/audio page.
               onLog?.(`View Feed ${i + 1}/${count}: returning from song page…`);
               await android.pressBack(serial);
-              await sleepOrAbort(serial, 700);
+               await sleepOrAbort(serial, 700 + Math.floor(Math.random() * 4301));
               await verifyStillInInstagram();
               audioTaps++;
               onLog?.(`View Feed ${i + 1}/${count}: ✓ audio page visited`);
@@ -5355,7 +5355,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 const _chSX  = Math.round(_chW / 2);
                 const _chDur = 300 + Math.round(Math.random() * 400);
                 await deviceProfileSwipe(serial, { x1: _chSX, y1: _chSY1, x2: _chSX, y2: _chSY2, durationMs: _chDur }, "feed-hashtag-profile-scroll");
-                await sleepOrAbort(serial, 280);
+                 await sleepOrAbort(serial, 280 + Math.floor(Math.random() * 4721));
                 if (!_chDidTapPost && Math.random() < _chTapChance) {
                   // Tap a random grid post using the grid_card_layout_container nodes.
                   const _chPXml = await android.dumpUi(serial).catch(() => "");
@@ -5375,11 +5375,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     const _chPostPick = _chPosts[Math.floor(Math.random() * _chPosts.length)];
                     onLog?.(`View Feed ${i + 1}/${count}: tapping grid post at (${_chPostPick.x},${_chPostPick.y})…`);
                     await android.tap(serial, _chPostPick.x, _chPostPick.y);
-                    await sleepOrAbort(serial, 1200);
+                     await sleepOrAbort(serial, 1200 + Math.floor(Math.random() * 3801));
                     await verifyStillInInstagram();
                     // Press Back once to return from the post to the hashtag grid.
                     await android.pressBack(serial);
-                    await sleepOrAbort(serial, 700);
+                     await sleepOrAbort(serial, 700 + Math.floor(Math.random() * 4301));
                     await verifyStillInInstagram();
                     _chDidTapPost = true;
                     break; // stop scrolling after a tap
@@ -5389,7 +5389,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               // Return to the feed — one Back press from the hashtag grid.
               onLog?.(`View Feed ${i + 1}/${count}: returning from hashtag grid…`);
               await android.pressBack(serial);
-              await sleepOrAbort(serial, 700);
+               await sleepOrAbort(serial, 700 + Math.floor(Math.random() * 4301));
               await verifyStillInInstagram();
               hashtagTaps++;
               onLog?.(`View Feed ${i + 1}/${count}: ✓ hashtag grid visited (${_chPick.tag}${_chDidTapPost ? ", tapped a post" : ""})`);
@@ -5411,7 +5411,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (wantClickAuthor) {
         try {
           if (isCycleAborted(serial)) throw new Error("cycle-aborted");
-          await sleepOrAbort(serial, 300);
+           await sleepOrAbort(serial, 300 + Math.floor(Math.random() * 4701));
           const _caScan = await scanViewFeedA11y().catch(() => null);
           const _caNode = _caScan?.author ?? null;
           if (!_caNode) {
@@ -5419,7 +5419,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           } else {
             onLog?.(`View Feed ${i + 1}/${count}: tapping author "${_caNode.name}" at (${_caNode.x},${_caNode.y})…`);
             await android.tap(serial, _caNode.x, _caNode.y);
-            await sleepOrAbort(serial, 1500);
+             await sleepOrAbort(serial, 1500 + Math.floor(Math.random() * 3501));
             await verifyStillInInstagram();
             // Post-tap verification — dump the UI and confirm we actually
             // landed on a profile page before doing anything else.
@@ -5457,7 +5457,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               // Return to the feed — one Back press from the author's profile.
               onLog?.(`View Feed ${i + 1}/${count}: returning from author profile…`);
               await android.pressBack(serial);
-              await sleepOrAbort(serial, 700);
+                 await sleepOrAbort(serial, 700 + Math.floor(Math.random() * 4301));
               await verifyStillInInstagram();
               authorVisits++;
               onLog?.(`View Feed ${i + 1}/${count}: ✓ author profile visited (${_caNode.name})`);
@@ -5853,7 +5853,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return { storiesWatched: 0, storyLikes: 0 };
     }
 
-    await sleepOrAbort(serial, 1800); // let viewer animate open
+    await sleepOrAbort(serial, 1800 + Math.floor(Math.random() * 3201)); // let viewer animate open
 
     let storiesWatched = 0;
     let storyLikes = 0;
@@ -5878,7 +5878,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (_storySlidePopup) {
         onLog?.(`View Stories ${s + 1}: mid-story popup dismissed (${_storySlidePopup})`);
         logger.info({ serial, story: s + 1, dismissed: _storySlidePopup }, "[view-stories] mid-story interstitial dismissed");
-        await sleepOrAbort(serial, 400);
+        await sleepOrAbort(serial, 400 + Math.floor(Math.random() * 4601));
       }
 
       // Like, share, and/or comment on this story?
@@ -5972,7 +5972,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
         // When a share is also scheduled on this slide, don't linger here —
         // every extra ms is runway the DM-share sequence won't have.
-        await sleepOrAbort(serial, willShare ? 100 : 200);
+        await sleepOrAbort(serial, willShare
+          ? 100 + Math.floor(Math.random() * 4901)
+          : 200 + Math.floor(Math.random() * 4801));
       }
 
       if (willShare && !(await stillInStoryViewer(/* fastOnly= */ true))) {
@@ -6056,11 +6058,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // unambiguously distinguishes "sheet open" from "nothing happened".
           await android.tap(serial, shareIconPos.x, shareIconPos.y);
           onLog?.(`View Stories ${s + 1}: tapped paper-plane at (${shareIconPos.x},${shareIconPos.y}) — waiting for share sheet`);
-          await sleepOrAbort(serial, 200); // just enough for the sheet to render
+          await sleepOrAbort(serial, 200 + Math.floor(Math.random() * 4801)); // let the sheet render
           opened = true;
         }
         if (opened) {
-          await sleepOrAbort(serial, 150); // wait for recipient picker
+          await sleepOrAbort(serial, 150 + Math.floor(Math.random() * 4851)); // wait for recipient picker
           // Confirm the sheet actually rendered BEFORE firing the recipient
           // tap. Root-cause fix (12 Jul 2026, user-reported): the only gate
           // that used to exist here was "no keyboard AND still in story
@@ -6107,7 +6109,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             _viewStoriesLastDmRecipient.set(serial, { x: _stPick.x, y: _stPick.y });
             onLog?.(`View Stories ${s + 1}: tapping recipient at (${_stPick.x},${_stPick.y})${(_stPick as any).name ? ` (${(_stPick as any).name})` : ""}`);
             await android.tap(serial, _stPick.x, _stPick.y);
-            await sleepOrAbort(serial, 200); // brief pause for selection to register
+            await sleepOrAbort(serial, 200 + Math.floor(Math.random() * 4801)); // brief pause for selection to register
             // No "still in story viewer?" check here — sheetSendBtn already confirms
             // the story was showing when the sheet opened. Adding an a11y dump
             // (fast 1–1.5s + slow 2.7s = 4.2s) burns the remaining slide budget
@@ -6120,11 +6122,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             const _stSb = sheetSendBtn ?? await android.findButtonByLabel(serial, "Send").catch(() => null);
             if (_stSb) {
               await android.tap(serial, _stSb.x, _stSb.y);
-              await sleepOrAbort(serial, 300);
+              await sleepOrAbort(serial, 300 + Math.floor(Math.random() * 4701));
               if (!(await _stIsOpen())) {
                 logger.info({ serial, story: s + 1 }, "[view-stories] shared story via DM — Send tapped");
                 onLog?.(`View Stories ${s + 1}: shared via DM — Send tapped`);
-                await sleepOrAbort(serial, 200);
+                await sleepOrAbort(serial, 200 + Math.floor(Math.random() * 4801));
               } else {
                 await android.pressBack(serial);
                 logger.info({ serial, story: s + 1 }, "[view-stories] Send button not found — closed DM picker");
@@ -6134,18 +6136,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             } else if (!(await _stIsOpen())) {
               logger.info({ serial, story: s + 1 }, "[view-stories] share sheet already closed — DM likely sent by recipient tap");
               onLog?.(`View Stories ${s + 1}: shared via DM — sheet auto-dismissed (sent by recipient tap)`);
-              await sleepOrAbort(serial, 150);
+              await sleepOrAbort(serial, 150 + Math.floor(Math.random() * 4851));
             } else {
               const _stFbX = Math.round(w * 0.50), _stFbY = Math.round(h * 0.982);
               onLog?.(`View Stories ${s + 1}: Send button not found via a11y — tapping coordinate fallback (${_stFbX},${_stFbY})`);
               await android.tap(serial, _stFbX, _stFbY);
-              await sleepOrAbort(serial, 300);
+              await sleepOrAbort(serial, 300 + Math.floor(Math.random() * 4701));
               if (!(await _stIsOpen())) {
                 onLog?.(`View Stories ${s + 1}: ✓ shared via DM — sent via coordinate fallback`);
-                await sleepOrAbort(serial, 200);
+                await sleepOrAbort(serial, 200 + Math.floor(Math.random() * 4801));
               } else {
                 await android.pressBack(serial);
-                await sleepOrAbort(serial, 200);
+                await sleepOrAbort(serial, 200 + Math.floor(Math.random() * 4801));
               }
             }
           }
