@@ -2369,7 +2369,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     serial: string,
     slotIdx: number,
   ): TrustScoreTimerState | null => {
-    const raw = all[trustScoreTimerKey(serial, slotIdx)] ?? all[legacyTrustScoreTimerKey(serial, slotIdx)];
+    // Numeric index keys are not valid fallbacks: deleting a slot renumbers
+    // later accounts, so an old numeric key belongs to the deleted account.
+    const raw = all[trustScoreTimerKey(serial, slotIdx)];
     if (!raw) return null;
     try {
       const parsed = JSON.parse(raw);
@@ -3377,8 +3379,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         return;
       }
       const all = await storage.getGlobalSettings();
-      const assignmentRaw = all[trustScoreAssignmentKey(serial, slotIdx)]
-        ?? all[legacyTrustScoreAssignmentKey(serial, slotIdx)];
+      // Never read numeric index keys here. They can transfer a deleted
+      // account's badge to the account that moved into its visible position.
+      const assignmentRaw = all[trustScoreAssignmentKey(serial, slotIdx)];
       let scoreId: string | null = null;
       try {
         const parsed = JSON.parse(assignmentRaw ?? "null");

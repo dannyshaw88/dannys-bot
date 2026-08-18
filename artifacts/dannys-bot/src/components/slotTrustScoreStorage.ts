@@ -7,21 +7,14 @@ export function slotTrustScoreKey(serial: string, slotIdx: number): string {
 }
 
 export function readLocalSlotTrustScore(serial: string, slotIdx: number): string | null {
-  try {
-    return localStorage.getItem(slotTrustScoreKey(serial, slotIdx)) ?? null;
-  } catch {
-    return null;
-  }
+  // The visible index is not an identity. Never hydrate a badge from an
+  // index-keyed browser cache after another account has moved into that row.
+  return null;
 }
 
 export function writeLocalSlotTrustScore(serial: string, slotIdx: number, scoreId: string | null): void {
-  try {
-    const key = slotTrustScoreKey(serial, slotIdx);
-    if (scoreId) localStorage.setItem(key, scoreId);
-    else localStorage.removeItem(key);
-  } catch {
-    // The server remains the source of truth when browser storage is unavailable.
-  }
+  // Kept as a compatibility shim for callers from older components. Stable
+  // account identity is resolved by the server from serial + current slotId.
 }
 
 export async function loadSlotTrustScore(serial: string, slotIdx: number): Promise<string | null> {

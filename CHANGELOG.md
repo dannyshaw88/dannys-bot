@@ -1,3 +1,9 @@
+## [1.2.537] — 2026-08-18
+
+### Fixed — Account Slot State Ownership
+
+- TrustScore state no longer falls back to visible slot indexes or index-keyed browser cache values, so deleting a slot cannot transfer its badge or timer to the account that moves up.
+
 ## [1.2.536] — 2026-08-17
 
 ### Fixed — Visual Share-to-Feed Detection
