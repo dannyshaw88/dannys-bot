@@ -1,3 +1,10 @@
+## [1.2.551] — 2026-08-18
+
+### Fixed — Prevent Native Image Processing Crashes
+
+- Make-a-Post Fix AI Slop processing is now opt-in instead of enabled by default.
+- Diagnostic snapshots now download successfully when the Electron save bridge is unavailable.
+
 ## [1.2.550] — 2026-08-18
 
 ### Fixed — Isolated Ghost Browser Tabs
