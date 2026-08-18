@@ -66,6 +66,27 @@ if (!existsSync(serverSrc)) {
 }
 await cp(serverSrc, path.join(dist, "server"), { recursive: true });
 
+// Ship the visual Search-bar references with the API server. The runtime
+// cannot depend on Replit's workspace-level attached_assets directory once
+// packaged on Windows.
+const searchReferenceSource = path.join(__dirname, "../../attached_assets");
+const searchReferenceNames = [
+  "V1_1787004021661.jpg",
+  "V2_1787004021661.jpg",
+  "V1_1787004422194.jpg",
+  "V1-TAPPED-FIELD_1787004428397.jpg",
+  "V1-WITH-TARGET_1787004431727.jpg",
+  "V2_1787004435387.jpg",
+  "V2-TAPPED-FIELD_1787004440073.jpg",
+  "V2-WITH-TARGET_1787004444586.jpg",
+];
+const searchReferenceTarget = path.join(dist, "server", "search-field-refs");
+await mkdir(searchReferenceTarget, { recursive: true });
+for (const name of searchReferenceNames) {
+  const source = path.join(searchReferenceSource, name);
+  if (existsSync(source)) await cp(source, path.join(searchReferenceTarget, name));
+}
+
 // 3. Copy built frontend
 const frontendSrc = path.join(__dirname, "../dannys-bot/dist/public");
 if (!existsSync(frontendSrc)) {

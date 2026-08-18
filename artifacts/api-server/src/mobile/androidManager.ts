@@ -5700,15 +5700,22 @@ async function findInstagramSearchFieldByPixels(
     "V1-WITH-TARGET_1787004431727.jpg", "V2_1787004435387.jpg",
     "V2-TAPPED-FIELD_1787004440073.jpg", "V2-WITH-TARGET_1787004444586.jpg",
   ];
-  const root = path.resolve(process.cwd(), "attached_assets");
+  const referenceRoots = [
+    path.resolve(process.cwd(), "attached_assets"),
+    // Packaged Electron build: build.mjs ships these beside the API bundle.
+    path.resolve(path.dirname(path.resolve(process.argv[1] ?? __filename)), "search-field-refs"),
+  ];
   const refs: Array<{ name: string; width: number; height: number; gray: Buffer }> = [];
   for (const name of names) {
-    try {
-      const { data, info } = await sharp(path.join(root, name))
-        .greyscale().raw().toBuffer({ resolveWithObject: true });
-      refs.push({ name, width: info.width, height: info.height, gray: data });
-    } catch {
-      // A missing optional reference must not turn into a guessed tap.
+    for (const root of referenceRoots) {
+      try {
+        const { data, info } = await sharp(path.join(root, name))
+          .greyscale().raw().toBuffer({ resolveWithObject: true });
+        refs.push({ name, width: info.width, height: info.height, gray: data });
+        break;
+      } catch {
+        // Try the next known runtime asset root.
+      }
     }
   }
   if (!refs.length) return null;
