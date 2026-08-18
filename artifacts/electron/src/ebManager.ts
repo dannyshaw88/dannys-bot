@@ -5112,10 +5112,13 @@ function setupToolbarIpc(): void {
         if (!entry || entry.win.isDestroyed() || !state) break;
         const tabWin = entry.win;
         const newTabId = state.nextId++;
-        // Use ebPartition() — not the hardcoded format — so Ghost browser tabs
-        // (pid=-1) correctly inherit the Ghost session (and its proxy) instead of
-        // falling into a fresh 'persist:eb--1' session with no proxy configured.
-        const partition = ebPartition(foundPid);
+        // Every added Ghost tab is its own persistent browser session. Reusing
+        // ebPartition(foundPid) made tab 2+ share tab 1's cookies, cache,
+        // localStorage, and session, and made the tabs behave like disposable
+        // views of one browser instead of isolated signup browsers.
+        const partition = foundPid < 0
+          ? `persist:ghost-${Math.abs(foundPid)}-tab-${newTabId}`
+          : `persist:eb-${foundPid}-tab-${newTabId}`;
         const tabView = new BrowserView({
           webPreferences: {
             partition,
@@ -5131,6 +5134,14 @@ function setupToolbarIpc(): void {
             backgroundThrottling: false,
           },
         });
+        // Configure the tab's independent session with the same proxy as the
+        // Ghost parent. Each partition owns its own proxy/session lifecycle.
+        try {
+          const tabSession = electronSession.fromPartition(partition);
+          await tabSession.setProxy(entry.proxy ? buildProxyConfig(entry.proxy) : { mode: "direct" });
+        } catch (proxyErr: any) {
+          console.warn(`[eb-tabs:${foundPid}] tab ${newTabId} proxy setup failed:`, proxyErr?.message ?? proxyErr);
+        }
         state.views.set(newTabId, tabView);
         state.tabs.push({ id: newTabId, url: "https://www.google.com/", title: "New Tab" });
         const _pushNavUrl = (navUrl: string) => {

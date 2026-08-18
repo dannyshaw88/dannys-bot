@@ -1,3 +1,9 @@
+## [1.2.550] — 2026-08-18
+
+### Fixed — Isolated Ghost Browser Tabs
+
+- Added Ghost tabs now use separate persistent browser partitions with independent cookies, cache, local storage, and proxy sessions.
+
 ## [1.2.549] — 2026-08-18
 
 ### Fixed — Ghost Browser Window Lifecycle
