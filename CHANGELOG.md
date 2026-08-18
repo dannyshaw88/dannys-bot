@@ -1,3 +1,9 @@
+## [1.2.549] — 2026-08-18
+
+### Fixed — Ghost Browser Window Lifecycle
+
+- Ghost Browser windows now remain parked instead of closing normally when the browser UI is left, preserving all signup tabs beyond tab 1.
+
 ## [1.2.548] — 2026-08-18
 
 ### Fixed — Ghost Browser Tab Persistence
