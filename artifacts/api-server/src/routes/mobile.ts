@@ -4190,6 +4190,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     fallback: { x1: number; y1: number; x2: number; y2: number; durationMs: number },
     source: string,
     personality?: "superSkim" | "skim" | "fast" | "quick" | "normal" | "slow" | "focused" | "tapDragRelease" | "back",
+    opts?: { maxFromY?: number },
   ): Promise<{ x1: number; y1: number; x2: number; y2: number; durationMs: number; profile: boolean }> {
     let configured: DevicePrefs["swipeGesture"] | undefined;
     try { configured = loadInstanceConfigs()[serial]?.devicePrefs?.swipeGesture; } catch { configured = undefined; }
@@ -4249,6 +4250,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       y2: clamp((reversed ? configured.y1 : configured.y2) + (reversed ? startDy : endDy) + personalityProfile.yBias, size.h),
       durationMs,
     };
+    // If the caller specifies a maximum starting Y (e.g. to keep the swipe
+    // start out of a bottom-row of clickable grid cells on the Explore page),
+    // clamp AFTER jitter so the profile's random offset can't push the finger
+    // onto an element whose touch consumer would claim the DOWN event as a tap.
+    if (opts?.maxFromY !== undefined && !reversed) {
+      path.y1 = Math.min(path.y1, opts.maxFromY);
+    }
     // The Reels caller already captures one live accessibility dump before and
     // after each advance. Do not repeat those expensive dumps here; the
     // calibrated path and final input coordinates are still logged below.
@@ -7273,7 +7281,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const exploreModeLabel = esv.mode === "superSkim" ? "super skim" : esv.mode;
         onLog?.(`View Explore ${i + 1}/${scrollCount}: next swipe [${exploreModeLabel}]`);
         logger.info({ serial, source: "explore-scroll", mode: esv.mode, from: [x, esv.fromY], to: [x, esv.toY], durationMs: esv.duration }, "[mobile-input] swipe");
-        await deviceProfileSwipe(serial, { x1: x, y1: esv.fromY, x2: x, y2: esv.toY, durationMs: esv.duration }, "explore-scroll", esv.mode as any);
+        // Cap the swipe start at 68% of screen height so startJitter can never
+        // push the finger onto the bottom row of clickable Reel thumbnail cells,
+        // which have touch consumers that claim the DOWN event as a tap even
+        // when the gesture travels 600+ px upward (root cause: jitter-pushed
+        // y1 onto a Reel cell → cell's touch consumer fired before the grid's
+        // scroll interceptor could claim the drag).
+        const exploreMaxFromY = Math.round(h * 0.68);
+        await deviceProfileSwipe(serial, { x1: x, y1: esv.fromY, x2: x, y2: esv.toY, durationMs: esv.duration }, "explore-scroll", esv.mode as any, { maxFromY: exploreMaxFromY });
         // Explore-only render dwell: the grid often needs a few seconds after
         // the gesture before its media cells are actually populated. Keep this
         // hardcoded and isolated here; it must not alter Feed, Reels, Stories,
