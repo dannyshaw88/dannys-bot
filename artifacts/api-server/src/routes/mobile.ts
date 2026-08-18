@@ -4731,13 +4731,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       logger.info({ serial, target: "feed-scroll", mode: sv.mode, from: [x, sv.fromY], to: [x, sv.toY], durationMs: sv.duration }, "[check-feed] swipe");
       await deviceProfileSwipe(serial, { x1: x, y1: sv.fromY, x2: x, y2: sv.toY, durationMs: sv.duration }, "feed-scroll", sv.mode as any);
       await sleepOrAbort(serial, 180);
-      await verifyStillInInstagram();
+
+      // Roll action chances before any post-scroll inspection. A scroll-only
+      // iteration must not pay for a UIAutomator dump or foreground check.
+      const wantLike = likeChance > 0 && Math.random() < likeChance;
+      const wantShareFeed = shareFeedChance > 0 && Math.random() < shareFeedChance;
+      const wantShareDm = shareDmChance > 0 && Math.random() < shareDmChance;
+      const wantSave = saveChance > 0 && Math.random() < saveChance;
+      const wantExpandCaption = captionExpandChance > 0 && Math.random() < captionExpandChance;
+      const wantTapAudio = tapAudioChance > 0 && Math.random() < tapAudioChance;
+      const wantClickHashtag = clickHashtagChance > 0 && Math.random() < clickHashtagChance;
+      const wantClickAuthor = clickAuthorChance > 0 && Math.random() < clickAuthorChance;
 
       // Single UI dump used for all mid-scroll sheet checks — avoids two
       // sequential dumps (comments check + interstitial scan) that together
       // could eat 5-9 s and leave an unexpected sheet open long enough to
       // auto-dismiss before we react.
-      {
+      if (wantLike || wantShareFeed || wantShareDm || wantSave || wantExpandCaption) {
         const xml = await android.dumpUi(serial).catch(() => "");
         if (/Add a comment|add a comment|Comments/i.test(xml) && /EditText|class="android\.widget\.EditText"/.test(xml)) {
           // Comments sheet accidentally opened by the swipe — press Back.
@@ -4767,27 +4777,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
       feedTimingAfterScroll = Date.now();
 
-      // Roll all three action chances up front (independent draws, same
-      // statistics as before) but DON'T act on any of them yet — first we
-      // need to confirm there's actually a normal post action bar on screen
-      // right now. Instagram's feed regularly serves things that aren't a
-      // normal post (embedded Reels, ads, "Thanks for your feedback" /
-      // snooze cards after its own suggested-content flow fires, survey
-      // prompts) and none of those expose the same Like/Share/Send row a
-      // real post does. Share-to-feed and share-via-DM used to tap fixed
-      // coordinates regardless of what was actually on screen — that's what
-      // was landing on "Undo", "Manage content preferences", the Comment
-      // button, or a Reel's own controls instead of the intended icon.
-      const wantLike = likeChance > 0 && Math.random() < likeChance;
-      const wantShareFeed = shareFeedChance > 0 && Math.random() < shareFeedChance;
-      const wantShareDm = shareDmChance > 0 && Math.random() < shareDmChance;
-      const wantSave = saveChance > 0 && Math.random() < saveChance;
-      const wantExpandCaption = captionExpandChance > 0 && Math.random() < captionExpandChance;
-      const wantTapAudio = tapAudioChance > 0 && Math.random() < tapAudioChance;
-      const wantClickHashtag = clickHashtagChance > 0 && Math.random() < clickHashtagChance;
-      const wantClickAuthor = clickAuthorChance > 0 && Math.random() < clickAuthorChance;
-
       if (wantLike || wantShareFeed || wantShareDm || wantSave || wantExpandCaption) {
+        // This can invoke a 5-second adb dumpsys timeout on a busy device.
+        // No action can have navigated away during a scroll-only iteration,
+        // so defer the safety check until an action is actually going to be
+        // inspected/tapped. This removes the recurring post-scroll stall on
+        // iterations where every action roll missed.
+        await verifyStillInInstagram();
         const feedbackCard = await android.isFeedbackOrSurveyCard(serial).catch(() => null);
         if (feedbackCard) {
           // This card replaced the post entirely — there is nothing safe to

@@ -1,3 +1,9 @@
+## [1.2.545] — 2026-08-18
+
+### Fixed — View Feed No-Action Scroll Delay
+
+- Deferred foreground-app verification and post-scroll UIAutomator/interstitial scans until an action is actually rolled, eliminating the recurring multi-second delay on scroll-only iterations.
+
 ## [1.2.544] — 2026-08-18
 
 ### Changed — View Feed Visual-Only Like Targeting
