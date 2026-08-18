@@ -5756,19 +5756,20 @@ async function findInstagramSearchFieldByPixels(
           // an assumed brightness value. Absolute correlation accepts both
           // light and dark Instagram themes without losing the layout shape.
           const score = 0.5 + Math.abs(covariance / Math.sqrt(screenVariance * refVariance)) * 0.5;
-           if (score > (best?.score ?? 0.74)) {
+            // Always retain the single closest visual resemblance. There is
+            // no arbitrary confidence-based accept/reject gate here.
+            if (score > (best?.score ?? -Infinity)) {
             best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), score, template: ref.name };
           }
         }
       }
     }
   }
-  if (best && best.score >= 0.68) {
+  if (best) {
     onLog?.(`Follow: visual search field matched ${best.template} at (${best.x}, ${best.y}) score=${best.score.toFixed(3)}`);
     return best;
   }
-  if (best) onLog?.(`Follow: visual search field weak visual match rejected (${best.template}) score=${best.score.toFixed(3)}`);
-  else onLog?.("Follow: visual search field not matched — refusing coordinate fallback");
+  else onLog?.("Follow: no visual search-field candidate was available");
   return null;
 }
 
