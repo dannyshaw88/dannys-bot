@@ -1665,7 +1665,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         localPath: z.string().trim().min(1).optional(),
         fileName: z.string().trim().min(1).max(255),
         fileData: z.string().min(1).optional(),
-        fixAiSlop: z.boolean().default(true),
+        fixAiSlop: z.boolean().default(false),
         alterationEnabled: z.boolean().default(true),
         alterationLevel: z.enum(["small", "medium", "large"]).default("small"),
         frequencyDisruption: z.boolean().default(false),
@@ -1749,7 +1749,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         localPath: z.string().trim().min(1).optional(),
         fileName: z.string().trim().min(1).max(255),
         fileData: z.string().min(1).optional(),
-        fixAiSlop: z.boolean().default(true),
+        fixAiSlop: z.boolean().default(false),
         alterationEnabled: z.boolean().default(true),
         alterationLevel: z.enum(["small", "medium", "large"]).default("small"),
         frequencyDisruption: z.boolean().default(false),
@@ -9719,7 +9719,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let prepared: Awaited<ReturnType<typeof prepareMakePostImage>>;
     try {
       prepared = await prepareMakePostImage(localPath, localFile, {
-        doFixAiSlop: imageOptions?.fixAiSlop ?? true,
+        doFixAiSlop: imageOptions?.fixAiSlop ?? false,
         alterationEnabled: imageOptions?.alterationEnabled ?? true,
         alterationLevel: imageOptions?.alterationLevel ?? "small",
         imageSettingsEnabled: imageOptions?.imageSettingsEnabled ?? true,

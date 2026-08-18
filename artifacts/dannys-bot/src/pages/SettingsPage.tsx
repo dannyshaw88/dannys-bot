@@ -671,7 +671,19 @@ export function SettingsPage() {
         toast({ title: "Snapshot cancelled", description: "No file was saved." });
         return;
       }
-      throw new Error("The desktop save service is unavailable. Restart the desktop app and try again.");
+      // Keep the button useful in the browser preview and after an Electron
+      // window recreation. The API snapshot has already been created; download
+      // it directly instead of reporting success while saving nothing.
+      const blob = new Blob([content], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      toast({ title: "Diagnostic snapshot downloaded", description: filename });
     } catch (error: any) {
       toast({ title: "Snapshot failed", description: error?.message ?? "Could not create snapshot", variant: "destructive" });
     } finally {
