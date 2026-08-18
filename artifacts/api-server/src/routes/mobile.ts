@@ -13434,6 +13434,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
       // 5. Close Instagram completely — recents switcher + swipe away, not a
       // force-stop, so the device behaves like a person put it down.
+      // If a restart/abort was requested while the tool loop was running, do
+      // not let this old worker perform the device-specific left-dismiss
+      // gesture after a new cycle has been allowed to take ownership.
+      if (isCycleAborted(serial)) throw new Error("cycle-aborted");
       tLog("▶ Closing Instagram…");
       // Resolve dismiss direction: if 'auto', look up the device model in the
       // DEVICE_PROFILES table (one getprop call); otherwise use the stored override.
@@ -14731,12 +14735,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       const activeCycleId = automationCycleCurrentId.get(serial);
       if (activeCycleId) automationCycleAbortedId.set(serial, activeCycleId);
-      // An explicit device reboot is a hard lifecycle boundary. The phone can
-      // disappear before the cycle's normal finally block runs, so do not
-      // leave a serial permanently blocked for the next manual HST trigger.
-      automationCycleInProgress.delete(serial);
-      automationCycleCurrentId.delete(serial);
-      automationCycleAbortedId.delete(serial);
+      // Keep the cycle lock and abort identity until the worker's finally block
+      // runs. Releasing it here lets a new Follow cycle start while this old
+      // worker is still unwinding and can still reach the left-dismiss gesture.
       android.rebootDevice(serial);
       res.json({ ok: true, interruptedCycle: Boolean(activeCycleId) });
     } catch (e: any) { res.status(500).json({ error: e?.message }); }
@@ -14758,12 +14759,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
 
       const stillRunning = automationCycleInProgress.has(serial);
-      if (stillRunning) {
-        // The device is being explicitly restarted and the in-flight worker
-        // may be blocked on a vanished ADB session. Release the server-side
-        // lock rather than making every later manual trigger return 409.
-        automationCycleInProgress.delete(serial);
-      }
+       // Do not release the server-side cycle lock here. The in-flight worker
+       // must finish its abort path first, otherwise a new cycle can overlap
+       // its final recents gesture.
 
        android.rebootDevice(serial);
        // Keep the cycle identity/abort marker until the worker's finally block
