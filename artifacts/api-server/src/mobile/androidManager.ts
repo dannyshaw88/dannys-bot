@@ -3604,6 +3604,18 @@ export async function findFeedActionIcons(
   // elements into rowNodes — see _findCentermostLikeNode.
   let like = _findCentermostLikeNode(xml, screenH);
   let alreadyLiked = false;
+  // Some Instagram builds expose the heart only as an unlabeled/custom
+  // drawable, so the accessibility tree has no Like node at all. Use the
+  // uploaded heart crop as a scale/colour-invariant visual anchor before
+  // giving up. This is intentionally only an anchor: the action row is still
+  // rescanned and the caller validates the post state after tapping.
+  if (!like) {
+    const visualLike = await findFeedLikeIconByPixels(serial, screenH / 2, onLog);
+    if (visualLike) {
+      like = visualLike;
+      onLog?.(`[feed-icons] Like visual anchor accepted at (${visualLike.x},${visualLike.y})`);
+    }
+  }
   if (!like) {
     // Post may be already liked (content-desc="Unlike"). We still need the
     // button's position to anchor the row scan for Comment/Repost/Send.
@@ -5867,6 +5879,72 @@ async function findFeedRepostIconByPixels(
     return { x: best.x, y: best.y };
   } catch {
     onLog?.("[feed-icons] Repost visual reference unavailable — skipping Share to Feed");
+    return null;
+  }
+}
+
+/**
+ * Finds the feed Like heart from the supplied clean crop. The crop is
+ * deliberately compared by normalized local contrast rather than raw colour
+ * or pixel dimensions, because MIUI/Instagram themes invert the glyph and
+ * device densities change its size.
+ */
+async function findFeedLikeIconByPixels(
+  serial: string,
+  rowY: number,
+  onLog?: (msg: string) => void,
+): Promise<{ x: number; y: number } | null> {
+  const screen = await _captureScreenPixels(serial);
+  if (!screen) return null;
+  try {
+    const refPath = path.resolve(
+      process.cwd(),
+      "attached_assets/b5e6e86c-285d-4550-bf03-4e8c17a54214_1787055295714.jpg",
+    );
+    const { data, info } = await sharp(refPath).greyscale().raw().toBuffer({ resolveWithObject: true });
+    const sample = (x: number, y: number) => {
+      const i = (y * screen.width + x) * screen.channels;
+      return (screen.pixels[i] + screen.pixels[i + 1] + screen.pixels[i + 2]) / 3;
+    };
+    let best: { x: number; y: number; score: number } | null = null;
+    for (const scale of [0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.8, 2.2, 2.7]) {
+      const tw = Math.max(10, Math.round(info.width * scale));
+      const th = Math.max(10, Math.round(info.height * scale));
+      if (tw >= screen.width || th >= screen.height) continue;
+      // Feed action rows occur below the header and above the bottom nav.
+      const yMin = Math.max(0, Math.round(rowY - screen.height * 0.22));
+      const yMax = Math.min(screen.height - th, Math.round(rowY + screen.height * 0.22));
+      for (let y = yMin; y <= yMax; y += 3) {
+        for (let x = 0; x <= screen.width - tw; x += 3) {
+          let error = 0;
+          let count = 0;
+          for (let ty = 0; ty < info.height; ty += 2) {
+            for (let tx = 0; tx < info.width; tx += 2) {
+              const sx = x + Math.min(tw - 1, Math.round(tx * scale));
+              const sy = y + Math.min(th - 1, Math.round(ty * scale));
+              const screenValue = sample(sx, sy);
+              const refValue = data[ty * info.width + tx];
+              // Absolute contrast makes black and white heart outlines
+              // equivalent, while still preserving the heart's geometry.
+              error += Math.min(255, Math.abs(Math.abs(screenValue - 128) - Math.abs(refValue - 128)));
+              count++;
+            }
+          }
+          const score = 1 - error / Math.max(1, count * 128);
+          if (score > (best?.score ?? 0.84)) {
+            best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), score };
+          }
+        }
+      }
+    }
+    if (!best) {
+      onLog?.(`[feed-icons] Like visual reference not matched near row y=${rowY}`);
+      return null;
+    }
+    onLog?.(`[feed-icons] Like visual reference matched at (${best.x},${best.y}) score=${best.score.toFixed(3)}`);
+    return { x: best.x, y: best.y };
+  } catch {
+    onLog?.("[feed-icons] Like visual reference unavailable — skipping visual anchor");
     return null;
   }
 }

@@ -1,3 +1,9 @@
+## [1.2.543] — 2026-08-18
+
+### Fixed — View Feed Like Detection
+
+- View Feed now uses the uploaded heart icon reference as a normalized visual anchor when Instagram omits the Like control from the accessibility tree.
+
 ## [1.2.542] — 2026-08-18
 
 ### Changed — Ghost Browser Window Height
