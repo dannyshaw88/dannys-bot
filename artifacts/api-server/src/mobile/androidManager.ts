@@ -9838,11 +9838,75 @@ export async function findInstagramSearchBar(
   serial: string,
   onLog?: (msg: string) => void,
 ): Promise<{ x: number; y: number } | null> {
-  // The live visual reference is authoritative. Do not silently fall through
-  // to an accessibility/coordinate guess when Instagram omits the field node.
+  // Prefer the visual detector, but do not make it the only detector. Instagram
+  // changes the Search-with-Meta-AI artwork between releases, while the live
+  // accessibility tree usually still exposes the same top search container.
   const visual = await findInstagramSearchFieldByPixels(serial, onLog);
-  if (!visual) return null;
-  return { x: visual.x, y: visual.y };
+  if (visual) return { x: visual.x, y: visual.y };
+
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const { h: screenH } = getScreenSize(serial);
+  const topLimit = Math.round(screenH * 0.45);
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) {
+    onLog?.("Follow: search bar visual match and accessibility dump both unavailable");
+    return null;
+  }
+
+  const searchIds = [
+    "action_bar_search_edit_text",
+    "search_bar_input",
+    "search_bar",
+    "search_input",
+    "search_field",
+    "search_bar_container",
+    "action_bar_search_hints_text_layout",
+    "explore_action_bar_container",
+    "explore_action_bar",
+  ];
+  type SearchCandidate = { x: number; y: number; score: number; id: string; label: string };
+  const candidates: SearchCandidate[] = [];
+  for (const match of xml.matchAll(/<node\b[^>]*>/gi)) {
+    const node = match[0];
+    const bounds = node.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+    if (!bounds) continue;
+    const x1 = Number(bounds[1]), y1 = Number(bounds[2]);
+    const x2 = Number(bounds[3]), y2 = Number(bounds[4]);
+    const centerY = (y1 + y2) / 2;
+    if (centerY > topLimit || x2 <= x1 || y2 <= y1) continue;
+    const resourceId = node.match(/\bresource-id="([^"]*)"/i)?.[1] ?? "";
+    const label = [
+      node.match(/\btext="([^"]*)"/i)?.[1] ?? "",
+      node.match(/\bcontent-desc="([^"]*)"/i)?.[1] ?? "",
+      node.match(/\bhint="([^"]*)"/i)?.[1] ?? "",
+    ].join(" ").trim();
+    const idMatch = searchIds.find(id => resourceId.toLowerCase().includes(id));
+    const mentionsSearch = /search/i.test(`${resourceId} ${label}`);
+    const isEditText = /class="android\.widget\.EditText"/i.test(node);
+    const interactive = /(?:clickable|focusable)="true"/i.test(node);
+    if (!idMatch && !mentionsSearch) continue;
+    // A generic top-region EditText is not sufficient. Require either a
+    // Search-labelled node or a known Instagram search resource id.
+    const score = (idMatch ? 100 : 0) + (isEditText ? 35 : 0) +
+      (interactive ? 15 : 0) + (label ? 5 : 0);
+    candidates.push({
+      x: Math.round((x1 + x2) / 2),
+      y: Math.round(centerY),
+      score,
+      id: resourceId || "(no resource-id)",
+      label: label || "(no label)",
+    });
+  }
+  if (candidates.length) {
+    candidates.sort((a, b) => b.score - a.score || a.y - b.y);
+    const best = candidates[0];
+    onLog?.(`Follow: accessibility search bar "${best.id}" "${best.label}" at (${best.x}, ${best.y})`);
+    return { x: best.x, y: best.y };
+  }
+
+  onLog?.("Follow: search bar visual match and semantic accessibility node not found");
+  return null;
 
   /*
   const tools = detectToolset();
