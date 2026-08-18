@@ -3609,7 +3609,12 @@ export async function openEbWindow(opts: {
     // for all actions — no background browser session is needed.  Allow the
     // window to close normally so the next manual open creates a fresh,
     // maximised window instead of restoring a hidden off-screen one.
-    if (!disableApi) return; // let the window close naturally
+    // Ghost Browser is always a user-managed multi-tab session. Even when API
+    // automation is disabled, closing/navigating away from the browser UI must
+    // not destroy its BrowserViews and erase signup tabs 2+. The explicit
+    // /eb/close endpoint uses win.destroy(), bypassing this handler, when the
+    // user intentionally resets the Ghost session.
+    if (!disableApi && profileId >= 0) return; // regular non-automation EB may close
     event.preventDefault();
     try {
       const bounds = win.getBounds();
