@@ -5719,14 +5719,17 @@ async function findInstagramSearchFieldByPixels(
   };
   let best: SearchFieldVisualMatch | null = null;
   // The field is in the top region, but its exact width varies by device and
-  // state.  Search a broad scale range instead of deriving one fixed scale.
+  // state. Search densely around the large-phone scale as well as the smaller
+  // scales. The uploaded references are ~360 px wide while the real device
+  // capture can be ~1080 px wide, so the useful scale is often 2.7–3.3.
+  const scales = Array.from({ length: 30 }, (_, i) => 0.50 + i * 0.10);
   for (const ref of refs) {
-    for (const scale of [0.50, 0.65, 0.80, 1.00, 1.25, 1.50, 1.80, 2.10, 2.50, 3.00]) {
+    for (const scale of scales) {
       const tw = Math.round(ref.width * scale), th = Math.round(ref.height * scale);
-      if (tw < 100 || th < 25 || tw >= screen.width || th >= Math.round(screen.height * 0.45)) continue;
-      const step = Math.max(1, Math.round(scale));
-      for (let y = 0; y <= Math.round(screen.height * 0.40) - th; y += 6) {
-        for (let x = 0; x <= screen.width - tw; x += 6) {
+      if (tw < 100 || th < 25 || tw > screen.width || th >= Math.round(screen.height * 0.45)) continue;
+      const step = scale >= 2.5 ? 2 : 1;
+      for (let y = 0; y <= Math.round(screen.height * 0.40) - th; y += 3) {
+        for (let x = 0; x <= screen.width - tw; x += 3) {
           let screenSum = 0, screenSum2 = 0, refSum = 0, refSum2 = 0, cross = 0, count = 0;
           for (let ty = 0; ty < ref.height; ty += step) {
             const sy = y + Math.min(th - 1, Math.round(ty * scale));
@@ -5753,14 +5756,14 @@ async function findInstagramSearchFieldByPixels(
           // an assumed brightness value. Absolute correlation accepts both
           // light and dark Instagram themes without losing the layout shape.
           const score = 0.5 + Math.abs(covariance / Math.sqrt(screenVariance * refVariance)) * 0.5;
-          if (score > (best?.score ?? 0.78)) {
+           if (score > (best?.score ?? 0.74)) {
             best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), score, template: ref.name };
           }
         }
       }
     }
   }
-  if (best && best.score >= 0.72) {
+  if (best && best.score >= 0.68) {
     onLog?.(`Follow: visual search field matched ${best.template} at (${best.x}, ${best.y}) score=${best.score.toFixed(3)}`);
     return best;
   }
