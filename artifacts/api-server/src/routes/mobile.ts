@@ -13996,6 +13996,40 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
+  // Account phone-number entry is a normal calibrated keyboard operation.
+  // Keep it on an explicit route so it can never be confused with the
+  // Instagram 2FA keypad route below, which uses the separate `2fa:*` map.
+  app.post("/api/mobile/devices/:serial/input/type-phone-number-calibrated", async (req: Request, res: Response) => {
+    try {
+      const input = inputTextSchema.parse(req.body);
+      if (!/^[0-9+().\-\s]+$/.test(input.text)) {
+        return void res.status(400).json({ ok: false, error: "Phone number contains unsupported characters" });
+      }
+      const serial = p(req, "serial");
+      req.log.info({ serial, characterCount: input.text.length }, "[mirror-phone-number-calibrated] starting");
+      const result = await android.typeViaSavedCalibrationMap(
+        serial,
+        input.text,
+        effectiveTypingProfile(serial),
+        message => req.log.info({ serial, message }, "[mirror-phone-number-calibrated]"),
+        { disableHumanErrors: true, debugLabel: "phone-number-regular-keyboard" },
+      );
+      if (!result.ok) {
+        return void res.status(422).json({
+          ok: false,
+          calibrated: result.available,
+          missing: result.missing,
+          error: result.available
+            ? "Regular keyboard calibration is missing one or more phone-number keys"
+            : "No saved regular keyboard calibration map for this device",
+        });
+      }
+      res.json({ ok: true, calibrated: true, keyboard: "regular" });
+    } catch (e: any) {
+      res.status(400).json({ ok: false, error: e?.message ?? "Phone-number typing failed" });
+    }
+  });
+
   app.post("/api/mobile/devices/:serial/input/type-2fa-calibrated", async (req: Request, res: Response) => {
     try {
       const input = inputTextSchema.parse(req.body);

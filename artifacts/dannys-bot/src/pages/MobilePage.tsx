@@ -8464,10 +8464,10 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
     setTypingField(field);
     setSaveError(null);
     try {
-      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/input/type-calibrated`, {
+       const response = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/input/type-calibrated`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+         body: JSON.stringify({ text }),
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
@@ -8992,7 +8992,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     if (!value) return;
     setTypingSimSlot(slot);
     try {
-      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/type-calibrated`, {
+      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/type-phone-number-calibrated`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: value }),

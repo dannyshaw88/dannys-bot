@@ -1,3 +1,9 @@
+## [1.2.538] — 2026-08-18
+
+### Fixed — Instagram Phone Number Keyboard
+
+- Account Phone Number entry now uses an explicit regular keyboard calibration route and cannot be routed through the separate 2FA keypad calibration.
+
 ## [1.2.537] — 2026-08-18
 
 ### Fixed — Account Slot State Ownership
