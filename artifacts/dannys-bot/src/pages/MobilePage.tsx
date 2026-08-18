@@ -8660,7 +8660,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
 
         <div className="space-y-4">
           {slots.map((slot, i) => (
-            <div key={i} className="bg-card border border-border rounded-xl p-5 space-y-3">
+            <div key={slot.slotId} className="bg-card border border-border rounded-xl p-5 space-y-3">
               {/* Slot header: title + Human Session Tool button + mirror toggle + Delete */}
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 flex-wrap">

@@ -1,3 +1,9 @@
+## [1.2.541] — 2026-08-18
+
+### Fixed — TrustScore Slot Reordering
+
+- Mobile account cards now use each account’s persisted `slotId` as the React key, preventing a moved account from retaining the previous slot’s TrustScore label or timer in memory.
+
 ## [1.2.540] — 2026-08-18
 
 ### Fixed — Isolated Ghost Browser Signup Tabs
