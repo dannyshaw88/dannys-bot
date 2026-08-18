@@ -3203,9 +3203,10 @@ export async function openEbWindow(opts: {
   if (isGhostBrowser || verifyMode || silentMode) {
     const { width: sw, height: sh } = eScreen.getPrimaryDisplay().workAreaSize;
     const ww = 430;
-    // Ghost signup windows are phone-width, but give the visible browser
-    // roughly 25% more vertical room so the mobile form is not cramped.
-    const wh = isGhostBrowser ? 875 : 700;
+    // Ghost signup windows are phone-width and should use the full usable
+    // Windows height. Use workAreaSize rather than screen height so the
+    // taskbar remains visible and every launch has the same max height.
+    const wh = isGhostBrowser ? sh : 700;
     if (isGhostBrowser) {
       _initX = Math.max(0, sw - ww - 8);
       _initY = Math.max(0, Math.floor((sh - wh) / 2));

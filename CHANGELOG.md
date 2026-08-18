@@ -1,3 +1,9 @@
+## [1.2.542] — 2026-08-18
+
+### Changed — Ghost Browser Window Height
+
+- Ghost Browser launch windows now use the maximum usable Windows work-area height while keeping their phone-width layout.
+
 ## [1.2.541] — 2026-08-18
 
 ### Fixed — TrustScore Slot Reordering
