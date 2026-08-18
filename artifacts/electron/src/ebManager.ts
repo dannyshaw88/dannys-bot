@@ -2641,7 +2641,10 @@ export async function openEbWindow(opts: {
   disableApi?: boolean;
 }): Promise<void> {
   const { profileId, username, proxy, userAgent, apiUA, password, twoFAKey, ebFingerprint, initialUrl, verifyMode, useHomeIp, silentMode, disableApi } = opts;
-  const isGhostBrowser = profileId === -1;
+  // Every negative profile is a disposable Ghost Browser slot (-1, -2, ...).
+  // Treating only -1 as ghost left later signup tabs with desktop dimensions
+  // and regular-browser navigation/recovery behavior.
+  const isGhostBrowser = profileId < 0;
   // Per-session random token baked into every __eq_* global injected into the Instagram page.
   // Using a random suffix prevents Instagram's JS from fingerprinting us by a fixed symbol name.
   const jsToken = Math.random().toString(36).slice(2, 8);
@@ -2653,7 +2656,7 @@ export async function openEbWindow(opts: {
     // Ghost browser (profileId=-1): always destroy and recreate with a fresh session.
     // Ghost is a disposable identity — each open must start clean with the current proxy.
     // win.destroy() bypasses the close→hide handler and actually destroys the window.
-    if (profileId === -1) {
+    if (profileId < 0) {
       try { existing.win.destroy(); } catch { /* already destroyed */ }
       ebMap.delete(profileId);
       tabsStateMap.delete(profileId);
@@ -2780,7 +2783,7 @@ export async function openEbWindow(opts: {
   // (no 'persist:' prefix → Chromium never writes cookies, IndexedDB, cache, or
   //  any other state to disk → zero leakage into the next Ghost session).
   // Regular account EBs keep 'persist:eb-{id}' so their session survives app restarts.
-  const partition = profileId === -1
+  const partition = profileId < 0
     ? `eb-ghost-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     : `persist:eb-${profileId}`;
   _ebCrashLog(profileId, `STEP-2: creating session partition="${partition}"`);
@@ -3200,7 +3203,9 @@ export async function openEbWindow(opts: {
   if (isGhostBrowser || verifyMode || silentMode) {
     const { width: sw, height: sh } = eScreen.getPrimaryDisplay().workAreaSize;
     const ww = 430;
-    const wh = 700;
+    // Ghost signup windows are phone-width, but give the visible browser
+    // roughly 25% more vertical room so the mobile form is not cramped.
+    const wh = isGhostBrowser ? 875 : 700;
     if (isGhostBrowser) {
       _initX = Math.max(0, sw - ww - 8);
       _initY = Math.max(0, Math.floor((sh - wh) / 2));
@@ -3216,7 +3221,7 @@ export async function openEbWindow(opts: {
   }
   const win = new BrowserWindow({
     width:           (isGhostBrowser || verifyMode) ? 430 : 1280,
-    height:          (isGhostBrowser || verifyMode) ? 700 : 820,
+    height:          (isGhostBrowser ? 875 : verifyMode ? 700 : 820),
     x:               _initX,
     y:               _initY,
     title:           `@${username} — Aura Farming Browser`,
@@ -4052,7 +4057,7 @@ export async function openEbWindow(opts: {
             // Ghost Browser (profileId=-1) drives its own navigation via the
             // ghost-signup automation. Never auto-tap "Log In" for it — that
             // would redirect the signup flow away from the email-signup page.
-            const _isSplash = profileId !== -1
+             const _isSplash = profileId >= 0
               && _currentUrl.includes("instagram.com")
               && !_currentUrl.includes("accounts/login")
               && !_currentUrl.includes("two_factor")
@@ -4155,7 +4160,7 @@ export async function openEbWindow(opts: {
   win.on("closed", () => clearInterval(_sessionAlivePoll));
 
   // ── Ghost browser: auto-dismiss Instagram login/signup overlay modals ─────
-  // When the Ghost browser (profileId === -1) browses Instagram logged out,
+  // When a Ghost browser (any negative profileId) browses Instagram logged out,
   // Instagram shows "Sign up to see more" / "Log in to" / "Save your login
   // info?" modal overlays after a few seconds. This dismisses them automatically
   // via CDP Input.dispatchMouseEvent (isTrusted=true, same as the cookie banner).
@@ -4167,7 +4172,7 @@ export async function openEbWindow(opts: {
   // a separate dismissOverlay() is scoped to that handler and not called (per the
   // warmup comment) to avoid mid-reel redirects. This listener only fires on
   // did-finish-load (hard navigations), not on the SPA reel transitions.
-  if (profileId === -1) {
+  if (profileId < 0) {
     // Scroll to top on every hard navigation — the signup page sometimes loads
     // scrolled down into the middle of the form, which confuses users.
     win.webContents.on("did-finish-load", () => {
@@ -4377,7 +4382,7 @@ export async function openEbWindow(opts: {
     // accounts/login/# (a hash route the React app doesn't render), leaving a
     // blank page.  Wait 3 s then check: if a 2FA input is still visible the
     // user is still typing — leave it.  If blank, force-navigate to the feed.
-    if (navUrl.includes("accounts/login/") && /#/.test(navUrl)) {
+    if (profileId >= 0 && navUrl.includes("accounts/login/") && /#/.test(navUrl)) {
       console.warn(`[ebDiag:${profileId}] did-navigate-in-page hit accounts/login/# — scheduling 3s blank-screen check`);
       setTimeout(async () => {
         if (win.isDestroyed()) return;
@@ -4450,6 +4455,11 @@ export async function openEbWindow(opts: {
       console.log(`[ebDiag:${profileId}] did-finish-load url="${url}" session=${diagCks.length > 0 ? "present" : "absent"} body=${snapshot}`);
 
       // ── General blank-screen recovery ─────────────────────────────────────
+      // Ghost signup is deliberately allowed to remain on Instagram's login
+      // error/splash states. In particular, a rejected credential submission
+      // can briefly produce a small DOM; reloading here erased the error and
+      // made the user think the browser refreshed itself.
+      if (profileId < 0) return;
       if (!url.includes("instagram.com")) {
         _blankRecoveryCount = 0; // reset on non-Instagram pages
         return;
@@ -4539,8 +4549,11 @@ export async function openEbWindow(opts: {
   if (silentMode) {
     _ebCrashLog(profileId, "STEP-29: silentMode — skipping initial loadURL (automation goto() will navigate)");
   } else if (profileId < 0) {
-    win.webContents.loadURL(initialUrl || "about:blank").catch(() => {});
-    _ebCrashLog(profileId, `STEP-29: ghost loadURL called — ${initialUrl || "about:blank"}`);
+    const ghostInitialUrl = initialUrl && initialUrl !== "about:blank"
+      ? initialUrl
+      : "https://www.instagram.com/";
+    win.webContents.loadURL(ghostInitialUrl).catch(() => {});
+    _ebCrashLog(profileId, `STEP-29: ghost loadURL called — ${ghostInitialUrl}`);
   } else {
     const sessionCksForNav = await ses.cookies.get({ name: "sessionid", domain: ".instagram.com" });
     if (!win.isDestroyed()) {

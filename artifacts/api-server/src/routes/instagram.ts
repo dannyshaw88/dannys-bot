@@ -4818,7 +4818,9 @@ export async function registerInstagramRoutes(
             useHomeIp: !proxy,
             userAgent,
             ebFingerprint: fingerprint ?? null,
-            initialUrl: initialUrl ?? "about:blank",
+            initialUrl: initialUrl && initialUrl !== "about:blank"
+              ? initialUrl
+              : "https://www.instagram.com/",
           }),
         });
         const j = await r.json() as any;

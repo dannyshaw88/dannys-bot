@@ -1,3 +1,10 @@
+## [1.2.539] — 2026-08-18
+
+### Fixed — Ghost Browser Signup Layout and Navigation
+
+- All Ghost Browser signup slots now open with the phone-sized layout, with extra vertical room for the signup form.
+- Signup sessions land on Instagram instead of `about:blank`, and rejected credentials remain visible without an automatic refresh.
+
 ## [1.2.538] — 2026-08-18
 
 ### Fixed — Instagram Phone Number Keyboard
