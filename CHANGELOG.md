@@ -1,3 +1,9 @@
+## [1.2.548] — 2026-08-18
+
+### Fixed — Ghost Browser Tab Persistence
+
+- Reopening or navigating within an existing Ghost Browser slot now reuses the live BrowserWindow instead of destroying it and clearing its tab state. Explicit close/reset remains destructive.
+
 ## [1.2.547] — 2026-08-18
 
 ### Fixed — Visual Like Matching

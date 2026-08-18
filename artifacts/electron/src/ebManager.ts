@@ -2653,15 +2653,18 @@ export async function openEbWindow(opts: {
   // Focus existing window if already open (or hidden via close→hide handler)
   const existing = ebMap.get(profileId);
   if (existing && !existing.win.isDestroyed()) {
-    // Ghost browser (profileId=-1): always destroy and recreate with a fresh session.
-    // Ghost is a disposable identity — each open must start clean with the current proxy.
-    // win.destroy() bypasses the close→hide handler and actually destroys the window.
+    // Ghost browser slots are stateful browser sessions. Reopening/focusing the
+    // browser must not destroy the BrowserWindow: doing so also deletes
+    // tabsStateMap and makes every user-created tab disappear when navigation
+    // or the panel asks to open the same slot again. Explicit Ghost close/reset
+    // remains the path that destroys the session and clears its tabs.
     if (profileId < 0) {
-      try { existing.win.destroy(); } catch { /* already destroyed */ }
-      ebMap.delete(profileId);
-      tabsStateMap.delete(profileId);
-      toolbarViewMap.delete(profileId);
-      // Fall through to create a new window below.
+      try {
+        if (existing.win.isMinimized()) existing.win.restore();
+        if (!silentMode) existing.win.show();
+        existing.win.focus();
+      } catch { /* window may be closing; the closed handler owns cleanup */ }
+      return;
     } else {
       // Regular account: always re-apply proxy on every re-show.
       // Checking only for proxy changes is insufficient — sessions can lose their
