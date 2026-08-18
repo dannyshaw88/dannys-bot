@@ -4226,7 +4226,7 @@ export async function openEbWindow(opts: {
     let _ghostOverlayRunning = false;
     const cdpDismissGhostOverlay = async () => {
       // Skip during warmup — warmup uses CSS-based hiding so no click occurs.
-      if (win.isDestroyed() || _ghostOverlayRunning || ebMap.get(-1)?.warmupActive) return;
+      if (win.isDestroyed() || _ghostOverlayRunning || ebMap.get(profileId)?.warmupActive) return;
       _ghostOverlayRunning = true;
       try {
         try { win.webContents.debugger.attach("1.3"); } catch {}
@@ -4285,7 +4285,7 @@ export async function openEbWindow(opts: {
     win.webContents.on("did-finish-load", () => { cdpDismissGhostOverlay().catch(() => {}); });
     const _ghostOverlayInterval = setInterval(() => {
       if (win.isDestroyed()) { clearInterval(_ghostOverlayInterval); return; }
-      if (!ebMap.get(-1)?.warmupActive) cdpDismissGhostOverlay().catch(() => {});
+      if (!ebMap.get(profileId)?.warmupActive) cdpDismissGhostOverlay().catch(() => {});
     }, 7000);
     win.on("closed", () => clearInterval(_ghostOverlayInterval));
   }
@@ -7999,7 +7999,9 @@ export function startEbIpcServer(
       // Progress is relayed to the API server via /api/signup/browser/warmup-step
       // so the frontend status bar updates in real time.
       if (req.method === "POST" && u.pathname === "/eb/ghost-warmup") {
-        const e = ebMap.get(-1);
+        const slot = Number(body?.slot ?? 1) || 1;
+        const ghostProfileId = -slot;
+        const e = ebMap.get(ghostProfileId);
         if (!e || e.win.isDestroyed()) {
           return send(res, 200, { ok: false, error: "Ghost Browser is not open" });
         }
@@ -8036,7 +8038,7 @@ export function startEbIpcServer(
 
         // Run warmup asynchronously — don't block the IPC response
         // Set warmupActive so cdpDismissGhostOverlay doesn't fire during reel viewing.
-        const _warmupEntry = ebMap.get(-1);
+        const _warmupEntry = ebMap.get(ghostProfileId);
         if (_warmupEntry) _warmupEntry.warmupActive = true;
         (async () => {
           const wc = e.win.webContents;
@@ -8300,12 +8302,12 @@ export function startEbIpcServer(
             relayStep(`Warm-up error: ${err?.message ?? "unknown"}`);
           } finally {
             relayDone();
-            const _weDone = ebMap.get(-1);
+            const _weDone = ebMap.get(ghostProfileId);
             if (_weDone) _weDone.warmupActive = false;
           }
         })().catch((err: any) => {
           console.log(`[warmup] OUTER CATCH: ${err?.message ?? String(err)}`);
-          const _weDone2 = ebMap.get(-1);
+          const _weDone2 = ebMap.get(ghostProfileId);
           if (_weDone2) _weDone2.warmupActive = false;
           relayDone();
         });

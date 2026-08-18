@@ -1,3 +1,9 @@
+## [1.2.540] — 2026-08-18
+
+### Fixed — Isolated Ghost Browser Signup Tabs
+
+- Ghost Browser overlay and warm-up state now resolve against each signup slot independently instead of always using signup slot 1.
+
 ## [1.2.539] — 2026-08-18
 
 ### Fixed — Ghost Browser Signup Layout and Navigation
