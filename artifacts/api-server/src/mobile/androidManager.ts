@@ -3597,76 +3597,13 @@ export async function findFeedActionIcons(
   // area) instead of the real feed action bar (y≈1900), poisoning every icon coord.
   // getScreenSize(serial) uses `adb shell wm size` and defaults to 1080×2400.
   const { w, h: screenH } = getScreenSize(serial);
-  // Find the Like node closest to the screen's real vertical centre.
-  // RecyclerView recycling can keep an adjacent post's (or a Reel/reply-bar
-  // card's) Like node alive in the hierarchy at the same time; anchoring the
-  // row-scan on the wrong post's Like button pulls THAT post's unrelated wide
-  // elements into rowNodes — see _findCentermostLikeNode.
-  let like = _findCentermostLikeNode(xml, screenH);
-  let alreadyLiked = false;
-  // Some Instagram builds expose the heart only as an unlabeled/custom
-  // drawable, so the accessibility tree has no Like node at all. Use the
-  // uploaded heart crop as a scale/colour-invariant visual anchor before
-  // giving up. This is intentionally only an anchor: the action row is still
-  // rescanned and the caller validates the post state after tapping.
+  // The uploaded heart reference is the ONLY Like target source. Do not use
+  // content-desc, resource IDs, icon order, or fixed coordinates: those
+  // accessibility paths have resolved to the wrong control on other builds.
+  const like = await findFeedLikeIconByPixels(serial, screenH / 2, onLog);
+  const alreadyLiked = false;
   if (!like) {
-    const visualLike = await findFeedLikeIconByPixels(serial, screenH / 2, onLog);
-    if (visualLike) {
-      like = visualLike;
-      onLog?.(`[feed-icons] Like visual anchor accepted at (${visualLike.x},${visualLike.y})`);
-    }
-  }
-  if (!like) {
-    // Post may be already liked (content-desc="Unlike"). We still need the
-    // button's position to anchor the row scan for Comment/Repost/Send.
-    // Use the same centering heuristic as _findCentermostLikeNode, but match
-    // "Unlike". The result is NEVER tapped for a like — callers must check
-    // alreadyLiked and skip the like action to avoid accidental unlike.
-    let bestUnlike: { x: number; y: number } | null = null;
-    let bestDist = Infinity;
-    const centerY = screenH / 2;
-    const MAX_DIST = screenH * 0.38;
-    const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
-    let um: RegExpExecArray | null;
-    while ((um = nodeRe.exec(xml)) !== null) {
-      const attrs = um[1];
-      const contentDesc = attrs.match(/\bcontent-desc="([^"]*)"/i)?.[1] ?? "";
-      if (!/^Unlike$/i.test(contentDesc)) continue;
-      const bounds = attrs.match(/\bbounds="(\[\d+,\d+\]\[\d+,\d+\])"/i)?.[1];
-      if (!bounds) continue;
-      const c = _parseCenter(bounds);
-      if (!c) continue;
-      const dist = Math.abs(c.y - centerY);
-      if (dist < bestDist) { bestDist = dist; bestUnlike = c; }
-    }
-    if (bestUnlike && bestDist <= MAX_DIST) {
-      like = bestUnlike;
-      alreadyLiked = true;
-    }
-  }
-  if (!like) {
-    // Diagnostic: dump every clickable node near screen centre so we can see
-    // exactly what label/resource-id the Reel viewer (or any other layout)
-    // exposes for its Like control. Without this the "null" return is silent
-    // and we cannot distinguish "Like button has different label" from
-    // "UI still loading" or "genuinely no post opened".
-    const centerY = screenH / 2;
-    const scanWindow = screenH * 0.50; // look within ±50 % of centre
-    const nearCentreRe = /<node\s([^>]+?)\s*\/?>/g;
-    const nearNodes: string[] = [];
-    let dm: RegExpExecArray | null;
-    while ((dm = nearCentreRe.exec(xml)) !== null) {
-      const a = dm[1];
-      const bm = a.match(/bounds="(\[\d+,\d+\]\[\d+,\d+\])"/);
-      if (!bm) continue;
-      const c = _parseCenter(bm[1]);
-      if (!c || Math.abs(c.y - centerY) > scanWindow) continue;
-      const cd  = (a.match(/content-desc="([^"]*)"/)  || [])[1] ?? "";
-      const rid = (a.match(/resource-id="([^"]*)"/)   || [])[1] ?? "";
-      const cls = (a.match(/class="([^"]*)"/)         || [])[1] ?? "";
-      nearNodes.push(`(${c.x},${c.y}) cd="${cd}" rid="${rid}" cls="${cls}"`);
-    }
-    onLog?.(`[feed-icons] no Like/Unlike node found near centre — nearcentre clickable nodes: ${nearNodes.length ? nearNodes.join(" | ") : "(none)"}`);
+    onLog?.("[feed-icons] Like icon visual match not found — refusing every non-visual fallback");
     return null;
   }
   const rowTolerance = 20;

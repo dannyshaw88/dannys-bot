@@ -1,3 +1,9 @@
+## [1.2.544] — 2026-08-18
+
+### Changed — View Feed Visual-Only Like Targeting
+
+- View Feed Like targeting now uses only the uploaded heart icon detector; all accessibility, resource-ID, icon-order, and coordinate fallbacks are refused.
+
 ## [1.2.543] — 2026-08-18
 
 ### Fixed — View Feed Like Detection
