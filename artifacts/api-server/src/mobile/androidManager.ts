@@ -5858,22 +5858,31 @@ async function findFeedLikeIconByPixels(
       const yMax = Math.min(screen.height - th, Math.round(rowY + screen.height * 0.22));
       for (let y = yMin; y <= yMax; y += 3) {
         for (let x = 0; x <= screen.width - tw; x += 3) {
-          let error = 0;
-          let count = 0;
+          let screenSum = 0, screenSum2 = 0, refSum = 0, refSum2 = 0, cross = 0, count = 0;
           for (let ty = 0; ty < info.height; ty += 2) {
             for (let tx = 0; tx < info.width; tx += 2) {
               const sx = x + Math.min(tw - 1, Math.round(tx * scale));
               const sy = y + Math.min(th - 1, Math.round(ty * scale));
               const screenValue = sample(sx, sy);
               const refValue = data[ty * info.width + tx];
-              // Absolute contrast makes black and white heart outlines
-              // equivalent, while still preserving the heart's geometry.
-              error += Math.min(255, Math.abs(Math.abs(screenValue - 128) - Math.abs(refValue - 128)));
+              screenSum += screenValue;
+              screenSum2 += screenValue * screenValue;
+              refSum += refValue;
+              refSum2 += refValue * refValue;
+              cross += screenValue * refValue;
               count++;
             }
           }
-          const score = 1 - error / Math.max(1, count * 128);
-          if (score > (best?.score ?? 0.84)) {
+          if (count < 100) continue;
+          const screenMean = screenSum / count;
+          const refMean = refSum / count;
+          const screenVariance = Math.max(1, screenSum2 / count - screenMean * screenMean);
+          const refVariance = Math.max(1, refSum2 / count - refMean * refMean);
+          const covariance = cross / count - screenMean * refMean;
+          // Correlate the heart's internal geometry, not its absolute colour.
+          // Absolute correlation accepts light and dark theme variants.
+          const score = 0.5 + Math.abs(covariance / Math.sqrt(screenVariance * refVariance)) * 0.5;
+          if (score > (best?.score ?? 0.86)) {
             best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), score };
           }
         }
@@ -5881,6 +5890,10 @@ async function findFeedLikeIconByPixels(
     }
     if (!best) {
       onLog?.(`[feed-icons] Like visual reference not matched near row y=${rowY}`);
+      return null;
+    }
+    if (best.score < 0.72) {
+      onLog?.(`[feed-icons] Like visual match rejected as weak at (${best.x},${best.y}) score=${best.score.toFixed(3)}`);
       return null;
     }
     onLog?.(`[feed-icons] Like visual reference matched at (${best.x},${best.y}) score=${best.score.toFixed(3)}`);

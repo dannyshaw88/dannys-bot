@@ -1,3 +1,9 @@
+## [1.2.547] — 2026-08-18
+
+### Fixed — Visual Like Matching
+
+- Updated the uploaded heart detector to use normalized, scale-invariant shape correlation with theme inversion support and weak-match rejection.
+
 ## [1.2.546] — 2026-08-18
 
 ### Fixed — Follow Users Search Field Detection
