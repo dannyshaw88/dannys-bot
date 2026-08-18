@@ -1,3 +1,9 @@
+## [1.2.546] — 2026-08-18
+
+### Fixed — Follow Users Search Field Detection
+
+- Replaced the brittle fixed-luminance comparison with scale-invariant normalized cross-correlation over the search-field reference geometry, including theme inversion support and weak-match rejection.
+
 ## [1.2.545] — 2026-08-18
 
 ### Fixed — View Feed No-Action Scroll Delay

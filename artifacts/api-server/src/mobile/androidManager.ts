@@ -5727,31 +5727,32 @@ async function findInstagramSearchFieldByPixels(
       const step = Math.max(1, Math.round(scale));
       for (let y = 0; y <= Math.round(screen.height * 0.40) - th; y += 6) {
         for (let x = 0; x <= screen.width - tw; x += 6) {
-          let sum = 0, sum2 = 0, count = 0, error = 0;
+          let screenSum = 0, screenSum2 = 0, refSum = 0, refSum2 = 0, cross = 0, count = 0;
           for (let ty = 0; ty < ref.height; ty += step) {
             const sy = y + Math.min(th - 1, Math.round(ty * scale));
             for (let tx = 0; tx < ref.width; tx += step) {
               const sx = x + Math.min(tw - 1, Math.round(tx * scale));
               const v = px(sx, sy);
               const t = ref.gray[ty * ref.width + tx];
-              sum += v; sum2 += v * v; count++;
+              screenSum += v;
+              screenSum2 += v * v;
+              refSum += t;
+              refSum2 += t * t;
+              cross += v * t;
+              count++;
             }
           }
           if (count < 100) continue;
-          const mean = sum / count;
-          const variance = Math.max(1, sum2 / count - mean * mean);
-          // Compare local contrast rather than polarity: the same artwork
-          // matches whether it is dark-on-light or light-on-dark.
-          for (let ty = 0; ty < ref.height; ty += step) {
-            const sy = y + Math.min(th - 1, Math.round(ty * scale));
-            for (let tx = 0; tx < ref.width; tx += step) {
-              const sx = x + Math.min(tw - 1, Math.round(tx * scale));
-              const v = (px(sx, sy) - mean) / Math.sqrt(variance);
-              const t = (ref.gray[ty * ref.width + tx] - 200) / 55;
-              error += Math.min(4, Math.abs(Math.abs(v) - Math.abs(t)));
-            }
-          }
-          const score = 1 - error / Math.max(1, count * 2);
+          const screenMean = screenSum / count;
+          const refMean = refSum / count;
+          const screenVariance = Math.max(1, screenSum2 / count - screenMean * screenMean);
+          const refVariance = Math.max(1, refSum2 / count - refMean * refMean);
+          const covariance = cross / count - screenMean * refMean;
+          // Normalized cross-correlation compares the field's internal
+          // geometry (rounded bar, magnifier, and Search glyph) rather than
+          // an assumed brightness value. Absolute correlation accepts both
+          // light and dark Instagram themes without losing the layout shape.
+          const score = 0.5 + Math.abs(covariance / Math.sqrt(screenVariance * refVariance)) * 0.5;
           if (score > (best?.score ?? 0.78)) {
             best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), score, template: ref.name };
           }
@@ -5759,9 +5760,13 @@ async function findInstagramSearchFieldByPixels(
       }
     }
   }
-  if (best) onLog?.(`Follow: visual search field matched ${best.template} at (${best.x}, ${best.y}) score=${best.score.toFixed(3)}`);
+  if (best && best.score >= 0.72) {
+    onLog?.(`Follow: visual search field matched ${best.template} at (${best.x}, ${best.y}) score=${best.score.toFixed(3)}`);
+    return best;
+  }
+  if (best) onLog?.(`Follow: visual search field weak visual match rejected (${best.template}) score=${best.score.toFixed(3)}`);
   else onLog?.("Follow: visual search field not matched — refusing coordinate fallback");
-  return best;
+  return null;
 }
 
 async function findFeedRepostIconByPixels(
