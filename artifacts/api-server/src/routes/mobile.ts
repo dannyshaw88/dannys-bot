@@ -948,10 +948,21 @@ function isPng(buf: Buffer): boolean {
 
 export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.get("/api/diagnostics/snapshot", (_req: Request, res: Response) => {
+    logger.info("[diagnostics] runtime snapshot requested");
     res.json({
       ok: true,
       ...getRuntimeSnapshot(),
     });
+  });
+  app.post("/api/diagnostics/snapshot", (_req: Request, res: Response) => {
+    logger.info("[diagnostics] runtime snapshot download requested");
+    const filename = `aura-diagnostic-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+    const content = JSON.stringify({ ok: true, ...getRuntimeSnapshot() }, null, 2);
+    res
+      .status(200)
+      .setHeader("Content-Type", "application/json; charset=utf-8")
+      .setHeader("Content-Disposition", `attachment; filename="${filename}"`)
+      .send(content);
   });
   // ── Screen mirror WebSocket stream ─────────────────────────────────────────
   const screenWss = new WebSocketServer({ noServer: true });
@@ -14773,7 +14784,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         await new Promise(resolve => setTimeout(resolve, 250));
       }
 
-      const stillRunning = automationCycleInProgress.has(serial);
+       const stillRunning = automationCycleInProgress.has(serial);
+       if (stillRunning) {
+         logger.warn({ serial }, "[graceful-reboot] cycle did not stop within 30 seconds; refusing to reboot");
+         res.status(409).json({
+           error: "The automation cycle is still stopping. The device was not rebooted.",
+           interruptedCycle: Boolean(activeCycleId),
+           forcedCleanup: true,
+         });
+         return;
+       }
        // Do not release the server-side cycle lock here. The in-flight worker
        // must finish its abort path first, otherwise a new cycle can overlap
        // its final recents gesture.
@@ -14784,7 +14804,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
        // after the reboot, deleting these markers here makes it look like a
        // generic failure instead of "cycle-aborted", skipping partial metrics.
        // A subsequent cycle start overwrites/clears stale markers safely.
-      res.json({ ok: true, interruptedCycle: Boolean(activeCycleId), forcedCleanup: stillRunning });
+       res.json({ ok: true, interruptedCycle: Boolean(activeCycleId), forcedCleanup: false });
     } catch (e: any) {
       res.status(500).json({ error: e?.message ?? "Graceful restart failed" });
     }

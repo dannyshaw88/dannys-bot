@@ -656,34 +656,22 @@ export function SettingsPage() {
   const createDiagnosticSnapshot = async () => {
     setSnapshotCreating(true);
     try {
-      const response = await fetch("/api/diagnostics/snapshot", { credentials: "include" });
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data?.ok) throw new Error(data?.error ?? "Snapshot failed");
-      const filename = `aura-diagnostic-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
-      const content = JSON.stringify(data, null, 2);
-      const electron = eAPI();
-      if (electron?.saveDiagnosticSnapshot) {
-        const result = await electron.saveDiagnosticSnapshot({ filename, content });
-        if (result?.saved) {
-          toast({ title: "Diagnostic snapshot saved", description: result.filePath });
-          return;
-        }
-        toast({ title: "Snapshot cancelled", description: "No file was saved." });
-        return;
-      }
-      // Keep the button useful in the browser preview and after an Electron
-      // window recreation. The API snapshot has already been created; download
-      // it directly instead of reporting success while saving nothing.
-      const blob = new Blob([content], { type: "application/json" });
+      console.info("[diagnostics] snapshot button clicked");
+      const response = await fetch("/api/diagnostics/snapshot", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error(`Snapshot request failed (${response.status})`);
+      const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = filename;
+      anchor.download = `aura-diagnostic-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
-      toast({ title: "Diagnostic snapshot downloaded", description: filename });
+      toast({ title: "Diagnostic snapshot downloaded", description: anchor.download });
     } catch (error: any) {
       toast({ title: "Snapshot failed", description: error?.message ?? "Could not create snapshot", variant: "destructive" });
     } finally {
