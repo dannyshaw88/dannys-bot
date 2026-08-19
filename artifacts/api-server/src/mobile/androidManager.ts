@@ -7356,7 +7356,10 @@ export async function removeDeviceFile(serial: string, devicePath: string): Prom
  */
 export async function findHomeTab(serial: string): Promise<{ x: number; y: number } | null> {
   const screen = await _captureScreenPixels(serial);
-  if (!screen || screen.channels < 3) return null;
+  if (!screen || screen.channels < 3) {
+    logger.warn({ serial }, "[home-tab] screenshot capture/decode failed");
+    return null;
+  }
 
   try {
     const referenceRoots = [
@@ -7364,30 +7367,61 @@ export async function findHomeTab(serial: string): Promise<{ x: number; y: numbe
       // Packaged Electron build: build.mjs ships this beside the API bundle.
       path.resolve(path.dirname(path.resolve(process.argv[1] ?? __filename)), "home-icon-refs"),
     ];
-    let reference: { data: Buffer; width: number; height: number } | null = null;
+    let reference: { data: Buffer; width: number; height: number; source: string } | null = null;
     for (const root of referenceRoots) {
       try {
         const { data, info } = await sharp(path.join(root, "home_1787131461428.jpg"))
           .greyscale()
           .raw()
           .toBuffer({ resolveWithObject: true });
-        reference = { data, width: info.width, height: info.height };
+        // The uploaded reference is a 32x32 screenshot crop, but the house
+        // itself occupies only the central ~21x21 pixels. Matching the whole
+        // crop makes the white/blank border dominate the correlation and can
+        // reject the real icon when the live nav background differs.
+        let minX = info.width, minY = info.height, maxX = -1, maxY = -1;
+        for (let y = 0; y < info.height; y++) {
+          for (let x = 0; x < info.width; x++) {
+            if (data[y * info.width + x] < 220) {
+              minX = Math.min(minX, x);
+              minY = Math.min(minY, y);
+              maxX = Math.max(maxX, x);
+              maxY = Math.max(maxY, y);
+            }
+          }
+        }
+        if (maxX < minX || maxY < minY) {
+          logger.warn({ serial, source: path.join(root, "home_1787131461428.jpg") }, "[home-tab] reference contains no glyph pixels");
+          return null;
+        }
+        const width = maxX - minX + 1;
+        const height = maxY - minY + 1;
+        const cropped = Buffer.alloc(width * height);
+        for (let y = 0; y < height; y++) {
+          data.copy(cropped, y * width, (minY + y) * info.width + minX, (minY + y) * info.width + minX + width);
+        }
+        reference = { data: cropped, width, height, source: path.join(root, "home_1787131461428.jpg") };
         break;
       } catch {
         // Try the next known runtime asset root.
       }
     }
-    if (!reference) return null;
+    if (!reference) {
+      logger.warn({ serial, referenceRoots }, "[home-tab] visual reference unavailable");
+      return null;
+    }
 
     const sample = (x: number, y: number): number => {
       const i = (y * screen.width + x) * screen.channels;
       return (screen.pixels[i] + screen.pixels[i + 1] + screen.pixels[i + 2]) / 3;
     };
-    let best: { x: number; y: number; score: number } | null = null;
-    for (const scale of [0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.8, 2.2, 2.7, 3.2, 3.7]) {
+    let best: { x: number; y: number; score: number; scale: number } | null = null;
+    // The crop is density-independent: include both small and large Android
+    // nav glyphs, with finer increments around the common 1x–4x range.
+    const scales = Array.from({ length: 25 }, (_, i) => 0.75 + i * 0.15);
+    for (const scale of scales) {
       const tw = Math.max(10, Math.round(reference.width * scale));
       const th = Math.max(10, Math.round(reference.height * scale));
-      if (tw >= screen.width * 0.30 || th >= screen.height * 0.12) continue;
+      if (tw >= screen.width * 0.18 || th >= screen.height * 0.10) continue;
 
       // Home is the leftmost icon in Instagram's bottom navigation. Keep the
       // scan above Android's system navigation strip, but avoid assuming one
@@ -7421,22 +7455,37 @@ export async function findHomeTab(serial: string): Promise<{ x: number; y: numbe
           // Absolute correlation accepts both black-on-white and
           // white-on-dark Instagram themes.
           const score = 0.5 + Math.abs(covariance / Math.sqrt(screenVariance * refVariance)) * 0.5;
-          if (score > (best?.score ?? 0.86)) {
-            best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), score };
+           if (score > (best?.score ?? -Infinity)) {
+             best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), score, scale };
           }
         }
       }
     }
 
-    if (!best || best.score < 0.86) {
+    const minimumConfidence = 0.72;
+    if (!best || best.score < minimumConfidence) {
+      logger.warn({
+        serial,
+        screen: [screen.width, screen.height],
+        scan: {
+          x: [0, Math.round(screen.width * 0.30)],
+          y: [Math.round(screen.height * 0.78), Math.round(screen.height * 0.95)],
+        },
+        reference: { source: reference.source, size: [reference.width, reference.height] },
+        best: best
+          ? { x: best.x, y: best.y, score: Number(best.score.toFixed(3)), scale: best.scale }
+          : null,
+        minimumConfidence,
+      }, "[home-tab] visual icon rejected");
       return null;
     }
     logger.debug(
-      { serial, x: best.x, y: best.y, score: Number(best.score.toFixed(3)) },
+      { serial, x: best.x, y: best.y, score: Number(best.score.toFixed(3)), scale: best.scale },
       "[home-tab] visual icon matched",
     );
     return { x: best.x, y: best.y };
-  } catch {
+  } catch (error) {
+    logger.warn({ serial, error: error instanceof Error ? error.message : String(error) }, "[home-tab] visual matcher failed");
     return null;
   }
 }
