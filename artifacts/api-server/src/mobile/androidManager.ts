@@ -7415,9 +7415,15 @@ export async function findHomeTab(serial: string): Promise<{ x: number; y: numbe
       return (screen.pixels[i] + screen.pixels[i + 1] + screen.pixels[i + 2]) / 3;
     };
     let best: { x: number; y: number; score: number; scale: number } | null = null;
-    // The crop is density-independent: include both small and large Android
-    // nav glyphs, with finer increments around the common 1x–4x range.
-    const scales = Array.from({ length: 25 }, (_, i) => 0.75 + i * 0.15);
+    // Keep this search deliberately bounded. A dense full-resolution scan is
+    // synchronous JavaScript and can starve the API event loop for tens of
+    // seconds on a 1080x2400 phone, which in turn makes concurrent ADB/Sharp
+    // work fail at the native boundary. These density bands cover the
+    // practical Android nav-icon sizes without turning detection into a CPU
+    // benchmark.
+    const scales = [0.9, 1.2, 1.5, 1.8, 2.2, 2.6, 3.0, 3.5, 4.0];
+    const scanStep = screen.width >= 900 ? 4 : 3;
+    const sampleStep = 3;
     for (const scale of scales) {
       const tw = Math.max(10, Math.round(reference.width * scale));
       const th = Math.max(10, Math.round(reference.height * scale));
@@ -7429,11 +7435,11 @@ export async function findHomeTab(serial: string): Promise<{ x: number; y: numbe
       const xMax = Math.min(screen.width - tw, Math.round(screen.width * 0.30));
       const yMin = Math.round(screen.height * 0.78);
       const yMax = Math.min(screen.height - th, Math.round(screen.height * 0.95) - th);
-      for (let y = yMin; y <= yMax; y += 2) {
-        for (let x = 0; x <= xMax; x += 2) {
+      for (let y = yMin; y <= yMax; y += scanStep) {
+        for (let x = 0; x <= xMax; x += scanStep) {
           let screenSum = 0, screenSum2 = 0, refSum = 0, refSum2 = 0, cross = 0, count = 0;
-          for (let ty = 0; ty < reference.height; ty += 2) {
-            for (let tx = 0; tx < reference.width; tx += 2) {
+          for (let ty = 0; ty < reference.height; ty += sampleStep) {
+            for (let tx = 0; tx < reference.width; tx += sampleStep) {
               const sx = x + Math.min(tw - 1, Math.round(tx * scale));
               const sy = y + Math.min(th - 1, Math.round(ty * scale));
               const screenValue = sample(sx, sy);
@@ -7460,6 +7466,10 @@ export async function findHomeTab(serial: string): Promise<{ x: number; y: numbe
           }
         }
       }
+      // Give screenshot polling, request handling, and cancellation a chance
+      // to run between scale bands. The detector remains one logical lookup,
+      // but never monopolizes the Node event loop for the entire scan.
+      await new Promise<void>(resolve => setImmediate(resolve));
     }
 
     const minimumConfidence = 0.72;
