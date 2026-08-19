@@ -5599,7 +5599,9 @@ type SearchFieldVisualMatch = { x: number; y: number; score: number; template: s
  * Matching uses normalized luminance, so light/dark colour inversion does not
  * change the result.  Size is a search dimension, never a fixed coordinate.
  */
-async function findInstagramSearchFieldByPixels(
+const followSearchMatchesInFlight = new Map<string, Promise<SearchFieldVisualMatch | null>>();
+
+async function findInstagramSearchFieldByPixelsInternal(
   serial: string,
   onLog?: (msg: string) => void,
 ): Promise<SearchFieldVisualMatch | null> {
@@ -5636,16 +5638,15 @@ async function findInstagramSearchFieldByPixels(
     return (screen.pixels[i] + screen.pixels[i + 1] + screen.pixels[i + 2]) / 3;
   };
   let best: SearchFieldVisualMatch | null = null;
-  // The field is in the top region, but its exact width varies by device and
-  // state. Search densely around the large-phone scale as well as the smaller
-  // scales. The uploaded references are ~360 px wide while the real device
-  // capture can be ~1080 px wide, so the useful scale is often 2.7–3.3.
-  const scales = Array.from({ length: 30 }, (_, i) => 0.50 + i * 0.10);
+  // Use the proven View Feed heart matcher as the basis: the same correlation
+  // scoring and scale cadence, extended only with larger bands because these
+  // search-field templates are wide screenshots rather than small glyphs.
+  const scales = [0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.8, 2.2, 2.7, 3.0, 3.3, 3.6];
   for (const ref of refs) {
     for (const scale of scales) {
       const tw = Math.round(ref.width * scale), th = Math.round(ref.height * scale);
       if (tw < 100 || th < 25 || tw > screen.width || th >= Math.round(screen.height * 0.45)) continue;
-      const step = scale >= 2.5 ? 2 : 1;
+      const step = 2;
       for (let y = 0; y <= Math.round(screen.height * 0.40) - th; y += 3) {
         for (let x = 0; x <= screen.width - tw; x += 3) {
           let screenSum = 0, screenSum2 = 0, refSum = 0, refSum2 = 0, cross = 0, count = 0;
@@ -5676,19 +5677,48 @@ async function findInstagramSearchFieldByPixels(
           const score = 0.5 + Math.abs(covariance / Math.sqrt(screenVariance * refVariance)) * 0.5;
             // Always retain the single closest visual resemblance. There is
             // no arbitrary confidence-based accept/reject gate here.
-            if (score > (best?.score ?? -Infinity)) {
+            // Same strong initial gate as the reliable View Feed heart
+            // detector; background resemblance never becomes a candidate.
+            if (score > (best?.score ?? 0.86)) {
             best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), score, template: ref.name };
           }
         }
+        // The search-field template is much larger than the Home/heart glyph.
+        // Yield after every scan row so it cannot starve ADB, video, or API
+        // request handling while comparing all template candidates.
+        await new Promise<void>(resolve => setImmediate(resolve));
       }
+      await new Promise<void>(resolve => setImmediate(resolve));
     }
   }
-  if (best) {
+  if (best && best.score >= 0.72) {
     onLog?.(`Follow: visual search field matched ${best.template} at (${best.x}, ${best.y}) score=${best.score.toFixed(3)}`);
     return best;
   }
+  if (best) {
+    onLog?.(`Follow: visual search-field match rejected as weak at (${best.x}, ${best.y}) score=${best.score.toFixed(3)}`);
+    return null;
+  }
   else onLog?.("Follow: no visual search-field candidate was available");
   return null;
+}
+
+async function findInstagramSearchFieldByPixels(
+  serial: string,
+  onLog?: (msg: string) => void,
+): Promise<SearchFieldVisualMatch | null> {
+  const existing = followSearchMatchesInFlight.get(serial);
+  if (existing) return existing;
+
+  const current = findInstagramSearchFieldByPixelsInternal(serial, onLog);
+  followSearchMatchesInFlight.set(serial, current);
+  try {
+    return await current;
+  } finally {
+    if (followSearchMatchesInFlight.get(serial) === current) {
+      followSearchMatchesInFlight.delete(serial);
+    }
+  }
 }
 
 async function findFeedRepostIconByPixels(
