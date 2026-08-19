@@ -8812,6 +8812,30 @@ function _findElem(xml: string, ...candidates: string[]): { x: number; y: number
       if (m2) { const c2 = _parseCenter(m2[1]); if (c2) return c2; }
     }
   }
+
+  // UIAutomator does not guarantee attribute order. The regexes above are
+  // fast for the common `text="..." bounds="..."` layout, but they miss a
+  // perfectly valid node when Android serializes `bounds` before `text` or
+  // `content-desc`. Parse complete nodes as a fallback so a visible label
+  // cannot disappear solely because the XML attribute order changed.
+  const nodeRe = /<node\b([^>]*)>/gi;
+  const nodes: Array<{ attrs: string; bounds: string }> = [];
+  let nodeMatch: RegExpExecArray | null;
+  while ((nodeMatch = nodeRe.exec(xml)) !== null) {
+    const bounds = nodeMatch[1].match(/\bbounds="([^"]+)"/i)?.[1];
+    if (bounds) nodes.push({ attrs: nodeMatch[1], bounds });
+  }
+  for (const t of candidates) {
+    const wanted = t.toLowerCase();
+    for (const node of nodes) {
+      for (const attr of ["text", "content-desc", "hint", "resource-id"]) {
+        const value = node.attrs.match(new RegExp(`\\b${attr}="([^"]*)"`, "i"))?.[1] ?? "";
+        if (!value.toLowerCase().includes(wanted)) continue;
+        const center = _parseCenter(node.bounds);
+        if (center) return center;
+      }
+    }
+  }
   return null;
 }
 

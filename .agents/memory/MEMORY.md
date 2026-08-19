@@ -94,6 +94,7 @@
 - [Mobile offline HST gate](mobile-offline-hst-gate.md) — pause all slot cycles on non-ready ADB state while preserving the saved toggle for reconnect resume
 - [Follow exact-target gate](follow-exact-target-gate.md) — never select a search result by row order; require an exact username node or abort and clear before the next target
 - [Mobile account restriction screen](mobile-account-restriction-screen.md) — pause on Instagram’s “What happened” restriction overlay, tap live top-right close, verify dismissal, then resume
+- [UIAutomator attribute order](ui-automator-attribute-order.md) — parse complete nodes; never assume text/content-desc appears before bounds
 - [Follow search template scan](follow-search-template-scan.md) — large multi-template search must be single-flight and yield during scans to protect native screenshot work
 - [Follow one-back navigation](follow-one-back-navigation.md) — after profile follow, one Back returns to search results; a second Back exits Explore to Home
 - [Per-device mother-code personality](per-device-mother-code-personality.md) — derive stable timing and gesture accents from serial while preserving per-action randomness and saved profile bounds
