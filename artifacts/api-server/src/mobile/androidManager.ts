@@ -7428,7 +7428,11 @@ export async function findHomeTab(serial: string): Promise<{ x: number; y: numbe
     // benchmark.
     const scales = [0.9, 1.2, 1.5, 1.8, 2.2, 2.6, 3.0, 3.5, 4.0];
     const scanStep = screen.width >= 900 ? 4 : 3;
-    const sampleStep = 3;
+    // A 21–22px bundled glyph sampled every third pixel yields fewer than
+    // the minimum 100 correlation samples and is rejected before scoring.
+    // Keep this at two so both the 32px JPG crop and the packaged SVG have
+    // enough spatial samples.
+    const sampleStep = 2;
     for (const scale of scales) {
       const tw = Math.max(10, Math.round(reference.width * scale));
       const th = Math.max(10, Math.round(reference.height * scale));

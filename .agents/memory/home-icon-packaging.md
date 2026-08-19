@@ -7,4 +7,4 @@ The packaged Home detector must have a self-contained reference asset. Workspace
 
 **Why:** A Windows Make a Post run aborted before tapping Home because the installed package had neither the workspace asset folder nor a packaged Home reference.
 
-**How to apply:** Make the installer build rebuild the API and Electron bundle, fail when no reference source exists, and verify the packaged reference directory contains a supported image before release.
+**How to apply:** Make the installer build rebuild the API and Electron bundle, fail when no reference source exists, and verify the packaged reference directory contains a supported image before release. Keep detector sampling dense enough that the smallest bundled glyph still clears its minimum sample count.
