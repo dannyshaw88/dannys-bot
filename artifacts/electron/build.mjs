@@ -96,6 +96,15 @@ if (existsSync(homeIconSource)) {
   await cp(homeIconSource, path.join(homeIconReferenceTarget, homeIconReferenceName));
 }
 
+// Ship the visual Instagram Save/bookmark reference with the packaged API.
+const saveIconReferenceName = "save_1787133131184.jpg";
+const saveIconReferenceTarget = path.join(dist, "server", "save-icon-refs");
+await mkdir(saveIconReferenceTarget, { recursive: true });
+const saveIconSource = path.join(searchReferenceSource, saveIconReferenceName);
+if (existsSync(saveIconSource)) {
+  await cp(saveIconSource, path.join(saveIconReferenceTarget, saveIconReferenceName));
+}
+
 // 3. Copy built frontend
 const frontendSrc = path.join(__dirname, "../dannys-bot/dist/public");
 if (!existsSync(frontendSrc)) {

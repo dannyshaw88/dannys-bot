@@ -3607,14 +3607,8 @@ export async function findFeedActionIcons(
     return null;
   }
   const rowTolerance = 20;
-  // Save/bookmark is almost always explicitly labelled (cd="Add to Saved" /
-  // cd="Remove from saved" / rid=row_feed_button_save) so the label filter
-  // catches it first. This positional cutoff is only a last-resort guard for
-  // the rare unlabelled save node, and must be generous enough NOT to exclude
-  // the Send/DM icon on narrow screens (720 px wide): Send lands at x≈90% on
-  // those devices, so 80% was incorrectly cutting it out.  95% leaves room for
-  // Send while still excluding an unlabelled Save that is always at the far
-  // right edge (confirmed: x=1013 on a 720 px screen, i.e. >100%).
+  // Keep the far-right bookmark slot out of the unlabeled share-icon pool.
+  // The bookmark itself is located only by the screenshot matcher below.
   const saveCutoffX = Math.round(w * 0.95);
   // Instagram's Comment/Repost/Send icons are small square glyphs (roughly
   // the same width as the Like heart). A message/reply compose field (the
@@ -3659,7 +3653,6 @@ export async function findFeedActionIcons(
     if (c.x < like.x + 20) continue; // Like itself, or the phantom accessibility container that wraps it (always within 20 px of like.x)
     const cdM = attrs.match(/content-desc="([^"]*)"/);
     const cd = cdM ? cdM[1] : "";
-    if (/favorit|save/i.test(cd)) continue; // bookmark, labeled
     if (c.x > saveCutoffX) continue; // bookmark, unlabeled — far-right heuristic
     const clsM = attrs.match(/class="([^"]*)"/);
     const cls = clsM ? clsM[1] : "";
@@ -3864,60 +3857,10 @@ export async function findFeedActionIcons(
   // coordinates. If neither strategy confirms a role, that slot stays null
   // and callers skip the action.
 
-  // ── Save/Bookmark button ──────────────────────────────────────────────────
-  // The ribbon/bookmark icon always lives far to the RIGHT of the action-bar
-  // row (confirmed: rid=row_feed_button_save, cd="Add to Saved", x=1014 on
-  // 1080 px screen — i.e. ~94 % of width). It is explicitly excluded from
-  // rowNodes above (the saveCutoffX heuristic + the /save/i label filter),
-  // so it is never confused with Comment/Repost/Send. We find it here by
-  // scanning for its well-known resource-id and content-desc labels rather
-  // than any positional assumption.
-  let save: { x: number; y: number } | null = null;
-  // A partially visible in-feed Reel can expose a row_feed_button_save node
-  // even though the feed post's own action row is not fully rendered. That
-  // node's coordinate is inside the Reel media; tapping it opens the Reel
-  // viewer instead of saving the feed post. View Feed must fail closed for
-  // these surfaces rather than treating node presence as visible confirmation.
-  const hasEmbeddedReelMarker =
-    xml.includes("reels_feed_media_view") ||
-    xml.includes("clips_media") ||
-    /(?:text|content-desc)="[^"]*\bReel\s+by\b[^"]*"/i.test(xml);
-  {
-    // Primary: resource-id match (most reliable — IG has kept this stable).
-    const ridSaveRe = /resource-id="[^"]*row_feed_button_save"[^>]*bounds="(\[\d+,\d+\]\[\d+,\d+\])"/;
-    const ridSaveM = ridSaveRe.exec(xml);
-    if (ridSaveM) {
-      save = _parseCenter(ridSaveM[1]);
-    }
-    // Fallback: content-desc label (covers future builds that rename the rid).
-    if (!save) {
-      const cdSaveRe = /content-desc="(?:Add to Saved|Remove from saved)"[^>]*bounds="(\[\d+,\d+\]\[\d+,\d+\])"/;
-      const cdSaveM = cdSaveRe.exec(xml);
-      if (cdSaveM) {
-        save = _parseCenter(cdSaveM[1]);
-      }
-    }
-    // Sanity check: the save/bookmark icon must sit on the same horizontal
-    // row as the Like button (the feed post's action bar). An embedded Reels
-    // card in the feed also exposes a row_feed_button_save / "Add to Saved"
-    // node, but its save icon is in the Reel's vertical right-edge column at
-    // a completely different Y position. If the detected save button is more
-    // than 80 px away from the Like button's Y, it belongs to a different
-    // card and must be rejected — tapping it navigates into the Reel viewer.
-    if (save && hasEmbeddedReelMarker) {
-      onLog?.(`[feed-icons] save button at (${save.x},${save.y}) rejected — embedded Reel/video surface is present; action row is not safely confirmed`);
-      save = null;
-    }
-    if (save && Math.abs(save.y - like.y) > 80) {
-      onLog?.(`[feed-icons] save button at (${save.x},${save.y}) rejected — y=${save.y} is ${Math.abs(save.y - like.y)}px from Like row (y=${like.y}); likely belongs to an embedded Reel card`);
-      save = null;
-    }
-    if (save) {
-      onLog?.(`[feed-icons] save button found at (${save.x},${save.y})`);
-    } else {
-      onLog?.(`[feed-icons] save button not found (will skip save action for this post)`);
-    }
-  }
+  // Save is independently confirmed from the live screenshot. If the ribbon
+  // is absent (for example, an ad or a Reel surface with no Save action), this
+  // returns null and callers must skip saving.
+  const save = await findSaveIconByPixels(serial, like.y, "feed", onLog);
 
   // Detect video/Reel posts in the feed using the already-fetched xml dump.
   // A video post exposes a SurfaceView, TextureView, or VideoView node for its
@@ -4337,32 +4280,22 @@ export async function findReelActionIcons(serial: string, onLog?: (msg: string) 
   const repostNode   = colNodes.find(n => /\brepost\b/i.test(n.cd)) ?? null;
   const sendNode     = colNodes.find(n => /\b(send|direct|message|share)\b/i.test(n.cd) && n !== repostNode) ?? null;
   const hasExplicitShareDmNode = !!sendNode;
-  // "Save" (unsaved) or "Saved" (already saved) — exact match only to avoid
-  // catching unrelated labels like "Save to Collection" sheet buttons.
-  const saveColNode  = colNodes.find(n => /^saved?$/i.test(n.cd)) ?? null;
-
   let comment:   { x: number; y: number } | null = commentNode ? pos(commentNode) : null;
   let shareFeed: { x: number; y: number } | null = repostNode  ? pos(repostNode)  : null;
   let shareDm:   { x: number; y: number } | null = sendNode    ? pos(sendNode)    : null;
-  let save:      { x: number; y: number } | null = saveColNode ? pos(saveColNode) : null;
-  let alreadySaved = saveColNode ? /^saved$/i.test(saveColNode.cd) : false;
+  const save = await findSaveIconByPixels(serial, like.y, "reel", onLog);
+  const alreadySaved = false;
 
-  // Structural fallback — mirrors findFeedActionIcons (replit.md rule:
-  // "Feed action-bar icons with no content-desc/resource-id — structural
-  // fallback"). Fires when label matching leaves shareFeed, shareDm, or save
-  // null, i.e. this device/IG build strips content-desc from the Reels column.
-  // Icons stack VERTICALLY in the column (Y ascending = top to bottom):
-  // Comment → shareFeed (Repost) → shareDm (Send/Share) → save. Only trust
-  // the result when an EXACT count is found — ambiguous counts stay null.
-  if (!shareFeed || !shareDm || !save) {
+  // Keep the existing structural fallback for Comment/Repost/Send only.
+  // Save is never inferred from this block; it is always screenshot-matched.
+  if (!shareFeed || !shareDm) {
     // ── Structural fallback A: ViewGroup icon pattern ──
     const vgCandidates = colNodes.filter(n => n.cls === "android.view.ViewGroup" && !n.cd && !n.txt);
     if (!comment && !shareFeed && !shareDm && !save && vgCandidates.length === 4) {
-      onLog?.(`[reel-icons] structural ViewGroup fallback: 4 unlabelled column nodes — assigning Comment/shareFeed/shareDm/save by Y order`);
+      onLog?.(`[reel-icons] structural ViewGroup fallback: 4 unlabelled column nodes — assigning Comment/shareFeed/shareDm by Y order; Save remains visual-only`);
       comment   = pos(vgCandidates[0]);
       shareFeed = pos(vgCandidates[1]);
       shareDm   = pos(vgCandidates[2]);
-      save      = pos(vgCandidates[3]);
     } else if (!comment && !shareFeed && !shareDm && vgCandidates.length === 3) {
       onLog?.(`[reel-icons] structural ViewGroup fallback: 3 unlabelled column nodes — assigning Comment/shareFeed/shareDm by Y order`);
       comment   = pos(vgCandidates[0]);
@@ -4386,11 +4319,10 @@ export async function findReelActionIcons(serial: string, onLog?: (msg: string) 
     if (!shareFeed && !shareDm) {
       const btnCandidates = colNodes.filter(n => n.cls === "android.widget.Button" && !n.cd && !n.txt);
       if (!comment && btnCandidates.length === 4) {
-        onLog?.(`[reel-icons] structural Button fallback: 4 unlabelled Buttons — assigning Comment/shareFeed/shareDm/save by Y order`);
+        onLog?.(`[reel-icons] structural Button fallback: 4 unlabelled Buttons — assigning Comment/shareFeed/shareDm by Y order; Save remains visual-only`);
         comment   = pos(btnCandidates[0]);
         shareFeed = pos(btnCandidates[1]);
         shareDm   = pos(btnCandidates[2]);
-        save      = pos(btnCandidates[3]);
       } else if (!comment && btnCandidates.length === 3) {
         onLog?.(`[reel-icons] structural Button fallback: 3 unlabelled Buttons — assigning Comment/shareFeed/shareDm by Y order`);
         comment   = pos(btnCandidates[0]);
@@ -4403,27 +4335,6 @@ export async function findReelActionIcons(serial: string, onLog?: (msg: string) 
       } else if (btnCandidates.length > 0) {
         onLog?.(`[reel-icons] structural Button fallback: ${btnCandidates.length} candidate(s) — ambiguous count, leaving null`);
       }
-    }
-  }
-
-  // ── Full-screen "floaty" save — some IG builds render the Save button as a
-  // floating element OUTSIDE the right-column (a ribbon or pill near the
-  // bottom of the reel). Scan the entire XML if the column scan missed it.
-  if (!save) {
-    const nodeRe3 = /<node\s([^>]+?)\s*\/?>/g;
-    let fsm: RegExpExecArray | null;
-    while ((fsm = nodeRe3.exec(xml)) !== null) {
-      const a3 = fsm[1];
-      const cd3 = (a3.match(/content-desc="([^"]*)"/) ?? [])[1] ?? "";
-      if (!/^saved?$/i.test(cd3)) continue;
-      const bm3 = a3.match(/bounds="(\[\d+,\d+\]\[\d+,\d+\])"/);
-      if (!bm3) continue;
-      const c3 = _parseCenter(bm3[1]);
-      if (!c3) continue;
-      alreadySaved = /^saved$/i.test(cd3);
-      save = c3;
-      onLog?.(`[reel-icons] save found via full-screen scan (floaty type) at (${c3.x},${c3.y}) cd="${cd3}"`);
-      break;
     }
   }
 
@@ -5911,6 +5822,103 @@ async function findFeedLikeIconByPixels(
     return { x: best.x, y: best.y };
   } catch {
     onLog?.("[feed-icons] Like visual reference unavailable — skipping visual anchor");
+    return null;
+  }
+}
+
+/**
+ * Finds Instagram's Save/bookmark ribbon from the live screenshot.
+ *
+ * The ribbon is optional: ads, embedded videos, and some Reel surfaces do not
+ * render it at all. This function therefore returns null unless the supplied
+ * reference has a strong visual match. Normalized correlation is deliberately
+ * polarity-invariant so black-on-white and white-on-dark themes both work.
+ */
+async function findSaveIconByPixels(
+  serial: string,
+  anchorY: number | null,
+  surface: "feed" | "reel",
+  onLog?: (msg: string) => void,
+): Promise<{ x: number; y: number } | null> {
+  const screen = await _captureScreenPixels(serial);
+  if (!screen || screen.channels < 3) return null;
+  try {
+    const referenceRoots = [
+      path.resolve(process.cwd(), "attached_assets"),
+      path.resolve(path.dirname(path.resolve(process.argv[1] ?? __filename)), "save-icon-refs"),
+    ];
+    let reference: { data: Buffer; width: number; height: number } | null = null;
+    for (const root of referenceRoots) {
+      try {
+        const { data, info } = await sharp(path.join(root, "save_1787133131184.jpg"))
+          .greyscale().raw().toBuffer({ resolveWithObject: true });
+        reference = { data, width: info.width, height: info.height };
+        break;
+      } catch {
+        // Try the next runtime asset root.
+      }
+    }
+    if (!reference) {
+      onLog?.(`[${surface}-icons] Save visual reference unavailable — skipping Save`);
+      return null;
+    }
+
+    const sample = (x: number, y: number): number => {
+      const i = (y * screen.width + x) * screen.channels;
+      return (screen.pixels[i] + screen.pixels[i + 1] + screen.pixels[i + 2]) / 3;
+    };
+    const xMin = Math.round(screen.width * (surface === "feed" ? 0.78 : 0.70));
+    const xMaxRatio = 0.995;
+    const yMin = surface === "feed"
+      ? Math.max(0, Math.round((anchorY ?? screen.height * 0.50) - screen.height * 0.22))
+      : Math.round(screen.height * 0.16);
+    const yMax = surface === "feed"
+      ? Math.min(screen.height, Math.round((anchorY ?? screen.height * 0.50) + screen.height * 0.22))
+      : Math.round(screen.height * 0.86);
+    let best: { x: number; y: number; score: number } | null = null;
+
+    for (const scale of [0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.8, 2.2, 2.7, 3.2, 3.7]) {
+      const tw = Math.max(10, Math.round(reference.width * scale));
+      const th = Math.max(10, Math.round(reference.height * scale));
+      if (tw >= screen.width * 0.30 || th >= screen.height * 0.12) continue;
+      for (let y = yMin; y <= yMax - th; y += 2) {
+        for (let x = xMin; x <= Math.round(screen.width * xMaxRatio) - tw; x += 2) {
+          let screenSum = 0, screenSum2 = 0, refSum = 0, refSum2 = 0, cross = 0, count = 0;
+          for (let ty = 0; ty < reference.height; ty += 2) {
+            for (let tx = 0; tx < reference.width; tx += 2) {
+              const sx = x + Math.min(tw - 1, Math.round(tx * scale));
+              const sy = y + Math.min(th - 1, Math.round(ty * scale));
+              const screenValue = sample(sx, sy);
+              const refValue = reference.data[ty * reference.width + tx];
+              screenSum += screenValue;
+              screenSum2 += screenValue * screenValue;
+              refSum += refValue;
+              refSum2 += refValue * refValue;
+              cross += screenValue * refValue;
+              count++;
+            }
+          }
+          if (count < 100) continue;
+          const screenMean = screenSum / count;
+          const refMean = refSum / count;
+          const screenVariance = Math.max(1, screenSum2 / count - screenMean * screenMean);
+          const refVariance = Math.max(1, refSum2 / count - refMean * refMean);
+          const covariance = cross / count - screenMean * refMean;
+          const score = 0.5 + Math.abs(covariance / Math.sqrt(screenVariance * refVariance)) * 0.5;
+          if (score > (best?.score ?? 0.86)) {
+            best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), score };
+          }
+        }
+      }
+    }
+    if (!best || best.score < 0.86) {
+      onLog?.(`[${surface}-icons] Save visual reference not matched — skipping Save`);
+      return null;
+    }
+    onLog?.(`[${surface}-icons] Save visual icon matched at (${best.x},${best.y}) score=${best.score.toFixed(3)}`);
+    return { x: best.x, y: best.y };
+  } catch {
+    onLog?.(`[${surface}-icons] Save visual matcher failed — skipping Save`);
     return null;
   }
 }

@@ -6919,31 +6919,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               if (_veColIcons) {
                 icons = { ...icons, shareFeed: _veColIcons.shareFeed, shareDm: _veColIcons.shareDm };
               }
-              // Save: findFeedActionIcons already ran a global scan for
-              // row_feed_button_save / "Add to Saved". If still null, try a
-              // broader heuristic: any clickable node in the right column
-              // (x > 80% screen) whose rid or content-desc matches
-              // save|bookmark.
-              if (!icons.save) {
-                const _veXml2 = await android.dumpUi(serial).catch(() => "");
-                const _veSaveRe2 = /<node\s([^>]+?)\s*\/?>/g;
-                let _veSmatch2: RegExpExecArray | null;
-                while ((_veSmatch2 = _veSaveRe2.exec(_veXml2)) !== null) {
-                  const _veA2 = _veSmatch2[1];
-                  const _veB2 = _veA2.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-                  if (!_veB2) continue;
-                  const _veCx2 = Math.round((+_veB2[1] + +_veB2[3]) / 2);
-                  const _veCy2 = Math.round((+_veB2[2] + +_veB2[4]) / 2);
-                  if (_veCx2 <= Math.round(w * 0.80)) continue; // must be in right column
-                  const _veCd2  = (_veA2.match(/content-desc="([^"]*)"/) || [])[1] ?? "";
-                  const _veRid2 = (_veA2.match(/resource-id="([^"]*)"/)  || [])[1] ?? "";
-                  if (/save|bookmark/i.test(_veCd2) || /save|bookmark/i.test(_veRid2)) {
-                    icons = { ...icons, save: { x: _veCx2, y: _veCy2 } };
-                    onLog?.(`[view-explore] save found in right column at (${_veCx2},${_veCy2}) via cd="${_veCd2}" rid="${_veRid2}"`);
-                    break;
-                  }
-                }
-              }
+              // Save remains null unless the shared screenshot matcher found
+              // the attached ribbon icon. Never restore an accessibility or
+              // positional Save fallback for the vertical Reel layout.
             }
 
             if (!icons) {
