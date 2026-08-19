@@ -66,6 +66,9 @@ const execAsync = promisify(exec);
 
 let serverPort = 0;
 let serverProc: ChildProcess | null = null;
+let serverExited = true;
+let serverExitCode: number | null = null;
+let serverExitSignal: NodeJS.Signals | null = null;
 let databaseDirWatcher: fs.FSWatcher | null = null;
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -333,6 +336,9 @@ function startServer(port: number, logPath: string, ebIpcPort = 0): void {
       EQUINOX_DATA_DIR: getUserDataPath(),
     },
   });
+  serverExited = false;
+  serverExitCode = null;
+  serverExitSignal = null;
 
   // Open fresh log file (flags:"w") and write a session-start marker so sessions
   // are clearly separated even when multiple log files are present.
@@ -371,6 +377,9 @@ function startServer(port: number, logPath: string, ebIpcPort = 0): void {
     logStream.write(`[${new Date().toISOString()}] [DB-WATCH] failed path=${dbPath} error=${String(error)}\n`);
   }
   serverProc.on("exit", (code, signal) => {
+    serverExited = true;
+    serverExitCode = code;
+    serverExitSignal = signal;
     const codeHex = typeof code === "number" ? `0x${(code >>> 0).toString(16).toUpperCase().padStart(8, "0")}` : "n/a";
     const exitMeaning = code === 0xC0000005
       ? "STATUS_ACCESS_VIOLATION/native access violation"
@@ -1144,6 +1153,15 @@ async function createWindow() {
   app.on("child-process-gone", (_e, details) => {
     appendToMainLog(`CHILD PROCESS GONE: type=${details.type} reason=${details.reason} exitCode=${details.exitCode}`);
   });
+  win?.webContents.on("unresponsive", () => {
+    appendToMainLog("WINDOW UNRESPONSIVE");
+  });
+  win?.webContents.on("responsive", () => {
+    appendToMainLog("WINDOW RESPONSIVE");
+  });
+  win?.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    appendToMainLog(`WINDOW DID FAIL LOAD code=${errorCode} description=${errorDescription} url=${validatedURL} mainFrame=${isMainFrame}`);
+  });
 
   serverPort = await getServerPort();
 
@@ -1315,7 +1333,9 @@ async function createWindow() {
         arch: process.arch,
         electronPid: process.pid,
         apiPid: serverProc?.pid ?? null,
-        apiRunning: Boolean(serverProc && !serverProc.killed),
+        apiRunning: Boolean(serverProc && !serverExited),
+        apiExitCode: serverExitCode,
+        apiExitSignal: serverExitSignal,
         uptimeSeconds: process.uptime(),
         memory: process.memoryUsage(),
       },
@@ -1324,7 +1344,7 @@ async function createWindow() {
         logs: _mainLogPath || null,
       },
       recentMainLog: readTail(_mainLogPath || path.join(process.cwd(), "logs.log")),
-      recentApiLog: serverProc ? readTail(path.join(getUserDataPath(), "server.log")) : "",
+      recentApiLog: _serverDebugLogPath ? readTail(_serverDebugLogPath) : "",
     };
     try {
       fs.mkdirSync(downloadsDir, { recursive: true });
