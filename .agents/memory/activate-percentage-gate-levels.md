@@ -29,3 +29,9 @@ Users chance per-user (wrong) or make Inject Browsing chance per-cycle
 explicit about which level it belongs to, and default new per-execution
 Activate Percentage fields to 100/100 (always run) so upgrades don't
 silently start skipping already-enabled tools for existing users.
+
+Pre-switch actions use a separate combined-workload quota: the sampled
+percentage selects the number of activated non-Follow tools that may run, and
+the same percentage scales the selected tools' configured counts. It must not
+run every tool and only shrink inner counts, because minimum-one clamps make
+that exceed the configured percentage.

@@ -12346,8 +12346,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               });
             } else if (preTool === "stories") {
               await runViewStoriesFromFeedLoop(serial, {
-                slidesMin: viewStoriesSlidesMin,
-                slidesMax: viewStoriesSlidesMax,
+                slidesMin: scaled(viewStoriesSlidesMin),
+                slidesMax: scaled(viewStoriesSlidesMax),
                 slideWatchPctMin: viewStoriesSlideWatchPctMin,
                 slideWatchPctMax: viewStoriesSlideWatchPctMax,
                 likePercentMin: viewStoriesLikePercentMin,
@@ -12365,8 +12365,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               });
             } else if (preTool === "reels") {
               await runViewReelsLoop(serial, {
-                scrollMin: viewReelsScrollMin,
-                scrollMax: viewReelsScrollMax,
+                scrollMin: scaled(viewReelsScrollMin),
+                scrollMax: scaled(viewReelsScrollMax),
                 watchPctMin: viewReelsWatchPctMin,
                 watchPctMax: viewReelsWatchPctMax,
                 likePercentMin: viewReelsLikePercentMin,
@@ -12386,8 +12386,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               });
             } else if (preTool === "checkDm") {
               await runCheckDmLoop(serial, {
-                scrollMin: checkDmScrollMin,
-                scrollMax: checkDmScrollMax,
+                scrollsMin: scaled(checkDmScrollMin),
+                scrollsMax: scaled(checkDmScrollMax),
                 clickPctMin: checkDmClickPctMin,
                 clickPctMax: checkDmClickPctMax,
                 onLog: (msg) => tLog(`  ${msg}`),
@@ -12397,8 +12397,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               });
             } else if (preTool === "post") {
               await runMakePostStep(serial, {
-                perSessionMin: Math.max(1, Math.round(makePostPerSessionMin * preSwitchToolPercent)),
-                perSessionMax: Math.max(1, Math.round(makePostPerSessionMax * preSwitchToolPercent)),
                 addLocation: makePostAddLocation,
                 alterationEnabled: makePostAlterationEnabled,
                 alterationLevel: makePostAlterationLevel,
