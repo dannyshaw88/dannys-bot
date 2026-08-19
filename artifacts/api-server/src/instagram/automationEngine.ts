@@ -189,10 +189,10 @@ function hourStr()     { return new Date().toISOString().slice(0, 13); }
 // ── Engine file logger — writes to /tmp/engine.log so it's always greppable ──
 import * as fs from "fs";
 const ENGINE_LOG_FILE = "/tmp/engine.log";
-// The browser automation engine is legacy and must not start alongside the
-// current Android/mobile engine. Keep the opt-in explicit so a normal desktop
-// launch cannot resurrect browser sessions from old account settings.
-const LEGACY_AUTOMATION_ENGINE_ENABLED = process.env.ENABLE_LEGACY_AUTOMATION_ENGINE === "true";
+// The browser automation engine is permanently disabled. The current Android/
+// mobile engine owns automation; old browser/API sessions must not be
+// resurrected by startup settings or manual legacy routes.
+const LEGACY_AUTOMATION_ENGINE_ENABLED = false;
 function engineLog(level: "INFO" | "WARN" | "ERROR", msg: string): void {
   const line = `[${new Date().toISOString()}] [${level}] ${msg}\n`;
   process.stderr.write(line);
