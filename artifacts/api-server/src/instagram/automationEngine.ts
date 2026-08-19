@@ -189,6 +189,10 @@ function hourStr()     { return new Date().toISOString().slice(0, 13); }
 // ── Engine file logger — writes to /tmp/engine.log so it's always greppable ──
 import * as fs from "fs";
 const ENGINE_LOG_FILE = "/tmp/engine.log";
+// The browser automation engine is legacy and must not start alongside the
+// current Android/mobile engine. Keep the opt-in explicit so a normal desktop
+// launch cannot resurrect browser sessions from old account settings.
+const LEGACY_AUTOMATION_ENGINE_ENABLED = process.env.ENABLE_LEGACY_AUTOMATION_ENGINE === "true";
 function engineLog(level: "INFO" | "WARN" | "ERROR", msg: string): void {
   const line = `[${new Date().toISOString()}] [${level}] ${msg}\n`;
   process.stderr.write(line);
@@ -640,6 +644,10 @@ class AutomationEngine {
 
   // ── Lifecycle ────────────────────────────────────────────────────────────
   start() {
+    if (!LEGACY_AUTOMATION_ENGINE_ENABLED) {
+      engineLog("INFO", "Legacy browser automation engine disabled; mobile engine owns automation");
+      return;
+    }
     this._beginAcquireLoop();
     const release = () => this._releaseLockSync();
     process.once("exit", release);
@@ -647,7 +655,10 @@ class AutomationEngine {
     process.once("SIGINT", release);
   }
 
-  triggerReconcile() { this.reconcile().catch(() => {}); }
+  triggerReconcile() {
+    if (!LEGACY_AUTOMATION_ENGINE_ENABLED) return;
+    this.reconcile().catch(() => {});
+  }
 
   private async restoreResumingAccounts(): Promise<void> {
     try {
@@ -7355,6 +7366,7 @@ class AutomationEngine {
   // next 10-second tick instead of waiting out the 30-60 min interval.
   // If no runner exists yet, kick off an immediate reconcile to launch one.
   triggerHumanSession(profileId: number) {
+    if (!LEGACY_AUTOMATION_ENGINE_ENABLED) return;
     const state = this.humanSessionStates.get(profileId);
     if (state) {
       // Runner is alive — reset its session timer and wake it from the idle sleep
@@ -7374,6 +7386,7 @@ class AutomationEngine {
   // Immediately kicks off a reconcile so the runner starts without waiting
   // up to 10 seconds for the scheduled interval.
   triggerUnfollow(profileId: number) {
+    if (!LEGACY_AUTOMATION_ENGINE_ENABLED) return;
     if (!this.unfollowStates.has(profileId)) {
       this.reconcile().catch(() => {});
     }
@@ -7381,6 +7394,7 @@ class AutomationEngine {
 
   // Called when a follow tool is explicitly enabled from the UI.
   triggerFollow(profileId: number) {
+    if (!LEGACY_AUTOMATION_ENGINE_ENABLED) return;
     if (this.states.has(profileId)) {
       // Runner is sleeping between sessions — wake it up immediately (within 1s)
       this.followForceRun.add(profileId);
@@ -7413,6 +7427,7 @@ class AutomationEngine {
   // Stops the existing runner (if any) so the next reconcile re-launches it
   // from scratch, respecting the startup wait + staggerOffsetMins from DB.
   restartColdWithWait(profileId: number, toolType: string) {
+    if (!LEGACY_AUTOMATION_ENGINE_ENABLED) return;
     if (toolType === "follow") {
       const state = this.states.get(profileId);
       if (state) { state.stop.stopped = true; this.states.delete(profileId); }
@@ -7433,6 +7448,7 @@ class AutomationEngine {
   // If the runner is already sleeping between sessions, it wakes within 1 second.
   // If the runner is not active, starts it immediately via reconcile.
   forceFollowNow(profileId: number) {
+    if (!LEGACY_AUTOMATION_ENGINE_ENABLED) return;
     if (this.states.has(profileId)) {
       this.followForceRun.add(profileId);
     } else {
@@ -7445,6 +7461,7 @@ class AutomationEngine {
   // If the runner is already active, it wakes on the next 5s poll.
   // If not active, triggers a reconcile to start it.
   triggerContactSend(profileId: number) {
+    if (!LEGACY_AUTOMATION_ENGINE_ENABLED) return;
     if (this.contactStates.has(profileId)) {
       this.contactForceRun.add(profileId);
     } else {
@@ -7564,6 +7581,7 @@ class AutomationEngine {
 
   // ── Cookie baker: trigger immediate run ──────────────────────────────────
   triggerCookieBakerNow(profileId: number) {
+    if (!LEGACY_AUTOMATION_ENGINE_ENABLED) return;
     this.cookieBakerForceRun.add(profileId);
     this.triggerReconcile();
   }
@@ -7896,6 +7914,7 @@ class AutomationEngine {
   }
 
   getStatus(): { profileId: number; loggedIn: boolean; dailyCount: number; hourlyCount: number; dailyUnfollowCount: number; dailyDmCount: number; nextHumanSessionAt: number; nextFollowAt: number; nextContactAt: number; nextUnfollowAt: number }[] {
+    if (!LEGACY_AUTOMATION_ENGINE_ENABLED) return [];
     // Collect every profileId that has at least one active runner
     const allIds = new Set<number>([
       ...this.states.keys(),
