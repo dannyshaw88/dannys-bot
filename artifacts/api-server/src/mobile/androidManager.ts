@@ -7471,9 +7471,11 @@ async function findHomeTabInternal(serial: string): Promise<{ x: number; y: numb
           // Absolute correlation accepts both black-on-white and
           // white-on-dark Instagram themes.
           const score = 0.5 + Math.abs(covariance / Math.sqrt(screenVariance * refVariance)) * 0.5;
-            // Use the same strong initial gate as the reliable Feed heart
-            // detector, so background lookalikes never become candidates.
-            if (score > (best?.score ?? 0.86)) {
+            // Retain the actual best visual candidate so borderline device
+            // renders are diagnosable. The explicit final 0.72 gate below is
+            // the safety decision; do not turn every sub-threshold result
+            // into an opaque `best: null`.
+            if (score > (best?.score ?? -Infinity)) {
              best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), score, scale };
           }
         }
