@@ -7368,12 +7368,15 @@ export async function findHomeTab(serial: string): Promise<{ x: number; y: numbe
       path.resolve(path.dirname(path.resolve(process.argv[1] ?? __filename)), "home-icon-refs"),
     ];
     let reference: { data: Buffer; width: number; height: number; source: string } | null = null;
+    const referenceNames = ["home_1787131461428.jpg", "home-icon-reference.svg"];
     for (const root of referenceRoots) {
-      try {
-        const { data, info } = await sharp(path.join(root, "home_1787131461428.jpg"))
-          .greyscale()
-          .raw()
-          .toBuffer({ resolveWithObject: true });
+      for (const referenceName of referenceNames) {
+        try {
+          const referencePath = path.join(root, referenceName);
+          const { data, info } = await sharp(referencePath)
+            .greyscale()
+            .raw()
+            .toBuffer({ resolveWithObject: true });
         // The uploaded reference is a 32x32 screenshot crop, but the house
         // itself occupies only the central ~21x21 pixels. Matching the whole
         // crop makes the white/blank border dominate the correlation and can
@@ -7390,20 +7393,22 @@ export async function findHomeTab(serial: string): Promise<{ x: number; y: numbe
           }
         }
         if (maxX < minX || maxY < minY) {
-          logger.warn({ serial, source: path.join(root, "home_1787131461428.jpg") }, "[home-tab] reference contains no glyph pixels");
-          return null;
-        }
+            logger.warn({ serial, source: referencePath }, "[home-tab] reference contains no glyph pixels");
+            return null;
+          }
         const width = maxX - minX + 1;
         const height = maxY - minY + 1;
         const cropped = Buffer.alloc(width * height);
         for (let y = 0; y < height; y++) {
           data.copy(cropped, y * width, (minY + y) * info.width + minX, (minY + y) * info.width + minX + width);
         }
-        reference = { data: cropped, width, height, source: path.join(root, "home_1787131461428.jpg") };
-        break;
-      } catch {
-        // Try the next known runtime asset root.
+          reference = { data: cropped, width, height, source: referencePath };
+          break;
+        } catch {
+          // Try the next known reference name or runtime asset root.
+        }
       }
+      if (reference) break;
     }
     if (!reference) {
       logger.warn({ serial, referenceRoots }, "[home-tab] visual reference unavailable");

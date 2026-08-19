@@ -92,11 +92,18 @@ const homeIconReferenceName = "home_1787131461428.jpg";
 const homeIconReferenceTarget = path.join(dist, "server", "home-icon-refs");
 await mkdir(homeIconReferenceTarget, { recursive: true });
 const homeIconSource = path.join(searchReferenceSource, homeIconReferenceName);
-if (!existsSync(homeIconSource)) {
+const bundledHomeIconSource = path.join(__dirname, "assets", "home-icon-reference.svg");
+if (existsSync(homeIconSource)) {
+  await cp(homeIconSource, path.join(homeIconReferenceTarget, homeIconReferenceName));
+} else if (existsSync(bundledHomeIconSource)) {
+  await cp(bundledHomeIconSource, path.join(homeIconReferenceTarget, "home-icon-reference.svg"));
+} else {
   throw new Error(`Required Home icon reference is missing: ${homeIconSource}`);
 }
-await cp(homeIconSource, path.join(homeIconReferenceTarget, homeIconReferenceName));
-if (!existsSync(path.join(homeIconReferenceTarget, homeIconReferenceName))) {
+if (
+  !existsSync(path.join(homeIconReferenceTarget, homeIconReferenceName)) &&
+  !existsSync(path.join(homeIconReferenceTarget, "home-icon-reference.svg"))
+) {
   throw new Error(`Home icon reference was not copied to: ${homeIconReferenceTarget}`);
 }
 
