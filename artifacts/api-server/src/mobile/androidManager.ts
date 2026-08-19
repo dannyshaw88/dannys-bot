@@ -7354,7 +7354,9 @@ export async function removeDeviceFile(serial: string, devicePath: string): Prom
  * the View Feed Like icon detector. The search is limited to the left side of
  * the bottom navigation row; there is no coordinate fallback.
  */
-export async function findHomeTab(serial: string): Promise<{ x: number; y: number } | null> {
+const homeTabMatchesInFlight = new Map<string, Promise<{ x: number; y: number } | null>>();
+
+async function findHomeTabInternal(serial: string): Promise<{ x: number; y: number } | null> {
   const screen = await _captureScreenPixels(serial);
   if (!screen || screen.channels < 3) {
     logger.warn({ serial }, "[home-tab] screenshot capture/decode failed");
@@ -7446,6 +7448,8 @@ export async function findHomeTab(serial: string): Promise<{ x: number; y: numbe
           }
         }
       }
+      // Do not let a full Home-region scan monopolize the API process.
+      await new Promise<void>(resolve => setImmediate(resolve));
       // Give screenshot polling, request handling, and cancellation a chance
       // to run between scale bands. The detector remains one logical lookup,
       // but never monopolizes the Node event loop for the entire scan.
@@ -8796,6 +8800,26 @@ function _findAllElems(xml: string, ...candidates: string[]): Array<{ x: number;
     }
   }
   return results.sort((a, b) => a.y - b.y);
+}
+
+/**
+ * Serialize Home detection per device. Several safety gates can ask whether
+ * Instagram is on Home at the same time; they must share one screenshot/scan
+ * instead of concurrently entering the native screenshot and pixel paths.
+ */
+export async function findHomeTab(serial: string): Promise<{ x: number; y: number } | null> {
+  const existing = homeTabMatchesInFlight.get(serial);
+  if (existing) return existing;
+
+  const current = findHomeTabInternal(serial);
+  homeTabMatchesInFlight.set(serial, current);
+  try {
+    return await current;
+  } finally {
+    if (homeTabMatchesInFlight.get(serial) === current) {
+      homeTabMatchesInFlight.delete(serial);
+    }
+  }
 }
 
 /** Find an element by partial resource-id match (e.g. "fab", "hostname"). */
