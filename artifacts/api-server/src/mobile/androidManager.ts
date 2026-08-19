@@ -7385,6 +7385,8 @@ export async function removeDeviceFile(serial: string, devicePath: string): Prom
  * the bottom navigation row; there is no coordinate fallback.
  */
 const homeTabMatchesInFlight = new Map<string, Promise<{ x: number; y: number } | null>>();
+type HomeReference = { data: Buffer; width: number; height: number; source: string };
+const homeReferenceCache = new Map<string, HomeReference>();
 
 async function findHomeTabInternal(serial: string): Promise<{ x: number; y: number } | null> {
   const screen = await _captureScreenPixels(serial);
@@ -7399,12 +7401,17 @@ async function findHomeTabInternal(serial: string): Promise<{ x: number; y: numb
       // Packaged Electron build: build.mjs ships this beside the API bundle.
       path.resolve(path.dirname(path.resolve(process.argv[1] ?? __filename)), "home-icon-refs"),
     ];
-    let reference: { data: Buffer; width: number; height: number; source: string } | null = null;
+    let reference: HomeReference | null = null;
     const referenceNames = ["home_1787131461428.jpg", "home-icon-reference.svg"];
     for (const root of referenceRoots) {
       for (const referenceName of referenceNames) {
         try {
           const referencePath = path.join(root, referenceName);
+          const cached = homeReferenceCache.get(referencePath);
+          if (cached) {
+            reference = cached;
+            break;
+          }
           const { data, info } = await sharp(referencePath)
             .greyscale()
             .raw()
@@ -7412,6 +7419,7 @@ async function findHomeTabInternal(serial: string): Promise<{ x: number; y: numb
           // Keep the complete screenshot crop. This is deliberately the same
           // template treatment used by the reliable View Feed heart matcher.
           reference = { data, width: info.width, height: info.height, source: referencePath };
+          homeReferenceCache.set(referencePath, reference);
           break;
         } catch {
           // Try the next known reference name or runtime asset root.

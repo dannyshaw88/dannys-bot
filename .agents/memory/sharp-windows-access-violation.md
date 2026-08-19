@@ -8,3 +8,5 @@ On Windows, a packaged API access violation (`0xC0000005`) can occur while mobil
 **Why:** Confirmed API child crashes occurred with `apiExitCode=3221225477` after sustained screencap traffic; one diagnostic also showed a 20.6-second Node event-loop stall immediately before a screencap request failed.
 
 **How to apply:** Keep Sharp concurrency at one, disable its native cache, serialize visual screenshot decodes, and bound/yield any synchronous screen-pixel search. Recheck every new visual detector for CPU cost and package the Electron bundle before testing.
+
+Cache decoded visual reference templates instead of re-decoding the same JPG/SVG during every device lookup; repeated reference-image Sharp calls add native pressure without improving detection.
