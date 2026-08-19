@@ -12270,7 +12270,32 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             exploreScrolled,
           };
           const preSwitchToolSeq = _toolSeq.filter(tool => tool !== "follow" && !String(tool).startsWith("follow_spread:"));
-          for (const preTool of preSwitchToolSeq) {
+          // Pre-switch percentage is a quota for the combined pre-switch
+          // workload, not merely a multiplier for counts inside every tool.
+          // The old behavior ran every activated tool and only reduced its
+          // inner count; Math.max(1, ...) then made low percentages run at
+          // least one action per tool, so the configured percentage was
+          // routinely exceeded.
+          const preSwitchToolCount = Math.min(
+            preSwitchToolSeq.length,
+            Math.max(0, Math.round(preSwitchToolSeq.length * preSwitchToolPercent)),
+          );
+          const preSwitchSelectedTools = (() => {
+            if (preSwitchToolCount >= preSwitchToolSeq.length) return preSwitchToolSeq;
+            if (preSwitchToolCount <= 0) return [] as string[];
+            const ranked = preSwitchToolSeq
+              .map((tool, index) => ({ tool, index, random: Math.random() }))
+              .sort((a, b) => a.random - b.random)
+              .slice(0, preSwitchToolCount)
+              .sort((a, b) => a.index - b.index);
+            return ranked.map(({ tool }) => tool);
+          })();
+          tLog(
+            `▶ Pre-switch quota: ${Math.round(preSwitchToolPercent * 100)}% — ` +
+            `${preSwitchSelectedTools.length}/${preSwitchToolSeq.length} tools selected` +
+            (preSwitchSelectedTools.length ? ` (${preSwitchSelectedTools.map(tool => _toolOrderLabels[tool] ?? tool).join(" → ")})` : ""),
+          );
+          for (const preTool of preSwitchSelectedTools) {
             if (isCycleAborted(serial)) break;
             if (preTool === "follow" || String(preTool).startsWith("follow_spread:")) continue;
             if (!_toolActivated[preTool]) continue;
@@ -12285,7 +12310,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               "Random Actions": "Random Actions",
             } as Record<string, string>)[preTool] ?? preTool);
             tLog(`▶ Pre-switch dispatch: ${_toolOrderLabels[preTool] ?? preTool}`);
-            const scaled = (n: number) => Math.max(1, Math.round(n * preSwitchToolPercent));
+            const scaled = (n: number) => Math.max(0, Math.floor(n * preSwitchToolPercent));
             if (preTool === "feed") {
               await runCheckFeedLoop(serial, {
                 count: scaled(Math.max(feedScrollMin, 1)),
