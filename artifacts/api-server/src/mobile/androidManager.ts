@@ -8198,6 +8198,86 @@ async function isKeyboardEmojiPickerOpen(serial: string): Promise<boolean> {
 }
 
 /**
+ * Detect and dismiss Instagram's account restriction screen.
+ *
+ * Instagram can show this surface before the feed renders or immediately after
+ * an account switch. It blocks the rest of the automation flow, so do not
+ * continue by guessing at underlying feed coordinates. The close control is
+ * selected from the live accessibility tree and must be confirmed gone before
+ * returning.
+ */
+export async function dismissInstagramAccountRestriction(
+  serial: string,
+  onLog?: (msg: string) => void,
+): Promise<boolean> {
+  const adbPath = findAdbPath();
+  if (!adbPath) return false;
+  const screen = getScreenSize(serial);
+  const isRestriction = (xml: string) => {
+    const lower = xml.toLowerCase();
+    return lower.includes("what happened") &&
+      (lower.includes("restriction") ||
+        lower.includes("can't share links") ||
+        lower.includes("cannot share links"));
+  };
+  const findClose = (xml: string): { x: number; y: number; label: string } | null => {
+    const candidates: Array<{ x: number; y: number; label: string; score: number }> = [];
+    const nodeRe = /<node\b([^>]*)>/gi;
+    let match: RegExpExecArray | null;
+    while ((match = nodeRe.exec(xml)) !== null) {
+      const attrs = match[1];
+      const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+      if (!bounds) continue;
+      const x1 = Number(bounds[1]), y1 = Number(bounds[2]);
+      const x2 = Number(bounds[3]), y2 = Number(bounds[4]);
+      const x = Math.round((x1 + x2) / 2);
+      const y = Math.round((y1 + y2) / 2);
+      if (y > screen.h * 0.24 || x < screen.w * 0.68) continue;
+      const label = [
+        attrs.match(/\btext="([^"]*)"/i)?.[1] ?? "",
+        attrs.match(/content-desc="([^"]*)"/i)?.[1] ?? "",
+        attrs.match(/resource-id="([^"]*)"/i)?.[1] ?? "",
+      ].join(" ").trim();
+      const lower = label.toLowerCase();
+      let score = 0;
+      if (/close|dismiss|cancel/.test(lower)) score += 100;
+      if (label === "X" || label === "x" || label.includes("×")) score += 120;
+      if (/clickable="true"/i.test(attrs)) score += 20;
+      if (x > screen.w * 0.82) score += 20;
+      if (score > 0) candidates.push({ x, y, label, score });
+    }
+    candidates.sort((a, b) => b.score - a.score || b.x - a.x);
+    const best = candidates[0];
+    return best ? { x: best.x, y: best.y, label: best.label } : null;
+  };
+
+  const firstXml = await getUiDump(serial).catch(() => "");
+  if (!isRestriction(firstXml)) return false;
+
+  onLog?.("⚠ Instagram account restriction screen detected — pausing before dismissal");
+  const close = findClose(firstXml);
+  if (!close) {
+    onLog?.("⚠ Restriction screen detected, but its top-right X was not exposed by accessibility — pausing flow");
+    return false;
+  }
+
+  onLog?.(`  ↳ Restriction close control found at (${close.x},${close.y}) label=${JSON.stringify(close.label)} — tapping`);
+  await _adbTapAsync(adbPath, serial, close.x, close.y);
+
+  const deadline = Date.now() + 7000;
+  while (Date.now() < deadline) {
+    await _sleep(500);
+    const afterXml = await getUiDump(serial).catch(() => "");
+    if (!isRestriction(afterXml)) {
+      onLog?.("  ✓ Restriction screen closed and confirmed — continuing flow");
+      return true;
+    }
+  }
+  onLog?.("⚠ Restriction screen remained visible after tapping X — pausing flow");
+  return false;
+}
+
+/**
  * Switches the active Instagram account to the one matching `username` by
  * triggering Instagram's built-in account switcher:
  *   1. Tap the profile tab once to open the active account profile
@@ -8231,6 +8311,19 @@ export async function switchToInstagramAccount(
   if (!adbPath) { onLog?.("  ⚠ ADB not found — cannot switch account"); return false; }
 
   const clean = username.replace(/^@/, "").trim();
+
+  // A restriction surface can be left over from the previous account or
+  // appear while Instagram is restoring its session. Clear it before looking
+  // for the Profile tab; otherwise every subsequent tap is blocked.
+  const restrictionAtSwitchStart = await dismissInstagramAccountRestriction(serial, onLog);
+  if (!restrictionAtSwitchStart) {
+    const restrictionCheck = await getUiDump(serial).catch(() => "");
+    const restrictionLower = restrictionCheck.toLowerCase();
+    if (restrictionLower.includes("what happened") &&
+        (restrictionLower.includes("restriction") || restrictionLower.includes("can't share links"))) {
+      return false;
+    }
+  }
 
   // 1. Find the profile tab.
   //    Try the preloaded XML first (same screen state, no extra dump needed).
@@ -8593,6 +8686,15 @@ export async function switchToInstagramAccount(
   // already-active account, Instagram can leave the account sheet open; in
   // that one case, dismiss it with exactly one Android Back. Never retry Back.
    await _sleep(1500 + Math.floor(Math.random() * 3501));
+   const restrictionAfterSwitch = await dismissInstagramAccountRestriction(serial, onLog);
+   if (!restrictionAfterSwitch) {
+     const restrictionCheck = await getUiDump(serial).catch(() => "");
+     const restrictionLower = restrictionCheck.toLowerCase();
+     if (restrictionLower.includes("what happened") &&
+         (restrictionLower.includes("restriction") || restrictionLower.includes("can't share links"))) {
+       return false;
+     }
+   }
   const postTapXml = await _uiDump(adbPath, serial).catch(() => "");
   if (postTapXml) {
     const homeFeedVisible =

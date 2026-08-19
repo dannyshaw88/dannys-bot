@@ -12192,6 +12192,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       } else {
         tLog("▶ No launch popup — feed ready");
       }
+      const launchRestrictionDismissed = await android.dismissInstagramAccountRestriction(serial, tLog).catch(() => false);
+      if (launchRestrictionDismissed) {
+        steps.push("account-restriction-dismissed");
+        await sleepOrAbort(serial, 700);
+      } else {
+        const restrictionCheck = await android.getUiDump(serial).catch(() => "");
+        const restrictionLower = restrictionCheck.toLowerCase();
+        if (restrictionLower.includes("what happened") &&
+            (restrictionLower.includes("restriction") || restrictionLower.includes("can't share links"))) {
+          tLog("✗ Account restriction screen remains open and could not be safely dismissed — pausing cycle");
+          steps.push("account-restriction-unresolved");
+          throw new Error("Instagram account restriction screen could not be dismissed safely");
+        }
+      }
       // Instagram can expose the feed in the accessibility tree before the
       // first feed render has finished. Give the launch screen a few seconds
       // to settle before account switching or any tool taps begin.
