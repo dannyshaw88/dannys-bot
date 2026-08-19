@@ -717,9 +717,8 @@ const FOLDER_PATHS_DIR: string = process.env.EQUINOX_DATA_DIR
 try { fs.mkdirSync(FOLDER_PATHS_DIR, { recursive: true }); } catch { /* already exists */ }
 
 // Debug screenshots — one folder per public device model, cleared when a new
-// account's Human Session cycle starts. Every timestamped cycle-log line gets
-// its own screenshot, named by Unix timestamp so the frames sort chronologically
-// and can be played back like a movie.
+// account's Human Session cycle starts. Each elapsed timestamp gets exactly one
+// screenshot; detail lines stamped with the same elapsed time are log-only.
 const SCREENSHOTS_DIR: string = process.env.EQUINOX_DATA_DIR
   ? path.join(process.env.EQUINOX_DATA_DIR, "debug-screenshots")
   : path.join(path.dirname(path.resolve(process.argv[1] ?? ".")), "..", "debug-screenshots");
@@ -732,6 +731,7 @@ const DEBUG_LOG_BUFFER_SIZE = 40;
 // ADB screencap calls must be serialized per device. Without this queue, rapid
 // log lines start overlapping child processes and some frames never get saved.
 const debugScreenshotQueues = new Map<string, Promise<void>>();
+const debugScreenshotTimestamps = new Map<string, Set<string>>();
 
 function pushDebugLogLine(serial: string, line: string): void {
   let buf = debugLogBuffer.get(serial);
@@ -864,7 +864,15 @@ async function captureDebugScreenshot(serial: string, label: string): Promise<vo
   }
 }
 
-function queueDebugScreenshot(serial: string, label: string): void {
+function queueDebugScreenshot(serial: string, timestamp: string, label: string): void {
+  let capturedTimestamps = debugScreenshotTimestamps.get(serial);
+  if (!capturedTimestamps) {
+    capturedTimestamps = new Set<string>();
+    debugScreenshotTimestamps.set(serial, capturedTimestamps);
+  }
+  if (capturedTimestamps.has(timestamp)) return;
+  capturedTimestamps.add(timestamp);
+
   const previous = debugScreenshotQueues.get(serial) ?? Promise.resolve();
   const next = previous
     .catch(() => {})
@@ -11962,10 +11970,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Push into the rolling buffer BEFORE capturing so the composite always
       // includes the current line in the log panel on the right.
       pushDebugLogLine(serial, fullLine);
-      // Every timestamped log line is a frame boundary. The capture is queued
-      // so no detail/status line is silently dropped when several arrive close
-      // together.
-      queueDebugScreenshot(serial, fullLine);
+      // One frame per elapsed timestamp. Detail/status lines emitted during
+      // the same timestamp remain in the rolling log panel but do not start
+      // additional ADB/Sharp screenshot work.
+      queueDebugScreenshot(serial, elapsed, fullLine);
     };
     try {
       const parsedCycle = automationCycleSchema.parse(req.body);
@@ -12126,6 +12134,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         path.join(SCREENSHOTS_DIR, getDeviceLabel(serial)),
         { recursive: true, force: true },
       ).catch(() => {});
+      debugScreenshotTimestamps.delete(serial);
 
       // 1. Power on the phone.
       tLog("▶ Waking screen…");

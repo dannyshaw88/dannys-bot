@@ -96,3 +96,4 @@
 - [Per-device mother-code personality](per-device-mother-code-personality.md) — derive stable timing and gesture accents from serial while preserving per-action randomness and saved profile bounds
 - [Diagnostic API liveness](diagnostic-api-liveness.md) — child object presence and ChildProcess.killed do not prove the API is alive; track exit state and read the configured log
 - [Sharp Windows access violations](sharp-windows-access-violation.md) — serialize native Sharp screenshot decoding and keep libvips concurrency/cache conservative under multi-device polling
+- [Debug screenshot timestamp dedupe](debug-screenshot-timestamp-dedupe.md) — capture one composite per elapsed log timestamp; same-timestamp detail lines stay log-only
