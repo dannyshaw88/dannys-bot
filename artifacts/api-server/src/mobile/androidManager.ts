@@ -7377,32 +7377,9 @@ export async function findHomeTab(serial: string): Promise<{ x: number; y: numbe
             .greyscale()
             .raw()
             .toBuffer({ resolveWithObject: true });
-        // The uploaded reference is a 32x32 screenshot crop, but the house
-        // itself occupies only the central ~21x21 pixels. Matching the whole
-        // crop makes the white/blank border dominate the correlation and can
-        // reject the real icon when the live nav background differs.
-        let minX = info.width, minY = info.height, maxX = -1, maxY = -1;
-        for (let y = 0; y < info.height; y++) {
-          for (let x = 0; x < info.width; x++) {
-            if (data[y * info.width + x] < 220) {
-              minX = Math.min(minX, x);
-              minY = Math.min(minY, y);
-              maxX = Math.max(maxX, x);
-              maxY = Math.max(maxY, y);
-            }
-          }
-        }
-        if (maxX < minX || maxY < minY) {
-            logger.warn({ serial, source: referencePath }, "[home-tab] reference contains no glyph pixels");
-            return null;
-          }
-        const width = maxX - minX + 1;
-        const height = maxY - minY + 1;
-        const cropped = Buffer.alloc(width * height);
-        for (let y = 0; y < height; y++) {
-          data.copy(cropped, y * width, (minY + y) * info.width + minX, (minY + y) * info.width + minX + width);
-        }
-          reference = { data: cropped, width, height, source: referencePath };
+          // Keep the complete screenshot crop. This is deliberately the same
+          // template treatment used by the reliable View Feed heart matcher.
+          reference = { data, width: info.width, height: info.height, source: referencePath };
           break;
         } catch {
           // Try the next known reference name or runtime asset root.
@@ -7420,18 +7397,10 @@ export async function findHomeTab(serial: string): Promise<{ x: number; y: numbe
       return (screen.pixels[i] + screen.pixels[i + 1] + screen.pixels[i + 2]) / 3;
     };
     let best: { x: number; y: number; score: number; scale: number } | null = null;
-    // Keep this search deliberately bounded. A dense full-resolution scan is
-    // synchronous JavaScript and can starve the API event loop for tens of
-    // seconds on a 1080x2400 phone, which in turn makes concurrent ADB/Sharp
-    // work fail at the native boundary. These density bands cover the
-    // practical Android nav-icon sizes without turning detection into a CPU
-    // benchmark.
-    const scales = [0.9, 1.2, 1.5, 1.8, 2.2, 2.6, 3.0, 3.5, 4.0];
-    const scanStep = screen.width >= 900 ? 4 : 3;
-    // A 21–22px bundled glyph sampled every third pixel yields fewer than
-    // the minimum 100 correlation samples and is rejected before scoring.
-    // Keep this at two so both the 32px JPG crop and the packaged SVG have
-    // enough spatial samples.
+    // Match the proven View Feed heart detector's scoring/search parameters.
+    // Only the Home-specific search rectangle below differs.
+    const scales = [0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.8, 2.2, 2.7];
+    const scanStep = 3;
     const sampleStep = 2;
     for (const scale of scales) {
       const tw = Math.max(10, Math.round(reference.width * scale));
