@@ -12210,6 +12210,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const hi = Math.max(preSwitchActionPercentMin, preSwitchActionPercentMax);
         return (lo === hi ? lo : Math.round(lo + Math.random() * (hi - lo))) / 100;
       })();
+      let preSwitchActionsRan = false;
       if (preSwitchEnabledMin <= 0 && preSwitchEnabledMax <= 0) {
         tLog("▶ Pre-switch activation disabled at 0% — skipping all pre-switch actions");
       } else if (preSwitchActionPercentMin <= 0 && preSwitchActionPercentMax <= 0) {
@@ -12295,6 +12296,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             `${preSwitchSelectedTools.length}/${preSwitchToolSeq.length} tools selected` +
             (preSwitchSelectedTools.length ? ` (${preSwitchSelectedTools.map(tool => _toolOrderLabels[tool] ?? tool).join(" → ")})` : ""),
           );
+          preSwitchActionsRan = preSwitchSelectedTools.length > 0;
           for (const preTool of preSwitchSelectedTools) {
             if (isCycleAborted(serial)) break;
             if (preTool === "follow" || String(preTool).startsWith("follow_spread:")) continue;
@@ -12510,6 +12512,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       //            The underlying implementation lives entirely in
       //            androidManager.ts → switchToInstagramAccount().
       // ═════════════════════════════════════════════════════════════════════
+
+      // Pre-switch tools can leave Instagram on Stories, Reels, Inbox, or
+      // another nested surface. The launch-time profile navigation happened
+      // before those tools ran, so it cannot be reused as the account-switch
+      // entry point. Explicitly tap the live Profile tab again before starting
+      // the account-switch routine.
+      if (preSwitchActionsRan) {
+        const postPreSwitchProfileTab = await android.findInstagramProfileTab(serial).catch(() => null);
+        if (postPreSwitchProfileTab) {
+          tLog(
+            `▶ Pre-switch complete: tapping Profile tab again at ` +
+            `(${postPreSwitchProfileTab.x}, ${postPreSwitchProfileTab.y}) before account switch…`,
+          );
+          await android.tap(serial, postPreSwitchProfileTab.x, postPreSwitchProfileTab.y);
+          await sleepOrAbort(serial, 800);
+        } else {
+          tLog("⚠ Pre-switch complete: Profile tab was not found for the required return tap; account switch will perform its own lookup");
+        }
+      }
 
       // 2d. Switch to the correct Instagram account for this slot.
       // Each slot stores the username of the Instagram account it represents.
