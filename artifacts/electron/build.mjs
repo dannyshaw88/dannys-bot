@@ -87,6 +87,15 @@ for (const name of searchReferenceNames) {
   if (existsSync(source)) await cp(source, path.join(searchReferenceTarget, name));
 }
 
+// Ship the visual Instagram Home-tab icon reference with the packaged API.
+const homeIconReferenceName = "home_1787131461428.jpg";
+const homeIconReferenceTarget = path.join(dist, "server", "home-icon-refs");
+await mkdir(homeIconReferenceTarget, { recursive: true });
+const homeIconSource = path.join(searchReferenceSource, homeIconReferenceName);
+if (existsSync(homeIconSource)) {
+  await cp(homeIconSource, path.join(homeIconReferenceTarget, homeIconReferenceName));
+}
+
 // 3. Copy built frontend
 const frontendSrc = path.join(__dirname, "../dannys-bot/dist/public");
 if (!existsSync(frontendSrc)) {

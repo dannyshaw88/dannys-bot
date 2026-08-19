@@ -7336,22 +7336,101 @@ export async function removeDeviceFile(serial: string, devicePath: string): Prom
   await scanMediaFile(serial, devicePath).catch(() => {});
 }
 
+/**
+ * Locate Instagram's bottom-nav Home tab from the live screenshot.
+ *
+ * Do not use content-desc/resource-id lookup here. Instagram sometimes renders
+ * this button visibly while exposing no useful Home node in UIAutomator. The
+ * attached 32x32 house crop is matched against the current screen using the
+ * same scale-search, normalized-correlation, and polarity-invariant rules as
+ * the View Feed Like icon detector. The search is limited to the left side of
+ * the bottom navigation row; there is no coordinate fallback.
+ */
 export async function findHomeTab(serial: string): Promise<{ x: number; y: number } | null> {
-  const tools = detectToolset();
-  const adb = requireTool(tools.adb, "adb");
-  const xml = await _uiDump(adb, serial);
-  if (!xml) return null;
-  // 1. content-desc prefix match — covers most IG builds.
-  const re = /content-desc="Home[^"]*"[^>]*bounds="([^"]+)"/;
-  const m = xml.match(re);
-  if (m) return _parseCenter(m[1]);
-  // 2. Known resource-ids.
-  const byId = _findByResId(xml, ":id/feed_tab", ":id/home_tab");
-  if (byId) return byId;
-  // No positional fallback. If Instagram does not expose a semantic Home
-  // node or known Home resource ID, guessing from bottom-nav geometry can tap
-  // Reels, Direct, or another control on a partially rendered screen.
-  return null;
+  const screen = await _captureScreenPixels(serial);
+  if (!screen || screen.channels < 3) return null;
+
+  try {
+    const referenceRoots = [
+      path.resolve(process.cwd(), "attached_assets"),
+      // Packaged Electron build: build.mjs ships this beside the API bundle.
+      path.resolve(path.dirname(path.resolve(process.argv[1] ?? __filename)), "home-icon-refs"),
+    ];
+    let reference: { data: Buffer; width: number; height: number } | null = null;
+    for (const root of referenceRoots) {
+      try {
+        const { data, info } = await sharp(path.join(root, "home_1787131461428.jpg"))
+          .greyscale()
+          .raw()
+          .toBuffer({ resolveWithObject: true });
+        reference = { data, width: info.width, height: info.height };
+        break;
+      } catch {
+        // Try the next known runtime asset root.
+      }
+    }
+    if (!reference) return null;
+
+    const sample = (x: number, y: number): number => {
+      const i = (y * screen.width + x) * screen.channels;
+      return (screen.pixels[i] + screen.pixels[i + 1] + screen.pixels[i + 2]) / 3;
+    };
+    let best: { x: number; y: number; score: number } | null = null;
+    for (const scale of [0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.8, 2.2, 2.7, 3.2, 3.7]) {
+      const tw = Math.max(10, Math.round(reference.width * scale));
+      const th = Math.max(10, Math.round(reference.height * scale));
+      if (tw >= screen.width * 0.30 || th >= screen.height * 0.12) continue;
+
+      // Home is the leftmost icon in Instagram's bottom navigation. Keep the
+      // scan above Android's system navigation strip, but avoid assuming one
+      // exact device percentage for its vertical position.
+      const xMax = Math.min(screen.width - tw, Math.round(screen.width * 0.30));
+      const yMin = Math.round(screen.height * 0.78);
+      const yMax = Math.min(screen.height - th, Math.round(screen.height * 0.95) - th);
+      for (let y = yMin; y <= yMax; y += 2) {
+        for (let x = 0; x <= xMax; x += 2) {
+          let screenSum = 0, screenSum2 = 0, refSum = 0, refSum2 = 0, cross = 0, count = 0;
+          for (let ty = 0; ty < reference.height; ty += 2) {
+            for (let tx = 0; tx < reference.width; tx += 2) {
+              const sx = x + Math.min(tw - 1, Math.round(tx * scale));
+              const sy = y + Math.min(th - 1, Math.round(ty * scale));
+              const screenValue = sample(sx, sy);
+              const refValue = reference.data[ty * reference.width + tx];
+              screenSum += screenValue;
+              screenSum2 += screenValue * screenValue;
+              refSum += refValue;
+              refSum2 += refValue * refValue;
+              cross += screenValue * refValue;
+              count++;
+            }
+          }
+          if (count < 100) continue;
+          const screenMean = screenSum / count;
+          const refMean = refSum / count;
+          const screenVariance = Math.max(1, screenSum2 / count - screenMean * screenMean);
+          const refVariance = Math.max(1, refSum2 / count - refMean * refMean);
+          const covariance = cross / count - screenMean * refMean;
+          // Absolute correlation accepts both black-on-white and
+          // white-on-dark Instagram themes.
+          const score = 0.5 + Math.abs(covariance / Math.sqrt(screenVariance * refVariance)) * 0.5;
+          if (score > (best?.score ?? 0.86)) {
+            best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), score };
+          }
+        }
+      }
+    }
+
+    if (!best || best.score < 0.86) {
+      return null;
+    }
+    logger.debug(
+      { serial, x: best.x, y: best.y, score: Number(best.score.toFixed(3)) },
+      "[home-tab] visual icon matched",
+    );
+    return { x: best.x, y: best.y };
+  } catch {
+    return null;
+  }
 }
 
 /**
