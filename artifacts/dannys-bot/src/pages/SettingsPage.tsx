@@ -657,10 +657,15 @@ export function SettingsPage() {
     setSnapshotCreating(true);
     try {
       console.info("[diagnostics] snapshot button clicked");
-      const response = await fetch("/api/diagnostics/snapshot", {
-        method: "POST",
-        credentials: "include",
-      });
+      const nativeResult = await eAPI().createDiagnosticSnapshot?.();
+      if (nativeResult?.saved) {
+        toast({ title: "Diagnostic snapshot saved", description: nativeResult.filePath });
+        return;
+      }
+      // This fallback is useful in the browser preview, but the installed
+      // application uses the native path above so it still works after the
+      // API child has crashed.
+      const response = await fetch("/api/diagnostics/snapshot", { method: "POST", credentials: "include" });
       if (!response.ok) throw new Error(`Snapshot request failed (${response.status})`);
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);

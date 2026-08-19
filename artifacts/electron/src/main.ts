@@ -1283,6 +1283,60 @@ async function createWindow() {
     }
   });
 
+  // This path intentionally does not contact the API child or open a browser
+  // download. It writes directly from Electron to Downloads, so it remains
+  // available while the API is hung or has already crashed.
+  ipcMain.handle("create-diagnostic-snapshot", async () => {
+    const timestamp = new Date().toISOString();
+    const filename = `aura-diagnostic-${timestamp.replace(/[:.]/g, "-")}.json`;
+    const downloadsDir = app.getPath("downloads");
+    const filePath = path.join(downloadsDir, filename);
+    const readTail = (filePath: string, maxBytes = 256 * 1024): string => {
+      try {
+        const stat = fs.statSync(filePath);
+        const start = Math.max(0, stat.size - maxBytes);
+        const fd = fs.openSync(filePath, "r");
+        const buffer = Buffer.alloc(stat.size - start);
+        fs.readSync(fd, buffer, 0, buffer.length, start);
+        fs.closeSync(fd);
+        return buffer.toString("utf8");
+      } catch {
+        return "";
+      }
+    };
+    const snapshot = {
+      ok: true,
+      source: "electron-local",
+      capturedAt: timestamp,
+      app: {
+        version: app.getVersion(),
+        packaged: app.isPackaged,
+        platform: process.platform,
+        arch: process.arch,
+        electronPid: process.pid,
+        apiPid: serverProc?.pid ?? null,
+        apiRunning: Boolean(serverProc && !serverProc.killed),
+        uptimeSeconds: process.uptime(),
+        memory: process.memoryUsage(),
+      },
+      paths: {
+        userData: app.getPath("userData"),
+        logs: _mainLogPath || null,
+      },
+      recentMainLog: readTail(_mainLogPath || path.join(process.cwd(), "logs.log")),
+      recentApiLog: serverProc ? readTail(path.join(getUserDataPath(), "server.log")) : "",
+    };
+    try {
+      fs.mkdirSync(downloadsDir, { recursive: true });
+      fs.writeFileSync(filePath, JSON.stringify(snapshot, null, 2), "utf8");
+      appendToMainLog(`[diagnostics] local snapshot saved to ${filePath}`);
+      return { saved: true, filePath };
+    } catch (error: any) {
+      appendToMainLog(`[diagnostics] local snapshot failed: ${error?.stack ?? error?.message ?? String(error)}`);
+      return { saved: false, error: error?.message ?? String(error) };
+    }
+  });
+
   ipcMain.handle("save-csv-dialog", async (_e, { content, filename }: { content: string; filename: string }) => {
     appendToMainLog(`[export-api-calls] save-csv-dialog IPC received — filename=${filename} contentLength=${content?.length ?? 0}`);
     try {

@@ -29,6 +29,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("write-eqx-downloads", files),
   saveDiagnosticSnapshot: (args: { filename: string; content: string }) =>
     ipcRenderer.invoke("save-diagnostic-snapshot", args),
+  createDiagnosticSnapshot: () =>
+    ipcRenderer.invoke("create-diagnostic-snapshot"),
   focusBrowserWindow: (profileId: number) =>
     ipcRenderer.invoke("focus-browser-window", profileId),
   getAutostart: () => ipcRenderer.invoke("get-autostart"),
