@@ -32,6 +32,14 @@ import { storage } from "../storage";
 import { logger } from "../lib/logger";
 import { HikerApiClient } from "../instagram/hikerApiClient";
 
+// Sharp/libvips is a native dependency. On Windows, concurrent decode work
+// alongside sustained ADB screenshot polling has previously terminated the
+// API process with STATUS_ACCESS_VIOLATION (0xC0000005). Keep the native
+// decoder deliberately conservative; screenshot polling itself remains
+// concurrent and is still coalesced per device below.
+sharp.concurrency(1);
+sharp.cache(false);
+
 type MalesOnlyMatch = { name: string; field: "account name" | "username" | "bio" };
 type CompiledMalesOnlyName = {
   name: string;
@@ -47,6 +55,7 @@ const malesOnlyMatcherCache = new Map<string, CompiledMalesOnlyName[]>();
 // serialize inside ADB and freeze every queued request for ~30 seconds.
 const screencapInFlight = new Map<string, Promise<Buffer>>();
 const SCREENCAP_TIMEOUT_MS = 8_000;
+let visualDecodeQueue: Promise<void> = Promise.resolve();
 
 function capturePng(adbPath: string, serial: string): Promise<Buffer> {
   const existing = screencapInFlight.get(serial);
@@ -80,6 +89,18 @@ function capturePng(adbPath: string, serial: string): Promise<Buffer> {
   return job;
 }
 
+async function decodeVisualScreenshot(png: Buffer): Promise<{ data: Buffer; info: sharp.OutputInfo }> {
+  let release!: () => void;
+  const previous = visualDecodeQueue;
+  visualDecodeQueue = new Promise<void>((resolve) => { release = resolve; });
+  await previous;
+  try {
+    return await sharp(png).raw().toBuffer({ resolveWithObject: true });
+  } finally {
+    release();
+  }
+}
+
 type VisualPostControl = { x: number; y: number; score: number } | null;
 
 /**
@@ -96,7 +117,7 @@ async function findVisualPostControl(
   if (!adb) return null;
   try {
     const png = await capturePng(adb, serial);
-    const decoded = await sharp(png).raw().toBuffer({ resolveWithObject: true });
+    const decoded = await decodeVisualScreenshot(png);
     const { data, info } = decoded;
     const regions: Record<typeof kind, [number, number, number, number]> = {
       // Instagram Home is in the bottom navigation row. The old full-height
