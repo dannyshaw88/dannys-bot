@@ -921,6 +921,7 @@ class AutomationEngine {
   // ── Profile Sync: fetch stats from Instagram or HikerAPI and persist ───────
   // Public so the /api/profiles/:id/sync route can trigger it directly.
   async syncProfile(profileId: number): Promise<{ followersCount: number; followingCount: number; postsCount: number } | null> {
+    if (!LEGACY_AUTOMATION_ENGINE_ENABLED) return null;
     const profile = await storage.getProfile(profileId);
     if (!profile) return null;
     return this.runProfileSync(profile);
@@ -7225,6 +7226,9 @@ class AutomationEngine {
 
   // ── Public trigger: run repost immediately (bypass skip-chance & timer) ──
   async runRepostNow(profileId: number): Promise<{ ok: boolean; message: string }> {
+    if (!LEGACY_AUTOMATION_ENGINE_ENABLED) {
+      return { ok: false, message: "Legacy browser automation engine is disabled; use the mobile engine." };
+    }
     const profile = await storage.getProfile(profileId);
     if (!profile) return { ok: false, message: "Profile not found" };
 
@@ -7538,6 +7542,9 @@ class AutomationEngine {
   // regardless of whether the contact runner is active or scheduled.
   // Returns how many new messages were queued to the pending list.
   async triggerExtractNow(profileId: number, countOverride?: number): Promise<{ queued: number; error?: string }> {
+    if (!LEGACY_AUTOMATION_ENGINE_ENABLED) {
+      return { queued: 0, error: "Legacy browser automation engine is disabled; use the mobile engine." };
+    }
     const profile = await storage.getProfile(profileId);
     if (!profile) return { queued: 0, error: "Profile not found" };
 
