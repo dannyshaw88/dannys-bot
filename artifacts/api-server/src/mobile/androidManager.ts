@@ -7434,15 +7434,21 @@ async function findHomeTabInternal(serial: string): Promise<{ x: number; y: numb
     const scales = [0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.8, 2.2, 2.7];
     const scanStep = 3;
     const sampleStep = 2;
+    const homeCenterMaxX = Math.round(screen.width * 0.20);
     for (const scale of scales) {
       const tw = Math.max(10, Math.round(reference.width * scale));
       const th = Math.max(10, Math.round(reference.height * scale));
       if (tw >= screen.width * 0.18 || th >= screen.height * 0.10) continue;
 
-      // Home is the leftmost icon in Instagram's bottom navigation. Keep the
-      // scan above Android's system navigation strip, but avoid assuming one
-      // exact device percentage for its vertical position.
-      const xMax = Math.min(screen.width - tw, Math.round(screen.width * 0.30));
+      // Home is the leftmost icon in Instagram's bottom navigation. The next
+      // tab (Reels) is normally centered near 30% of the width, so a broad
+      // "left side" search can legally select Reels when its glyph happens to
+      // correlate better than Home. Limit the candidate CENTER to the first
+      // navigation slot, leaving margin for OEM/Instagram spacing variation.
+      const xMax = Math.min(
+        screen.width - tw,
+        Math.max(0, homeCenterMaxX - Math.round(tw / 2)),
+      );
       const yMin = Math.round(screen.height * 0.78);
       const yMax = Math.min(screen.height - th, Math.round(screen.height * 0.95) - th);
       for (let y = yMin; y <= yMax; y += scanStep) {
@@ -7475,8 +7481,10 @@ async function findHomeTabInternal(serial: string): Promise<{ x: number; y: numb
             // renders are diagnosable. The explicit final 0.72 gate below is
             // the safety decision; do not turn every sub-threshold result
             // into an opaque `best: null`.
-            if (score > (best?.score ?? -Infinity)) {
-             best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), score, scale };
+           const candidateCenterX = Math.round(x + tw / 2);
+           if (candidateCenterX > homeCenterMaxX) continue;
+           if (score > (best?.score ?? -Infinity)) {
+             best = { x: candidateCenterX, y: Math.round(y + th / 2), score, scale };
           }
         }
       }
@@ -7494,7 +7502,7 @@ async function findHomeTabInternal(serial: string): Promise<{ x: number; y: numb
         serial,
         screen: [screen.width, screen.height],
         scan: {
-          x: [0, Math.round(screen.width * 0.30)],
+           x: [0, homeCenterMaxX],
           y: [Math.round(screen.height * 0.78), Math.round(screen.height * 0.95)],
         },
         reference: { source: reference.source, size: [reference.width, reference.height] },
