@@ -642,6 +642,7 @@ export function SettingsPage() {
   const [backupRestoring, setBackupRestoring] = useState<string | null>(null);
   const [backupDeleting, setBackupDeleting] = useState<string | null>(null);
   const [snapshotCreating, setSnapshotCreating] = useState(false);
+  const [snapshotSavedPath, setSnapshotSavedPath] = useState("");
 
   const refreshBackupList = async () => {
     if (!isElectron) return;
@@ -659,6 +660,7 @@ export function SettingsPage() {
       console.info("[diagnostics] snapshot button clicked");
       const nativeResult = await eAPI().createDiagnosticSnapshot?.();
       if (nativeResult?.saved) {
+        setSnapshotSavedPath(nativeResult.filePath ?? "Downloads");
         toast({ title: "Diagnostic snapshot saved", description: nativeResult.filePath });
         return;
       }
@@ -676,6 +678,7 @@ export function SettingsPage() {
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
+      setSnapshotSavedPath(`Downloaded as ${anchor.download}`);
       toast({ title: "Diagnostic snapshot downloaded", description: anchor.download });
     } catch (error: any) {
       toast({ title: "Snapshot failed", description: error?.message ?? "Could not create snapshot", variant: "destructive" });
@@ -1380,6 +1383,11 @@ export function SettingsPage() {
               {snapshotCreating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
               {snapshotCreating ? "Creating Snapshot…" : "Create Diagnostic Snapshot"}
             </Button>
+            {snapshotSavedPath && (
+              <p className="mt-3 text-xs text-emerald-600 break-all">
+                Saved successfully: {snapshotSavedPath}
+              </p>
+            )}
           </div>
           <div className="desktop-card p-6">
             <div className="flex items-center gap-3 mb-1">
