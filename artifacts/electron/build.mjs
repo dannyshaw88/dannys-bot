@@ -92,8 +92,12 @@ const homeIconReferenceName = "home_1787131461428.jpg";
 const homeIconReferenceTarget = path.join(dist, "server", "home-icon-refs");
 await mkdir(homeIconReferenceTarget, { recursive: true });
 const homeIconSource = path.join(searchReferenceSource, homeIconReferenceName);
-if (existsSync(homeIconSource)) {
-  await cp(homeIconSource, path.join(homeIconReferenceTarget, homeIconReferenceName));
+if (!existsSync(homeIconSource)) {
+  throw new Error(`Required Home icon reference is missing: ${homeIconSource}`);
+}
+await cp(homeIconSource, path.join(homeIconReferenceTarget, homeIconReferenceName));
+if (!existsSync(path.join(homeIconReferenceTarget, homeIconReferenceName))) {
+  throw new Error(`Home icon reference was not copied to: ${homeIconReferenceTarget}`);
 }
 
 // Ship the visual Instagram Save/bookmark reference with the packaged API.
