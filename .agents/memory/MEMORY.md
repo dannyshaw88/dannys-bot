@@ -62,6 +62,7 @@
 - [HST restart recovery](hst-restart-recovery.md) — startup recovery and manual toggle-on must use separate scheduling paths; preserve slot identity in background settings responses
 - [Mobile Search tab detector](mobile-search-tab-detector.md) — validate unlabeled bottom-nav nodes from the live accessibility row; never derive a tap coordinate from screen dimensions
 - [Instagram Home tab icon detector](home-tab-icon-detector.md) — use the live house-icon screenshot with polarity-invariant matching; no Home accessibility or coordinate fallback
+- [Home icon packaging](home-icon-packaging.md) — packaged Windows builds must bundle a self-contained Home reference; never depend on workspace attached_assets
 - [Instagram Save button icon detector](save-button-icon-detector.md) — locate optional Save only from the live bookmark icon screenshot; skip when absent, never infer from accessibility or order
 - [GitHub PAT push fallback](github-pat-push-fallback.md) — project GITHUB_TOKEN secrets work with GIT_ASKPASS HTTPS pushes, but not the gitPush source-control helper
 - [Actions source validation](actions-source-validation.md) — CI checks must inspect active assignments, not raw text, because comments documenting disabled settings can trigger false failures
