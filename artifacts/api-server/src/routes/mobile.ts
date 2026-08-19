@@ -8882,9 +8882,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // control only after the picker has settled.
     await sleepOrAbort(serial, 700);
     onLog?.("Make a Post: re-scanning settled picker for live \"Next\" button…");
-    let nextBtn1: { x: number; y: number } | null = await android.findButtonByLabel(serial, "Next").catch(() => null);
+    let nextBtn1: { x: number; y: number } | null = await android.findPostNextButton(serial).catch(() => null);
     for (let nextScan = 0; nextScan < 4 && !nextBtn1; nextScan++) {
-      nextBtn1 = await android.findButtonByLabel(serial, "Next").catch(() => null);
+      nextBtn1 = await android.findPostNextButton(serial).catch(() => null);
       if (!nextBtn1 && nextScan < 3) await sleepOrAbort(serial, 500);
     }
     if (!nextBtn1) {
@@ -8909,7 +8909,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let stillOnPicker: { x: number; y: number } | null = null;
     for (let advanceScan = 0; advanceScan < 10; advanceScan++) {
       await sleepOrAbort(serial, advanceScan === 0 ? 700 : 500);
-      editorNext = await android.findButtonByLabel(serial, "Next").catch(() => null);
+      editorNext = await android.findPostNextButton(serial).catch(() => null);
       if (editorNext) break;
       stillOnPicker = await android.findExpandPhotoButton(serial).catch(() => null);
       if (!stillOnPicker) break;
@@ -8925,7 +8925,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // filter strip, ratio controls) shows a labelled "Next" in the app bar —
     // give it extra time to settle before looking, since the audio-suggestion
     // overlay animation can delay accessibility-tree population.
-    const nextBtn2 = editorNext ?? await android.findButtonByLabel(serial, "Next").catch(() => null);
+    const nextBtn2 = editorNext ?? await android.findPostNextButton(serial).catch(() => null);
     if (nextBtn2) {
       onLog?.(`Make a Post: tapping filter/edit "Next" at (${nextBtn2.x}, ${nextBtn2.y})…`);
       await android.tap(serial, nextBtn2.x, nextBtn2.y);
@@ -8933,7 +8933,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
 
     // Edit/adjustments screen → Next (only present on some builds).
-    const nextBtn3 = await android.findButtonByLabel(serial, "Next").catch(() => null);
+    const nextBtn3 = await android.findPostNextButton(serial).catch(() => null);
     if (nextBtn3) {
       onLog?.(`Make a Post: tapping edit "Next" at (${nextBtn3.x}, ${nextBtn3.y})…`);
       await android.tap(serial, nextBtn3.x, nextBtn3.y);

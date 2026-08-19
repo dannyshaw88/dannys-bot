@@ -5431,7 +5431,7 @@ export async function findPostNextButton(serial: string): Promise<{ x: number; y
   const { w, h } = getScreenSize(serial);
   const fallback = { x: Math.round(w * 0.90), y: Math.round(h * 0.055) };
   const xml = await _uiDump(adb, serial).catch(() => "");
-  if (!xml) return fallback;
+  if (!xml) return null;
 
   const labelled = _findElem(xml, "Next", "Continue");
   if (labelled) return labelled;
@@ -5462,9 +5462,9 @@ export async function findPostNextButton(serial: string): Promise<{ x: number; y
   candidates.sort((a, b) => a.area - b.area);
   if (candidates[0]) return { x: candidates[0].x, y: candidates[0].y };
 
-  // Instagram's New Post Next control is always in the top-right app bar.
-  // Do not allow an accessibility-tree omission to suppress the required tap.
-  return { x: Math.round(w * 0.90), y: Math.round(h * 0.055) };
+  // Do not guess a coordinate when Instagram has not exposed a visible Next
+  // control. The caller must wait for the live label to appear instead.
+  return null;
 }
 
 /**
