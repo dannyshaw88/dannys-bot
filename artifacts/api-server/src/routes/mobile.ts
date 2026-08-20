@@ -40,6 +40,39 @@ import { HikerApiClient } from "../instagram/hikerApiClient";
 sharp.concurrency(1);
 sharp.cache(false);
 
+type BasicImageInfo = { format: string; width: number; height: number };
+
+function readBasicImageInfo(bytes: Buffer): BasicImageInfo {
+  if (bytes.length >= 24 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+    return { format: "png", width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+  }
+  if (bytes.length >= 12 && bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP") {
+    if (bytes.toString("ascii", 12, 16) === "VP8X" && bytes.length >= 30) {
+      return { format: "webp", width: 1 + bytes.readUIntLE(24, 3), height: 1 + bytes.readUIntLE(27, 3) };
+    }
+    return { format: "webp", width: 0, height: 0 };
+  }
+  if (bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8) {
+    let offset = 2;
+    while (offset + 9 < bytes.length) {
+      if (bytes[offset] !== 0xff) { offset++; continue; }
+      const marker = bytes[offset + 1];
+      offset += 2;
+      if (marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7)) continue;
+      if (offset + 2 > bytes.length) break;
+      const segmentLength = bytes.readUInt16BE(offset);
+      if (segmentLength < 2 || offset + segmentLength > bytes.length) break;
+      const sof = (marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7) ||
+        (marker >= 0xc9 && marker <= 0xcb) || (marker >= 0xcd && marker <= 0xcf);
+      if (sof && segmentLength >= 7) {
+        return { format: "jpeg", height: bytes.readUInt16BE(offset + 3), width: bytes.readUInt16BE(offset + 5) };
+      }
+      offset += segmentLength;
+    }
+  }
+  return { format: "unknown", width: 0, height: 0 };
+}
+
 type MalesOnlyMatch = { name: string; field: "account name" | "username" | "bio" };
 type CompiledMalesOnlyName = {
   name: string;
@@ -8444,24 +8477,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (!outputBytes.length || outputBytes.equals(inputBytes)) {
         throw new Error(`${stage} output was empty or byte-identical to its input`);
       }
-      try {
-        const metadata = await sharp(outputBytes).metadata();
-        if (!metadata.format || !metadata.width || !metadata.height) {
-          throw new Error("missing image format or dimensions");
-        }
-      } catch (e: any) {
-        throw new Error(`${stage} output is not a valid decodable image: ${e?.message ?? String(e)}`);
+      const metadata = readBasicImageInfo(outputBytes);
+      if (!metadata.format || !metadata.width || !metadata.height) {
+        throw new Error(`${stage} output is missing a recognized image header or dimensions`);
       }
       return outputBytes;
     };
     const describeImage = async (imagePath: string, bytes: Buffer) => {
-      const metadata = await sharp(bytes).metadata();
+      const metadata = readBasicImageInfo(bytes);
       return {
         sha256: createHash("sha256").update(bytes).digest("hex"),
         bytes: bytes.length,
-        format: metadata.format ?? "unknown",
-        width: metadata.width ?? 0,
-        height: metadata.height ?? 0,
+        format: metadata.format,
+        width: metadata.width,
+        height: metadata.height,
       };
     };
 
