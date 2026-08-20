@@ -850,7 +850,9 @@ function DeviceCard({
     if (!response?.ok) {
       setRebooting(false);
       const result = await response?.json().catch(() => null);
-      console.error("[PhoneFarm] device restart failed", result?.error ?? "Device restart failed");
+      const message = result?.error ?? "Device restart failed";
+      console.error("[PhoneFarm] device restart failed", message);
+      window.alert(message);
       return;
     }
     setTimeout(() => setRebooting(false), 15000);

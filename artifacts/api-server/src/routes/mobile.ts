@@ -14932,6 +14932,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const serial = p(req, "serial");
     try {
       const activeCycleId = automationCycleCurrentId.get(serial);
+      logger.info({ serial, activeCycleId: activeCycleId ?? null }, "[graceful-reboot] request received");
       if (activeCycleId) automationCycleAbortedId.set(serial, activeCycleId);
 
       const deadline = Date.now() + 30_000;
@@ -14941,7 +14942,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
        const stillRunning = automationCycleInProgress.has(serial);
        if (stillRunning) {
-         logger.warn({ serial }, "[graceful-reboot] cycle did not stop within 30 seconds; refusing to reboot");
+          logger.warn({ serial, activeCycleId, waitedMs: 30_000 }, "[graceful-reboot] cycle did not stop; refusing to reboot");
          res.status(409).json({
            error: "The automation cycle is still stopping. The device was not rebooted.",
            interruptedCycle: Boolean(activeCycleId),
@@ -14953,7 +14954,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
        // must finish its abort path first, otherwise a new cycle can overlap
        // its final recents gesture.
 
-       android.rebootDevice(serial);
+        logger.info({ serial, interruptedCycle: Boolean(activeCycleId) }, "[graceful-reboot] dispatching adb reboot");
+        android.rebootDevice(serial);
+        logger.info({ serial }, "[graceful-reboot] adb reboot command completed");
        // Keep the cycle identity/abort marker until the worker's finally block
        // clears it. If the worker was blocked on ADB and only reaches its catch
        // after the reboot, deleting these markers here makes it look like a
