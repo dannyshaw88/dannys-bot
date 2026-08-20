@@ -2745,13 +2745,42 @@ export async function clearFocusedTextField(serial: string, onLog?: (msg: string
   onLog?.("[android-input] focused field selected-all and cleared");
 }
 
+/**
+ * Keep ordinary automation taps from landing on the identical pixel forever.
+ *
+ * This is deliberately tiny because this API does not receive the confirmed
+ * target bounds. Callers that have a node/screenshot rectangle should prefer
+ * choosing a point inside that rectangle before calling tap(); this fallback
+ * only moves a normal bot tap by at most two pixels and never touches manual
+ * mirror input or calibrated keyboard taps (which use _adbTap directly).
+ */
+function humanizeBotTap(x: number, y: number): { x: number; y: number; jitterPx: number } {
+  const jitterPx = 2;
+  const jitter = () => Math.round((Math.random() * 2 - 1) * jitterPx);
+  return {
+    x: Math.max(0, Math.round(x) + jitter()),
+    y: Math.max(0, Math.round(y) + jitter()),
+    jitterPx,
+  };
+}
+
 export async function tap(serial: string, x: number, y: number, source?: "manual" | "bot"): Promise<void> {
+  const tapSource = source ?? "bot";
+  const dispatched = tapSource === "bot" ? humanizeBotTap(x, y) : { x: Math.round(x), y: Math.round(y), jitterPx: 0 };
   logger.info(
-    { serial, x, y, source: source ?? "bot" },
+    {
+      serial,
+      requestedX: Math.round(x),
+      requestedY: Math.round(y),
+      x: dispatched.x,
+      y: dispatched.y,
+      jitterPx: dispatched.jitterPx,
+      source: tapSource,
+    },
     "[mobile-input] tap dispatched",
   );
-  recorder.addTap(serial, x, y, undefined, source ?? "bot");
-  await runInputShell(serial, ["tap", String(x), String(y)], "tap");
+  recorder.addTap(serial, dispatched.x, dispatched.y, undefined, tapSource);
+  await runInputShell(serial, ["tap", String(dispatched.x), String(dispatched.y)], "tap");
 }
 
 /**
