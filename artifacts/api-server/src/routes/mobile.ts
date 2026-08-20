@@ -4121,7 +4121,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // globalDwell, making account switching, navigation, and action pacing
     // silently share one timing profile even when the device UI showed
     // distinct saved values.
-    const override = overrides?.[category] ?? overrides?.globalDwell;
+    const overrideSource = overrides?.[category] ? category : overrides?.globalDwell ? "globalDwell" : "generated";
+    const override = overrideSource === "generated" ? undefined : overrides?.[overrideSource];
     if (!override) return low + Math.floor(Math.random() * (high - low + 1));
     const min = Math.min(override.minMs, override.maxMs);
     const max = Math.max(override.minMs, override.maxMs);
@@ -4130,8 +4131,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const now = Date.now();
     if ((dwellDiagnosticAt.get(diagnosticKey) ?? 0) + 5000 <= now) {
       dwellDiagnosticAt.set(diagnosticKey, now);
-      logger.info({ serial, category, requestedMs: ms, overrideMinMs: min, overrideMaxMs: max, actualMs: actual },
-        "[mobile-override] global dwell applied");
+      logger.info({
+        serial,
+        category,
+        overrideSource,
+        requestedMs: ms,
+        overrideMinMs: min,
+        overrideMaxMs: max,
+        actualMs: actual,
+      }, "[mobile-override] dwell override applied");
     }
     return actual;
   };
