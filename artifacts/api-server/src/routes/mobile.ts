@@ -4145,10 +4145,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   };
   const sleepOrAbort = (serial: string, ms: number, category: "globalDwell" | "accountSwitching" | "navigation" | "actionPacing" = "actionPacing") => {
     const dwellMs = randomizedDwellMs(serial, ms, category);
+    const startedAt = performance.now();
     return new Promise<void>((resolve, reject) => {
       const t = setTimeout(() => {
-        if (isCycleAborted(serial)) reject(new Error("cycle-aborted"));
-        else resolve();
+        const elapsedMs = Math.round(performance.now() - startedAt);
+        if (isCycleAborted(serial)) {
+          logger.info({ serial, category, requestedMs: ms, scheduledMs: dwellMs, elapsedMs, completed: false },
+            "[mobile-execution] dwell completed");
+          reject(new Error("cycle-aborted"));
+        } else {
+          logger.info({ serial, category, requestedMs: ms, scheduledMs: dwellMs, elapsedMs, completed: true },
+            "[mobile-execution] dwell completed");
+          resolve();
+        }
       }, dwellMs);
       // Also check immediately for zero-ms waits
       if (dwellMs <= 0) { clearTimeout(t); isCycleAborted(serial) ? reject(new Error("cycle-aborted")) : resolve(); }

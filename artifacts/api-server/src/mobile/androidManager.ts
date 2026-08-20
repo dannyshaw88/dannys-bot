@@ -2864,6 +2864,13 @@ export async function swipe(
     ["swipe", String(jx1), String(jy1), String(jx2), String(jy2), String(Math.max(1, Math.round(durationMs)))],
     "swipe",
   );
+  logger.info({
+    serial,
+    executedFrom: [jx1, jy1],
+    executedTo: [jx2, jy2],
+    durationMs: Math.max(1, Math.round(durationMs)),
+    completed: true,
+  }, "[mobile-execution] swipe command completed");
 }
 
 export async function keyevent(serial: string, code: string | number): Promise<void> {
@@ -11427,6 +11434,10 @@ export async function typeViaCalibrationMap(
   onLog?.(
     `[cal-keyboard] typing-session start serial=${serial} display=${display.w}x${display.h} ` +
     `ime=${activeIme || "unknown"} initialLayer=${layer} textLength=${text.length} ` +
+    `typingGapMs=${typingProfile.minMs}-${typingProfile.maxMs} ` +
+    `keyDwellMs=${typingProfile.dwellMinMs}-${typingProfile.dwellMaxMs} ` +
+    `hesitationMs=${typingProfile.hesitationMinMs}-${typingProfile.hesitationMaxMs} ` +
+    `errorPercent=${typingProfile.errorPercentMin}-${typingProfile.errorPercentMax} ` +
     `debugLabel=${options?.debugLabel ?? "none"}`,
   );
 
@@ -11494,7 +11505,9 @@ export async function typeViaCalibrationMap(
     }
     const pause = dwellMin + Math.round(Math.random() * (dwellMax - dwellMin));
     onLog?.(`[cal-keyboard] pacing after ${description}: ${pause}ms (range=${dwellMin}-${dwellMax}ms)`);
+    const pacingStartedAt = Date.now();
     await _sleep(pause);
+    onLog?.(`[cal-keyboard] pacing completed after ${description}: elapsed=${Date.now() - pacingStartedAt}ms scheduled=${pause}ms`);
     return true;
   };
   const maybeHumanError = async () => {
