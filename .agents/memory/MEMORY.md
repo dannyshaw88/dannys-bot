@@ -61,6 +61,7 @@
 - [Settings wide control rows](settings-wide-control-rows.md) — long explanatory settings text needs full-width, top-aligned control rows rather than a narrow centered layout
 - [HST restart recovery](hst-restart-recovery.md) — startup recovery and manual toggle-on must use separate scheduling paths; preserve slot identity in background settings responses
 - [Mobile Search tab detector](mobile-search-tab-detector.md) — validate unlabeled bottom-nav nodes from the live accessibility row; never derive a tap coordinate from screen dimensions
+- [Follow search field lookup](follow-search-field-lookup.md) — live top search resource nodes first with retries; visual matching is fallback only
 - [Instagram Home tab icon detector](home-tab-icon-detector.md) — use the live house-icon screenshot with polarity-invariant matching; no Home accessibility or coordinate fallback
 - [Home icon packaging](home-icon-packaging.md) — packaged Windows builds must bundle a self-contained Home reference; never depend on workspace attached_assets
 - [Instagram Save button icon detector](save-button-icon-detector.md) — locate optional Save only from the live bookmark icon screenshot; skip when absent, never infer from accessibility or order

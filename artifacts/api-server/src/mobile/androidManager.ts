@@ -10169,22 +10169,10 @@ export async function findInstagramSearchBar(
   serial: string,
   onLog?: (msg: string) => void,
 ): Promise<{ x: number; y: number } | null> {
-  // Prefer the visual detector, but do not make it the only detector. Instagram
-  // changes the Search-with-Meta-AI artwork between releases, while the live
-  // accessibility tree usually still exposes the same top search container.
-  const visual = await findInstagramSearchFieldByPixels(serial, onLog);
-  if (visual) return { x: visual.x, y: visual.y };
-
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const { h: screenH } = getScreenSize(serial);
   const topLimit = Math.round(screenH * 0.45);
-  const xml = await _uiDump(adb, serial).catch(() => "");
-  if (!xml) {
-    onLog?.("Follow: search bar visual match and accessibility dump both unavailable");
-    return null;
-  }
-
   const searchIds = [
     "action_bar_search_edit_text",
     "search_bar_input",
@@ -10196,6 +10184,40 @@ export async function findInstagramSearchBar(
     "explore_action_bar_container",
     "explore_action_bar",
   ];
+
+  // The live node is authoritative. Do this before any visual work and retry
+  // fresh dumps while Explore finishes rendering. The old active path claimed
+  // to retry, but its retry loop was inside a commented-out block, so it only
+  // performed one dump after the visual scan.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await _sleep(450);
+    const xml = await _uiDump(adb, serial).catch(() => "");
+    if (!xml) continue;
+
+    const exact = _findLiveNodeByResId(xml, ":id/action_bar_search_edit_text");
+    if (exact && exact.y <= topLimit) {
+      onLog?.(`Follow: live search field action_bar_search_edit_text at (${exact.x}, ${exact.y}) attempt=${attempt + 1}`);
+      return exact;
+    }
+
+    const live = _findLiveNodeByResId(xml, ...searchIds.map(id => `:id/${id}`));
+    if (live && live.y <= topLimit) {
+      onLog?.(`Follow: live search field resource node at (${live.x}, ${live.y}) attempt=${attempt + 1}`);
+      return live;
+    }
+  }
+
+  // Accessibility can omit the resource-id during an Instagram transition.
+  // Use the screenshot matcher only after the live-node retries have failed.
+  const visual = await findInstagramSearchFieldByPixels(serial, onLog);
+  if (visual) return { x: visual.x, y: visual.y };
+
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) {
+    onLog?.("Follow: live search-node retries, visual match, and accessibility dump all unavailable");
+    return null;
+  }
+
   type SearchCandidate = { x: number; y: number; score: number; id: string; label: string };
   const candidates: SearchCandidate[] = [];
   for (const match of xml.matchAll(/<node\b[^>]*>/gi)) {
