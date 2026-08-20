@@ -10798,6 +10798,20 @@ export async function typeViaSavedCalibrationMap(
   const map = loadKeyCalibrationMap(serial);
   const mapPath = _calibrationPath(serial);
   const uniqueChars = [...new Set([...text])].join("");
+  logger.info({
+    serial,
+    map: map ? "loaded" : "missing",
+    mapEntries: map ? Object.keys(map).length : 0,
+    typingGapMs: typingProfile?.minMs ?? null,
+    typingGapMaxMs: typingProfile?.maxMs ?? null,
+    keyDwellMinMs: typingProfile?.dwellMinMs ?? null,
+    keyDwellMaxMs: typingProfile?.dwellMaxMs ?? null,
+    hesitationMinMs: typingProfile?.hesitationMinMs ?? null,
+    hesitationMaxMs: typingProfile?.hesitationMaxMs ?? null,
+    errorPercentMin: typingProfile?.errorPercentMin ?? null,
+    errorPercentMax: typingProfile?.errorPercentMax ?? null,
+    textLength: text.length,
+  }, "[cal-keyboard] execution profile resolved");
   onLog?.(
     `[cal-keyboard] serial=${serial} map=${map ? "loaded" : "missing"} ` +
     `entries=${map ? Object.keys(map).length : 0} typingProfile=${typingProfile ? "loaded" : "missing"} ` +
@@ -11507,7 +11521,17 @@ export async function typeViaCalibrationMap(
     onLog?.(`[cal-keyboard] pacing after ${description}: ${pause}ms (range=${dwellMin}-${dwellMax}ms)`);
     const pacingStartedAt = Date.now();
     await _sleep(pause);
-    onLog?.(`[cal-keyboard] pacing completed after ${description}: elapsed=${Date.now() - pacingStartedAt}ms scheduled=${pause}ms`);
+    const pacingElapsedMs = Date.now() - pacingStartedAt;
+    logger.info({
+      serial,
+      key: description,
+      scheduledMs: pause,
+      elapsedMs: pacingElapsedMs,
+      configuredMinMs: dwellMin,
+      configuredMaxMs: dwellMax,
+      completed: true,
+    }, "[cal-keyboard] pacing completed");
+    onLog?.(`[cal-keyboard] pacing completed after ${description}: elapsed=${pacingElapsedMs}ms scheduled=${pause}ms`);
     return true;
   };
   const maybeHumanError = async () => {
