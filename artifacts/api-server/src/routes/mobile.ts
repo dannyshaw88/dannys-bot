@@ -89,13 +89,24 @@ function capturePng(adbPath: string, serial: string): Promise<Buffer> {
   return job;
 }
 
-async function decodeVisualScreenshot(png: Buffer): Promise<{ data: Buffer; info: sharp.OutputInfo }> {
+async function decodeVisualScreenshot(png: Buffer): Promise<{
+  data: Buffer;
+  info: { width: number; height: number; channels: number };
+}> {
   let release!: () => void;
   const previous = visualDecodeQueue;
   visualDecodeQueue = new Promise<void>((resolve) => { release = resolve; });
   await previous;
   try {
-    return await sharp(png).raw().toBuffer({ resolveWithObject: true });
+    const decoded = android.decodePngPixels(png);
+    return {
+      data: decoded.pixels,
+      info: {
+        width: decoded.width,
+        height: decoded.height,
+        channels: decoded.channels,
+      },
+    };
   } finally {
     release();
   }

@@ -4355,7 +4355,7 @@ export async function findReelActionIcons(serial: string, onLog?: (msg: string) 
  * RGB (colorType 2) and grayscale (colorType 0) are also handled
  * defensively. Pure Buffer + built-in zlib — no image library needed.
  */
-function _decodePng(buf: Buffer): { width: number; height: number; channels: number; pixels: Buffer } {
+export function decodePngPixels(buf: Buffer): { width: number; height: number; channels: number; pixels: Buffer } {
   let offset = 8; // skip PNG signature
   let width = 0, height = 0, bitDepth = 0, colorType = 0;
   const idatChunks: Buffer[] = [];
@@ -4433,7 +4433,7 @@ async function _captureScreenPixels(serial: string): Promise<{ width: number; he
     } as any);
     const buf = stdout as unknown as Buffer;
     if (!buf || buf.length < 100) return null;
-    return _decodePng(buf);
+    return decodePngPixels(buf);
   } catch {
     return null;
   }
