@@ -4203,6 +4203,33 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     return { w, h };
   }
 
+  /**
+   * Instagram's first-save collection sheet can appear with different
+   * accessibility text/IDs across account age and app builds. Once the sheet
+   * is positively detected, dismiss it through a fresh point in the clear
+   * scrim above the sheet. Never fire this coordinate unless detection passed.
+   */
+  const dismissSaveCollectionPrompt = async (
+    serial: string,
+    xml: string,
+    onLog?: (msg: string) => void,
+    context = "Save",
+  ): Promise<boolean> => {
+    if (!/(?:pinned_save_row|collect the posts you love|start a collection|save to collection)/i.test(xml)) {
+      return false;
+    }
+    const { w, h } = getScreenSize(serial);
+    // Randomize within the upper 20%, avoiding the very top system/header
+    // edge. The collection sheet owns the lower portion and leaves this
+    // confirmed scrim area non-interactive while it is visible.
+    const x = Math.round(w * (0.10 + Math.random() * 0.80));
+    const y = Math.round(h * (0.04 + Math.random() * 0.15));
+    await android.tap(serial, x, y);
+    onLog?.(`${context}: dismissed collection prompt at randomized top-scrim point (${x},${y})`);
+    await sleepOrAbort(serial, 300);
+    return true;
+  };
+
   // Each tool tracks its own last DM recipient independently — no cross-tool
   // sharing so that changing one tool's Share-to-DM code can never affect
   // another tool's recipient state. All four Maps are keyed by serial.
@@ -5275,40 +5302,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   onLog?.(`View Feed ${i + 1}/${count}: tapping save (ribbon) icon at (${_saveBtn.x},${_saveBtn.y})…`);
                   await android.tap(serial, _saveBtn.x, _saveBtn.y);
                  await sleepOrAbort(serial, 600 + Math.floor(Math.random() * 4401));
-                  // Instagram may show a "Collect the posts you love" bottom
-                  // sheet on accounts with no existing collections.  Detect it
-                  // with a fresh dump and dismiss it by tapping the transparent
-                  // background_dimmer above the sheet (top 12% of screen).
-                  // The dump is skipped when the sheet isn't present — the
-                  // timeout is rare and acceptable on the save path.
+                   // Instagram may show a first-save collection sheet on
+                   // accounts with no existing collections. Detect it with a
+                   // fresh dump and dismiss only through the shared,
+                   // randomized top-scrim handler.
                   let _fsSaveXml = await android.dumpUi(serial).catch(() => "");
-                  if (_fsSaveXml.includes('pinned_save_row') || _fsSaveXml.includes('Collect the posts you love')) {
-                    // The sheet must be dismissed through its own live
-                    // accessibility node.  Never tap a screen-relative
-                    // "safe" coordinate in View Feed.
-                    let _fsDismissed = false;
-                    for (const _fsSeg of _fsSaveXml.split("<node ")) {
-                      const _fsRid = (_fsSeg.match(/resource-id="([^"]*)"/) ?? [])[1] ?? "";
-                      const _fsDesc = (_fsSeg.match(/content-desc="([^"]*)"/) ?? [])[1] ?? "";
-                      if (
-                        !_fsSeg.includes('clickable="true"') ||
-                        !/background_dimmer|scrim|dismiss/i.test(`${_fsRid} ${_fsDesc}`)
-                      ) continue;
-                      const _fsBb = _fsSeg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-                      if (!_fsBb) continue;
-                      const _fsX = Math.floor((Number(_fsBb[1]) + Number(_fsBb[3])) / 2);
-                      const _fsY = Math.floor((Number(_fsBb[2]) + Number(_fsBb[4])) / 2);
-                      await android.tap(serial, _fsX, _fsY);
-                      _fsDismissed = true;
-                      onLog?.(`View Feed ${i + 1}/${count}: dismissed "Save to collection?" via accessibility dimmer node`);
-                      await sleepOrAbort(serial, 300);
-                      break;
-                    }
-                    if (!_fsDismissed) {
-                      onLog?.(`View Feed ${i + 1}/${count}: save sheet detected but no dismiss node was confirmed — leaving it closed with Back`);
-                      await android.pressBack(serial);
-                      await sleepOrAbort(serial, 300);
-                    }
+                   if (await dismissSaveCollectionPrompt(serial, _fsSaveXml, onLog, `View Feed ${i + 1}/${count}`)) {
                     _fsSaveXml = await android.dumpUi(serial).catch(() => "");
                   }
                   const _saveStayedInInstagram = await verifyStillInInstagram();
@@ -7221,19 +7220,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     onLog?.(`View Explore ${i + 1}/${scrollCount}: tapping save (ribbon) at (${_eSaveBtn.x},${_eSaveBtn.y})…`);
                     await android.tap(serial, _eSaveBtn.x, _eSaveBtn.y);
                     await sleepOrAbort(serial, 600);
-                    // Dismiss "Save to collection?" bottom sheet by tapping the
-                    // top-25% of the screen — always safe, no interactive controls
-                    // in that zone while the collection sheet is visible.
-                    const _eDismissX = Math.round(w * 0.50);
-                    const _eDismissY = Math.round(h * 0.12);
-                    // Only dismiss if the collection sheet is actually visible —
-                    // an unconditional tap risks hitting the Explore header when
-                    // the toast appears without the sheet.
                     const _eSaveXml = await android.dumpUi(serial).catch(() => "");
-                    if (_eSaveXml.includes('pinned_save_row') || _eSaveXml.includes('Collect the posts you love')) {
-                      await android.tap(serial, _eDismissX, _eDismissY);
-                      await sleepOrAbort(serial, 300);
-                    }
+                     await dismissSaveCollectionPrompt(serial, _eSaveXml, onLog, `View Explore ${i + 1}/${scrollCount}`);
                     saves++;
                     logger.info({ serial }, "[view-explore] saved post via ribbon icon");
                     onLog?.(`View Explore ${i + 1}/${scrollCount}: ✓ saved`);
@@ -7744,21 +7732,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               await android.tap(serial, icons.save.x, icons.save.y);
               saves++;
               onLog?.(`Reel ${i + 1}/${totalReels}: saved at (${icons.save.x},${icons.save.y})`);
-              // Wait long enough for Instagram to show the "Save to collection?"
-              // bottom sheet if it's going to (common on fresh/new accounts).
+               // Wait long enough for Instagram to show the first-save
+               // collection sheet if it's going to (common on new accounts).
               await sleepOrAbort(serial, 600);
-              // Conditionally dismiss: dump once, check for the collection popup.
-              // Only tap if the popup is actually there — an unconditional tap at
-              // the top of the screen would hit the Reels "For you" tab or the
-              // creator header and could navigate away from the reel.
               const _vrSaveXml = await android.dumpUi(serial).catch(() => "");
-              if (_vrSaveXml.includes("Start a collection") || _vrSaveXml.includes("Collect the posts")) {
-                const _vrDismissX = Math.round(w * 0.50);
-                const _vrDismissY = Math.round(h * 0.12);
-                await android.tap(serial, _vrDismissX, _vrDismissY);
-                onLog?.(`Reel ${i + 1}/${totalReels}: dismissed "Save to collection?" popup`);
-                await sleepOrAbort(serial, 300);
-              }
+               await dismissSaveCollectionPrompt(serial, _vrSaveXml, onLog, `Reel ${i + 1}/${totalReels}`);
             }
           }
           if (wantShareDm) {
@@ -10866,16 +10844,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         onLog?.(`Inject Browsing: tapping save icon at (${icons.save.x},${icons.save.y})…`);
         await android.tap(serial, icons.save.x, icons.save.y);
         await sleepOrAbort(serial, 600);
-        // Dismiss the "Collect the posts you love" bottom sheet if it appears.
-        {
-          const _ibSaveXml = await android.dumpUi(serial).catch(() => "");
-          if (_ibSaveXml.includes('pinned_save_row') || _ibSaveXml.includes('Collect the posts you love')) {
-            const { w: _ibW, h: _ibH } = getScreenSize(serial);
-            await android.tap(serial, Math.round(_ibW * 0.50), Math.round(_ibH * 0.12));
-            onLog?.("Inject Browsing: dismissed \"Save to collection?\" popup");
-            await sleepOrAbort(serial, 300);
-          }
-        }
+        const _ibSaveXml = await android.dumpUi(serial).catch(() => "");
+        await dismissSaveCollectionPrompt(serial, _ibSaveXml, onLog, "Inject Browsing");
         onLog?.("Inject Browsing: ✓ post saved");
       } catch (e: any) {
         if (e?.message === "cycle-aborted") throw e;
