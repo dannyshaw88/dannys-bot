@@ -2806,14 +2806,37 @@ export async function doubleTap(
 ): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
+  // Choose one offset for the whole gesture, not a separate offset per tap.
+  // Both taps must land together closely enough for Android/Instagram to
+  // recognize a double-tap. Keep the offset inside the logical display.
+  const screen = getScreenSize(serial);
+  const offset = () => Math.floor(Math.random() * 51) - 25;
+  const offsetX = offset();
+  const offsetY = offset();
+  const dispatchedX = Math.max(0, Math.min(screen.w - 1, Math.round(x) + offsetX));
+  const dispatchedY = Math.max(0, Math.min(screen.h - 1, Math.round(y) + offsetY));
   const interTapDelayMs = 35 + Math.floor(Math.random() * 86);
   const interTapDelaySeconds = (interTapDelayMs / 1000).toFixed(3);
   logger.info(
-    { serial, x, y, interTapDelayMs },
+    {
+      serial,
+      requestedX: Math.round(x),
+      requestedY: Math.round(y),
+      dispatchedX,
+      dispatchedY,
+      offsetX: dispatchedX - Math.round(x),
+      offsetY: dispatchedY - Math.round(y),
+      maxOffsetPx: 25,
+      interTapDelayMs,
+    },
     "[android-input] double-tap",
   );
-  onLog?.(`Double-tap at (${x},${y}) — inter-tap delay ${interTapDelayMs}ms`);
-  const cmd = `input tap ${x} ${y}; sleep ${interTapDelaySeconds}; input tap ${x} ${y}`;
+  onLog?.(
+    `Double-tap requested=(${Math.round(x)},${Math.round(y)}) ` +
+    `dispatched=(${dispatchedX},${dispatchedY}) offset=(${dispatchedX - Math.round(x)},${dispatchedY - Math.round(y)}) ` +
+    `— inter-tap delay ${interTapDelayMs}ms`,
+  );
+  const cmd = `input tap ${dispatchedX} ${dispatchedY}; sleep ${interTapDelaySeconds}; input tap ${dispatchedX} ${dispatchedY}`;
   const r = spawnSync(adb, ["-s", serial, "shell", cmd], { encoding: "utf8", timeout: 5000 });
   const out = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim();
   if (r.status !== 0 || r.error || /error|exception|permission denied/i.test(out)) {
