@@ -10152,12 +10152,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     await sleepOrAbort(serial, 1500 + Math.round(Math.random() * 300));
 
-    // 6. Leave the surrounding settings surface after the Save/tick action.
-    // The Save/tick flow already handles leaving the dedicated bio editor, so
-    // only one Back is needed before the next shuffled tool starts.
-    await android.pressBack(serial);
+    // 6. Leave the surrounding Edit Profile surface by locating the live
+    // top-left back arrow. Do not use Android Back or a guessed coordinate:
+    // on some builds the save flow leaves this screen open and the next
+    // random action then runs against Edit Profile indefinitely.
+    const backIcon = await android.findBackHeaderIconByPixels(
+      serial,
+      message => onLog?.(`Update Bio: ${message}`),
+    );
+    if (!backIcon) {
+      onLog?.("Update Bio: ✗ top-left back arrow was not visually confirmed — stopping without fallback");
+      return;
+    }
+    await android.tap(serial, backIcon.x, backIcon.y);
     await sleepOrAbort(serial, 800);
-    onLog?.("Update Bio: pressed Back (left surrounding settings)");
+    onLog?.(`Update Bio: tapped visually confirmed back arrow at (${backIcon.x},${backIcon.y})`);
     onLog?.("Update Bio: ✓ done");
   }
 
