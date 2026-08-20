@@ -5638,16 +5638,16 @@ async function findInstagramSearchFieldByPixelsInternal(
     return (screen.pixels[i] + screen.pixels[i + 1] + screen.pixels[i + 2]) / 3;
   };
   let best: SearchFieldVisualMatch | null = null;
-  // Use the proven View Feed heart matcher as the basis: the same correlation
-  // scoring and scale cadence, extended only with larger bands because these
-  // search-field templates are wide screenshots rather than small glyphs.
-  const scales = [0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.8, 2.2, 2.7, 3.0, 3.3, 3.6];
+  // Use the proven View Feed heart matcher exactly: same scale cadence,
+  // normalized correlation, and acceptance gate. The search field is only
+  // searched in the top 20% of the screen, where Instagram renders it.
+  const scales = [0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.8, 2.2, 2.7];
   for (const ref of refs) {
     for (const scale of scales) {
       const tw = Math.round(ref.width * scale), th = Math.round(ref.height * scale);
       if (tw < 100 || th < 25 || tw > screen.width || th >= Math.round(screen.height * 0.45)) continue;
       const step = 2;
-      for (let y = 0; y <= Math.round(screen.height * 0.40) - th; y += 3) {
+      for (let y = 0; y <= Math.round(screen.height * 0.20) - th; y += 3) {
         for (let x = 0; x <= screen.width - tw; x += 3) {
           let screenSum = 0, screenSum2 = 0, refSum = 0, refSum2 = 0, cross = 0, count = 0;
           for (let ty = 0; ty < ref.height; ty += step) {
@@ -5679,7 +5679,11 @@ async function findInstagramSearchFieldByPixelsInternal(
             // no arbitrary confidence-based accept/reject gate here.
             // Same strong initial gate as the reliable View Feed heart
             // detector; background resemblance never becomes a candidate.
-            if (score > (best?.score ?? 0.86)) {
+            // This page has one search field in this scan band. Always keep
+            // the closest visual candidate rather than rejecting a valid
+            // field because a device/theme only resembles the reference
+            // weakly.
+            if (score > (best?.score ?? 0.5)) {
             best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), score, template: ref.name };
           }
         }
@@ -5691,15 +5695,11 @@ async function findInstagramSearchFieldByPixelsInternal(
       await new Promise<void>(resolve => setImmediate(resolve));
     }
   }
-  if (best && best.score >= 0.72) {
+  if (best) {
     onLog?.(`Follow: visual search field matched ${best.template} at (${best.x}, ${best.y}) score=${best.score.toFixed(3)}`);
     return best;
   }
-  if (best) {
-    onLog?.(`Follow: visual search-field match rejected as weak at (${best.x}, ${best.y}) score=${best.score.toFixed(3)}`);
-    return null;
-  }
-  else onLog?.("Follow: no visual search-field candidate was available");
+  onLog?.("Follow: no visual search-field candidate was available");
   return null;
 }
 
@@ -10169,6 +10169,13 @@ export async function findInstagramSearchBar(
   serial: string,
   onLog?: (msg: string) => void,
 ): Promise<{ x: number; y: number } | null> {
+  // Search-field taps are deliberately visual-only. UIAutomator nodes are
+  // intermittent on this surface and must never override the same
+  // screenshot/reference correlation used by the Feed Like detector.
+  const visual = await findInstagramSearchFieldByPixels(serial, onLog);
+  return visual ? { x: visual.x, y: visual.y } : null;
+
+  /*
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const { h: screenH } = getScreenSize(serial);
