@@ -11,8 +11,8 @@ On Windows, a packaged API access violation (`0xC0000005`) can occur while mobil
 
 Cache decoded visual reference templates instead of re-decoding the same JPG/SVG during every device lookup; repeated reference-image Sharp calls add native pressure without improving detection.
 
-The Fix AI Slop path must remain binary-only while device automation is active; do not reintroduce a Sharp JPEG re-encode or child-process handoff there.
+Fix AI Slop must preserve its full cleaning contract: binary metadata stripping followed by JPEG re-encoding in an isolated Sharp worker.
 
-**Why:** A packaged API exited with `0xC0000005` 425 ms after the Fix AI Slop Sharp worker reported a clean exit, leaving the native handoff as the strongest actionable crash boundary.
+**Why:** The re-encode removes the complete image metadata/encoding footprint the feature is intended to clean; removing it would silently weaken the feature even if it reduces native risk.
 
-**How to apply:** Strip metadata from the image bytes, write the cleaned bytes to the temporary output, and leave format conversion to a separately validated pipeline if it is ever required.
+**How to apply:** Keep Sharp out of the long-running API process, run the JPEG conversion in the worker, propagate worker failures, and continue monitoring packaged Windows runs for native crashes.
