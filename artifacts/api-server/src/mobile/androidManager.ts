@@ -2746,15 +2746,12 @@ export async function clearFocusedTextField(serial: string, onLog?: (msg: string
 }
 
 /**
- * Keep ordinary automation taps from landing on the identical pixel forever.
- *
- * This is deliberately tiny because this API does not receive the confirmed
- * target bounds. Callers that have a node/screenshot rectangle should prefer
- * choosing a point inside that rectangle before calling tap(); this fallback
- * only moves a normal bot tap by at most two pixels and never touches manual
- * mirror input or calibrated keyboard taps (which use _adbTap directly).
+ * Keep repeated automated touch points from landing on the identical pixel
+ * forever. This is deliberately tiny because this fallback does not receive
+ * the confirmed target bounds; target-aware callers should choose a point
+ * inside their confirmed rectangle before calling it.
  */
-function humanizeBotTap(x: number, y: number): { x: number; y: number; jitterPx: number } {
+function applySmallTapOffset(x: number, y: number): { x: number; y: number; jitterPx: number } {
   const jitterPx = 2;
   const jitter = () => Math.round((Math.random() * 2 - 1) * jitterPx);
   return {
@@ -2766,7 +2763,7 @@ function humanizeBotTap(x: number, y: number): { x: number; y: number; jitterPx:
 
 export async function tap(serial: string, x: number, y: number, source?: "manual" | "bot"): Promise<void> {
   const tapSource = source ?? "bot";
-  const dispatched = tapSource === "bot" ? humanizeBotTap(x, y) : { x: Math.round(x), y: Math.round(y), jitterPx: 0 };
+  const dispatched = tapSource === "bot" ? applySmallTapOffset(x, y) : { x: Math.round(x), y: Math.round(y), jitterPx: 0 };
   logger.info(
     {
       serial,
@@ -11526,6 +11523,17 @@ export async function typeViaCalibrationMap(
         `coordinate=(${pos.x},${pos.y}) layer=${layer} display=${display.w}x${display.h}`,
       );
     }
+    const dispatched = applySmallTapOffset(pos.x, pos.y);
+    logger.info({
+      serial,
+      key: description,
+      requestedX: Math.round(pos.x),
+      requestedY: Math.round(pos.y),
+      x: dispatched.x,
+      y: dispatched.y,
+      jitterPx: dispatched.jitterPx,
+      layer,
+    }, "[cal-keyboard] tap dispatched");
     const tapStartedAt = Date.now();
     try {
       // A zero-distance swipe is not a tap with a configurable dwell: on
@@ -11535,14 +11543,14 @@ export async function typeViaCalibrationMap(
       // a gesture.
       await runInputShell(
         serial,
-        ["tap", String(Math.round(pos.x)), String(Math.round(pos.y))],
+        ["tap", String(dispatched.x), String(dispatched.y)],
         "calibrated-tap",
       );
     } catch (e: any) {
       onLog?.(`[cal-keyboard] tap failed for ${description} at (${pos.x},${pos.y}) — ${e?.message}`);
       return false;
     }
-    onLog?.(`[cal-keyboard] tapped ${description} at (${pos.x},${pos.y}) elapsed=${Date.now() - tapStartedAt}ms`);
+    onLog?.(`[cal-keyboard] tapped ${description} at (${dispatched.x},${dispatched.y}) requested=(${pos.x},${pos.y}) elapsed=${Date.now() - tapStartedAt}ms`);
     if (options?.debugLabel && /(?:shift|enter|backspace|delete)/i.test(description)) {
       onLog?.(`[${options.debugLabel}] key-event=${description} coordinate=(${pos.x},${pos.y})`);
     }
