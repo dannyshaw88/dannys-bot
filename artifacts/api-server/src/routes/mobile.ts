@@ -8769,6 +8769,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (!fileName) return { posted: false };
     const localFilePath = path.join(localFolderPath, fileName);
 
+    onLog?.(`Make a Post: preparing processed image "${fileName}"…`);
     const prepared = await prepareMakePostImage(localFilePath, fileName, {
       doFixAiSlop,
       alterationEnabled,
@@ -8778,6 +8779,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       frequencyDisruption,
       onLog,
     });
+    onLog?.(
+      `Make a Post: image preparation complete — path=${path.basename(prepared.pushFilePath)} ` +
+      `bytes=${prepared.audit.processedBytes} format=${prepared.audit.format} ` +
+      `dimensions=${prepared.audit.width}x${prepared.audit.height}`,
+    );
 
     onLog?.(`Make a Post: pushing "${fileName}" to device…`);
     let devicePath: string;
@@ -8788,10 +8794,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       onLog?.(`Make a Post: adb push failed — ${e?.message ?? "unknown error"}`);
       return { posted: false };
     }
+    onLog?.(`Make a Post: adb push complete — devicePath=${devicePath}`);
     await prepared.cleanup();
+    onLog?.("Make a Post: local prepared image cleaned up after push");
+    onLog?.("Make a Post: auditing device media copy before opening Instagram picker…");
     await auditDeviceMediaCopy(serial, devicePath, prepared.audit, onLog);
+    onLog?.("Make a Post: device media audit complete");
     onLog?.(`Make a Post: ✓ pushed to ${devicePath}, media-scanner notified — processedSha256=${prepared.audit.processedSha256} filename=${prepared.pushFileName} bytes=${prepared.audit.processedBytes}`);
     await sleepOrAbort(serial, 1200); // let the scanner index the file before we open the picker
+    onLog?.("Make a Post: media-scan settle complete; looking for compose icon");
 
     onLog?.("Make a Post: looking for the \"+\" compose icon…");
     const composeBtn = await android.findComposeButton(serial).catch(() => null);
