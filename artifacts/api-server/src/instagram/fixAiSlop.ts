@@ -42,7 +42,6 @@
 
 import { randomBytes } from "crypto";
 import { appendFileSync } from "fs";
-import { spawn } from "child_process";
 import { readFile, unlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
@@ -302,8 +301,8 @@ function detectFormat(buf: Buffer): ImageFormat {
  * The caller MUST call cleanupAiSlopTemp() after using the returned path.
  *
  * Pipeline:
- *   Binary strip: C2PA, EXIF, XMP, IPTC removed at byte level, followed by a
- *   metadata-free JPEG re-encode. No pixel perturbation is performed here.
+ *   Binary strip: C2PA, EXIF, XMP, IPTC removed at byte level. No native image
+ *   library is used in this path, and no pixel perturbation is performed here.
  */
 export async function fixAiSlop(
   inputPath: string,
@@ -352,62 +351,23 @@ export async function fixAiSlop(
     );
     onLog?.(`Fix AI Slop: binary strip complete — format=${fmt}, removed ${removedCount} metadata block(s)`);
 
-    // ── Step 2: Metadata-free JPEG re-encode ────────────────────────────────
-    // Sharp is used for the metadata-free JPEG re-encode.
-    const quality = 85 + Math.floor(Math.random() * 8);
-    nativeCrashBreadcrumb("sharp-pipeline", `format=${fmt} bytes=${stripped.length} quality=${quality}`);
-    const strippedPath = `${tmp}.input`;
-    await writeFile(strippedPath, stripped);
-    let reencoded: Buffer;
-    try {
-      await runSharpWorker(strippedPath, tmp, quality);
-      reencoded = await readFile(tmp);
-    } finally {
-      await unlink(strippedPath).catch(() => {});
-    }
-
-    nativeCrashBreadcrumb("sharp-complete", `outputBytes=${reencoded.length}`);
-    await writeFile(tmp, reencoded);
+    // Do not run a native JPEG re-encode here. This endpoint is used while
+    // device automation is active, alongside other image work in the API
+    // process. The byte-level metadata removal above is sufficient and keeps
+    // this path entirely inside Node's memory/filesystem APIs.
+    nativeCrashBreadcrumb("binary-strip-complete", `format=${fmt} bytes=${stripped.length}`);
+    await writeFile(tmp, stripped);
 
     console.log(
-      `[fixAiSlop] done — format=${fmt}, quality=${quality}, binary-stripped ${removedCount} block(s)`,
+      `[fixAiSlop] done — format=${fmt}, binary-stripped ${removedCount} block(s)`,
     );
-    onLog?.(`Fix AI Slop: full processing complete — JPEG quality ${quality}`);
+    onLog?.(`Fix AI Slop: metadata removal complete — format=${fmt}`);
     return tmp;
   } catch (err) {
     console.error("[fixAiSlop] failed:", err);
     await unlink(tmp).catch(() => {});
     throw new Error(`Fix AI Slop processing failed: ${(err as Error)?.message ?? String(err)}`);
   }
-}
-
-function runSharpWorker(inputPath: string, outputPath: string, quality: number): Promise<void> {
-  const workerPath = join(dirname(__filename), "fixAiSlopWorker.mjs");
-  return new Promise((resolve, reject) => {
-    nativeCrashBreadcrumb("worker-spawn", `worker=${workerPath} input=${inputPath} output=${outputPath} quality=${quality}`);
-    const child = spawn(process.execPath, [workerPath, inputPath, outputPath], {
-      stdio: ["ignore", "ignore", "pipe"],
-      env: { ...process.env, FIX_AI_SLOP_QUALITY: String(quality) },
-    });
-    let stderr = "";
-    const timer = setTimeout(() => {
-      nativeCrashBreadcrumb("worker-timeout", "timeoutMs=30000");
-      child.kill("SIGKILL");
-      reject(new Error("Sharp worker timed out after 30 seconds"));
-    }, 30_000);
-    child.stderr.on("data", chunk => { stderr += String(chunk).slice(-4000); });
-    child.once("error", error => {
-      clearTimeout(timer);
-      nativeCrashBreadcrumb("worker-error", error.message);
-      reject(error);
-    });
-    child.once("close", (code, signal) => {
-      clearTimeout(timer);
-      nativeCrashBreadcrumb("worker-close", `code=${code ?? "null"} signal=${signal ?? "none"} stderr=${stderr.trim().slice(-1000)}`);
-      if (code === 0) resolve();
-      else reject(new Error(`Sharp worker exited with code ${code ?? "null"}${signal ? ` signal ${signal}` : ""}${stderr ? `: ${stderr.trim()}` : ""}`));
-    });
-  });
 }
 
 /**
