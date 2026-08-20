@@ -4051,6 +4051,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   // Shared mother-code timing with a stable, serial-specific accent. The
   // per-action random sample below still prevents repetitive sequences.
+  const motherCodeDiagnostics = new Set<string>();
   const devicePersonality = (serial: string) => {
     let h = 2166136261;
     for (let i = 0; i < serial.length; i++) {
@@ -4063,14 +4064,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       n ^= n >>> 13; n = Math.imul(n, 3266489917) >>> 0;
       return ((n ^ (n >>> 16)) >>> 0) / 0x100000000;
     };
-    return {
+    const personality = {
       dwellScale: 0.86 + unit(1) * 0.30,
       pauseScale: 0.82 + unit(2) * 0.36,
       settleScale: 0.82 + unit(3) * 0.36,
       gestureScale: 0.92 + unit(4) * 0.16,
-      xBias: Math.round((unit(5) - 0.5) * 18),
-      yBias: Math.round((unit(6) - 0.5) * 24),
+      // Keep these large enough that distinct serials do not routinely
+      // collapse to the same integer after rounding. They remain bounded
+      // and are applied only to calibrated swipe paths.
+      xBias: Math.round((unit(5) - 0.5) * 36),
+      yBias: Math.round((unit(6) - 0.5) * 48),
     };
+    if (!motherCodeDiagnostics.has(serial)) {
+      motherCodeDiagnostics.add(serial);
+      const prefs = loadInstanceConfigs()[serial]?.devicePrefs;
+      logger.info({
+        serial,
+        personality,
+        hasDevicePrefs: Boolean(prefs),
+        hasSwipeGesture: Boolean(prefs?.swipeGesture),
+        hasTypingProfile: Boolean(prefs?.typingSpeedProfile),
+        hasMotherOverrides: Boolean(prefs?.motherCodeOverrides),
+      }, "[mother-code] resolved per-device personality");
+    }
+    return personality;
   };
   const effectiveTypingProfile = (serial: string) => {
     const profile = loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile;
@@ -4100,7 +4117,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const low = scaled >= 5000 ? Math.max(1, Math.round(scaled * 0.5)) : Math.max(1, Math.round(scaled));
     const high = scaled >= 5000 ? Math.round(scaled) : 5000;
     const overrides = loadInstanceConfigs()[serial]?.devicePrefs?.motherCodeOverrides;
-    const override = overrides?.globalDwell;
+    // Category-specific overrides must win. Previously every category read
+    // globalDwell, making account switching, navigation, and action pacing
+    // silently share one timing profile even when the device UI showed
+    // distinct saved values.
+    const override = overrides?.[category] ?? overrides?.globalDwell;
     if (!override) return low + Math.floor(Math.random() * (high - low + 1));
     const min = Math.min(override.minMs, override.maxMs);
     const max = Math.max(override.minMs, override.maxMs);
