@@ -6010,6 +6010,74 @@ async function findSaveIconByPixels(
 }
 
 /**
+ * Finds the visible Instagram top-left back arrow from the supplied reference
+ * image. This intentionally follows the same normalized, polarity-invariant
+ * pixel correlation as the Feed Like matcher: no accessibility label, node
+ * order, fixed coordinate, or screen-relative fallback is allowed.
+ */
+export async function findBackHeaderIconByPixels(
+  serial: string,
+  onLog?: (msg: string) => void,
+): Promise<{ x: number; y: number } | null> {
+  const screen = await _captureScreenPixels(serial);
+  if (!screen || screen.channels < 3) return null;
+  try {
+    const refPath = path.resolve(process.cwd(), "attached_assets/fdsfs_1787258338907.jpg");
+    const { data, info } = await sharp(refPath).greyscale().raw().toBuffer({ resolveWithObject: true });
+    const sample = (x: number, y: number): number => {
+      const i = (y * screen.width + x) * screen.channels;
+      return (screen.pixels[i] + screen.pixels[i + 1] + screen.pixels[i + 2]) / 3;
+    };
+    let best: { x: number; y: number; score: number } | null = null;
+    const xLimit = Math.round(screen.width * 0.42);
+    const yLimit = Math.round(screen.height * 0.20);
+    for (const scale of [0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.8, 2.2, 2.7, 3.2, 3.7]) {
+      const tw = Math.max(10, Math.round(info.width * scale));
+      const th = Math.max(10, Math.round(info.height * scale));
+      if (tw >= xLimit || th >= yLimit) continue;
+      for (let y = 0; y <= yLimit - th; y += 2) {
+        for (let x = 0; x <= xLimit - tw; x += 2) {
+          let screenSum = 0, screenSum2 = 0, refSum = 0, refSum2 = 0, cross = 0, count = 0;
+          for (let ty = 0; ty < info.height; ty += 2) {
+            for (let tx = 0; tx < info.width; tx += 2) {
+              const sx = x + Math.min(tw - 1, Math.round(tx * scale));
+              const sy = y + Math.min(th - 1, Math.round(ty * scale));
+              const screenValue = sample(sx, sy);
+              const refValue = data[ty * info.width + tx];
+              screenSum += screenValue;
+              screenSum2 += screenValue * screenValue;
+              refSum += refValue;
+              refSum2 += refValue * refValue;
+              cross += screenValue * refValue;
+              count++;
+            }
+          }
+          if (count < 100) continue;
+          const screenMean = screenSum / count;
+          const refMean = refSum / count;
+          const screenVariance = Math.max(1, screenSum2 / count - screenMean * screenMean);
+          const refVariance = Math.max(1, refSum2 / count - refMean * refMean);
+          const covariance = cross / count - screenMean * refMean;
+          const score = 0.5 + Math.abs(covariance / Math.sqrt(screenVariance * refVariance)) * 0.5;
+          if (score > (best?.score ?? 0.86)) {
+            best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), score };
+          }
+        }
+      }
+    }
+    if (!best || best.score < 0.86) {
+      onLog?.("[back-icon] visual reference not matched — refusing fallback tap");
+      return null;
+    }
+    onLog?.(`[back-icon] visual reference matched at (${best.x},${best.y}) score=${best.score.toFixed(3)}`);
+    return { x: best.x, y: best.y };
+  } catch {
+    onLog?.("[back-icon] visual matcher unavailable — refusing fallback tap");
+    return null;
+  }
+}
+
+/**
  * Finds the Share footer button on Instagram's "New post" caption screen.
  *
  * Uses resource-id as the primary signal (confirmed from real-device dump,
