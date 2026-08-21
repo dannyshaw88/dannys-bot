@@ -4341,7 +4341,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     cum += focused;
     if (roll < cum) return { mode: "focused", duration: duration("focused", 2500, 5000), fromY: Math.round(h * Math.min(0.58, safeStartFrac)), toY: Math.round(h * 0.48) };
     cum += tapDragRelease;
-    if (roll < cum) return { mode: "tapDragRelease", duration: duration("tapDragRelease", 5000, 10000), fromY: Math.round(h * safeStartFrac), toY: Math.round(h * 0.35) };
+    // This mode is intentionally a quick, deliberate drag rather than a
+    // literal long press.  A multi-second DOWN on an Explore grid cell can
+    // be claimed by the cell as a tap before Instagram's scroll container
+    // takes ownership of the gesture.
+    if (roll < cum) return { mode: "tapDragRelease", duration: duration("tapDragRelease", 450, 850), fromY: Math.round(h * safeStartFrac), toY: Math.round(h * 0.35) };
     return {
       mode: "back",
       duration: duration("back", 350, 600),
@@ -4427,6 +4431,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // onto an element whose touch consumer would claim the DOWN event as a tap.
     if (opts?.maxFromY !== undefined && !reversed) {
       path.y1 = Math.min(path.y1, opts.maxFromY);
+    }
+    // Explore's media grid is itself clickable.  After the profile endpoint
+    // and jitter are applied, preserve a meaningful upward travel distance so
+    // a slow/short tap-drag cannot be interpreted as opening the tile under
+    // the finger.  Keep this scoped to Explore; other calibrated swipe
+    // surfaces may intentionally use shorter movements.
+    if (source === "explore-scroll" && !reversed) {
+      const minExploreTravel = Math.round(size.h * 0.22);
+      if ((path.y1 - path.y2) < minExploreTravel) {
+        path.y2 = Math.max(0, path.y1 - minExploreTravel);
+        logger.warn({
+          serial,
+          source,
+          recoveredFrom: [path.x1, path.y1],
+          recoveredTo: [path.x2, path.y2],
+          minExploreTravel,
+        }, "[mobile-input] recovered short Explore swipe before dispatch");
+      }
     }
     // A feed swipe must never degrade into a tap. This can happen when a
     // saved profile's endpoints are near the Android bottom gesture zone and
