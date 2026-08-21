@@ -6020,9 +6020,12 @@ export async function findBackHeaderIconByPixels(
   onLog?: (msg: string) => void,
 ): Promise<{ x: number; y: number } | null> {
   const screen = await _captureScreenPixels(serial);
-  if (!screen || screen.channels < 3) return null;
+  if (!screen) return null;
   try {
-    const refPath = path.resolve(process.cwd(), "attached_assets/fdsfs_1787258338907.jpg");
+    const refPath = path.resolve(
+      process.cwd(),
+      "attached_assets/fdsfs_1787258338907.jpg",
+    );
     const { data, info } = await sharp(refPath).greyscale().raw().toBuffer({ resolveWithObject: true });
     const sample = (x: number, y: number): number => {
       const i = (y * screen.width + x) * screen.channels;
@@ -6030,13 +6033,16 @@ export async function findBackHeaderIconByPixels(
     };
     let best: { x: number; y: number; score: number } | null = null;
     const xLimit = Math.round(screen.width * 0.42);
-    const yLimit = Math.round(screen.height * 0.20);
-    for (const scale of [0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.8, 2.2, 2.7, 3.2, 3.7]) {
+    const yMin = 0;
+    const yMax = Math.round(screen.height * 0.20);
+    // Keep the Like matcher’s scale set and traversal cadence exactly. The
+    // only intentional difference is the top-left search window.
+    for (const scale of [0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.8, 2.2, 2.7]) {
       const tw = Math.max(10, Math.round(info.width * scale));
       const th = Math.max(10, Math.round(info.height * scale));
-      if (tw >= xLimit || th >= yLimit) continue;
-      for (let y = 0; y <= yLimit - th; y += 2) {
-        for (let x = 0; x <= xLimit - tw; x += 2) {
+      if (tw >= screen.width || th >= screen.height) continue;
+      for (let y = yMin; y <= yMax - th; y += 3) {
+        for (let x = 0; x <= xLimit - tw; x += 3) {
           let screenSum = 0, screenSum2 = 0, refSum = 0, refSum2 = 0, cross = 0, count = 0;
           for (let ty = 0; ty < info.height; ty += 2) {
             for (let tx = 0; tx < info.width; tx += 2) {
@@ -6065,8 +6071,12 @@ export async function findBackHeaderIconByPixels(
         }
       }
     }
-    if (!best || best.score < 0.86) {
-      onLog?.("[back-icon] visual reference not matched — refusing fallback tap");
+    if (!best) {
+      onLog?.("[back-icon] visual reference not matched in top-left region");
+      return null;
+    }
+    if (best.score < 0.72) {
+      onLog?.(`[back-icon] visual match rejected as weak at (${best.x},${best.y}) score=${best.score.toFixed(3)}`);
       return null;
     }
     onLog?.(`[back-icon] visual reference matched at (${best.x},${best.y}) score=${best.score.toFixed(3)}`);
