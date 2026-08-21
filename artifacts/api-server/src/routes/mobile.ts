@@ -2046,14 +2046,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     checkDmRerunChanceMax: z.number().min(0).max(100).default(0),
     makePostRerunChanceMin: z.number().min(0).max(100).default(0),
     makePostRerunChanceMax: z.number().min(0).max(100).default(0),
-    viewExploreRerunChanceMin: z.number().min(0).max(100).default(0),
-    viewExploreRerunChanceMax: z.number().min(0).max(100).default(0),
-    viewReelsRerunChanceMin: z.number().min(0).max(100).default(0),
-    viewReelsRerunChanceMax: z.number().min(0).max(100).default(0),
-    checkDmRerunChanceMin: z.number().min(0).max(100).default(0),
-    checkDmRerunChanceMax: z.number().min(0).max(100).default(0),
-    makePostRerunChanceMin: z.number().min(0).max(100).default(0),
-    makePostRerunChanceMax: z.number().min(0).max(100).default(0),
     feedScrollMin: z.number().min(1),
     feedScrollMax: z.number().min(1),
     viewStoriesSlidesMin: z.number().min(0).max(100).default(0),
@@ -8050,6 +8042,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     clickAuthorPercentMax: z.number().min(0).max(100).default(0),
     feedRerunChanceMin: z.number().min(0).max(100).default(0),
     feedRerunChanceMax: z.number().min(0).max(100).default(0),
+    viewExploreRerunChanceMin: z.number().min(0).max(100).default(0),
+    viewExploreRerunChanceMax: z.number().min(0).max(100).default(0),
+    viewReelsRerunChanceMin: z.number().min(0).max(100).default(0),
+    viewReelsRerunChanceMax: z.number().min(0).max(100).default(0),
+    checkDmRerunChanceMin: z.number().min(0).max(100).default(0),
+    checkDmRerunChanceMax: z.number().min(0).max(100).default(0),
+    makePostRerunChanceMin: z.number().min(0).max(100).default(0),
+    makePostRerunChanceMax: z.number().min(0).max(100).default(0),
     viewStoriesSlidesMin: z.number().min(0).max(100).default(0),
     viewStoriesSlidesMax: z.number().min(0).max(100).default(0),
     viewStoriesSlideWatchPctMin: z.number().min(1).max(100).default(50),
@@ -12114,6 +12114,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         clickHashtagPercentMin, clickHashtagPercentMax,
         clickAuthorPercentMin, clickAuthorPercentMax,
         feedRerunChanceMin, feedRerunChanceMax,
+        viewExploreRerunChanceMin, viewExploreRerunChanceMax,
+        viewReelsRerunChanceMin, viewReelsRerunChanceMax,
+        checkDmRerunChanceMin, checkDmRerunChanceMax,
+        makePostRerunChanceMin, makePostRerunChanceMax,
         viewStoriesSlidesMin, viewStoriesSlidesMax,
         viewStoriesSlideWatchPctMin, viewStoriesSlideWatchPctMax,
         viewStoriesLikePercentMin, viewStoriesLikePercentMax,
@@ -12925,16 +12929,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // targetCount === 1: spread never applies, follow runs normally via standard dispatcher
       }
 
-      // View Feed re-run is appended after the completed shuffled sequence.
-      // Reusing the same `feed` dispatcher entry reapplies every View Feed
-      // setting and action, including likes, hashtags, and author clicks.
-      const _feedRerunLo = Math.min(feedRerunChanceMin, feedRerunChanceMax);
-      const _feedRerunHi = Math.max(feedRerunChanceMin, feedRerunChanceMax);
-      const _feedRerunChance = _feedRerunLo + Math.random() * (_feedRerunHi - _feedRerunLo);
-      if (_toolActivated.feed && _feedRerunChance > 0 && Math.random() * 100 < _feedRerunChance) {
-        _toolSeq.push("feed");
-        tLog(`▶ View Feed re-run rolled (${Math.round(_feedRerunChance)}%) — appended at end of cycle`);
-      }
+      // Each requested tool gets an independent one-pass re-run roll. The
+      // appended dispatcher entry invokes the real tool function again, so
+      // that function's own counts, percentages, delays, and personality
+      // rolls are all fresh for the re-run.
+      const appendToolRerun = (
+        tool: string,
+        min: number,
+        max: number,
+        label: string,
+      ) => {
+        if (!_toolActivated[tool]) return;
+        const lo = Math.min(min, max);
+        const hi = Math.max(min, max);
+        const chance = lo + Math.random() * (hi - lo);
+        if (chance > 0 && Math.random() * 100 < chance) {
+          _toolSeq.push(tool);
+          tLog(`▶ ${label} re-run rolled (${Math.round(chance)}%) — appended at end of cycle`);
+        }
+      };
+      appendToolRerun("feed", feedRerunChanceMin, feedRerunChanceMax, "View Feed");
+      appendToolRerun("explore", viewExploreRerunChanceMin, viewExploreRerunChanceMax, "View Explore");
+      appendToolRerun("reels", viewReelsRerunChanceMin, viewReelsRerunChanceMax, "View Reels");
+      appendToolRerun("checkDm", checkDmRerunChanceMin, checkDmRerunChanceMax, "Check Inbox");
+      appendToolRerun("post", makePostRerunChanceMin, makePostRerunChanceMax, "Make a Post");
 
       // Report the order the dispatcher will actually execute. Spread Follows
       // rewrites the base shuffled sequence after pre-fetching candidates, so

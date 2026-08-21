@@ -4111,6 +4111,14 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             clickAuthorPercentMax: s.clickAuthorPercentMax,
             feedRerunChanceMin: s.feedRerunChanceMin,
             feedRerunChanceMax: s.feedRerunChanceMax,
+            viewExploreRerunChanceMin: s.viewExploreRerunChanceMin,
+            viewExploreRerunChanceMax: s.viewExploreRerunChanceMax,
+            viewReelsRerunChanceMin: s.viewReelsRerunChanceMin,
+            viewReelsRerunChanceMax: s.viewReelsRerunChanceMax,
+            checkDmRerunChanceMin: s.checkDmRerunChanceMin,
+            checkDmRerunChanceMax: s.checkDmRerunChanceMax,
+            makePostRerunChanceMin: s.makePostRerunChanceMin,
+            makePostRerunChanceMax: s.makePostRerunChanceMax,
             viewStoriesSlidesMin: s.viewStoriesSlidesMin,
             viewStoriesSlidesMax: s.viewStoriesSlidesMax,
             viewStoriesSlideWatchPctMin: s.viewStoriesSlideWatchPctMin,
@@ -4980,6 +4988,9 @@ function CopySettingsDialog({
                   onClick={() => { sessionStorage.removeItem("copySettings_subKeys"); setSelectedSubKeys(new Set()); }}>None</Button>
               </div>
             </div>
+            <p className="text-[11px] leading-snug text-muted-foreground/80 mb-2 shrink-0">
+              TrustScore-controlled settings are shown here but greyed out. Edit or copy those settings from Settings → TrustScores.
+            </p>
             <div className="overflow-y-auto flex-1 space-y-1 pr-1">
               {displayCopySections.map(section => {
                 const state = sectionState(section);
@@ -6030,6 +6041,20 @@ export function AutomationSettingsPanel({
                 disabled={loading} />
             </div>
           </div>
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground block text-center">Re-run Chance %</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewExploreRerunChanceMin}
+                onChange={e => setSettings(s => ({ ...s, viewExploreRerunChanceMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewExploreRerunChanceMax}
+                onChange={e => setSettings(s => ({ ...s, viewExploreRerunChanceMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+            </div>
+          </div>
         </div>}
 
         {/* Border separator between View Explore Page above and View
@@ -6309,6 +6334,20 @@ export function AutomationSettingsPanel({
 
             </div>
           </div>
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground block text-center">Re-run Chance %</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewReelsRerunChanceMin}
+                onChange={e => setSettings(s => ({ ...s, viewReelsRerunChanceMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.viewReelsRerunChanceMax}
+                onChange={e => setSettings(s => ({ ...s, viewReelsRerunChanceMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+            </div>
+          </div>
         </div>}
 
         {/* ── Check Inbox — between View Reels and Follow Users ── */}
@@ -6370,6 +6409,20 @@ export function AutomationSettingsPanel({
               <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
                 value={settings.checkDmClickPctMax}
                 onChange={e => setSettings(s => ({ ...s, checkDmClickPctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+            </div>
+          </div>
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground block text-center">Re-run Chance %</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.checkDmRerunChanceMin}
+                onChange={e => setSettings(s => ({ ...s, checkDmRerunChanceMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.checkDmRerunChanceMax}
+                onChange={e => setSettings(s => ({ ...s, checkDmRerunChanceMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
             </div>
           </div>
@@ -7233,6 +7286,20 @@ export function AutomationSettingsPanel({
                       value={settings.makePostPerSessionMax}
                       onChange={e => setSettings(s => ({ ...s, makePostPerSessionMax: clamp4(Number(e.target.value)) }))}
                       disabled={fieldDisabled("makePostPerSessionMax")} />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-sm text-muted-foreground block text-center">Re-run Chance %</Label>
+                  <div className="flex items-center gap-2">
+                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.makePostRerunChanceMin}
+                      onChange={e => setSettings(s => ({ ...s, makePostRerunChanceMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                      disabled={fieldDisabled("makePostRerunChanceMin")} />
+                    <span className="text-muted-foreground text-sm">to</span>
+                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.makePostRerunChanceMax}
+                      onChange={e => setSettings(s => ({ ...s, makePostRerunChanceMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                      disabled={fieldDisabled("makePostRerunChanceMax")} />
                   </div>
                 </div>
               </div>

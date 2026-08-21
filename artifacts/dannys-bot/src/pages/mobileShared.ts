@@ -111,6 +111,14 @@ export interface AutomationSettingsData {
   clickAuthorPercentMax: number;
   feedRerunChanceMin: number;
   feedRerunChanceMax: number;
+  viewExploreRerunChanceMin: number;
+  viewExploreRerunChanceMax: number;
+  viewReelsRerunChanceMin: number;
+  viewReelsRerunChanceMax: number;
+  checkDmRerunChanceMin: number;
+  checkDmRerunChanceMax: number;
+  makePostRerunChanceMin: number;
+  makePostRerunChanceMax: number;
   feedScrollMin: number;
   feedScrollMax: number;
   viewStoriesSlidesMin: number;
@@ -278,6 +286,10 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   clickHashtagPercentMin: 0, clickHashtagPercentMax: 0,
   clickAuthorPercentMin: 0, clickAuthorPercentMax: 0,
   feedRerunChanceMin: 0, feedRerunChanceMax: 0,
+  viewExploreRerunChanceMin: 0, viewExploreRerunChanceMax: 0,
+  viewReelsRerunChanceMin: 0, viewReelsRerunChanceMax: 0,
+  checkDmRerunChanceMin: 0, checkDmRerunChanceMax: 0,
+  makePostRerunChanceMin: 0, makePostRerunChanceMax: 0,
   feedScrollMin: 5, feedScrollMax: 10,
   viewStoriesSlidesMin: 0, viewStoriesSlidesMax: 0,
   viewStoriesSlideWatchPctMin: 50, viewStoriesSlideWatchPctMax: 90,
@@ -552,6 +564,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'exploreShareDm',    label: 'Share via DM %',                fields: ['viewExploreShareDmPercentMin','viewExploreShareDmPercentMax'] },
     { key: 'exploreSave',       label: 'Save %',                        fields: ['viewExploreSavePercentMin','viewExploreSavePercentMax'] },
     { key: 'exploreClickAuthor', label: 'Click Author %',               fields: ['viewExploreClickAuthorPercentMin','viewExploreClickAuthorPercentMax'] },
+    { key: 'exploreRerunChance', label: 'Re-run Chance %',               fields: ['viewExploreRerunChanceMin','viewExploreRerunChanceMax'] },
   ]},
   { key: 'reels',         label: 'View Reels', sub: [
     { key: 'reelsEnabled',      label: 'Enabled',                       fields: ['viewReelsEnabled'] },
@@ -563,12 +576,14 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'reelsSave',         label: 'Save %',                        fields: ['viewReelsSavePercentMin','viewReelsSavePercentMax'] },
     { key: 'reelsShareDm',      label: 'Share via DM %',                fields: ['viewReelsShareDmPercentMin','viewReelsShareDmPercentMax'] },
     { key: 'reelsClickAuthor',  label: 'Click Author %',                fields: ['viewReelsClickAuthorPercentMin','viewReelsClickAuthorPercentMax'] },
+    { key: 'reelsRerunChance',  label: 'Re-run Chance %',                fields: ['viewReelsRerunChanceMin','viewReelsRerunChanceMax'] },
   ]},
   { key: 'checkDm',       label: 'Check Inbox', sub: [
     { key: 'checkDmEnabled',    label: 'Enabled',                       fields: ['checkDmEnabled'] },
     { key: 'checkDmActivate',   label: 'Activate Percentage',           fields: ['checkDmActivatePctMin','checkDmActivatePctMax'] },
     { key: 'checkDmScroll',     label: 'Scroll amount',                 fields: ['checkDmScrollMin','checkDmScrollMax'] },
     { key: 'checkDmClickPct',   label: 'Click Thread %',                fields: ['checkDmClickPctMin','checkDmClickPctMax'] },
+    { key: 'checkDmRerunChance', label: 'Re-run Chance %',              fields: ['checkDmRerunChanceMin','checkDmRerunChanceMax'] },
   ]},
   { key: 'follow',        label: 'Follow Users', sub: [
     { key: 'followEnabled',     label: 'Enabled',                       fields: ['followEnabled'] },
@@ -631,6 +646,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'postEnabled',       label: 'Enabled',                       fields: ['makePostEnabled'] },
     { key: 'postActivate',      label: 'Activate Percentage',           fields: ['makePostActivatePctMin','makePostActivatePctMax'] },
     { key: 'postPerSession',    label: 'Posts per session',             fields: ['makePostPerSessionMin','makePostPerSessionMax'] },
+    { key: 'postRerunChance',   label: 'Re-run Chance %',                fields: ['makePostRerunChanceMin','makePostRerunChanceMax'] },
     { key: 'postAlteration',    label: 'Image Alteration',              fields: ['makePostAlterationEnabled','makePostAlterationLevel'] },
     { key: 'postImgSettings',   label: 'Image Settings',                fields: ['makePostImageSettingsEnabled','makePostImageSettings'] },
     { key: 'postLocalFolder',   label: 'My Computer directory',          fields: ['makePostLocalFolderPath'] },

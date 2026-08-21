@@ -7,4 +7,4 @@ The frontend and API each maintain TrustScore ownership rules. Any new physical 
 
 **Why:** A Post a Story link setting was correctly protected by the API but initially omitted from the frontend ownership set, creating a silent TrustScore editor mismatch.
 
-**How to apply:** When adding or changing a slot-owned field, update and audit both the shared frontend ownership constants and the server ownership constants, then verify template locking, assigned-slot editing, and Copy Settings filtering together.
+**How to apply:** When adding or changing a slot-owned field, update and audit both the shared frontend ownership constants and the server ownership constants, then verify template locking, assigned-slot editing, and Copy Settings filtering together. HST Copy Settings should still list template-owned settings as disabled context; TrustScore Copy Settings is the authoritative copy path for them.
