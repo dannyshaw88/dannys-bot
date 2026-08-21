@@ -6,10 +6,12 @@ import os from "os";
 import zlib from "zlib";
 import sharp from "sharp";
 import { randomBytes } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { logger } from "../lib/logger";
 import * as recorder from "./sessionRecorder";
 
 const execFileP = promisify(execFile);
+const runtimeServerDir = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Non-blocking ADB runner. Returns stdout on success OR on timeout/error
@@ -606,11 +608,17 @@ export async function launchInstagram(serial: string): Promise<void> {
 export async function launchFilterCamera(serial: string): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  const apkPath = path.join(process.cwd(), "native-filter-camera", "app", "build", "outputs", "apk", "debug", "app-debug.apk");
-  logger.info({ serial, apkPath, adb }, "[filter-camera] launch start");
-  if (!fs.existsSync(apkPath)) {
-    logger.error({ serial, apkPath }, "[filter-camera] APK missing");
-    throw new Error(`Native filter APK is not built: ${apkPath}`);
+  const apkCandidates = [
+    // Packaged API: the Electron build copies this asset beside the server bundle.
+    path.join(runtimeServerDir, "native-filter-camera", "app-debug.apk"),
+    // Development workspace path.
+    path.join(process.cwd(), "native-filter-camera", "app", "build", "outputs", "apk", "debug", "app-debug.apk"),
+  ];
+  const apkPath = apkCandidates.find(candidate => fs.existsSync(candidate));
+  logger.info({ serial, apkCandidates, apkPath: apkPath ?? null, adb }, "[filter-camera] launch start");
+  if (!apkPath) {
+    logger.error({ serial, apkCandidates }, "[filter-camera] APK missing");
+    throw new Error(`Native filter APK is not bundled or built. Searched: ${apkCandidates.join(" | ")}`);
   }
   const installed = await isPackageInstalled(serial, "com.aura.farm.filtercamera");
   logger.info({ serial, installed, apkBytes: fs.statSync(apkPath).size }, "[filter-camera] package state checked");
