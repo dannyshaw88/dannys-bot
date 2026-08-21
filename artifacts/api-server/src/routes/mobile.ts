@@ -1688,6 +1688,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       logger.info({ serial }, "[filter-camera] native launch dispatched");
       res.json({ ok: true, native: true });
     } catch (e: any) {
+      logger.error({ serial: p(req, "serial"), err: e }, "[filter-camera] native launch failed");
       res.status(400).json({ ok: false, error: e?.message ?? "Could not open phone filter camera" });
     }
   });

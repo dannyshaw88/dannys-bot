@@ -607,15 +607,27 @@ export async function launchFilterCamera(serial: string): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const apkPath = path.join(process.cwd(), "native-filter-camera", "app", "build", "outputs", "apk", "debug", "app-debug.apk");
+  logger.info({ serial, apkPath, adb }, "[filter-camera] launch start");
   if (!fs.existsSync(apkPath)) {
+    logger.error({ serial, apkPath }, "[filter-camera] APK missing");
     throw new Error(`Native filter APK is not built: ${apkPath}`);
   }
-  if (!(await isPackageInstalled(serial, "com.aura.farm.filtercamera"))) {
+  const installed = await isPackageInstalled(serial, "com.aura.farm.filtercamera");
+  logger.info({ serial, installed, apkBytes: fs.statSync(apkPath).size }, "[filter-camera] package state checked");
+  if (!installed) {
+    logger.info({ serial, apkPath }, "[filter-camera] installing APK");
     await installApk(serial, apkPath);
+    logger.info({ serial }, "[filter-camera] APK install completed");
   }
   const result = spawnSync(adb, ["-s", serial, "shell", "am", "start", "-n",
     "com.aura.farm.filtercamera/.MainActivity", "--activity-clear-top"],
     { encoding: "utf8", timeout: 15000 });
+  logger.info({
+    serial,
+    exitCode: result.status,
+    stdout: (result.stdout ?? "").trim().slice(0, 500),
+    stderr: (result.stderr ?? "").trim().slice(0, 500),
+  }, "[filter-camera] activity launch result");
   if (result.status !== 0 || /Error|does not exist/i.test(`${result.stdout ?? ""}\n${result.stderr ?? ""}`)) {
     throw new Error(result.stderr?.trim() || result.stdout?.trim() || "Could not launch native filter camera");
   }

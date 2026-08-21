@@ -2694,6 +2694,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
     if (filterOpening) return;
     setFilterOpening(true);
     onLog?.(`Filter Camera: launching native APK on ${phone.serial}…`);
+    console.debug("[filter-camera] request start", { serial: phone.serial });
     try {
       const response = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/filter-camera/open`, {
         method: "POST",
@@ -2701,9 +2702,11 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
         body: "{}",
       });
       const body = await response.json().catch(() => null);
+      console.debug("[filter-camera] response", { serial: phone.serial, status: response.status, body });
       if (!response.ok) throw new Error(body?.error ?? `HTTP ${response.status}`);
       onLog?.("Filter Camera: launched native CameraX filter app");
     } catch (error: any) {
+      console.error("[filter-camera] request failed", { serial: phone.serial, error });
       onLog?.(`Filter Camera: failed to open — ${error?.message ?? "network error"}`);
       window.alert(`Filter Camera could not launch:\n${error?.message ?? "network error"}`);
     } finally {
