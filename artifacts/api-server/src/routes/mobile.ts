@@ -9732,8 +9732,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return;
     }
     await android.tap(serial, settingsRow.x, settingsRow.y);
-    await sleepOrAbort(serial, 1200 + Math.round(Math.random() * 600));
+    const destinationSettleMs = 1800 + Math.round(Math.random() * 1000);
+    await sleepOrAbort(serial, destinationSettleMs);
     onLog?.(`Visit Settings: ✓ tapped one setting row (${settingsRow.label})`);
+    logger.info({ serial, label: settingsRow.label, destinationSettleMs }, "[jitter-visit-settings] destination settled");
 
     // 5. Either scroll once then Back, or Back immediately. There is never a
     // second setting/subsetting tap in this flow.
@@ -9754,9 +9756,34 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
 
     // 6. Back once only.
+    logger.info({ serial }, "[jitter-visit-settings] pressing Back");
     await android.pressBack(serial);
-    await sleepOrAbort(serial, 800);
-    onLog?.("Visit Settings: ✓ done after one Back");
+    let hubVisible = false;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      await sleepOrAbort(serial, attempt === 0 ? 700 : 450);
+      hubVisible = await android.isInstagramSettingsHubVisible(serial).catch(() => false);
+      logger.info({ serial, attempt: attempt + 1, hubVisible }, "[jitter-visit-settings] Back verification");
+      if (hubVisible) break;
+    }
+    if (!hubVisible) {
+      // Some MIUI/Instagram combinations consume the first hardware Back
+      // while the destination transition is still settling. Retry once only
+      // after the first Back failed verification; never send an unbounded
+      // sequence that could escape Instagram.
+      logger.warn({ serial }, "[jitter-visit-settings] first Back not confirmed; issuing one controlled retry");
+      onLog?.("Visit Settings: Back not confirmed — retrying once");
+      await sleepOrAbort(serial, 500);
+      await android.pressBack(serial);
+      await sleepOrAbort(serial, 900);
+      hubVisible = await android.isInstagramSettingsHubVisible(serial).catch(() => false);
+      logger.info({ serial, hubVisible }, "[jitter-visit-settings] retry Back verification");
+    }
+    if (!hubVisible) {
+      onLog?.("Visit Settings: ⚠ Back still not confirmed after one retry");
+      logger.warn({ serial }, "[jitter-visit-settings] Back failed after controlled retry");
+      return;
+    }
+    onLog?.("Visit Settings: ✓ done after verified Back");
   }
 
   /**
