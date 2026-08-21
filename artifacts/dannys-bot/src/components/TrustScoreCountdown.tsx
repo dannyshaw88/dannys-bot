@@ -80,6 +80,8 @@ export function TrustScoreCountdown({
       setExpiresAt(null);
       return;
     }
+    const startedAt = performance.now();
+    console.debug("[ui-speed] trust score countdown:start", { serial, slotIdx });
     try {
       const assignment = await fetch(
         `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/trust-score`,
@@ -128,7 +130,18 @@ export function TrustScoreCountdown({
           ? data.expiresAt
           : Date.now() + effectiveRemaining,
       );
+      console.debug("[ui-speed] trust score countdown:ready", {
+        serial,
+        slotIdx,
+        scoreId: liveScoreId,
+        totalMs: Math.round((performance.now() - startedAt) * 10) / 10,
+      });
     } catch {
+      console.debug("[ui-speed] trust score countdown:failed", {
+        serial,
+        slotIdx,
+        totalMs: Math.round((performance.now() - startedAt) * 10) / 10,
+      });
       // A transient request failure should not make a persisted timer vanish.
     }
   }, [levels, serial, slotIdx, slotId]);

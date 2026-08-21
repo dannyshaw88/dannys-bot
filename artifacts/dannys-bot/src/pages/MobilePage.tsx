@@ -8336,8 +8336,18 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   // populated by SlotHumanSessionView via onAutomationState for display only.
   const [slotAutomationStates, setSlotAutomationStates] = useState<Record<number, SlotAutomationState>>({});
   const handleSlotAutomationState = useCallback((slotIdx: number, state: SlotAutomationState) => {
+    const navStarted = Number(sessionStorage.getItem("mobile_device_nav_started_at"));
+    console.debug("[ui-speed] device account slot automation state", {
+      serial: phone?.serial ?? null,
+      slotIdx,
+      enabled: state.enabled,
+      running: state.running,
+      elapsedMs: Number.isFinite(navStarted) && navStarted > 0
+        ? Math.round((performance.now() - navStarted) * 10) / 10
+        : null,
+    });
     setSlotAutomationStates(prev => ({ ...prev, [slotIdx]: state }));
-  }, []);
+  }, [phone?.serial]);
   const { config: collisionConfig, requestSlot, releaseSlot, cancelQueuedSlot, resetCollision } = useCollisionPreventer(phone?.serial ?? null);
 
   // Notify parent whenever the "any slot enabled" summary changes.
@@ -8444,9 +8454,25 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
     hydratedRef.current = false;
     if (!phone) { setSlots(Array.from({ length: ACCT_SLOT_COUNT }, emptySlot)); return; }
     let active = true;
+    const startedAt = performance.now();
+    console.debug("[ui-speed] account slots request:start", {
+      serial: phone.serial,
+      elapsedMs: null,
+    });
     setLoading(true);
     fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/account`)
-      .then(r => r.json())
+      .then(async r => {
+        const responseAt = performance.now();
+        const payload = await r.json();
+        console.debug("[ui-speed] account slots response", {
+          serial: phone.serial,
+          ok: r.ok,
+          status: r.status,
+          responseMs: Math.round((responseAt - startedAt) * 10) / 10,
+          jsonMs: Math.round((performance.now() - responseAt) * 10) / 10,
+        });
+        return payload;
+      })
       .then(async d => {
         if (!active) return;
         // Server returns { slots: [...] }; also handle legacy { username, password }
@@ -8483,6 +8509,18 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
         setTotpError(Array(loaded.length).fill(null));
         setLoading(false);
         hydratedRef.current = true;
+        console.debug("[ui-speed] account slots state:ready", {
+          serial: phone.serial,
+          slotCount: loaded.length,
+          totalMs: Math.round((performance.now() - startedAt) * 10) / 10,
+        });
+        requestAnimationFrame(() => {
+          console.debug("[ui-speed] account slots:painted", {
+            serial: phone.serial,
+            slotCount: loaded.length,
+            totalMs: Math.round((performance.now() - startedAt) * 10) / 10,
+          });
+        });
         // Do not block device selection on the legacy profile-to-slot
         // TrustScore compatibility migration. It performs a profile fetch and
         // one assignment request per slot, which made an otherwise idle device

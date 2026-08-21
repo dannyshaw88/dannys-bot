@@ -450,6 +450,14 @@ function PhoneFarmPhoneSection({
 }
 
 export function StatsPage() {
+  const statsPageStartedAtRef = useRef(performance.now());
+  const statsSpeedLastRef = useRef("");
+  useEffect(() => {
+    console.debug("[ui-speed] statistics page:mounted", {
+      totalMs: 0,
+      url: window.location.href,
+    });
+  }, []);
   useScrollRestore("stats");
   const { data: rawProfiles, isLoading } = useProfiles();
   const profiles = useMemo(() => rawProfiles?.filter(p => !p.isTemplate), [rawProfiles]);
@@ -564,6 +572,19 @@ export function StatsPage() {
     })),
   });
 
+  useEffect(() => {
+    const successCount = statsQueries.filter(q => q.isSuccess).length;
+    const key = `${profiles?.length ?? 0}:${successCount}`;
+    if (key === statsSpeedLastRef.current) return;
+    statsSpeedLastRef.current = key;
+    console.debug("[ui-speed] statistics profile stats progress", {
+      profiles: profiles?.length ?? 0,
+      successful: successCount,
+      loading: statsQueries.filter(q => q.isLoading).length,
+      totalMs: Math.round((performance.now() - statsPageStartedAtRef.current) * 10) / 10,
+    });
+  }, [profiles?.length, statsQueries]);
+
   const today = new Date().toISOString().split("T")[0];
 
   const statsMap = useMemo(() => {
@@ -665,6 +686,14 @@ export function StatsPage() {
     refetchInterval: 30000,
     enabled: activeTab === "metrics",
   });
+  useEffect(() => {
+    if (activeTab !== "metrics") return;
+    console.debug("[ui-speed] statistics metrics device data", {
+      usbPhones: metricsPhones?.phones?.length ?? 0,
+      farmDevices: metricsFarmData?.devices?.length ?? 0,
+      totalMs: Math.round((performance.now() - statsPageStartedAtRef.current) * 10) / 10,
+    });
+  }, [activeTab, metricsPhones?.phones?.length, metricsFarmData?.devices?.length]);
   const metricsPhoneList = useMemo(() => {
     const rawPhones = metricsPhones?.phones ?? [];
     const slotMap = new Map((metricsFarmData?.devices ?? []).map(device => [device.serial, device.slotIndex]));
@@ -682,6 +711,17 @@ export function StatsPage() {
       enabled: activeTab === "metrics",
     })),
   });
+  useEffect(() => {
+    if (activeTab !== "metrics") return;
+    const loaded = deviceSlotResults.filter(result => result.isSuccess).length;
+    console.debug("[ui-speed] statistics account slots progress", {
+      devices: deviceSlotResults.length,
+      loaded,
+      loading: deviceSlotResults.filter(result => result.isLoading).length,
+      totalAccounts: deviceSlotResults.reduce((sum, result) => sum + ((result.data as any)?.slots?.length ?? 0), 0),
+      totalMs: Math.round((performance.now() - statsPageStartedAtRef.current) * 10) / 10,
+    });
+  }, [activeTab, deviceSlotResults.map(result => result.dataUpdatedAt).join(","), deviceSlotResults.length]);
 
   const deviceGroups = useMemo(() => {
     const profilesByUsername = new Map(
@@ -720,6 +760,14 @@ export function StatsPage() {
     () => deviceGroups.flatMap(group => group.accounts),
     [deviceGroups],
   );
+  useEffect(() => {
+    if (activeTab !== "metrics") return;
+    console.debug("[ui-speed] statistics account selector:ready", {
+      deviceGroups: deviceGroups.length,
+      slotAccounts: deviceGroups.reduce((sum, group) => sum + group.accounts.length, 0),
+      totalMs: Math.round((performance.now() - statsPageStartedAtRef.current) * 10) / 10,
+    });
+  }, [activeTab, deviceGroups]);
   const unassignedProfiles = useMemo<MetricAccount[]>(
     () => [...(profiles ?? [])]
       .filter(p => !slotMetricAccounts.some(account => account.profile?.id === p.id))
