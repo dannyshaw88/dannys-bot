@@ -95,6 +95,7 @@ export type TrustLevelId = string;
 // ── Dynamic trust level storage ────────────────────────────────────────────────
 
 const TRUSTLEVELS_LS_KEY = "trustlevels_v1";
+let trustLevelsCache: TrustLevelEntry[] | null = null;
 
 interface StyleOverride {
   bg?: string;
@@ -140,6 +141,7 @@ function resolveIcon(
 }
 
 export function getTrustLevels(): TrustLevelEntry[] {
+  if (trustLevelsCache) return trustLevelsCache;
   const s = getTrustLevelsStorage();
   const byId = new Map<string, TrustLevelEntry>();
   for (const l of BASE_TRUST_LEVELS) byId.set(l.id, l);
@@ -149,7 +151,7 @@ export function getTrustLevels(): TrustLevelEntry[] {
     }
   }
   const overrides = s.overrides ?? {};
-  return s.order
+  trustLevelsCache = s.order
     .filter(id => !s.deleted.includes(id) && byId.has(id))
     .map(id => {
       const base = byId.get(id)!;
@@ -164,16 +166,23 @@ export function getTrustLevels(): TrustLevelEntry[] {
         iconKey: resolvedIconKey,
         icon,
       };
-    });
+     });
+  return trustLevelsCache;
+}
+
+function invalidateTrustLevelsCache() {
+  trustLevelsCache = null;
 }
 
 export function reorderTrustLevels(newOrder: string[]) {
+  invalidateTrustLevelsCache();
   const s = getTrustLevelsStorage();
   s.order = newOrder;
   saveTrustLevelsStorage(s);
 }
 
 export function deleteTrustLevel(id: string) {
+  invalidateTrustLevelsCache();
   const s = getTrustLevelsStorage();
   s.deleted = [...s.deleted.filter(d => d !== id), id];
   s.order = s.order.filter(o => o !== id);
@@ -182,6 +191,7 @@ export function deleteTrustLevel(id: string) {
 }
 
 export function addCustomTrustLevel(label: string): string {
+  invalidateTrustLevelsCache();
   const id = `custom_${Date.now()}`;
   const s = getTrustLevelsStorage();
   s.custom.push({ id, label: label.toUpperCase().trim() });
@@ -191,6 +201,7 @@ export function addCustomTrustLevel(label: string): string {
 }
 
 export function updateTrustLevelStyle(id: string, updates: StyleOverride) {
+  invalidateTrustLevelsCache();
   const s = getTrustLevelsStorage();
   if (!s.overrides) s.overrides = {};
   s.overrides[id] = { ...(s.overrides[id] ?? {}), ...updates };
