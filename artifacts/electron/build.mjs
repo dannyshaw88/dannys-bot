@@ -66,6 +66,17 @@ if (!existsSync(serverSrc)) {
 }
 await cp(serverSrc, path.join(dist, "server"), { recursive: true });
 
+const bundledFilterApk = path.join(
+  dist,
+  "server",
+  "native-filter-camera",
+  "app-debug.apk",
+);
+if (!existsSync(bundledFilterApk)) {
+  throw new Error(`Native filter APK missing from API bundle: ${bundledFilterApk}`);
+}
+console.log(`Bundled native filter APK: ${bundledFilterApk}`);
+
 // Ship the visual Search-bar references with the API server. The runtime
 // cannot depend on Replit's workspace-level attached_assets directory once
 // packaged on Windows.
