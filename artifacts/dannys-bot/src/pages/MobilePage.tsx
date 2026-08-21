@@ -3769,39 +3769,48 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       hydratedRef.current = true;
     };
     const stateUrl = `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx ?? 0}/automation-state?${hydrateCacheKey}`;
-    fetch(stateUrl, { cache: "no-store" })
-      .then(r => r.ok ? r.json() : null)
-      .then(async d => {
-        if (!active || typeof d?.enabled !== "boolean") return;
-        // The lightweight state endpoint is authoritative for the slot
-        // toggle. Paint it immediately instead of making the account list
-        // wait for the larger TrustScore-resolved settings payload below.
-        setSettings(previous => ({ ...previous, enabled: d.enabled }));
-        // Disabled slots only need the master state to keep the background
-        // runtime and slot-list toggle accurate. The full TrustScore-resolved
-        // settings object is large and is only needed by an enabled runtime
-        // or the visible editor.
-        if (!d.enabled && !isActive) {
-          applyHydratedSettings({ enabled: false });
-          return;
-        }
-        const settingsUrl = slotIdx !== undefined
-          ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings?${hydrateCacheKey}`
-          : `/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings?${hydrateCacheKey}`;
-        const response = await fetch(settingsUrl, { cache: "no-store" });
-        if (!response.ok) throw new Error("settings request failed");
-        applyHydratedSettings(await response.json());
-      })
-      .catch(() => {
-        // Keep defaults on a transient failure, but do not leave a disabled
-        // slot permanently blocked from rendering its lightweight controls.
-        if (active) {
-          applyHydratedSettings({ enabled: false });
-          setLoading(false);
-        }
-      })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+    const hydrate = () => {
+      fetch(stateUrl, { cache: "no-store" })
+        .then(r => r.ok ? r.json() : null)
+        .then(async d => {
+          if (!active || typeof d?.enabled !== "boolean") return;
+          // The lightweight state endpoint is authoritative for the slot
+          // toggle. Paint it immediately instead of making the account list
+          // wait for the larger TrustScore-resolved settings payload below.
+          setSettings(previous => ({ ...previous, enabled: d.enabled }));
+          // Disabled slots only need the master state to keep the background
+          // runtime and slot-list toggle accurate. The full TrustScore-resolved
+          // settings object is large and is only needed by an enabled runtime
+          // or the visible editor.
+          if (!d.enabled && !isActive) {
+            applyHydratedSettings({ enabled: false });
+            return;
+          }
+          const settingsUrl = slotIdx !== undefined
+            ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings?${hydrateCacheKey}`
+            : `/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings?${hydrateCacheKey}`;
+          const response = await fetch(settingsUrl, { cache: "no-store" });
+          if (!response.ok) throw new Error("settings request failed");
+          applyHydratedSettings(await response.json());
+        })
+        .catch(() => {
+          // Keep defaults on a transient failure, but do not leave a disabled
+          // slot permanently blocked from rendering its lightweight controls.
+          if (active) {
+            applyHydratedSettings({ enabled: false });
+            setLoading(false);
+          }
+        })
+        .finally(() => { if (active) setLoading(false); });
+    };
+    // The account list is the navigation-critical surface. Hidden HST slots
+    // remain mounted for scheduling, but should not monopolize the browser's
+    // request queue before the selected device's accounts can paint.
+    const hydrationTimer = window.setTimeout(hydrate, isActive ? 0 : 250);
+    return () => {
+      active = false;
+      window.clearTimeout(hydrationTimer);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectedKey, phone?.serial, slotIdx, refreshKey, invalidHstSlot, isActive]);
 
