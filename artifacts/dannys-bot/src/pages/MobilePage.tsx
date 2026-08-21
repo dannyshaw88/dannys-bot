@@ -3545,7 +3545,7 @@ const MAX_HST_ACCOUNT_SLOTS = 10;
 // the Human Session Tool tab never unmounts this and interrupts an
 // in-progress automation cycle — the loop must keep running in the
 // background regardless of which tab is currently visible.
-function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void, slotIdx?: number, slotUsername?: string, requestSlot?: (idx: number, readyAt: number, onQueued?: () => void) => Promise<boolean>, releaseSlot?: (idx: number, skipRest?: boolean) => void, cancelQueuedSlot?: (idx: number) => void, refreshKey?: number, collisionPreventerConfig?: CollisionPreventerConfig) {
+function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void, slotIdx?: number, slotUsername?: string, requestSlot?: (idx: number, readyAt: number, onQueued?: () => void) => Promise<boolean>, releaseSlot?: (idx: number, skipRest?: boolean) => void, cancelQueuedSlot?: (idx: number) => void, refreshKey?: number, collisionPreventerConfig?: CollisionPreventerConfig, isActive = false) {
   const [settings, setSettings] = useState<AutomationSettingsData>(AUTOMATION_DEFAULTS);
   const [loading,  setLoading]  = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -3757,41 +3757,48 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     // Hydration requires the JSON body; a cache-busting query prevents a 304
     // from silently leaving `hydrated` false and permanently disabling HST.
     const hydrateCacheKey = `hstHydrate=${Date.now()}`;
+    const applyHydratedSettings = (d: Record<string, any>) => {
+      if (!active) return;
+      const merged = { ...AUTOMATION_DEFAULTS, ...d, makePostLocalFolderEnabled: true };
+      lastSavedRef.current = JSON.stringify(merged);
+      // Set settings AND hydrated in the same React batch so the run-loop
+      // fires exactly once with the correct loaded values.
+      setSettings(merged);
+      setHydrated(true);
+      hydratedRef.current = true;
+    };
     const stateUrl = `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx ?? 0}/automation-state?${hydrateCacheKey}`;
     fetch(stateUrl, { cache: "no-store" })
       .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (active && typeof d?.enabled === "boolean") {
-          setSettings(s => ({ ...s, enabled: d.enabled }));
+      .then(async d => {
+        if (!active || typeof d?.enabled !== "boolean") return;
+        // Disabled slots only need the master state to keep the background
+        // runtime and slot-list toggle accurate. The full TrustScore-resolved
+        // settings object is large and is only needed by an enabled runtime
+        // or the visible editor.
+        if (!d.enabled && !isActive) {
+          applyHydratedSettings({ enabled: false });
+          return;
+        }
+        const settingsUrl = slotIdx !== undefined
+          ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings?${hydrateCacheKey}`
+          : `/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings?${hydrateCacheKey}`;
+        const response = await fetch(settingsUrl, { cache: "no-store" });
+        if (!response.ok) throw new Error("settings request failed");
+        applyHydratedSettings(await response.json());
+      })
+      .catch(() => {
+        // Keep defaults on a transient failure, but do not leave a disabled
+        // slot permanently blocked from rendering its lightweight controls.
+        if (active) {
+          applyHydratedSettings({ enabled: false });
+          setLoading(false);
         }
       })
-      .catch(() => {});
-    const settingsUrl = slotIdx !== undefined
-      ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings?${hydrateCacheKey}`
-      : `/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings?${hydrateCacheKey}`;
-    fetch(settingsUrl, { cache: "no-store" })
-      .then(r => r.json())
-      .then(d => {
-        if (!active) return;
-        const merged = { ...AUTOMATION_DEFAULTS, ...d, makePostLocalFolderEnabled: true };
-        lastSavedRef.current = JSON.stringify(merged);
-        // Set settings AND hydrated in the same React batch so the run-loop
-        // fires exactly once with the correct loaded values.  Doing this in
-        // .then() (not .finally()) ensures setHydrated(true) is never called
-        // without the real settings also being in place.
-        setSettings(merged);
-        setHydrated(true);
-        hydratedRef.current = true;
-        // Do NOT set manualToggleOnRef here. On restart the toggle is already
-        // on, but accounts must NOT fire immediately — each slot schedules its
-        // own random first-run delay within the configured interval instead.
-        // manualToggleOnRef is only set by explicit user action (setEnabledByUser).
-      })
-      .catch(() => { /* keep defaults */ })
-      .finally(() => { if (active) { setLoading(false); } });
+      .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectedKey, phone?.serial, slotIdx, refreshKey, invalidHstSlot]);
+  }, [connectedKey, phone?.serial, slotIdx, refreshKey, invalidHstSlot, isActive]);
 
   // Pause every slot immediately when the live ADB state becomes offline (or
   // unauthorized). This is separate from the scheduling effect because that
@@ -8140,7 +8147,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   { phone, slotIdx, slotUsername, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, onCopied, onAutomationState, collisionConfig, onOpenBrowserProfile, isActive = false, sharedScrollTopRef },
   ref,
 ) {
-  const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, collisionConfig);
+  const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, collisionConfig, isActive);
   const isFirst = slotIdx === 0;
   const isLast = slotIdx === (slotCount ?? 1) - 1;
 
@@ -8165,7 +8172,9 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   );
   useEffect(() => {
     let active = true;
-    if (!phone?.serial) {
+    // The slot list has its own Trust Score badge. Background HST runtimes
+    // only need the assignment when their editor is actually visible.
+    if (!phone?.serial || !isActive) {
       setTrustScoreAssigned(false);
       return () => { active = false; };
     }
@@ -8182,7 +8191,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
         if (active) setTrustScoreAssigned(Boolean(automation.settings.trustScoreId));
       });
     return () => { active = false; };
-  }, [phone?.serial, slotIdx, refreshKey, automation.settings.trustScoreId]);
+  }, [phone?.serial, slotIdx, refreshKey, automation.settings.trustScoreId, isActive]);
 
   // Expose setEnabled so the parent can toggle THIS slot directly by calling
   // slotHandleRefs.current[i]?.setEnabled(v).  Because the ref is bound to
@@ -8228,21 +8237,23 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
         </Button>
       </div>
        <div className="flex-1 min-h-0">
-        <AutomationSettingsPanel
-          phone={phone}
-          {...automation}
-          slotIdx={slotIdx}
-          slotUsername={slotUsername}
-          slotUsernames={slotUsernames}
-          onCopied={onCopied}
-          showCopyDialog={showCopyDialog}
-          setShowCopyDialog={setShowCopyDialog}
-          trustScoreAssigned={trustScoreAssigned || Boolean(automation.settings.trustScoreId)}
-          onOpenBrowserProfile={onOpenBrowserProfile}
-           settingsScrollRef={settingsScrollRef}
-           sharedScrollTopRef={sharedScrollTopRef}
-           isActive={isActive}
-        />
+        {isActive && (
+          <AutomationSettingsPanel
+            phone={phone}
+            {...automation}
+            slotIdx={slotIdx}
+            slotUsername={slotUsername}
+            slotUsernames={slotUsernames}
+            onCopied={onCopied}
+            showCopyDialog={showCopyDialog}
+            setShowCopyDialog={setShowCopyDialog}
+            trustScoreAssigned={trustScoreAssigned || Boolean(automation.settings.trustScoreId)}
+            onOpenBrowserProfile={onOpenBrowserProfile}
+            settingsScrollRef={settingsScrollRef}
+            sharedScrollTopRef={sharedScrollTopRef}
+            isActive={isActive}
+          />
+        )}
       </div>
     </div>
   );

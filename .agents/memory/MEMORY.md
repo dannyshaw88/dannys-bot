@@ -110,3 +110,4 @@
 - [Sharp Windows access violations](sharp-windows-access-violation.md) — serialize native Sharp screenshot decoding and keep libvips concurrency/cache conservative under multi-device polling
 - [Debug screenshot timestamp dedupe](debug-screenshot-timestamp-dedupe.md) — capture one composite per elapsed log timestamp; same-timestamp detail lines stay log-only
 - [Mobile tool discovery polling](mobile-tool-discovery-polling.md) — never run synchronous adb/emulator version probes on screenshot or device-status polling paths
+- [Mobile HST background rendering](mobile-hst-background-rendering.md) — keep hidden slot runtimes alive without mounting expensive editors or full settings hydration
