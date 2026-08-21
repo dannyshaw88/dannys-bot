@@ -9096,7 +9096,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const [dismissDir,    setDismissDir]    = React.useState<"auto" | "left" | "up">("auto");
   const [dismissSaving, setDismissSaving] = React.useState(false);
   type SwipeGesture = { x1: number; y1: number; x2: number; y2: number; durationMinMs: number; durationMaxMs: number; jitterX: number; jitterY: number; startJitterMinY: number; startJitterMaxY: number; pauseMinMs: number; pauseMaxMs: number; settleMinMs: number; settleMaxMs: number };
-  const [swipeGesture, setSwipeGesture] = React.useState<SwipeGesture>({ x1: 540, y1: 2100, x2: 540, y2: 500, durationMinMs: 400, durationMaxMs: 150, jitterX: 0, jitterY: 0, startJitterMinY: 0, startJitterMaxY: 0, pauseMinMs: 150, pauseMaxMs: 600, settleMinMs: 100, settleMaxMs: 350 });
+  const [swipeGesture, setSwipeGesture] = React.useState<SwipeGesture>({ x1: 540, y1: 2100, x2: 540, y2: 500, durationMinMs: 400, durationMaxMs: 800, jitterX: 0, jitterY: 0, startJitterMinY: 0, startJitterMaxY: 0, pauseMinMs: 150, pauseMaxMs: 600, settleMinMs: 100, settleMaxMs: 350 });
   type TypingSpeedProfile = { minMs: number; maxMs: number; errorPercentMin: number; errorPercentMax: number; dwellMinMs: number; dwellMaxMs: number; hesitationMinMs: number; hesitationMaxMs: number };
   const [typingSpeedProfile, setTypingSpeedProfile] = React.useState<TypingSpeedProfile>({ minMs: 80, maxMs: 220, errorPercentMin: 0, errorPercentMax: 0, dwellMinMs: 40, dwellMaxMs: 80, hesitationMinMs: 250, hesitationMaxMs: 650 });
   type MotherRange = { minMs: number; maxMs: number };
@@ -9145,7 +9145,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
         setDismissDir(d.dismissDirection ?? "auto");
         if (d.swipeGesture) setSwipeGesture({
           durationMinMs: 500, jitterX: 0, jitterY: 0, startJitterMinY: 0, startJitterMaxY: 0, pauseMinMs: 150, pauseMaxMs: 600, settleMinMs: 100, settleMaxMs: 350, ...d.swipeGesture,
-          durationMaxMs: Math.min(150, Number(d.swipeGesture.durationMaxMs ?? 150)),
+          durationMaxMs: Number(d.swipeGesture.durationMaxMs ?? 800),
         });
         if (d.typingSpeedProfile) setTypingSpeedProfile({ minMs: 80, maxMs: 220, errorPercentMin: 0, errorPercentMax: 0, dwellMinMs: 40, dwellMaxMs: 80, hesitationMinMs: 250, hesitationMaxMs: 650, ...d.typingSpeedProfile });
         if (d.swipePersonalityOverrides) setSwipePersonalityOverrides({ ...defaultSwipePersonalityOverrides, ...d.swipePersonalityOverrides });
@@ -9171,13 +9171,12 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
 
   const saveSwipeGesture = async (next: SwipeGesture) => {
     if (!serial) return;
-    const capped = { ...next, durationMaxMs: Math.min(150, next.durationMaxMs) };
-    setSwipeGesture(capped);
+    setSwipeGesture(next);
     setSwipeSaving(true);
     try {
       await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-prefs`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ swipeGesture: capped }),
+        body: JSON.stringify({ swipeGesture: next }),
       });
     } finally { setSwipeSaving(false); }
   };
@@ -9252,7 +9251,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     if (!serial || swipeTesting) return;
     setSwipeTesting(true);
     const durationMinMs = Math.min(swipeGesture.durationMinMs, swipeGesture.durationMaxMs);
-    const durationMaxMs = Math.min(150, Math.max(swipeGesture.durationMinMs, swipeGesture.durationMaxMs));
+    const durationMaxMs = Math.max(swipeGesture.durationMinMs, swipeGesture.durationMaxMs);
     const durationMs = durationMinMs + Math.round(Math.random() * (durationMaxMs - durationMinMs));
     setSwipeProgress(0);
     const startJitterMinY = Math.max(0, Math.min(swipeGesture.startJitterMinY ?? 0, swipeGesture.startJitterMaxY ?? 0));

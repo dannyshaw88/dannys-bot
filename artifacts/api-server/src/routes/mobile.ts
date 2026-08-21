@@ -3313,7 +3313,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           x2: z.number().finite(),
           y2: z.number().finite(),
           durationMinMs: z.number().finite(),
-          durationMaxMs: z.number().finite().max(150),
+          // Keep the full calibrated duration range.  The old 150 ms cap
+          // made a saved range such as 400–800 ms become 400–150 ms, which
+          // normalized to an intermittently unreliable micro-swipe during
+          // Step 3 recents dismissal.
+          durationMaxMs: z.number().finite().min(1).max(30000),
           jitterX: z.number().finite(),
           jitterY: z.number().finite(),
           startJitterMinY: z.number().finite().optional(),
@@ -3330,9 +3334,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         devicePrefs: {
           ...cfg[serial]?.devicePrefs,
           ...allowed,
-          ...(allowed.swipeGesture
-            ? { swipeGesture: { ...allowed.swipeGesture, durationMaxMs: Math.min(150, allowed.swipeGesture.durationMaxMs) } }
-            : {}),
+          ...(allowed.swipeGesture ? { swipeGesture: allowed.swipeGesture } : {}),
         },
       };
       saveInstanceConfigs(cfg);
