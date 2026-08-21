@@ -10734,7 +10734,7 @@ export function MobilePage() {
     const navigationMs = Number.isFinite(started) && started > 0
       ? performance.now() - started
       : null;
-    console.debug("[mobile-device-debug] MobilePage target changed", {
+    writeUiSpeedLog("mobile-page-target-changed", {
       from: previousTargetSerialRef.current,
       to: targetSerial,
       navigationMs,
@@ -10938,7 +10938,7 @@ export function MobilePage() {
         changed = !previous || !samePhoneSnapshot(previous, next);
         return previous && !changed ? previous : next;
       });
-      console.debug("[mobile-device-debug] USB poll complete", {
+      writeUiSpeedLog("usb-poll-complete", {
         durationMs: Math.round((performance.now() - pollStarted) * 10) / 10,
         showSpinner,
         phoneCount: next.phones.length,
@@ -10947,7 +10947,7 @@ export function MobilePage() {
       });
     }
     catch (e: any) {
-      console.debug("[mobile-device-debug] USB poll failed", {
+      writeUiSpeedLog("usb-poll-failed", {
         durationMs: Math.round((performance.now() - pollStarted) * 10) / 10,
         showSpinner,
         targetSerial,
