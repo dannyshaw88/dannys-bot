@@ -2692,7 +2692,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
       const response = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/filter-camera/open`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: "{}",
+        body: JSON.stringify({ cameraOrigin: window.location.origin }),
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(body?.error ?? `HTTP ${response.status}`);
