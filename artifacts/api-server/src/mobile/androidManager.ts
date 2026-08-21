@@ -6097,9 +6097,13 @@ export async function findBackHeaderIconByPixels(
       return (screen.pixels[i] + screen.pixels[i + 1] + screen.pixels[i + 2]) / 3;
     };
     let best: { x: number; y: number; score: number } | null = null;
-    const xLimit = Math.round(screen.width * 0.42);
+    // Instagram's header Back arrow is always in the upper-left corner.
+    // Keep this window deliberately narrow: matching elsewhere can select a
+    // visually similar chevron from Settings content or an overlay and turn
+    // the correct visual detector into the wrong tap target.
+    const xLimit = Math.round(screen.width * 0.30);
     const yMin = 0;
-    const yMax = Math.round(screen.height * 0.20);
+    const yMax = Math.round(screen.height * 0.15);
     // Keep the Like matcher’s scale set and traversal cadence exactly. The
     // only intentional difference is the top-left search window.
     for (const scale of [0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.8, 2.2, 2.7]) {
