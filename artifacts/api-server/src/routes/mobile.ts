@@ -8576,9 +8576,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       candidatePath: string,
       inputBytes: Buffer,
       stage: string,
+      allowByteIdentical = false,
     ): Promise<Buffer> => {
       const outputBytes = await fsPromises.readFile(candidatePath);
-      if (!outputBytes.length || outputBytes.equals(inputBytes)) {
+      if (!outputBytes.length || (!allowByteIdentical && outputBytes.equals(inputBytes))) {
         throw new Error(`${stage} output was empty or byte-identical to its input`);
       }
       const metadata = readBasicImageInfo(outputBytes);
@@ -8611,9 +8612,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           throw new Error("processor returned the original source path");
         }
         tempFiles.push(pushFilePath);
-        const outputBytes = await verifyProcessedImage(pushFilePath, inputBytes, "Fix AI Slop");
+        // A valid image may legitimately be byte-identical when it contains
+        // no removable EXIF/XMP/IPTC/C2PA blocks. Fix AI Slop is a metadata
+        // cleanup pass; unlike visual alteration, it must not fail the post
+        // merely because there was nothing to remove.
+        const outputBytes = await verifyProcessedImage(pushFilePath, inputBytes, "Fix AI Slop", true);
         const outputAudit = await describeImage(pushFilePath, outputBytes);
-        onLog?.(`${prefix}: Fix AI Slop verified — processed image is decodable and differs from input`);
+        const changed = !outputBytes.equals(inputBytes);
+        onLog?.(`${prefix}: Fix AI Slop verified — processed image is decodable${changed ? " and differs from input" : "; no removable metadata was present"}`);
         onLog?.(`${prefix}: Fix AI Slop audit — sourceSha256=${sourceAudit.sha256} processedSha256=${outputAudit.sha256} bytes=${outputAudit.bytes} format=${outputAudit.format} dimensions=${outputAudit.width}x${outputAudit.height}`);
       } catch (e: any) {
         await Promise.all(tempFiles.map(file => fsPromises.unlink(file).catch(() => {})));
