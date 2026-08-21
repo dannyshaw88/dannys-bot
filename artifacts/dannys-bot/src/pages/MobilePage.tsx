@@ -4096,7 +4096,6 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           body: JSON.stringify({
             cycleId,
             count,
-            profileTabLongPressPct: s.profileTabLongPressPct,
             feedEnabled: s.feedEnabled,
             storiesEnabled: s.storiesEnabled,
             delayMinSec: s.actionDelayMin,
@@ -5533,24 +5532,6 @@ export function AutomationSettingsPanel({
           Pre-switch actions: <span className="font-normal">Before switching accounts, optionally run actions on the account that was already active.</span><br />
         </p>
         <div className="flex items-start gap-6 flex-wrap">
-           <div className="space-y-1.5">
-             <Label className="text-sm text-muted-foreground block text-center">Profile-tab switch %</Label>
-             <Input
-               type="number"
-               min={0}
-               max={100}
-               className={NUM_INPUT_CLASS}
-               value={settings.profileTabLongPressPct}
-               onChange={e => setSettings(s => ({
-                 ...s,
-                 profileTabLongPressPct: Math.max(0, Math.min(100, clamp4(Number(e.target.value)))),
-               }))}
-               disabled={loading}
-             />
-             <p className="text-xs text-muted-foreground max-w-[150px]">
-               Chance to use a randomized 3–10 second Profile-tab hold.
-             </p>
-           </div>
           <div className="space-y-1.5">
             <Label className="text-sm text-muted-foreground block text-center">Chance to run %</Label>
             <div className="flex items-center gap-2">

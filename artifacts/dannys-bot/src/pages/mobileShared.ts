@@ -88,7 +88,6 @@ export interface AutomationSettingsData {
   enabled: boolean;
   cycleIntervalMin: number;
   cycleIntervalMax: number;
-  profileTabLongPressPct: number;
   feedEnabled: boolean;
   storiesEnabled: boolean;
   shuffleToolOrder: boolean;
@@ -278,7 +277,6 @@ export interface AutomationSettingsData {
 
 export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
-  profileTabLongPressPct: 0,
   feedEnabled: true, storiesEnabled: true, shuffleToolOrder: false,
   actionDelayMin: 5, actionDelayMax: 10,
   likePercentMin: 3, likePercentMax: 5,
@@ -531,7 +529,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'masterEnabled',      label: 'Enabled',                       fields: ['enabled'] },
     { key: 'cycleInterval',     label: 'Run every X - Y minutes',      fields: ['cycleIntervalMin','cycleIntervalMax'] },
     { key: 'shuffleToolOrder',  label: 'Shuffle tool order',           fields: ['shuffleToolOrder'] },
-    { key: 'preSwitch',          label: 'Pre-switch actions',             fields: ['preSwitchEnabledMin','preSwitchEnabledMax','preSwitchActionPercentMin','preSwitchActionPercentMax','profileTabLongPressPct'] },
+    { key: 'preSwitch',          label: 'Pre-switch actions',             fields: ['preSwitchEnabledMin','preSwitchEnabledMax','preSwitchActionPercentMin','preSwitchActionPercentMax'] },
   ]},
   { key: 'feed',          label: 'View Feed', sub: [
     { key: 'feedEnabled',       label: 'Enabled',                       fields: ['feedEnabled'] },

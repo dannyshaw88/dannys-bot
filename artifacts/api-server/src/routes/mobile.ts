@@ -466,7 +466,6 @@ const p = (req: Request, key: string): string => String((req.params as any)[key]
 type AutomationSettings = {
   cycleIntervalMin?: number;
   cycleIntervalMax?: number;
-  profileTabLongPressPct?: number;
   enabled: boolean;
   trustScoreId?: string | null;
   trustScoreDisabledTools?: string[];
@@ -2019,7 +2018,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     enabled: z.boolean().default(false),
     cycleIntervalMin: z.number().min(1).max(9999).optional(),
     cycleIntervalMax: z.number().min(1).max(9999).optional(),
-    profileTabLongPressPct: z.number().min(0).max(100).default(0),
     feedEnabled: z.boolean().default(true),
     storiesEnabled: z.boolean().default(true),
     actionDelayMin: z.number().min(0).max(9999),
@@ -2304,7 +2302,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const cfg = loadInstanceConfigs();
     const defaults: AutomationSettings = {
       enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
-      profileTabLongPressPct: 0,
       feedEnabled: true, storiesEnabled: true,
       actionDelayMin: 5, actionDelayMax: 10,
       likePercentMin: 3, likePercentMax: 5,
@@ -2868,7 +2865,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const serial = p(req, "serial");
       const defaults: AutomationSettings = {
         enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
-        profileTabLongPressPct: 0,
         feedEnabled: true, storiesEnabled: true,
         actionDelayMin: 5, actionDelayMax: 10,
         likePercentMin: 3, likePercentMax: 5,
@@ -8162,7 +8158,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     preSwitchEnabledMax: z.number().min(0).max(100).default(0),
     preSwitchActionPercentMin: z.number().min(0).max(100).default(0),
     preSwitchActionPercentMax: z.number().min(0).max(100).default(0),
-    profileTabLongPressPct: z.number().min(0).max(100).default(0),
     followMaxScrapeSessions: z.number().min(0).max(999).default(0),
     // Inject Browsing — per-user profile-browsing behaviour woven into the
     // Follow Users flow itself (12 Jul 2026 rework). There is no per-item
@@ -12231,7 +12226,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         followFilterMalesOnly, followFilterMaleNames,
          preSwitchEnabledMin, preSwitchEnabledMax,
          preSwitchActionPercentMin, preSwitchActionPercentMax,
-         profileTabLongPressPct,
         injectBrowsingEnabled,
         injectBrowsingActivatePctMin, injectBrowsingActivatePctMax,
         injectBrowsingBeforeFollowPctMin, injectBrowsingBeforeFollowPctMax,
@@ -12761,8 +12755,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
          automationCurrentTool.set(serial, "ACCOUNT SWITCHING");
           tLog(`[TRACE] step-1 account-switch: target=@${resolvedSlotUsername}`);
          tLog(`▶ Switching to Instagram account: @${resolvedSlotUsername}…`);
-          const useProfileTabLongPress =
-            Math.random() < Math.max(0, Math.min(100, Number(profileTabLongPressPct ?? 0))) / 100;
+          // This is deliberately hardcoded rather than exposed as an HST
+          // setting. Every account switch randomly chooses the established
+          // default flow or the Profile-tab long-press flow.
+          const PROFILE_TAB_LONG_PRESS_PERCENT = 50;
+          const useProfileTabLongPress = Math.random() < PROFILE_TAB_LONG_PRESS_PERCENT / 100;
           const profileTabHoldMs = useProfileTabLongPress
             ? 3000 + Math.floor(Math.random() * 7001)
             : null;

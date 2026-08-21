@@ -111,3 +111,4 @@
 - [Debug screenshot timestamp dedupe](debug-screenshot-timestamp-dedupe.md) — capture one composite per elapsed log timestamp; same-timestamp detail lines stay log-only
 - [Mobile tool discovery polling](mobile-tool-discovery-polling.md) — never run synchronous adb/emulator version probes on screenshot or device-status polling paths
 - [Mobile HST background rendering](mobile-hst-background-rendering.md) — keep hidden slot runtimes alive without mounting expensive editors or full settings hydration
+- [Account switch method rollout](account-switch-method-rollout.md) — alternate Profile-tab long-press switching is hardcoded internal variation, never an HST setting
