@@ -5908,6 +5908,7 @@ async function findFeedLikeIconByPixels(
   serial: string,
   rowY: number,
   onLog?: (msg: string) => void,
+  searchRegion: "feed-row" | "top-right" = "feed-row",
 ): Promise<{ x: number; y: number } | null> {
   const screen = await _captureScreenPixels(serial);
   if (!screen) return null;
@@ -5922,15 +5923,22 @@ async function findFeedLikeIconByPixels(
       return (screen.pixels[i] + screen.pixels[i + 1] + screen.pixels[i + 2]) / 3;
     };
     let best: { x: number; y: number; score: number } | null = null;
+    const { width: screenW, height: screenH } = screen;
     for (const scale of [0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.8, 2.2, 2.7]) {
       const tw = Math.max(10, Math.round(info.width * scale));
       const th = Math.max(10, Math.round(info.height * scale));
       if (tw >= screen.width || th >= screen.height) continue;
       // Feed action rows occur below the header and above the bottom nav.
-      const yMin = Math.max(0, Math.round(rowY - screen.height * 0.22));
-      const yMax = Math.min(screen.height - th, Math.round(rowY + screen.height * 0.22));
+      const yMin = searchRegion === "top-right"
+        ? 0
+        : Math.max(0, Math.round(rowY - screen.height * 0.22));
+      const yMax = searchRegion === "top-right"
+        ? Math.min(screen.height - th, Math.round(screenH * 0.22))
+        : Math.min(screen.height - th, Math.round(rowY + screen.height * 0.22));
+      const xMin = searchRegion === "top-right" ? Math.round(screenW * 0.62) : 0;
+      const xMax = searchRegion === "top-right" ? screen.width - tw : screen.width - tw;
       for (let y = yMin; y <= yMax; y += 3) {
-        for (let x = 0; x <= screen.width - tw; x += 3) {
+        for (let x = xMin; x <= xMax; x += 3) {
           let screenSum = 0, screenSum2 = 0, refSum = 0, refSum2 = 0, cross = 0, count = 0;
           for (let ty = 0; ty < info.height; ty += 2) {
             for (let tx = 0; tx < info.width; tx += 2) {
@@ -5962,14 +5970,26 @@ async function findFeedLikeIconByPixels(
       }
     }
     if (!best) {
-      onLog?.(`[feed-icons] Like visual reference not matched near row y=${rowY}`);
+      onLog?.(
+        searchRegion === "top-right"
+          ? "[notifications] heart visual reference not matched in top-right header"
+          : `[feed-icons] Like visual reference not matched near row y=${rowY}`,
+      );
       return null;
     }
     if (best.score < 0.72) {
-      onLog?.(`[feed-icons] Like visual match rejected as weak at (${best.x},${best.y}) score=${best.score.toFixed(3)}`);
+      onLog?.(
+        searchRegion === "top-right"
+          ? `[notifications] top-right heart visual match rejected as weak at (${best.x},${best.y}) score=${best.score.toFixed(3)}`
+          : `[feed-icons] Like visual match rejected as weak at (${best.x},${best.y}) score=${best.score.toFixed(3)}`,
+      );
       return null;
     }
-    onLog?.(`[feed-icons] Like visual reference matched at (${best.x},${best.y}) score=${best.score.toFixed(3)}`);
+    onLog?.(
+      searchRegion === "top-right"
+        ? `[notifications] top-right heart visual reference matched at (${best.x},${best.y}) score=${best.score.toFixed(3)}`
+        : `[feed-icons] Like visual reference matched at (${best.x},${best.y}) score=${best.score.toFixed(3)}`,
+    );
     return { x: best.x, y: best.y };
   } catch {
     onLog?.("[feed-icons] Like visual reference unavailable — skipping visual anchor");
@@ -9738,39 +9758,19 @@ export async function installInstagramFromPlayStore(serial: string): Promise<{ o
 }
 
 /**
- * Find the Instagram Activity/Notifications icon (heart icon, top-right of the home
- * feed header). Tries resource IDs and content-desc labels first; falls back to a
- * positional scan of clickable ImageViews in the top-right screen quadrant so it
- * works even when Instagram obfuscates IDs.
+ * Find Instagram's Activity/Notifications heart from the live screenshot.
+ *
+ * This deliberately uses the same visual matcher as View Feed Like, but limits
+ * the search to the top-right header. Accessibility labels/resource IDs are not
+ * safe here: on some Instagram builds they are absent or describe a stale
+ * hierarchy while the visible heart is still present.
  */
-export async function findInstagramNotificationsIcon(serial: string): Promise<{ x: number; y: number } | null> {
-  const tools = detectToolset();
-  const adb = requireTool(tools.adb, "adb");
-  const xml = await _uiDump(adb, serial).catch(() => "");
-  if (!xml) return null;
-  const byId = _findByResId(xml,
-    ":id/notification", ":id/activity_icon", ":id/nav_notification",
-    ":id/action_notification", ":id/notification_bell", ":id/heart_icon");
-  if (byId) return byId;
-  const byLabel = _findElem(xml, "Activity", "Notifications", "Notification");
-  if (byLabel) return byLabel;
-  // Positional fallback: find clickable ImageViews in the top-right area
-  // (x > 65% of width, y < 12% of height).  Notifications icon is the
-  // rightmost one there (camera icon is further left on this model).
-  const { w, h } = getScreenSize(serial);
-  const rightThresh = Math.round(w * 0.65);
-  const topThresh  = Math.round(h * 0.12);
-  const imgRe = /class="android\.widget\.ImageView"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^/]*clickable="true"/gi;
-  let m: RegExpExecArray | null;
-  let best: { x: number; y: number } | null = null;
-  while ((m = imgRe.exec(xml)) !== null) {
-    const cx = (Number(m[1]) + Number(m[3])) / 2;
-    const cy = (Number(m[2]) + Number(m[4])) / 2;
-    if (cx > rightThresh && cy < topThresh) {
-      if (!best || cx > best.x) best = { x: Math.round(cx), y: Math.round(cy) };
-    }
-  }
-  return best;
+export async function findInstagramNotificationsIcon(
+  serial: string,
+  onLog?: (msg: string) => void,
+): Promise<{ x: number; y: number } | null> {
+  const { h } = getScreenSize(serial);
+  return findFeedLikeIconByPixels(serial, h * 0.10, onLog, "top-right");
 }
 
 /**

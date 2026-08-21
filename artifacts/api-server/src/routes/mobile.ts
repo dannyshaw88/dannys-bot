@@ -9495,8 +9495,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     onLog?.(`Random Actions: tapping Home before notifications at (${homeTab.x},${homeTab.y})`);
     await android.tap(serial, homeTab.x, homeTab.y);
     await sleepOrAbort(serial, 1000);
-    // Find the notifications heart icon via accessibility tree scan.
-    const icon = await android.findInstagramNotificationsIcon(serial).catch(() => null);
+    // Find the notifications heart visually, using the same live screenshot
+    // matcher as View Feed Like but constrained to the top-right header. Do
+    // not use accessibility/positional fallbacks: a stale hierarchy can point
+    // at another app or switch Instagram unexpectedly.
+    const icon = await android.findInstagramNotificationsIcon(serial, onLog).catch(() => null);
     if (!icon) {
       onLog?.("Random Actions: notifications icon not found — skipping check notifications");
       logger.warn({ serial }, "[jitter-check-notif] notifications icon not found by scan");
