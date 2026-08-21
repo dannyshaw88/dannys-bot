@@ -610,6 +610,10 @@ export async function launchInstagram(serial: string): Promise<void> {
 export async function launchFilterCamera(serial: string, url: string): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
+  // The browser runs on the phone, so the desktop preview proxy hostname
+  // (often 127.0.0.1:<proxy-port>) is not reachable from the phone. Reverse
+  // the stable Vite port over the existing ADB connection instead.
+  await runAdbStrict(adb, ["-s", serial, "reverse", "tcp:5000", "tcp:5000"], 10000);
   // Opening a VIEW intent directly on a first-run Chrome installation leaves
   // the URL behind Chrome's onboarding carousel ("Download videos", etc.).
   // Prepare Chrome first, then send the URL once the onboarding surface is

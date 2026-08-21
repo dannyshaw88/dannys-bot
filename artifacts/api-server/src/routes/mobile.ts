@@ -1682,29 +1682,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.post("/api/mobile/devices/:serial/filter-camera/open", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
-      const requestedOrigin = typeof req.body?.cameraOrigin === "string"
-        ? req.body.cameraOrigin.trim()
-        : "";
-      const forwardedHost = String(req.headers["x-forwarded-host"] ?? "").split(",")[0].trim();
-      const host = forwardedHost || String(req.headers.host ?? "").trim();
-      let cameraOrigin = "";
-      if (requestedOrigin) {
-        try {
-          const parsed = new URL(requestedOrigin);
-          if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-            cameraOrigin = parsed.origin;
-          }
-        } catch {
-          // Fall back to the forwarded request host below.
-        }
-      }
-      if (!cameraOrigin && !host) {
-        res.status(400).json({ ok: false, error: "Could not determine the phone camera URL host" });
-        return;
-      }
-      const forwardedProto = String(req.headers["x-forwarded-proto"] ?? "").split(",")[0].trim();
-      const protocol = forwardedProto || (host.startsWith("localhost") || host.startsWith("127.") ? "http" : "https");
-      const url = `${cameraOrigin || `${protocol}://${host}`}/phone-camera?serial=${encodeURIComponent(serial)}`;
+      // launchFilterCamera establishes an ADB reverse tunnel to the web
+      // server, so this URL is local to the phone and does not depend on the
+      // Replit preview proxy hostname.
+      const url = `http://127.0.0.1:5000/phone-camera?serial=${encodeURIComponent(serial)}`;
       await android.wakeScreen(serial);
       await android.launchFilterCamera(serial, url);
       res.json({ ok: true, url });
