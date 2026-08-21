@@ -194,14 +194,15 @@ async function sendKey(serial: string, code: number, label: string, onLog?: (msg
 
 // ─── Nav button ───────────────────────────────────────────────────────────────
 
-function NavBtn({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
+function NavBtn({ icon, label, onClick, disabled = false }: { icon: ReactNode; label: string; onClick: () => void; disabled?: boolean }) {
   return (
     <button
       type="button"
       tabIndex={-1}
       onClick={onClick}
+      disabled={disabled}
       title={label}
-      className="flex flex-col items-center gap-0.5 text-white/40 hover:text-white/80 transition-colors px-1.5 focus:outline-none"
+      className="flex flex-col items-center gap-0.5 text-white/40 hover:text-white/80 transition-colors px-1.5 focus:outline-none disabled:opacity-50"
     >
       {icon}
       <span className="text-[8px] font-medium tracking-wide uppercase">{label}</span>
@@ -2686,8 +2687,13 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
     sendKey(phone.serial, manualLive ? 223 : 224, manualLive ? "Sleep" : "Wake", onLog);
   }, [manualLive, onLog, onPower, phone]);
 
+  const [filterOpening, setFilterOpening] = useState(false);
+
   const openFilterCamera = useCallback(async () => {
     if (!phone?.serial) return;
+    if (filterOpening) return;
+    setFilterOpening(true);
+    onLog?.(`Filter Camera: launching native APK on ${phone.serial}…`);
     try {
       const response = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/filter-camera/open`, {
         method: "POST",
@@ -2699,8 +2705,11 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
       onLog?.("Filter Camera: launched native CameraX filter app");
     } catch (error: any) {
       onLog?.(`Filter Camera: failed to open — ${error?.message ?? "network error"}`);
+      window.alert(`Filter Camera could not launch:\n${error?.message ?? "network error"}`);
+    } finally {
+      setFilterOpening(false);
     }
-  }, [onLog, phone]);
+  }, [filterOpening, onLog, phone]);
 
   // ── Element tree inspector ─────────────────────────────────────────────────
   // Full UIAutomator node tree shown below the mirror when inspect mode is on.
@@ -3343,7 +3352,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
            <NavBtn icon={<Power       className="w-3 h-3" />}     label={manualLive ? "Power off" : "Power on"}  onClick={toggleManualPower} />
           <div className="w-px h-4 bg-white/10" />
           <NavBtn icon={<Keyboard    className="w-3 h-3" />}     label="Keyboard" onClick={() => setShowCalibration(true)} />
-           <NavBtn icon={<Camera      className="w-3 h-3" />}     label="Filter"   onClick={openFilterCamera} />
+          <NavBtn icon={<Camera      className="w-3 h-3" />}     label={filterOpening ? "Launching…" : "Filter"} onClick={openFilterCamera} disabled={filterOpening} />
         </div>
       )}
 

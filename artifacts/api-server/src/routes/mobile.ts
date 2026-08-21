@@ -1682,8 +1682,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.post("/api/mobile/devices/:serial/filter-camera/open", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
+      logger.info({ serial }, "[filter-camera] native launch requested");
       await android.wakeScreen(serial);
       await android.launchFilterCamera(serial);
+      logger.info({ serial }, "[filter-camera] native launch dispatched");
       res.json({ ok: true, native: true });
     } catch (e: any) {
       res.status(400).json({ ok: false, error: e?.message ?? "Could not open phone filter camera" });
