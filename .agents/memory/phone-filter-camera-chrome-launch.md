@@ -7,4 +7,4 @@ The phone-side filter camera must launch Chrome first, dismiss only positively d
 
 **Why:** A direct Android VIEW intent on a first-run Chrome installation leaves the URL behind the onboarding carousel, such as the “Download videos” page, so the user sees onboarding instead of the camera.
 
-**How to apply:** For any device-side web camera or browser surface, prepare Chrome and handle known onboarding labels before issuing the final URL intent. Build the URL from the frontend origin supplied by the browser request, not the proxied API origin. Never tap arbitrary page content as a workaround.
+**How to apply:** For USB-connected phones, reverse the stable web-server port over ADB and use the phone-local URL. Prepare Chrome and handle known onboarding labels before issuing the final URL intent. Never tap arbitrary page content as a workaround.
