@@ -610,10 +610,49 @@ export async function launchInstagram(serial: string): Promise<void> {
 export async function launchFilterCamera(serial: string, url: string): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
+  // Opening a VIEW intent directly on a first-run Chrome installation leaves
+  // the URL behind Chrome's onboarding carousel ("Download videos", etc.).
+  // Prepare Chrome first, then send the URL once the onboarding surface is
+  // gone. This is intentionally limited to Chrome onboarding labels; never
+  // tap arbitrary page content.
+  const launch = spawnSync(adb, [
+    "-s", serial, "shell", "am", "start", "-n",
+    "com.android.chrome/com.google.android.apps.chrome.Main",
+    "--activity-clear-top",
+  ], { encoding: "utf8", timeout: 15000 });
+  if (launch.status !== 0 || /Error|does not exist/i.test(`${launch.stdout ?? ""}\n${launch.stderr ?? ""}`)) {
+    throw new Error(launch.stderr?.trim() || launch.stdout?.trim() || "Could not launch Chrome");
+  }
+  await _sleep(2200);
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const xml = await _uiDump(adb, serial);
+    if (!xml || !xml.includes("com.android.chrome")) break;
+    const onboardingButton = _findElem(
+      xml,
+      "signin_fre_continue_button",
+      "Continue as",
+      "Accept & continue",
+      "Skip",
+      "No, thanks",
+      "No thanks",
+      "Got it",
+    );
+    const onboardingSurface =
+      xml.includes("fre_pager") ||
+      xml.includes("Make Chrome your own") ||
+      xml.includes("Download videos") ||
+      xml.includes("Save time, type less") ||
+      xml.includes("privacy_sandbox");
+    if (!onboardingSurface || !onboardingButton) break;
+    _adbTap(adb, serial, onboardingButton.x, onboardingButton.y);
+    await _sleep(1200);
+  }
+
   const result = spawnSync(adb, [
     "-s", serial, "shell", "am", "start",
     "-a", "android.intent.action.VIEW",
     "-d", url,
+    "-p", "com.android.chrome",
   ], { encoding: "utf8", timeout: 15000 });
   if (result.status !== 0) {
     throw new Error(result.stderr?.trim() || result.stdout?.trim() || "Could not open filter camera on device");
