@@ -843,7 +843,8 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
       }
       setBrowserState("opening");
       setSignupStatus("Opening browser…");
-      setActiveUA(selectedUA);
+      const effectiveEmbeddedUA = embeddedUA.trim() || selectedUA.embedded;
+      setActiveUA({ ...selectedUA, embedded: effectiveEmbeddedUA });
       setActiveProxyLabel(resolvedProxy ? `${resolvedProxy.host}:${resolvedProxy.port}` : "Direct (no proxy)");
       try {
         await fetch("/api/signup/browser/open", {
@@ -851,7 +852,9 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             slot,
-            userAgent: selectedUA.api,
+            // Electron must receive the browser UA. The API UA is Instagram's
+            // compact device string and is not valid for a Chromium window.
+            userAgent: effectiveEmbeddedUA,
             proxyHost: resolvedProxy?.host,
             proxyPort: resolvedProxy?.port,
             proxyUsername: resolvedProxy?.username,

@@ -3111,9 +3111,21 @@ export async function openEbWindow(opts: {
   // one window called it.  Creating the window at the correct physical dimensions
   // means Chromium's layout engine sees a real mobile-sized viewport from the
   // start, so @media queries evaluate correctly without any CDP override at all.
-  const _isApiFormat = !!userAgent && isApiFormatUA(userAgent);
-  const _apiParsed   = _isApiFormat ? apiUAToBrowserUA(userAgent!) : null;
-  let _browserUA   = _isApiFormat ? _apiParsed!.browserUA : (userAgent ?? null);
+  // A Ghost window must never inherit Electron's Windows UA. If the caller
+  // failed to provide an identity, use a mobile browser identity rather than
+  // exposing the Windows host to the target site. Normal profile windows still
+  // retain the existing no-UA behavior so missing profile data is observable.
+  const _ghostFallbackUA =
+    isGhostBrowser && !userAgent
+      ? `Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome?.split(".")[0] ?? CURRENT_CHROME_MAJOR}.0.0.0 Mobile Safari/537.36`
+      : null;
+  if (_ghostFallbackUA) {
+    console.warn(`[ebManager:${profileId}] Ghost browser UA missing — using defensive mobile fallback instead of Electron host UA`);
+  }
+  const _effectiveUserAgent = userAgent ?? _ghostFallbackUA;
+  const _isApiFormat = !!_effectiveUserAgent && isApiFormatUA(_effectiveUserAgent);
+  const _apiParsed   = _isApiFormat ? apiUAToBrowserUA(_effectiveUserAgent!) : null;
+  let _browserUA   = _isApiFormat ? _apiParsed!.browserUA : (_effectiveUserAgent ?? null);
   const _resolvedApiUA = _isApiFormat ? userAgent! : (apiUA ?? null);
   const _androidVer  = _apiParsed?.androidVersion ?? (
     _browserUA?.match(/Android\s+(\d+)/i)?.[1] ?? "14"
