@@ -5720,57 +5720,100 @@ async function findInstagramSearchFieldByPixelsInternal(
   // normalized correlation, and acceptance gate. The search field is only
   // searched in the top 20% of the screen, where Instagram renders it.
   const scales = [0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.8, 2.2, 2.7];
-  for (const ref of refs) {
+  type RefStats = { sum: number; sum2: number; count: number };
+  const statsCache = new Map<string, RefStats>();
+  const getRefStats = (refIndex: number, sampleStep: number): RefStats => {
+    const key = `${refIndex}:${sampleStep}`;
+    const cached = statsCache.get(key);
+    if (cached) return cached;
+    const ref = refs[refIndex];
+    let sum = 0, sum2 = 0, count = 0;
+    for (let ty = 0; ty < ref.height; ty += sampleStep) {
+      for (let tx = 0; tx < ref.width; tx += sampleStep) {
+        const value = ref.gray[ty * ref.width + tx];
+        sum += value;
+        sum2 += value * value;
+        count++;
+      }
+    }
+    const result = { sum, sum2, count };
+    statsCache.set(key, result);
+    return result;
+  };
+  const scoreAt = (
+    refIndex: number,
+    scale: number,
+    x: number,
+    y: number,
+    sampleStep: number,
+  ): number => {
+    const ref = refs[refIndex];
+    const tw = Math.round(ref.width * scale);
+    const th = Math.round(ref.height * scale);
+    const refStats = getRefStats(refIndex, sampleStep);
+    let screenSum = 0, screenSum2 = 0, cross = 0;
+    for (let ty = 0; ty < ref.height; ty += sampleStep) {
+      const sy = y + Math.min(th - 1, Math.round(ty * scale));
+      for (let tx = 0; tx < ref.width; tx += sampleStep) {
+        const sx = x + Math.min(tw - 1, Math.round(tx * scale));
+        const value = screenGray[sy * screen.width + sx];
+        screenSum += value;
+        screenSum2 += value * value;
+        cross += value * ref.gray[ty * ref.width + tx];
+      }
+    }
+    const screenMean = screenSum / refStats.count;
+    const refMean = refStats.sum / refStats.count;
+    const screenVariance = Math.max(1, screenSum2 / refStats.count - screenMean * screenMean);
+    const refVariance = Math.max(1, refStats.sum2 / refStats.count - refMean * refMean);
+    const covariance = cross / refStats.count - screenMean * refMean;
+    return 0.5 + Math.abs(covariance / Math.sqrt(screenVariance * refVariance)) * 0.5;
+  };
+  const consider = (refIndex: number, scale: number, x: number, y: number, sampleStep: number) => {
+    const ref = refs[refIndex];
+    const tw = Math.round(ref.width * scale), th = Math.round(ref.height * scale);
+    if (x < 0 || y < 0 || x + tw > screen.width || y + th > screen.height) return;
+    const score = scoreAt(refIndex, scale, x, y, sampleStep);
+    if (score > (best?.score ?? 0.5)) {
+      best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), score, template: ref.name };
+    }
+  };
+
+  // Coarse pass: sample fewer positions and pixels to find the correct
+  // reference/scale/region.  The old implementation performed a full
+  // normalized-correlation calculation at every 3px position for every
+  // template and scale, which took 20–30 seconds on the device PC.
+  for (let refIndex = 0; refIndex < refs.length; refIndex++) {
+    const ref = refs[refIndex];
     for (const scale of scales) {
       const tw = Math.round(ref.width * scale), th = Math.round(ref.height * scale);
       if (tw < 100 || th < 25 || tw > screen.width || th >= Math.round(screen.height * 0.45)) continue;
-      const step = 2;
-      for (let y = 0; y <= Math.round(screen.height * 0.20) - th; y += 3) {
-        for (let x = 0; x <= screen.width - tw; x += 3) {
-          let screenSum = 0, screenSum2 = 0, refSum = 0, refSum2 = 0, cross = 0, count = 0;
-          for (let ty = 0; ty < ref.height; ty += step) {
-            const sy = y + Math.min(th - 1, Math.round(ty * scale));
-            for (let tx = 0; tx < ref.width; tx += step) {
-              const sx = x + Math.min(tw - 1, Math.round(tx * scale));
-              const v = screenGray[sy * screen.width + sx];
-              const t = ref.gray[ty * ref.width + tx];
-              screenSum += v;
-              screenSum2 += v * v;
-              refSum += t;
-              refSum2 += t * t;
-              cross += v * t;
-              count++;
-            }
-          }
-          if (count < 100) continue;
-          const screenMean = screenSum / count;
-          const refMean = refSum / count;
-          const screenVariance = Math.max(1, screenSum2 / count - screenMean * screenMean);
-          const refVariance = Math.max(1, refSum2 / count - refMean * refMean);
-          const covariance = cross / count - screenMean * refMean;
-          // Normalized cross-correlation compares the field's internal
-          // geometry (rounded bar, magnifier, and Search glyph) rather than
-          // an assumed brightness value. Absolute correlation accepts both
-          // light and dark Instagram themes without losing the layout shape.
-          const score = 0.5 + Math.abs(covariance / Math.sqrt(screenVariance * refVariance)) * 0.5;
-            // Always retain the single closest visual resemblance. There is
-            // no arbitrary confidence-based accept/reject gate here.
-            // Same strong initial gate as the reliable View Feed heart
-            // detector; background resemblance never becomes a candidate.
-            // This page has one search field in this scan band. Always keep
-            // the closest visual candidate rather than rejecting a valid
-            // field because a device/theme only resembles the reference
-            // weakly.
-            if (score > (best?.score ?? 0.5)) {
-            best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), score, template: ref.name };
-          }
+      const topLimit = Math.round(screen.height * 0.20);
+      for (let y = 0; y <= topLimit - th; y += 8) {
+        for (let x = 0; x <= screen.width - tw; x += 8) {
+          consider(refIndex, scale, x, y, 4);
         }
-        // The search-field template is much larger than the Home/heart glyph.
-        // Yield after every scan row so it cannot starve ADB, video, or API
-        // request handling while comparing all template candidates.
         await new Promise<void>(resolve => setImmediate(resolve));
       }
-      await new Promise<void>(resolve => setImmediate(resolve));
+    }
+  }
+
+  // Precision pass: retain the same normalized-correlation score, but only
+  // inspect a small neighborhood around the coarse winner.
+  if (best) {
+    const coarse = best;
+    for (let refIndex = 0; refIndex < refs.length; refIndex++) {
+      const ref = refs[refIndex];
+      for (const scale of scales) {
+        const tw = Math.round(ref.width * scale), th = Math.round(ref.height * scale);
+        if (tw < 100 || th < 25 || tw > screen.width || th >= Math.round(screen.height * 0.45)) continue;
+        const coarseX = Math.round(coarse.x - tw / 2), coarseY = Math.round(coarse.y - th / 2);
+        for (let y = coarseY - 12; y <= coarseY + 12; y += 2) {
+          for (let x = coarseX - 12; x <= coarseX + 12; x += 2) {
+            consider(refIndex, scale, x, y, 2);
+          }
+        }
+      }
     }
   }
   if (best) {
