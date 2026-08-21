@@ -250,6 +250,7 @@ interface EbEntry {
   username: string;
   proxy?: { host: string; port: number; user?: string; pass?: string; type?: string };
   partition: string;
+  userAgent?: string;
   warmupActive?: boolean;
   /** Per-session random token baked into every __eq_* global name injected into the Instagram page. */
   jsToken?: string;
@@ -2659,6 +2660,53 @@ export async function openEbWindow(opts: {
     // or the panel asks to open the same slot again. Explicit Ghost close/reset
     // remains the path that destroys the session and clears its tabs.
     if (profileId < 0) {
+      // Ghost slots are reused when the operator changes the selected agent.
+      // Do not return before applying the new identity: otherwise the existing
+      // Chromium renderer keeps its previous UA (or Electron's Windows UA if
+      // the first open had no identity).
+      const requestedUA = userAgent
+        ? (isApiFormatUA(userAgent) ? apiUAToBrowserUA(userAgent).browserUA : userAgent)
+        : null;
+      if (requestedUA) {
+        const isMobileUA = /Android|iPhone|iPad|Mobile/i.test(requestedUA);
+        const chromeMajor = requestedUA.match(/Chrome\/(\d+)/i)?.[1] ?? CURRENT_CHROME_MAJOR;
+        const desktopMeta = isMobileUA ? null : buildDesktopUAMetadata(requestedUA);
+        try { existing.win.webContents.setUserAgent(requestedUA); } catch {}
+        try {
+          await existing.win.webContents.debugger.sendCommand("Emulation.setUserAgentOverride", {
+            userAgent: requestedUA,
+            acceptLanguage: "en-US,en;q=0.9",
+            platform: isMobileUA ? "Linux armv8l" : desktopMeta!.navigatorPlatform,
+            userAgentMetadata: {
+              brands: [
+                { brand: "Not A(Brand", version: "99" },
+                { brand: "Chromium", version: chromeMajor },
+                { brand: "Google Chrome", version: chromeMajor },
+              ],
+              fullVersionList: [
+                { brand: "Not A(Brand", version: "99.0.0.0" },
+                { brand: "Chromium", version: `${chromeMajor}.0.0.0` },
+                { brand: "Google Chrome", version: `${chromeMajor}.0.0.0` },
+              ],
+              platform: isMobileUA ? "Android" : desktopMeta!.platform,
+              platformVersion: isMobileUA
+                ? (requestedUA.match(/Android\s+([\d.]+)/i)?.[1] ?? "14")
+                : desktopMeta!.platformVersion,
+              architecture: isMobileUA ? "arm" : desktopMeta!.architecture,
+              model: isMobileUA
+                ? (requestedUA.match(/Android\s+\d+;\s*([^)]+)\)/i)?.[1]?.trim() ?? "")
+                : "",
+              mobile: isMobileUA,
+              bitness: isMobileUA ? "64" : desktopMeta!.bitness,
+              wow64: false,
+            },
+          });
+        } catch (err: any) {
+          console.warn(`[ebManager:${profileId}] existing Ghost UA override failed:`, err?.message);
+        }
+        ebMap.set(profileId, { ...existing, userAgent: requestedUA });
+        console.log(`[ebManager:${profileId}] Reapplied Ghost Browser UA to existing session: ${requestedUA.slice(0, 100)}`);
+      }
       try {
         if (existing.win.isMinimized()) existing.win.restore();
         if (!silentMode) existing.win.show();
@@ -3308,7 +3356,7 @@ export async function openEbWindow(opts: {
   // visibly on screen — causing the frontend status poll to incorrectly
   // conclude the browser isn't open.  Registering here ensures the VERY NEXT
   // poll (within 5 s) sees { open:true } and the UI reflects reality.
-  ebMap.set(profileId, { win, username, proxy, partition, jsToken });
+  ebMap.set(profileId, { win, username, proxy, partition, userAgent: _browserUA ?? undefined, jsToken });
   _ebCrashLog(profileId, "STEP-13: ebMap early-registration done");
 
   // Belt-and-suspenders proxy re-apply after first page load.

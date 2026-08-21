@@ -7,4 +7,4 @@ The Ghost Browser's Electron window must receive `userAgentEmbedded` / the full 
 
 **Why:** The normal Create Account path once passed the API UA while the standalone Open path passed the embedded UA, allowing the Electron window to fall back to or expose the Windows host identity.
 
-**How to apply:** Keep both Ghost open paths on the same effective embedded UA value, and retain a defensive mobile fallback in Electron for a missing Ghost UA.
+**How to apply:** Keep both Ghost open paths on the same effective embedded UA value, retain a defensive mobile fallback in Electron for a missing Ghost UA, and reapply the UA when an existing negative Ghost slot is reused.
