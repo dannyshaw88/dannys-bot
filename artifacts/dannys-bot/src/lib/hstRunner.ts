@@ -164,6 +164,8 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
         clickAuthorPercentMax: s.clickAuthorPercentMax,
          feedRerunChanceMin: s.feedRerunChanceMin,
          feedRerunChanceMax: s.feedRerunChanceMax,
+         storiesRerunChanceMin: s.storiesRerunChanceMin,
+         storiesRerunChanceMax: s.storiesRerunChanceMax,
         viewStoriesSlidesMin: s.viewStoriesSlidesMin,
         viewStoriesSlidesMax: s.viewStoriesSlidesMax,
         viewStoriesSlideWatchPctMin: s.viewStoriesSlideWatchPctMin,

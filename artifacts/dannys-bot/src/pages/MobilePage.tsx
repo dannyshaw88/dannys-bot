@@ -4111,6 +4111,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             clickAuthorPercentMax: s.clickAuthorPercentMax,
             feedRerunChanceMin: s.feedRerunChanceMin,
             feedRerunChanceMax: s.feedRerunChanceMax,
+            storiesRerunChanceMin: s.storiesRerunChanceMin,
+            storiesRerunChanceMax: s.storiesRerunChanceMax,
             viewExploreRerunChanceMin: s.viewExploreRerunChanceMin,
             viewExploreRerunChanceMax: s.viewExploreRerunChanceMax,
             viewReelsRerunChanceMin: s.viewReelsRerunChanceMin,
@@ -6184,6 +6186,20 @@ export function AutomationSettingsPanel({
                 onChange={e => setSettings(s => ({ ...s, viewStoriesClickAuthorPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
 
+            </div>
+          </div>
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground block text-center">Re-run Chance %</Label>
+            <div className="flex items-center gap-3">
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.storiesRerunChanceMin}
+                onChange={e => setSettings(s => ({ ...s, storiesRerunChanceMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                value={settings.storiesRerunChanceMax}
+                onChange={e => setSettings(s => ({ ...s, storiesRerunChanceMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                disabled={loading} />
             </div>
           </div>
         </div>}

@@ -494,6 +494,8 @@ type AutomationSettings = {
   clickAuthorPercentMax: number;
   feedRerunChanceMin: number;
   feedRerunChanceMax: number;
+  storiesRerunChanceMin: number;
+  storiesRerunChanceMax: number;
   feedScrollMin: number;
   feedScrollMax: number;
   viewStoriesSlidesMin: number;
@@ -2038,6 +2040,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     clickAuthorPercentMax: z.number().min(0).max(100).default(0),
     feedRerunChanceMin: z.number().min(0).max(100).default(0),
     feedRerunChanceMax: z.number().min(0).max(100).default(0),
+    storiesRerunChanceMin: z.number().min(0).max(100).default(0),
+    storiesRerunChanceMax: z.number().min(0).max(100).default(0),
     viewExploreRerunChanceMin: z.number().min(0).max(100).default(0),
     viewExploreRerunChanceMax: z.number().min(0).max(100).default(0),
     viewReelsRerunChanceMin: z.number().min(0).max(100).default(0),
@@ -2309,6 +2313,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       clickHashtagPercentMin: 0, clickHashtagPercentMax: 0,
       clickAuthorPercentMin: 0, clickAuthorPercentMax: 0,
       feedRerunChanceMin: 0, feedRerunChanceMax: 0,
+      storiesRerunChanceMin: 0, storiesRerunChanceMax: 0,
       viewExploreRerunChanceMin: 0, viewExploreRerunChanceMax: 0,
       viewReelsRerunChanceMin: 0, viewReelsRerunChanceMax: 0,
       checkDmRerunChanceMin: 0, checkDmRerunChanceMax: 0,
@@ -2871,6 +2876,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         clickHashtagPercentMin: 0, clickHashtagPercentMax: 0,
         clickAuthorPercentMin: 0, clickAuthorPercentMax: 0,
         feedRerunChanceMin: 0, feedRerunChanceMax: 0,
+        storiesRerunChanceMin: 0, storiesRerunChanceMax: 0,
         viewExploreRerunChanceMin: 0, viewExploreRerunChanceMax: 0,
         viewReelsRerunChanceMin: 0, viewReelsRerunChanceMax: 0,
         checkDmRerunChanceMin: 0, checkDmRerunChanceMax: 0,
@@ -8042,6 +8048,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     clickAuthorPercentMax: z.number().min(0).max(100).default(0),
     feedRerunChanceMin: z.number().min(0).max(100).default(0),
     feedRerunChanceMax: z.number().min(0).max(100).default(0),
+    storiesRerunChanceMin: z.number().min(0).max(100).default(0),
+    storiesRerunChanceMax: z.number().min(0).max(100).default(0),
     viewExploreRerunChanceMin: z.number().min(0).max(100).default(0),
     viewExploreRerunChanceMax: z.number().min(0).max(100).default(0),
     viewReelsRerunChanceMin: z.number().min(0).max(100).default(0),
@@ -12114,6 +12122,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         clickHashtagPercentMin, clickHashtagPercentMax,
         clickAuthorPercentMin, clickAuthorPercentMax,
         feedRerunChanceMin, feedRerunChanceMax,
+        storiesRerunChanceMin, storiesRerunChanceMax,
         viewExploreRerunChanceMin, viewExploreRerunChanceMax,
         viewReelsRerunChanceMin, viewReelsRerunChanceMax,
         checkDmRerunChanceMin, checkDmRerunChanceMax,
@@ -12949,6 +12958,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
       };
       appendToolRerun("feed", feedRerunChanceMin, feedRerunChanceMax, "View Feed");
+      appendToolRerun("stories", storiesRerunChanceMin, storiesRerunChanceMax, "View Stories");
       appendToolRerun("explore", viewExploreRerunChanceMin, viewExploreRerunChanceMax, "View Explore");
       appendToolRerun("reels", viewReelsRerunChanceMin, viewReelsRerunChanceMax, "View Reels");
       appendToolRerun("checkDm", checkDmRerunChanceMin, checkDmRerunChanceMax, "Check Inbox");

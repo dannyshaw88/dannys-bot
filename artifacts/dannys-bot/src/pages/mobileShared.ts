@@ -111,6 +111,8 @@ export interface AutomationSettingsData {
   clickAuthorPercentMax: number;
   feedRerunChanceMin: number;
   feedRerunChanceMax: number;
+  storiesRerunChanceMin: number;
+  storiesRerunChanceMax: number;
   viewExploreRerunChanceMin: number;
   viewExploreRerunChanceMax: number;
   viewReelsRerunChanceMin: number;
@@ -286,6 +288,7 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   clickHashtagPercentMin: 0, clickHashtagPercentMax: 0,
   clickAuthorPercentMin: 0, clickAuthorPercentMax: 0,
   feedRerunChanceMin: 0, feedRerunChanceMax: 0,
+  storiesRerunChanceMin: 0, storiesRerunChanceMax: 0,
   viewExploreRerunChanceMin: 0, viewExploreRerunChanceMax: 0,
   viewReelsRerunChanceMin: 0, viewReelsRerunChanceMax: 0,
   checkDmRerunChanceMin: 0, checkDmRerunChanceMax: 0,
@@ -552,6 +555,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'storiesShareDm',    label: 'Share DM %',                    fields: ['viewStoriesShareDmPercentMin','viewStoriesShareDmPercentMax'] },
     { key: 'storiesComment',    label: 'Comment %',                     fields: ['viewStoriesCommentPercentMin','viewStoriesCommentPercentMax'] },
     { key: 'storiesClickAuthor', label: 'Click Author %',               fields: ['viewStoriesClickAuthorPercentMin','viewStoriesClickAuthorPercentMax'] },
+    { key: 'storiesRerunChance', label: 'Re-run Chance %',              fields: ['storiesRerunChanceMin','storiesRerunChanceMax'] },
   ]},
   { key: 'explore',       label: 'View Explore Page', sub: [
     { key: 'exploreEnabled',    label: 'Enabled',                       fields: ['viewExploreEnabled'] },
