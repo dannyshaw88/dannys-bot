@@ -52,6 +52,13 @@ export type AndroidToolset = {
   sdkRoot: string | null;
 };
 
+// Tool discovery runs synchronously because it is also used by startup and
+// device-management paths. Never repeat those probes for every thumbnail or
+// screencap poll: on Windows a stalled adb/emulator executable can block the
+// Node event loop for several seconds per tool.
+const TOOLSET_CACHE_TTL_MS = 30_000;
+let cachedToolset: { value: AndroidToolset; checkedAt: number } | null = null;
+
 export type AvdInfo = {
   name: string;
   running: boolean;
@@ -239,6 +246,11 @@ function findAdbPath(): string | null {
 }
 
 export function detectToolset(): AndroidToolset {
+  const now = Date.now();
+  if (cachedToolset && now - cachedToolset.checkedAt < TOOLSET_CACHE_TTL_MS) {
+    return cachedToolset.value;
+  }
+
   const sdkCandidates = candidateSdkRoots();
   const sdkRoot = sdkCandidates.find(p => { try { return fs.statSync(p).isDirectory(); } catch { return false; } }) ?? null;
 
@@ -255,13 +267,15 @@ export function detectToolset(): AndroidToolset {
     return { found: false, path: null, version: null };
   }
 
-  return {
+  const value: AndroidToolset = {
     adb: locate("adb"),
     emulator: locate("emulator"),
     avdmanager: locate("avdmanager"),
     scrcpy: locate("scrcpy"),
     sdkRoot,
   };
+  cachedToolset = { value, checkedAt: now };
+  return value;
 }
 
 // ── Emulator auto-discovery ────────────────────────────────────────────────────
