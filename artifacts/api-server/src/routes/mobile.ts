@@ -9790,10 +9790,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       onLog?.("Visit Settings: ✓ scrolled once");
     }
 
-    // 6. Back once only.
-    await android.pressBack(serial);
+    // 6. Leave the setting by tapping the live Instagram header arrow.
+    // Do not use Android Back here: on Xiaomi/Instagram builds the system
+    // Back event can be consumed by the setting surface or return to the
+    // wrong parent, leaving Random Actions stuck in Settings and activity.
+    // This must use the same visual-confirmation rule as View Feed's Like
+    // detector: only tap a positively matched live icon, never a guessed
+    // coordinate or an accessibility node selected by order.
+    const backIcon = await android.findBackHeaderIconByPixels(
+      serial,
+      message => onLog?.(`Visit Settings: ${message}`),
+    );
+    if (!backIcon) {
+      onLog?.("Visit Settings: ✗ top-left back arrow was not visually confirmed — stopping without fallback");
+      logger.warn({ serial }, "[jitter-visit-settings] visual back arrow not found; refusing blind Back fallback");
+      return;
+    }
+    await android.tap(serial, backIcon.x, backIcon.y);
     await sleepOrAbort(serial, 800);
-    onLog?.("Visit Settings: ✓ done after one Back");
+    onLog?.(`Visit Settings: ✓ tapped visually confirmed back arrow at (${backIcon.x},${backIcon.y})`);
+    onLog?.("Visit Settings: ✓ done after one visual Back");
   }
 
   /**
