@@ -4443,6 +4443,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (opts?.maxFromY !== undefined && !reversed) {
       path.y1 = Math.min(path.y1, opts.maxFromY);
     }
+    // A feed swipe must never degrade into a tap. This can happen when a
+    // saved profile's endpoints are near the Android bottom gesture zone and
+    // both get clamped to nearly the same Y, especially for slow/focused
+    // personalities. Keep the recovery gesture in the lower content area and
+    // force a meaningful upward travel distance.
+    if (source === "feed-scroll" && !reversed) {
+      const minTravel = Math.round(size.h * 0.18);
+      const lowerStart = Math.round(size.h * 0.72);
+      const upperStart = Math.round(size.h * 0.82);
+      const originalTravel = path.y1 - path.y2;
+      if (path.y1 < lowerStart || originalTravel < minTravel) {
+        const startY = Math.min(upperStart, Math.max(lowerStart, path.y1));
+        path.y1 = startY;
+        path.y2 = Math.max(Math.round(size.h * 0.48), startY - minTravel);
+        logger.warn({
+          serial,
+          source,
+          originalFrom: [path.x1, startY],
+          originalTo: [path.x2, startY - originalTravel],
+          recoveredTo: [path.x2, path.y2],
+          minTravel,
+        }, "[mobile-input] recovered short feed swipe before dispatch");
+      }
+    }
     // The Reels caller already captures one live accessibility dump before and
     // after each advance. Do not repeat those expensive dumps here; the
     // calibrated path and final input coordinates are still logged below.
