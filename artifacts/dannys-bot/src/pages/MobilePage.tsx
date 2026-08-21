@@ -3772,6 +3772,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       .then(r => r.ok ? r.json() : null)
       .then(async d => {
         if (!active || typeof d?.enabled !== "boolean") return;
+        // The lightweight state endpoint is authoritative for the slot
+        // toggle. Paint it immediately instead of making the account list
+        // wait for the larger TrustScore-resolved settings payload below.
+        setSettings(previous => ({ ...previous, enabled: d.enabled }));
         // Disabled slots only need the master state to keep the background
         // runtime and slot-list toggle accurate. The full TrustScore-resolved
         // settings object is large and is only needed by an enabled runtime

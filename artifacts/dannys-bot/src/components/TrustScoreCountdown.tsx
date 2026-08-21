@@ -135,17 +135,15 @@ export function TrustScoreCountdown({
 
   useEffect(() => {
     if (!serial) return;
-    // Let the account panel paint before the optional timer hydration. This
-    // preserves countdown behavior while keeping ten slot views from issuing
-    // their TrustScore requests in the same frame as device navigation.
-    const timer = window.setTimeout(() => { void load(); }, 900 + slotIdx * 80);
+    // Hydrate immediately. Delaying this by 900ms made the countdown the last
+    // element to appear in the account slot row after device navigation.
+    void load();
     const onChanged = (event: Event) => {
       const detail = (event as CustomEvent<{ serial?: string; slotIdx?: number }>).detail;
       if (detail?.serial === serial && detail.slotIdx === slotIdx) void load();
     };
     window.addEventListener("mobile_trustscore_changed", onChanged);
     return () => {
-      window.clearTimeout(timer);
       window.removeEventListener("mobile_trustscore_changed", onChanged);
     };
   }, [load, serial, slotIdx]);
