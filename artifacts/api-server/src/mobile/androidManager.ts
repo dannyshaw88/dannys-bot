@@ -613,6 +613,7 @@ export async function launchFilterCamera(serial: string): Promise<void> {
     path.join(runtimeServerDir, "native-filter-camera", "app-debug.apk"),
     // Development workspace path.
     path.join(process.cwd(), "native-filter-camera", "app", "build", "outputs", "apk", "debug", "app-debug.apk"),
+    path.join(process.cwd(), "artifacts", "api-server", "native-filter-camera", "app", "build", "outputs", "apk", "debug", "app-debug.apk"),
   ];
   const apkPath = apkCandidates.find(candidate => fs.existsSync(candidate));
   logger.info({ serial, apkCandidates, apkPath: apkPath ?? null, adb }, "[filter-camera] launch start");
@@ -628,7 +629,8 @@ export async function launchFilterCamera(serial: string): Promise<void> {
     logger.info({ serial }, "[filter-camera] APK install completed");
   }
   const result = spawnSync(adb, ["-s", serial, "shell", "am", "start", "-n",
-    "com.aura.farm.filtercamera/.MainActivity", "--activity-clear-top"],
+    "com.aura.farm.filtercamera/.MainActivity", "--activity-clear-top",
+    "--es", "serial", serial],
     { encoding: "utf8", timeout: 15000 });
   logger.info({
     serial,

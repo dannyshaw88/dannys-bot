@@ -15,7 +15,9 @@ gradle assembleDebug
 The API launches:
 `app/build/outputs/apk/debug/app-debug.apk`
 
-The first native version provides a live front-camera preview, on-device ML Kit
-face tracking, Off/Glasses/Beard/Blush/Freckles/Cartoon effects, and filtered
-still-photo capture to `DCIM/AuraFilters`. Video compositing remains separate
-from still capture and is not silently presented as complete.
+The native version provides a live front-camera preview, on-device ML Kit face
+tracking, Off/Long hair/Beard/Cute face/Glasses/Freckles/Blush/Cartoon effects,
+filtered still-photo capture, and local CameraX video capture to
+`DCIM/AuraFilters`. The selected effect is persisted under the launching
+device serial, so a filter choice on one connected phone does not bleed into
+another phone.
