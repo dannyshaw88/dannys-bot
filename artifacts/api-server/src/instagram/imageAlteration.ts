@@ -11,6 +11,7 @@
  * fails to load the COM-only fallback still runs.
  */
 import { randomBytes } from "crypto";
+import { spawn } from "child_process";
 
 export type AlterationLevel = "small" | "medium" | "high";
 
@@ -111,6 +112,57 @@ async function getSharp() {
   return sharpModule;
 }
 
+async function getFfmpegPath(): Promise<string> {
+  try {
+    const mod = await import("ffmpeg-static");
+    const ffmpegPath = (mod as { default?: unknown }).default ?? mod;
+    if (typeof ffmpegPath === "string" && ffmpegPath.length > 0) return ffmpegPath;
+  } catch {
+    // handled below with an explicit processing failure
+  }
+  throw new Error("FFmpeg is unavailable for required image alteration");
+}
+
+async function ffmpegAlter(input: Buffer, level: AlterationLevel, cfg: AlterationConfig, frequencyDisruption: boolean): Promise<Buffer> {
+  const ffmpegPath = await getFfmpegPath();
+  const inputPath = `/tmp/equinox-alter-input-${randomBytes(8).toString("hex")}.jpg`;
+  const outputPath = `/tmp/equinox-alter-output-${randomBytes(8).toString("hex")}.jpg`;
+  const { writeFile, readFile, unlink } = await import("fs/promises");
+  const contrast = 1 + randInRange(cfg.contrast.min, cfg.contrast.max) / 1000;
+  const brightness = randInRange(cfg.brightness.min, cfg.brightness.max) / 5000;
+  const noise = Math.max(1, Math.round(randInRange(cfg.noise.min, cfg.noise.max)));
+  const filters = [
+    `eq=brightness=${brightness.toFixed(5)}:contrast=${contrast.toFixed(5)}`,
+    `noise=alls=${noise}:allf=u`,
+  ];
+  if (!frequencyDisruption) filters.splice(1, 1);
+  await writeFile(inputPath, input);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(ffmpegPath, [
+        "-hide_banner", "-loglevel", "error", "-y", "-i", inputPath,
+        "-map_metadata", "-1", "-vf", filters.join(","),
+        "-q:v", level === "high" ? "1" : level === "medium" ? "2" : "3",
+        outputPath,
+      ], { stdio: ["ignore", "ignore", "pipe"] });
+      let stderr = "";
+      child.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+      child.once("error", reject);
+      child.once("close", (code) => code === 0
+        ? resolve()
+        : reject(new Error(`FFmpeg exited with code ${code}${stderr ? `: ${stderr.trim()}` : ""}`)));
+    });
+    const output = await readFile(outputPath);
+    if (!output.length || output.equals(input) || output[0] !== 0xff || output[1] !== 0xd8) {
+      throw new Error("FFmpeg alteration output was empty, unchanged, or invalid");
+    }
+    return output;
+  } finally {
+    await unlink(inputPath).catch(() => {});
+    await unlink(outputPath).catch(() => {});
+  }
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 /**
  * Alters a JPEG image buffer to make it unique before reposting.
@@ -131,8 +183,10 @@ export async function alterJpegBuffer(
   const sharp = await getSharp();
 
   if (!sharp) {
-    // sharp native binary not available on this platform — COM-only fallback
-    return injectComSegment(input, comLen);
+    // sharp native binary is intentionally avoided on affected Windows
+    // builds. Use FFmpeg for the actual configured pixel alteration instead
+    // of falsely succeeding with a metadata-only COM segment.
+    return ffmpegAlter(input, level, cfg, frequencyDisruption);
   }
 
   try {

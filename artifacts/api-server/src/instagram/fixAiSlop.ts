@@ -45,6 +45,7 @@ import { appendFileSync } from "fs";
 import { readFile, unlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
+import { spawn } from "child_process";
 
 const MAX_AI_SLOP_INPUT_BYTES = 50 * 1024 * 1024;
 const MAX_AI_SLOP_PIXELS = 100_000_000;
@@ -289,6 +290,38 @@ function detectFormat(buf: Buffer): ImageFormat {
   return "unknown";
 }
 
+async function resolveFfmpegPath(): Promise<string> {
+  try {
+    const mod = await import("ffmpeg-static");
+    const ffmpegPath = (mod as { default?: unknown }).default ?? mod;
+    if (typeof ffmpegPath === "string" && ffmpegPath.length > 0) return ffmpegPath;
+  } catch {
+    // The bundled binary is required for this no-Sharp processing path.
+  }
+  throw new Error("FFmpeg is unavailable for required pixel-level image processing");
+}
+
+async function reencodeWithPixelDisruption(inputPath: string, outputPath: string): Promise<void> {
+  const ffmpegPath = await resolveFfmpegPath();
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(ffmpegPath, [
+      "-hide_banner", "-loglevel", "error", "-y",
+      "-i", inputPath,
+      "-map_metadata", "-1",
+      "-vf", "eq=brightness=0.001:contrast=1.002,noise=alls=1:allf=u",
+      "-q:v", "2",
+      outputPath,
+    ], { stdio: ["ignore", "ignore", "pipe"] });
+    let stderr = "";
+    child.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+    child.once("error", reject);
+    child.once("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`FFmpeg exited with code ${code}${stderr ? `: ${stderr.trim()}` : ""}`));
+    });
+  });
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Public API
 // ─────────────────────────────────────────────────────────────────────────────
@@ -353,8 +386,26 @@ export async function fixAiSlop(
     nativeCrashBreadcrumb("binary-strip-complete", `format=${fmt} bytes=${stripped.length}`);
     await writeFile(tmp, stripped);
 
+    // Metadata stripping alone is insufficient for Fix AI Slop. Re-encode
+    // through bundled FFmpeg so this path performs real pixel work without
+    // loading Sharp's native module.
+    const pixelTmp = join(
+      tmpdir(),
+      `equinox_fixaislop_pixels_${randomBytes(8).toString("hex")}.jpg`,
+    );
+    try {
+      await reencodeWithPixelDisruption(tmp, pixelTmp);
+      const transformed = await readFile(pixelTmp);
+      if (!transformed.length || transformed.equals(raw) || detectFormat(transformed) !== "jpeg") {
+        throw new Error("FFmpeg output was empty, byte-identical, or not a valid JPEG");
+      }
+      await writeFile(tmp, transformed);
+    } finally {
+      await unlink(pixelTmp).catch(() => {});
+    }
+
     console.log(
-      `[fixAiSlop] done — format=${fmt}, binary-stripped ${removedCount} block(s)`,
+      `[fixAiSlop] done — format=${fmt}, binary-stripped ${removedCount} block(s), pixel re-encode complete`,
     );
     onLog?.(`Fix AI Slop: metadata removal complete — format=${fmt}`);
     return tmp;

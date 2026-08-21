@@ -8600,6 +8600,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     };
 
     let pushFilePath = localFilePath;
+    let pushFileName = fileName;
     const sourceBytes = await fsPromises.readFile(localFilePath);
     const sourceAudit = await describeImage(localFilePath, sourceBytes);
     onLog?.(`${prefix}: Fix AI Slop setting = ${doFixAiSlop ? "ON" : "OFF"}`);
@@ -8616,11 +8617,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // no removable EXIF/XMP/IPTC/C2PA blocks. Fix AI Slop is a metadata
         // cleanup pass; unlike visual alteration, it must not fail the post
         // merely because there was nothing to remove.
-        const outputBytes = await verifyProcessedImage(pushFilePath, inputBytes, "Fix AI Slop", true);
+        const outputBytes = await verifyProcessedImage(pushFilePath, inputBytes, "Fix AI Slop");
         const outputAudit = await describeImage(pushFilePath, outputBytes);
-        const changed = !outputBytes.equals(inputBytes);
-        onLog?.(`${prefix}: Fix AI Slop verified — processed image is decodable${changed ? " and differs from input" : "; no removable metadata was present"}`);
+        onLog?.(`${prefix}: Fix AI Slop verified — processed image is decodable and differs from input`);
         onLog?.(`${prefix}: Fix AI Slop audit — sourceSha256=${sourceAudit.sha256} processedSha256=${outputAudit.sha256} bytes=${outputAudit.bytes} format=${outputAudit.format} dimensions=${outputAudit.width}x${outputAudit.height}`);
+        if (outputAudit.format === "jpeg" && ![".jpg", ".jpeg"].includes(path.extname(fileName).toLowerCase())) {
+          pushFileName = `${path.basename(fileName, path.extname(fileName))}.jpg`;
+        }
       } catch (e: any) {
         await Promise.all(tempFiles.map(file => fsPromises.unlink(file).catch(() => {})));
         tempFiles.length = 0;
@@ -8630,7 +8633,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
     }
 
-    let pushFileName = fileName;
     if (alterationEnabled) {
       const level = alterationLevel ?? "small";
       onLog?.(`${prefix}: applying ${level} image alteration…`);
