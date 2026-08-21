@@ -10050,17 +10050,6 @@ export async function findInstagramSettingsRow(
   return deduped[Math.floor(Math.random() * deduped.length)];
 }
 
-/** Confirm that Instagram's Settings and activity hub is visible on this device. */
-export async function isInstagramSettingsHubVisible(serial: string): Promise<boolean> {
-  const tools = detectToolset();
-  const adb = requireTool(tools.adb, "adb");
-  const xml = await _uiDump(adb, serial).catch(() => "");
-  if (!xml) return false;
-  const hasTitle = /Settings and activity/i.test(xml);
-  if (!hasTitle) return false;
-  const knownRow = /Notifications|Privacy|Your activity|Time spent|Saved|Security/i.test(xml);
-  return knownRow;
-}
 
 /**
  * Find the "Saved" row on Instagram's Settings and activity page.

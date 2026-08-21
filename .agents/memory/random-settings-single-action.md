@@ -7,4 +7,4 @@ The Phone Farm “Visit Random Settings” action must be limited to one validat
 
 **Why:** Instagram can render nested settings differently across builds, and a second setting/subsetting tap can leave the phone in an unexpected screen and break the automation flow.
 
-**How to apply:** Keep the sequence as `open Settings → tap one validated row → optional scroll → Back`. Verify the Settings hub returns after Back; on a device-specific transition race, allow only one controlled Back retry. If no validated row is available, skip safely rather than guessing a coordinate.
+**How to apply:** Keep the sequence as `open Settings → tap one validated row → optional scroll → Back`. If no validated row is available, skip the setting action safely rather than guessing a coordinate.
