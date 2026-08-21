@@ -10318,9 +10318,83 @@ export async function findInstagramSearchBar(
   serial: string,
   onLog?: (msg: string) => void,
 ): Promise<{ x: number; y: number } | null> {
-  // Search-field taps are deliberately visual-only. UIAutomator nodes are
-  // intermittent on this surface and must never override the same
-  // screenshot/reference correlation used by the Feed Like detector.
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const { h: screenH } = getScreenSize(serial);
+  const topLimit = Math.round(screenH * 0.45);
+  const searchIds = [
+    "action_bar_search_edit_text",
+    "search_bar_input",
+    "search_bar",
+    "search_input",
+    "search_field",
+    "search_bar_container",
+    "action_bar_search_hints_text_layout",
+    "explore_action_bar_container",
+    "explore_action_bar",
+  ];
+
+  // UIAutomator is the fast path. A live resource node gives us the exact
+  // current field bounds in one dump and avoids the large screenshot/template
+  // scan that is only needed on builds which omit these nodes.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await _sleep(350);
+    const xml = await _uiDump(adb, serial).catch(() => "");
+    if (!xml) continue;
+
+    const exact = _findLiveNodeByResId(xml, ":id/action_bar_search_edit_text");
+    if (exact && exact.y <= topLimit) {
+      onLog?.(`Follow: live search field action_bar_search_edit_text at (${exact.x}, ${exact.y}) attempt=${attempt + 1}`);
+      return exact;
+    }
+
+    const live = _findLiveNodeByResId(xml, ...searchIds.map(id => `:id/${id}`));
+    if (live && live.y <= topLimit) {
+      onLog?.(`Follow: live search field resource node at (${live.x}, ${live.y}) attempt=${attempt + 1}`);
+      return live;
+    }
+
+    // Resource ids can disappear briefly during Explore transitions. Accept
+    // a search-labelled top-region node as a bounded semantic fallback, but
+    // never use a guessed coordinate.
+    const candidates: Array<{ x: number; y: number; score: number; id: string; label: string }> = [];
+    for (const node of xml.match(/<node\b[^>]*>/gi) ?? []) {
+      const bounds = node.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+      if (!bounds) continue;
+      const x1 = Number(bounds[1]), y1 = Number(bounds[2]);
+      const x2 = Number(bounds[3]), y2 = Number(bounds[4]);
+      const centerY = (y1 + y2) / 2;
+      if (x2 <= x1 || y2 <= y1 || centerY > topLimit) continue;
+      const id = node.match(/\bresource-id="([^"]*)"/i)?.[1] ?? "";
+      const label = [
+        node.match(/\btext="([^"]*)"/i)?.[1] ?? "",
+        node.match(/\bcontent-desc="([^"]*)"/i)?.[1] ?? "",
+        node.match(/\bhint="([^"]*)"/i)?.[1] ?? "",
+      ].join(" ").trim();
+      const mentionsSearch = /search/i.test(`${id} ${label}`);
+      if (!mentionsSearch) continue;
+      const matchedId = searchIds.find(searchId => id.toLowerCase().includes(searchId));
+      const isEditText = /class="android\.widget\.EditText"/i.test(node);
+      const interactive = /(?:clickable|focusable)="true"/i.test(node);
+      candidates.push({
+        x: Math.round((x1 + x2) / 2),
+        y: Math.round(centerY),
+        score: (matchedId ? 100 : 0) + (isEditText ? 35 : 0) + (interactive ? 15 : 0) + (label ? 5 : 0),
+        id: id || "(no resource-id)",
+        label: label || "(no label)",
+      });
+    }
+    if (candidates.length) {
+      candidates.sort((a, b) => b.score - a.score || a.y - b.y);
+      const best = candidates[0];
+      onLog?.(`Follow: live semantic search field "${best.id}" "${best.label}" at (${best.x}, ${best.y}) attempt=${attempt + 1}`);
+      return { x: best.x, y: best.y };
+    }
+  }
+
+  // Only builds that fail all bounded live-node attempts pay the cost of the
+  // multi-template screenshot matcher.
+  onLog?.("Follow: live search field node unavailable — using visual fallback");
   const visual = await findInstagramSearchFieldByPixels(serial, onLog);
   return visual ? { x: visual.x, y: visual.y } : null;
 
