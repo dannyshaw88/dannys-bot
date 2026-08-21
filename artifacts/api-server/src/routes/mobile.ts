@@ -12954,6 +12954,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // ── Feed ────────────────────────────────────────────────────────
         if (_tool === 'feed') {
           if (_toolActivated[_tool]) { // pre-rolled above
+            // Every View Feed pass gets its own scroll-count roll. This is
+            // deliberately inside the dispatcher rather than computed once
+            // for the cycle, so a re-run is a genuinely fresh Feed session.
+            const feedRunCount = Math.max(
+              1,
+              Math.min(
+                50,
+                Math.floor(
+                  Math.min(feedScrollMin, feedScrollMax) +
+                  Math.random() * (Math.abs(feedScrollMax - feedScrollMin) + 1),
+                ),
+              ),
+            );
             // When this is not the first tool the previous one may have left
             // the phone anywhere — navigate back to the home feed before
             // starting the scroll sequence.
@@ -12970,9 +12983,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               }
               await sleepOrAbort(serial, 2000);
             }
-            tLog(`▶ Starting feed scroll — ${count} posts`);
+            tLog(`▶ Starting feed scroll — ${feedRunCount} posts (fresh pass roll)`);
             ({ likes, likeFailures, sharesFeed, sharesDm, saves, captionExpands, strayNavRecoveries, audioTaps, hashtagTaps, authorVisits } = await runCheckFeedLoop(serial, {
-              count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
+              count: feedRunCount, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
               homeAlreadyEstablished: !_isFirst,
               shareFeedPercentMin, shareFeedPercentMax,
               shareDmPercentMin, shareDmPercentMax,
@@ -12983,8 +12996,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               clickAuthorPercentMin, clickAuthorPercentMax,
               onLog: (msg) => tLog(`  ${msg}`),
             }));
-            feedScrolled = count;
-            steps.push(`feed(${count} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${saves} saves, ${captionExpands} caption-expands, ${audioTaps} audio-taps, ${hashtagTaps} hashtag-taps, ${authorVisits} author-visits, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
+            feedScrolled = feedRunCount;
+            steps.push(`feed(${feedRunCount} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${saves} saves, ${captionExpands} caption-expands, ${audioTaps} audio-taps, ${hashtagTaps} hashtag-taps, ${authorVisits} author-visits, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
             tLog(`▶ Feed done — ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} DM-shares, ${saves} saves, ${captionExpands} caption-expands`);
             _viewFeedExecuted = true;
           } else if (!feedEnabled) {

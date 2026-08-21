@@ -60,6 +60,7 @@
 - [View Feed fresh-node action validation](view-feed-fresh-node-validation.md) — rescan the current post before each action and confirm state changes before counting success
 - [Feed swipe tap guard](feed-swipe-tap-guard.md) — calibrated slow/focused feed paths need a minimum upward travel or Android can interpret them as profile taps
 - [Scroll personality first-turn guard](scroll-personality-first-turn.md) — backward scrolling is disabled on the first Feed/Explore scroll because there is no prior content to revisit
+- [View Feed re-run freshness](feed-rerun-fresh-session.md) — every re-run independently rolls count, feature percentages, per-post decisions, delays, and personality paths
 - [Settings wide control rows](settings-wide-control-rows.md) — long explanatory settings text needs full-width, top-aligned control rows rather than a narrow centered layout
 - [HST restart recovery](hst-restart-recovery.md) — startup recovery and manual toggle-on must use separate scheduling paths; preserve slot identity in background settings responses
 - [Mobile Search tab detector](mobile-search-tab-detector.md) — validate unlabeled bottom-nav nodes from the live accessibility row; never derive a tap coordinate from screen dimensions
