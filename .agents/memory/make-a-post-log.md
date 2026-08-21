@@ -7,6 +7,12 @@ description: Chronological record of every attempt to get Make a Post working vi
 
 **Why this file exists:** The Make a Post feature has been attempted ~20 times via the mobile API and has never worked. Every new session the agent repeats the same fixes. This file and the in-UI README-REPLIT block are the stop-gap.
 
+### 2026-08-21 — Preparation must precede Instagram navigation
+- The mobile cycle was tapping Home before selecting and preparing the image, so the expected Fix AI Slop stripping/audit block never appeared before navigation.
+- The cycle caller also passed `fixAiSlop` to `runMakePostStep`, whose option is `doFixAiSlop`; that silently disabled the preparation branch in the pre-switch path.
+- **Lesson:** Make a Post must prepare and verify the temporary image before any Home or compose tap, and option names must match at the function boundary.
+- Status: reordered and corrected; API build passed and workflow restarted; physical-device confirmation is still required.
+
 ### 2026-08-09 — Home dwell report was preceded by an undefined slot variable
 - Production log showed `slotIdx is not defined` immediately after the Home tap, before the compose lookup. The function accepted `slotIdx` in its options but failed to destructure it, so the picker/`+` button was never attempted.
 - Fixed by destructuring `slotIdx` and adding an explicit three-second Home-render dwell with a visible readiness log line.

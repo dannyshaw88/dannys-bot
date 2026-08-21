@@ -8752,6 +8752,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     deleteAfterUpload: boolean; captionText: string;
     addLocation?: boolean;
     accountUsername?: string; slotIdx?: number;
+    homeTapCount?: number;
     doFixAiSlop?: boolean;
     alterationEnabled?: boolean;
     alterationLevel?: AlterationLevel;
@@ -8766,42 +8767,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       imageSettingsEnabled, imageSettings, frequencyDisruption, addLocation, accountUsername, slotIdx, onLog,
       homeTapCount = 1,
     } = opts;
-
-    // Make a Post always starts from Instagram's normal Home feed.  Do not use
-    // the screenshot heuristic for this tap: a bright pixel in the navigation
-    // strip can be a different icon or an animation frame, and tapping it can
-    // leave Instagram/kill the desktop cycle before image preparation starts.
-    // The accessibility detector has the account of the live screen and its
-    // known fallbacks, so keep this navigation step on that path.
-    onLog?.("Make a Post: locating Instagram Home button…");
-    const homeTab = await android.findHomeTab(serial).catch(() => null);
-    if (!homeTab) {
-      onLog?.("Make a Post: validated Instagram Home node not exposed — aborting before any tap");
-      return { posted: false };
-    } else {
-      if (
-        !Number.isFinite(homeTab.x) ||
-        !Number.isFinite(homeTab.y) ||
-        homeTab.x < 0 ||
-        homeTab.y < 0
-      ) {
-        onLog?.(`Make a Post: invalid Home coordinates (${homeTab.x}, ${homeTab.y}) — aborting before any tap`);
-        return { posted: false };
-      }
-      const taps = Math.max(1, Math.round(homeTapCount));
-      for (let tapIndex = 0; tapIndex < taps; tapIndex++) {
-        onLog?.(`Make a Post: tapping Instagram Home button (${tapIndex + 1}/${taps})…`);
-        await android.tap(serial, homeTab.x, homeTab.y);
-        if (tapIndex + 1 < taps) await sleepOrAbort(serial, 500);
-      }
-    }
-    // Do not immediately continue after the tab tap. On slower phones the
-    // Home surface remains in its transition state for several seconds; use
-    // a natural randomized 3–5 second dwell before any later picker or
-    // compose lookup is attempted.
-    const homeDwellMs = 3000 + Math.round(Math.random() * 2000);
-    onLog?.(`Make a Post: waiting ${ (homeDwellMs / 1000).toFixed(1) }s for Instagram Home to finish loading…`);
-    await sleepOrAbort(serial, homeDwellMs);
 
     const fileName = await pickLocalFolderImage(serial, {
       folderPath: localFolderPath, random: localFolderRandom, noRepeat: localFolderNoRepeat, slotIdx, onLog,
@@ -8824,6 +8789,39 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       `bytes=${prepared.audit.processedBytes} format=${prepared.audit.format} ` +
       `dimensions=${prepared.audit.width}x${prepared.audit.height}`,
     );
+
+    // Prepare the media before touching Instagram navigation. This is
+    // intentional: a Home/compose tap must never happen before the source has
+    // been selected, transformed, verified, and is ready to push.
+    onLog?.("Make a Post: image is prepared and verified; locating Instagram Home button…");
+    const homeTab = await android.findHomeTab(serial).catch(() => null);
+    if (!homeTab) {
+      await prepared.cleanup();
+      onLog?.("Make a Post: validated Instagram Home node not exposed — aborting before any tap");
+      return { posted: false };
+    }
+    if (
+      !Number.isFinite(homeTab.x) ||
+      !Number.isFinite(homeTab.y) ||
+      homeTab.x < 0 ||
+      homeTab.y < 0
+    ) {
+      await prepared.cleanup();
+      onLog?.(`Make a Post: invalid Home coordinates (${homeTab.x}, ${homeTab.y}) — aborting before any tap`);
+      return { posted: false };
+    }
+    const taps = Math.max(1, Math.round(homeTapCount));
+    for (let tapIndex = 0; tapIndex < taps; tapIndex++) {
+      onLog?.(`Make a Post: tapping Instagram Home button (${tapIndex + 1}/${taps})…`);
+      await android.tap(serial, homeTab.x, homeTab.y);
+      if (tapIndex + 1 < taps) await sleepOrAbort(serial, 500);
+    }
+    // Do not immediately continue after the tab tap. On slower phones the
+    // Home surface remains in its transition state for several seconds; use
+    // a natural randomized 3–5 second dwell before pushing/opening compose.
+    const homeDwellMs = 3000 + Math.round(Math.random() * 2000);
+    onLog?.(`Make a Post: waiting ${ (homeDwellMs / 1000).toFixed(1) }s for Instagram Home to finish loading…`);
+    await sleepOrAbort(serial, homeDwellMs);
 
     onLog?.(`Make a Post: pushing "${fileName}" to device…`);
     let devicePath: string;
@@ -12505,21 +12503,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               });
             } else if (preTool === "post") {
               await runMakePostStep(serial, {
+                localFolderPath: makePostLocalFolderPath || getMakePostFolderPath(serial, slotIdx),
+                localFolderRandom: makePostLocalFolderRandom,
+                localFolderNoRepeat: makePostLocalFolderNoRepeat,
+                deleteAfterUpload: false,
+                captionText: makePostCaptionText,
                 addLocation: makePostAddLocation,
                 alterationEnabled: makePostAlterationEnabled,
                 alterationLevel: makePostAlterationLevel,
                 imageSettingsEnabled: makePostImageSettingsEnabled,
                 imageSettings: makePostImageSettings,
-                fixAiSlop: makePostFixAiSlop,
-                metadataCleanup: makePostMetadataCleanup,
+                doFixAiSlop: makePostFixAiSlop,
                 frequencyDisruption: makePostFrequencyDisruption,
-                captionText: makePostCaptionText,
-                localFolderEnabled: makePostLocalFolderEnabled,
-                localFolderPath: makePostLocalFolderPath,
-                localFolderNoRepeat: makePostLocalFolderNoRepeat,
-                localFolderRandom: makePostLocalFolderRandom,
-                localFolderDeleteAfterUpload: false,
-                useChatGpt: false,
                 onLog: (msg) => tLog(`  ${msg}`),
               }).catch((e: any) => {
                 if (e?.message === "cycle-aborted") throw e;
