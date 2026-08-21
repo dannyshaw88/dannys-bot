@@ -7840,7 +7840,7 @@ export function AutomationSettingsPanel({
       <div className="bg-card border border-border rounded-xl p-5 space-y-2">
         <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(FINAL STEP)</p>
         <p className="text-sm text-foreground">
-          Close the Instagram app and Airplane Mode will be activated for 15–20 seconds, then Airplane Mode will be turned off.
+          Close the Instagram app and Airplane Mode will be activated for 10–15 seconds, then Airplane Mode will be turned off.
         </p>
       </div>
 

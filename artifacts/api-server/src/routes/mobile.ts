@@ -4139,8 +4139,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // this at the shared boundary prevents a newly added action from silently
   // reintroducing a fixed timing signature.
   const dwellDiagnosticAt = new Map<string, number>();
-  const randomizedDwellMs = (serial: string, ms: number, category: "globalDwell" | "accountSwitching" | "navigation" | "actionPacing" = "actionPacing"): number => {
+  const randomizedDwellMs = (serial: string, ms: number, category: "globalDwell" | "accountSwitching" | "navigation" | "actionPacing" | "airplaneMode" = "actionPacing"): number => {
     if (!Number.isFinite(ms) || ms <= 0) return Math.max(0, ms);
+    // Airplane mode is an explicit network-reset window, not a human-action
+    // dwell. Do not let a short Mother Code override collapse it.
+    if (category === "airplaneMode") return Math.round(ms);
     const scaled = ms * devicePersonality(serial).dwellScale;
     const low = scaled >= 5000 ? Math.max(1, Math.round(scaled * 0.5)) : Math.max(1, Math.round(scaled));
     const high = scaled >= 5000 ? Math.round(scaled) : 5000;
@@ -4171,7 +4174,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     return actual;
   };
-  const sleepOrAbort = (serial: string, ms: number, category: "globalDwell" | "accountSwitching" | "navigation" | "actionPacing" = "actionPacing") => {
+  const sleepOrAbort = (serial: string, ms: number, category: "globalDwell" | "accountSwitching" | "navigation" | "actionPacing" | "airplaneMode" = "actionPacing") => {
     const dwellMs = randomizedDwellMs(serial, ms, category);
     const startedAt = performance.now();
     return new Promise<void>((resolve, reject) => {
@@ -8053,8 +8056,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // whole sequence once; the frontend calls it back-to-back on a randomized
   // gap while the master toggle stays on, so it recycles every time.
   const automationCycleSchema = checkFeedSchema.extend({
-    airplaneWaitMinSec: z.number().min(1).max(120).default(15),
-    airplaneWaitMaxSec: z.number().min(1).max(120).default(20),
+    airplaneWaitMinSec: z.number().min(1).max(120).default(10),
+    airplaneWaitMaxSec: z.number().min(1).max(120).default(15),
     // Master on/off switches for each slide of the cycle (12 Jul 2026).
     // When a step is unticked in the UI, its whole block never runs — this
     // is purely a gate, not a percentage/chance like the fields below.
@@ -13803,7 +13806,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const waitLoSec = Math.min(airplaneWaitMinSec, airplaneWaitMaxSec);
       const waitHiSec = Math.max(airplaneWaitMinSec, airplaneWaitMaxSec);
       const waitSec = waitLoSec + Math.random() * (waitHiSec - waitLoSec);
-      await sleepOrAbort(serial, Math.round(waitSec * 1000));
+      await sleepOrAbort(serial, Math.round(waitSec * 1000), "airplaneMode");
       tLog("▶ Airplane mode OFF — restoring network…");
       await android.setAirplaneMode(serial, false);
       tLog("  ✓ Airplane mode off — network reconnecting");
