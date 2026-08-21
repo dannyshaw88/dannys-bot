@@ -15023,16 +15023,29 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       logger.info({ serial, activeCycleId: activeCycleId ?? null }, "[graceful-reboot] request received");
       if (activeCycleId) automationCycleAbortedId.set(serial, activeCycleId);
 
-      const deadline = Date.now() + 30_000;
+      // Most cycles unwind through their abort checkpoint within a few
+      // seconds. A device I/O call can still remain in flight indefinitely,
+      // though, so graceful reboot must have a bounded drain period rather
+      // than refusing to reboot forever.
+      const drainTimeoutMs = 15_000;
+      const deadline = Date.now() + drainTimeoutMs;
       while (automationCycleInProgress.has(serial) && Date.now() < deadline) {
         await new Promise(resolve => setTimeout(resolve, 250));
       }
 
        const stillRunning = automationCycleInProgress.has(serial);
        if (stillRunning) {
-          logger.warn({ serial, activeCycleId, waitedMs: 30_000 }, "[graceful-reboot] cycle did not stop; refusing to reboot");
-         res.status(409).json({
-           error: "The automation cycle is still stopping. The device was not rebooted.",
+          // The worker may be blocked inside a synchronous ADB operation and
+          // therefore cannot observe the abort marker until the device
+          // disappears. Rebooting here is the only reliable way to interrupt
+          // that operation. The worker's existing catch/finally path will
+          // classify the resulting offline error as an abort, persist partial
+          // metrics, and release the cycle lock afterward.
+          logger.warn({ serial, activeCycleId, waitedMs: drainTimeoutMs }, "[graceful-reboot] cycle did not stop; forcing adb reboot");
+          android.rebootDevice(serial);
+          logger.info({ serial, interruptedCycle: Boolean(activeCycleId), forcedCleanup: true }, "[graceful-reboot] forced adb reboot dispatched");
+          res.json({
+            ok: true,
            interruptedCycle: Boolean(activeCycleId),
            forcedCleanup: true,
          });

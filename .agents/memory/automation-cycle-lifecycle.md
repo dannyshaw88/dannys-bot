@@ -30,3 +30,18 @@ already on screen, or force-stopping the process invisibly.
   older builds) rather than tapping a quick-settings tile — tile position
   is not consistent across devices/OEMs, so a coordinate tap is unreliable
   at scale.
+
+- Graceful reboot must use a bounded cycle-drain period and then force the ADB
+  reboot if the worker is still registered. A synchronous/in-flight device I/O
+  operation may never reach the abort checkpoint while the device remains
+  online.
+
+**Why:** Waiting indefinitely for `automationCycleInProgress` caused the
+reboot endpoint to return an error and leave the physical phone running. The
+reboot itself interrupts the stuck device operation; the worker's existing
+catch/finally path then records partial metrics and releases the cycle lock.
+
+**How to apply:** Mark the matching cycle ID aborted first, allow a short
+normal unwind window, then dispatch `adb reboot` on timeout and return a
+successful forced-cleanup result. Do not return a refusal solely because the
+cycle marker is still present.
