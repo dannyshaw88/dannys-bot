@@ -602,64 +602,22 @@ export async function launchInstagram(serial: string): Promise<void> {
   ], { encoding: "utf8", timeout: 10000 });
 }
 
-/**
- * Open the local phone-side filter camera in the device's default browser.
- * The camera and capture pipeline run on the phone; the desktop mirror only
- * displays the resulting phone screen.
- */
-export async function launchFilterCamera(serial: string, url: string): Promise<void> {
+/** Install and launch the native CameraX filter surface. */
+export async function launchFilterCamera(serial: string): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  // The browser runs on the phone, so the desktop preview proxy hostname
-  // (often 127.0.0.1:<proxy-port>) is not reachable from the phone. Reverse
-  // the stable Vite port over the existing ADB connection instead.
-  await runAdbStrict(adb, ["-s", serial, "reverse", "tcp:5000", "tcp:5000"], 10000);
-  // Opening a VIEW intent directly on a first-run Chrome installation leaves
-  // the URL behind Chrome's onboarding carousel ("Download videos", etc.).
-  // Prepare Chrome first, then send the URL once the onboarding surface is
-  // gone. This is intentionally limited to Chrome onboarding labels; never
-  // tap arbitrary page content.
-  const launch = spawnSync(adb, [
-    "-s", serial, "shell", "am", "start", "-n",
-    "com.android.chrome/com.google.android.apps.chrome.Main",
-    "--activity-clear-top",
-  ], { encoding: "utf8", timeout: 15000 });
-  if (launch.status !== 0 || /Error|does not exist/i.test(`${launch.stdout ?? ""}\n${launch.stderr ?? ""}`)) {
-    throw new Error(launch.stderr?.trim() || launch.stdout?.trim() || "Could not launch Chrome");
+  const apkPath = path.join(process.cwd(), "native-filter-camera", "app", "build", "outputs", "apk", "debug", "app-debug.apk");
+  if (!fs.existsSync(apkPath)) {
+    throw new Error(`Native filter APK is not built: ${apkPath}`);
   }
-  await _sleep(2200);
-  for (let attempt = 0; attempt < 6; attempt++) {
-    const xml = await _uiDump(adb, serial);
-    if (!xml || !xml.includes("com.android.chrome")) break;
-    const onboardingButton = _findElem(
-      xml,
-      "signin_fre_continue_button",
-      "Continue as",
-      "Accept & continue",
-      "Skip",
-      "No, thanks",
-      "No thanks",
-      "Got it",
-    );
-    const onboardingSurface =
-      xml.includes("fre_pager") ||
-      xml.includes("Make Chrome your own") ||
-      xml.includes("Download videos") ||
-      xml.includes("Save time, type less") ||
-      xml.includes("privacy_sandbox");
-    if (!onboardingSurface || !onboardingButton) break;
-    _adbTap(adb, serial, onboardingButton.x, onboardingButton.y);
-    await _sleep(1200);
+  if (!(await isPackageInstalled(serial, "com.aura.farm.filtercamera"))) {
+    await installApk(serial, apkPath);
   }
-
-  const result = spawnSync(adb, [
-    "-s", serial, "shell", "am", "start",
-    "-a", "android.intent.action.VIEW",
-    "-d", url,
-    "-p", "com.android.chrome",
-  ], { encoding: "utf8", timeout: 15000 });
-  if (result.status !== 0) {
-    throw new Error(result.stderr?.trim() || result.stdout?.trim() || "Could not open filter camera on device");
+  const result = spawnSync(adb, ["-s", serial, "shell", "am", "start", "-n",
+    "com.aura.farm.filtercamera/.MainActivity", "--activity-clear-top"],
+    { encoding: "utf8", timeout: 15000 });
+  if (result.status !== 0 || /Error|does not exist/i.test(`${result.stdout ?? ""}\n${result.stderr ?? ""}`)) {
+    throw new Error(result.stderr?.trim() || result.stdout?.trim() || "Could not launch native filter camera");
   }
 }
 

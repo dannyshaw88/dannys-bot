@@ -2692,11 +2692,11 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
       const response = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/filter-camera/open`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cameraOrigin: window.location.origin }),
+        body: "{}",
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(body?.error ?? `HTTP ${response.status}`);
-      onLog?.("Filter Camera: opened phone-side camera preview");
+      onLog?.("Filter Camera: launched native CameraX filter app");
     } catch (error: any) {
       onLog?.(`Filter Camera: failed to open — ${error?.message ?? "network error"}`);
     }

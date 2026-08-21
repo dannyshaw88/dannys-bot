@@ -1,0 +1,5 @@
+.gradle/
+build/reports/
+build/intermediates/
+build/generated/
+build/kotlin/

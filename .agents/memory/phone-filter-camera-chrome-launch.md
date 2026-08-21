@@ -1,10 +1,10 @@
 ---
-name: Phone filter camera Chrome launch
-description: Chrome first-run onboarding can intercept the phone-side filter camera URL
+name: Phone filter camera runtime
+description: Native CameraX is required for phone-side face filters
 ---
 
-The phone-side filter camera must launch Chrome first, dismiss only positively detected Chrome onboarding surfaces, and send the camera URL afterward.
+The phone-side filter camera must run as a native CameraX activity on the phone. The mirror Filter control should install or launch the native APK directly and must not open a browser.
 
-**Why:** A direct Android VIEW intent on a first-run Chrome installation leaves the URL behind the onboarding carousel, such as the “Download videos” page, so the user sees onboarding instead of the camera.
+**Why:** Browser camera pages are not the same as an integrated camera pipeline, are blocked by device/network routing, and cannot reliably compose tracked effects into captured media.
 
-**How to apply:** For USB-connected phones, reverse the stable web-server port over ADB and use the phone-local URL. Prepare Chrome and handle known onboarding labels before issuing the final URL intent. Never tap arbitrary page content as a workaround.
+**How to apply:** Keep camera frames local to CameraX, use on-device face landmarks, and verify the APK is built before attempting ADB installation. Keep still/video capture behavior explicit rather than claiming raw video is filtered.

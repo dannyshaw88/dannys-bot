@@ -1676,19 +1676,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(500).json({ error: e?.message }); }
   });
 
-  // ── Phone-side face-filter camera ──────────────────────────────────────────
-  // The browser camera page runs on the phone, so its canvas output is what
-  // gets captured. The desktop mirror is only a view of that phone surface.
+  // ── Native phone face-filter camera ─────────────────────────────────────────
+  // The CameraX APK runs on the phone. No browser, preview proxy, or camera
+  // frame relay is involved.
   app.post("/api/mobile/devices/:serial/filter-camera/open", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
-      // launchFilterCamera establishes an ADB reverse tunnel to the web
-      // server, so this URL is local to the phone and does not depend on the
-      // Replit preview proxy hostname.
-      const url = `http://127.0.0.1:5000/phone-camera?serial=${encodeURIComponent(serial)}`;
       await android.wakeScreen(serial);
-      await android.launchFilterCamera(serial, url);
-      res.json({ ok: true, url });
+      await android.launchFilterCamera(serial);
+      res.json({ ok: true, native: true });
     } catch (e: any) {
       res.status(400).json({ ok: false, error: e?.message ?? "Could not open phone filter camera" });
     }
