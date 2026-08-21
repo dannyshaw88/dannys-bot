@@ -38,6 +38,7 @@ import {
 } from "../instagram/imageAlteration";
 import { createInstagramAccountViaApi, submitSignupCode } from "../instagram/instagramWebClient";
 import { fetchInstagramCodeFromImap } from "../instagram/imapHelper";
+import { logger } from "../lib/logger";
 import { IgApiClient } from "instagram-private-api";
 import {
   getOrCreateSession,
@@ -503,7 +504,13 @@ export async function registerInstagramRoutes(
   // swallowed on Windows when the server holds the fd open).
   app.post("/api/ipc-log", (req, res) => {
     const msg = String(req.body?.message ?? "").trim();
-    if (msg) console.log(msg);
+    if (msg) {
+      // Keep renderer diagnostics in the same structured file log as the
+      // server. Plain console forwarding is easy to lose in packaged-app
+      // capture/export; a named field makes the payload searchable and
+      // preserves the exact timing message.
+      logger.info({ uiSpeed: msg }, "UI-SPEED");
+    }
     res.json({ ok: true });
   });
 
