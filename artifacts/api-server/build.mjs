@@ -136,18 +136,6 @@ async function copyVendorAssets() {
     path.join(destDir, "scrcpy-server-v3.1"),
   );
 
-  // Bundle the native CameraX filter APK into the API artifact. The packaged
-  // Windows app cannot resolve workspace-relative native-filter-camera paths.
-  const filterApkSource = path.resolve(
-    artifactDir,
-    "native-filter-camera/app/build/outputs/apk/debug/app-debug.apk",
-  );
-  const filterApkTargetDir = path.resolve(artifactDir, "dist/native-filter-camera");
-  await mkdir(filterApkTargetDir, { recursive: true });
-  await copyFile(
-    filterApkSource,
-    path.join(filterApkTargetDir, "app-debug.apk"),
-  );
 }
 
 buildAll()

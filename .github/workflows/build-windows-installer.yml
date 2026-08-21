@@ -94,7 +94,6 @@ jobs:
           $required = @(
             "dist/main.js",
             "dist/server/start.mjs",
-            "dist/server/native-filter-camera/app-debug.apk",
             "dist/frontend/public/index.html",
             "resources/bin/win32/idevice_id.exe",
             "assets/icon.ico"

@@ -1676,23 +1676,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(500).json({ error: e?.message }); }
   });
 
-  // ── Native phone face-filter camera ─────────────────────────────────────────
-  // The CameraX APK runs on the phone. No browser, preview proxy, or camera
-  // frame relay is involved.
-  app.post("/api/mobile/devices/:serial/filter-camera/open", async (req: Request, res: Response) => {
-    try {
-      const serial = p(req, "serial");
-      logger.info({ serial }, "[filter-camera] native launch requested");
-      await android.wakeScreen(serial);
-      await android.launchFilterCamera(serial);
-      logger.info({ serial }, "[filter-camera] native launch dispatched");
-      res.json({ ok: true, native: true });
-    } catch (e: any) {
-      logger.error({ serial: p(req, "serial"), err: e }, "[filter-camera] native launch failed");
-      res.status(400).json({ ok: false, error: e?.message ?? "Could not open phone filter camera" });
-    }
-  });
-
   // ── Manual PC → phone media transfer ─────────────────────────────────────
   // This is intentionally separate from automated Make a Post. The user
   // chooses one image, loads it into DCIM/Camera, completes the Instagram post

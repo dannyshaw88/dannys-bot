@@ -21,7 +21,7 @@ import {
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
   ChevronLeft, ChevronRight, ChevronDown, Home, Power, Trash2,
   FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim, RotateCcw,
-  Palette, Plus, X, Keyboard, Camera,
+  Palette, Plus, X, Keyboard,
   Users, Globe, BarChart2, ClipboardList, Bug, ImagePlus, Tablet, MonitorSmartphone, Settings2, ScanSearch,
 } from "lucide-react";
 
@@ -2687,33 +2687,6 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
     sendKey(phone.serial, manualLive ? 223 : 224, manualLive ? "Sleep" : "Wake", onLog);
   }, [manualLive, onLog, onPower, phone]);
 
-  const [filterOpening, setFilterOpening] = useState(false);
-
-  const openFilterCamera = useCallback(async () => {
-    if (!phone?.serial) return;
-    if (filterOpening) return;
-    setFilterOpening(true);
-    onLog?.(`Filter Camera: launching native APK on ${phone.serial}…`);
-    console.debug("[filter-camera] request start", { serial: phone.serial });
-    try {
-      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/filter-camera/open`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-      });
-      const body = await response.json().catch(() => null);
-      console.debug("[filter-camera] response", { serial: phone.serial, status: response.status, body });
-      if (!response.ok) throw new Error(body?.error ?? `HTTP ${response.status}`);
-      onLog?.("Filter Camera: launched native CameraX filter app");
-    } catch (error: any) {
-      console.error("[filter-camera] request failed", { serial: phone.serial, error });
-      onLog?.(`Filter Camera: failed to open — ${error?.message ?? "network error"}`);
-      window.alert(`Filter Camera could not launch:\n${error?.message ?? "network error"}`);
-    } finally {
-      setFilterOpening(false);
-    }
-  }, [filterOpening, onLog, phone]);
-
   // ── Element tree inspector ─────────────────────────────────────────────────
   // Full UIAutomator node tree shown below the mirror when inspect mode is on.
   // "Tree" tab: hover a row to highlight its bounds on the mirror; hover the
@@ -3355,7 +3328,6 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
            <NavBtn icon={<Power       className="w-3 h-3" />}     label={manualLive ? "Power off" : "Power on"}  onClick={toggleManualPower} />
           <div className="w-px h-4 bg-white/10" />
           <NavBtn icon={<Keyboard    className="w-3 h-3" />}     label="Keyboard" onClick={() => setShowCalibration(true)} />
-          <NavBtn icon={<Camera      className="w-3 h-3" />}     label={filterOpening ? "Launching…" : "Filter"} onClick={openFilterCamera} disabled={filterOpening} />
         </div>
       )}
 

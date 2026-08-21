@@ -16,7 +16,6 @@ import { ReadmePage } from "@/pages/ReadmePage";
 import { BulkImportPage } from "@/pages/BulkImportPage";
 import { MobilePage } from "@/pages/MobilePage";
 import { MobileDevicesPage } from "@/pages/MobileDevicesPage";
-import PhoneFilterCameraPage from "@/pages/PhoneFilterCameraPage";
 import { TrustScoresPage } from "@/pages/TrustScoresPage";
 import { TrustScoreDetailPage } from "@/pages/TrustScoreDetailPage";
 import { ToolsPage } from "@/pages/ToolsPage";
@@ -125,7 +124,6 @@ function Router() {
       <Route path="/mobile" component={MobileDevicesPage} />
       <Route path="/mobile/farm/:serial" component={MobilePage} />
       <Route path="/mobile/farm" component={MobilePage} />
-      <Route path="/phone-camera" component={PhoneFilterCameraPage} />
       <Route path="/trust-scores" component={TrustScoresPage} />
       <Route path="/trust-scores/:trustScoreId" component={TrustScoreDetailPage} />
       <Route path="/tools" component={ToolsPage} />
