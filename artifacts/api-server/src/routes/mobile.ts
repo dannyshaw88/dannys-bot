@@ -2840,10 +2840,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // ── Per-slot Human Session Tool automation settings ─────────────────────────
   // Each Instagram account slot stores its own independent copy of all
   // automation settings. Settings are keyed by slot index in slotAutomation.
+  const MAX_MOBILE_ACCOUNT_SLOTS = 10;
+  const parseMobileSlotIndex = (value: unknown): number | null => {
+    const raw = String(value ?? "");
+    if (!/^(?:0|[1-9]\d*)$/.test(raw)) return null;
+    const slotIdx = Number(raw);
+    return Number.isSafeInteger(slotIdx) && slotIdx < MAX_MOBILE_ACCOUNT_SLOTS
+      ? slotIdx
+      : null;
+  };
   app.get("/api/mobile/devices/:serial/slots/:slotIdx/automation-state", (req: Request, res: Response) => {
     try {
-      const slotIdx = parseInt(String(req.params.slotIdx), 10);
-      if (isNaN(slotIdx) || slotIdx < 0) {
+      const slotIdx = parseMobileSlotIndex(req.params.slotIdx);
+      if (slotIdx === null) {
         res.status(400).json({ error: "Invalid slot index" });
         return;
       }
@@ -2859,8 +2868,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   });
   app.get("/api/mobile/devices/:serial/slots/:slotIdx/automation-settings", async (req: Request, res: Response) => {
     try {
-      const slotIdx = parseInt(String(req.params.slotIdx), 10);
-      if (isNaN(slotIdx) || slotIdx < 0) { res.status(400).json({ error: "Invalid slot index" }); return; }
+      const slotIdx = parseMobileSlotIndex(req.params.slotIdx);
+      if (slotIdx === null) { res.status(400).json({ error: "Invalid slot index" }); return; }
       const cfg = loadInstanceConfigs();
       const serial = p(req, "serial");
       const defaults: AutomationSettings = {
@@ -3029,8 +3038,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   });
   app.post("/api/mobile/devices/:serial/slots/:slotIdx/automation-settings", async (req: Request, res: Response) => {
     try {
-      const slotIdx = parseInt(String(req.params.slotIdx), 10);
-      if (isNaN(slotIdx) || slotIdx < 0) { res.status(400).json({ error: "Invalid slot index" }); return; }
+      const slotIdx = parseMobileSlotIndex(req.params.slotIdx);
+      if (slotIdx === null) { res.status(400).json({ error: "Invalid slot index" }); return; }
       const serial = p(req, "serial");
       const cfg = loadInstanceConfigs();
       // Load whatever is already saved for this slot.  For Copy Settings the
