@@ -21,7 +21,7 @@ import {
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
   ChevronLeft, ChevronRight, ChevronDown, Home, Power, Trash2,
   FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim, RotateCcw,
-  Palette, Plus, X, Keyboard,
+  Palette, Plus, X, Keyboard, Camera,
   Users, Globe, BarChart2, ClipboardList, Bug, ImagePlus, Tablet, MonitorSmartphone, Settings2, ScanSearch,
 } from "lucide-react";
 
@@ -2686,6 +2686,22 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
     sendKey(phone.serial, manualLive ? 223 : 224, manualLive ? "Sleep" : "Wake", onLog);
   }, [manualLive, onLog, onPower, phone]);
 
+  const openFilterCamera = useCallback(async () => {
+    if (!phone?.serial) return;
+    try {
+      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/filter-camera/open`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.error ?? `HTTP ${response.status}`);
+      onLog?.("Filter Camera: opened phone-side camera preview");
+    } catch (error: any) {
+      onLog?.(`Filter Camera: failed to open — ${error?.message ?? "network error"}`);
+    }
+  }, [onLog, phone]);
+
   // ── Element tree inspector ─────────────────────────────────────────────────
   // Full UIAutomator node tree shown below the mirror when inspect mode is on.
   // "Tree" tab: hover a row to highlight its bounds on the mirror; hover the
@@ -3327,6 +3343,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
            <NavBtn icon={<Power       className="w-3 h-3" />}     label={manualLive ? "Power off" : "Power on"}  onClick={toggleManualPower} />
           <div className="w-px h-4 bg-white/10" />
           <NavBtn icon={<Keyboard    className="w-3 h-3" />}     label="Keyboard" onClick={() => setShowCalibration(true)} />
+           <NavBtn icon={<Camera      className="w-3 h-3" />}     label="Filter"   onClick={openFilterCamera} />
         </div>
       )}
 

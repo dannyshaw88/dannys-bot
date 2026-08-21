@@ -603,6 +603,24 @@ export async function launchInstagram(serial: string): Promise<void> {
 }
 
 /**
+ * Open the local phone-side filter camera in the device's default browser.
+ * The camera and capture pipeline run on the phone; the desktop mirror only
+ * displays the resulting phone screen.
+ */
+export async function launchFilterCamera(serial: string, url: string): Promise<void> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const result = spawnSync(adb, [
+    "-s", serial, "shell", "am", "start",
+    "-a", "android.intent.action.VIEW",
+    "-d", url,
+  ], { encoding: "utf8", timeout: 15000 });
+  if (result.status !== 0) {
+    throw new Error(result.stderr?.trim() || result.stdout?.trim() || "Could not open filter camera on device");
+  }
+}
+
+/**
  * Open the Google Chrome app on the device and handle the Chrome first-run
  * experience (FRE) if it appears.
  *
