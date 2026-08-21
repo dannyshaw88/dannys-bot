@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { type Profile, type Tool } from "@shared/schema";
 import { queryClient } from "@/lib/queryClient";
+import { writeUiSpeedLog } from "@/lib/uiSpeedLog";
 
 type StatKey = "follow" | "unfollow" | "dm" | "like" | "comment" | "story" | "repost" | "human_session";
 type ColKey = StatKey | "trustscore";
@@ -453,7 +454,7 @@ export function StatsPage() {
   const statsPageStartedAtRef = useRef(performance.now());
   const statsSpeedLastRef = useRef("");
   useEffect(() => {
-    console.debug("[ui-speed] statistics page:mounted", {
+    writeUiSpeedLog("statistics-page-mounted", {
       totalMs: 0,
       url: window.location.href,
     });
@@ -577,7 +578,7 @@ export function StatsPage() {
     const key = `${profiles?.length ?? 0}:${successCount}`;
     if (key === statsSpeedLastRef.current) return;
     statsSpeedLastRef.current = key;
-    console.debug("[ui-speed] statistics profile stats progress", {
+    writeUiSpeedLog("statistics-profile-stats-progress", {
       profiles: profiles?.length ?? 0,
       successful: successCount,
       loading: statsQueries.filter(q => q.isLoading).length,
@@ -688,7 +689,7 @@ export function StatsPage() {
   });
   useEffect(() => {
     if (activeTab !== "metrics") return;
-    console.debug("[ui-speed] statistics metrics device data", {
+    writeUiSpeedLog("statistics-metrics-device-data", {
       usbPhones: metricsPhones?.phones?.length ?? 0,
       farmDevices: metricsFarmData?.devices?.length ?? 0,
       totalMs: Math.round((performance.now() - statsPageStartedAtRef.current) * 10) / 10,
@@ -714,7 +715,7 @@ export function StatsPage() {
   useEffect(() => {
     if (activeTab !== "metrics") return;
     const loaded = deviceSlotResults.filter(result => result.isSuccess).length;
-    console.debug("[ui-speed] statistics account slots progress", {
+    writeUiSpeedLog("statistics-account-slots-progress", {
       devices: deviceSlotResults.length,
       loaded,
       loading: deviceSlotResults.filter(result => result.isLoading).length,
@@ -762,7 +763,7 @@ export function StatsPage() {
   );
   useEffect(() => {
     if (activeTab !== "metrics") return;
-    console.debug("[ui-speed] statistics account selector:ready", {
+    writeUiSpeedLog("statistics-account-selector-ready", {
       deviceGroups: deviceGroups.length,
       slotAccounts: deviceGroups.reduce((sum, group) => sum + group.accounts.length, 0),
       totalMs: Math.round((performance.now() - statsPageStartedAtRef.current) * 10) / 10,

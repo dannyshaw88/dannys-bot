@@ -5,6 +5,7 @@ import {
   readLocalSlotTrustScore,
   saveSlotTrustScore,
 } from "./slotTrustScoreStorage";
+import { writeUiSpeedLog } from "@/lib/uiSpeedLog";
 
 type TimerResponse = {
   scoreId?: string | null;
@@ -81,7 +82,7 @@ export function TrustScoreCountdown({
       return;
     }
     const startedAt = performance.now();
-    console.debug("[ui-speed] trust score countdown:start", { serial, slotIdx });
+    writeUiSpeedLog("trust-score-countdown-start", { serial, slotIdx });
     try {
       const assignment = await fetch(
         `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/trust-score`,
@@ -130,14 +131,14 @@ export function TrustScoreCountdown({
           ? data.expiresAt
           : Date.now() + effectiveRemaining,
       );
-      console.debug("[ui-speed] trust score countdown:ready", {
+      writeUiSpeedLog("trust-score-countdown-ready", {
         serial,
         slotIdx,
         scoreId: liveScoreId,
         totalMs: Math.round((performance.now() - startedAt) * 10) / 10,
       });
     } catch {
-      console.debug("[ui-speed] trust score countdown:failed", {
+      writeUiSpeedLog("trust-score-countdown-failed", {
         serial,
         slotIdx,
         totalMs: Math.round((performance.now() - startedAt) * 10) / 10,

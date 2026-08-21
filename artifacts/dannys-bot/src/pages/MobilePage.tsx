@@ -10,6 +10,7 @@ import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { Sidebar, FilledFarmIcon } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
 import { useDeviceLog } from "@/contexts/DeviceLogContext";
+import { writeUiSpeedLog } from "@/lib/uiSpeedLog";
 import { Label } from "@/components/ui/label";
 import { Input as BaseInput } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -8337,7 +8338,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   const [slotAutomationStates, setSlotAutomationStates] = useState<Record<number, SlotAutomationState>>({});
   const handleSlotAutomationState = useCallback((slotIdx: number, state: SlotAutomationState) => {
     const navStarted = Number(sessionStorage.getItem("mobile_device_nav_started_at"));
-    console.debug("[ui-speed] device account slot automation state", {
+    writeUiSpeedLog("device-account-slot-automation-state", {
       serial: phone?.serial ?? null,
       slotIdx,
       enabled: state.enabled,
@@ -8455,7 +8456,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
     if (!phone) { setSlots(Array.from({ length: ACCT_SLOT_COUNT }, emptySlot)); return; }
     let active = true;
     const startedAt = performance.now();
-    console.debug("[ui-speed] account slots request:start", {
+    writeUiSpeedLog("account-slots-request-start", {
       serial: phone.serial,
       elapsedMs: null,
     });
@@ -8464,7 +8465,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
       .then(async r => {
         const responseAt = performance.now();
         const payload = await r.json();
-        console.debug("[ui-speed] account slots response", {
+        writeUiSpeedLog("account-slots-response", {
           serial: phone.serial,
           ok: r.ok,
           status: r.status,
@@ -8509,13 +8510,13 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
         setTotpError(Array(loaded.length).fill(null));
         setLoading(false);
         hydratedRef.current = true;
-        console.debug("[ui-speed] account slots state:ready", {
+        writeUiSpeedLog("account-slots-state-ready", {
           serial: phone.serial,
           slotCount: loaded.length,
           totalMs: Math.round((performance.now() - startedAt) * 10) / 10,
         });
         requestAnimationFrame(() => {
-          console.debug("[ui-speed] account slots:painted", {
+          writeUiSpeedLog("account-slots-painted", {
             serial: phone.serial,
             slotCount: loaded.length,
             totalMs: Math.round((performance.now() - startedAt) * 10) / 10,

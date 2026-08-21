@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, RotateCcw } from "lucide-react";
 import { pickLocalWallpaper } from "@/pages/mobileShared";
+import { writeUiSpeedLog } from "@/lib/uiSpeedLog";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1256,7 +1257,7 @@ export function MobileDevicesPage() {
                       currentTool={currentTools.get(device.serial) ?? null}
                       onClick={() => {
                         const started = performance.now();
-                        console.debug("[mobile-device-debug] device card clicked", {
+                        writeUiSpeedLog("device-card-clicked", {
                           serial: device.serial,
                           slotIndex: device.slotIndex,
                           online: onlineSerials.has(device.serial),
