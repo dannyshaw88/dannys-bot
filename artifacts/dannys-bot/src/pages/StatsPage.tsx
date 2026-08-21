@@ -222,16 +222,16 @@ type MetricAccount = {
 };
 
 function MobileSlotSessionToggle({ serial, slotIdx, slotUsername }: { serial: string; slotIdx: number; slotUsername: string }) {
-  const qKey = [`/api/mobile/devices/${serial}/slots/${slotIdx}/automation-settings`];
-  // Fetch the full settings object (not just enabled) so we can pass it
-  // directly to the automation-cycle endpoint when turning on.
-  const { data: settings, isLoading } = useQuery<Record<string, any>>({ queryKey: qKey });
+  const qKey = [`/api/mobile/devices/${serial}/slots/${slotIdx}/automation-state`];
+  // The table only needs the lightweight master enabled state. The complete
+  // settings object is fetched on demand if the user turns a slot on.
+  const { data: state, isLoading } = useQuery<{ enabled: boolean }>({ queryKey: qKey });
   const [optimistic, setOptimistic] = useState<boolean | null>(null);
 
   if (isLoading) return <span className="text-muted-foreground text-[10px]">…</span>;
-  if (!settings) return <span className="text-muted-foreground text-[10px]">—</span>;
+  if (!state) return <span className="text-muted-foreground text-[10px]">—</span>;
 
-  const checked = optimistic ?? (settings.enabled as boolean);
+  const checked = optimistic ?? state.enabled;
 
   const toggle = async (val: boolean) => {
     setOptimistic(val);
@@ -257,14 +257,19 @@ function MobileSlotSessionToggle({ serial, slotIdx, slotUsername }: { serial: st
       // 3. When turning ON, also kick off an automation cycle directly.
       //    This handles the common case where the user is on the Stats page
       //    and MobilePage is NOT mounted — the BroadcastChannel message above
-      //    would be lost and no cycle would ever start.  We spread the full
-      //    cached settings object so the cycle runs with the slot's real
-      //    configuration.  If MobilePage also picks up the BroadcastChannel
+      //    would be lost and no cycle would ever start. We load and spread the
+      //    full settings object so the cycle runs with the slot's real
+      //    configuration. If MobilePage also picks up the BroadcastChannel
       //    and fires its own cycle request, the server's 409 "already in
       //    progress" guard on the /automation-cycle endpoint prevents a
       //    duplicate — whichever arrives second is safely ignored.
       if (val) {
-        const s = settings;
+        const settingsResponse = await fetch(
+          `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings`,
+          { cache: "no-store" },
+        );
+        if (!settingsResponse.ok) throw new Error("Could not load slot settings");
+        const s = await settingsResponse.json() as Record<string, any>;
         const scrollMin = Math.max(1, Math.min(s.feedScrollMin ?? 5, s.feedScrollMax ?? 10));
         const scrollMax = Math.max(s.feedScrollMin ?? 5, s.feedScrollMax ?? 10);
         const count = Math.floor(Math.random() * (scrollMax - scrollMin + 1)) + scrollMin;
