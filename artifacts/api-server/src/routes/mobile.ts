@@ -12127,6 +12127,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         viewReelsRerunChanceMin, viewReelsRerunChanceMax,
         checkDmRerunChanceMin, checkDmRerunChanceMax,
         makePostRerunChanceMin, makePostRerunChanceMax,
+         feedScrollMin, feedScrollMax,
         viewStoriesSlidesMin, viewStoriesSlidesMax,
         viewStoriesSlideWatchPctMin, viewStoriesSlideWatchPctMax,
         viewStoriesLikePercentMin, viewStoriesLikePercentMax,
