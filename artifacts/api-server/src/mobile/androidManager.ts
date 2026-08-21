@@ -8508,6 +8508,10 @@ export async function switchToInstagramAccount(
     jitterX: number; jitterY: number;
     startJitterMinY?: number; startJitterMaxY?: number;
   },
+  switchMethod?: {
+    useProfileTabLongPress?: boolean;
+    holdDurationMs?: number;
+  },
 ): Promise<boolean> {
   if (!username.trim()) return false;
   const adbPath = findAdbPath();
@@ -8662,6 +8666,20 @@ export async function switchToInstagramAccount(
   onLog?.(`  ↳ Profile tab found at (${profileTab.x},${profileTab.y}) via ${profileTabSource} — waiting ${PROFILE_TAB_SETTLE_MS}ms for Instagram to finish rendering…`);
   await _sleep(PROFILE_TAB_SETTLE_MS);
 
+  let postHeaderTapXml = "";
+  if (switchMethod?.useProfileTabLongPress) {
+    const holdDurationMs = Math.max(3000, Math.min(10000, Math.round(switchMethod.holdDurationMs ?? 3000)));
+    onLog?.(`  ↳ Holding live Profile tab at (${profileTab.x},${profileTab.y}) for ${holdDurationMs}ms to open account sheet…`);
+    await runAdb(adbPath, [
+      "-s", serial, "shell", "input", "swipe",
+      String(profileTab.x), String(profileTab.y),
+      String(profileTab.x), String(profileTab.y),
+      String(holdDurationMs),
+    ], Math.max(12000, holdDurationMs + 4000));
+    await _sleep(700 + Math.floor(Math.random() * 4301));
+    postHeaderTapXml = await _uiDump(adbPath, serial).catch(() => "");
+    onLog?.(`  ↳ Profile-tab long-press result: xmlLength=${postHeaderTapXml.length}, hasAccountSheet=${/(?:account|switch|chooser|dialog|bottom_sheet|modal)/i.test(postHeaderTapXml)}`);
+  } else {
   // 2. Open the active account profile with a single tap. Instagram's newer
   // account UI no longer reliably opens the account list from a long-press.
   const profileBeforeTapXml = preloadedXml || "";
@@ -8746,7 +8764,7 @@ export async function switchToInstagramAccount(
   onLog?.(`  ↳ Tapping profile header username @${clean} to open account list…`);
   await _adbTapAsync(adbPath, serial, profileHeaderUsername.x, profileHeaderUsername.y);
   await _sleep(700 + Math.floor(Math.random() * 4301));
-  const postHeaderTapXml = await _uiDump(adbPath, serial).catch(() => "");
+  postHeaderTapXml = await _uiDump(adbPath, serial).catch(() => "");
   const postHeaderState = {
     hasUsernameContainer: /action_bar_username_container/.test(postHeaderTapXml),
     hasEditProfile: /(?:text|content-desc)="Edit profile"/i.test(postHeaderTapXml),
@@ -8757,6 +8775,7 @@ export async function switchToInstagramAccount(
     sheetMarkers: (postHeaderTapXml.match(/(?:account|switch|chooser|dialog|bottom_sheet|modal|action_bar_username_container)/gi) ?? []).slice(0, 20),
   };
   onLog?.(`  ↳ Account-header tap result: xmlLength=${postHeaderTapXml.length}, state=${JSON.stringify(postHeaderState)}`);
+  }
 
   // 4. Dump the accessibility tree and look for the target username.
   //    Instagram displays each account row as a node with text="username"

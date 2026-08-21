@@ -11027,6 +11027,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   ): Promise<number> {
     const { usersMin, usersMax, sources, onLog, onLike, recordFollow, browsing, skipFollowedUsernames, skipSkippedUsernames, filters } = params;
     let searchReadyForReuse = !!params.searchAlreadyReady;
+    // The Search field stays in the same top-bar position while returning from
+    // a rejected profile to Search results. Keep the last live visual match so
+    // recovery does not repeat the expensive multi-template scan immediately.
+    let lastKnownSearchBar: { x: number; y: number } | null = null;
 
     // Follow leaves Instagram on the search/results surface after each
     // profile.  Always restore the normal Instagram UI before another tool
@@ -11062,13 +11066,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       searchReadyForReuse = false;
       await android.pressBack(serial);
       await sleepOrAbort(serial, 500);
-      await android.clearInstagramSearchBar(serial, (msg) => onLog?.(`Follow: skipped-user cleanup — ${msg}`));
-      const searchBar = await android.findInstagramSearchBar(serial, onLog).catch(() => null);
-      if (!searchBar) {
+      // The field was just used to launch this profile, so it is still the
+      // focused field after returning to results. Avoid another UIAutomator
+      // dump and clear it with the fast key-event path.
+      await android.clearInstagramSearchBar(
+        serial,
+        (msg) => onLog?.(`Follow: skipped-user cleanup — ${msg}`),
+        { skipNodeLookup: true },
+      );
+      const recoverySearchBar = lastKnownSearchBar
+        ?? await android.findInstagramSearchBar(serial, onLog).catch(() => null);
+      if (!recoverySearchBar) {
         onLog?.("Follow: skipped-user cleanup — cleared search bar not found");
         return false;
       }
-      await android.tap(serial, searchBar.x, searchBar.y);
+      if (lastKnownSearchBar) {
+        onLog?.(`Follow: skipped-user cleanup — reusing confirmed visual search field at (${lastKnownSearchBar.x}, ${lastKnownSearchBar.y})`);
+      }
+      await android.tap(serial, recoverySearchBar.x, recoverySearchBar.y);
       await sleepOrAbort(serial, 500);
       const focused = await android.isInstagramSearchBarFocused(serial).catch(() => false);
       if (!focused) {
@@ -11405,6 +11420,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
         const searchBar = await android.findInstagramSearchBar(serial, onLog).catch(() => null);
         if (!searchBar) { onLog?.("Follow: search bar accessibility node not found — stopping"); break; }
+        lastKnownSearchBar = searchBar;
         onLog?.("[TRACE] follow: tap-search-field");
         await android.tap(serial, searchBar.x, searchBar.y);
         await sleepOrAbort(serial, 500 + Math.floor(Math.random() * 500));

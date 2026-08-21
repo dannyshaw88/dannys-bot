@@ -4089,6 +4089,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           body: JSON.stringify({
             cycleId,
             count,
+            profileTabLongPressPct: s.profileTabLongPressPct,
             feedEnabled: s.feedEnabled,
             storiesEnabled: s.storiesEnabled,
             delayMinSec: s.actionDelayMin,
