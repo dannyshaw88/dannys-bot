@@ -7588,7 +7588,13 @@ export async function removeDeviceFile(serial: string, devicePath: string): Prom
  * the bottom navigation row; there is no coordinate fallback.
  */
 const homeTabMatchesInFlight = new Map<string, Promise<{ x: number; y: number } | null>>();
-type HomeReference = { data: Buffer; width: number; height: number; source: string };
+type HomeReference = {
+  data: Buffer;
+  invertedData: Buffer;
+  width: number;
+  height: number;
+  source: string;
+};
 const homeReferenceCache = new Map<string, HomeReference>();
 
 async function findHomeTabInternal(serial: string): Promise<{ x: number; y: number } | null> {
@@ -7621,7 +7627,9 @@ async function findHomeTabInternal(serial: string): Promise<{ x: number; y: numb
             .toBuffer({ resolveWithObject: true });
           // Keep the complete screenshot crop. This is deliberately the same
           // template treatment used by the reliable View Feed heart matcher.
-          reference = { data, width: info.width, height: info.height, source: referencePath };
+           const invertedData = Buffer.allocUnsafe(data.length);
+           for (let i = 0; i < data.length; i++) invertedData[i] = 255 - data[i];
+           reference = { data, invertedData, width: info.width, height: info.height, source: referencePath };
           homeReferenceCache.set(referencePath, reference);
           break;
         } catch {
@@ -7639,7 +7647,7 @@ async function findHomeTabInternal(serial: string): Promise<{ x: number; y: numb
       const i = (y * screen.width + x) * screen.channels;
       return (screen.pixels[i] + screen.pixels[i + 1] + screen.pixels[i + 2]) / 3;
     };
-    let best: { x: number; y: number; score: number; scale: number } | null = null;
+    let best: { x: number; y: number; score: number; scale: number; polarity: "normal" | "inverted" } | null = null;
     // Match the proven View Feed heart detector's scoring/search parameters.
     // Only the Home-specific search rectangle below differs.
     const scales = [0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.8, 2.2, 2.7];
@@ -7664,30 +7672,40 @@ async function findHomeTabInternal(serial: string): Promise<{ x: number; y: numb
       const yMax = Math.min(screen.height - th, Math.round(screen.height * 0.95) - th);
       for (let y = yMin; y <= yMax; y += scanStep) {
         for (let x = 0; x <= xMax; x += scanStep) {
-          let screenSum = 0, screenSum2 = 0, refSum = 0, refSum2 = 0, cross = 0, count = 0;
-          for (let ty = 0; ty < reference.height; ty += sampleStep) {
-            for (let tx = 0; tx < reference.width; tx += sampleStep) {
-              const sx = x + Math.min(tw - 1, Math.round(tx * scale));
-              const sy = y + Math.min(th - 1, Math.round(ty * scale));
-              const screenValue = sample(sx, sy);
-              const refValue = reference.data[ty * reference.width + tx];
-              screenSum += screenValue;
-              screenSum2 += screenValue * screenValue;
-              refSum += refValue;
-              refSum2 += refValue * refValue;
-              cross += screenValue * refValue;
-              count++;
-            }
-          }
-          if (count < 100) continue;
-          const screenMean = screenSum / count;
-          const refMean = refSum / count;
-          const screenVariance = Math.max(1, screenSum2 / count - screenMean * screenMean);
-          const refVariance = Math.max(1, refSum2 / count - refMean * refMean);
-          const covariance = cross / count - screenMean * refMean;
-          // Absolute correlation accepts both black-on-white and
-          // white-on-dark Instagram themes.
-          const score = 0.5 + Math.abs(covariance / Math.sqrt(screenVariance * refVariance)) * 0.5;
+           let bestPolarityScore = -Infinity;
+           let bestPolarity: "normal" | "inverted" = "normal";
+           for (const [polarity, refData] of [
+             ["normal", reference.data],
+             ["inverted", reference.invertedData],
+           ] as const) {
+             let screenSum = 0, screenSum2 = 0, refSum = 0, refSum2 = 0, cross = 0, count = 0;
+             for (let ty = 0; ty < reference.height; ty += sampleStep) {
+               for (let tx = 0; tx < reference.width; tx += sampleStep) {
+                 const sx = x + Math.min(tw - 1, Math.round(tx * scale));
+                 const sy = y + Math.min(th - 1, Math.round(ty * scale));
+                 const screenValue = sample(sx, sy);
+                 const refValue = refData[ty * reference.width + tx];
+                 screenSum += screenValue;
+                 screenSum2 += screenValue * screenValue;
+                 refSum += refValue;
+                 refSum2 += refValue * refValue;
+                 cross += screenValue * refValue;
+                 count++;
+               }
+             }
+             if (count < 100) continue;
+             const screenMean = screenSum / count;
+             const refMean = refSum / count;
+             const screenVariance = Math.max(1, screenSum2 / count - screenMean * screenMean);
+             const refVariance = Math.max(1, refSum2 / count - refMean * refMean);
+             const covariance = cross / count - screenMean * refMean;
+             const score = 0.5 + Math.abs(covariance / Math.sqrt(screenVariance * refVariance)) * 0.5;
+             if (score > bestPolarityScore) {
+               bestPolarityScore = score;
+               bestPolarity = polarity;
+             }
+           }
+           const score = bestPolarityScore;
             // Retain the actual best visual candidate so borderline device
             // renders are diagnosable. The explicit final 0.72 gate below is
             // the safety decision; do not turn every sub-threshold result
@@ -7695,7 +7713,7 @@ async function findHomeTabInternal(serial: string): Promise<{ x: number; y: numb
            const candidateCenterX = Math.round(x + tw / 2);
            if (candidateCenterX > homeCenterMaxX) continue;
            if (score > (best?.score ?? -Infinity)) {
-             best = { x: candidateCenterX, y: Math.round(y + th / 2), score, scale };
+               best = { x: candidateCenterX, y: Math.round(y + th / 2), score, scale, polarity: bestPolarity };
           }
         }
       }
@@ -7718,14 +7736,14 @@ async function findHomeTabInternal(serial: string): Promise<{ x: number; y: numb
         },
         reference: { source: reference.source, size: [reference.width, reference.height] },
         best: best
-          ? { x: best.x, y: best.y, score: Number(best.score.toFixed(3)), scale: best.scale }
+           ? { x: best.x, y: best.y, score: Number(best.score.toFixed(3)), scale: best.scale, polarity: best.polarity }
           : null,
         minimumConfidence,
       }, "[home-tab] visual icon rejected");
       return null;
     }
     logger.debug(
-      { serial, x: best.x, y: best.y, score: Number(best.score.toFixed(3)), scale: best.scale },
+      { serial, x: best.x, y: best.y, score: Number(best.score.toFixed(3)), scale: best.scale, polarity: best.polarity },
       "[home-tab] visual icon matched",
     );
     return { x: best.x, y: best.y };
