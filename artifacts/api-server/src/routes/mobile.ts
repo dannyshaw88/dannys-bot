@@ -711,7 +711,7 @@ type AutomationSettings = {
   // 'left' / 'up' = manual override stored per device.
   dismissDirection?: "auto" | "left" | "up";
 };
-type DeviceSlot = { slotId?: string; username: string; password: string; totpSecret?: string; emailAddress?: string; emailPassword?: string; phoneNumber?: string };
+type DeviceSlot = { slotId?: string; username: string; password: string; totpSecret?: string; emailAddress?: string; emailPassword?: string; phoneNumber?: string; personality?: DevicePersonality };
 type DeviceAccount = { slots: DeviceSlot[] };
 type DeviceSettings = { googlePlayEmail?: string; googlePlayPassword?: string; selectedSimSlot?: number; simPhoneNumbers?: Record<string, string> };
 type DevicePrefs = {
@@ -3694,6 +3694,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     emailAddress: z.string().optional(),
     emailPassword: z.string().optional(),
     phoneNumber: z.string().optional(),
+    personality: z.object({
+      engagement: z.number().int().min(0).max(4),
+      consumption: z.number().int().min(0).max(4),
+      attention: z.number().int().min(0).max(4),
+      discovery: z.number().int().min(0).max(4),
+      actionVariety: z.number().int().min(0).max(4),
+    }).optional(),
   });
   const deviceAccountSchema = z.object({
     // No upper-bound cap — users can add as many slots as they need via the UI
