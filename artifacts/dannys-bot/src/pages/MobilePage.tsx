@@ -8404,6 +8404,10 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
             onCopied={onCopied}
             showCopyDialog={showCopyDialog}
             setShowCopyDialog={setShowCopyDialog}
+            onOpenGestures={() => {
+              const event = new CustomEvent("mobile-open-account-gestures", { detail: { slotIdx } });
+              window.dispatchEvent(event);
+            }}
             trustScoreAssigned={trustScoreAssigned || Boolean(automation.settings.trustScoreId)}
             onOpenBrowserProfile={onOpenBrowserProfile}
             settingsScrollRef={settingsScrollRef}
@@ -8602,6 +8606,18 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   const [openSlotTool,      setOpenSlotTool]      = useState<number | null>(initialSlot ?? null);
   const [openGesturesSlot,  setOpenGesturesSlot]  = useState<number | null>(null);
   const [openPhoneAppsTool,  setOpenPhoneAppsTool]  = useState(false);
+  useEffect(() => {
+    const onOpenGestures = (event: Event) => {
+      const slotIdx = (event as CustomEvent<{ slotIdx?: number }>).detail?.slotIdx;
+      if (typeof slotIdx === "number") {
+        setOpenSlotTool(null);
+        setOpenPhoneAppsTool(false);
+        setOpenGesturesSlot(slotIdx);
+      }
+    };
+    window.addEventListener("mobile-open-account-gestures", onOpenGestures);
+    return () => window.removeEventListener("mobile-open-account-gestures", onOpenGestures);
+  }, []);
   const [phoneAppsEnabled,   setPhoneAppsEnabled]   = useState(false);
   const [phoneAppsNextRunAt, setPhoneAppsNextRunAt] = useState<number | null>(null);
   const [phoneAppsRunning,   setPhoneAppsRunning]   = useState(false);
