@@ -8514,6 +8514,22 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
             emailAddress: s?.emailAddress ?? "",
             emailPassword: s?.emailPassword ?? "",
             phoneNumber: s?.phoneNumber ?? "",
+             personality: s?.personality && typeof s.personality === "object"
+               ? {
+                   engagement: Number(s.personality.engagement),
+                   consumption: Number(s.personality.consumption),
+                   attention: Number(s.personality.attention),
+                   discovery: Number(s.personality.discovery),
+                   actionVariety: Number(s.personality.actionVariety),
+                 }
+               : undefined,
+             personalityOverrides: s?.personalityOverrides && typeof s.personalityOverrides === "object"
+               ? Object.fromEntries(
+                   Object.entries(s.personalityOverrides)
+                     .filter(([, value]) => Number.isInteger(value) && Number(value) >= 0 && Number(value) <= 4)
+                     .map(([key, value]) => [key, Number(value)]),
+                 )
+               : undefined,
           }));
         } else if (d && d.username) {
           loaded = [{ slotId: crypto.randomUUID(), username: d.username, password: d.password ?? "", totpSecret: "", emailAddress: "", emailPassword: "", phoneNumber: "" }];

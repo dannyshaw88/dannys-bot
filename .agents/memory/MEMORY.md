@@ -114,3 +114,4 @@
 - [Account switch method rollout](account-switch-method-rollout.md) — alternate Profile-tab long-press switching is hardcoded internal variation, never an HST setting
 - [Random Actions notification detector](random-actions-notification-detector.md) — locate the top-right heart visually, never through stale accessibility or broad clickable-node fallbacks
 - [Account-slot personality baseline](slot-personality-baseline.md) — derive unique slot behaviour from device calibration and Trust Score, with bounded persistent overlays
+- [Mobile personality hydration](mobile-personality-hydration.md) — account response mappers must preserve persisted personality fields or restart renders Auto despite correct storage
