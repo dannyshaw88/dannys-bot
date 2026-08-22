@@ -4368,31 +4368,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     };
   }
 
-  /**
-   * Feed scrolling is not a sequence of velocity tests. Pick a consumption
-   * pattern first, then vary the calibrated path within safe bounds. Deliberate
-   * drags are the normal case; flicks remain exceptional.
-   */
+  const consumptionScrollWeights = {
+    superSkim: 1, skim: 3, fast: 8, quick: 12, normal: 30, slow: 30,
+    focused: 20, tapDragRelease: 5, back: 0,
+  };
+
   function rollFeedConsumptionGesture(
     h: number,
     history: { lastMode?: string; streak: number },
     serial: string,
   ): { duration: number; fromY: number; toY: number; mode: string } {
-    const gesture = rollScrollVelocity(h, {
-      superSkim: 1, skim: 3, fast: 8, quick: 12,
-      normal: 30, slow: 30, focused: 20, tapDragRelease: 5, back: 0,
-    }, false, 0.80, history, serial);
-    const travelByMode: Record<string, [number, number]> = {
-      superSkim: [0.62, 0.74], skim: [0.52, 0.66], fast: [0.43, 0.56],
-      quick: [0.34, 0.48], normal: [0.27, 0.40], slow: [0.22, 0.34],
-      focused: [0.16, 0.28], tapDragRelease: [0.20, 0.32],
-    };
-    const [minTravel, maxTravel] = travelByMode[gesture.mode] ?? [0.25, 0.40];
-    const travel = minTravel + Math.random() * (maxTravel - minTravel);
-    const startMin = gesture.mode === "focused" ? 0.62 : 0.72;
-    const startMax = gesture.mode === "focused" ? 0.78 : 0.86;
-    const fromY = Math.round(h * (startMin + Math.random() * (startMax - startMin)));
-    return { ...gesture, fromY, toY: Math.max(Math.round(h * 0.18), Math.round(fromY - h * travel)) };
+    return rollScrollVelocity(h, consumptionScrollWeights, false, 0.80, history, serial);
   }
 
   /**
@@ -4406,7 +4392,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     fallback: { x1: number; y1: number; x2: number; y2: number; durationMs: number },
     source: string,
     personality?: "superSkim" | "skim" | "fast" | "quick" | "normal" | "slow" | "focused" | "tapDragRelease" | "back",
-    opts?: { maxFromY?: number; consumption?: boolean },
+    opts?: { maxFromY?: number },
   ): Promise<{ x1: number; y1: number; x2: number; y2: number; durationMs: number; profile: boolean }> {
     let configured: DevicePrefs["swipeGesture"] | undefined;
     try { configured = loadInstanceConfigs()[serial]?.devicePrefs?.swipeGesture; } catch { configured = undefined; }
@@ -4466,13 +4452,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       y2: clamp((reversed ? configured.y1 : configured.y2) + (reversed ? startDy : endDy) + personalityProfile.yBias, size.h),
       durationMs,
     };
-    if (opts?.consumption && !reversed) {
-      const calibratedTravel = Math.max(1, path.y1 - path.y2);
-      const travelScale = 0.88 + Math.random() * 0.24;
-      const startShift = Math.round((Math.random() * 2 - 1) * size.h * 0.055);
-      path.y1 = clamp(path.y1 + startShift, size.h);
-      path.y2 = clamp(path.y1 - Math.round(calibratedTravel * travelScale), size.h);
-    }
     // If the caller specifies a maximum starting Y (e.g. to keep the swipe
     // start out of a bottom-row of clickable grid cells on the Explore page),
     // clamp AFTER jitter so the profile's random offset can't push the finger
@@ -4974,10 +4953,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Roll session scroll personality once — each run of the feed tool gets
     // its own mix so the distribution never converges to a fixed signature
     // over many sessions. Weights are relative (don't need to sum to 100).
-    const feedScrollWeights = {
-      superSkim: 1, skim: 3, fast: 8, quick: 12, normal: 30, slow: 30,
-      focused: 20, tapDragRelease: 5, back: 0,
-    };
+    const feedScrollWeights = consumptionScrollWeights;
     onLog?.(`Feed consumption personality — deliberate drags:${feedScrollWeights.normal + feedScrollWeights.slow + feedScrollWeights.focused} quick corrections:${feedScrollWeights.quick + feedScrollWeights.tapDragRelease} rare flicks:${feedScrollWeights.skim + feedScrollWeights.fast + feedScrollWeights.superSkim}`);
     const feedPersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
 
@@ -4998,7 +4974,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const feedModeLabel = sv.mode === "superSkim" ? "super skim" : sv.mode;
       onLog?.(`View Feed ${i + 1}/${count} [${feedModeLabel}]`);
       logger.info({ serial, target: "feed-scroll", mode: sv.mode, from: [x, sv.fromY], to: [x, sv.toY], durationMs: sv.duration }, "[check-feed] swipe");
-      await deviceProfileSwipe(serial, { x1: x, y1: sv.fromY, x2: x, y2: sv.toY, durationMs: sv.duration }, "feed-scroll", sv.mode as any, { consumption: true });
+      await deviceProfileSwipe(serial, { x1: x, y1: sv.fromY, x2: x, y2: sv.toY, durationMs: sv.duration }, "feed-scroll", sv.mode as any);
       await sleepOrAbort(serial, 180);
 
       // Roll action chances before any post-scroll inspection. A scroll-only
@@ -5864,7 +5840,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           dwellMs: consumptionDwellMs,
           actionTaken,
         }, "[check-feed] consumption dwell");
-        await sleepOrAbort(serial, consumptionDwellMs);
+        await sleepOrAbort(serial, consumptionDwellMs, "globalDwell");
         const feedTimingBeforeConfiguredDelay = Date.now();
         const delaySec = delayLoSec + Math.random() * (delayHiSec - delayLoSec);
         await sleepOrAbort(serial, Math.round(delaySec * 1000));
@@ -7523,7 +7499,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // y1 onto a Reel cell → cell's touch consumer fired before the grid's
         // scroll interceptor could claim the drag).
         const exploreMaxFromY = Math.round(h * 0.68);
-        await deviceProfileSwipe(serial, { x1: x, y1: esv.fromY, x2: x, y2: esv.toY, durationMs: esv.duration }, "explore-scroll", esv.mode as any, { maxFromY: exploreMaxFromY, consumption: true });
+        await deviceProfileSwipe(serial, { x1: x, y1: esv.fromY, x2: x, y2: esv.toY, durationMs: esv.duration }, "explore-scroll", esv.mode as any, { maxFromY: exploreMaxFromY });
         // Explore-only render dwell: the grid often needs a few seconds after
         // the gesture before its media cells are actually populated. Keep this
         // hardcoded and isolated here; it must not alter Feed, Reels, Stories,
