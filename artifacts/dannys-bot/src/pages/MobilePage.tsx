@@ -8098,7 +8098,21 @@ function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 142, hideIco
 
 const ACCT_SLOT_COUNT = 5;
 const emptySlot = () => ({ slotId: crypto.randomUUID(), username: "", password: "", totpSecret: "", emailAddress: "", emailPassword: "", phoneNumber: "" });
-type AccountSlot = { slotId: string; username: string; password: string; totpSecret: string; emailAddress: string; emailPassword: string; phoneNumber: string };
+type SlotPersonality = {
+  engagement: number;
+  consumption: number;
+  attention: number;
+  discovery: number;
+  actionVariety: number;
+};
+type AccountSlot = { slotId: string; username: string; password: string; totpSecret: string; emailAddress: string; emailPassword: string; phoneNumber: string; personality?: SlotPersonality };
+const SLOT_PERSONALITY_TRAITS = [
+  ["engagement", "Engagement", ["Reserved", "Selective", "Balanced", "Open", "Generous"]],
+  ["consumption", "Consumption", ["Light", "Moderate", "Balanced", "Active", "High volume"]],
+  ["attention", "Attention", ["Skimmer", "Casual", "Steady", "Focused", "Immersive"]],
+  ["discovery", "Discovery", ["Home-focused", "Occasional", "Balanced", "Curious", "Explorer"]],
+  ["actionVariety", "Actions", ["Passive", "Likes-focused", "Balanced", "Social", "Varied"]],
+] as const;
 
 // ── Per-slot Human Session Tool view ─────────────────────────────────────────
 // Always mounted so the automation hook's run-loop persists even when the
@@ -8590,6 +8604,21 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   const updateSlot = (i: number, patch: Partial<AccountSlot>) =>
     setSlots(s => s.map((slot, idx) => idx === i ? { ...slot, ...patch } : slot));
 
+  const randomiseSlotPersonality = async (slotIdx: number) => {
+    if (!phone?.serial || !slots[slotIdx]) return;
+    try {
+      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/personality`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ regenerate: true }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data.personality) updateSlot(slotIdx, { personality: data.personality });
+    } catch {
+      setSaveError("Couldn't randomise this slot's personality");
+    }
+  };
+
   const [typingField, setTypingField] = useState<"username" | "password" | "totpSecret" | "emailAddress" | "emailPassword" | "phoneNumber" | null>(null);
 
   const typeAccountField = async (field: "username" | "password" | "totpSecret" | "emailAddress" | "emailPassword" | "phoneNumber", value: string) => {
@@ -9037,6 +9066,31 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                   />
                 </div>
 
+                {/* Unique per-account slot personality, derived from the
+                    device and Trust Score baselines. */}
+                <div className="w-full flex items-center gap-2 flex-wrap rounded-md border border-border/60 bg-muted/20 px-3 py-2">
+                  <span className="text-xs font-semibold text-muted-foreground mr-1">Personality:</span>
+                  {(slot.personality
+                    ? SLOT_PERSONALITY_TRAITS.map(([key, label, options]) =>
+                        `${label}: ${options[slot.personality?.[key] ?? 2]}`)
+                    : ["Not randomised", "Not randomised", "Not randomised", "Not randomised", "Not randomised"]
+                  ).map((trait, traitIdx) => (
+                    <span key={traitIdx} className="rounded border border-border bg-background px-2 py-1 text-[11px] text-foreground">
+                      {trait}
+                    </span>
+                  ))}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void randomiseSlotPersonality(i)}
+                    disabled={loading || !phone?.serial}
+                    className="ml-auto h-7 text-xs"
+                  >
+                    Randomise
+                  </Button>
+                </div>
+
                 {/* Trust Score — independent instance (mobile_ts_<serial>_<slotIdx>)
                     so styling changes here don't affect other badge placements */}
                 <div style={{ display: "flex", alignSelf: "flex-end", height: "36px", gap: "8px" }}>
@@ -9178,16 +9232,6 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     discovery: number;
     actionVariety: number;
   };
-  const personalityChoices = [
-    ["engagement", "Engagement Threshold", ["Very selective", "Selective", "Balanced", "Open", "Highly expressive"]],
-    ["consumption", "Consumption Volume", ["Light", "Moderate", "Balanced", "Active", "High volume"]],
-    ["attention", "Attention Style", ["Skimmer", "Casual viewer", "Steady viewer", "Focused viewer", "Immersive viewer"]],
-    ["discovery", "Discovery Curiosity", ["Home-focused", "Occasional explorer", "Balanced browser", "Curious explorer", "Social navigator"]],
-    ["actionVariety", "Action Variety", ["Mostly passive", "Likes-focused", "Balanced actions", "Social actions", "Highly varied"]],
-  ] as const;
-  const defaultDevicePersonality: DevicePersonality = { engagement: 2, consumption: 2, attention: 2, discovery: 2, actionVariety: 2 };
-  const [devicePersonality, setDevicePersonality] = React.useState<DevicePersonality>(defaultDevicePersonality);
-  const [personalitySaving, setPersonalitySaving] = React.useState(false);
   const [swipeResolution, setSwipeResolution] = React.useState({ w: 1080, h: 2400 });
   const [swipeSaving, setSwipeSaving] = React.useState(false);
   const [swipeTesting, setSwipeTesting] = React.useState(false);
@@ -9229,7 +9273,6 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
         });
         if (d.typingSpeedProfile) setTypingSpeedProfile({ minMs: 80, maxMs: 220, errorPercentMin: 0, errorPercentMax: 0, dwellMinMs: 40, dwellMaxMs: 80, hesitationMinMs: 250, hesitationMaxMs: 650, ...d.typingSpeedProfile });
         if (d.swipePersonalityOverrides) setSwipePersonalityOverrides({ ...defaultSwipePersonalityOverrides, ...d.swipePersonalityOverrides });
-        if (d.devicePersonality) setDevicePersonality({ ...defaultDevicePersonality, ...d.devicePersonality });
         if (d.motherCodeOverrides) setMotherOverrides({
           globalDwell: d.motherCodeOverrides.globalDwell ?? defaultMotherOverrides.globalDwell,
           perTool: d.motherCodeOverrides.perTool ?? defaultMotherOverrides.perTool,
@@ -9276,19 +9319,6 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ swipePersonalityOverrides: next }),
     }).catch(() => {});
-  };
-  const saveDevicePersonality = async (next: DevicePersonality, regenerate = false) => {
-    if (!serial) return;
-    setPersonalitySaving(true);
-    try {
-      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-prefs`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(regenerate ? { regeneratePersonality: true } : { devicePersonality: next }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (response.ok && data.devicePersonality) setDevicePersonality(data.devicePersonality);
-      else if (!regenerate) setDevicePersonality(next);
-    } finally { setPersonalitySaving(false); }
   };
 
   const updateSwipeFromPointer = (event: React.PointerEvent<SVGSVGElement>) => {
@@ -9612,43 +9642,6 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
 
   return (
     <div className="h-full overflow-y-auto p-6 space-y-6">
-
-      {/* ── Device Personality ───────────────────────────────────────── */}
-      <div className="bg-card border border-border rounded-xl p-5 space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold text-foreground">Device Personality</p>
-            <p className="text-xs text-muted-foreground">
-              One persistent five-part behaviour mix shared by every account slot on this device. Trust Scores remain the baseline.
-            </p>
-          </div>
-          <Button type="button" size="sm" variant="outline" onClick={() => saveDevicePersonality(devicePersonality, true)} disabled={!serial || personalitySaving}>
-            {personalitySaving ? "Saving…" : "Regenerate"}
-          </Button>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {personalityChoices.map(([key, label, options]) => (
-            <label key={key} className="text-xs text-muted-foreground">
-              <span className="block mb-1">{label}</span>
-              <select
-                value={devicePersonality[key]}
-                onChange={e => {
-                  const next = { ...devicePersonality, [key]: Number(e.target.value) };
-                  setDevicePersonality(next);
-                  void saveDevicePersonality(next);
-                }}
-                disabled={!serial || personalitySaving}
-                className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground"
-              >
-                {options.map((option, index) => <option key={option} value={index}>{option}</option>)}
-              </select>
-            </label>
-          ))}
-        </div>
-        <p className="text-[11px] text-muted-foreground">
-          This changes action rates, browsing volume, attention, discovery, and session rhythm. It does not rewrite Swipe Gesture or Typing Speed Profile calibration.
-        </p>
-      </div>
 
       {/* ── Typing Speed Profile ─────────────────────────────────────── */}
       <div className="bg-card border border-primary/30 rounded-xl p-5 space-y-3">

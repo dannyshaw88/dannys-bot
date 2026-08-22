@@ -3314,6 +3314,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     logger.info({ serial, personality: next, regenerate }, "[device-personality] resolved persistent device profile");
     return next;
   };
+  const ensureSlotPersonality = (serial: string, slotIdx: number, regenerate = false): DevicePersonality => {
+    const cfg = loadInstanceConfigs();
+    const slot = cfg[serial]?.account?.slots?.[slotIdx];
+    const current = slot?.personality;
+    if (!regenerate && isDevicePersonality(current)) return current;
+    const next = randomDevicePersonality();
+    if (!slot) return next;
+    const slots = [...(cfg[serial]?.account?.slots ?? [])];
+    slots[slotIdx] = { ...slots[slotIdx], personality: next };
+    cfg[serial] = { ...cfg[serial], account: { slots } };
+    saveInstanceConfigs(cfg);
+    logger.info({ serial, slotIdx, personality: next, regenerate }, "[slot-personality] resolved persistent account profile");
+    return next;
+  };
 
   // ── Per-device prefs (hardware-level, not per-slot) ────────────────────────
   // Stored separately from automation settings so they can never be
@@ -3792,6 +3806,43 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to save the account" }); }
   });
 
+  app.post("/api/mobile/devices/:serial/slots/:slotIdx/personality", (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const slotIdx = Number(req.params.slotIdx);
+      if (!Number.isInteger(slotIdx) || slotIdx < 0) {
+        res.status(400).json({ error: "Invalid slot index" });
+        return;
+      }
+      const parsed = z.object({
+        regenerate: z.boolean().optional(),
+        personality: z.object({
+          engagement: z.number().int().min(0).max(4),
+          consumption: z.number().int().min(0).max(4),
+          attention: z.number().int().min(0).max(4),
+          discovery: z.number().int().min(0).max(4),
+          actionVariety: z.number().int().min(0).max(4),
+        }).optional(),
+      }).refine(value => value.regenerate || value.personality, "Personality is required").parse(req.body);
+      const cfg = loadInstanceConfigs();
+      const slots = [...(cfg[serial]?.account?.slots ?? [])];
+      if (!slots[slotIdx]) {
+        res.status(404).json({ error: "Account slot not found" });
+        return;
+      }
+      const personality = parsed.regenerate
+        ? randomDevicePersonality()
+        : parsed.personality!;
+      slots[slotIdx] = { ...slots[slotIdx], personality };
+      cfg[serial] = { ...cfg[serial], account: { slots } };
+      saveInstanceConfigs(cfg);
+      logger.info({ serial, slotIdx, personality, regenerate: Boolean(parsed.regenerate) }, "[slot-personality] saved");
+      res.json({ ok: true, personality });
+    } catch (e: any) {
+      res.status(400).json({ error: e?.message ?? "Failed to save slot personality" });
+    }
+  });
+
   // Removing a physical farm device is a destructive account-boundary
   // operation.  The serial may be registered again later with completely
   // different accounts, so do not let the old account slots, HST toggles,
@@ -4177,7 +4228,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     return personality;
   };
   const applyDevicePersonality = <T extends Record<string, any>>(serial: string, input: T): T => {
-    const profile = ensureDevicePersonality(serial);
+    const slotIdx = automationCycleActiveSlot.get(serial) ?? 0;
+    const profile = ensureSlotPersonality(serial, slotIdx);
     const result = { ...input };
     const clampPct = (value: number) => Math.max(0, Math.min(100, value));
     const adjustRange = (minKey: string, maxKey: string, offset: number, scale = 1) => {
@@ -4187,18 +4239,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       result[minKey] = clampPct(Math.min(min, max) * scale + offset);
       result[maxKey] = clampPct(Math.max(min, max) * scale + offset);
     };
-    const engagementOffset = [-8, -3, 0, 12, 24][profile.engagement];
-    const actionScale = [0.55, 0.78, 1, 1.12, 1.25][profile.actionVariety];
-    const discoveryOffset = [-5, -2, 0, 6, 12][profile.discovery];
-    const volumeScale = [0.60, 0.80, 1, 1.25, 1.55][profile.consumption];
-    const attentionScale = [0.78, 0.90, 1, 1.15, 1.30][profile.attention];
+    // Personality is deliberately relative to the Trust Score range. It can
+    // move a slot toward the low/high end of its assigned tier, but never
+    // injects a large fixed percentage offset that could leapfrog protection.
+    const engagementScale = [0.75, 0.90, 1, 1.10, 1.25][profile.engagement];
+    const actionScale = [0.75, 0.90, 1, 1.10, 1.25][profile.actionVariety];
+    const discoveryScale = [0.75, 0.90, 1, 1.10, 1.25][profile.discovery];
+    const volumeScale = [0.75, 0.90, 1, 1.10, 1.25][profile.consumption];
+    const attentionScale = [0.85, 0.93, 1, 1.07, 1.15][profile.attention];
 
     for (const [minKey, maxKey] of [
       ["likePercentMin", "likePercentMax"],
       ["viewStoriesLikePercentMin", "viewStoriesLikePercentMax"],
       ["viewReelsLikePercentMin", "viewReelsLikePercentMax"],
       ["viewExploreLikePercentMin", "viewExploreLikePercentMax"],
-    ]) adjustRange(minKey, maxKey, engagementOffset, actionScale);
+    ]) adjustRange(minKey, maxKey, 0, engagementScale * actionScale);
     for (const [minKey, maxKey] of [
       ["shareFeedPercentMin", "shareFeedPercentMax"],
       ["shareDmPercentMin", "shareDmPercentMax"],
@@ -4219,7 +4274,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       ["viewReelsClickAuthorPercentMin", "viewReelsClickAuthorPercentMax"],
       ["viewExploreClickPostPctMin", "viewExploreClickPostPctMax"],
       ["viewExploreClickAuthorPercentMin", "viewExploreClickAuthorPercentMax"],
-    ]) adjustRange(minKey, maxKey, discoveryOffset, actionScale);
+    ]) adjustRange(minKey, maxKey, 0, discoveryScale * actionScale);
     for (const [minKey, maxKey] of [
       ["feedScrollMin", "feedScrollMax"],
       ["viewStoriesSlidesMin", "viewStoriesSlidesMax"],
@@ -4239,17 +4294,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (Number.isFinite(result.viewExploreActionDelayMin)) result.viewExploreActionDelayMin = Math.max(0, result.viewExploreActionDelayMin * attentionScale);
     if (Number.isFinite(result.viewExploreActionDelayMax)) result.viewExploreActionDelayMax = Math.max(result.viewExploreActionDelayMin ?? 0, result.viewExploreActionDelayMax * attentionScale);
     logger.info({
-      serial,
+      serial, slotIdx,
       personality: profile,
       likeRange: [result.likePercentMin, result.likePercentMax],
       feedScrollRange: [result.feedScrollMin, result.feedScrollMax],
-    }, "[device-personality] applied bounded runtime adjustments");
+    }, "[slot-personality] applied bounded runtime adjustments");
     return result;
   };
   const effectiveTypingProfile = (serial: string) => {
     const profile = loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile;
     if (!profile) return undefined;
-    const scale = devicePersonality(serial).dwellScale;
+    const slotPersonality = ensureSlotPersonality(serial, automationCycleActiveSlot.get(serial) ?? 0);
+    const typingScale = [1.08, 1.04, 1, 0.96, 0.92][slotPersonality.attention];
+    const scale = devicePersonality(serial).dwellScale * typingScale;
     const range = (minMs: number, maxMs: number) => ({
       minMs: Math.max(0, Math.round(minMs * scale)),
       maxMs: Math.max(0, Math.round(maxMs * scale)),
@@ -4273,7 +4330,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Airplane mode is an explicit network-reset window, not a human-action
     // dwell. Do not let a short Mother Code override collapse it.
     if (category === "airplaneMode") return Math.round(ms);
-    const scaled = ms * devicePersonality(serial).dwellScale;
+    const slotPersonality = ensureSlotPersonality(serial, automationCycleActiveSlot.get(serial) ?? 0);
+    const attentionScale = [1.08, 1.04, 1, 0.96, 0.92][slotPersonality.attention];
+    const scaled = ms * devicePersonality(serial).dwellScale * attentionScale;
     const low = scaled >= 5000 ? Math.max(1, Math.round(scaled * 0.5)) : Math.max(1, Math.round(scaled));
     const high = scaled >= 5000 ? Math.round(scaled) : 5000;
     const overrides = loadInstanceConfigs()[serial]?.devicePrefs?.motherCodeOverrides;
@@ -4424,6 +4483,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   ): { duration: number; fromY: number; toY: number; mode: string } {
     const personalityOverrides = serial ? loadInstanceConfigs()[serial]?.devicePrefs?.swipePersonalityOverrides : undefined;
     const effectiveWeights = { ...weights };
+    if (serial) {
+      const slotProfile = ensureSlotPersonality(serial, automationCycleActiveSlot.get(serial) ?? 0);
+      const attentionModeScale = [0.80, 0.92, 1, 1.08, 1.18][slotProfile.attention];
+      const varietyModeScale = [0.82, 0.92, 1, 1.08, 1.16][slotProfile.actionVariety];
+      effectiveWeights.fast *= attentionModeScale;
+      effectiveWeights.quick *= attentionModeScale;
+      effectiveWeights.normal *= attentionModeScale;
+      effectiveWeights.slow *= attentionModeScale;
+      effectiveWeights.focused *= attentionModeScale * varietyModeScale;
+      effectiveWeights.tapDragRelease *= varietyModeScale;
+    }
     for (const mode of Object.keys(effectiveWeights) as Array<keyof typeof effectiveWeights>) {
       const configured = personalityOverrides?.[mode];
       // UI uses weight 0 as "follow Mother Code defaults", not "disable this
@@ -4556,17 +4626,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       back: [0.05, 0.10],
     };
     const [bandStart, bandEnd] = personality ? durationBand[personality] : [0, 1];
+    const slotPersonality = ensureSlotPersonality(serial, automationCycleActiveSlot.get(serial) ?? 0);
+    const slotGestureScale = [1.08, 1.04, 1, 0.96, 0.92][slotPersonality.attention];
     const personalityProfile = devicePersonality(serial);
     const durationMs = Math.max(1, Math.round(
       (minDuration + span * (bandStart + Math.random() * (bandEnd - bandStart))) *
-      personalityProfile.gestureScale,
+      personalityProfile.gestureScale * slotGestureScale,
     ));
     const pauseMin = Math.max(0, Math.min(configured.pauseMinMs ?? 0, configured.pauseMaxMs ?? 0));
     const pauseMax = Math.max(pauseMin, configured.pauseMaxMs ?? pauseMin);
     const settleMin = Math.max(0, Math.min(configured.settleMinMs ?? 0, configured.settleMaxMs ?? 0));
     const settleMax = Math.max(settleMin, configured.settleMaxMs ?? settleMin);
-    const pauseMs = Math.round((pauseMin + Math.random() * (pauseMax - pauseMin)) * personalityProfile.pauseScale);
-    const settleMs = Math.round((settleMin + Math.random() * (settleMax - settleMin)) * personalityProfile.settleScale);
+    const pauseMs = Math.round((pauseMin + Math.random() * (pauseMax - pauseMin)) * personalityProfile.pauseScale * slotGestureScale);
+    const settleMs = Math.round((settleMin + Math.random() * (settleMax - settleMin)) * personalityProfile.settleScale * slotGestureScale);
     if (pauseMs > 0) await new Promise(resolve => setTimeout(resolve, pauseMs));
     const reversed = personality === "back";
     let path = {
