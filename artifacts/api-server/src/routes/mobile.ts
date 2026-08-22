@@ -31,6 +31,12 @@ import {
 import { storage } from "../storage";
 import { logger } from "../lib/logger";
 import { HikerApiClient } from "../instagram/hikerApiClient";
+import { runAppSwitch as runAppSwitchOperation } from "../mobile/hst/operations/appSwitch";
+import { runVisitOwnProfile as runVisitOwnProfileOperation } from "../mobile/hst/operations/visitOwnProfile";
+import { runVisitSaved as runVisitSavedOperation } from "../mobile/hst/operations/visitSaved";
+import { runVisitSettings as runVisitSettingsOperation } from "../mobile/hst/operations/visitSettings";
+import { runCheckNotifications as runCheckNotificationsOperation } from "../mobile/hst/operations/checkNotifications";
+import { runCheckDmLoop as runCheckDmLoopOperation } from "../mobile/hst/operations/checkDm";
 
 // Sharp/libvips is a native dependency. On Windows, concurrent decode work
 // alongside sustained ADB screenshot polling has previously terminated the
@@ -4239,11 +4245,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const notifChance = rollRange(opts.checkNotificationsPctMin, opts.checkNotificationsPctMax) / 100;
     if (notifChance > 0 && Math.random() < notifChance) {
       onLog("Random Actions: checking notifications…");
-      await runCheckNotifications(serial, {
+      await runCheckNotificationsOperation(serial, {
         scrollsMin: opts.checkNotificationsScrollsMin,
         scrollsMax: opts.checkNotificationsScrollsMax,
         clickPctMin: opts.checkNotificationsClickPctMin,
         clickPctMax: opts.checkNotificationsClickPctMax,
+      }, {
+        android,
+        getScreenSize,
+        deviceProfileSwipe,
+        sleepOrAbort,
+        hstRandomDelay,
+        rollRange,
+        logger,
         onLog: (msg) => onLog(`  ${msg}`),
       });
       _jitterFired = true;
@@ -4251,26 +4265,52 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const profileChance = rollRange(opts.visitProfilePctMin, opts.visitProfilePctMax) / 100;
     if (profileChance > 0 && Math.random() < profileChance) {
       onLog("Random Actions: visiting own profile…");
-      await runVisitOwnProfile(serial, (msg) => onLog(`  ${msg}`));
+      await runVisitOwnProfileOperation(serial, {
+        android,
+        hstRandomDelay,
+        logger,
+        onLog: (msg) => onLog(`  ${msg}`),
+      });
       _jitterFired = true;
       await mutateAfter?.("profile");
     }
     const savedChance = rollRange(opts.visitSavedPctMin, opts.visitSavedPctMax) / 100;
     if (savedChance > 0 && Math.random() < savedChance) {
       onLog("Random Actions: visiting saved posts…");
-      await runVisitSaved(serial, (msg) => onLog(`  ${msg}`));
+      await runVisitSavedOperation(serial, {
+        android,
+        getScreenSize,
+        deviceProfileSwipe,
+        sleepOrAbort,
+        returnToHomeSafely,
+        rollRange,
+        logger,
+        onLog: (msg) => onLog(`  ${msg}`),
+      });
       _jitterFired = true;
     }
     const settingsChance = rollRange(opts.visitSettingsPctMin, opts.visitSettingsPctMax) / 100;
     if (settingsChance > 0 && Math.random() < settingsChance) {
       onLog("Random Actions: visiting random settings…");
-      await runVisitSettings(serial, (msg) => onLog(`  ${msg}`));
+      await runVisitSettingsOperation(serial, {
+        android,
+        getScreenSize,
+        getDeviceDensity: (deviceSerial) => android.getDeviceDensity(deviceSerial),
+        deviceProfileSwipe,
+        sleepOrAbort,
+        logger,
+        onLog: (msg) => onLog(`  ${msg}`),
+      });
       _jitterFired = true;
     }
     const appSwitchChance = rollRange(opts.appSwitchPctMin, opts.appSwitchPctMax) / 100;
     if (appSwitchChance > 0 && Math.random() < appSwitchChance) {
       onLog("Random Actions: app switch (SMS)…");
-      await runAppSwitch(serial, (msg) => onLog(`  ${msg}`));
+      await runAppSwitchOperation(serial, {
+        android,
+        sleepOrAbort,
+        onLog: (msg) => onLog(`  ${msg}`),
+      });
       _jitterFired = true;
     }
     const profilePicChance = rollRange(opts.updateProfilePicEnabled ? 100 : 0, opts.updateProfilePicEnabled ? 100 : 0) / 100;
@@ -9807,75 +9847,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   //            marker below. It is NOT part of Jitter.
   // ═══════════════════════════════════════════════════════════════════════════
 
-  /** Check Instagram notifications: tap heart icon → scroll → optionally tap item. */
-  async function runCheckNotifications(serial: string, opts: {
-    scrollsMin: number; scrollsMax: number;
-    clickPctMin: number; clickPctMax: number;
-    onLog?: (msg: string) => void;
-  }): Promise<void> {
-    const { scrollsMin, scrollsMax, clickPctMin, clickPctMax, onLog } = opts;
-    // Notifications can be launched after another tool leaves Instagram on a
-    // nested screen. Establish the Home surface before looking for the heart.
-    const homeTab = await android.findHomeTab(serial).catch(() => null);
-    if (!homeTab) {
-      onLog?.("Random Actions: Home tab not positively detected — skipping check notifications");
-      logger.warn({ serial }, "[jitter-check-notif] Home tab not found; refusing notification navigation");
-      return;
-    }
-    onLog?.(`Random Actions: tapping Home before notifications at (${homeTab.x},${homeTab.y})`);
-    await android.tap(serial, homeTab.x, homeTab.y);
-    await sleepOrAbort(serial, 1000);
-    // Find the notifications heart visually, using the same live screenshot
-    // matcher as View Feed Like but constrained to the top-right header. Do
-    // not use accessibility/positional fallbacks: a stale hierarchy can point
-    // at another app or switch Instagram unexpectedly.
-    const icon = await android.findInstagramNotificationsIcon(serial, onLog).catch(() => null);
-    if (!icon) {
-      onLog?.("Random Actions: notifications icon not found — skipping check notifications");
-      logger.warn({ serial }, "[jitter-check-notif] notifications icon not found by scan");
-      return;
-    }
-    await android.tap(serial, icon.x, icon.y);
-    await hstRandomDelay(serial, 1500, 10000);
-    onLog?.("Random Actions: ✓ opened notifications");
-    // Scroll down x–y times to browse through them.
-    const scrollCount = rollRange(scrollsMin, scrollsMax);
-    const { w, h } = getScreenSize(serial);
-    for (let i = 0; i < scrollCount; i++) {
-      await deviceProfileSwipe(
-        serial,
-        {
-          x1: Math.round(w * 0.5), y1: Math.round(h * 0.65),
-          x2: Math.round(w * 0.5), y2: Math.round(h * 0.30),
-          durationMs: 380 + Math.round(Math.random() * 120),
-        },
-        "check-notifications-scroll",
-        "normal",
-      );
-      await sleepOrAbort(serial, 500 + Math.round(Math.random() * 500));
-    }
-    // Optionally tap a random notification item (passive: opens a profile or post).
-    const clickChance = rollRange(clickPctMin, clickPctMax) / 100;
-    if (clickChance > 0 && Math.random() < clickChance) {
-      const item = await android.findRandomNotificationItem(serial).catch(() => null);
-      if (item) {
-        await android.tap(serial, item.x, item.y);
-        onLog?.("Random Actions: ✓ tapped notification item");
-        await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 1500));
-        await android.pressBack(serial);
-        await hstRandomDelay(serial, 2500, 10000);
-      } else {
-        onLog?.("Random Actions: no clickable notification row found — skipping click");
-      }
-    } else {
-      onLog?.("Random Actions: click-notification roll missed — skipping click");
-    }
-    // Return to home feed.
-    await android.pressBack(serial);
-    await hstRandomDelay(serial, 2500, 10000);
-    onLog?.("Random Actions: ✓ notifications check done");
-  }
-
   // ═══════════════════════════════════════════════════════════════════════════
   // TOOL: CHECK DM
   // Functions: runCheckDmLoop()
@@ -9884,334 +9855,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   //            Separate from Random Jitter — it has its own toggle in the UI.
   //            Do not merge its logic with Jitter helpers.
   // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Check DM inbox: tap the paper-plane icon, dismiss any "Not now" popup,
-   * scroll through the inbox, and optionally tap one conversation thread.
-   */
-  async function runCheckDmLoop(serial: string, opts: {
-    scrollsMin: number; scrollsMax: number;
-    clickPctMin: number; clickPctMax: number;
-    onLog?: (msg: string) => void;
-  }): Promise<void> {
-    const { scrollsMin, scrollsMax, clickPctMin, clickPctMax, onLog } = opts;
-    // Tap the DM paper-plane icon (top-right header area of the home feed).
-    const dmTab = await android.findInstagramDmTab(serial).catch(() => null);
-    if (!dmTab) {
-      onLog?.("Check Inbox: DM icon not found — skipping");
-      logger.warn({ serial }, "[check-dm] DM icon not found by scan");
-      return;
-    }
-    await android.tap(serial, dmTab.x, dmTab.y);
-    await sleepOrAbort(serial, 2000);
-    // Dismiss any "Not now" popup (e.g. "Turn on notifications for Direct").
-    const dismissed = await android.dismissInstagramInterstitials(serial).catch(() => null);
-    if (dismissed) {
-      onLog?.(`Check Inbox: dismissed popup ("${dismissed}")`);
-      await sleepOrAbort(serial, 600);
-    }
-    onLog?.("Check Inbox: ✓ opened DM inbox");
-    // Scroll through inbox N times.
-    const scrollCount = rollRange(scrollsMin, scrollsMax);
-    const { w, h } = getScreenSize(serial);
-    for (let i = 0; i < scrollCount; i++) {
-      await deviceProfileSwipe(
-        serial,
-        {
-          x1: Math.round(w * 0.5), y1: Math.round(h * 0.65),
-          x2: Math.round(w * 0.5), y2: Math.round(h * 0.30),
-          durationMs: 380 + Math.round(Math.random() * 120),
-        },
-        "check-dm-scroll",
-        "normal",
-      );
-      await sleepOrAbort(serial, 500 + Math.round(Math.random() * 500));
-    }
-    // Optionally tap a conversation thread.
-    const clickChance = rollRange(clickPctMin, clickPctMax) / 100;
-    if (clickChance > 0 && Math.random() < clickChance) {
-      const item = await android.findDmConversationItem(serial).catch(() => null);
-      if (item) {
-        await android.tap(serial, item.x, item.y);
-        onLog?.("Check Inbox: ✓ opened conversation thread");
-        await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 1500));
-        await android.pressBack(serial);
-        await sleepOrAbort(serial, 600);
-      } else {
-        onLog?.("Check Inbox: no conversation thread found — skipping tap");
-      }
-    } else {
-      onLog?.("Check Inbox: click-thread roll missed — skipping");
-    }
-    // Return to home feed.
-    await android.pressBack(serial);
-    await sleepOrAbort(serial, 800);
-    onLog?.("Check Inbox: ✓ DM inbox check done");
-  }
-
-  /** Visit own profile: tap profile icon in bottom nav, dwell briefly, return to home. */
-  async function runVisitOwnProfile(serial: string, onLog?: (msg: string) => void): Promise<void> {
-    // Locate profile tab via accessibility tree — more reliable than fixed %
-    // coordinates which drift across screen resolutions and OEM skins.
-    const profileTab = await android.findInstagramProfileTab(serial).catch(() => null);
-    if (!profileTab) {
-      onLog?.("Random Actions: profile tab not found — skipping visit profile");
-      logger.warn({ serial }, "[jitter-visit-profile] profile tab not found by scan");
-      return;
-    }
-    await android.tap(serial, profileTab.x, profileTab.y);
-    await hstRandomDelay(serial, 1500, 10000);
-
-    // The profile / "Discover people" page sometimes triggers an
-    // "Allow Instagram to access your contacts?" system dialog.
-    // Dismiss it automatically so the cycle does not stall.
-    const dismissed = await android.dismissInstagramInterstitials(serial).catch(() => null);
-    if (dismissed) {
-      onLog?.(`Random Jitter: dismissed contacts popup ("${dismissed}")`);
-      await hstRandomDelay(serial, 2500, 10000);
-    }
-
-    onLog?.("Random Actions: ✓ visited own profile");
-    // Return to home feed.
-    const homeTab = await android.findHomeTab(serial).catch(() => null);
-    if (homeTab) {
-      await android.tap(serial, homeTab.x, homeTab.y);
-    } else {
-      await android.pressBack(serial);
-    }
-    await hstRandomDelay(serial, 250, 10000);
-  }
-
-  /**
-   * Visit Saved — navigates to the account's Saved media page via:
-   *   Profile tab → hamburger "Options" button → "Saved" row
-   * then scrolls 1–10 times through the saved posts grid, and returns
-   * to the home feed.
-   *
-   * Navigation path confirmed from UIAutomator XML dumps:
-   *   - Profile page hamburger: ImageView content-desc="Options" (~top-right)
-   *   - Settings and activity page Saved row: View content-desc="Saved"
-   */
-  async function runVisitSaved(serial: string, onLog?: (msg: string) => void): Promise<void> {
-    // Tap the profile tab directly; it is available in the Instagram bottom
-    // navigation regardless of which tool opened this action.
-    const profileTab = await android.findInstagramProfileTab(serial).catch(() => null);
-    if (!profileTab) {
-      onLog?.("Visit Saved: profile tab not found — skipping");
-      logger.warn({ serial }, "[jitter-visit-saved] profile tab not found");
-      return;
-    }
-    await android.tap(serial, profileTab.x, profileTab.y);
-    await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 800));
-
-    // Dismiss any interstitial that may appear on profile page load.
-    const d1 = await android.dismissInstagramInterstitials(serial).catch(() => null);
-    if (d1) await sleepOrAbort(serial, 500);
-
-    // 3. Tap the hamburger "Options" button (top-right of profile page).
-    const optionsBtn = await android.findInstagramProfileOptionsButton(serial).catch(() => null);
-    if (!optionsBtn) {
-      onLog?.("Visit Saved: Options button not found — skipping");
-      logger.warn({ serial }, "[jitter-visit-saved] Options/hamburger button not found");
-      // Return to home and bail.
-      await returnToHomeSafely(serial);
-      await sleepOrAbort(serial, 600);
-      return;
-    }
-    await android.tap(serial, optionsBtn.x, optionsBtn.y);
-    await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 600));
-    onLog?.("Visit Saved: ✓ opened Settings and activity");
-
-    // 4. Tap the "Saved" row on the Settings and activity page.
-    const savedRow = await android.findInstagramSavedRow(serial).catch(() => null);
-    if (!savedRow) {
-      onLog?.("Visit Saved: Saved row not found — skipping");
-      logger.warn({ serial }, "[jitter-visit-saved] Saved row not found");
-      // Back out: Settings and activity → profile → home.
-      await android.pressBack(serial);
-      await sleepOrAbort(serial, 600);
-      await returnToHomeSafely(serial);
-      await sleepOrAbort(serial, 600);
-      return;
-    }
-    await android.tap(serial, savedRow.x, savedRow.y);
-    await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 800));
-    onLog?.("Visit Saved: ✓ opened Saved media page");
-
-    // 5. Scroll through saved posts 1–10 times.
-    const scrollCount = rollRange(1, 10);
-    const { w, h } = getScreenSize(serial);
-    for (let i = 0; i < scrollCount; i++) {
-      await deviceProfileSwipe(
-        serial,
-        {
-          x1: Math.round(w * 0.5), y1: Math.round(h * 0.65),
-          x2: Math.round(w * 0.5), y2: Math.round(h * 0.30),
-          durationMs: 380 + Math.round(Math.random() * 120),
-        },
-        "visit-saved-scroll",
-        "normal",
-      );
-      await sleepOrAbort(serial, 500 + Math.round(Math.random() * 600));
-    }
-    onLog?.(`Visit Saved: ✓ scrolled ${scrollCount}×`);
-
-    // 6. Return to home feed: pressBack × 2 (Saved → Settings, Settings → Profile),
-    //    then tap the home tab.
-    await android.pressBack(serial);
-    await sleepOrAbort(serial, 600);
-    await android.pressBack(serial);
-    await sleepOrAbort(serial, 600);
-    await returnToHomeSafely(serial);
-    await sleepOrAbort(serial, 600);
-    onLog?.("Visit Saved: ✓ done, returned to home feed");
-  }
-
-  /**
-   * Visit Random Settings — navigates to Settings and activity via Profile →
-   * Options, taps exactly one validated top-level settings row, optionally
-   * scrolls that destination once, then presses Back exactly once.
-   *
-   * Never use a blind coordinate tap and never tap a second-level setting.
-   */
-  async function runVisitSettings(serial: string, onLog?: (msg: string) => void): Promise<void> {
-    // Tap the profile tab directly; it is available in the Instagram bottom
-    // navigation regardless of which tool opened this action.
-    const profileTab = await android.findInstagramProfileTab(serial).catch(() => null);
-    if (!profileTab) {
-      onLog?.("Visit Settings: profile tab not found — skipping");
-      logger.warn({ serial }, "[jitter-visit-settings] profile tab not found");
-      return;
-    }
-    await android.tap(serial, profileTab.x, profileTab.y);
-    await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 800));
-
-    // Dismiss any interstitial that may appear on profile page load.
-    const d1 = await android.dismissInstagramInterstitials(serial).catch(() => null);
-    if (d1) await sleepOrAbort(serial, 500);
-
-    // 3. Tap the hamburger "Options" button (top-right of profile page).
-    const optionsBtn = await android.findInstagramProfileOptionsButton(serial).catch(() => null);
-    if (!optionsBtn) {
-      onLog?.("Visit Settings: Options button not found — skipping");
-      logger.warn({ serial }, "[jitter-visit-settings] Options/hamburger button not found");
-      await returnToHomeSafely(serial);
-      await sleepOrAbort(serial, 600);
-      return;
-    }
-    await android.tap(serial, optionsBtn.x, optionsBtn.y);
-    await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 600));
-    onLog?.("Visit Settings: ✓ opened Settings and activity");
-
-    // 4. Tap exactly one real settings row. Never guess at a screen coordinate.
-    const settingsRow = await android.findInstagramSettingsRow(serial).catch(() => null);
-    if (!settingsRow) {
-      onLog?.("Visit Settings: no validated settings row found — skipping");
-      logger.warn({ serial }, "[jitter-visit-settings] no validated settings row");
-      await android.pressBack(serial);
-      await sleepOrAbort(serial, 800);
-      return;
-    }
-    await android.tap(serial, settingsRow.x, settingsRow.y);
-    await sleepOrAbort(serial, 1200 + Math.round(Math.random() * 600));
-    onLog?.(`Visit Settings: ✓ tapped one setting row (${settingsRow.label})`);
-
-    // Only the explicit "Instagram for tablets" row opens the QR-code
-    // education modal. Do not scan for Finished after unrelated settings rows:
-    // those screens may contain their own controls and should follow the
-    // normal single-row/Back flow.
-    if (/^Instagram for tablets$/i.test(settingsRow.label.trim())) {
-      const tabletPopupDismissed = await android.dismissInstagramTabletAppPopup(
-        serial,
-        message => onLog?.(message),
-      ).catch(() => false);
-      if (tabletPopupDismissed) {
-        onLog?.("Visit Settings: ✓ tablet-app popup dismissed");
-      }
-    }
-
-    // 5. Either scroll once then Back, or Back immediately. There is never a
-    // second setting/subsetting tap in this flow.
-    const { w, h } = getScreenSize(serial);
-    if (Math.random() < 0.5) {
-      await deviceProfileSwipe(
-        serial,
-        {
-          x1: Math.round(w * 0.5), y1: Math.round(h * 0.68),
-          x2: Math.round(w * 0.5), y2: Math.round(h * 0.34),
-          durationMs: 420 + Math.round(Math.random() * 120),
-        },
-        "visit-settings-scroll",
-        "normal",
-      );
-      await sleepOrAbort(serial, 500 + Math.round(Math.random() * 400));
-      onLog?.("Visit Settings: ✓ scrolled once");
-    }
-
-    // 6. Leave the setting with the fixed upper-left navigation tap.
-    // The visual matcher is deliberately not used here: on this
-    // Instagram/Xiaomi build it fails to recognize the visible header arrow.
-    // The Settings header back control is the first button in the upper-left
-    // corner, so use that position directly and exactly once.
-    const density = await android.getDeviceDensity(serial).catch(() => 160);
-    const dp = density / 160;
-    // Fixed Android header position: 24dp from the left edge and 24dp below
-    // the status-bar/header boundary. This is not screen-percentage targeting;
-    // density scaling keeps the same physical control position across devices.
-    const topLeftBackX = Math.max(1, Math.round(24 * dp));
-    const topLeftBackY = Math.max(1, Math.round(48 * dp));
-    await android.tap(serial, topLeftBackX, topLeftBackY);
-    await sleepOrAbort(serial, 800);
-    onLog?.(`Visit Settings: ✓ tapped upper-left Back button at (${topLeftBackX},${topLeftBackY})`);
-    onLog?.("Visit Settings: ✓ done after one visual Back");
-  }
-
-  /**
-   * App Switch — presses the square (Overview) button to open the
-   * floating-windows recents overlay, launches the device's default SMS app
-   * via a generic SENDTO intent (works across OEMs without hardcoding a
-   * package name), waits a random 10–30 s to simulate reading messages, then
-   * re-opens the recents overlay, swipes the SMS card up to dismiss it, and
-   * launches Instagram back to the foreground.
-   */
-  async function runAppSwitch(serial: string, onLog?: (msg: string) => void): Promise<void> {
-    // 1. Open the recent-apps (square/Overview) overlay.
-    await android.openRecentApps(serial);
-    await sleepOrAbort(serial, 800 + Math.round(Math.random() * 400));
-
-    // 2. Launch the default SMS app via a generic intent so it works across
-    //    OEMs (Samsung, Xiaomi, stock Android, etc.) without a hardcoded pkg.
-    const tools = android.detectToolset();
-    const adb = tools.adb.path ?? "";
-    if (adb) {
-      spawnSync(adb, [
-        "-s", serial, "shell", "am", "start",
-        "-a", "android.intent.action.SENDTO",
-        "-d", "smsto:",
-      ], { encoding: "utf8", timeout: 8000 });
-    }
-    onLog?.("Random Actions: ✓ opened SMS app");
-
-    // 3. Dwell in the SMS app for a random 10–30 s.
-    const dwellMs = 10_000 + Math.round(Math.random() * 20_000);
-    onLog?.(`Random Jitter: staying in SMS for ${Math.round(dwellMs / 1000)}s…`);
-    await sleepOrAbort(serial, dwellMs);
-
-    // 4. Re-open the recents overlay — SMS is now the top card.
-    await android.openRecentApps(serial);
-    await sleepOrAbort(serial, 700 + Math.round(Math.random() * 300));
-
-    // 5. Swipe up to dismiss the SMS card, leaving Instagram as the remaining app.
-    await android.swipeUpFromBottom(serial);
-    await sleepOrAbort(serial, 600 + Math.round(Math.random() * 400));
-
-    // 6. Bring Instagram back to the foreground.  Using launchInstagram is
-    //    more reliable than tapping a recents card whose position may vary.
-    await android.launchInstagram(serial);
-    await sleepOrAbort(serial, 1500 + Math.round(Math.random() * 500));
-
-    onLog?.("Random Actions: ✓ returned to Instagram after app switch");
-  }
 
   // ── Update Profile Picture ───────────────────────────────────────────────
   // Picks the most recent image from the PC folder, pushes it to the device,
@@ -12932,11 +12575,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 tLog(`  ⚠ Pre-switch View Reels skipped: ${e?.message ?? "unknown error"}`);
               });
             } else if (preTool === "checkDm") {
-              await runCheckDmLoop(serial, {
+              await runCheckDmLoopOperation(serial, {
                 scrollsMin: scaled(checkDmScrollMin),
                 scrollsMax: scaled(checkDmScrollMax),
                 clickPctMin: checkDmClickPctMin,
                 clickPctMax: checkDmClickPctMax,
+              }, {
+                android,
+                getScreenSize,
+                deviceProfileSwipe,
+                sleepOrAbort,
+                rollRange,
+                logger,
                 onLog: (msg) => tLog(`  ${msg}`),
               }).catch((e: any) => {
                 if (e?.message === "cycle-aborted") throw e;
@@ -13658,11 +13308,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           if (_toolActivated[_tool]) {
             tLog("▶ Check Inbox — opening DM inbox…");
             try {
-              await runCheckDmLoop(serial, {
+              await runCheckDmLoopOperation(serial, {
                 scrollsMin: checkDmScrollMin,
                 scrollsMax: checkDmScrollMax,
                 clickPctMin: checkDmClickPctMin,
                 clickPctMax: checkDmClickPctMax,
+              }, {
+                android,
+                getScreenSize,
+                deviceProfileSwipe,
+                sleepOrAbort,
+                rollRange,
+                logger,
                 onLog: (msg) => tLog(`  ${msg}`),
               });
               steps.push("checkDm(done)");
