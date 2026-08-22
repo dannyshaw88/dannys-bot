@@ -7001,21 +7001,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Scroll geometry: same safe band as runCheckFeedLoop.
     const x  = Math.round(w / 2);
 
-    // Session scroll personality — same approach as runCheckFeedLoop.
-    const exploreScrollWeights = {
-      superSkim: 1 + Math.floor(Math.random() * 5), skim: 10 + Math.floor(Math.random() * 16),
-      fast: 40 + Math.floor(Math.random() * 36), quick: 50 + Math.floor(Math.random() * 46),
-      normal: 60 + Math.floor(Math.random() * 36), slow: 75 + Math.floor(Math.random() * 21),
-      focused: 75 + Math.floor(Math.random() * 26),
-      tapDragRelease: 1 + Math.floor(Math.random() * 5),
-      back:       Math.floor(Math.random() * 6),       // 0–5
-    };
-    onLog?.(`Explore scroll personality — super skim:${exploreScrollWeights.superSkim} skim:${exploreScrollWeights.skim} fast:${exploreScrollWeights.fast} quick:${exploreScrollWeights.quick} normal:${exploreScrollWeights.normal} slow:${exploreScrollWeights.slow} focused:${exploreScrollWeights.focused} tap-drag-release:${exploreScrollWeights.tapDragRelease} back:${exploreScrollWeights.back}`);
+    // Explore uses the same feed-like consumption behavior, while retaining
+    // its separate grid safety guard below.
+    onLog?.("Explore consumption personality — deliberate drags are primary; corrections and flicks are rare");
     const explorePersonalityHistory: { lastMode?: string; streak: number } = { streak: 0 };
 
     for (let i = 0; i < scrollCount; i++) {
       if (isCycleAborted(serial)) throw new Error("cycle-aborted");
       onLog?.(`View Explore ${i + 1}/${scrollCount}`);
+      const exploreActionsBefore = { postsClicked, likes, sharesFeed, sharesDm, saves, authorVisits };
 
       // Optionally click a post from the currently visible grid.
       if (clickChance > 0 && Math.random() < clickChance) {
@@ -7497,13 +7491,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       onProgress?.({ postsScrolled, postsClicked, likes, sharesFeed, sharesDm, saves, authorVisits });
 
       if (i < scrollCount - 1) {
-        // Delay between scrolls.
+        const exploreActionTaken =
+          postsClicked > exploreActionsBefore.postsClicked ||
+          likes > exploreActionsBefore.likes ||
+          sharesFeed > exploreActionsBefore.sharesFeed ||
+          sharesDm > exploreActionsBefore.sharesDm ||
+          saves > exploreActionsBefore.saves ||
+          authorVisits > exploreActionsBefore.authorVisits;
+        const exploreDwellMs = Math.round(2800 + Math.random() * 4200 + (exploreActionTaken ? 1200 : 0));
+        onLog?.(`View Explore ${i + 1}/${scrollCount}: consumption dwell ${exploreDwellMs}ms (action=${exploreActionTaken ? "yes" : "no"})`);
+        logger.info({ serial, dwellMs: exploreDwellMs, actionTaken: exploreActionTaken }, "[view-explore] consumption dwell");
+        await sleepOrAbort(serial, exploreDwellMs);
+        // Preserve the user-configured delay in addition to consumption time.
         const delaySec = delayLoSec + Math.random() * (delayHiSec - delayLoSec);
         if (delaySec > 0) await sleepOrAbort(serial, Math.round(delaySec * 1000));
         // Swipe up to reveal more Explore posts.
         // The first Explore advance is the first opportunity to reveal more
         // content; there is no prior grid position to revisit yet.
-        const esv = rollScrollVelocity(h, exploreScrollWeights, /*allowBack=*/i > 0, /*safeStartFrac=*/0.80, explorePersonalityHistory, serial);
+        const esv = rollFeedConsumptionGesture(h, explorePersonalityHistory, serial);
         const exploreOverride = serial ? loadInstanceConfigs()[serial]?.devicePrefs?.swipePersonalityOverrides?.[esv.mode] : undefined;
         onLog?.(`[Override] Explore swipe: mode=${esv.mode}, duration=${esv.duration}ms${exploreOverride ? `, weight=${exploreOverride.weightMin}-${exploreOverride.weightMax}, durationRange=${exploreOverride.durationMinMs}-${exploreOverride.durationMaxMs}ms` : ", Mother Code default"}`);
         explorePersonalityHistory.streak = explorePersonalityHistory.lastMode === esv.mode ? explorePersonalityHistory.streak + 1 : 1;
@@ -7518,7 +7523,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // y1 onto a Reel cell → cell's touch consumer fired before the grid's
         // scroll interceptor could claim the drag).
         const exploreMaxFromY = Math.round(h * 0.68);
-        await deviceProfileSwipe(serial, { x1: x, y1: esv.fromY, x2: x, y2: esv.toY, durationMs: esv.duration }, "explore-scroll", esv.mode as any, { maxFromY: exploreMaxFromY });
+        await deviceProfileSwipe(serial, { x1: x, y1: esv.fromY, x2: x, y2: esv.toY, durationMs: esv.duration }, "explore-scroll", esv.mode as any, { maxFromY: exploreMaxFromY, consumption: true });
         // Explore-only render dwell: the grid often needs a few seconds after
         // the gesture before its media cells are actually populated. Keep this
         // hardcoded and isolated here; it must not alter Feed, Reels, Stories,
