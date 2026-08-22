@@ -9099,7 +9099,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                     <span className="sr-only">{label}</span>
                     <select
                       aria-label={`${label} personality trait`}
-                      value={override === undefined ? "auto" : String(override)}
+                      value={override !== undefined ? String(override) : automatic !== undefined ? String(automatic) : "auto"}
                       onChange={e => {
                         const nextOverrides = { ...(slot.personalityOverrides ?? {}) };
                         if (e.target.value === "auto") delete nextOverrides[key as keyof SlotPersonality];
@@ -9108,7 +9108,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                       }}
                       className="w-[4.8rem] cursor-pointer bg-transparent text-[10px] font-medium outline-none"
                     >
-                      <option value="auto">Auto{automatic !== undefined ? `: ${options[automatic]}` : ""}</option>
+                      <option value="auto">Auto (randomised)</option>
                       {options.map((option, optionIdx) => <option key={option} value={optionIdx}>{option}</option>)}
                     </select>
                   </label>
