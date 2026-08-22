@@ -13750,7 +13750,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               });
             };
 
-            let _sfCount = await _runOneSpreadSlot(_spreadUsername);
+            // Every new spread execution must begin from a fresh, explicit
+            // bottom Search-tab navigation. Only backup candidates inside
+            // this same spread may pass `true` and reuse the cleared search
+            // surface below.
+            let _sfCount = await _runOneSpreadSlot(_spreadUsername, false);
 
             // If filtered/skipped at follow-time, try backup candidates first.
             while (_sfCount === 0 && _sfBackupQueue.length > 0) {
