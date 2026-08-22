@@ -8105,7 +8105,7 @@ type SlotPersonality = {
   discovery: number;
   actionVariety: number;
 };
-type AccountSlot = { slotId: string; username: string; password: string; totpSecret: string; emailAddress: string; emailPassword: string; phoneNumber: string; personality?: SlotPersonality };
+type AccountSlot = { slotId: string; username: string; password: string; totpSecret: string; emailAddress: string; emailPassword: string; phoneNumber: string; personality?: SlotPersonality; personalityOverrides?: Partial<SlotPersonality> };
 const SLOT_PERSONALITY_TRAITS = [
   { key: "engagement", label: "Engagement", options: ["Reserved", "Selective", "Balanced", "Open", "Generous"], icon: Heart, color: "text-rose-500 border-rose-200 bg-rose-50 dark:bg-rose-950/30" },
   { key: "consumption", label: "Consumption", options: ["Light", "Moderate", "Balanced", "Active", "High volume"], icon: BarChart3, color: "text-cyan-600 border-cyan-200 bg-cyan-50 dark:bg-cyan-950/30" },
@@ -9090,12 +9090,30 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                   device and Trust Score baselines. */}
               <div className="flex items-center gap-2 flex-wrap rounded-md border border-border/60 bg-muted/20 px-3 py-2">
                 <span className="text-xs font-semibold text-muted-foreground mr-1">Personality:</span>
-                {SLOT_PERSONALITY_TRAITS.map(({ key, label, options, icon: TraitIcon, color }) => (
-                  <span key={key} className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] ${color}`} title={label}>
-                    <TraitIcon className="h-3 w-3" aria-hidden="true" />
-                    {slot.personality ? options[slot.personality[key as keyof SlotPersonality] ?? 2] : "Not randomised"}
-                  </span>
-                ))}
+                {SLOT_PERSONALITY_TRAITS.map(({ key, label, options, icon: TraitIcon, color }) => {
+                  const override = slot.personalityOverrides?.[key as keyof SlotPersonality];
+                  const automatic = slot.personality?.[key as keyof SlotPersonality];
+                  return (
+                  <label key={key} className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] ${color}`} title={`${label} — choose Auto or a manual override`}>
+                    <TraitIcon className="h-3 w-3 shrink-0" aria-hidden="true" />
+                    <span className="sr-only">{label}</span>
+                    <select
+                      aria-label={`${label} personality trait`}
+                      value={override === undefined ? "auto" : String(override)}
+                      onChange={e => {
+                        const nextOverrides = { ...(slot.personalityOverrides ?? {}) };
+                        if (e.target.value === "auto") delete nextOverrides[key as keyof SlotPersonality];
+                        else nextOverrides[key as keyof SlotPersonality] = Number(e.target.value) as never;
+                        updateSlot(i, { personalityOverrides: nextOverrides });
+                      }}
+                      className="max-w-[9rem] cursor-pointer bg-transparent text-[11px] font-medium outline-none"
+                    >
+                      <option value="auto">Auto{automatic !== undefined ? `: ${options[automatic]}` : ""}</option>
+                      {options.map((option, optionIdx) => <option key={option} value={optionIdx}>{option}</option>)}
+                    </select>
+                  </label>
+                  );
+                })}
                 <Button
                   type="button"
                   size="sm"
