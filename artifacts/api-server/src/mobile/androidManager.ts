@@ -8484,8 +8484,15 @@ export async function switchToInstagramAccount(
   // A restriction surface can be left over from the previous account or
   // appear while Instagram is restoring its session. Clear it before looking
   // for the Profile tab; otherwise every subsequent tap is blocked.
-  const restrictionAtSwitchStart = await dismissInstagramAccountRestriction(serial, onLog);
-  if (!restrictionAtSwitchStart) {
+  // Reuse the launch-time dump when the cycle already validated this screen.
+  // A second restriction dump (and its defensive follow-up) can cost several
+  // seconds on a busy Xiaomi device before account switching even begins.
+  const restrictionAtSwitchStart = await dismissInstagramAccountRestriction(
+    serial,
+    onLog,
+    preloadedXml,
+  );
+  if (!restrictionAtSwitchStart && !preloadedXml) {
     const restrictionCheck = await getUiDump(serial).catch(() => "");
     const restrictionLower = restrictionCheck.toLowerCase();
     if (restrictionLower.includes("what happened") &&
@@ -8651,17 +8658,18 @@ export async function switchToInstagramAccount(
   const profileBeforeTapXml = preloadedXml || "";
   onLog?.(`  ↳ Tapping profile tab at (${profileTab.x},${profileTab.y}) to open the active account profile…`);
   await _adbTapAsync(adbPath, serial, profileTab.x, profileTab.y);
-  await _sleep(450 + Math.floor(Math.random() * 4551));
+  // The following dump is the readiness check; a long random pause here only
+  // delays the switch on cold/loaded devices.
+  await _sleep(400 + Math.floor(Math.random() * 401));
   const profileAfterTabTapXml = await _uiDump(adbPath, serial).catch(() => "");
   onLog?.(`  ↳ Profile-tab tap result: xmlLength=${profileAfterTabTapXml.length}, changed=${profileBeforeTapXml ? profileAfterTabTapXml !== profileBeforeTapXml : "not-comparable"}, hasProfileHeader=${/action_bar_username_container/i.test(profileAfterTabTapXml)}, hasBottomNav=${/bottom_nav|tab_bar|profile_tab/i.test(profileAfterTabTapXml)}`);
-  const PROFILE_SCREEN_SETTLE_MS = 1500 + Math.floor(Math.random() * 3501);
-  onLog?.(`  ↳ Waiting ${PROFILE_SCREEN_SETTLE_MS}ms for the profile header to settle…`);
-  await _sleep(PROFILE_SCREEN_SETTLE_MS);
 
   // 3. On the profile screen, tap the username in the top header. Restrict
   // the match to the header region so a username in a post or suggestion
   // cannot be mistaken for the account-switch control.
-  const profileXml = await _uiDump(adbPath, serial).catch(() => "");
+  // Do not dump the unchanged profile screen a second time. The dump above
+  // already captured the header after the profile-tab tap.
+  const profileXml = profileAfterTabTapXml;
   let profileHeaderUsername = _findTopProfileUsername(profileXml);
   if (!profileHeaderUsername) {
     const profileDumpDiagnostics = (() => {
@@ -8729,7 +8737,8 @@ export async function switchToInstagramAccount(
   onLog?.(`  ↳ Account-header tap target: (${profileHeaderUsername.x},${profileHeaderUsername.y}) node=${JSON.stringify(headerNode)}`);
   onLog?.(`  ↳ Tapping profile header username @${clean} to open account list…`);
   await _adbTapAsync(adbPath, serial, profileHeaderUsername.x, profileHeaderUsername.y);
-  await _sleep(700 + Math.floor(Math.random() * 4301));
+  // The post-tap dump below is the account-sheet readiness check.
+  await _sleep(500 + Math.floor(Math.random() * 501));
   postHeaderTapXml = await _uiDump(adbPath, serial).catch(() => "");
   const postHeaderState = {
     hasUsernameContainer: /action_bar_username_container/.test(postHeaderTapXml),
@@ -8767,7 +8776,11 @@ export async function switchToInstagramAccount(
   const SWITCHER_POLL_MAX_MS = 5000;
   const SWITCHER_MAX_POLL = 2;
   for (let p = 0; p < SWITCHER_MAX_POLL; p++) {
-    xml = await _uiDump(adbPath, serial).catch(() => "");
+    // The header-tap result is already a fresh dump. Reuse it for the first
+    // row scan instead of immediately issuing an identical second dump.
+    if (!(p === 0 && xml)) {
+      xml = await _uiDump(adbPath, serial).catch(() => "");
+    }
     coords = _findVisibleAccountRow(xml, switcherScreenHeight, clean, `@${clean}`);
     if (coords) break; // found — proceed to tap
     if (p < SWITCHER_MAX_POLL - 1) {
