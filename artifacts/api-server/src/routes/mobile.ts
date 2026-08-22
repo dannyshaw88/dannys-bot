@@ -47,6 +47,7 @@ import { runUpdateProfilePicture as runUpdateProfilePictureOperation } from "../
 import { runUpdateBio as runUpdateBioOperation } from "../mobile/hst/operations/updateBio";
 import { runRandomActionsStep, type RandomActionsOperationContext } from "../mobile/hst/operations/randomActions";
 import { runFollowUsersStep } from "../mobile/hst/operations/follow";
+import { runAccountSwitch } from "../mobile/hst/operations/accountSwitch";
 
 // Sharp/libvips is a native dependency. On Windows, concurrent decode work
 // alongside sustained ADB screenshot polling has previously terminated the
@@ -6047,100 +6048,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
       }
 
-      // ═════════════════════════════════════════════════════════════════════
-      // ACCOUNT SWITCH
-      // Functions: android.switchToInstagramAccount() [in androidManager.ts]
-      // When:      runs before every tool dispatch, once per automation-cycle
-      //            slot execution — switches to the account assigned to this
-      //            slot so the correct account is always active before tools run.
-      // Isolation: this block owns account verification and switching only.
-      //            No tool logic (feed, follow, stories, etc.) belongs here.
-      //            The underlying implementation lives entirely in
-      //            androidManager.ts → switchToInstagramAccount().
-      // ═════════════════════════════════════════════════════════════════════
-
-      // Pre-switch tools can leave Instagram on Stories, Reels, Inbox, or
-      // another nested surface. The launch-time profile navigation happened
-      // before those tools ran, so it cannot be reused as the account-switch
-      // entry point. Explicitly tap the live Profile tab again before starting
-      // the account-switch routine.
-      if (preSwitchActionsRan) {
-        const postPreSwitchProfileTab = await android.findInstagramProfileTab(serial).catch(() => null);
-        if (postPreSwitchProfileTab) {
-          tLog(
-            `▶ Pre-switch complete: tapping Profile tab again at ` +
-            `(${postPreSwitchProfileTab.x}, ${postPreSwitchProfileTab.y}) before account switch…`,
-          );
-          await android.tap(serial, postPreSwitchProfileTab.x, postPreSwitchProfileTab.y);
-          await sleepOrAbort(serial, 800);
-        } else {
-          tLog("⚠ Pre-switch complete: Profile tab was not found for the required return tap; account switch will perform its own lookup");
-        }
-      }
-
-      // 2d. Switch to the correct Instagram account for this slot.
-      // Each slot stores the username of the Instagram account it represents.
-      // Before any tools run we open Instagram's built-in account switcher
-      // (long-press the profile tab → pick the matching username) so the
-      // correct account is active regardless of which one was last open.
-      // This is a no-op when slotUsername is empty (device-level cycle or
-      // slot with no username entered yet).
-      //
-      // Pass launchXml only when neither ads-choice nor a popup was dismissed
-      // (screen unchanged) so the switcher can reuse the dump for its pre-check
-      // and profile-tab lookup without doing two more sequential dumps.
-      const switchPreloadXml = (!adsChoice.dismissed && !launchPopup) ? launchXml : undefined;
-      tLog("[TRACE] step-1 account-switch: begin");
-      if (resolvedSlotUsername) {
-         automationCurrentTool.set(serial, "ACCOUNT SWITCHING");
-          tLog(`[TRACE] step-1 account-switch: target=@${resolvedSlotUsername}`);
-         tLog(`▶ Switching to Instagram account: @${resolvedSlotUsername}…`);
-          // This is deliberately hardcoded rather than exposed as an HST
-          // setting. Every account switch randomly chooses the established
-          // default flow or the Profile-tab long-press flow.
-          const PROFILE_TAB_LONG_PRESS_PERCENT = 50;
-          const useProfileTabLongPress = Math.random() < PROFILE_TAB_LONG_PRESS_PERCENT / 100;
-          const profileTabHoldMs = useProfileTabLongPress
-            ? 3000 + Math.floor(Math.random() * 7001)
-            : null;
-          tLog(
-            useProfileTabLongPress
-              ? `▶ Account switch method: Profile-tab long-press (${profileTabHoldMs}ms hold)`
-              : "▶ Account switch method: Home/top-profile",
-          );
-         const switched = await android.switchToInstagramAccount(
-           serial,
-           resolvedSlotUsername,
-           tLog,
-           switchPreloadXml,
-           loadInstanceConfigs()[serial]?.devicePrefs?.swipeGesture,
-            useProfileTabLongPress
-              ? { useProfileTabLongPress: true, holdDurationMs: profileTabHoldMs! }
-              : undefined,
-         );
-         if (switched) {
-            tLog("[TRACE] step-1 account-switch: confirmed");
-           steps.push(`account-switch(@${resolvedSlotUsername})`);
-           automationLastActiveUsername.set(serial, resolvedSlotUsername);
-           // Brief extra settle after switching — Instagram reloads the new
-           // account's home feed, and ads-choice / interstitial dialogs can
-           // reappear for accounts that haven't accepted them yet.
-           await sleepOrAbort(serial, 1500);
-            const postSwitchPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
-            if (postSwitchPopup) {
-              tLog(`▶ Dismissed post-switch popup (${postSwitchPopup})`);
-              await sleepOrAbort(serial, 500);
-            }
-         } else {
-            tLog("[TRACE] step-1 account-switch: failed");
-           tLog(`✗ Account switch to @${resolvedSlotUsername} failed — continuing with tools`);
-           steps.push("account-switch(attempted — continuing)");
-        }
-      } else {
-        tLog("[TRACE] step-1 account-switch: skipped-no-slot-username");
-      }
-
-      automationLastActiveUsername.set(serial, resolvedSlotUsername || automationLastActiveUsername.get(serial) || "");
+      // Account-switch orchestration is isolated from the cycle dispatcher.
+      await runAccountSwitch({
+        android,
+        serial,
+        username: resolvedSlotUsername,
+        launchXml,
+        adsChoiceDismissed: adsChoice.dismissed,
+        launchPopup,
+        preSwitchActionsRan,
+        steps,
+        log: tLog,
+        sleepOrAbort,
+        lastActiveUsername: automationLastActiveUsername,
+        currentTool: automationCurrentTool,
+        swipeGesture: loadInstanceConfigs()[serial]?.devicePrefs?.swipeGesture,
+      });
 
       // ── Step 2: Shuffleable tool dispatcher ──────────────────────────────
       // When shuffleToolOrder is on the six tools are Fisher-Yates shuffled
