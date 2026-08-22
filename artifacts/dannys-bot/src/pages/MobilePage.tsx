@@ -9179,15 +9179,15 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const swipeModes = ["superSkim", "skim", "fast", "quick", "normal", "slow", "focused", "tapDragRelease", "back"] as const;
   type SwipePersonalityOverride = { weightMin: number; weightMax: number; durationMinMs: number; durationMaxMs: number };
   const motherSwipeDefaults: Record<string, SwipePersonalityOverride> = {
-    superSkim: { weightMin: 1, weightMax: 5, durationMinMs: 150, durationMaxMs: 350 },
-    skim: { weightMin: 10, weightMax: 25, durationMinMs: 450, durationMaxMs: 800 },
-    fast: { weightMin: 40, weightMax: 75, durationMinMs: 900, durationMaxMs: 1500 },
-    quick: { weightMin: 50, weightMax: 95, durationMinMs: 1250, durationMaxMs: 2000 },
-    normal: { weightMin: 60, weightMax: 95, durationMinMs: 1500, durationMaxMs: 2500 },
-    slow: { weightMin: 75, weightMax: 95, durationMinMs: 2000, durationMaxMs: 3500 },
-    focused: { weightMin: 75, weightMax: 100, durationMinMs: 2500, durationMaxMs: 5000 },
-    tapDragRelease: { weightMin: 1, weightMax: 5, durationMinMs: 5000, durationMaxMs: 10000 },
-    back: { weightMin: 0, weightMax: 5, durationMinMs: 350, durationMaxMs: 600 },
+    superSkim: { weightMin: 1, weightMax: 1, durationMinMs: 700, durationMaxMs: 1400 },
+    skim: { weightMin: 2, weightMax: 4, durationMinMs: 1200, durationMaxMs: 2200 },
+    fast: { weightMin: 6, weightMax: 10, durationMinMs: 1800, durationMaxMs: 3000 },
+    quick: { weightMin: 10, weightMax: 15, durationMinMs: 2400, durationMaxMs: 3800 },
+    normal: { weightMin: 25, weightMax: 35, durationMinMs: 3000, durationMaxMs: 5200 },
+    slow: { weightMin: 25, weightMax: 35, durationMinMs: 4000, durationMaxMs: 6500 },
+    focused: { weightMin: 18, weightMax: 25, durationMinMs: 5000, durationMaxMs: 8500 },
+    tapDragRelease: { weightMin: 4, weightMax: 6, durationMinMs: 2500, durationMaxMs: 4500 },
+    back: { weightMin: 0, weightMax: 0, durationMinMs: 350, durationMaxMs: 600 },
   };
   const defaultSwipePersonalityOverrides: Record<string, SwipePersonalityOverride> = Object.fromEntries(
     swipeModes.map(mode => [mode, motherSwipeDefaults[mode]]),
@@ -9692,8 +9692,8 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
                   {(["x1", "y1", "x2", "y2", "durationMinMs", "durationMaxMs", "jitterX", "jitterY", "startJitterMinY", "startJitterMaxY", "pauseMinMs", "pauseMaxMs", "settleMinMs", "settleMaxMs"] as const).map(key => (
                     <label key={key} className="text-center text-xs text-muted-foreground">{key}
                       <input type="number"
-                        value={swipeGesture[key]} max={key === "durationMinMs" || key === "durationMaxMs" ? 150 : undefined}
-                        onChange={e => saveSwipeGesture({ ...swipeGesture, [key]: key === "durationMaxMs" ? Math.min(150, Number(e.target.value)) : Number(e.target.value) })}
+                        value={swipeGesture[key]} max={key === "durationMinMs" || key === "durationMaxMs" ? 30000 : undefined}
+                        onChange={e => saveSwipeGesture({ ...swipeGesture, [key]: key === "durationMinMs" || key === "durationMaxMs" ? Math.min(30000, Number(e.target.value)) : Number(e.target.value) })}
                         className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-center text-sm text-foreground" />
                     </label>
                   ))}
