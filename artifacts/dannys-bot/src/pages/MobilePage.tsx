@@ -5978,12 +5978,12 @@ export function AutomationSettingsPanel({
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground block text-center">Delay between actions in s</Label>
             <div className="flex items-center gap-3">
-              <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
+             <Input type="number" min={0} maxLength={4} className={personalityInputClass("viewExploreActionDelayMin")}
                 value={settings.viewExploreActionDelayMin}
                 onChange={e => setSettings(s => ({ ...s, viewExploreActionDelayMin: clamp4(Number(e.target.value)) }))}
                 disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} maxLength={4} className={NUM_INPUT_CLASS}
+             <Input type="number" min={0} maxLength={4} className={personalityInputClass("viewExploreActionDelayMax")}
                 value={settings.viewExploreActionDelayMax}
                 onChange={e => setSettings(s => ({ ...s, viewExploreActionDelayMax: clamp4(Number(e.target.value)) }))}
                 disabled={loading} />
@@ -6023,12 +6023,12 @@ export function AutomationSettingsPanel({
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground block text-center">Like % of posts</Label>
             <div className="flex items-center gap-3">
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewExploreLikePercentMin")}
                 value={settings.viewExploreLikePercentMin}
                 onChange={e => setSettings(s => ({ ...s, viewExploreLikePercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewExploreLikePercentMax")}
                 value={settings.viewExploreLikePercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewExploreLikePercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
@@ -6038,12 +6038,12 @@ export function AutomationSettingsPanel({
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground block text-center">Share to Feed % of posts</Label>
             <div className="flex items-center gap-3">
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewExploreShareFeedPercentMin")}
                 value={settings.viewExploreShareFeedPercentMin}
                 onChange={e => setSettings(s => ({ ...s, viewExploreShareFeedPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewExploreShareFeedPercentMax")}
                 value={settings.viewExploreShareFeedPercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewExploreShareFeedPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
@@ -6053,12 +6053,12 @@ export function AutomationSettingsPanel({
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground block text-center">Share via DM % of posts</Label>
             <div className="flex items-center gap-3">
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewExploreShareDmPercentMin")}
                 value={settings.viewExploreShareDmPercentMin}
                 onChange={e => setSettings(s => ({ ...s, viewExploreShareDmPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewExploreShareDmPercentMax")}
                 value={settings.viewExploreShareDmPercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewExploreShareDmPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
@@ -6068,12 +6068,12 @@ export function AutomationSettingsPanel({
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground block text-center">Save % of posts</Label>
             <div className="flex items-center gap-3">
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewExploreSavePercentMin")}
                 value={settings.viewExploreSavePercentMin}
                 onChange={e => setSettings(s => ({ ...s, viewExploreSavePercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewExploreSavePercentMax")}
                 value={settings.viewExploreSavePercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewExploreSavePercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
