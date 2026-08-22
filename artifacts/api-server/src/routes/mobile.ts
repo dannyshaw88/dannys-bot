@@ -47,7 +47,10 @@ import { runUpdateProfilePicture as runUpdateProfilePictureOperation } from "../
 import { runUpdateBio as runUpdateBioOperation } from "../mobile/hst/operations/updateBio";
 import { runRandomActionsStep, type RandomActionsOperationContext } from "../mobile/hst/operations/randomActions";
 import { runFollowUsersStep } from "../mobile/hst/operations/follow";
-import { runAccountSwitch } from "../mobile/hst/operations/accountSwitch";
+import {
+  runAccountSwitch,
+  runManualProfileTabLongPress,
+} from "../mobile/hst/operations/accountSwitch";
 
 // Sharp/libvips is a native dependency. On Windows, concurrent decode work
 // alongside sustained ADB screenshot polling has previously terminated the
@@ -7798,17 +7801,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.post("/api/mobile/devices/:serial/input/profile-tab-longpress", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
-      logger.info({ serial }, "[manual-account-switch] resolving profile tab before long-press");
-      const profileTab = await android.findInstagramProfileTab(serial);
-      if (!profileTab) {
-        logger.warn({ serial }, "[manual-account-switch] profile tab unavailable; long-press not dispatched");
-        res.status(404).json({ error: "Instagram Profile tab was not found in the live accessibility tree" });
+      const result = await runManualProfileTabLongPress({ android, serial });
+      if (!result.ok) {
+        res.status(result.status).json({ error: result.error });
         return;
       }
-      logger.info({ serial, profileTab }, "[manual-account-switch] profile target resolved; dispatching long-press");
-      await android.swipe(serial, profileTab.x, profileTab.y, profileTab.x, profileTab.y, 2000);
-      logger.info({ serial, profileTab }, "[manual-account-switch] long-press dispatched");
-      res.json({ ok: true, dispatched: true, target: "profile-tab", node: profileTab });
+      res.json(result);
     } catch (e: any) {
       res.status(400).json({ error: e?.message ?? "Profile-tab long-press failed" });
     }

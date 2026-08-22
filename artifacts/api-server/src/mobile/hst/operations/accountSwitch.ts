@@ -1,4 +1,42 @@
 import type * as androidManager from "../../androidManager";
+import { logger } from "../../../lib/logger";
+
+export interface ManualProfileTabLongPressOperationContext {
+  android: typeof androidManager;
+  serial: string;
+}
+
+export type ManualProfileTabLongPressResult =
+  | { ok: true; dispatched: true; target: "profile-tab"; node: { x: number; y: number } }
+  | { ok: false; status: 404; error: string };
+
+/**
+ * Resolve Instagram's live Profile tab and open the account switcher.
+ *
+ * This is kept separate from the generic manual long-press operation because
+ * the account-switch gesture must target the accessibility-discovered tab,
+ * rather than a coordinate supplied by the mirrored screen.
+ */
+export async function runManualProfileTabLongPress(
+  context: ManualProfileTabLongPressOperationContext,
+): Promise<ManualProfileTabLongPressResult> {
+  const { android, serial } = context;
+  logger.info({ serial }, "[manual-account-switch] resolving profile tab before long-press");
+  const profileTab = await android.findInstagramProfileTab(serial);
+  if (!profileTab) {
+    logger.warn({ serial }, "[manual-account-switch] profile tab unavailable; long-press not dispatched");
+    return {
+      ok: false,
+      status: 404,
+      error: "Instagram Profile tab was not found in the live accessibility tree",
+    };
+  }
+
+  logger.info({ serial, profileTab }, "[manual-account-switch] profile target resolved; dispatching long-press");
+  await android.swipe(serial, profileTab.x, profileTab.y, profileTab.x, profileTab.y, 2000);
+  logger.info({ serial, profileTab }, "[manual-account-switch] long-press dispatched");
+  return { ok: true, dispatched: true, target: "profile-tab", node: profileTab };
+}
 
 export interface AccountSwitchOperationContext {
   android: typeof androidManager;
