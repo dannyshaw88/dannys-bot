@@ -750,14 +750,29 @@ function configFilePath(): string {
   // directory gives the stable artifacts/api-server/ package root.
   return path.join(path.dirname(path.resolve(process.argv[1])), "..", "mobile-instances.json");
 }
+const INSTANCE_CONFIG_CACHE_TTL_MS = 250;
+let instanceConfigCache: InstanceConfigMap | null = null;
+let instanceConfigCacheAt = 0;
 function loadInstanceConfigs(): InstanceConfigMap {
+  const now = Date.now();
+  if (instanceConfigCache && now - instanceConfigCacheAt < INSTANCE_CONFIG_CACHE_TTL_MS) {
+    return instanceConfigCache;
+  }
   try {
     const raw = fs.readFileSync(configFilePath(), "utf8");
-    return JSON.parse(raw) as InstanceConfigMap;
-  } catch { return {}; }
+    instanceConfigCache = JSON.parse(raw) as InstanceConfigMap;
+  } catch {
+    instanceConfigCache = {};
+  }
+  instanceConfigCacheAt = now;
+  return instanceConfigCache;
 }
 function saveInstanceConfigs(cfg: InstanceConfigMap): void {
   fs.writeFileSync(configFilePath(), JSON.stringify(cfg, null, 2));
+  // Keep all same-process callers on the just-persisted object while allowing
+  // a short window for the duplicate API workflow to observe external saves.
+  instanceConfigCache = cfg;
+  instanceConfigCacheAt = Date.now();
 }
 
 // ── Make a Post — dedicated per-slot folder path store ──────────────────────
@@ -4424,7 +4439,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     sleepOrAbort(serial, minMs + Math.floor(Math.random() * (maxMs - minMs + 1)));
 
   // Helper: get screen dimensions via adb wm size.
+  const screenSizeCache = new Map<string, { w: number; h: number; cachedAt: number }>();
+  const SCREEN_SIZE_CACHE_TTL_MS = 30_000;
   function getScreenSize(serial: string): { w: number; h: number } {
+    const cached = screenSizeCache.get(serial);
+    if (cached && Date.now() - cached.cachedAt < SCREEN_SIZE_CACHE_TTL_MS) {
+      return { w: cached.w, h: cached.h };
+    }
     let w = 1080, h = 2400;
     try {
       const tools = android.detectToolset();
@@ -4447,7 +4468,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (m) { w = parseInt(m[1]); h = parseInt(m[2]); }
       }
     } catch { /* fall back to defaults above */ }
-    return { w, h };
+    const resolved = { w, h };
+    screenSizeCache.set(serial, { ...resolved, cachedAt: Date.now() });
+    return resolved;
   }
 
   /**
