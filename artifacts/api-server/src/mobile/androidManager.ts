@@ -8324,6 +8324,7 @@ async function isKeyboardEmojiPickerOpen(serial: string): Promise<boolean> {
 export async function dismissInstagramAccountRestriction(
   serial: string,
   onLog?: (msg: string) => void,
+  preloadedXml?: string,
 ): Promise<boolean> {
   const adbPath = findAdbPath();
   if (!adbPath) return false;
@@ -8366,7 +8367,11 @@ export async function dismissInstagramAccountRestriction(
     return best ? { x: best.x, y: best.y, label: best.label } : null;
   };
 
-  const firstXml = await getUiDump(serial).catch(() => "");
+  // Reuse the startup dump when the caller already captured the current
+  // screen. A second full UIAutomator dump here can cost 5–15 seconds on
+  // loaded Xiaomi devices and used to delay the account switch despite the
+  // shared startup-dump optimization.
+  const firstXml = preloadedXml ?? await getUiDump(serial).catch(() => "");
   if (!isRestriction(firstXml)) return false;
 
   onLog?.("⚠ Instagram account restriction screen detected — pausing before dismissal");

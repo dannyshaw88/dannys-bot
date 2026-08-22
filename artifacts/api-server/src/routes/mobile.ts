@@ -10211,25 +10211,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       onLog?.("Visit Settings: ✓ scrolled once");
     }
 
-    // 6. Leave the setting by tapping the live Instagram header arrow.
-    // Do not use Android Back here: on Xiaomi/Instagram builds the system
-    // Back event can be consumed by the setting surface or return to the
-    // wrong parent, leaving Random Actions stuck in Settings and activity.
-    // This must use the same visual-confirmation rule as View Feed's Like
-    // detector: only tap a positively matched live icon, never a guessed
-    // coordinate or an accessibility node selected by order.
-    const backIcon = await android.findBackHeaderIconByPixels(
-      serial,
-      message => onLog?.(`Visit Settings: ${message}`),
-    );
-    if (!backIcon) {
-      onLog?.("Visit Settings: ✗ top-left back arrow was not visually confirmed — stopping without fallback");
-      logger.warn({ serial }, "[jitter-visit-settings] visual back arrow not found; refusing blind Back fallback");
-      return;
-    }
-    await android.tap(serial, backIcon.x, backIcon.y);
+    // 6. Leave the setting with the fixed upper-left navigation tap.
+    // The visual matcher is deliberately not used here: on this
+    // Instagram/Xiaomi build it fails to recognize the visible header arrow.
+    // The Settings header back control is the first button in the upper-left
+    // corner, so use that position directly and exactly once.
+    const topLeftBackX = Math.max(1, Math.round(w * 0.05));
+    const topLeftBackY = Math.max(1, Math.round(h * 0.05));
+    await android.tap(serial, topLeftBackX, topLeftBackY);
     await sleepOrAbort(serial, 800);
-    onLog?.(`Visit Settings: ✓ tapped visually confirmed back arrow at (${backIcon.x},${backIcon.y})`);
+    onLog?.(`Visit Settings: ✓ tapped upper-left Back button at (${topLeftBackX},${topLeftBackY})`);
     onLog?.("Visit Settings: ✓ done after one visual Back");
   }
 
@@ -12797,7 +12788,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       } else {
         tLog("▶ No launch popup — feed ready");
       }
-      const launchRestrictionDismissed = await android.dismissInstagramAccountRestriction(serial, tLog).catch(() => false);
+      const launchRestrictionDismissed = await android.dismissInstagramAccountRestriction(
+        serial,
+        tLog,
+        adsChoice.dismissed ? undefined : launchXml,
+      ).catch(() => false);
       if (launchRestrictionDismissed) {
         steps.push("account-restriction-dismissed");
         await sleepOrAbort(serial, 500);
