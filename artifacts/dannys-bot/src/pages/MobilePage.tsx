@@ -6180,12 +6180,12 @@ export function AutomationSettingsPanel({
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground block text-center">Share DM %</Label>
             <div className="flex items-center gap-3">
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+               <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewStoriesShareDmPercentMin")}
                 value={settings.viewStoriesShareDmPercentMin}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesShareDmPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+               <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewStoriesShareDmPercentMax")}
                 value={settings.viewStoriesShareDmPercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesShareDmPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
@@ -6196,12 +6196,12 @@ export function AutomationSettingsPanel({
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground block text-center">Comment %</Label>
             <div className="flex items-center gap-3">
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+               <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewStoriesCommentPercentMin")}
                 value={settings.viewStoriesCommentPercentMin}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesCommentPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+               <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewStoriesCommentPercentMax")}
                 value={settings.viewStoriesCommentPercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesCommentPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
@@ -6212,12 +6212,12 @@ export function AutomationSettingsPanel({
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground block text-center">Click Author %</Label>
             <div className="flex items-center gap-3">
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+               <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewStoriesClickAuthorPercentMin")}
                 value={settings.viewStoriesClickAuthorPercentMin}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesClickAuthorPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+               <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewStoriesClickAuthorPercentMax")}
                 value={settings.viewStoriesClickAuthorPercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesClickAuthorPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
@@ -6310,12 +6310,12 @@ export function AutomationSettingsPanel({
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground block text-center">Like %</Label>
             <div className="flex items-center gap-3">
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+               <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewReelsLikePercentMin")}
                 value={settings.viewReelsLikePercentMin}
                 onChange={e => setSettings(s => ({ ...s, viewReelsLikePercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+               <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewReelsLikePercentMax")}
                 value={settings.viewReelsLikePercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewReelsLikePercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
@@ -6326,12 +6326,12 @@ export function AutomationSettingsPanel({
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground block text-center">Share Feed %</Label>
             <div className="flex items-center gap-3">
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+               <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewReelsShareFeedPercentMin")}
                 value={settings.viewReelsShareFeedPercentMin}
                 onChange={e => setSettings(s => ({ ...s, viewReelsShareFeedPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+               <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewReelsShareFeedPercentMax")}
                 value={settings.viewReelsShareFeedPercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewReelsShareFeedPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
@@ -6342,12 +6342,12 @@ export function AutomationSettingsPanel({
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground block text-center">Save %</Label>
             <div className="flex items-center gap-3">
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+               <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewReelsSavePercentMin")}
                 value={settings.viewReelsSavePercentMin}
                 onChange={e => setSettings(s => ({ ...s, viewReelsSavePercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+               <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewReelsSavePercentMax")}
                 value={settings.viewReelsSavePercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewReelsSavePercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
@@ -6358,12 +6358,12 @@ export function AutomationSettingsPanel({
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground block text-center">Share DM %</Label>
             <div className="flex items-center gap-3">
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+               <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewReelsShareDmPercentMin")}
                 value={settings.viewReelsShareDmPercentMin}
                 onChange={e => setSettings(s => ({ ...s, viewReelsShareDmPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+               <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewReelsShareDmPercentMax")}
                 value={settings.viewReelsShareDmPercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewReelsShareDmPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
@@ -6374,12 +6374,12 @@ export function AutomationSettingsPanel({
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground block text-center">Click Author %</Label>
             <div className="flex items-center gap-3">
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+               <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewReelsClickAuthorPercentMin")}
                 value={settings.viewReelsClickAuthorPercentMin}
                 onChange={e => setSettings(s => ({ ...s, viewReelsClickAuthorPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+               <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewReelsClickAuthorPercentMax")}
                 value={settings.viewReelsClickAuthorPercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewReelsClickAuthorPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
@@ -6438,12 +6438,12 @@ export function AutomationSettingsPanel({
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground block text-center">Scroll amount</Label>
             <div className="flex items-center gap-3">
-              <Input type="number" min={0} maxLength={8} className={NUM_INPUT_CLASS}
+               <Input type="number" min={0} maxLength={8} className={personalityInputClass("checkDmScrollMin")}
                 value={settings.checkDmScrollMin}
                 onChange={e => setSettings(s => ({ ...s, checkDmScrollMin: clamp4(Number(e.target.value)) }))}
                 disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} maxLength={8} className={NUM_INPUT_CLASS}
+               <Input type="number" min={0} maxLength={8} className={personalityInputClass("checkDmScrollMax")}
                 value={settings.checkDmScrollMax}
                 onChange={e => setSettings(s => ({ ...s, checkDmScrollMax: clamp4(Number(e.target.value)) }))}
                 disabled={loading} />
