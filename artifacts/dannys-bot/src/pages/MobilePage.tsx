@@ -5093,9 +5093,9 @@ function CopySettingsDialog({
 }
 
 export function AutomationSettingsPanel({
-  phone, settings, setSettings: setSettingsExternal, setEnabledByUser, loading: loadingExternal, saveError, running, nextRunAt,
+  phone, settings: baseSettings, setSettings: setSettingsExternal, setEnabledByUser, loading: loadingExternal, saveError, running, nextRunAt,
   slotIdx, slotUsername, slotUsernames, onCopied, showCopyDialog, setShowCopyDialog,
-  templateLockedFields, trustScoreAssigned, trustScoreLabel, onOpenBrowserProfile, settingsScrollRef, sharedScrollTopRef, isActive,
+  templateLockedFields, trustScoreAssigned, trustScoreLabel, onOpenBrowserProfile, settingsScrollRef, sharedScrollTopRef, isActive, personality,
 }: {
   phone: UsbPhone | null;
   settings: AutomationSettingsData;
@@ -5127,9 +5127,15 @@ export function AutomationSettingsPanel({
   settingsScrollRef?: React.MutableRefObject<HTMLDivElement | null>;
   sharedScrollTopRef?: React.MutableRefObject<number>;
   isActive?: boolean;
+  personality?: SlotPersonality;
 }) {
+  const settings = React.useMemo(() => applySlotPersonalityToSettings(baseSettings, personality), [baseSettings, personality]);
   const trustScoreActive = trustScoreAssigned === true || Boolean(settings.trustScoreId);
   const isTrustScoreTemplateEditor = templateLockedFields !== undefined;
+  const personalityInputClass = (field: keyof AutomationSettingsData) => {
+    const adjusted = personality && Number(baseSettings[field]) !== Number(settings[field]);
+    return `${NUM_INPUT_CLASS}${adjusted ? " !border-red-500 !text-red-600 dark:!border-red-400 dark:!text-red-400" : ""}`;
+  };
   const TRUST_SCORE_FEATURE_FIELDS = new Set([
     "feedEnabled", "storiesEnabled", "viewExploreEnabled", "viewReelsEnabled",
     "checkDmEnabled", "followEnabled", "randomJitterEnabled", "makePostEnabled",
@@ -5633,7 +5639,7 @@ export function AutomationSettingsPanel({
                 type="number"
                 min={1}
                 maxLength={4}
-                className={NUM_INPUT_CLASS}
+                className={personalityInputClass("feedScrollMin")}
                 value={settings.feedScrollMin}
                 onChange={e => setSettings(s => ({ ...s, feedScrollMin: clamp4(Number(e.target.value)) }))}
                 disabled={loading}
@@ -5643,7 +5649,7 @@ export function AutomationSettingsPanel({
                 type="number"
                 min={1}
                 maxLength={4}
-                className={NUM_INPUT_CLASS}
+                className={personalityInputClass("feedScrollMax")}
                 value={settings.feedScrollMax}
                 onChange={e => setSettings(s => ({ ...s, feedScrollMax: clamp4(Number(e.target.value)) }))}
                 disabled={loading}
@@ -5657,7 +5663,7 @@ export function AutomationSettingsPanel({
               <Input
                 type="number"
                 maxLength={4}
-                className={NUM_INPUT_CLASS}
+                className={personalityInputClass("actionDelayMin")}
                 value={settings.actionDelayMin}
                 onChange={e => setSettings(s => ({ ...s, actionDelayMin: clamp4(Number(e.target.value)) }))}
                 disabled={loading}
@@ -5666,7 +5672,7 @@ export function AutomationSettingsPanel({
               <Input
                 type="number"
                 maxLength={4}
-                className={NUM_INPUT_CLASS}
+                className={personalityInputClass("actionDelayMax")}
                 value={settings.actionDelayMax}
                 onChange={e => setSettings(s => ({ ...s, actionDelayMax: clamp4(Number(e.target.value)) }))}
                 disabled={loading}
@@ -5682,7 +5688,7 @@ export function AutomationSettingsPanel({
                 min={0}
                 max={100}
                 maxLength={4}
-                className={NUM_INPUT_CLASS}
+                className={personalityInputClass("likePercentMin")}
                 value={settings.likePercentMin}
                 onChange={e => setSettings(s => ({ ...s, likePercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading}
@@ -5693,7 +5699,7 @@ export function AutomationSettingsPanel({
                 min={0}
                 max={100}
                 maxLength={4}
-                className={NUM_INPUT_CLASS}
+                className={personalityInputClass("likePercentMax")}
                 value={settings.likePercentMax}
                 onChange={e => setSettings(s => ({ ...s, likePercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading}
@@ -5712,7 +5718,7 @@ export function AutomationSettingsPanel({
                 min={0}
                 max={100}
                 maxLength={4}
-                className={NUM_INPUT_CLASS}
+                className={personalityInputClass("shareFeedPercentMin")}
                 value={settings.shareFeedPercentMin}
                 onChange={e => setSettings(s => ({ ...s, shareFeedPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading}
@@ -5723,7 +5729,7 @@ export function AutomationSettingsPanel({
                 min={0}
                 max={100}
                 maxLength={4}
-                className={NUM_INPUT_CLASS}
+                className={personalityInputClass("shareFeedPercentMax")}
                 value={settings.shareFeedPercentMax}
                 onChange={e => setSettings(s => ({ ...s, shareFeedPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading}
@@ -5740,7 +5746,7 @@ export function AutomationSettingsPanel({
                 min={0}
                 max={100}
                 maxLength={4}
-                className={NUM_INPUT_CLASS}
+                className={personalityInputClass("shareDmPercentMin")}
                 value={settings.shareDmPercentMin}
                 onChange={e => setSettings(s => ({ ...s, shareDmPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading}
@@ -5751,7 +5757,7 @@ export function AutomationSettingsPanel({
                 min={0}
                 max={100}
                 maxLength={4}
-                className={NUM_INPUT_CLASS}
+                className={personalityInputClass("shareDmPercentMax")}
                 value={settings.shareDmPercentMax}
                 onChange={e => setSettings(s => ({ ...s, shareDmPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading}
@@ -5768,7 +5774,7 @@ export function AutomationSettingsPanel({
                 min={0}
                 max={100}
                 maxLength={4}
-                className={NUM_INPUT_CLASS}
+                className={personalityInputClass("savePercentMin")}
                 value={settings.savePercentMin}
                 onChange={e => setSettings(s => ({ ...s, savePercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading}
@@ -5779,7 +5785,7 @@ export function AutomationSettingsPanel({
                 min={0}
                 max={100}
                 maxLength={4}
-                className={NUM_INPUT_CLASS}
+                className={personalityInputClass("savePercentMax")}
                 value={settings.savePercentMax}
                 onChange={e => setSettings(s => ({ ...s, savePercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading}
@@ -5850,7 +5856,7 @@ export function AutomationSettingsPanel({
                 min={0}
                 max={100}
                 maxLength={4}
-                className={NUM_INPUT_CLASS}
+                className={personalityInputClass("clickHashtagPercentMin")}
                 value={settings.clickHashtagPercentMin}
                 onChange={e => setSettings(s => ({ ...s, clickHashtagPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading}
@@ -5861,7 +5867,7 @@ export function AutomationSettingsPanel({
                 min={0}
                 max={100}
                 maxLength={4}
-                className={NUM_INPUT_CLASS}
+                className={personalityInputClass("clickHashtagPercentMax")}
                 value={settings.clickHashtagPercentMax}
                 onChange={e => setSettings(s => ({ ...s, clickHashtagPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading}
@@ -5877,7 +5883,7 @@ export function AutomationSettingsPanel({
                 min={0}
                 max={100}
                 maxLength={4}
-                className={NUM_INPUT_CLASS}
+                className={personalityInputClass("clickAuthorPercentMin")}
                 value={settings.clickAuthorPercentMin}
                 onChange={e => setSettings(s => ({ ...s, clickAuthorPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading}
@@ -5888,7 +5894,7 @@ export function AutomationSettingsPanel({
                 min={0}
                 max={100}
                 maxLength={4}
-                className={NUM_INPUT_CLASS}
+                className={personalityInputClass("clickAuthorPercentMax")}
                 value={settings.clickAuthorPercentMax}
                 onChange={e => setSettings(s => ({ ...s, clickAuthorPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading}
@@ -5950,12 +5956,12 @@ export function AutomationSettingsPanel({
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground block text-center">Scroll this many times</Label>
             <div className="flex items-center gap-3">
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewExploreScrollMin")}
                 value={settings.viewExploreScrollMin}
                 onChange={e => setSettings(s => ({ ...s, viewExploreScrollMin: clamp4(Number(e.target.value)) }))}
                 disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewExploreScrollMax")}
                 value={settings.viewExploreScrollMax}
                 onChange={e => setSettings(s => ({ ...s, viewExploreScrollMax: clamp4(Number(e.target.value)) }))}
                 disabled={loading} />
@@ -5980,12 +5986,12 @@ export function AutomationSettingsPanel({
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground block text-center">Click posts %</Label>
             <div className="flex items-center gap-3">
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewExploreClickPostPctMin")}
                 value={settings.viewExploreClickPostPctMin}
                 onChange={e => setSettings(s => ({ ...s, viewExploreClickPostPctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewExploreClickPostPctMax")}
                 value={settings.viewExploreClickPostPctMax}
                 onChange={e => setSettings(s => ({ ...s, viewExploreClickPostPctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
@@ -5995,12 +6001,12 @@ export function AutomationSettingsPanel({
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground block text-center">Click Author % of posts</Label>
             <div className="flex items-center gap-3">
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewExploreClickAuthorPercentMin")}
                 value={settings.viewExploreClickAuthorPercentMin}
                 onChange={e => setSettings(s => ({ ...s, viewExploreClickAuthorPercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewExploreClickAuthorPercentMax")}
                 value={settings.viewExploreClickAuthorPercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewExploreClickAuthorPercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
@@ -6120,12 +6126,12 @@ export function AutomationSettingsPanel({
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground block text-center">Stories to watch</Label>
             <div className="flex items-center gap-3">
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewStoriesSlidesMin")}
                 value={settings.viewStoriesSlidesMin}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesSlidesMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewStoriesSlidesMax")}
                 value={settings.viewStoriesSlidesMax}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesSlidesMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
@@ -6151,12 +6157,12 @@ export function AutomationSettingsPanel({
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground block text-center">Like %</Label>
             <div className="flex items-center gap-3">
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewStoriesLikePercentMin")}
                 value={settings.viewStoriesLikePercentMin}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesLikePercentMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewStoriesLikePercentMax")}
                 value={settings.viewStoriesLikePercentMax}
                 onChange={e => setSettings(s => ({ ...s, viewStoriesLikePercentMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                 disabled={loading} />
@@ -6266,12 +6272,12 @@ export function AutomationSettingsPanel({
           <div className="space-y-3">
             <Label className="text-sm text-muted-foreground block text-center">Scroll amount</Label>
             <div className="flex items-center gap-3">
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewReelsScrollMin")}
                 value={settings.viewReelsScrollMin}
                 onChange={e => setSettings(s => ({ ...s, viewReelsScrollMin: clamp4(Number(e.target.value)) }))}
                 disabled={loading} />
               <span className="text-muted-foreground text-sm">to</span>
-              <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+              <Input type="number" min={0} max={100} maxLength={4} className={personalityInputClass("viewReelsScrollMax")}
                 value={settings.viewReelsScrollMax}
                 onChange={e => setSettings(s => ({ ...s, viewReelsScrollMax: clamp4(Number(e.target.value)) }))}
                 disabled={loading} />
@@ -8119,30 +8125,56 @@ const SLOT_PERSONALITY_TRAITS = [
 const personalityMultiplier = (value: number | undefined) => [0.75, 0.9, 1, 1.1, 1.25][value ?? 2] ?? 1;
 const attentionTimingMultiplier = (value: number | undefined) => [1.08, 1.04, 1, 0.96, 0.92][value ?? 2] ?? 1;
 
-function PersonalityImpactSummary({ settings, personality }: { settings: AutomationSettingsData; personality?: SlotPersonality }) {
-  if (!personality) return null;
-  const effective = (min: number, max: number, scale: number) =>
-    `${Math.round(min * scale)}%–${Math.round(max * scale)}%`;
-  const engagement = personalityMultiplier(personality.engagement);
-  const action = personalityMultiplier(personality.actionVariety);
-  const discovery = personalityMultiplier(personality.discovery) * action;
-  const volume = personalityMultiplier(personality.consumption);
-  const attention = attentionTimingMultiplier(personality.attention);
-  const groups = [
-    { label: "Likes", value: effective(settings.likePercentMin, settings.likePercentMax, engagement * action), active: personality.engagement !== 2 || personality.actionVariety !== 2 },
-    { label: "Scroll / view volume", value: `${Math.round(settings.feedScrollMin * volume)}–${Math.round(settings.feedScrollMax * volume)}`, active: personality.consumption !== 2 },
-    { label: "Discovery clicks", value: effective(settings.clickAuthorPercentMin, settings.clickAuthorPercentMax, discovery), active: personality.discovery !== 2 || personality.actionVariety !== 2 },
-    { label: "Action delay", value: `${Math.round(settings.actionDelayMin * attention)}–${Math.round(settings.actionDelayMax * attention)} sec`, active: personality.attention !== 2 },
-  ].filter(group => group.active);
-  if (!groups.length) return null;
-  return (
-    <div className="mx-4 mt-3 rounded-lg border border-red-200 bg-red-50/70 px-3 py-2 dark:border-red-900/60 dark:bg-red-950/20">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-red-700 dark:text-red-300">Personality-adjusted HST values</p>
-      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-        {groups.map(group => <span key={group.label} className="text-xs text-red-700 dark:text-red-300"><b>{group.label}:</b> {group.value}</span>)}
-      </div>
-    </div>
-  );
+function applySlotPersonalityToSettings(input: AutomationSettingsData, personality?: SlotPersonality): AutomationSettingsData {
+  if (!personality) return input;
+  const result = { ...input };
+  const pctScale = (level: number | undefined) => personalityMultiplier(level);
+  const engagement = pctScale(personality.engagement);
+  const action = pctScale(personality.actionVariety);
+  const discovery = pctScale(personality.discovery);
+  const volume = pctScale(personality.consumption);
+  const attention = [0.85, 0.93, 1, 1.07, 1.15][personality.attention ?? 2] ?? 1;
+  const range = (minKey: keyof AutomationSettingsData, maxKey: keyof AutomationSettingsData, scale: number) => {
+    const min = Number(result[minKey]);
+    const max = Number(result[maxKey]);
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return;
+    (result as any)[minKey] = Math.max(0, Math.min(100, Math.round(Math.min(min, max) * scale)));
+    (result as any)[maxKey] = Math.max((result as any)[minKey], Math.min(100, Math.round(Math.max(min, max) * scale)));
+  };
+  [
+    ["likePercentMin", "likePercentMax"], ["viewStoriesLikePercentMin", "viewStoriesLikePercentMax"],
+    ["viewReelsLikePercentMin", "viewReelsLikePercentMax"], ["viewExploreLikePercentMin", "viewExploreLikePercentMax"],
+  ].forEach(([min, max]) => range(min as keyof AutomationSettingsData, max as keyof AutomationSettingsData, engagement * action));
+  [
+    ["shareFeedPercentMin", "shareFeedPercentMax"], ["shareDmPercentMin", "shareDmPercentMax"],
+    ["savePercentMin", "savePercentMax"], ["viewStoriesShareDmPercentMin", "viewStoriesShareDmPercentMax"],
+    ["viewStoriesCommentPercentMin", "viewStoriesCommentPercentMax"], ["viewReelsShareFeedPercentMin", "viewReelsShareFeedPercentMax"],
+    ["viewReelsShareDmPercentMin", "viewReelsShareDmPercentMax"], ["viewReelsSavePercentMin", "viewReelsSavePercentMax"],
+    ["viewExploreShareFeedPercentMin", "viewExploreShareFeedPercentMax"], ["viewExploreShareDmPercentMin", "viewExploreShareDmPercentMax"],
+    ["viewExploreSavePercentMin", "viewExploreSavePercentMax"],
+  ].forEach(([min, max]) => range(min as keyof AutomationSettingsData, max as keyof AutomationSettingsData, action));
+  [
+    ["clickAuthorPercentMin", "clickAuthorPercentMax"], ["clickHashtagPercentMin", "clickHashtagPercentMax"],
+    ["viewStoriesClickAuthorPercentMin", "viewStoriesClickAuthorPercentMax"], ["viewReelsClickAuthorPercentMin", "viewReelsClickAuthorPercentMax"],
+    ["viewExploreClickPostPctMin", "viewExploreClickPostPctMax"], ["viewExploreClickAuthorPercentMin", "viewExploreClickAuthorPercentMax"],
+  ].forEach(([min, max]) => range(min as keyof AutomationSettingsData, max as keyof AutomationSettingsData, discovery * action));
+  [
+    ["feedScrollMin", "feedScrollMax"], ["viewStoriesSlidesMin", "viewStoriesSlidesMax"],
+    ["viewReelsScrollMin", "viewReelsScrollMax"], ["viewExploreScrollMin", "viewExploreScrollMax"],
+    ["checkDmScrollMin", "checkDmScrollMax"],
+  ].forEach(([min, max]) => {
+    const low = Number(result[min as keyof AutomationSettingsData]);
+    const high = Number(result[max as keyof AutomationSettingsData]);
+    if (Number.isFinite(low) && Number.isFinite(high)) {
+      (result as any)[min] = Math.max(0, Math.round(Math.min(low, high) * volume));
+      (result as any)[max] = Math.max((result as any)[min], Math.round(Math.max(low, high) * volume));
+    }
+  });
+  (result as any).actionDelayMin = Math.max(0, Number(result.actionDelayMin) * attention);
+  (result as any).actionDelayMax = Math.max((result as any).actionDelayMin, Number(result.actionDelayMax) * attention);
+  (result as any).viewExploreActionDelayMin = Math.max(0, Number(result.viewExploreActionDelayMin) * attention);
+  (result as any).viewExploreActionDelayMax = Math.max((result as any).viewExploreActionDelayMin, Number(result.viewExploreActionDelayMax) * attention);
+  return result;
 }
 
 function AccountGesturesPanel({ serial, username, personality, onBack }: {
@@ -8353,7 +8385,6 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
           SLOT {slotIdx + 2}
         </Button>
       </div>
-      <PersonalityImpactSummary settings={automation.settings} personality={slotPersonality} />
        <div className="flex-1 min-h-0">
         {isActive && (
           <AutomationSettingsPanel
@@ -8362,6 +8393,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
             slotIdx={slotIdx}
             slotUsername={slotUsername}
             slotUsernames={slotUsernames}
+            personality={slotPersonality}
             onCopied={onCopied}
             showCopyDialog={showCopyDialog}
             setShowCopyDialog={setShowCopyDialog}
