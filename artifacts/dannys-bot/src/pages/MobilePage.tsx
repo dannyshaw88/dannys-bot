@@ -22,7 +22,7 @@ import {
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
   ChevronLeft, ChevronRight, ChevronDown, Home, Power, Trash2,
   FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim, RotateCcw,
-  Palette, Plus, X, Keyboard,
+  Palette, Plus, X, Keyboard, Heart, BarChart3, Eye, Compass, Sparkles,
   Users, Globe, BarChart2, ClipboardList, Bug, ImagePlus, Tablet, MonitorSmartphone, Settings2, ScanSearch,
 } from "lucide-react";
 
@@ -8107,11 +8107,11 @@ type SlotPersonality = {
 };
 type AccountSlot = { slotId: string; username: string; password: string; totpSecret: string; emailAddress: string; emailPassword: string; phoneNumber: string; personality?: SlotPersonality };
 const SLOT_PERSONALITY_TRAITS = [
-  ["engagement", "Engagement", ["Reserved", "Selective", "Balanced", "Open", "Generous"]],
-  ["consumption", "Consumption", ["Light", "Moderate", "Balanced", "Active", "High volume"]],
-  ["attention", "Attention", ["Skimmer", "Casual", "Steady", "Focused", "Immersive"]],
-  ["discovery", "Discovery", ["Home-focused", "Occasional", "Balanced", "Curious", "Explorer"]],
-  ["actionVariety", "Actions", ["Passive", "Likes-focused", "Balanced", "Social", "Varied"]],
+  { key: "engagement", label: "Engagement", options: ["Reserved", "Selective", "Balanced", "Open", "Generous"], icon: Heart, color: "text-rose-500 border-rose-200 bg-rose-50 dark:bg-rose-950/30" },
+  { key: "consumption", label: "Consumption", options: ["Light", "Moderate", "Balanced", "Active", "High volume"], icon: BarChart3, color: "text-cyan-600 border-cyan-200 bg-cyan-50 dark:bg-cyan-950/30" },
+  { key: "attention", label: "Attention", options: ["Skimmer", "Casual", "Steady", "Focused", "Immersive"], icon: Eye, color: "text-amber-600 border-amber-200 bg-amber-50 dark:bg-amber-950/30" },
+  { key: "discovery", label: "Discovery", options: ["Home-focused", "Occasional", "Balanced", "Curious", "Explorer"], icon: Compass, color: "text-violet-600 border-violet-200 bg-violet-50 dark:bg-violet-950/30" },
+  { key: "actionVariety", label: "Actions", options: ["Passive", "Likes-focused", "Balanced", "Social", "Varied"], icon: Sparkles, color: "text-emerald-600 border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30" },
 ] as const;
 
 // ── Per-slot Human Session Tool view ─────────────────────────────────────────
@@ -9066,37 +9066,36 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                   />
                 </div>
 
-                {/* Unique per-account slot personality, derived from the
-                    device and Trust Score baselines. */}
-                <div className="w-full flex items-center gap-2 flex-wrap rounded-md border border-border/60 bg-muted/20 px-3 py-2">
-                  <span className="text-xs font-semibold text-muted-foreground mr-1">Personality:</span>
-                  {(slot.personality
-                    ? SLOT_PERSONALITY_TRAITS.map(([key, label, options]) =>
-                        `${label}: ${options[slot.personality?.[key] ?? 2]}`)
-                    : ["Not randomised", "Not randomised", "Not randomised", "Not randomised", "Not randomised"]
-                  ).map((trait, traitIdx) => (
-                    <span key={traitIdx} className="rounded border border-border bg-background px-2 py-1 text-[11px] text-foreground">
-                      {trait}
-                    </span>
-                  ))}
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void randomiseSlotPersonality(i)}
-                    disabled={loading || !phone?.serial}
-                    className="ml-auto h-7 text-xs"
-                  >
-                    Randomise
-                  </Button>
-                </div>
-
                 {/* Trust Score — independent instance (mobile_ts_<serial>_<slotIdx>)
                     so styling changes here don't affect other badge placements */}
                 <div style={{ display: "flex", alignSelf: "flex-end", height: "36px", gap: "8px" }}>
                   <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={i} width={114} />
                    <TrustScoreCountdown serial={phone?.serial ?? ""} slotIdx={i} slotId={slot.slotId} />
                 </div>
+              </div>
+
+              {/* Unique per-account slot personality, derived from the
+                  device and Trust Score baselines. */}
+              <div className="flex items-center gap-2 flex-wrap rounded-md border border-border/60 bg-muted/20 px-3 py-2">
+                <span className="text-xs font-semibold text-muted-foreground mr-1">Personality:</span>
+                {SLOT_PERSONALITY_TRAITS.map(({ key, label, options, icon: TraitIcon, color }) => (
+                  <span key={key} className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] ${color}`} title={label}>
+                    <TraitIcon className="h-3 w-3" aria-hidden="true" />
+                    {slot.personality ? options[slot.personality[key as keyof SlotPersonality] ?? 2] : "Not randomised"}
+                  </span>
+                ))}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    void randomiseSlotPersonality(i);
+                  }}
+                  disabled={loading || !phone?.serial}
+                  className="ml-auto h-7 text-xs"
+                >
+                  Randomise
+                </Button>
               </div>
           </div>
         ))}
